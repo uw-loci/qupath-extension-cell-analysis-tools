@@ -16,7 +16,8 @@ public class ClusteringConfig {
         HDBSCAN("hdbscan", "HDBSCAN"),
         AGGLOMERATIVE("agglomerative", "Agglomerative (hierarchical)"),
         MINIBATCHKMEANS("minibatchkmeans", "MiniBatch KMeans"),
-        GMM("gmm", "Gaussian Mixture Model");
+        GMM("gmm", "Gaussian Mixture Model"),
+        BANKSY("banksy", "BANKSY (spatially-aware)");
 
         private final String id;
         private final String displayName;

@@ -48,6 +48,15 @@ logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=marker_names)
 
+# Read optional spatial coordinates early (needed by BANKSY and spatial analysis)
+try:
+    spatial_data = spatial_coords.ndarray().copy()
+    has_spatial_coords = True
+    logger.info("Spatial coordinates loaded (%d cells)", spatial_data.shape[0])
+except NameError:
+    spatial_data = None
+    has_spatial_coords = False
+
 # 2. Normalize
 task.update("Normalizing measurements...", current=0, maximum=6)
 
@@ -196,6 +205,57 @@ elif algorithm == "gmm":
                           covariance_type=covariance_type, random_state=42)
     labels = gmm.fit_predict(df_norm.values)
 
+elif algorithm == "banksy":
+    if not has_spatial_coords:
+        raise ValueError("BANKSY requires spatial coordinates (cell centroids)")
+
+    from banksy.initialize_banksy import initialize_banksy
+    from banksy.run_banksy import run_banksy_search
+    import anndata as ad
+
+    lambda_param = algorithm_params.get("lambda_param", 0.2)
+    k_geom = algorithm_params.get("k_geom", 15)
+    resolution = algorithm_params.get("resolution", 0.7)
+    pca_dims = algorithm_params.get("pca_dims", 20)
+    logger.info("BANKSY: lambda=%.2f, k_geom=%d, resolution=%.2f, pca_dims=%d",
+                lambda_param, k_geom, resolution, pca_dims)
+
+    # Build AnnData with expression and spatial coordinates
+    adata_banksy = ad.AnnData(X=df_norm.values)
+    adata_banksy.var_names = pd.Index(list(marker_names))
+    adata_banksy.obsm['spatial'] = spatial_data
+
+    # Initialize BANKSY (compute spatial neighbor weights)
+    banksy_dict = initialize_banksy(
+        adata_banksy,
+        coord_keys=None,  # uses adata.obsm['spatial']
+        k_geom=k_geom,
+        max_m=1,
+        plt_edge_hist=False,
+        plt_nbr_weights=False,
+    )
+
+    # Run BANKSY clustering (Leiden on spatially-augmented features)
+    results_df = run_banksy_search(
+        adata_banksy,
+        banksy_dict,
+        lambda_list=[lambda_param],
+        resolutions=[resolution],
+        max_m=1,
+        pca_dims=[pca_dims],
+        key='pyclustering',
+        cluster_algorithm='leiden',
+        savefig=False,
+        add_nonspatial=False,
+    )
+
+    # Extract cluster labels from adata_banksy.obs
+    label_cols = [c for c in adata_banksy.obs.columns if c.startswith('labels_')]
+    if not label_cols:
+        raise ValueError("BANKSY did not produce cluster labels")
+    labels = adata_banksy.obs[label_cols[-1]].astype(int).values
+    logger.info("BANKSY clustering complete: used label column '%s'", label_cols[-1])
+
 else:
     raise ValueError("Unknown clustering algorithm: %s" % algorithm)
 
@@ -290,11 +350,7 @@ else:
     logger.info("Skipping post-analysis (too few cells or clusters)")
 
 # 6c. Spatial analysis (if coordinates provided)
-try:
-    spatial_data = spatial_coords.ndarray().copy()
-    has_spatial = True
-except NameError:
-    has_spatial = False
+has_spatial = has_spatial_coords
 
 if has_spatial and n_clusters_found > 1:
     task.update("Running spatial analysis...")

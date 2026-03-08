@@ -59,6 +59,9 @@ public class ClusteringDialog {
     private Spinner<Integer> hdbscanMinClusterSpinner;
     private Spinner<Integer> aggClusterSpinner;
     private ComboBox<String> aggLinkageCombo;
+    private Spinner<Double> banksyLambdaSpinner;
+    private Spinner<Integer> banksyKGeomSpinner;
+    private Spinner<Double> banksyResolutionSpinner;
 
     public ClusteringDialog(QuPathGUI qupath) {
         this.qupath = qupath;
@@ -248,6 +251,18 @@ public class ClusteringDialog {
                 "ward", "complete", "average", "single"));
         aggLinkageCombo.setValue("ward");
 
+        banksyLambdaSpinner = new Spinner<>(0.0, 1.0, 0.2, 0.05);
+        banksyLambdaSpinner.setEditable(true);
+        banksyLambdaSpinner.setPrefWidth(80);
+
+        banksyKGeomSpinner = new Spinner<>(2, 200, 15);
+        banksyKGeomSpinner.setEditable(true);
+        banksyKGeomSpinner.setPrefWidth(80);
+
+        banksyResolutionSpinner = new Spinner<>(0.01, 10.0, 0.7, 0.1);
+        banksyResolutionSpinner.setEditable(true);
+        banksyResolutionSpinner.setPrefWidth(80);
+
         HBox algoRow = new HBox(10, new Label("Algorithm:"), algorithmCombo);
         algoRow.setAlignment(Pos.CENTER_LEFT);
 
@@ -326,6 +341,18 @@ public class ClusteringDialog {
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
+            case BANKSY -> {
+                HBox row1 = new HBox(10,
+                        new Label("lambda (spatial weight):"), banksyLambdaSpinner,
+                        new Label("k_geom (spatial neighbors):"), banksyKGeomSpinner);
+                row1.setAlignment(Pos.CENTER_LEFT);
+                HBox row2 = new HBox(10,
+                        new Label("resolution:"), banksyResolutionSpinner);
+                row2.setAlignment(Pos.CENTER_LEFT);
+                Label note = new Label("Uses cell centroid coordinates for spatially-aware clustering");
+                note.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+                algorithmParamsBox.getChildren().addAll(row1, row2, note);
+            }
         }
     }
 
@@ -400,6 +427,11 @@ public class ClusteringDialog {
             }
             case GMM -> {
                 algorithmParams.put("n_components", kmeansClusterSpinner.getValue());
+            }
+            case BANKSY -> {
+                algorithmParams.put("lambda_param", banksyLambdaSpinner.getValue());
+                algorithmParams.put("k_geom", banksyKGeomSpinner.getValue());
+                algorithmParams.put("resolution", banksyResolutionSpinner.getValue());
             }
         }
         config.setAlgorithmParams(algorithmParams);

@@ -314,9 +314,11 @@ public class ClusteringWorkflow {
             }
         }
 
-        // Create spatial coordinates NDArray if spatial analysis is enabled
+        // Create spatial coordinates NDArray if spatial analysis is enabled or BANKSY algorithm
         NDArray spatialCoordsNd = null;
-        if (config.isEnableSpatialAnalysis()) {
+        boolean needsSpatialCoords = config.isEnableSpatialAnalysis()
+                || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY;
+        if (needsSpatialCoords) {
             double[][] centroids = MeasurementExtractor.extractCentroids(
                     extraction.getDetections());
             NDArray.Shape spatialShape = new NDArray.Shape(

@@ -36,6 +36,7 @@ try:
     import anndata
     import squidpy
     import harmonypy
+    import banksy
 
     logger.info("PyClustering packages loaded successfully")
     logger.info("  scikit-learn: %s", sklearn.__version__)
@@ -45,6 +46,7 @@ try:
     logger.info("  anndata: %s", anndata.__version__)
     logger.info("  squidpy: %s", squidpy.__version__)
     logger.info("  harmonypy: available")
+    logger.info("  pybanksy: available")
 
     init_error = None
 
