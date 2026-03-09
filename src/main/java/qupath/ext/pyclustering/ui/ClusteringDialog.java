@@ -112,13 +112,10 @@ public class ClusteringDialog {
         dialog.getDialogPane().getButtonTypes().add(runType);
 
         runButton = (Button) dialog.getDialogPane().lookupButton(runType);
-        runButton.setOnAction(e -> {
-            e.consume();
+        runButton.addEventFilter(javafx.event.ActionEvent.ACTION, event -> {
+            event.consume();
             runClustering();
         });
-
-        // Prevent Run button from closing dialog
-        runButton.addEventFilter(javafx.event.ActionEvent.ACTION, event -> event.consume());
 
         // Populate measurements from current image
         populateMeasurements();
