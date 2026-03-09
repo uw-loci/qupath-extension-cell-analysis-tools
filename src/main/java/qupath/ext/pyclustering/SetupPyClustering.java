@@ -200,6 +200,15 @@ public class SetupPyClustering implements QuPathExtension, GitHubProject {
 
         quickClusterMenu.getItems().addAll(quickLeiden, quickKmeans, quickHdbscan);
 
+        // View Past Results
+        MenuItem viewResultsItem = new MenuItem("View Past Results...");
+        viewResultsItem.setOnAction(e -> ClusteringDialog.showPastResultsChooser(qupath));
+        viewResultsItem.visibleProperty().bind(environmentReady);
+        viewResultsItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getProject() == null,
+                        qupath.projectProperty()));
+
         // Manage Clusters
         MenuItem manageClustersItem = new MenuItem(res.getString("menu.manageClusters"));
         manageClustersItem.setOnAction(e -> {
@@ -251,6 +260,7 @@ public class SetupPyClustering implements QuPathExtension, GitHubProject {
                 quickClusterMenu,
                 sep2,
                 manageClustersItem,
+                viewResultsItem,
                 exportAnnDataItem,
                 utilitiesMenu
         );

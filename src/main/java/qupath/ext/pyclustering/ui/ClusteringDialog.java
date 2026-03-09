@@ -15,6 +15,7 @@ import qupath.ext.pyclustering.model.ClusteringConfig;
 import qupath.ext.pyclustering.model.ClusteringConfig.*;
 import qupath.ext.pyclustering.model.ClusteringResult;
 import qupath.ext.pyclustering.service.ClusteringConfigManager;
+import qupath.ext.pyclustering.service.ClusteringResultManager;
 import qupath.ext.pyclustering.service.MeasurementExtractor;
 import qupath.ext.pyclustering.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
@@ -778,13 +779,55 @@ public class ClusteringDialog {
     }
 
     private void showResultsDialog(ClusteringResult result) {
+        showResultsDialog(result,
+                embeddingCombo.getValue() != null
+                        ? embeddingCombo.getValue().getDisplayName() : "Embedding",
+                algorithmCombo.getValue() != null
+                        ? algorithmCombo.getValue().getDisplayName() : null,
+                normalizationCombo.getValue() != null
+                        ? normalizationCombo.getValue().getId() : null);
+    }
+
+    /**
+     * Show the results dialog. Can be called from outside (e.g., View Past Results menu).
+     *
+     * @param result        the clustering result to display
+     * @param embName       embedding method display name (e.g., "UMAP")
+     * @param algorithm     algorithm name for save metadata (may be null for loaded results)
+     * @param normalization normalization id for save metadata (may be null for loaded results)
+     */
+    public static void showResultsDialog(ClusteringResult result, String embName,
+                                          String algorithm, String normalization) {
+        showResultsDialog(null, null, result, embName, algorithm, normalization, null);
+    }
+
+    /**
+     * Full results dialog builder. Supports save to project and display of loaded results.
+     */
+    private static void showResultsDialog(Stage ownerStage, QuPathGUI qupathRef,
+                                           ClusteringResult result, String embName,
+                                           String algorithm, String normalization,
+                                           String loadedResultName) {
+        // Resolve owner and qupath from static context if needed
+        Stage dialogOwner = ownerStage;
+        QuPathGUI qupath = qupathRef;
+        if (qupath == null) {
+            qupath = QuPathGUI.getInstance();
+        }
+        if (dialogOwner == null && qupath != null) {
+            dialogOwner = qupath.getStage();
+        }
+
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.initOwner(owner);
+        if (dialogOwner != null) dialog.initOwner(dialogOwner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("PyClustering - Results");
+        dialog.setTitle("PyClustering - Results"
+                + (loadedResultName != null ? " [" + loadedResultName + "]" : ""));
         dialog.setHeaderText(result.getNClusters() + " clusters, "
                 + result.getNCells() + " cells");
         dialog.setResizable(true);
+
+        if (embName == null) embName = "Embedding";
 
         TabPane tabPane = new TabPane();
 
@@ -807,8 +850,6 @@ public class ClusteringDialog {
         // Interactive embedding scatter tab
         if (result.hasEmbedding()) {
             EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
-            String embName = embeddingCombo.getValue() != null
-                    ? embeddingCombo.getValue().getDisplayName() : "Embedding";
             scatter.setData(result.getEmbedding(), result.getClusterLabels(),
                     result.getNClusters(), embName);
             Tab tab = new Tab(embName, wrapWithGuide(scatter,
@@ -949,7 +990,60 @@ public class ClusteringDialog {
             }
         }
 
-        dialog.getDialogPane().setContent(tabPane);
+        // Save/Delete buttons at bottom
+        final QuPathGUI qp = qupath;
+        final String algo = algorithm;
+        final String norm = normalization;
+        final String emb = embName;
+
+        HBox buttonBar = new HBox(10);
+        buttonBar.setAlignment(Pos.CENTER_LEFT);
+        buttonBar.setPadding(new Insets(5, 0, 0, 0));
+
+        Button saveBtn = new Button("Save Results...");
+        saveBtn.setTooltip(new Tooltip(
+                "Save these results to the project so they can be\n"
+                + "reopened later via Extensions > PyClustering > View Past Results."));
+        saveBtn.setOnAction(e -> {
+            if (qp == null || qp.getProject() == null) {
+                Dialogs.showWarningNotification("PyClustering",
+                        "A project must be open to save results.");
+                return;
+            }
+            TextInputDialog nameDialog = new TextInputDialog(
+                    algo != null ? algo.toLowerCase() + "-result" : "result");
+            nameDialog.setTitle("Save Clustering Results");
+            nameDialog.setHeaderText("Enter a name for these results:");
+            var nameResult = nameDialog.showAndWait();
+            if (nameResult.isEmpty() || nameResult.get().trim().isEmpty()) return;
+
+            try {
+                ClusteringResultManager.saveResult(qp.getProject(),
+                        nameResult.get().trim(), result, algo, norm, emb);
+                Dialogs.showInfoNotification("PyClustering",
+                        "Results saved: " + nameResult.get().trim());
+                OperationLogger.getInstance().logEvent("RESULTS SAVED",
+                        "Saved '" + nameResult.get().trim() + "' ("
+                        + result.getNClusters() + " clusters, "
+                        + result.getNCells() + " cells)");
+            } catch (Exception ex) {
+                logger.error("Failed to save results", ex);
+                Dialogs.showErrorNotification("PyClustering",
+                        "Failed to save results: " + ex.getMessage());
+            }
+        });
+        buttonBar.getChildren().add(saveBtn);
+
+        // Disable save if no project
+        if (qp == null || qp.getProject() == null) {
+            saveBtn.setDisable(true);
+            saveBtn.setTooltip(new Tooltip("A project must be open to save results."));
+        }
+
+        VBox mainContent = new VBox(tabPane, buttonBar);
+        VBox.setVgrow(tabPane, javafx.scene.layout.Priority.ALWAYS);
+
+        dialog.getDialogPane().setContent(mainContent);
         dialog.getDialogPane().setPrefSize(850, 650);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
@@ -957,9 +1051,67 @@ public class ClusteringDialog {
     }
 
     /**
+     * Show a chooser dialog to load and view past clustering results from the project.
+     */
+    public static void showPastResultsChooser(QuPathGUI qupath) {
+        Project<?> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("PyClustering",
+                    "A project must be open to view past results.");
+            return;
+        }
+
+        try {
+            Map<String, String> summaries = ClusteringResultManager.listResultSummaries(project);
+            if (summaries.isEmpty()) {
+                Dialogs.showWarningNotification("PyClustering",
+                        "No saved results found in this project.");
+                return;
+            }
+
+            // Build display strings: "name -- summary"
+            List<String> names = new ArrayList<>(summaries.keySet());
+            List<String> displayItems = new ArrayList<>();
+            for (String name : names) {
+                displayItems.add(name + "  --  " + summaries.get(name));
+            }
+
+            ChoiceDialog<String> chooser = new ChoiceDialog<>(displayItems.get(0), displayItems);
+            chooser.setTitle("PyClustering - View Past Results");
+            chooser.setHeaderText("Select a saved result to view:");
+            chooser.initOwner(qupath.getStage());
+
+            var chosen = chooser.showAndWait();
+            if (chosen.isEmpty()) return;
+
+            // Extract the name (before " -- ")
+            String selectedDisplay = chosen.get();
+            int idx = displayItems.indexOf(selectedDisplay);
+            String selectedName = names.get(idx);
+
+            // Load and display
+            var saved = ClusteringResultManager.loadSavedResult(project, selectedName);
+
+            // Resolve plot paths
+            ClusteringResult result = ClusteringResultManager.loadResult(project, selectedName);
+
+            showResultsDialog(qupath.getStage(), qupath, result,
+                    saved.getEmbeddingMethod(),
+                    saved.getAlgorithm(),
+                    saved.getNormalization(),
+                    selectedName);
+
+        } catch (Exception e) {
+            logger.error("Failed to load past results", e);
+            Dialogs.showErrorNotification("PyClustering",
+                    "Failed to load results: " + e.getMessage());
+        }
+    }
+
+    /**
      * Wrap content with an interpretive guide label at the top of the tab.
      */
-    private VBox wrapWithGuide(javafx.scene.Node content, String guideText) {
+    private static VBox wrapWithGuide(javafx.scene.Node content, String guideText) {
         Label guide = new Label(guideText);
         guide.setWrapText(true);
         guide.setStyle("-fx-font-size: 11px; -fx-text-fill: #444; "
@@ -973,7 +1125,7 @@ public class ClusteringDialog {
         return box;
     }
 
-    private String formatSpatialAutocorr(ClusteringResult result) {
+    private static String formatSpatialAutocorr(ClusteringResult result) {
         String json = result.getSpatialAutocorrJson();
         if (json == null) return "No spatial autocorrelation data available.";
 
@@ -1006,7 +1158,7 @@ public class ClusteringDialog {
         }
     }
 
-    private String formatMarkerRankings(ClusteringResult result) {
+    private static String formatMarkerRankings(ClusteringResult result) {
         String json = result.getMarkerRankingsJson();
         if (json == null) return "No marker rankings available.";
 
