@@ -83,6 +83,64 @@ public class ResultApplier {
     }
 
     /**
+     * Applies phenotype labels to detections as PathClass classifications.
+     * <p>
+     * Each detection is assigned a classification matching the phenotype name
+     * (e.g., "CD8+ T Cell", "Macrophage", "Unknown").
+     *
+     * @param detections     ordered list of detections (same order as labels)
+     * @param labels         phenotype label index for each detection
+     * @param phenotypeNames ordered array of phenotype names (index matches label value)
+     */
+    public void applyPhenotypeLabels(List<PathObject> detections, int[] labels,
+                                      String[] phenotypeNames) {
+        if (detections.size() != labels.length) {
+            throw new IllegalArgumentException(
+                    "Detection count (" + detections.size()
+                    + ") does not match label count (" + labels.length + ")");
+        }
+
+        for (int i = 0; i < detections.size(); i++) {
+            PathObject det = detections.get(i);
+            int label = labels[i];
+            String name = (label >= 0 && label < phenotypeNames.length)
+                    ? phenotypeNames[label] : "Unknown";
+            det.setPathClass(PathClass.fromString(name));
+        }
+
+        logger.info("Applied phenotype labels to {} detections", detections.size());
+    }
+
+    /**
+     * Applies sub-cluster labels to detections as hierarchical PathClass classifications.
+     * <p>
+     * Each detection is assigned a classification like "Cluster 3.0", "Cluster 3.1", etc.,
+     * preserving the parent cluster identity in the label.
+     *
+     * @param detections       ordered list of detections (same order as labels)
+     * @param labels           sub-cluster label for each detection
+     * @param parentClusterName the parent cluster name (e.g., "Cluster 3")
+     */
+    public void applySubclusterLabels(List<PathObject> detections, int[] labels,
+                                       String parentClusterName) {
+        if (detections.size() != labels.length) {
+            throw new IllegalArgumentException(
+                    "Detection count (" + detections.size()
+                    + ") does not match label count (" + labels.length + ")");
+        }
+
+        for (int i = 0; i < detections.size(); i++) {
+            PathObject det = detections.get(i);
+            int label = labels[i];
+            String subName = parentClusterName + "." + label;
+            det.setPathClass(PathClass.fromString(subName));
+        }
+
+        logger.info("Applied sub-cluster labels to {} detections (parent: {})",
+                detections.size(), parentClusterName);
+    }
+
+    /**
      * Convenience method to get the embedding measurement prefix for a given method.
      */
     public static String getEmbeddingPrefix(String embeddingMethod) {

@@ -256,6 +256,11 @@ elif algorithm == "banksy":
     labels = adata_banksy.obs[label_cols[-1]].astype(int).values
     logger.info("BANKSY clustering complete: used label column '%s'", label_cols[-1])
 
+elif algorithm == "none":
+    # Embedding only -- assign all cells to cluster 0 (no real clustering)
+    labels = np.zeros(n_cells, dtype=np.int32)
+    logger.info("Embedding-only mode: no clustering applied")
+
 else:
     raise ValueError("Unknown clustering algorithm: %s" % algorithm)
 
@@ -295,7 +300,8 @@ if embedding_result is not None:
 
 # Compute neighbor graph (needed for PAGA and dendrogram)
 n_neigh = min(15, n_cells - 1)
-can_analyze = n_neigh >= 2 and n_clusters_found > 1
+embedding_only = (algorithm == "none")
+can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
 
 if can_analyze:
     sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep='X')
@@ -456,6 +462,20 @@ if do_plots and plot_dir and can_analyze:
         logger.info("Saved PAGA graph: %s", paga_path)
     except Exception as e:
         logger.warning("Failed to generate PAGA graph: %s", e)
+
+    # Stacked violin plot -- expression distribution per cluster
+    if n_clusters_found > 1:
+        try:
+            sv = sc.pl.stacked_violin(adata, var_names=list(marker_names),
+                                       groupby='cluster', dendrogram=True,
+                                       show=False, return_fig=True)
+            violin_path = os.path.join(plot_dir, 'stacked_violin.png')
+            sv.savefig(violin_path, dpi=150, bbox_inches='tight')
+            plt.close('all')
+            plot_paths['stacked_violin'] = violin_path
+            logger.info("Saved stacked violin: %s", violin_path)
+        except Exception as e:
+            logger.warning("Failed to generate stacked violin: %s", e)
 
     # Embedding scatter colored by cluster (if embedding was computed)
     if embedding_result is not None:

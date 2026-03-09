@@ -10,6 +10,7 @@ import qupath.ext.pyclustering.model.ClusteringConfig;
 import qupath.ext.pyclustering.model.ClusteringResult;
 import qupath.ext.pyclustering.service.ApposeClusteringService;
 import qupath.ext.pyclustering.service.MeasurementExtractor;
+import qupath.ext.pyclustering.service.OperationLogger;
 import qupath.ext.pyclustering.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -29,6 +30,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -57,6 +59,7 @@ public class ClusteringWorkflow {
      */
     public ClusteringResult runClustering(ClusteringConfig config,
                                            Consumer<String> progressCallback) throws IOException {
+        long startTime = System.currentTimeMillis();
         report(progressCallback, "Extracting measurements...");
 
         // Get detections from the current image
@@ -125,7 +128,11 @@ public class ClusteringWorkflow {
         report(progressCallback, "Applying results to QuPath...");
 
         ResultApplier applier = new ResultApplier();
-        applier.applyClusterLabels(extraction.getDetections(), result.getClusterLabels());
+
+        // Skip label application for embedding-only mode
+        if (config.getAlgorithm() != ClusteringConfig.Algorithm.NONE) {
+            applier.applyClusterLabels(extraction.getDetections(), result.getClusterLabels());
+        }
 
         if (result.hasEmbedding()) {
             String prefix = ResultApplier.getEmbeddingPrefix(
@@ -141,8 +148,27 @@ public class ClusteringWorkflow {
             }
         });
 
-        report(progressCallback, "Clustering complete: " + result.getNClusters()
-                + " clusters found for " + result.getNCells() + " cells.");
+        String completeMsg = config.getAlgorithm() == ClusteringConfig.Algorithm.NONE
+                ? "Embedding computed for " + result.getNCells() + " cells."
+                : "Clustering complete: " + result.getNClusters()
+                    + " clusters found for " + result.getNCells() + " cells.";
+        report(progressCallback, completeMsg);
+
+        // Audit trail
+        long elapsed = System.currentTimeMillis() - startTime;
+        String opType = config.getAlgorithm() == ClusteringConfig.Algorithm.NONE
+                ? "EMBEDDING" : "CLUSTERING";
+        OperationLogger.getInstance().logOperation(opType,
+                OperationLogger.clusteringParams(
+                        config.getAlgorithm().getDisplayName(),
+                        config.getAlgorithmParams(),
+                        config.getNormalization().getId(),
+                        config.getEmbeddingMethod().getId(),
+                        extraction.getNMeasurements(),
+                        extraction.getNCells(),
+                        config.isEnableSpatialAnalysis(),
+                        config.isEnableBatchCorrection()),
+                completeMsg, elapsed);
 
         return result;
     }
@@ -162,6 +188,8 @@ public class ClusteringWorkflow {
             List<ProjectImageEntry<BufferedImage>> imageEntries,
             ClusteringConfig config,
             Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
 
         if (imageEntries == null || imageEntries.isEmpty()) {
             throw new IOException("No project images selected for clustering.");
@@ -277,11 +305,280 @@ public class ClusteringWorkflow {
             }
         });
 
-        report(progressCallback, "Project clustering complete: " + result.getNClusters()
+        String completeMsg = "Project clustering complete: " + result.getNClusters()
                 + " clusters found for " + result.getNCells() + " cells across "
-                + extraction.getImageSegments().size() + " images.");
+                + extraction.getImageSegments().size() + " images.";
+        report(progressCallback, completeMsg);
+
+        // Audit trail
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("PROJECT CLUSTERING",
+                OperationLogger.projectClusteringParams(
+                        config.getAlgorithm().getDisplayName(),
+                        config.getAlgorithmParams(),
+                        config.getNormalization().getId(),
+                        config.getEmbeddingMethod().getId(),
+                        extraction.getNMeasurements(),
+                        extraction.getNCells(),
+                        extraction.getImageSegments().size(),
+                        config.isEnableBatchCorrection()),
+                completeMsg, elapsed);
 
         return result;
+    }
+
+    /**
+     * Runs phenotyping on detections from the current image using user-defined rules.
+     * This method should be called from a background thread.
+     *
+     * @param selectedMeasurements marker measurements to use for phenotyping
+     * @param normalization        normalization method id ("zscore", "minmax", "percentile", "none")
+     * @param phenotypeRulesJson   JSON string of phenotype rules
+     * @param gatesJson            JSON string of per-marker gate thresholds
+     * @param progressCallback     optional callback for progress messages
+     * @return map with "labels" (int[]), "phenotype_names" (String[]),
+     *         "n_phenotypes" (Integer), "phenotype_counts" (String JSON)
+     * @throws IOException if phenotyping fails
+     */
+    public Map<String, Object> runPhenotyping(
+            List<String> selectedMeasurements,
+            String normalization,
+            String phenotypeRulesJson,
+            String gatesJson,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        report(progressCallback, "Extracting measurements...");
+
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            throw new IOException("No image is open");
+        }
+
+        PathObjectHierarchy hierarchy = imageData.getHierarchy();
+        List<PathObject> detections = new ArrayList<>(hierarchy.getDetectionObjects());
+        if (detections.isEmpty()) {
+            throw new IOException("No detection objects found. Run cell detection first.");
+        }
+
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extract(detections, selectedMeasurements);
+
+        logger.info("Extracted {} cells x {} measurements for phenotyping",
+                extraction.getNCells(), extraction.getNMeasurements());
+
+        report(progressCallback, "Sending data to Python (" + extraction.getNCells()
+                + " cells x " + extraction.getNMeasurements() + " markers)...");
+
+        Map<String, Object> resultMap;
+        try {
+            resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
+                    executePhenotypingTask(extraction, normalization,
+                            phenotypeRulesJson, gatesJson, progressCallback));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Phenotyping failed: " + e.getMessage(), e);
+        }
+
+        // Apply labels back to QuPath
+        report(progressCallback, "Applying phenotype labels...");
+        int[] labels = (int[]) resultMap.get("labels");
+        String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
+
+        ResultApplier applier = new ResultApplier();
+        applier.applyPhenotypeLabels(extraction.getDetections(), labels, phenotypeNames);
+
+        // Fire hierarchy update on FX thread
+        Platform.runLater(() -> {
+            ImageData<BufferedImage> currentImageData = qupath.getImageData();
+            if (currentImageData != null) {
+                currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+            }
+        });
+
+        String completeMsg = "Phenotyping complete: " + resultMap.get("n_phenotypes")
+                + " phenotypes assigned to " + extraction.getNCells() + " cells.";
+        report(progressCallback, completeMsg);
+
+        // Audit trail -- count rules from the JSON (each array element is a rule)
+        int ruleCount = 0;
+        try {
+            List<?> ruleList = new Gson().fromJson(phenotypeRulesJson, List.class);
+            ruleCount = ruleList != null ? ruleList.size() : 0;
+        } catch (Exception ignored) {}
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("PHENOTYPING",
+                OperationLogger.phenotypingParams(
+                        normalization,
+                        selectedMeasurements.size(),
+                        ruleCount,
+                        extraction.getNCells(),
+                        selectedMeasurements),
+                completeMsg, elapsed);
+
+        return resultMap;
+    }
+
+    /**
+     * Computes per-marker histograms and auto-thresholds.
+     * This method should be called from a background thread.
+     *
+     * @param selectedMeasurements marker measurements to compute thresholds for
+     * @param normalization        normalization method id
+     * @param progressCallback     optional callback for progress messages
+     * @return JSON string with per-marker histogram data and auto-thresholds
+     * @throws IOException if computation fails
+     */
+    public String computeThresholds(
+            List<String> selectedMeasurements,
+            String normalization,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        report(progressCallback, "Extracting measurements for thresholds...");
+
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            throw new IOException("No image is open");
+        }
+
+        List<PathObject> detections = new ArrayList<>(
+                imageData.getHierarchy().getDetectionObjects());
+        if (detections.isEmpty()) {
+            throw new IOException("No detection objects found.");
+        }
+
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extract(detections, selectedMeasurements);
+
+        report(progressCallback, "Computing thresholds (" + extraction.getNCells()
+                + " cells x " + extraction.getNMeasurements() + " markers)...");
+
+        try {
+            String result = ApposeClusteringService.withExtensionClassLoader(() ->
+                    executeThresholdTask(extraction, normalization, progressCallback));
+
+            // Audit trail
+            long elapsed = System.currentTimeMillis() - startTime;
+            OperationLogger.getInstance().logOperation("COMPUTE THRESHOLDS",
+                    OperationLogger.thresholdParams(
+                            normalization,
+                            extraction.getNMeasurements(),
+                            extraction.getNCells()),
+                    "Thresholds computed for " + extraction.getNMeasurements() + " markers",
+                    elapsed);
+
+            return result;
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Threshold computation failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Executes the threshold computation task via Appose. Must be called with TCCL set.
+     */
+    private String executeThresholdTask(
+            MeasurementExtractor.ExtractionResult extraction,
+            String normalization,
+            Consumer<String> progressCallback) throws IOException {
+
+        int nCells = extraction.getNCells();
+        int nMeasurements = extraction.getNMeasurements();
+        double[][] data = extraction.getData();
+
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+        var buf = measurementsNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            buf.put(data[i]);
+        }
+
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("normalization", normalization);
+
+        try {
+            ApposeClusteringService service = ApposeClusteringService.getInstance();
+            Task task = service.runTaskWithListener("compute_thresholds", inputs, event -> {
+                if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                    report(progressCallback, event.message);
+                }
+            });
+
+            return (String) task.outputs.get("histograms_json");
+        } finally {
+            measurementsNd.close();
+        }
+    }
+
+    /**
+     * Executes the phenotyping task via Appose. Must be called with TCCL set.
+     */
+    private Map<String, Object> executePhenotypingTask(
+            MeasurementExtractor.ExtractionResult extraction,
+            String normalization,
+            String phenotypeRulesJson,
+            String gatesJson,
+            Consumer<String> progressCallback) throws IOException {
+
+        int nCells = extraction.getNCells();
+        int nMeasurements = extraction.getNMeasurements();
+        double[][] data = extraction.getData();
+
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+        var buf = measurementsNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            buf.put(data[i]);
+        }
+
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("normalization", normalization);
+        inputs.put("phenotype_rules", phenotypeRulesJson);
+        inputs.put("gates_json", gatesJson);
+
+        NDArray labelsNd = null;
+
+        try {
+            ApposeClusteringService service = ApposeClusteringService.getInstance();
+            Task task = service.runTaskWithListener("run_phenotyping", inputs, event -> {
+                if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                    report(progressCallback, event.message);
+                }
+            });
+
+            // Parse outputs
+            labelsNd = (NDArray) task.outputs.get("phenotype_labels");
+            int nPhenotypes = ((Number) task.outputs.get("n_phenotypes")).intValue();
+            String phenotypeNamesJson = (String) task.outputs.get("phenotype_names");
+            String phenotypeCountsJson = (String) task.outputs.get("phenotype_counts");
+
+            int[] labels = new int[nCells];
+            labelsNd.buffer().asIntBuffer().get(labels);
+
+            Gson gson = new Gson();
+            List<String> namesList = gson.fromJson(phenotypeNamesJson,
+                    new TypeToken<List<String>>(){}.getType());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("labels", labels);
+            result.put("phenotype_names", namesList.toArray(new String[0]));
+            result.put("n_phenotypes", nPhenotypes);
+            result.put("phenotype_counts", phenotypeCountsJson);
+
+            return result;
+        } finally {
+            measurementsNd.close();
+            if (labelsNd != null) labelsNd.close();
+        }
     }
 
     /**
@@ -479,6 +776,299 @@ public class ClusteringWorkflow {
             if (pagaNd != null) pagaNd.close();
             if (nhoodNd != null) nhoodNd.close();
         }
+    }
+
+    /**
+     * Runs sub-clustering on detections within a specific parent cluster.
+     * The parent cluster detections are re-clustered and assigned hierarchical labels
+     * (e.g., "Cluster 3.0", "Cluster 3.1").
+     *
+     * @param parentClusterName  the parent cluster classification (e.g., "Cluster 3")
+     * @param config             clustering configuration to use for sub-clustering
+     * @param progressCallback   optional callback for progress messages
+     * @return the clustering result for the sub-cluster
+     * @throws IOException if sub-clustering fails
+     */
+    public ClusteringResult runSubclustering(
+            String parentClusterName,
+            ClusteringConfig config,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        report(progressCallback, "Extracting detections from " + parentClusterName + "...");
+
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            throw new IOException("No image is open");
+        }
+
+        // Filter detections by parent cluster classification
+        List<PathObject> parentDetections = imageData.getHierarchy().getDetectionObjects()
+                .stream()
+                .filter(det -> {
+                    var pc = det.getPathClass();
+                    return pc != null && pc.toString().equals(parentClusterName);
+                })
+                .collect(java.util.stream.Collectors.toList());
+
+        if (parentDetections.isEmpty()) {
+            throw new IOException("No detections found with classification '"
+                    + parentClusterName + "'");
+        }
+
+        logger.info("Sub-clustering {} detections from {}", parentDetections.size(), parentClusterName);
+
+        // Extract measurements
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extract(parentDetections, config.getSelectedMeasurements());
+
+        report(progressCallback, "Sub-clustering " + extraction.getNCells()
+                + " cells from " + parentClusterName + "...");
+
+        // Run clustering via Appose
+        ClusteringResult result;
+        try {
+            result = ApposeClusteringService.withExtensionClassLoader(() ->
+                    executeClusteringTask(extraction, config, progressCallback));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Sub-clustering failed: " + e.getMessage(), e);
+        }
+
+        // Apply hierarchical sub-cluster labels
+        report(progressCallback, "Applying sub-cluster labels...");
+        ResultApplier applier = new ResultApplier();
+        applier.applySubclusterLabels(extraction.getDetections(),
+                result.getClusterLabels(), parentClusterName);
+
+        if (result.hasEmbedding()) {
+            String prefix = ResultApplier.getEmbeddingPrefix(
+                    config.getEmbeddingMethod().getId());
+            applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
+        }
+
+        // Fire hierarchy update
+        Platform.runLater(() -> {
+            ImageData<BufferedImage> currentImageData = qupath.getImageData();
+            if (currentImageData != null) {
+                currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+            }
+        });
+
+        String completeMsg = "Sub-clustering complete: " + result.getNClusters()
+                + " sub-clusters in " + parentClusterName;
+        report(progressCallback, completeMsg);
+
+        // Audit trail
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("SUB-CLUSTERING",
+                OperationLogger.subclusteringParams(
+                        parentClusterName,
+                        config.getAlgorithm().getDisplayName(),
+                        extraction.getNCells()),
+                completeMsg, elapsed);
+
+        return result;
+    }
+
+    /**
+     * Exports current image data as AnnData (.h5ad) file.
+     * Includes measurements, cluster labels, phenotype labels, embedding, and spatial coordinates.
+     *
+     * @param selectedMeasurements measurements to include (null for all)
+     * @param outputPath           path to write the .h5ad file
+     * @param progressCallback     optional callback for progress messages
+     * @throws IOException if export fails
+     */
+    public void exportAnnData(
+            List<String> selectedMeasurements,
+            String outputPath,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        report(progressCallback, "Preparing AnnData export...");
+
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            throw new IOException("No image is open");
+        }
+
+        List<PathObject> detections = new ArrayList<>(
+                imageData.getHierarchy().getDetectionObjects());
+        if (detections.isEmpty()) {
+            throw new IOException("No detection objects found.");
+        }
+
+        // Determine measurements to export
+        if (selectedMeasurements == null || selectedMeasurements.isEmpty()) {
+            selectedMeasurements = MeasurementExtractor.getAllMeasurements(detections);
+        }
+
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extract(detections, selectedMeasurements);
+
+        report(progressCallback, "Exporting " + extraction.getNCells() + " cells x "
+                + extraction.getNMeasurements() + " markers...");
+
+        try {
+            ApposeClusteringService.withExtensionClassLoader(() -> {
+                executeAnnDataExport(extraction, outputPath, progressCallback);
+                return null;
+            });
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("AnnData export failed: " + e.getMessage(), e);
+        }
+
+        // Audit trail
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("EXPORT ANNDATA",
+                OperationLogger.exportParams(
+                        outputPath,
+                        extraction.getNCells(),
+                        extraction.getNMeasurements()),
+                "Exported " + extraction.getNCells() + " cells x "
+                        + extraction.getNMeasurements() + " markers",
+                elapsed);
+
+        report(progressCallback, "AnnData exported to " + outputPath);
+    }
+
+    /**
+     * Executes the AnnData export task via Appose. Must be called with TCCL set.
+     */
+    private void executeAnnDataExport(
+            MeasurementExtractor.ExtractionResult extraction,
+            String outputPath,
+            Consumer<String> progressCallback) throws IOException {
+
+        int nCells = extraction.getNCells();
+        int nMeasurements = extraction.getNMeasurements();
+        double[][] data = extraction.getData();
+
+        // Create measurement NDArray
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+        var buf = measurementsNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            buf.put(data[i]);
+        }
+
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("output_path", outputPath);
+
+        // Extract cluster labels from current PathClass
+        List<Integer> clusterLabels = new ArrayList<>();
+        List<String> phenotypeLabels = new ArrayList<>();
+        boolean hasCluster = false;
+        boolean hasPhenotype = false;
+
+        for (PathObject det : extraction.getDetections()) {
+            var pc = det.getPathClass();
+            String className = pc != null ? pc.toString() : "";
+
+            if (className.startsWith("Cluster ")) {
+                try {
+                    int label = Integer.parseInt(className.substring("Cluster ".length()).split("\\.")[0]);
+                    clusterLabels.add(label);
+                    hasCluster = true;
+                } catch (NumberFormatException e) {
+                    clusterLabels.add(-1);
+                }
+                phenotypeLabels.add(className);
+            } else if (!className.isEmpty()) {
+                clusterLabels.add(-1);
+                phenotypeLabels.add(className);
+                hasPhenotype = true;
+            } else {
+                clusterLabels.add(-1);
+                phenotypeLabels.add("Unknown");
+            }
+        }
+
+        if (hasCluster) {
+            inputs.put("cluster_labels", clusterLabels);
+        }
+        if (hasPhenotype || hasCluster) {
+            inputs.put("phenotype_labels", phenotypeLabels);
+        }
+
+        // Extract embedding coordinates if present
+        double[][] embedding = extractExistingEmbedding(extraction.getDetections());
+        NDArray embNd = null;
+        if (embedding != null) {
+            NDArray.Shape embShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
+            embNd = new NDArray(NDArray.DType.FLOAT64, embShape);
+            var embBuf = embNd.buffer().asDoubleBuffer();
+            for (int i = 0; i < nCells; i++) {
+                embBuf.put(embedding[i]);
+            }
+            inputs.put("embedding", embNd);
+        }
+
+        // Extract spatial coordinates (centroids)
+        double[][] centroids = MeasurementExtractor.extractCentroids(extraction.getDetections());
+        NDArray.Shape spatialShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
+        NDArray spatialNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
+        var spatialBuf = spatialNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            spatialBuf.put(centroids[i]);
+        }
+        inputs.put("spatial_coords", spatialNd);
+
+        try {
+            ApposeClusteringService service = ApposeClusteringService.getInstance();
+            Task task = service.runTaskWithListener("export_anndata", inputs, event -> {
+                if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                    report(progressCallback, event.message);
+                }
+            });
+
+            boolean success = (boolean) task.outputs.get("success");
+            if (!success) {
+                throw new IOException("AnnData export reported failure");
+            }
+
+            int exportedCells = ((Number) task.outputs.get("n_cells")).intValue();
+            int exportedMarkers = ((Number) task.outputs.get("n_markers")).intValue();
+            logger.info("Exported AnnData: {} cells x {} markers to {}",
+                    exportedCells, exportedMarkers, outputPath);
+        } finally {
+            measurementsNd.close();
+            if (embNd != null) embNd.close();
+            spatialNd.close();
+        }
+    }
+
+    /**
+     * Extracts existing embedding coordinates (UMAP1/UMAP2 or PCA1/PCA2 or tSNE1/tSNE2)
+     * from detection measurements. Returns null if no embedding found.
+     */
+    private double[][] extractExistingEmbedding(List<PathObject> detections) {
+        // Try UMAP, PCA, tSNE in order
+        String[][] prefixes = {{"UMAP1", "UMAP2"}, {"PCA1", "PCA2"}, {"tSNE1", "tSNE2"}};
+
+        for (String[] pair : prefixes) {
+            PathObject first = detections.get(0);
+            if (first.getMeasurements().containsKey(pair[0])
+                    && first.getMeasurements().containsKey(pair[1])) {
+                double[][] emb = new double[detections.size()][2];
+                for (int i = 0; i < detections.size(); i++) {
+                    var ml = detections.get(i).getMeasurements();
+                    emb[i][0] = ml.getOrDefault(pair[0], 0.0).doubleValue();
+                    emb[i][1] = ml.getOrDefault(pair[1], 0.0).doubleValue();
+                }
+                logger.info("Found existing embedding: {}/{}", pair[0], pair[1]);
+                return emb;
+            }
+        }
+        return null;
     }
 
     private static void report(Consumer<String> callback, String message) {

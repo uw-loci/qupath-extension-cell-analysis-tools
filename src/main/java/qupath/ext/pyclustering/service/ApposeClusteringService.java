@@ -44,6 +44,7 @@ public class ApposeClusteringService {
     private boolean initialized;
     private String initError;
     private Thread shutdownHook;
+    private Consumer<String> debugListener;
 
     private ApposeClusteringService() {}
 
@@ -125,8 +126,13 @@ public class ApposeClusteringService {
 
                 pythonService = environment.python();
 
-                pythonService.debug(msg ->
-                        logger.info("[PyClustering Python] {}", msg));
+                pythonService.debug(msg -> {
+                    logger.info("[PyClustering Python] {}", msg);
+                    Consumer<String> listener = debugListener;
+                    if (listener != null) {
+                        listener.accept(msg);
+                    }
+                });
 
                 // Import numpy first to avoid Windows threading deadlock
                 String initScript = "import numpy\n" + loadScript("init_services.py");
@@ -306,6 +312,14 @@ public class ApposeClusteringService {
     }
 
     public String getInitError() { return initError; }
+
+    /**
+     * Sets a listener that receives Python debug/stderr output.
+     * Useful for forwarding to the Python Console window.
+     */
+    public void setDebugListener(Consumer<String> listener) {
+        this.debugListener = listener;
+    }
 
     /**
      * Executes a callable with the extension classloader as TCCL.

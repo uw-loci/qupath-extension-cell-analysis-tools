@@ -17,7 +17,8 @@ public class ClusteringConfig {
         AGGLOMERATIVE("agglomerative", "Agglomerative (hierarchical)"),
         MINIBATCHKMEANS("minibatchkmeans", "MiniBatch KMeans"),
         GMM("gmm", "Gaussian Mixture Model"),
-        BANKSY("banksy", "BANKSY (spatially-aware)");
+        BANKSY("banksy", "BANKSY (spatially-aware)"),
+        NONE("none", "None (embedding only)");
 
         private final String id;
         private final String displayName;

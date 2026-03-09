@@ -14,7 +14,9 @@ import qupath.ext.pyclustering.controller.ClusteringWorkflow;
 import qupath.ext.pyclustering.model.ClusteringConfig;
 import qupath.ext.pyclustering.model.ClusteringConfig.*;
 import qupath.ext.pyclustering.model.ClusteringResult;
+import qupath.ext.pyclustering.service.ClusteringConfigManager;
 import qupath.ext.pyclustering.service.MeasurementExtractor;
+import qupath.ext.pyclustering.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
@@ -93,6 +95,8 @@ public class ClusteringDialog {
                 new Separator(),
                 createAnalysisSection(),
                 new Separator(),
+                createConfigSection(),
+                new Separator(),
                 createStatusSection()
         );
 
@@ -156,8 +160,10 @@ public class ClusteringDialog {
         HBox buttonBar = new HBox(5);
         Button selectAll = new Button("Select All");
         selectAll.setOnAction(e -> measurementList.getSelectionModel().selectAll());
+        selectAll.setTooltip(new Tooltip("Select all available measurements for clustering."));
         Button selectNone = new Button("Select None");
         selectNone.setOnAction(e -> measurementList.getSelectionModel().clearSelection());
+        selectNone.setTooltip(new Tooltip("Clear the measurement selection."));
         Button selectMean = new Button("Select 'Mean' only");
         selectMean.setOnAction(e -> {
             measurementList.getSelectionModel().clearSelection();
@@ -167,7 +173,14 @@ public class ClusteringDialog {
                 }
             }
         });
+        selectMean.setTooltip(new Tooltip(
+                "Select only mean intensity measurements.\n"
+                + "Typically the best choice for marker-based clustering."));
         buttonBar.getChildren().addAll(selectAll, selectNone, selectMean);
+
+        measurementList.setTooltip(new Tooltip(
+                "Select the measurements to use for clustering.\n"
+                + "Hold Ctrl/Cmd to select multiple. Shift-click for ranges."));
 
         VBox box = new VBox(5, measurementList, buttonBar);
         TitledPane pane = new TitledPane("Measurements", box);
@@ -179,6 +192,12 @@ public class ClusteringDialog {
     private HBox createNormalizationSection() {
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(Normalization.values()));
         normalizationCombo.setValue(Normalization.ZSCORE);
+        normalizationCombo.setTooltip(new Tooltip(
+                "How to scale marker values before clustering:\n"
+                + "  Z-score - zero mean, unit variance (recommended)\n"
+                + "  Min-Max - scale to [0,1] range\n"
+                + "  Percentile - robust min-max using 1st/99th percentiles\n"
+                + "  None - use raw measurement values"));
 
         HBox box = new HBox(10, new Label("Normalization:"), normalizationCombo);
         box.setAlignment(Pos.CENTER_LEFT);
@@ -188,14 +207,33 @@ public class ClusteringDialog {
     private TitledPane createEmbeddingSection() {
         embeddingCombo = new ComboBox<>(FXCollections.observableArrayList(EmbeddingMethod.values()));
         embeddingCombo.setValue(EmbeddingMethod.UMAP);
+        embeddingCombo.setTooltip(new Tooltip(
+                "Dimensionality reduction for 2D visualization:\n"
+                + "  UMAP - preserves local + global structure (McInnes et al. 2018)\n"
+                + "  t-SNE - preserves local neighborhoods (van der Maaten & Hinton 2008)\n"
+                + "  PCA - linear projection onto top 2 principal components\n"
+                + "  None - skip embedding computation\n"
+                + "See documentation/REFERENCES.md for full citations."));
 
         umapNeighborsSpinner = new Spinner<>(2, 200, 15);
         umapNeighborsSpinner.setEditable(true);
         umapNeighborsSpinner.setPrefWidth(80);
+        umapNeighborsSpinner.setTooltip(new Tooltip(
+                "Number of nearest neighbors for UMAP.\n"
+                + "Range: 2-200. Default: 15.\n"
+                + "Smaller values emphasize local structure (tight clusters),\n"
+                + "larger values emphasize global structure (broad layout).\n"
+                + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
         umapMinDistSpinner = new Spinner<>(0.0, 1.0, 0.1, 0.05);
         umapMinDistSpinner.setEditable(true);
         umapMinDistSpinner.setPrefWidth(80);
+        umapMinDistSpinner.setTooltip(new Tooltip(
+                "Minimum distance between points in UMAP output.\n"
+                + "Range: 0.0-1.0. Default: 0.1.\n"
+                + "Smaller values create tighter, more separated clusters,\n"
+                + "larger values spread points more evenly.\n"
+                + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
         HBox embRow = new HBox(10, new Label("Method:"), embeddingCombo);
         embRow.setAlignment(Pos.CENTER_LEFT);
@@ -223,6 +261,16 @@ public class ClusteringDialog {
         algorithmCombo = new ComboBox<>(FXCollections.observableArrayList(Algorithm.values()));
         algorithmCombo.setValue(Algorithm.LEIDEN);
         algorithmCombo.setOnAction(e -> updateAlgorithmParams());
+        algorithmCombo.setTooltip(new Tooltip(
+                "Clustering algorithm:\n"
+                + "  Leiden - graph-based, auto-detects k (Traag et al. 2019)\n"
+                + "  KMeans - centroid-based, requires k (Lloyd 1982)\n"
+                + "  HDBSCAN - density-based, auto-detects + noise (Campello et al. 2013)\n"
+                + "  Agglomerative - hierarchical, requires k\n"
+                + "  GMM - Gaussian mixture model, soft clustering\n"
+                + "  BANKSY - spatially-aware (Singhal et al. 2024, Nature Genetics)\n"
+                + "  None - embedding only, no clustering\n"
+                + "See documentation/REFERENCES.md for full citations."));
 
         algorithmParamsBox = new VBox(5);
 
@@ -230,38 +278,85 @@ public class ClusteringDialog {
         leidenNeighborsSpinner = new Spinner<>(2, 500, 50);
         leidenNeighborsSpinner.setEditable(true);
         leidenNeighborsSpinner.setPrefWidth(80);
+        leidenNeighborsSpinner.setTooltip(new Tooltip(
+                "Number of nearest neighbors for the k-NN graph.\n"
+                + "Range: 2-500. Default: 50.\n"
+                + "Higher values connect more distant cells, producing\n"
+                + "broader, fewer clusters. Lower values find finer structure."));
 
         leidenResolutionSpinner = new Spinner<>(0.01, 10.0, 1.0, 0.1);
         leidenResolutionSpinner.setEditable(true);
         leidenResolutionSpinner.setPrefWidth(80);
+        leidenResolutionSpinner.setTooltip(new Tooltip(
+                "Controls cluster granularity for Leiden.\n"
+                + "Range: 0.01-10.0. Default: 1.0.\n"
+                + "Higher values produce more, smaller clusters.\n"
+                + "Lower values produce fewer, larger clusters.\n"
+                + "Start at 1.0 and adjust based on heatmap inspection."));
 
         kmeansClusterSpinner = new Spinner<>(2, 200, 10);
         kmeansClusterSpinner.setEditable(true);
         kmeansClusterSpinner.setPrefWidth(80);
+        kmeansClusterSpinner.setTooltip(new Tooltip(
+                "Number of clusters (k) to create.\n"
+                + "Range: 2-200. Default: 10.\n"
+                + "Must be specified in advance. If unsure, try Leiden\n"
+                + "instead (auto-detects cluster count)."));
 
         hdbscanMinClusterSpinner = new Spinner<>(2, 500, 15);
         hdbscanMinClusterSpinner.setEditable(true);
         hdbscanMinClusterSpinner.setPrefWidth(80);
+        hdbscanMinClusterSpinner.setTooltip(new Tooltip(
+                "Minimum number of cells to form a cluster.\n"
+                + "Range: 2-500. Default: 15.\n"
+                + "Smaller values find more (and smaller) clusters.\n"
+                + "Cells not assigned to any cluster are labeled\n"
+                + "'Unclassified' (noise points)."));
 
         aggClusterSpinner = new Spinner<>(2, 200, 10);
         aggClusterSpinner.setEditable(true);
         aggClusterSpinner.setPrefWidth(80);
+        aggClusterSpinner.setTooltip(new Tooltip(
+                "Number of clusters for agglomerative (hierarchical) clustering.\n"
+                + "Range: 2-200. Default: 10."));
 
         aggLinkageCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "ward", "complete", "average", "single"));
         aggLinkageCombo.setValue("ward");
+        aggLinkageCombo.setTooltip(new Tooltip(
+                "Linkage criterion for merging clusters:\n"
+                + "  ward - minimizes within-cluster variance (most common)\n"
+                + "  complete - uses max distance between cluster members\n"
+                + "  average - uses mean distance between cluster members\n"
+                + "  single - uses min distance (can produce elongated clusters)"));
 
         banksyLambdaSpinner = new Spinner<>(0.0, 1.0, 0.2, 0.05);
         banksyLambdaSpinner.setEditable(true);
         banksyLambdaSpinner.setPrefWidth(80);
+        banksyLambdaSpinner.setTooltip(new Tooltip(
+                "Weight of spatial vs. expression information.\n"
+                + "Range: 0.0-1.0. Default: 0.2.\n"
+                + "0 = expression only, 1 = spatial only.\n"
+                + "Values around 0.2 balance expression and spatial context.\n"
+                + "Ref: Singhal et al. (2024) Nature Genetics"));
 
         banksyKGeomSpinner = new Spinner<>(2, 200, 15);
         banksyKGeomSpinner.setEditable(true);
         banksyKGeomSpinner.setPrefWidth(80);
+        banksyKGeomSpinner.setTooltip(new Tooltip(
+                "Number of spatial nearest neighbors for BANKSY.\n"
+                + "Range: 2-200. Default: 15.\n"
+                + "Defines how many nearby cells contribute to\n"
+                + "each cell's spatial context. Larger values\n"
+                + "capture broader tissue patterns."));
 
         banksyResolutionSpinner = new Spinner<>(0.01, 10.0, 0.7, 0.1);
         banksyResolutionSpinner.setEditable(true);
         banksyResolutionSpinner.setPrefWidth(80);
+        banksyResolutionSpinner.setTooltip(new Tooltip(
+                "Leiden resolution for the final BANKSY clustering step.\n"
+                + "Range: 0.01-10.0. Default: 0.7.\n"
+                + "Higher values produce more, smaller clusters."));
 
         HBox algoRow = new HBox(10, new Label("Algorithm:"), algorithmCombo);
         algoRow.setAlignment(Pos.CENTER_LEFT);
@@ -276,13 +371,27 @@ public class ClusteringDialog {
     private VBox createAnalysisSection() {
         generatePlotsCheck = new CheckBox("Generate analysis plots (marker ranking, PAGA, dotplot)");
         generatePlotsCheck.setSelected(true);
+        generatePlotsCheck.setTooltip(new Tooltip(
+                "Generate static PNG plots for marker rankings (Wilcoxon rank-sum),\n"
+                + "PAGA trajectory graph, dotplot, and stacked violin plots."));
 
         spatialAnalysisCheck = new CheckBox("Spatial analysis (neighborhood enrichment, Moran's I)");
         spatialAnalysisCheck.setSelected(false);
+        spatialAnalysisCheck.setTooltip(new Tooltip(
+                "Compute spatial statistics using cell centroid coordinates:\n"
+                + "  Neighborhood enrichment - which clusters co-localize?\n"
+                + "  Moran's I - spatial autocorrelation per marker.\n"
+                + "Powered by squidpy (Palla et al. 2022, Nature Methods).\n"
+                + "See documentation/REFERENCES.md for citations."));
 
         batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");
         batchCorrectionCheck.setSelected(false);
         batchCorrectionCheck.setDisable(true);
+        batchCorrectionCheck.setTooltip(new Tooltip(
+                "Apply Harmony batch correction to remove per-image\n"
+                + "technical variation before clustering.\n"
+                + "Only available when clustering all project images.\n"
+                + "Ref: Korsunsky et al. (2019) Nature Methods"));
 
         // Enable batch correction only when "All project images" is selected
         scopeAllImages.selectedProperty().addListener((obs, oldVal, newVal) -> {
@@ -439,6 +548,171 @@ public class ClusteringDialog {
         return config;
     }
 
+    private HBox createConfigSection() {
+        Button saveBtn = new Button("Save Config...");
+        saveBtn.setOnAction(e -> saveConfig());
+        saveBtn.setTooltip(new Tooltip(
+                "Save the current clustering configuration (algorithm,\n"
+                + "parameters, measurements) to the project for reuse."));
+
+        Button loadBtn = new Button("Load Config...");
+        loadBtn.setOnAction(e -> loadConfig());
+        loadBtn.setTooltip(new Tooltip(
+                "Load a previously saved clustering configuration\n"
+                + "and restore all settings in this dialog."));
+
+        HBox box = new HBox(10, saveBtn, loadBtn);
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
+    }
+
+    private void saveConfig() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("PyClustering",
+                    "A project must be open to save configs.");
+            return;
+        }
+
+        ClusteringConfig config = buildConfig();
+        if (config == null) return;
+
+        TextInputDialog nameDialog = new TextInputDialog("my-config");
+        nameDialog.setTitle("Save Clustering Config");
+        nameDialog.setHeaderText("Enter a name for this configuration:");
+        nameDialog.initOwner(owner);
+        var result = nameDialog.showAndWait();
+        if (result.isEmpty() || result.get().trim().isEmpty()) return;
+
+        try {
+            String configName = result.get().trim();
+            ClusteringConfigManager.saveConfig(project, configName, config);
+            Dialogs.showInfoNotification("PyClustering",
+                    "Config saved: " + configName);
+            OperationLogger.getInstance().logEvent("CONFIG SAVED",
+                    "Saved clustering config '" + configName + "' ("
+                    + config.getAlgorithm().getDisplayName() + ", "
+                    + config.getSelectedMeasurements().size() + " markers)");
+        } catch (Exception e) {
+            logger.error("Failed to save config", e);
+            Dialogs.showErrorNotification("PyClustering",
+                    "Failed to save config: " + e.getMessage());
+        }
+    }
+
+    private void loadConfig() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("PyClustering",
+                    "A project must be open to load configs.");
+            return;
+        }
+
+        try {
+            List<String> configNames = ClusteringConfigManager.listConfigs(project);
+            if (configNames.isEmpty()) {
+                Dialogs.showWarningNotification("PyClustering", "No saved configs found.");
+                return;
+            }
+
+            ChoiceDialog<String> choiceDialog = new ChoiceDialog<>(configNames.get(0), configNames);
+            choiceDialog.setTitle("Load Clustering Config");
+            choiceDialog.setHeaderText("Select a saved configuration:");
+            choiceDialog.initOwner(owner);
+            var result = choiceDialog.showAndWait();
+            if (result.isEmpty()) return;
+
+            String configName = result.get();
+            ClusteringConfig config = ClusteringConfigManager.loadConfig(project, configName);
+            applyConfig(config);
+            Dialogs.showInfoNotification("PyClustering",
+                    "Config loaded: " + configName);
+            OperationLogger.getInstance().logEvent("CONFIG LOADED",
+                    "Loaded clustering config '" + configName + "' ("
+                    + config.getAlgorithm().getDisplayName() + ", "
+                    + config.getSelectedMeasurements().size() + " markers)");
+        } catch (Exception e) {
+            logger.error("Failed to load config", e);
+            Dialogs.showErrorNotification("PyClustering",
+                    "Failed to load config: " + e.getMessage());
+        }
+    }
+
+    private void applyConfig(ClusteringConfig config) {
+        // Algorithm
+        if (config.getAlgorithm() != null) {
+            algorithmCombo.setValue(config.getAlgorithm());
+            updateAlgorithmParams();
+        }
+
+        // Normalization
+        if (config.getNormalization() != null) {
+            normalizationCombo.setValue(config.getNormalization());
+        }
+
+        // Embedding
+        if (config.getEmbeddingMethod() != null) {
+            embeddingCombo.setValue(config.getEmbeddingMethod());
+        }
+
+        // Embedding params
+        Map<String, Object> embParams = config.getEmbeddingParams();
+        if (embParams != null) {
+            if (embParams.containsKey("n_neighbors")) {
+                umapNeighborsSpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("n_neighbors")).intValue());
+            }
+            if (embParams.containsKey("min_dist")) {
+                umapMinDistSpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("min_dist")).doubleValue());
+            }
+        }
+
+        // Algorithm params
+        Map<String, Object> algoParams = config.getAlgorithmParams();
+        if (algoParams != null) {
+            if (algoParams.containsKey("n_neighbors")) {
+                leidenNeighborsSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("n_neighbors")).intValue());
+            }
+            if (algoParams.containsKey("resolution")) {
+                leidenResolutionSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("resolution")).doubleValue());
+            }
+            if (algoParams.containsKey("n_clusters")) {
+                kmeansClusterSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("n_clusters")).intValue());
+            }
+            if (algoParams.containsKey("min_cluster_size")) {
+                hdbscanMinClusterSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("min_cluster_size")).intValue());
+            }
+            if (algoParams.containsKey("n_components")) {
+                kmeansClusterSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("n_components")).intValue());
+            }
+            if (algoParams.containsKey("linkage")) {
+                aggLinkageCombo.setValue((String) algoParams.get("linkage"));
+            }
+        }
+
+        // Analysis options
+        generatePlotsCheck.setSelected(config.isGeneratePlots());
+        spatialAnalysisCheck.setSelected(config.isEnableSpatialAnalysis());
+        batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
+
+        // Measurements - select matching items
+        List<String> configMeasurements = config.getSelectedMeasurements();
+        if (configMeasurements != null && !configMeasurements.isEmpty()) {
+            measurementList.getSelectionModel().clearSelection();
+            for (int i = 0; i < measurementList.getItems().size(); i++) {
+                if (configMeasurements.contains(measurementList.getItems().get(i))) {
+                    measurementList.getSelectionModel().select(i);
+                }
+            }
+        }
+    }
+
     private void runClustering() {
         ClusteringConfig config = buildConfig();
         if (config == null) return;
@@ -482,6 +756,16 @@ public class ClusteringDialog {
                 });
             } catch (Exception e) {
                 logger.error("Clustering failed", e);
+                OperationLogger.getInstance().logFailure("CLUSTERING",
+                        OperationLogger.clusteringParams(
+                                config.getAlgorithm().getDisplayName(),
+                                config.getAlgorithmParams(),
+                                config.getNormalization().getId(),
+                                config.getEmbeddingMethod().getId(),
+                                config.getSelectedMeasurements().size(),
+                                0, config.isEnableSpatialAnalysis(),
+                                config.isEnableBatchCorrection()),
+                        e.getMessage(), -1);
                 Platform.runLater(() -> {
                     progressBar.setProgress(0);
                     progressBar.setVisible(false);
@@ -507,6 +791,29 @@ public class ClusteringDialog {
 
         TabPane tabPane = new TabPane();
 
+        // Interactive heatmap tab (cluster-marker means)
+        if (result.getClusterStats() != null && result.getNClusters() > 1) {
+            ClusterHeatmapPanel heatmap = new ClusterHeatmapPanel();
+            heatmap.setData(result.getClusterStats(), result.getMarkerNames());
+            ScrollPane heatmapScroll = new ScrollPane(heatmap);
+            heatmapScroll.setFitToWidth(true);
+            Tab tab = new Tab("Heatmap", heatmapScroll);
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        // Interactive embedding scatter tab
+        if (result.hasEmbedding()) {
+            EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
+            String embName = embeddingCombo.getValue() != null
+                    ? embeddingCombo.getValue().getDisplayName() : "Embedding";
+            scatter.setData(result.getEmbedding(), result.getClusterLabels(),
+                    result.getNClusters(), embName);
+            Tab tab = new Tab(embName + " (interactive)", scatter);
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
         // Marker rankings tab
         if (result.hasMarkerRankings()) {
             TextArea rankingsText = new TextArea(formatMarkerRankings(result));
@@ -527,7 +834,7 @@ public class ClusteringDialog {
             tabPane.getTabs().add(tab);
         }
 
-        // Plot tabs
+        // Plot tabs (PNGs from Python)
         if (result.hasPlots()) {
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
                 try {
@@ -543,8 +850,9 @@ public class ClusteringDialog {
                     String tabName = switch (entry.getKey()) {
                         case "dotplot" -> "Dotplot";
                         case "matrixplot" -> "Matrix Plot";
+                        case "stacked_violin" -> "Stacked Violin";
                         case "paga" -> "PAGA Graph";
-                        case "embedding" -> "Embedding";
+                        case "embedding" -> "Embedding (static)";
                         case "nhood_enrichment" -> "Neighborhood Enrichment";
                         case "spatial_scatter" -> "Spatial Scatter";
                         default -> entry.getKey();
