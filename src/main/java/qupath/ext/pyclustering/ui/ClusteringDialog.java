@@ -794,7 +794,12 @@ public class ClusteringDialog {
             heatmap.setData(result.getClusterStats(), result.getMarkerNames());
             ScrollPane heatmapScroll = new ScrollPane(heatmap);
             heatmapScroll.setFitToWidth(true);
-            Tab tab = new Tab("Heatmap", heatmapScroll);
+            Tab tab = new Tab("Heatmap", wrapWithGuide(heatmapScroll,
+                    "Mean marker expression per cluster (column-normalized).\n"
+                    + "Red = high relative expression, blue = low. Each row is a cluster, "
+                    + "each column is a marker. Hover over cells for exact values.\n"
+                    + "Use this to identify which markers define each cluster and to guide "
+                    + "cell type annotation in the Phenotyping dialog."));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -806,7 +811,13 @@ public class ClusteringDialog {
                     ? embeddingCombo.getValue().getDisplayName() : "Embedding";
             scatter.setData(result.getEmbedding(), result.getClusterLabels(),
                     result.getNClusters(), embName);
-            Tab tab = new Tab(embName + " (interactive)", scatter);
+            Tab tab = new Tab(embName, wrapWithGuide(scatter,
+                    "Each point is one cell, colored by cluster assignment. "
+                    + "Cells close together have similar marker expression profiles.\n"
+                    + "Well-separated groups indicate distinct cell populations. "
+                    + "Scroll to zoom, drag to pan, hover for cell details.\n"
+                    + "Note: distances within a group are meaningful, but absolute "
+                    + "distances between groups should be interpreted cautiously."));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -815,8 +826,16 @@ public class ClusteringDialog {
         if (result.hasMarkerRankings()) {
             TextArea rankingsText = new TextArea(formatMarkerRankings(result));
             rankingsText.setEditable(false);
-            rankingsText.setStyle("-fx-font-family: monospace;");
-            Tab tab = new Tab("Marker Rankings", rankingsText);
+            rankingsText.setWrapText(false);
+            rankingsText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            Tab tab = new Tab("Marker Rankings", wrapWithGuide(rankingsText,
+                    "Top differentially expressed markers per cluster (Wilcoxon rank-sum test).\n"
+                    + "  Score: test statistic -- higher values indicate stronger differential expression.\n"
+                    + "  Log2FC: log2 fold change vs. all other clusters -- positive means upregulated "
+                    + "in this cluster.\n"
+                    + "  Adj. P-val: Benjamini-Hochberg corrected p-value -- smaller is more significant.\n"
+                    + "Use the top-scoring markers for each cluster as starting points for cell type "
+                    + "annotation. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells."));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -825,8 +844,16 @@ public class ClusteringDialog {
         if (result.hasSpatialAutocorr()) {
             TextArea autocorrText = new TextArea(formatSpatialAutocorr(result));
             autocorrText.setEditable(false);
-            autocorrText.setStyle("-fx-font-family: monospace;");
-            Tab tab = new Tab("Spatial Autocorrelation", autocorrText);
+            autocorrText.setWrapText(false);
+            autocorrText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            Tab tab = new Tab("Spatial Autocorrelation", wrapWithGuide(autocorrText,
+                    "Moran's I per marker measures spatial organization of expression.\n"
+                    + "  I > 0: spatially clustered (nearby cells have similar expression).\n"
+                    + "  I ~ 0: spatially random (no spatial pattern).\n"
+                    + "  I < 0: spatially dispersed (nearby cells have different expression).\n"
+                    + "Markers with high Moran's I and significant p-values show tissue-level "
+                    + "spatial structure -- they are good candidates for spatially-aware analyses "
+                    + "like BANKSY clustering."));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -844,17 +871,76 @@ public class ClusteringDialog {
                     ScrollPane sp = new ScrollPane(iv);
                     sp.setFitToWidth(true);
 
-                    String tabName = switch (entry.getKey()) {
-                        case "dotplot" -> "Dotplot";
-                        case "matrixplot" -> "Matrix Plot";
-                        case "stacked_violin" -> "Stacked Violin";
-                        case "paga" -> "PAGA Graph";
-                        case "embedding" -> "Embedding (static)";
-                        case "nhood_enrichment" -> "Neighborhood Enrichment";
-                        case "spatial_scatter" -> "Spatial Scatter";
-                        default -> entry.getKey();
-                    };
-                    Tab tab = new Tab(tabName, sp);
+                    String tabName;
+                    String guide;
+                    switch (entry.getKey()) {
+                        case "dotplot" -> {
+                            tabName = "Dotplot";
+                            guide = "Dot size = fraction of cells in the cluster expressing the marker. "
+                                    + "Dot color = mean expression level.\n"
+                                    + "Large, dark dots indicate markers that are both highly expressed and "
+                                    + "broadly active in that cluster -- strong candidate markers for cell type identity.";
+                        }
+                        case "matrixplot" -> {
+                            tabName = "Matrix Plot";
+                            guide = "Mean expression of each marker per cluster shown as a color grid, "
+                                    + "with hierarchical clustering of rows and columns.\n"
+                                    + "Markers and clusters that are grouped together by the dendrogram "
+                                    + "have similar expression patterns. Publication-quality version of the "
+                                    + "interactive Heatmap tab.";
+                        }
+                        case "stacked_violin" -> {
+                            tabName = "Stacked Violin";
+                            guide = "Distribution of expression values for each marker within each cluster. "
+                                    + "Wider regions indicate more cells at that expression level.\n"
+                                    + "Bimodal (double-peaked) distributions within a single cluster suggest "
+                                    + "the cluster may contain two distinct subpopulations -- consider "
+                                    + "subclustering via the Cluster Management dialog.";
+                        }
+                        case "paga" -> {
+                            tabName = "PAGA Trajectory";
+                            guide = "Partition-based graph abstraction showing connectivity between clusters. "
+                                    + "Thicker edges = stronger transcriptional similarity.\n"
+                                    + "Connected clusters may represent related cell states or differentiation "
+                                    + "trajectories. Isolated clusters are transcriptionally distinct. "
+                                    + "Node size reflects cell count.";
+                        }
+                        case "embedding" -> {
+                            tabName = "Embedding Plot";
+                            guide = "Publication-quality embedding plot generated by scanpy, colored by cluster. "
+                                    + "Same data as the interactive embedding tab but with consistent styling.\n"
+                                    + "Right-click to save this image for use in presentations or publications.";
+                        }
+                        case "nhood_enrichment" -> {
+                            tabName = "Neighborhood Enrichment";
+                            guide = "Z-score matrix of spatial co-localization between cluster pairs. "
+                                    + "Red (positive) = clusters found as spatial neighbors more often "
+                                    + "than expected by chance.\n"
+                                    + "Blue (negative) = clusters that spatially avoid each other. "
+                                    + "Diagonal values show self-enrichment (spatial clustering). "
+                                    + "Use this to identify tissue microenvironment compositions.";
+                        }
+                        case "spatial_scatter" -> {
+                            tabName = "Spatial Scatter";
+                            guide = "Cells plotted at their physical tissue coordinates (X/Y centroids), "
+                                    + "colored by cluster assignment.\n"
+                                    + "Shows the spatial distribution of cell types across the tissue section. "
+                                    + "Compare with the embedding plot -- clusters that overlap in the embedding "
+                                    + "but are spatially separated may represent the same cell type in "
+                                    + "different tissue regions.";
+                        }
+                        default -> {
+                            tabName = entry.getKey();
+                            guide = null;
+                        }
+                    }
+
+                    Tab tab;
+                    if (guide != null) {
+                        tab = new Tab(tabName, wrapWithGuide(sp, guide));
+                    } else {
+                        tab = new Tab(tabName, sp);
+                    }
                     tab.setClosable(false);
                     tabPane.getTabs().add(tab);
                 } catch (Exception e) {
@@ -870,6 +956,23 @@ public class ClusteringDialog {
         dialog.show();
     }
 
+    /**
+     * Wrap content with an interpretive guide label at the top of the tab.
+     */
+    private VBox wrapWithGuide(javafx.scene.Node content, String guideText) {
+        Label guide = new Label(guideText);
+        guide.setWrapText(true);
+        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: #444; "
+                + "-fx-background-color: #f5f5f0; -fx-padding: 8; "
+                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        guide.setMaxWidth(Double.MAX_VALUE);
+
+        VBox box = new VBox(content);
+        box.getChildren().addFirst(guide);
+        VBox.setVgrow(content, javafx.scene.layout.Priority.ALWAYS);
+        return box;
+    }
+
     private String formatSpatialAutocorr(ClusteringResult result) {
         String json = result.getSpatialAutocorrJson();
         if (json == null) return "No spatial autocorrelation data available.";
@@ -881,9 +984,7 @@ public class ClusteringDialog {
             Map<String, Map<String, Double>> autocorr = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
-            sb.append("Moran's I spatial autocorrelation per marker\n");
-            sb.append("Higher I = stronger spatial clustering of expression\n\n");
-            sb.append(String.format("%-35s %10s %12s%n", "Marker", "Moran's I", "P-value"));
+            sb.append(String.format("%-35s %10s %12s\n", "Marker", "Moran's I", "P-value"));
             sb.append("-".repeat(59)).append("\n");
 
             // Sort by Moran's I descending
@@ -894,7 +995,7 @@ public class ClusteringDialog {
                     .forEach(entry -> {
                         double mI = entry.getValue().getOrDefault("I", Double.NaN);
                         double pval = entry.getValue().getOrDefault("pval", Double.NaN);
-                        sb.append(String.format("%-35s %10.4f %12.2e%n",
+                        sb.append(String.format("%-35s %10.4f %12.2e\n",
                                 entry.getKey(), mI, pval));
                     });
 
@@ -916,13 +1017,13 @@ public class ClusteringDialog {
             Map<String, List<Map<String, Object>>> rankings = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("%-12s %-30s %10s %12s %12s%n",
+            sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s\n",
                     "Cluster", "Marker", "Score", "Log2FC", "Adj. P-val"));
-            sb.append("-".repeat(78)).append("\n");
+            sb.append("-".repeat(80)).append("\n");
 
             for (Map.Entry<String, List<Map<String, Object>>> cluster : rankings.entrySet()) {
                 for (Map<String, Object> marker : cluster.getValue()) {
-                    sb.append(String.format("%-12s %-30s %10.2f %12.3f %12.2e%n",
+                    sb.append(String.format("%-12s  %-30s  %10.2f  %10.3f  %12.2e\n",
                             "Cluster " + cluster.getKey(),
                             marker.get("name"),
                             ((Number) marker.get("score")).doubleValue(),

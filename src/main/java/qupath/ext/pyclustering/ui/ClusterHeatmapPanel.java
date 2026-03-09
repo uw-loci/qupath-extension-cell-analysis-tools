@@ -45,7 +45,7 @@ public class ClusterHeatmapPanel extends VBox {
         setSpacing(5);
         setPadding(new Insets(5));
 
-        titleLabel = new Label("Cluster-Marker Heatmap");
+        titleLabel = new Label("Cluster-Marker Heatmap (hover for values)");
         titleLabel.setFont(TITLE_FONT);
         titleLabel.setStyle("-fx-font-weight: bold;");
 
