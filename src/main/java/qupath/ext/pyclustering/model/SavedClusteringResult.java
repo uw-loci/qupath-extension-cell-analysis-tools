@@ -1,5 +1,7 @@
 package qupath.ext.pyclustering.model;
 
+import qupath.lib.common.GeneralTools;
+
 import java.util.Map;
 
 /**
@@ -34,6 +36,10 @@ public class SavedClusteringResult {
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
+
+    // Provenance
+    private String extensionVersion;
+    private String qupathVersion;
 
     public SavedClusteringResult() {}
 
@@ -98,6 +104,13 @@ public class SavedClusteringResult {
     public String getSpatialAutocorrJson() { return spatialAutocorrJson; }
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
 
+    // --- Provenance ---
+    public String getExtensionVersion() { return extensionVersion; }
+    public void setExtensionVersion(String v) { this.extensionVersion = v; }
+
+    public String getQupathVersion() { return qupathVersion; }
+    public void setQupathVersion(String v) { this.qupathVersion = v; }
+
     /**
      * Populate from a ClusteringResult and config metadata.
      */
@@ -127,6 +140,11 @@ public class SavedClusteringResult {
         saved.setNhoodEnrichment(result.getNhoodEnrichment());
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
+
+        // Provenance
+        String extVer = GeneralTools.getPackageVersion(SavedClusteringResult.class);
+        saved.setExtensionVersion(extVer != null ? extVer : "dev");
+        saved.setQupathVersion(GeneralTools.getVersion().toString());
 
         return saved;
     }
