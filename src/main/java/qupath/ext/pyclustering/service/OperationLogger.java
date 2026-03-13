@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.lib.projects.Project;
 
+import qupath.lib.common.GeneralTools;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -78,6 +80,7 @@ public class OperationLogger {
         StringBuilder sb = new StringBuilder();
         sb.append("=== ").append(operationType).append(" === ")
                 .append(LocalDateTime.now().format(TIMESTAMP_FMT)).append("\n");
+        appendVersionInfo(sb);
 
         if (parameters != null) {
             for (Map.Entry<String, String> entry : parameters.entrySet()) {
@@ -112,6 +115,7 @@ public class OperationLogger {
         StringBuilder sb = new StringBuilder();
         sb.append("=== ").append(operationType).append(" [FAILED] === ")
                 .append(LocalDateTime.now().format(TIMESTAMP_FMT)).append("\n");
+        appendVersionInfo(sb);
 
         if (parameters != null) {
             for (Map.Entry<String, String> entry : parameters.entrySet()) {
@@ -274,6 +278,17 @@ public class OperationLogger {
     }
 
     // ---- Internal helpers ----
+
+    /**
+     * Appends extension and QuPath version info to a log entry.
+     */
+    private static void appendVersionInfo(StringBuilder sb) {
+        String extVersion = GeneralTools.getPackageVersion(OperationLogger.class);
+        sb.append("  PyClustering version: ")
+                .append(extVersion != null ? extVersion : "dev").append("\n");
+        sb.append("  QuPath version: ")
+                .append(GeneralTools.getVersion()).append("\n");
+    }
 
     /**
      * Resolves the log file path for today. Always checks the current date
