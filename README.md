@@ -397,3 +397,7 @@ Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI
 ## License
 
 [Apache License 2.0](LICENSE)
+
+## AI-Assisted Development
+
+This project was developed with assistance from [Claude](https://claude.ai) (Anthropic). Claude was used as a development tool for code generation, architecture design, debugging, and documentation throughout the project.
