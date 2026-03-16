@@ -396,7 +396,7 @@ Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[GNU General Public License v3.0](LICENSE)
 
 ## AI-Assisted Development
 
