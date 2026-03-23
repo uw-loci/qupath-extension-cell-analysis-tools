@@ -5,11 +5,11 @@ plugins {
 }
 
 qupathExtension {
-    name = "qupath-extension-pyclustering"
-    group = "io.github.michaelsnelson"
-    version = "0.1.0-rc1"
-    description = "Python-powered clustering and phenotyping for highly multiplexed imaging data in QuPath."
-    automaticModule = "io.github.michaelsnelson.extension.pyclustering"
+    name = "qupath-extension-cluster-analysis-tools"
+    group = "io.github.uw-loci"
+    version = "0.1.0"
+    description = "QP-CAT: Cluster Analysis Tools for QuPath. Python-powered clustering, phenotyping, and spatial analysis for multiplexed imaging data."
+    automaticModule = "io.github.uw-loci.extension.qpcat"
 }
 
 allprojects {

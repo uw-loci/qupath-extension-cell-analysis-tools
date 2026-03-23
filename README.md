@@ -1,10 +1,10 @@
-# QuPath PyClustering Extension
+# QP-CAT: Cluster Analysis Tools for QuPath
 
 Python-powered clustering and phenotyping for highly multiplexed imaging data in [QuPath](https://qupath.github.io/).
 
-PyClustering embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
+QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
-**Repository:** [uw-loci/qupath-extension-pyclustering](https://github.com/uw-loci/qupath-extension-pyclustering)
+**Repository:** [uw-loci/qupath-extension-cluster-analysis-tools](https://github.com/uw-loci/qupath-extension-cluster-analysis-tools)
 
 ### Documentation
 
@@ -42,17 +42,17 @@ PyClustering embeds a full scientific Python environment (via [Appose](https://g
 
 ### From GitHub Releases
 
-1. Download the latest `.jar` from the [Releases](https://github.com/uw-loci/qupath-extension-pyclustering/releases) page
+1. Download the latest `.jar` from the [Releases](https://github.com/uw-loci/qupath-extension-cluster-analysis-tools/releases) page
 2. Drag the JAR onto the QuPath window, or place it in your QuPath extensions directory
 3. Restart QuPath
-4. Go to **Extensions > PyClustering > Setup Clustering Environment** and click "Setup"
+4. Go to **Extensions > QP-CAT > Setup Clustering Environment** and click "Setup"
 5. Wait for the Python environment to build (first time only, ~5-10 minutes)
 
 ### Building from Source
 
 ```bash
-git clone https://github.com/uw-loci/qupath-extension-pyclustering.git
-cd qupath-extension-pyclustering
+git clone https://github.com/uw-loci/qupath-extension-cluster-analysis-tools.git
+cd qupath-extension-cluster-analysis-tools
 ./gradlew build
 ```
 
@@ -63,7 +63,7 @@ The built JAR will be in `build/libs/`. Copy it to your QuPath extensions direct
 ## Quick Start
 
 1. Open an image in QuPath with cell detections (run cell detection first if needed)
-2. **Extensions > PyClustering > Run Clustering...**
+2. **Extensions > QP-CAT > Run Clustering...**
 3. Select measurements (defaults to "Mean" intensity channels)
 4. Choose algorithm (Leiden recommended) and click **Run Clustering**
 5. Results are applied directly to detections as classifications (Cluster 0, Cluster 1, ...)
@@ -114,7 +114,7 @@ Rule-based cell type classification using marker gating thresholds.
 
 ### Workflow
 
-1. **Extensions > PyClustering > Run Phenotyping...**
+1. **Extensions > QP-CAT > Run Phenotyping...**
 2. Select markers to use as gating channels
 3. Set per-marker gate thresholds (manually or via auto-thresholding)
 4. Define phenotype rules: each rule maps a cell type name to marker conditions (positive/negative)
@@ -134,13 +134,13 @@ Select a marker column header to view its histogram with an interactive draggabl
 
 ### Saving and Loading Rule Sets
 
-Phenotype rules, gates, and marker selections can be saved to and loaded from the QuPath project directory (`<project>/pyclustering/phenotype_rules/`). This allows reuse across sessions and sharing between team members.
+Phenotype rules, gates, and marker selections can be saved to and loaded from the QuPath project directory (`<project>/qpcat/phenotype_rules/`). This allows reuse across sessions and sharing between team members.
 
 ---
 
 ## Spatial Analysis
 
-When enabled in the clustering dialog, PyClustering computes spatial statistics using cell centroid coordinates:
+When enabled in the clustering dialog, QP-CAT computes spatial statistics using cell centroid coordinates:
 
 - **Neighborhood enrichment** -- Z-score matrix showing which clusters tend to co-localize (or avoid each other) in tissue space
 - **Moran's I autocorrelation** -- Per-marker spatial autocorrelation, identifying markers with spatially structured expression patterns
@@ -160,7 +160,7 @@ Parameters:
 
 ## Post-Analysis Outputs
 
-After clustering, PyClustering can generate:
+After clustering, QP-CAT can generate:
 
 | Output | Description |
 |--------|-------------|
@@ -180,7 +180,7 @@ After clustering, PyClustering can generate:
 
 Export your data to the AnnData format for use with external tools:
 
-- **Extensions > PyClustering > Export AnnData (.h5ad)...**
+- **Extensions > QP-CAT > Export AnnData (.h5ad)...**
 
 The exported file includes:
 - All selected measurements as the expression matrix
@@ -195,7 +195,7 @@ Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cel
 
 ## Cluster Management
 
-**Extensions > PyClustering > Manage Clusters...** opens a dialog for post-hoc cluster organization:
+**Extensions > QP-CAT > Manage Clusters...** opens a dialog for post-hoc cluster organization:
 
 - **Rename** -- Change a cluster's classification name (e.g., "Cluster 3" -> "CD8+ T Cells")
 - **Merge** -- Combine two or more clusters into one with a user-specified name
@@ -208,14 +208,14 @@ Changes are applied directly to detection objects and reflected immediately in Q
 
 ### Clustering Configs
 
-Save and load clustering parameter sets (algorithm, parameters, measurement selection, normalization, embedding settings) within a QuPath project. Stored in `<project>/pyclustering/cluster_configs/`.
+Save and load clustering parameter sets (algorithm, parameters, measurement selection, normalization, embedding settings) within a QuPath project. Stored in `<project>/qpcat/cluster_configs/`.
 
 ### Operation Audit Trail
 
 Every operation (clustering, phenotyping, embedding, export, threshold computation) is logged with full parameters, timestamps, cell counts, and results to per-day log files at:
 
 ```
-<project>/pyclustering/logs/pyclustering_YYYY-MM-DD.log
+<project>/qpcat/logs/qpcat_YYYY-MM-DD.log
 ```
 
 This provides a reproducibility trail -- you can always see exactly what parameters were used for any analysis. Log files are human-readable text.
@@ -224,7 +224,7 @@ This provides a reproducibility trail -- you can always see exactly what paramet
 
 ## Python Console
 
-**Extensions > PyClustering > Utilities > Python Console** opens a window showing real-time Python stderr/debug output from the embedded Python environment. Useful for:
+**Extensions > QP-CAT > Utilities > Python Console** opens a window showing real-time Python stderr/debug output from the embedded Python environment. Useful for:
 
 - Monitoring long-running operations
 - Debugging Python-side errors
@@ -236,11 +236,11 @@ The console includes a **Save Log...** button to export its contents to a text f
 
 ## Python Environment
 
-PyClustering manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). The environment is stored at:
+QP-CAT manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). The environment is stored at:
 
 ```
-~/.local/share/appose/qupath-pyclustering/    (Linux/macOS)
-%LOCALAPPDATA%\appose\qupath-pyclustering\    (Windows)
+~/.local/share/appose/qupath-qpcat/    (Linux/macOS)
+%LOCALAPPDATA%\appose\qupath-qpcat\    (Windows)
 ```
 
 ### Key Python Packages
@@ -263,7 +263,7 @@ PyClustering manages its own isolated Python environment via [Appose](https://gi
 
 If the environment becomes corrupted or you need to update packages:
 
-1. **Extensions > PyClustering > Utilities > Rebuild Clustering Environment**
+1. **Extensions > QP-CAT > Utilities > Rebuild Clustering Environment**
 2. Confirm the rebuild (this deletes the existing environment)
 3. Click "Setup" in the dialog that appears
 
@@ -271,7 +271,7 @@ If the environment becomes corrupted or you need to update packages:
 
 ## Menu Reference
 
-All items are under **Extensions > PyClustering**:
+All items are under **Extensions > QP-CAT**:
 
 | Menu Item | Description | Requirements |
 |-----------|-------------|--------------|
@@ -301,7 +301,7 @@ All items are under **Extensions > PyClustering**:
 
 ### "No detections found"
 
-PyClustering operates on detection objects (cells). Run cell detection first:
+QP-CAT operates on detection objects (cells). Run cell detection first:
 - **Analyze > Cell detection** in QuPath, or
 - Use StarDist, Cellpose, or another detection method
 
@@ -323,8 +323,8 @@ PyClustering operates on detection objects (cells). Run cell detection first:
 ## Building from Source
 
 ```bash
-git clone https://github.com/uw-loci/qupath-extension-pyclustering.git
-cd qupath-extension-pyclustering
+git clone https://github.com/uw-loci/qupath-extension-cluster-analysis-tools.git
+cd qupath-extension-cluster-analysis-tools
 ./gradlew build
 ```
 
@@ -340,8 +340,8 @@ To compile only (no tests):
 ## Project Structure
 
 ```
-src/main/java/qupath/ext/pyclustering/
-  SetupPyClustering.java          Extension entry point and menu registration
+src/main/java/qupath/ext/qpcat/
+  SetupQPCAT.java                 Extension entry point and menu registration
   controller/
     ClusteringWorkflow.java       Orchestrates all analysis operations
   model/
@@ -367,7 +367,7 @@ src/main/java/qupath/ext/pyclustering/
     PythonConsoleWindow.java      Real-time Python stderr viewer
     SetupEnvironmentDialog.java   Environment download progress dialog
 
-src/main/resources/qupath/ext/pyclustering/
+src/main/resources/qupath/ext/qpcat/
   pixi.toml                       Python environment specification
   scripts/
     init_services.py              Python worker initialization

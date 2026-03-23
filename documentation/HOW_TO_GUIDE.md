@@ -1,10 +1,10 @@
-# PyClustering -- How-To Guide
+# QP-CAT -- How-To Guide
 
-Step-by-step instructions for every workflow in the PyClustering extension.
+Step-by-step instructions for every workflow in the QP-CAT extension.
 
 **Prerequisites for all workflows:**
-- QuPath 0.6.0+ with PyClustering installed
-- Python environment set up (Extensions > PyClustering > Setup Clustering Environment)
+- QuPath 0.6.0+ with QP-CAT installed
+- Python environment set up (Extensions > QP-CAT > Setup Clustering Environment)
 - An image open in QuPath with cell detections present
 
 ---
@@ -31,11 +31,11 @@ Step-by-step instructions for every workflow in the PyClustering extension.
 **First-time only.** This downloads Python and all scientific packages (~1.5-2.5 GB).
 
 1. Open QuPath
-2. Go to **Extensions > PyClustering > Setup Clustering Environment**
+2. Go to **Extensions > QP-CAT > Setup Clustering Environment**
 3. Click **Setup Environment**
 4. Wait for the download and build to complete (5-10 minutes depending on internet speed)
 5. When "Environment setup complete!" appears, close the dialog
-6. The rest of the PyClustering menu items now become visible
+6. The rest of the QP-CAT menu items now become visible
 
 **Troubleshooting:** If setup fails, check your internet connection and disk space (~2.5 GB needed). Use **Utilities > Rebuild Clustering Environment** to start fresh.
 
@@ -48,7 +48,7 @@ Full clustering with all configuration options.
 ### Step-by-step:
 
 1. Open an image with cell detections
-2. **Extensions > PyClustering > Run Clustering...**
+2. **Extensions > QP-CAT > Run Clustering...**
 3. **Scope** -- Choose "Current image" or "All project images"
 4. **Measurements** -- Select the markers to cluster on
    - Click **Select 'Mean' only** for a good default (mean intensity per marker)
@@ -82,7 +82,7 @@ Full clustering with all configuration options.
 One-click clustering with sensible defaults. Good for initial exploration.
 
 1. Open an image with cell detections
-2. **Extensions > PyClustering > Quick Cluster** and pick one:
+2. **Extensions > QP-CAT > Quick Cluster** and pick one:
    - **Quick Leiden (auto)** -- Leiden with n_neighbors=50, resolution=1.0, Z-score normalization, UMAP embedding
    - **Quick KMeans (k=10)** -- KMeans with 10 clusters
    - **Quick HDBSCAN (auto)** -- HDBSCAN with min_cluster_size=15
@@ -98,7 +98,7 @@ Quick Cluster automatically selects all "Mean" measurements and uses Z-score nor
 Cluster all images in a project together for globally consistent assignments.
 
 1. Open a QuPath project with multiple images (each must have cell detections)
-2. **Extensions > PyClustering > Run Clustering...**
+2. **Extensions > QP-CAT > Run Clustering...**
 3. Select **All project images** scope
 4. Configure measurements, normalization, algorithm as usual
 5. Optionally enable **Batch correction (Harmony)** to account for per-image technical variation
@@ -114,7 +114,7 @@ All detections across all images are combined into a single dataset, clustered t
 
 Add UMAP/PCA/t-SNE coordinates to detections without changing existing classifications.
 
-1. **Extensions > PyClustering > Compute Embedding Only...**
+1. **Extensions > QP-CAT > Compute Embedding Only...**
 2. Select measurements and normalization
 3. Choose embedding method (UMAP recommended)
 4. Set parameters:
@@ -133,7 +133,7 @@ Classify cells into biological types based on marker expression thresholds.
 
 ### Step-by-step:
 
-1. **Extensions > PyClustering > Run Phenotyping...**
+1. **Extensions > QP-CAT > Run Phenotyping...**
 2. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** then deselect irrelevant markers
@@ -190,7 +190,7 @@ Automatically compute marker gate thresholds instead of setting them manually.
 
 Organize cluster assignments after clustering.
 
-1. **Extensions > PyClustering > Manage Clusters...**
+1. **Extensions > QP-CAT > Manage Clusters...**
 2. The dialog shows all classifications with cell counts
 3. **To rename:** Select one cluster, click **Rename...**, enter the new name
    - Example: "Cluster 3" -> "CD8+ T Cells"
@@ -207,7 +207,7 @@ Changes are applied immediately to detection objects.
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 
-1. **Extensions > PyClustering > Export AnnData (.h5ad)...**
+1. **Extensions > QP-CAT > Export AnnData (.h5ad)...**
 2. Choose a save location and filename
 3. The export includes:
    - Expression matrix (all measurements)
@@ -234,7 +234,7 @@ print(adata)
 3. Enter a name (e.g., "my-panel-leiden")
 4. To restore: click **Load Config...** and select the saved configuration
 
-Configs are stored in `<project>/pyclustering/cluster_configs/`.
+Configs are stored in `<project>/qpcat/cluster_configs/`.
 
 ### Phenotype Rule Sets
 
@@ -243,7 +243,7 @@ Configs are stored in `<project>/pyclustering/cluster_configs/`.
 3. Enter a name (e.g., "Immune Panel v1")
 4. To restore: click **Load Rules...** and select the saved rule set
 
-Rule sets are stored in `<project>/pyclustering/phenotype_rules/`.
+Rule sets are stored in `<project>/qpcat/phenotype_rules/`.
 
 ---
 
@@ -251,7 +251,7 @@ Rule sets are stored in `<project>/pyclustering/phenotype_rules/`.
 
 Monitor Python-side output in real time.
 
-1. **Extensions > PyClustering > Utilities > Python Console**
+1. **Extensions > QP-CAT > Utilities > Python Console**
 2. The console shows timestamped debug messages from the Python environment
 3. **Auto-scroll** toggle: keeps the view at the latest output
 4. **Clear**: empties the console
@@ -263,9 +263,9 @@ Useful for diagnosing errors, monitoring long operations, and seeing detailed Py
 
 ## 12. Reviewing the Operation Audit Trail
 
-Every PyClustering operation is logged to a persistent file in your project.
+Every QP-CAT operation is logged to a persistent file in your project.
 
-**Location:** `<project>/pyclustering/logs/pyclustering_YYYY-MM-DD.log`
+**Location:** `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`
 
 Each log entry records:
 - Timestamp

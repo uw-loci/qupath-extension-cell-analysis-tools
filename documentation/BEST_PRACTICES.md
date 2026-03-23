@@ -1,4 +1,4 @@
-# PyClustering -- Best Practices
+# QP-CAT -- Best Practices
 
 Recommendations for getting the best results from cell clustering and phenotyping in multiplexed imaging data.
 
@@ -23,7 +23,7 @@ Recommendations for getting the best results from cell clustering and phenotypin
 
 ### Cell Detection Quality Matters
 
-Clustering quality depends heavily on the quality of upstream cell detection and segmentation. Before running PyClustering:
+Clustering quality depends heavily on the quality of upstream cell detection and segmentation. Before running QP-CAT:
 
 - Verify that cell boundaries are reasonable (spot-check several regions)
 - Check that cells are not over- or under-segmented
@@ -265,7 +265,7 @@ Multi-image clustering loads all detection data into memory. For large projects:
 
 1. **Save clustering configs** for every analysis you run
 2. **Save phenotype rule sets** with descriptive names and version numbers
-3. **Check the operation log** in `<project>/pyclustering/logs/` for exact parameters
+3. **Check the operation log** in `<project>/qpcat/logs/` for exact parameters
 4. **Export AnnData** for downstream analysis -- the .h5ad file captures the full state
 
 ### Document Your Choices
@@ -275,7 +275,7 @@ For publications, report:
 - Normalization method
 - Number of cells and markers used
 - Any manual gate adjustments
-- Software versions (Extensions > PyClustering > Utilities > System Info)
+- Software versions (Extensions > QP-CAT > Utilities > System Info)
 
 ### Version Your Rule Sets
 

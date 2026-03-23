@@ -1,6 +1,6 @@
-# PyClustering -- Algorithm References and Citations
+# QP-CAT -- Algorithm References and Citations
 
-This document lists the original publications and key application papers for every algorithm, method, and tool used in the PyClustering extension. If you use PyClustering in your research, please cite the relevant methods below.
+This document lists the original publications and key application papers for every algorithm, method, and tool used in the QP-CAT extension. If you use QP-CAT in your research, please cite the relevant methods below.
 
 ---
 
@@ -256,7 +256,7 @@ Non-parametric test for identifying differentially expressed markers between clu
 
 ### Scanpy
 
-Large-scale single-cell gene expression data analysis framework. Provides the computational backbone for PyClustering.
+Large-scale single-cell gene expression data analysis framework. Provides the computational backbone for QP-CAT.
 
 **Original paper:**
 > Wolf FA, Angerer P, Theis FJ. "SCANPY: large-scale single-cell gene expression data analysis." *Genome Biology* 19, 15 (2018).
@@ -288,7 +288,7 @@ Annotated data format for single-cell analysis. Standard interchange format for 
 
 ### Appose
 
-Inter-process communication framework for polyglot scientific computing. Enables PyClustering's embedded Python environment.
+Inter-process communication framework for polyglot scientific computing. Enables QP-CAT's embedded Python environment.
 
 **Software:**
 > Appose: polyglot inter-process shared-memory communication. GitHub.
@@ -310,7 +310,7 @@ Open-source platform for bioimage analysis, with emphasis on digital pathology a
 
 ## Key Application Papers (Multiplexed Imaging)
 
-These papers demonstrate workflows similar to PyClustering's capabilities applied to multiplexed tissue imaging:
+These papers demonstrate workflows similar to QP-CAT's capabilities applied to multiplexed tissue imaging:
 
 > Schurch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
 > https://doi.org/10.1016/j.cell.2020.07.005
