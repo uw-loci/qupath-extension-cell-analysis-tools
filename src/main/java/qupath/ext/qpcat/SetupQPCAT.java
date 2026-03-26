@@ -83,6 +83,14 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         });
 
         if (environmentReady.get()) {
+            // Check if environment dependencies have changed since last build
+            if (ApposeClusteringService.isEnvironmentStale()) {
+                logger.info("QPCAT environment is stale - dependencies changed");
+                Platform.runLater(() ->
+                        Dialogs.showInfoNotification(EXTENSION_NAME,
+                                "Python environment needs updating (new dependencies).\n"
+                                + "This will happen automatically and may take several minutes."));
+            }
             startBackgroundInitialization();
         }
     }

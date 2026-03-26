@@ -68,6 +68,28 @@ public class ApposeClusteringService {
         return Files.isDirectory(envDir.resolve(".pixi"));
     }
 
+    /**
+     * Checks if the on-disk pixi.toml differs from the JAR-bundled version,
+     * indicating the environment needs a rebuild (e.g., new dependencies were added).
+     *
+     * @return true if the environment exists but its pixi.toml is outdated
+     */
+    public static boolean isEnvironmentStale() {
+        try {
+            Path envDir = getEnvironmentPath();
+            Path pixiTomlFile = envDir.resolve("pixi.toml");
+            if (!Files.exists(pixiTomlFile)) return false;
+            if (!Files.isDirectory(envDir.resolve(".pixi"))) return false;
+
+            String expected = loadResource(PIXI_TOML_RESOURCE);
+            String existing = Files.readString(pixiTomlFile, StandardCharsets.UTF_8);
+            return !existing.replace("\r\n", "\n").strip()
+                    .equals(expected.replace("\r\n", "\n").strip());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public static Path getEnvironmentPath() {
         ApposeClusteringService svc = instance;
         if (svc != null && svc.environment != null) {
@@ -101,9 +123,14 @@ public class ApposeClusteringService {
             Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
 
             try {
-                syncPixiToml(pixiToml);
-
-                report(statusCallback, "Building pixi environment (this may take several minutes)...");
+                boolean rebuilding = syncPixiToml(pixiToml);
+                if (rebuilding) {
+                    report(statusCallback,
+                            "Dependencies changed -- rebuilding environment (this may take several minutes)...");
+                    logger.info("Environment rebuild triggered by pixi.toml change");
+                } else {
+                    report(statusCallback, "Building pixi environment (this may take several minutes)...");
+                }
 
                 var builder = Appose.pixi()
                         .content(pixiToml)
@@ -340,16 +367,22 @@ public class ApposeClusteringService {
         if (callback != null) callback.accept(message);
     }
 
-    private void syncPixiToml(String expectedContent) {
+    /**
+     * Syncs the on-disk pixi.toml with the JAR-bundled version.
+     * If they differ, deletes .pixi and pixi.lock to force a rebuild.
+     *
+     * @return true if the environment was wiped for rebuild
+     */
+    private boolean syncPixiToml(String expectedContent) {
         try {
             Path envDir = getEnvironmentPath();
             Path pixiTomlFile = envDir.resolve("pixi.toml");
-            if (!Files.exists(pixiTomlFile)) return;
+            if (!Files.exists(pixiTomlFile)) return false;
 
             String existing = Files.readString(pixiTomlFile, StandardCharsets.UTF_8);
             String normalizedExisting = existing.replace("\r\n", "\n").strip();
             String normalizedExpected = expectedContent.replace("\r\n", "\n").strip();
-            if (normalizedExisting.equals(normalizedExpected)) return;
+            if (normalizedExisting.equals(normalizedExpected)) return false;
 
             logger.info("pixi.toml changed - forcing environment rebuild");
             Files.writeString(pixiTomlFile, expectedContent, StandardCharsets.UTF_8);
@@ -358,8 +391,10 @@ public class ApposeClusteringService {
             if (Files.isDirectory(pixiDir)) {
                 deleteDirectoryRecursively(pixiDir);
             }
+            return true;
         } catch (IOException e) {
             logger.warn("Failed to sync pixi.toml: {}", e.getMessage());
+            return false;
         }
     }
 
