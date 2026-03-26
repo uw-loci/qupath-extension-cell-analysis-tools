@@ -110,6 +110,89 @@ class CellVAE(nn.Module):
         return recon, mu, logvar, z, class_logits
 
 
+class ConvCellVAE(nn.Module):
+    """
+    Convolutional VAE for tile-based cell classification.
+
+    Takes multi-channel image tiles (NCHW format) and learns a latent
+    representation via convolutional encoder/decoder. Supports variable
+    channel counts for multiplexed imaging (IMC, CODEX, IF panels).
+
+    Encoder: Conv2d layers -> AdaptiveAvgPool -> flatten -> (mu, logvar)
+    Decoder: Linear -> unflatten -> ConvTranspose2d layers -> output
+    Classifier: latent_dim -> n_classes (optional)
+    """
+
+    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0):
+        super().__init__()
+        self.n_channels = n_channels
+        self.tile_size = tile_size
+        self.latent_dim = latent_dim
+        self.n_classes = n_classes
+
+        # Encoder: conv layers that reduce spatial dims
+        self.encoder = nn.Sequential(
+            nn.Conv2d(n_channels, 32, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1),  # -> (B, 128, 1, 1)
+            nn.Flatten(),             # -> (B, 128)
+        )
+
+        self.fc_mu = nn.Linear(128, latent_dim)
+        self.fc_logvar = nn.Linear(128, latent_dim)
+
+        # Decoder: reconstruct spatial output
+        # Compute decoded spatial size (tile_size // 8 due to 3x stride-2 convs)
+        self.dec_spatial = max(tile_size // 8, 1)
+        self.dec_fc = nn.Linear(latent_dim, 128 * self.dec_spatial * self.dec_spatial)
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, n_channels, 3, stride=2, padding=1, output_padding=1),
+        )
+
+        # Classifier head
+        if n_classes > 0:
+            self.classifier = nn.Linear(latent_dim, n_classes)
+        else:
+            self.classifier = None
+
+    def encode(self, x):
+        h = self.encoder(x)
+        return self.fc_mu(h), self.fc_logvar(h)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        h = F.relu(self.dec_fc(z))
+        h = h.view(-1, 128, self.dec_spatial, self.dec_spatial)
+        h = self.decoder(h)
+        # Crop or pad to original tile size if needed
+        return h[:, :, :self.tile_size, :self.tile_size]
+
+    def classify(self, z):
+        if self.classifier is None:
+            return None
+        return self.classifier(z)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z)
+        class_logits = self.classify(z)
+        return recon, mu, logvar, z, class_logits
+
+
 def vae_loss(recon, x, mu, logvar):
     """Gaussian reconstruction loss + KL divergence."""
     recon_loss = F.mse_loss(recon, x, reduction='mean')
@@ -120,8 +203,31 @@ def vae_loss(recon, x, mu, logvar):
 # ==================== Main Script ====================
 
 # 1. Parse inputs
-data = measurements.ndarray().copy().astype(np.float32)
-n_cells, n_markers = data.shape
+try:
+    mode = input_mode
+except NameError:
+    mode = "measurements"
+
+use_tiles = (mode == "tiles")
+
+if use_tiles:
+    # Tile mode: NCHW float32
+    raw_tiles = tile_images.ndarray().copy().astype(np.float32)
+    n_cells = raw_tiles.shape[0]
+    img_channels = int(n_channels)
+    img_tile_size = int(tile_size)
+    logger.info("Tile mode: %d cells, %d channels, %dx%d tiles",
+                n_cells, img_channels, img_tile_size, img_tile_size)
+    data = None
+    n_markers = 0
+else:
+    # Measurement mode
+    data = measurements.ndarray().copy().astype(np.float32)
+    n_cells, n_markers = data.shape
+    raw_tiles = None
+    img_channels = 0
+    img_tile_size = 0
+
 label_array = np.array(labels, dtype=np.int32)
 class_names = list(label_names)
 n_classes = len(class_names)
@@ -176,31 +282,66 @@ if has_labels:
         logger.info("  Class %d (%s): %d cells", i, name, count)
 
 # 2. Normalize
-task.update("Normalizing measurements...", current=0, maximum=epochs + 2)
+task.update("Normalizing...", current=0, maximum=epochs + 2)
 
-if norm_method == "zscore":
-    mean = data.mean(axis=0)
-    std = data.std(axis=0)
-    std[std == 0] = 1
-    data_norm = (data - mean) / std
-elif norm_method == "minmax":
-    dmin = data.min(axis=0)
-    dmax = data.max(axis=0)
-    drange = dmax - dmin
-    drange[drange == 0] = 1
-    data_norm = (data - dmin) / drange
+mean = None
+std = None
+dmin = None
+dmax = None
+
+if use_tiles:
+    # Per-channel normalization for tiles
+    if norm_method == "zscore":
+        # Compute per-channel mean/std across all tiles
+        mean = raw_tiles.mean(axis=(0, 2, 3), keepdims=True)  # (1, C, 1, 1)
+        std = raw_tiles.std(axis=(0, 2, 3), keepdims=True)
+        std[std == 0] = 1
+        data_norm_tiles = (raw_tiles - mean) / std
+        # Flatten for checkpoint storage
+        mean = mean.squeeze()
+        std = std.squeeze()
+    elif norm_method == "minmax":
+        dmin = raw_tiles.min(axis=(0, 2, 3), keepdims=True)
+        dmax = raw_tiles.max(axis=(0, 2, 3), keepdims=True)
+        drange = dmax - dmin
+        drange[drange == 0] = 1
+        data_norm_tiles = (raw_tiles - dmin) / drange
+        dmin = dmin.squeeze()
+        dmax = dmax.squeeze()
+    else:
+        data_norm_tiles = raw_tiles.copy()
+    data_norm = None
 else:
-    data_norm = data.copy()
+    # Measurement normalization
+    if norm_method == "zscore":
+        mean = data.mean(axis=0)
+        std = data.std(axis=0)
+        std[std == 0] = 1
+        data_norm = (data - mean) / std
+    elif norm_method == "minmax":
+        dmin = data.min(axis=0)
+        dmax = data.max(axis=0)
+        drange = dmax - dmin
+        drange[drange == 0] = 1
+        data_norm = (data - dmin) / drange
+    else:
+        data_norm = data.copy()
+    data_norm_tiles = None
 
 # 3. Build model and optimizer
 from model_utils import detect_device
 device = detect_device()
 
-model = CellVAE(n_markers, ldim, n_classes if has_labels else 0).to(device)
+if use_tiles:
+    model = ConvCellVAE(img_channels, img_tile_size, ldim,
+                        n_classes if has_labels else 0).to(device)
+    data_tensor = torch.tensor(data_norm_tiles, dtype=torch.float32)
+else:
+    model = CellVAE(n_markers, ldim, n_classes if has_labels else 0).to(device)
+    data_tensor = torch.tensor(data_norm, dtype=torch.float32)
+
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-# Build DataLoader
-data_tensor = torch.tensor(data_norm, dtype=torch.float32)
 label_tensor = torch.tensor(label_array, dtype=torch.long)
 dataset = TensorDataset(data_tensor, label_tensor)
 loader = DataLoader(dataset, batch_size=bs, shuffle=True, drop_last=False)
@@ -289,21 +430,28 @@ if save_path:
 
 # Also encode as base64 for Appose transfer
 buf = io.BytesIO()
-torch.save({
+checkpoint_data = {
     'state_dict': model.state_dict(),
-    'n_markers': n_markers,
+    'input_mode': mode,
     'latent_dim': ldim,
     'n_classes': n_classes,
     'class_names': class_names,
     'normalization': norm_method,
     'norm_params': {
-        'mean': mean.tolist() if norm_method == 'zscore' else None,
-        'std': std.tolist() if norm_method == 'zscore' else None,
-        'min': dmin.tolist() if norm_method == 'minmax' else None,
-        'max': dmax.tolist() if norm_method == 'minmax' else None,
+        'mean': mean.tolist() if mean is not None else None,
+        'std': std.tolist() if std is not None else None,
+        'min': dmin.tolist() if dmin is not None else None,
+        'max': dmax.tolist() if dmax is not None else None,
     },
-    'marker_names': list(marker_names),
-}, buf)
+}
+if use_tiles:
+    checkpoint_data['n_channels'] = img_channels
+    checkpoint_data['tile_size'] = img_tile_size
+else:
+    checkpoint_data['n_markers'] = n_markers
+    checkpoint_data['marker_names'] = list(marker_names)
+
+torch.save(checkpoint_data, buf)
 model_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
 
 # 7. Package outputs

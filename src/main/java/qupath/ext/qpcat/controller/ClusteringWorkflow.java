@@ -1154,6 +1154,76 @@ public class ClusteringWorkflow {
         return tileData;
     }
 
+    /**
+     * Reads multi-channel tile images centered on each detection's centroid.
+     * Returns float32 data packed as (nDetections, nChannels, tileSize, tileSize)
+     * in row-major (C-order) layout, suitable for PyTorch conv layers (NCHW).
+     * <p>
+     * Uses raster.getSampleFloat() to support any bit depth (8-bit, 16-bit, 32-bit).
+     * Follows the multi-channel reading pattern from the DL pixel classifier extension.
+     *
+     * @param server           the image server to read tiles from
+     * @param detections       detections whose centroids define tile centers
+     * @param tileSize         side length of each square tile in pixels
+     * @param progressCallback optional progress callback
+     * @return float array packed as NCHW, and the channel count
+     */
+    private float[] readMultiChannelTilesAroundCentroids(
+            ImageServer<BufferedImage> server,
+            List<PathObject> detections,
+            int tileSize,
+            Consumer<String> progressCallback) {
+
+        int nCells = detections.size();
+        int nChannels = server.nChannels();
+        int halfTile = tileSize / 2;
+        float[] tileData = new float[nCells * nChannels * tileSize * tileSize];
+
+        for (int i = 0; i < nCells; i++) {
+            PathObject det = detections.get(i);
+            double cx = det.getROI().getCentroidX();
+            double cy = det.getROI().getCentroidY();
+
+            int x = Math.max(0, (int) cx - halfTile);
+            int y = Math.max(0, (int) cy - halfTile);
+            x = Math.min(x, Math.max(0, server.getWidth() - tileSize));
+            y = Math.min(y, Math.max(0, server.getHeight() - tileSize));
+
+            int readW = Math.min(tileSize, server.getWidth() - x);
+            int readH = Math.min(tileSize, server.getHeight() - y);
+
+            try {
+                RegionRequest request = RegionRequest.createInstance(
+                        server.getPath(), 1.0, x, y, readW, readH);
+                BufferedImage tile = server.readRegion(request);
+                var raster = tile.getRaster();
+
+                // Pack as NCHW: [cell_idx][channel][y][x]
+                int cellOffset = i * nChannels * tileSize * tileSize;
+                for (int c = 0; c < nChannels; c++) {
+                    int channelOffset = cellOffset + c * tileSize * tileSize;
+                    for (int ty = 0; ty < tileSize; ty++) {
+                        for (int tx = 0; tx < tileSize; tx++) {
+                            if (tx < tile.getWidth() && ty < tile.getHeight()) {
+                                tileData[channelOffset + ty * tileSize + tx] =
+                                        raster.getSampleFloat(tx, ty, c);
+                            }
+                            // else: default 0.0f
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to read tile for detection {}: {}", i, e.getMessage());
+            }
+
+            if ((i + 1) % 500 == 0) {
+                report(progressCallback, "Read " + (i + 1) + "/" + nCells + " tiles...");
+            }
+        }
+
+        return tileData;
+    }
+
     // ==================== Feature Extraction (Foundation Models) ====================
 
     /**
@@ -1466,14 +1536,31 @@ public class ClusteringWorkflow {
      * @return result map with model_state, class_names, accuracy, n_classes
      * @throws IOException if training fails
      */
+    /**
+     * [TEST FEATURE] Trains a VAE classifier on detections from the current image.
+     *
+     * @param selectedMeasurements measurements to use (for measurement mode)
+     * @param normalization        normalization method id
+     * @param latentDim            latent space dimensionality
+     * @param epochs               training epochs
+     * @param learningRate         optimizer learning rate
+     * @param batchSize            training batch size
+     * @param supervisionWeight    weight of classification loss
+     * @param inputMode            "measurements" or "tiles"
+     * @param tileSize             tile size for pixel mode (ignored in measurement mode)
+     * @param progressCallback     optional progress callback
+     * @return result map with model_state, class_names, accuracy, n_classes
+     * @throws IOException if training fails
+     */
     public Map<String, Object> runAutoencoderTraining(
             List<String> selectedMeasurements, String normalization,
             int latentDim, int epochs, double learningRate,
             int batchSize, double supervisionWeight,
+            String inputMode, int tileSize,
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
-        report(progressCallback, "Extracting measurements and labels...");
+        boolean useTiles = "tiles".equals(inputMode);
 
         ImageData<BufferedImage> imageData = qupath.getImageData();
         if (imageData == null) throw new IOException("No image is open");
@@ -1483,37 +1570,47 @@ public class ClusteringWorkflow {
         if (detections.isEmpty())
             throw new IOException("No detections found.");
 
-        MeasurementExtractor extractor = new MeasurementExtractor();
-        MeasurementExtractor.ExtractionResult extraction =
-                extractor.extract(detections, selectedMeasurements);
-
         // Extract class labels from existing PathClass assignments
         List<String> classNames = new ArrayList<>();
-        int[] classLabels = extractClassLabels(extraction.getDetections(), classNames);
+        int[] classLabels = extractClassLabels(detections, classNames);
 
         int nLabeled = 0;
         for (int l : classLabels) if (l >= 0) nLabeled++;
-        logger.info("[TEST] Autoencoder: {} cells, {} labeled, {} classes",
-                extraction.getNCells(), nLabeled, classNames.size());
+        logger.info("[TEST] Autoencoder ({}): {} cells, {} labeled, {} classes",
+                inputMode, detections.size(), nLabeled, classNames.size());
 
-        report(progressCallback, "Training autoencoder (" + extraction.getNCells()
+        // For measurement mode, extract measurements
+        MeasurementExtractor.ExtractionResult extraction = null;
+        if (!useTiles) {
+            report(progressCallback, "Extracting measurements and labels...");
+            MeasurementExtractor extractor = new MeasurementExtractor();
+            extraction = extractor.extract(detections, selectedMeasurements);
+        }
+
+        // For tile mode, read multi-channel tiles
+        float[] tileData = null;
+        int nChannels = 0;
+        if (useTiles) {
+            ImageServer<BufferedImage> server = imageData.getServer();
+            nChannels = server.nChannels();
+            report(progressCallback, "Reading " + detections.size() + " tiles ("
+                    + tileSize + "x" + tileSize + "x" + nChannels + " channels)...");
+            tileData = readMultiChannelTilesAroundCentroids(
+                    server, detections, tileSize, progressCallback);
+        }
+
+        int nCells = detections.size();
+        report(progressCallback, "Training autoencoder (" + nCells
                 + " cells, " + nLabeled + " labeled)...");
 
         Map<String, Object> resultMap = new HashMap<>();
+        final MeasurementExtractor.ExtractionResult finalExtraction = extraction;
+        final float[] finalTileData = tileData;
+        final int finalNChannels = nChannels;
         try {
             ApposeClusteringService.withExtensionClassLoader(() -> {
-                int nCells = extraction.getNCells();
-                int nMeasurements = extraction.getNMeasurements();
-
-                NDArray.Shape shape = new NDArray.Shape(
-                        NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-                NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-                var buf = measurementsNd.buffer().asDoubleBuffer();
-                for (double[] row : extraction.getData()) buf.put(row);
-
                 Map<String, Object> inputs = new HashMap<>();
-                inputs.put("measurements", measurementsNd);
-                inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+                inputs.put("input_mode", inputMode);
                 inputs.put("labels", classLabels.length > 0
                         ? toIntList(classLabels) : List.of());
                 inputs.put("label_names", classNames);
@@ -1523,6 +1620,27 @@ public class ClusteringWorkflow {
                 inputs.put("batch_size", batchSize);
                 inputs.put("supervision_weight", supervisionWeight);
                 inputs.put("normalization", normalization);
+
+                if (!useTiles) {
+                    // Measurement mode
+                    int nMeasurements = finalExtraction.getNMeasurements();
+                    NDArray.Shape shape = new NDArray.Shape(
+                            NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                    NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                    var buf = measurementsNd.buffer().asDoubleBuffer();
+                    for (double[] row : finalExtraction.getData()) buf.put(row);
+                    inputs.put("measurements", measurementsNd);
+                    inputs.put("marker_names", List.of(finalExtraction.getMeasurementNames()));
+                } else {
+                    // Tile mode: pass NCHW float32 data
+                    NDArray.Shape shape = new NDArray.Shape(
+                            NDArray.Shape.Order.C_ORDER, nCells, finalNChannels, tileSize, tileSize);
+                    NDArray tilesNd = new NDArray(NDArray.DType.FLOAT32, shape);
+                    tilesNd.buffer().asFloatBuffer().put(finalTileData);
+                    inputs.put("tile_images", tilesNd);
+                    inputs.put("n_channels", finalNChannels);
+                    inputs.put("tile_size", tileSize);
+                }
 
                 ApposeClusteringService service = ApposeClusteringService.getInstance();
                 Task task = service.runTaskWithListener("train_autoencoder", inputs, event -> {
@@ -1544,8 +1662,10 @@ public class ClusteringWorkflow {
                 confNd.buffer().asFloatBuffer().get(confidence);
 
                 // Apply latent features as measurements
+                List<PathObject> targetDetections = useTiles
+                        ? detections : finalExtraction.getDetections();
                 for (int i = 0; i < nCells; i++) {
-                    var ml = extraction.getDetections().get(i).getMeasurements();
+                    var ml = targetDetections.get(i).getMeasurements();
                     for (int d = 0; d < latentDim; d++) {
                         ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
                     }
@@ -1555,7 +1675,7 @@ public class ClusteringWorkflow {
                 // Apply predicted labels
                 if (!classNames.isEmpty()) {
                     ResultApplier applier = new ResultApplier();
-                    applier.applyPhenotypeLabels(extraction.getDetections(),
+                    applier.applyPhenotypeLabels(targetDetections,
                             predLabels, classNames.toArray(new String[0]));
                 }
 
@@ -1565,7 +1685,6 @@ public class ClusteringWorkflow {
                 resultMap.put("accuracy", task.outputs.get("final_class_accuracy"));
                 resultMap.put("n_classes", task.outputs.get("n_classes"));
 
-                try { measurementsNd.close(); } catch (Exception ignored) {}
                 try { latentNd.close(); } catch (Exception ignored) {}
                 try { predNd.close(); } catch (Exception ignored) {}
                 try { confNd.close(); } catch (Exception ignored) {}
@@ -1613,6 +1732,7 @@ public class ClusteringWorkflow {
             List<String> measurements,
             String modelStateBase64,
             String[] classNames,
+            String inputMode, int tileSize,
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
@@ -1638,30 +1758,53 @@ public class ClusteringWorkflow {
                 continue;
             }
 
-            MeasurementExtractor extractor = new MeasurementExtractor();
-            MeasurementExtractor.ExtractionResult extraction;
-            try {
-                extraction = extractor.extract(detections, measurements);
-            } catch (Exception e) {
-                logger.warn("Failed to extract from {}: {}", entry.getImageName(), e.getMessage());
-                continue;
+            boolean useTiles = "tiles".equals(inputMode);
+
+            // Prepare input data based on mode
+            MeasurementExtractor.ExtractionResult extraction = null;
+            float[] tileBuf = null;
+            int nChannels = 0;
+            if (useTiles) {
+                ImageServer<BufferedImage> server = imageData.getServer();
+                nChannels = server.nChannels();
+                tileBuf = readMultiChannelTilesAroundCentroids(
+                        server, detections, tileSize, null);
+            } else {
+                MeasurementExtractor extractor = new MeasurementExtractor();
+                try {
+                    extraction = extractor.extract(detections, measurements);
+                } catch (Exception e) {
+                    logger.warn("Failed to extract from {}: {}", entry.getImageName(), e.getMessage());
+                    continue;
+                }
             }
+
+            final MeasurementExtractor.ExtractionResult finalExtraction = extraction;
+            final float[] finalTileBuf = tileBuf;
+            final int finalNChannels = nChannels;
 
             try {
                 ApposeClusteringService.withExtensionClassLoader(() -> {
-                    int nCells = extraction.getNCells();
-                    int nMeasurements = extraction.getNMeasurements();
-
-                    NDArray.Shape shape = new NDArray.Shape(
-                            NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-                    NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-                    var buf = measurementsNd.buffer().asDoubleBuffer();
-                    for (double[] row : extraction.getData()) buf.put(row);
-
+                    int nCells = detections.size();
                     Map<String, Object> inputs = new HashMap<>();
-                    inputs.put("measurements", measurementsNd);
-                    inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
                     inputs.put("model_state_base64", modelStateBase64);
+
+                    if (useTiles) {
+                        NDArray.Shape shape = new NDArray.Shape(
+                                NDArray.Shape.Order.C_ORDER, nCells, finalNChannels, tileSize, tileSize);
+                        NDArray tilesNd = new NDArray(NDArray.DType.FLOAT32, shape);
+                        tilesNd.buffer().asFloatBuffer().put(finalTileBuf);
+                        inputs.put("tile_images", tilesNd);
+                    } else {
+                        int nMeasurements = finalExtraction.getNMeasurements();
+                        NDArray.Shape shape = new NDArray.Shape(
+                                NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                        var buf = measurementsNd.buffer().asDoubleBuffer();
+                        for (double[] row : finalExtraction.getData()) buf.put(row);
+                        inputs.put("measurements", measurementsNd);
+                        inputs.put("marker_names", List.of(finalExtraction.getMeasurementNames()));
+                    }
 
                     ApposeClusteringService service = ApposeClusteringService.getInstance();
                     Task task = service.runTaskWithListener("infer_autoencoder", inputs, event -> {
@@ -1686,8 +1829,11 @@ public class ClusteringWorkflow {
                     confNd.buffer().asFloatBuffer().get(confidence);
 
                     // Apply to detections
+                    List<PathObject> targetDets = useTiles
+                            ? detections
+                            : finalExtraction.getDetections();
                     for (int i = 0; i < nCells; i++) {
-                        var ml = extraction.getDetections().get(i).getMeasurements();
+                        var ml = targetDets.get(i).getMeasurements();
                         for (int d = 0; d < latentDim; d++) {
                             ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
                         }
@@ -1696,11 +1842,10 @@ public class ClusteringWorkflow {
 
                     if (classNames != null && classNames.length > 0) {
                         ResultApplier applier = new ResultApplier();
-                        applier.applyPhenotypeLabels(extraction.getDetections(),
+                        applier.applyPhenotypeLabels(targetDets,
                                 predLabels, classNames);
                     }
 
-                    try { measurementsNd.close(); } catch (Exception ignored) {}
                     try { latentNd.close(); } catch (Exception ignored) {}
                     try { predNd.close(); } catch (Exception ignored) {}
                     try { confNd.close(); } catch (Exception ignored) {}

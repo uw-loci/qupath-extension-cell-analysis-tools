@@ -254,9 +254,13 @@ Follows the scANVI pattern (Xu et al. 2021) adapted for continuous protein measu
 - PathClass labels: predicted cell type
 - Trained model can be applied to other images via "Apply to All Project Images"
 
+### Input Modes
+
+- **Measurements** (default): Uses per-cell measurement values (e.g., mean channel intensities). Fast, CPU-friendly. MLP encoder/decoder.
+- **Tile images**: Uses multi-channel pixel tiles centered on each cell. Captures spatial morphology and texture. Convolutional encoder/decoder. All image channels are included automatically. Benefits from GPU.
+
 ### Current Limitations (Test Feature)
 
-- Uses cell measurements (mean channel intensities) only; pixel-based input planned for future
 - No early stopping or learning rate scheduling
 - Model checkpoint held in memory (not persisted to disk between sessions)
 - Results should be validated before use in published analyses

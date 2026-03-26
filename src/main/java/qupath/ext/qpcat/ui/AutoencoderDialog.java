@@ -5,6 +5,7 @@ import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.*;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -49,7 +50,10 @@ public class AutoencoderDialog {
     private final Stage owner;
 
     // UI components
+    private RadioButton measurementModeRadio;
+    private RadioButton tileModeRadio;
     private ListView<String> measurementList;
+    private Spinner<Integer> tileSizeSpinner;
     private ComboBox<String> normalizationCombo;
     private Spinner<Integer> latentDimSpinner;
     private Spinner<Integer> epochsSpinner;
@@ -66,6 +70,8 @@ public class AutoencoderDialog {
     private String trainedModelState;
     private String[] trainedClassNames;
     private List<String> trainedMeasurements;
+    private String trainedInputMode;
+    private int trainedTileSize;
 
     public AutoencoderDialog(QuPathGUI qupath) {
         this.qupath = qupath;
@@ -153,24 +159,38 @@ public class AutoencoderDialog {
     }
 
     private VBox createMeasurementSection() {
-        Label heading = new Label("Measurements");
+        Label heading = new Label("Input Data");
         heading.setStyle("-fx-font-weight: bold;");
 
+        // Input mode toggle
+        ToggleGroup inputModeGroup = new ToggleGroup();
+        measurementModeRadio = new RadioButton("Cell measurements (mean channel intensities)");
+        measurementModeRadio.setToggleGroup(inputModeGroup);
+        measurementModeRadio.setSelected(true);
+        measurementModeRadio.setTooltip(new Tooltip(
+                "Use per-cell measurement values as input.\n"
+                + "Fast, works on CPU. Recommended for most cases."));
+
+        tileModeRadio = new RadioButton("Tile images (pixel data around each cell)");
+        tileModeRadio.setToggleGroup(inputModeGroup);
+        tileModeRadio.setTooltip(new Tooltip(
+                "Use multi-channel image tiles centered on each cell.\n"
+                + "Captures spatial morphology and texture patterns.\n"
+                + "Slower, benefits from GPU. Uses all image channels."));
+
+        // Measurement list (visible in measurement mode)
         measurementList = new ListView<>();
         measurementList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        measurementList.setPrefHeight(120);
+        measurementList.setPrefHeight(100);
         measurementList.setTooltip(new Tooltip(
                 "Select which measurements to use as input features.\n"
-                + "Typically 'Mean' channel intensities work best.\n"
-                + "The autoencoder learns a compressed representation of these."));
+                + "Typically 'Mean' channel intensities work best."));
 
-        // Populate from current image
         if (qupath.getImageData() != null) {
             var detections = qupath.getImageData().getHierarchy().getDetectionObjects();
             if (!detections.isEmpty()) {
                 List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
                 measurementList.setItems(FXCollections.observableArrayList(allMeasurements));
-                // Auto-select Mean measurements
                 for (int i = 0; i < allMeasurements.size(); i++) {
                     if (allMeasurements.get(i).contains("Mean")) {
                         measurementList.getSelectionModel().select(i);
@@ -179,17 +199,50 @@ public class AutoencoderDialog {
             }
         }
 
+        // Tile size spinner (visible in tile mode)
+        tileSizeSpinner = new Spinner<>(16, 128, 32, 8);
+        tileSizeSpinner.setEditable(true);
+        tileSizeSpinner.setPrefWidth(80);
+        tileSizeSpinner.setDisable(true);
+        tileSizeSpinner.setTooltip(new Tooltip(
+                "Size of the square tile around each cell centroid (pixels).\n"
+                + "Default: 32. Smaller = faster, captures less context.\n"
+                + "All image channels are included automatically."));
+
+        int nChannels = 0;
+        if (qupath.getImageData() != null) {
+            nChannels = qupath.getImageData().getServer().nChannels();
+        }
+        Label tileInfo = new Label("Channels: " + nChannels
+                + " (all channels used automatically)");
+        tileInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        HBox tileRow = new HBox(10, new Label("Tile size (px):"), tileSizeSpinner, tileInfo);
+        tileRow.setAlignment(Pos.CENTER_LEFT);
+        tileRow.setDisable(true);
+
+        // Toggle visibility based on mode
+        measurementModeRadio.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            measurementList.setDisable(!newVal);
+            tileSizeSpinner.setDisable(newVal);
+            tileRow.setDisable(newVal);
+        });
+
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "Z-score", "Min-Max [0,1]", "None"));
         normalizationCombo.getSelectionModel().selectFirst();
         normalizationCombo.setTooltip(new Tooltip(
                 "Normalization applied before training.\n"
-                + "Z-score is recommended for most multiplexed imaging data."));
+                + "Z-score: recommended for measurements.\n"
+                + "Min-Max: recommended for tile pixel values."));
 
         HBox normRow = new HBox(10, new Label("Normalization:"), normalizationCombo);
         normRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox section = new VBox(5, heading, measurementList, normRow);
+        VBox section = new VBox(5, heading,
+                measurementModeRadio, measurementList,
+                tileModeRadio, tileRow,
+                normRow);
         VBox.setVgrow(measurementList, Priority.ALWAYS);
         return section;
     }
@@ -336,11 +389,17 @@ public class AutoencoderDialog {
             return;
         }
 
-        List<String> selectedMeasurements = new ArrayList<>(
-                measurementList.getSelectionModel().getSelectedItems());
-        if (selectedMeasurements.isEmpty()) {
-            Dialogs.showWarningNotification("QP-CAT", "Select at least one measurement.");
-            return;
+        boolean useTiles = tileModeRadio.isSelected();
+        List<String> selectedMeasurements;
+        if (useTiles) {
+            selectedMeasurements = List.of(); // not used in tile mode
+        } else {
+            selectedMeasurements = new ArrayList<>(
+                    measurementList.getSelectionModel().getSelectedItems());
+            if (selectedMeasurements.isEmpty()) {
+                Dialogs.showWarningNotification("QP-CAT", "Select at least one measurement.");
+                return;
+            }
         }
 
         trainButton.setDisable(true);
@@ -357,6 +416,8 @@ public class AutoencoderDialog {
         int batchSize = batchSizeSpinner.getValue();
         double supWeight = supervisionWeightSpinner.getValue();
         String normId = getNormId();
+        String inputMode = useTiles ? "tiles" : "measurements";
+        int tileSize = tileSizeSpinner.getValue();
 
         Thread thread = new Thread(() -> {
             try {
@@ -364,11 +425,14 @@ public class AutoencoderDialog {
                 Map<String, Object> result = workflow.runAutoencoderTraining(
                         selectedMeasurements, normId,
                         latentDim, epochs, lr, batchSize, supWeight,
+                        inputMode, tileSize,
                         progress);
 
                 trainedModelState = (String) result.get("model_state");
                 trainedClassNames = (String[]) result.get("class_names");
                 trainedMeasurements = selectedMeasurements;
+                trainedInputMode = inputMode;
+                trainedTileSize = tileSize;
 
                 double accuracy = ((Number) result.get("accuracy")).doubleValue();
                 int nClasses = ((Number) result.get("n_classes")).intValue();
@@ -451,7 +515,8 @@ public class AutoencoderDialog {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 workflow.applyAutoencoderToProject(
                         entries, trainedMeasurements, trainedModelState,
-                        trainedClassNames, progress);
+                        trainedClassNames, trainedInputMode, trainedTileSize,
+                        progress);
 
                 Platform.runLater(() -> {
                     statusLabel.setText("Applied to " + entries.size() + " images.");

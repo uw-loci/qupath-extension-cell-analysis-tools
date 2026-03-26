@@ -63,57 +63,113 @@ class CellVAE(nn.Module):
         return self.classifier(z)
 
 
-# 1. Parse inputs
+class ConvCellVAE(nn.Module):
+    """Convolutional VAE (must match training architecture exactly)."""
+    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0):
+        super().__init__()
+        self.n_channels = n_channels
+        self.tile_size = tile_size
+        self.latent_dim = latent_dim
+        self.n_classes = n_classes
+        self.encoder = nn.Sequential(
+            nn.Conv2d(n_channels, 32, 3, stride=2, padding=1), nn.ReLU(),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.ReLU(),
+            nn.Conv2d(64, 128, 3, stride=2, padding=1), nn.ReLU(),
+            nn.AdaptiveAvgPool2d(1), nn.Flatten(),
+        )
+        self.fc_mu = nn.Linear(128, latent_dim)
+        self.fc_logvar = nn.Linear(128, latent_dim)
+        self.dec_spatial = max(tile_size // 8, 1)
+        self.dec_fc = nn.Linear(latent_dim, 128 * self.dec_spatial * self.dec_spatial)
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1), nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1), nn.ReLU(),
+            nn.ConvTranspose2d(32, n_channels, 3, stride=2, padding=1, output_padding=1),
+        )
+        if n_classes > 0:
+            self.classifier = nn.Linear(latent_dim, n_classes)
+        else:
+            self.classifier = None
+
+    def encode(self, x):
+        h = self.encoder(x)
+        return self.fc_mu(h), self.fc_logvar(h)
+
+    def classify(self, z):
+        if self.classifier is None:
+            return None
+        return self.classifier(z)
+
+
+# 1. Load checkpoint and determine mode
 task.update("Loading model checkpoint...", current=0, maximum=3)
 
-data = measurements.ndarray().copy().astype(np.float32)
-n_cells, n_markers = data.shape
-logger.info("Received %d cells x %d markers for inference", n_cells, n_markers)
-
-# Decode checkpoint
 ckpt_bytes = base64.b64decode(model_state_base64)
 buf = io.BytesIO(ckpt_bytes)
 checkpoint = torch.load(buf, map_location='cpu', weights_only=False)
 
-ckpt_n_markers = checkpoint['n_markers']
 ldim = checkpoint['latent_dim']
 n_classes = checkpoint['n_classes']
 class_names = checkpoint['class_names']
 norm_method = checkpoint['normalization']
 norm_params = checkpoint['norm_params']
-ckpt_markers = checkpoint['marker_names']
+ckpt_mode = checkpoint.get('input_mode', 'measurements')
+use_tiles = (ckpt_mode == 'tiles')
 
-logger.info("Model: %d markers, latent_dim=%d, %d classes", ckpt_n_markers, ldim, n_classes)
+# 2. Load input data based on mode
+task.update("Normalizing and encoding...", current=1, maximum=3)
 
-# Validate marker compatibility
-input_markers = list(marker_names)
-if input_markers != ckpt_markers:
-    logger.warning("Marker names differ from training. "
-                    "Training: %s, Input: %s", ckpt_markers, input_markers)
+if use_tiles:
+    raw_data = tile_images.ndarray().copy().astype(np.float32)
+    n_cells = raw_data.shape[0]
+    ckpt_channels = checkpoint['n_channels']
+    ckpt_tile_size = checkpoint['tile_size']
+    logger.info("Tile inference: %d cells, %d channels", n_cells, ckpt_channels)
+
+    # Per-channel normalization (reshape stats to NCHW broadcast shape)
+    if norm_method == "zscore" and norm_params.get('mean') is not None:
+        mean = np.array(norm_params['mean'], dtype=np.float32).reshape(1, -1, 1, 1)
+        std = np.array(norm_params['std'], dtype=np.float32).reshape(1, -1, 1, 1)
+        std[std == 0] = 1
+        data_norm = (raw_data - mean) / std
+    elif norm_method == "minmax" and norm_params.get('min') is not None:
+        dmin = np.array(norm_params['min'], dtype=np.float32).reshape(1, -1, 1, 1)
+        dmax = np.array(norm_params['max'], dtype=np.float32).reshape(1, -1, 1, 1)
+        drange = dmax - dmin
+        drange[drange == 0] = 1
+        data_norm = (raw_data - dmin) / drange
+    else:
+        data_norm = raw_data.copy()
+else:
+    raw_data = measurements.ndarray().copy().astype(np.float32)
+    n_cells, n_markers = raw_data.shape
+    ckpt_n_markers = checkpoint['n_markers']
+    logger.info("Measurement inference: %d cells x %d markers", n_cells, n_markers)
+
     if n_markers != ckpt_n_markers:
         raise ValueError("Marker count mismatch: model expects %d, got %d" %
                          (ckpt_n_markers, n_markers))
 
-# 2. Normalize using training statistics
-task.update("Normalizing and encoding...", current=1, maximum=3)
-
-if norm_method == "zscore" and norm_params.get('mean') is not None:
-    mean = np.array(norm_params['mean'], dtype=np.float32)
-    std = np.array(norm_params['std'], dtype=np.float32)
-    std[std == 0] = 1
-    data_norm = (data - mean) / std
-elif norm_method == "minmax" and norm_params.get('min') is not None:
-    dmin = np.array(norm_params['min'], dtype=np.float32)
-    dmax = np.array(norm_params['max'], dtype=np.float32)
-    drange = dmax - dmin
-    drange[drange == 0] = 1
-    data_norm = (data - dmin) / drange
-else:
-    data_norm = data.copy()
+    if norm_method == "zscore" and norm_params.get('mean') is not None:
+        mean = np.array(norm_params['mean'], dtype=np.float32)
+        std = np.array(norm_params['std'], dtype=np.float32)
+        std[std == 0] = 1
+        data_norm = (raw_data - mean) / std
+    elif norm_method == "minmax" and norm_params.get('min') is not None:
+        dmin = np.array(norm_params['min'], dtype=np.float32)
+        dmax = np.array(norm_params['max'], dtype=np.float32)
+        drange = dmax - dmin
+        drange[drange == 0] = 1
+        data_norm = (raw_data - dmin) / drange
+    else:
+        data_norm = raw_data.copy()
 
 # 3. Load model and run inference
 device = detect_device()
-model = CellVAE(ckpt_n_markers, ldim, n_classes).to(device)
+if use_tiles:
+    model = ConvCellVAE(ckpt_channels, ckpt_tile_size, ldim, n_classes).to(device)
+else:
+    model = CellVAE(checkpoint['n_markers'], ldim, n_classes).to(device)
 model.load_state_dict(checkpoint['state_dict'])
 model.eval()
 
