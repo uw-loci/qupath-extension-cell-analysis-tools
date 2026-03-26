@@ -433,6 +433,20 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 
 ---
 
+## [TEST] Autoencoder Cell Classification
+
+**Variational Autoencoder (VAE):**
+> Kingma DP, Welling M. "Auto-Encoding Variational Bayes." *Proceedings of the 2nd International Conference on Learning Representations (ICLR)* (2014).
+> https://doi.org/10.48550/arXiv.1312.6114
+
+**Semi-supervised VAE for cell annotation (scANVI architecture pattern):**
+> Xu C, Lopez R, Mehlman E, et al. "Probabilistic harmonization and annotation of single-cell transcriptomics data with deep generative models." *Molecular Systems Biology* 17, e9620 (2021).
+> https://doi.org/10.15252/msb.20209620
+
+**Used in:** [TEST] Autoencoder Classifier (architecture adapted for continuous protein measurements with Gaussian likelihood)
+
+---
+
 ## Key Application Papers (Multiplexed Imaging)
 
 These papers demonstrate workflows similar to QP-CAT's capabilities applied to multiplexed tissue imaging:

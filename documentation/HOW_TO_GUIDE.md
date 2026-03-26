@@ -287,6 +287,48 @@ Changes are applied immediately to detection objects.
 
 ---
 
+## 10. [TEST] Autoencoder Cell Classifier
+
+Train a VAE-based classifier on labeled cells, then apply across the project. This is a **test feature**.
+
+### Training
+
+1. **Label cells** in QuPath using the standard classification tools (right-click > Set class). Label 100-200 cells per cell type for best results.
+2. **Extensions > QP-CAT > [TEST] Autoencoder Classifier...**
+3. **Select measurements** to use as input (typically "Mean" channel intensities)
+4. Adjust training parameters if desired (defaults work well for most cases):
+   - Latent dimensions: 16 (how compressed the representation is)
+   - Epochs: 100 (training iterations)
+   - Supervision weight: 1.0 (how strongly labels influence the model)
+5. Click **Train on Current Image**
+6. Review accuracy on labeled cells
+
+### Applying to Project
+
+After training on the current image:
+
+1. Click **Apply to All Project Images**
+2. The trained model encodes each image's cells and assigns predicted labels
+3. Results are saved automatically per image
+
+### Outputs
+
+Each detection receives:
+- `AE_0` through `AE_N` measurements: learned latent features
+- `AE_confidence`: prediction confidence (0-1)
+- PathClass label: predicted cell type
+
+The latent features (AE_*) can be used as input for clustering (select them as measurements in the clustering dialog).
+
+### Tips
+
+- More labeled cells = better accuracy. Aim for 100+ per class.
+- If accuracy is low, try increasing epochs or latent dimensions.
+- Run on a well-annotated image first, then apply to the rest of the project.
+- Validate predictions by visual inspection before publishing.
+
+---
+
 ## 11. Exporting AnnData
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).

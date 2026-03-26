@@ -15,6 +15,7 @@ import qupath.ext.qpcat.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 
 import com.google.gson.Gson;
@@ -27,6 +28,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -1408,6 +1410,343 @@ public class ClusteringWorkflow {
                 msg, elapsed);
 
         return resultMap;
+    }
+
+    // ==================== Autoencoder Training & Inference [TEST FEATURE] ====================
+
+    /**
+     * Extracts existing PathClass labels from detections as integer indices.
+     * Unlabeled cells (null PathClass or "Cluster *" from prior clustering) get -1.
+     *
+     * @param detections ordered detection list
+     * @param classNames output: populated with discovered class names in order
+     * @return int array with class index per detection (-1 = unlabeled)
+     */
+    private static int[] extractClassLabels(List<PathObject> detections,
+                                             List<String> classNames) {
+        // Discover unique class names (excluding cluster labels)
+        LinkedHashSet<String> uniqueClasses = new LinkedHashSet<>();
+        for (PathObject det : detections) {
+            PathClass pc = det.getPathClass();
+            if (pc != null && pc != PathClass.getNullClass()) {
+                String name = pc.toString();
+                if (!name.startsWith("Cluster ") && !name.equals("Unclassified")) {
+                    uniqueClasses.add(name);
+                }
+            }
+        }
+        classNames.addAll(uniqueClasses);
+
+        // Map each detection to its class index
+        int[] labels = new int[detections.size()];
+        List<String> nameList = new ArrayList<>(classNames);
+        for (int i = 0; i < detections.size(); i++) {
+            PathClass pc = detections.get(i).getPathClass();
+            if (pc == null || pc == PathClass.getNullClass()) {
+                labels[i] = -1;
+            } else {
+                int idx = nameList.indexOf(pc.toString());
+                labels[i] = idx; // -1 if not found (e.g., cluster labels)
+            }
+        }
+        return labels;
+    }
+
+    /**
+     * [TEST FEATURE] Trains a VAE classifier on detections from the current image.
+     *
+     * @param selectedMeasurements measurements to use as input features
+     * @param normalization        normalization method id
+     * @param latentDim            latent space dimensionality
+     * @param epochs               training epochs
+     * @param learningRate         optimizer learning rate
+     * @param batchSize            training batch size
+     * @param supervisionWeight    weight of classification loss
+     * @param progressCallback     optional progress callback
+     * @return result map with model_state, class_names, accuracy, n_classes
+     * @throws IOException if training fails
+     */
+    public Map<String, Object> runAutoencoderTraining(
+            List<String> selectedMeasurements, String normalization,
+            int latentDim, int epochs, double learningRate,
+            int batchSize, double supervisionWeight,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        report(progressCallback, "Extracting measurements and labels...");
+
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) throw new IOException("No image is open");
+
+        List<PathObject> detections = new ArrayList<>(
+                imageData.getHierarchy().getDetectionObjects());
+        if (detections.isEmpty())
+            throw new IOException("No detections found.");
+
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extract(detections, selectedMeasurements);
+
+        // Extract class labels from existing PathClass assignments
+        List<String> classNames = new ArrayList<>();
+        int[] classLabels = extractClassLabels(extraction.getDetections(), classNames);
+
+        int nLabeled = 0;
+        for (int l : classLabels) if (l >= 0) nLabeled++;
+        logger.info("[TEST] Autoencoder: {} cells, {} labeled, {} classes",
+                extraction.getNCells(), nLabeled, classNames.size());
+
+        report(progressCallback, "Training autoencoder (" + extraction.getNCells()
+                + " cells, " + nLabeled + " labeled)...");
+
+        Map<String, Object> resultMap = new HashMap<>();
+        try {
+            ApposeClusteringService.withExtensionClassLoader(() -> {
+                int nCells = extraction.getNCells();
+                int nMeasurements = extraction.getNMeasurements();
+
+                NDArray.Shape shape = new NDArray.Shape(
+                        NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                var buf = measurementsNd.buffer().asDoubleBuffer();
+                for (double[] row : extraction.getData()) buf.put(row);
+
+                Map<String, Object> inputs = new HashMap<>();
+                inputs.put("measurements", measurementsNd);
+                inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+                inputs.put("labels", classLabels.length > 0
+                        ? toIntList(classLabels) : List.of());
+                inputs.put("label_names", classNames);
+                inputs.put("latent_dim", latentDim);
+                inputs.put("n_epochs", epochs);
+                inputs.put("learning_rate", learningRate);
+                inputs.put("batch_size", batchSize);
+                inputs.put("supervision_weight", supervisionWeight);
+                inputs.put("normalization", normalization);
+
+                ApposeClusteringService service = ApposeClusteringService.getInstance();
+                Task task = service.runTaskWithListener("train_autoencoder", inputs, event -> {
+                    if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                        report(progressCallback, event.message);
+                    }
+                });
+
+                // Parse results
+                NDArray latentNd = (NDArray) task.outputs.get("latent_features");
+                NDArray predNd = (NDArray) task.outputs.get("predicted_labels");
+                NDArray confNd = (NDArray) task.outputs.get("prediction_confidence");
+
+                float[] latentBuf = new float[nCells * latentDim];
+                latentNd.buffer().asFloatBuffer().get(latentBuf);
+                int[] predLabels = new int[nCells];
+                predNd.buffer().asIntBuffer().get(predLabels);
+                float[] confidence = new float[nCells];
+                confNd.buffer().asFloatBuffer().get(confidence);
+
+                // Apply latent features as measurements
+                for (int i = 0; i < nCells; i++) {
+                    var ml = extraction.getDetections().get(i).getMeasurements();
+                    for (int d = 0; d < latentDim; d++) {
+                        ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
+                    }
+                    ml.put("AE_confidence", (double) confidence[i]);
+                }
+
+                // Apply predicted labels
+                if (!classNames.isEmpty()) {
+                    ResultApplier applier = new ResultApplier();
+                    applier.applyPhenotypeLabels(extraction.getDetections(),
+                            predLabels, classNames.toArray(new String[0]));
+                }
+
+                resultMap.put("model_state",
+                        String.valueOf(task.outputs.get("model_state_base64")));
+                resultMap.put("class_names", classNames.toArray(new String[0]));
+                resultMap.put("accuracy", task.outputs.get("final_class_accuracy"));
+                resultMap.put("n_classes", task.outputs.get("n_classes"));
+
+                try { measurementsNd.close(); } catch (Exception ignored) {}
+                try { latentNd.close(); } catch (Exception ignored) {}
+                try { predNd.close(); } catch (Exception ignored) {}
+                try { confNd.close(); } catch (Exception ignored) {}
+
+                return null;
+            });
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Autoencoder training failed: " + e.getMessage(), e);
+        }
+
+        // Fire hierarchy update
+        Platform.runLater(() -> {
+            ImageData<BufferedImage> current = qupath.getImageData();
+            if (current != null) {
+                current.getHierarchy().fireHierarchyChangedEvent(this);
+            }
+        });
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("AUTOENCODER_TRAIN",
+                Map.of("Cells", String.valueOf(extraction.getNCells()),
+                       "Labeled", String.valueOf(nLabeled),
+                       "Classes", String.valueOf(classNames.size()),
+                       "LatentDim", String.valueOf(latentDim),
+                       "Epochs", String.valueOf(epochs)),
+                "[TEST] Autoencoder trained", elapsed);
+
+        return resultMap;
+    }
+
+    /**
+     * [TEST FEATURE] Applies a trained autoencoder to all images in a project.
+     *
+     * @param imageEntries     project images to apply to
+     * @param measurements     measurement names (must match training)
+     * @param modelStateBase64 base64-encoded model checkpoint
+     * @param classNames       class names from training
+     * @param progressCallback optional progress callback
+     * @throws IOException if application fails
+     */
+    public void applyAutoencoderToProject(
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            List<String> measurements,
+            String modelStateBase64,
+            String[] classNames,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        int totalApplied = 0;
+
+        for (int idx = 0; idx < imageEntries.size(); idx++) {
+            ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
+            report(progressCallback, "Processing image " + (idx + 1) + "/"
+                    + imageEntries.size() + ": " + entry.getImageName());
+
+            ImageData<BufferedImage> imageData;
+            try {
+                imageData = entry.readImageData();
+            } catch (Exception e) {
+                logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                continue;
+            }
+
+            List<PathObject> detections = new ArrayList<>(
+                    imageData.getHierarchy().getDetectionObjects());
+            if (detections.isEmpty()) {
+                logger.info("Skipping {} - no detections", entry.getImageName());
+                continue;
+            }
+
+            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor.ExtractionResult extraction;
+            try {
+                extraction = extractor.extract(detections, measurements);
+            } catch (Exception e) {
+                logger.warn("Failed to extract from {}: {}", entry.getImageName(), e.getMessage());
+                continue;
+            }
+
+            try {
+                ApposeClusteringService.withExtensionClassLoader(() -> {
+                    int nCells = extraction.getNCells();
+                    int nMeasurements = extraction.getNMeasurements();
+
+                    NDArray.Shape shape = new NDArray.Shape(
+                            NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                    NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                    var buf = measurementsNd.buffer().asDoubleBuffer();
+                    for (double[] row : extraction.getData()) buf.put(row);
+
+                    Map<String, Object> inputs = new HashMap<>();
+                    inputs.put("measurements", measurementsNd);
+                    inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+                    inputs.put("model_state_base64", modelStateBase64);
+
+                    ApposeClusteringService service = ApposeClusteringService.getInstance();
+                    Task task = service.runTaskWithListener("infer_autoencoder", inputs, event -> {
+                        if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                            report(progressCallback, event.message);
+                        }
+                    });
+
+                    NDArray latentNd = (NDArray) task.outputs.get("latent_features");
+                    NDArray predNd = (NDArray) task.outputs.get("predicted_labels");
+                    NDArray confNd = (NDArray) task.outputs.get("prediction_confidence");
+
+                    // Infer latent dim from buffer size
+                    int latentBufSize = latentNd.buffer().asFloatBuffer().remaining();
+                    int latentDim = latentBufSize / nCells;
+
+                    float[] latentBuf = new float[nCells * latentDim];
+                    latentNd.buffer().asFloatBuffer().get(latentBuf);
+                    int[] predLabels = new int[nCells];
+                    predNd.buffer().asIntBuffer().get(predLabels);
+                    float[] confidence = new float[nCells];
+                    confNd.buffer().asFloatBuffer().get(confidence);
+
+                    // Apply to detections
+                    for (int i = 0; i < nCells; i++) {
+                        var ml = extraction.getDetections().get(i).getMeasurements();
+                        for (int d = 0; d < latentDim; d++) {
+                            ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
+                        }
+                        ml.put("AE_confidence", (double) confidence[i]);
+                    }
+
+                    if (classNames != null && classNames.length > 0) {
+                        ResultApplier applier = new ResultApplier();
+                        applier.applyPhenotypeLabels(extraction.getDetections(),
+                                predLabels, classNames);
+                    }
+
+                    try { measurementsNd.close(); } catch (Exception ignored) {}
+                    try { latentNd.close(); } catch (Exception ignored) {}
+                    try { predNd.close(); } catch (Exception ignored) {}
+                    try { confNd.close(); } catch (Exception ignored) {}
+
+                    return null;
+                });
+            } catch (Exception e) {
+                logger.error("Failed to apply autoencoder to {}: {}",
+                        entry.getImageName(), e.getMessage());
+                continue;
+            }
+
+            // Save results
+            try {
+                entry.saveImageData(imageData);
+                totalApplied++;
+                logger.info("Saved autoencoder results for {} ({} detections)",
+                        entry.getImageName(), detections.size());
+            } catch (Exception e) {
+                logger.error("Failed to save {}: {}", entry.getImageName(), e.getMessage());
+            }
+        }
+
+        // Fire hierarchy update for currently open image
+        Platform.runLater(() -> {
+            ImageData<BufferedImage> current = qupath.getImageData();
+            if (current != null) {
+                current.getHierarchy().fireHierarchyChangedEvent(this);
+            }
+        });
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        String msg = "[TEST] Autoencoder applied to " + totalApplied + "/"
+                + imageEntries.size() + " images";
+        report(progressCallback, msg);
+        OperationLogger.getInstance().logOperation("AUTOENCODER_PROJECT_APPLY",
+                Map.of("Images", String.valueOf(imageEntries.size()),
+                       "Applied", String.valueOf(totalApplied)),
+                msg, elapsed);
+    }
+
+    /** Converts int[] to List<Integer> for Appose JSON serialization. */
+    private static List<Integer> toIntList(int[] arr) {
+        List<Integer> list = new ArrayList<>(arr.length);
+        for (int v : arr) list.add(v);
+        return list;
     }
 
     private static void report(Consumer<String> callback, String message) {

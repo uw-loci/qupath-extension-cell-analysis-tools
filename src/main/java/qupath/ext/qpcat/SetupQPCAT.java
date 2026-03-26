@@ -19,6 +19,7 @@ import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
+import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.FeatureExtractionDialog;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
@@ -208,6 +209,22 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         });
         featureExtractionItem.visibleProperty().bind(environmentReady);
 
+        // Autoencoder Classifier [TEST FEATURE]
+        MenuItem autoencoderItem = new MenuItem(res.getString("menu.autoencoderClassifier"));
+        autoencoderItem.setOnAction(e -> {
+            if (qupath.getImageData() == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+                return;
+            }
+            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
+                Dialogs.showWarningNotification(EXTENSION_NAME,
+                        "No detections found. Run cell detection first.");
+                return;
+            }
+            new AutoencoderDialog(qupath).show();
+        });
+        autoencoderItem.visibleProperty().bind(environmentReady);
+
         // Compute Embedding Only
         MenuItem computeEmbeddingItem = new MenuItem(res.getString("menu.computeEmbedding"));
         computeEmbeddingItem.setOnAction(e -> {
@@ -306,6 +323,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 quickClusterMenu,
                 sep2,
                 featureExtractionItem,
+                autoencoderItem,
                 sep3,
                 manageClustersItem,
                 viewResultsItem,

@@ -222,6 +222,47 @@ BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does 
 
 ---
 
+## [TEST] Autoencoder Cell Classifier
+
+**Extensions > QP-CAT > [TEST] Autoencoder Classifier...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. This is a **test feature** under active development.
+
+### How It Works
+
+1. Label representative cells in QuPath using the standard classification tools (100-200 per cell type recommended)
+2. The VAE learns a compressed latent representation of all cell measurements
+3. A classifier head trained on the labeled subset propagates labels to all cells
+4. The trained model can be applied across all images in a project
+
+### Architecture
+
+- **Encoder**: Measurements -> 128 -> 64 -> latent space (configurable dim, default 16)
+- **Decoder**: Latent space -> 64 -> 128 -> reconstructed measurements (Gaussian likelihood)
+- **Classifier**: Latent space -> class probabilities (semi-supervised)
+
+Follows the scANVI pattern (Xu et al. 2021) adapted for continuous protein measurements.
+
+### Training Modes
+
+- **Semi-supervised** (recommended): Some cells labeled, rest unlabeled. Reconstruction shapes the latent space; labels guide it.
+- **Fully supervised**: All cells labeled. Classification drives latent structure.
+- **Unsupervised**: No labels. VAE learns reconstruction only (set supervision weight to 0).
+
+### Output
+
+- `AE_0` through `AE_N` measurements: latent features per cell
+- `AE_confidence`: classifier confidence score
+- PathClass labels: predicted cell type
+- Trained model can be applied to other images via "Apply to All Project Images"
+
+### Current Limitations (Test Feature)
+
+- Uses cell measurements (mean channel intensities) only; pixel-based input planned for future
+- No early stopping or learning rate scheduling
+- Model checkpoint held in memory (not persisted to disk between sessions)
+- Results should be validated before use in published analyses
+
+---
+
 ## Post-Analysis Outputs
 
 After clustering, QP-CAT can generate:
@@ -347,6 +388,7 @@ All items are under **Extensions > QP-CAT**:
 | Compute Embedding Only... | UMAP/PCA/t-SNE without clustering | Image + detections |
 | Extract Foundation Model Features... | Extract morphological embeddings from vision models | Image + detections |
 | Zero-Shot Phenotyping (BiomedCLIP)... | Text-prompt cell phenotyping via vision-language model | Image + detections |
+| [TEST] Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
 | Run Phenotyping... | Rule-based cell type classification | Image + detections + project |
 | Quick Cluster > Quick Leiden | One-click Leiden clustering with defaults | Image + detections |
 | Quick Cluster > Quick KMeans | One-click KMeans (k=10) | Image + detections |
