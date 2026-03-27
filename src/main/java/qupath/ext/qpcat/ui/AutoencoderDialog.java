@@ -518,103 +518,100 @@ public class AutoencoderDialog {
         boolean usePoints = labelPointsCheck != null && labelPointsCheck.isSelected();
         boolean useDetections = labelDetectionsCheck != null && labelDetectionsCheck.isSelected();
 
-        // Gather detections from all checked images
         Map<String, Integer> classCounts = new LinkedHashMap<>();
         Map<String, Integer> classColors = new LinkedHashMap<>();
         int totalCells = 0;
         int totalLabeled = 0;
 
-        List<ImageData<BufferedImage>> imagesToScan = new ArrayList<>();
+        // Count checked images for the summary
+        int nCheckedImages = 0;
+        for (var prop : imageChecks.values()) {
+            if (prop.get()) nCheckedImages++;
+        }
+        if (projectEntries.isEmpty()) nCheckedImages = 1; // current image only
 
-        // Checked project images
-        for (int i = 0; i < projectEntries.size(); i++) {
-            String name = projectEntries.get(i).getImageName();
-            SimpleBooleanProperty checked = imageChecks.get(name);
-            if (checked == null || !checked.get()) continue;
+        // Scan the currently open image for live preview.
+        // Other checked images will be loaded at training time.
+        // Reading non-current images from disk here would block the UI thread.
+        ImageData<BufferedImage> currentImageData = qupath.getImageData();
+        if (currentImageData == null) {
+            labelSummaryLabel.setText("No image open.");
+            classDistributionChart.setVisible(false);
+            classDistributionChart.setManaged(false);
+            return;
+        }
 
-            try {
-                // Use current image data if it's the open image
-                var currentEntry = qupath.getProject() != null && qupath.getImageData() != null
-                        ? qupath.getProject().getEntry(qupath.getImageData()) : null;
-                if (currentEntry != null && currentEntry.equals(projectEntries.get(i))) {
-                    imagesToScan.add(qupath.getImageData());
+        var hierarchy = currentImageData.getHierarchy();
+        List<PathObject> dets = new ArrayList<>(hierarchy.getDetectionObjects());
+        if (cellsOnly) dets.removeIf(d -> !d.isCell());
+        totalCells = dets.size();
+
+        // Count from detection classifications
+        // Unclassified (null/NULL_CLASS) is a valid class
+        if (useDetections) {
+            for (PathObject det : dets) {
+                PathClass pc = det.getPathClass();
+                String name;
+                Integer color;
+                if (pc == null || pc == PathClass.getNullClass()) {
+                    name = "Unclassified";
+                    color = 0x404040; // gray
                 } else {
-                    imagesToScan.add(projectEntries.get(i).readImageData());
+                    name = pc.toString();
+                    if (name.startsWith("Cluster ")) continue;
+                    color = pc.getColor();
                 }
-            } catch (Exception e) {
-                logger.debug("Could not read image data for {}: {}", name, e.getMessage());
+                classCounts.merge(name, 1, Integer::sum);
+                classColors.putIfAbsent(name, color);
+                totalLabeled++;
             }
         }
 
-        // If no project, use current image
-        if (projectEntries.isEmpty() && qupath.getImageData() != null) {
-            imagesToScan.add(qupath.getImageData());
-        }
-
-        for (ImageData<BufferedImage> imageData : imagesToScan) {
-            var hierarchy = imageData.getHierarchy();
-            List<PathObject> dets = new ArrayList<>(hierarchy.getDetectionObjects());
-            if (cellsOnly) dets.removeIf(d -> !d.isCell());
-
-            totalCells += dets.size();
-
-            // Count from detection classifications
-            if (useDetections) {
-                for (PathObject det : dets) {
-                    PathClass pc = det.getPathClass();
-                    if (pc != null && pc != PathClass.getNullClass()) {
-                        String name = pc.toString();
-                        if (!name.startsWith("Cluster ") && !name.equals("Unclassified")) {
-                            classCounts.merge(name, 1, Integer::sum);
-                            classColors.putIfAbsent(name, pc.getColor());
-                            totalLabeled++;
-                        }
-                    }
+        // Count from locked annotations
+        if (useLocked) {
+            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
+                if (!annotation.isLocked()) continue;
+                PathClass pc = annotation.getPathClass();
+                if (pc == null || pc == PathClass.getNullClass()) continue;
+                String className = pc.toString();
+                if (className.startsWith("Cluster ")) continue;
+                var inside = hierarchy.getAllDetectionsForROI(annotation.getROI());
+                int count = 0;
+                for (PathObject det : inside) {
+                    if (cellsOnly && !det.isCell()) continue;
+                    count++;
                 }
-            }
-
-            // Count from locked annotations
-            if (useLocked) {
-                for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                    if (!annotation.isLocked()) continue;
-                    PathClass pc = annotation.getPathClass();
-                    if (pc == null || pc == PathClass.getNullClass()) continue;
-                    String className = pc.toString();
-                    if (className.startsWith("Cluster ")) continue;
-                    var inside = hierarchy.getAllDetectionsForROI(annotation.getROI());
-                    int count = 0;
-                    for (PathObject det : inside) {
-                        if (cellsOnly && !det.isCell()) continue;
-                        count++;
-                    }
-                    if (count > 0) {
-                        classCounts.merge(className, count, Integer::sum);
-                        classColors.putIfAbsent(className, pc.getColor());
-                        totalLabeled += count;
-                    }
-                }
-            }
-
-            // Count from point annotations
-            if (usePoints) {
-                for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                    if (annotation.getROI() == null || !annotation.getROI().isPoint()) continue;
-                    PathClass pc = annotation.getPathClass();
-                    if (pc == null || pc == PathClass.getNullClass()) continue;
-                    String className = pc.toString();
-                    if (className.startsWith("Cluster ")) continue;
-                    int nPoints = annotation.getROI().getNumPoints();
-                    classCounts.merge(className, nPoints, Integer::sum);
+                if (count > 0) {
+                    classCounts.merge(className, count, Integer::sum);
                     classColors.putIfAbsent(className, pc.getColor());
-                    totalLabeled += nPoints;
+                    totalLabeled += count;
                 }
+            }
+        }
+
+        // Count from point annotations
+        if (usePoints) {
+            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
+                if (annotation.getROI() == null || !annotation.getROI().isPoint()) continue;
+                PathClass pc = annotation.getPathClass();
+                if (pc == null || pc == PathClass.getNullClass()) continue;
+                String className = pc.toString();
+                if (className.startsWith("Cluster ")) continue;
+                int nPoints = annotation.getROI().getNumPoints();
+                classCounts.merge(className, nPoints, Integer::sum);
+                classColors.putIfAbsent(className, pc.getColor());
+                totalLabeled += nPoints;
             }
         }
 
         // Update summary label
         StringBuilder sb = new StringBuilder();
         sb.append(totalCells).append(" ").append(cellsOnly ? "cells" : "detections")
-          .append(" total across ").append(imagesToScan.size()).append(" image(s). ");
+          .append(" in current image");
+        if (nCheckedImages > 1) {
+            sb.append(" (").append(nCheckedImages).append(" images selected for training)");
+        }
+        sb.append(". ");
         if (classCounts.isEmpty()) {
             sb.append("No labeled cells found.");
         } else {

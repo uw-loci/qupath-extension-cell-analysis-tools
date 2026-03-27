@@ -1608,17 +1608,22 @@ public class ClusteringWorkflow {
         }
 
         // Source 3: Detection classifications (overrides other sources)
+        // Unclassified (null PathClass or NULL_CLASS) is treated as a valid
+        // "Unclassified" class -- the classifier needs to learn what "not any
+        // specific type" looks like. Cluster labels from prior runs are still skipped.
         if (useDetections) {
             int detLabeled = 0;
             for (int i = 0; i < n; i++) {
                 PathClass pc = detections.get(i).getPathClass();
-                if (pc != null && pc != PathClass.getNullClass()) {
-                    String name = pc.toString();
-                    if (!name.startsWith("Cluster ") && !name.equals("Unclassified")) {
-                        assignedClass[i] = name;
-                        detLabeled++;
-                    }
+                String name;
+                if (pc == null || pc == PathClass.getNullClass()) {
+                    name = "Unclassified";
+                } else {
+                    name = pc.toString();
+                    if (name.startsWith("Cluster ")) continue;
                 }
+                assignedClass[i] = name;
+                detLabeled++;
             }
             if (detLabeled > 0)
                 logger.info("Labels from detection classes: {} cells", detLabeled);
