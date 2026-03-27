@@ -196,31 +196,33 @@ public class AutoencoderDialog {
 
         // Populate from project
         Project<BufferedImage> project = qupath.getProject();
-        if (project != null) {
-            List<String> imageNames = new ArrayList<>();
-            for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
-                imageNames.add(entry.getImageName());
-            }
-            imageListView.setItems(FXCollections.observableArrayList(imageNames));
-
-            // Pre-select current image
-            if (qupath.getImageData() != null) {
-                String currentName = qupath.getImageData().getServer().getMetadata().getName();
-                for (int i = 0; i < imageNames.size(); i++) {
-                    if (imageNames.get(i).equals(currentName)) {
-                        imageListView.getSelectionModel().select(i);
-                        break;
-                    }
-                }
-            }
-            // If nothing selected, select first
-            if (imageListView.getSelectionModel().isEmpty() && !imageNames.isEmpty()) {
-                imageListView.getSelectionModel().selectFirst();
-            }
-        } else {
+        if (project == null || project.getImageList().isEmpty()) {
             Label noProject = new Label("No project open -- training on current image only.");
             noProject.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
             return new VBox(5, heading, noProject);
+        }
+
+        List<ProjectImageEntry<BufferedImage>> entries = project.getImageList();
+        List<String> imageNames = new ArrayList<>();
+        for (ProjectImageEntry<BufferedImage> entry : entries) {
+            imageNames.add(entry.getImageName());
+        }
+        imageListView.setItems(FXCollections.observableArrayList(imageNames));
+        logger.debug("Populated image list with {} images", imageNames.size());
+
+        // Pre-select current image by matching against all entry identifiers
+        if (qupath.getImageData() != null) {
+            var currentEntry = qupath.getProject().getEntry(qupath.getImageData());
+            if (currentEntry != null) {
+                int idx = entries.indexOf(currentEntry);
+                if (idx >= 0) {
+                    imageListView.getSelectionModel().select(idx);
+                }
+            }
+        }
+        // If nothing selected, select first
+        if (imageListView.getSelectionModel().isEmpty()) {
+            imageListView.getSelectionModel().selectFirst();
         }
 
         Label hint = new Label("Select multiple images for more robust training. "
