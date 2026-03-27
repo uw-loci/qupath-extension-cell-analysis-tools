@@ -746,6 +746,14 @@ public class AutoencoderDialog {
         boolean labelDetections = labelDetectionsCheck.isSelected();
         boolean cellsOnly = cellsOnlyRadio.isSelected();
 
+        // Build list of checked project images
+        List<ProjectImageEntry<BufferedImage>> selectedImageEntries = new ArrayList<>();
+        for (int i = 0; i < projectEntries.size(); i++) {
+            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
+                selectedImageEntries.add(projectEntries.get(i));
+            }
+        }
+
         QpcatPreferences.saveFromDialog(
                 latentDim, epochs, lr, batchSize, supWeight,
                 valSplit, earlyStopPatience, useClassWeights, useAugmentation,
@@ -756,6 +764,7 @@ public class AutoencoderDialog {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 Map<String, Object> result = workflow.runAutoencoderTraining(
+                        selectedImageEntries.isEmpty() ? null : selectedImageEntries,
                         selectedMeasurements, normId,
                         latentDim, epochs, lr, batchSize, supWeight,
                         inputMode, tileSize, includeMask,

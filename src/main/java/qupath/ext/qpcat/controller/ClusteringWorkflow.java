@@ -1676,7 +1676,33 @@ public class ClusteringWorkflow {
      * @return result map with model_state, class_names, accuracy, n_classes
      * @throws IOException if training fails
      */
+    /**
+     * [TEST FEATURE] Trains a VAE classifier on detections from selected project images.
+     *
+     * @param selectedImages       project images to include in training (null = current image only)
+     * @param selectedMeasurements measurements to use (for measurement mode)
+     * @param normalization        normalization method id
+     * @param latentDim            latent space dimensionality
+     * @param epochs               training epochs
+     * @param learningRate         optimizer learning rate
+     * @param batchSize            training batch size
+     * @param supervisionWeight    weight of classification loss
+     * @param inputMode            "measurements" or "tiles"
+     * @param tileSize             tile size for pixel mode
+     * @param includeCellMask      if true, add cell ROI mask as extra channel
+     * @param validationSplit      fraction held out for validation
+     * @param earlyStoppingPatience patience for early stopping (0 = disabled)
+     * @param enableClassWeights   use inverse-frequency class weights
+     * @param enableAugmentation   apply data augmentation
+     * @param labelFromLocked      read labels from locked annotations
+     * @param labelFromPoints      read labels from point annotations
+     * @param labelFromDetections  read labels from detection classifications
+     * @param cellsOnly            filter to cell objects only
+     * @param progressCallback     optional progress callback
+     * @return result map with model_state, class_names, accuracy, n_classes
+     */
     public Map<String, Object> runAutoencoderTraining(
+            List<ProjectImageEntry<BufferedImage>> selectedImages,
             List<String> selectedMeasurements, String normalization,
             int latentDim, int epochs, double learningRate,
             int batchSize, double supervisionWeight,
@@ -1690,53 +1716,125 @@ public class ClusteringWorkflow {
         long startTime = System.currentTimeMillis();
         boolean useTiles = "tiles".equals(inputMode);
 
-        ImageData<BufferedImage> imageData = qupath.getImageData();
-        if (imageData == null) throw new IOException("No image is open");
-
-        List<PathObject> detections = new ArrayList<>(
-                imageData.getHierarchy().getDetectionObjects());
-        if (cellsOnly) {
-            int before = detections.size();
-            detections.removeIf(d -> !d.isCell());
-            logger.info("Cell objects only: {} cells (filtered from {} detections)",
-                    detections.size(), before);
-        }
-        if (detections.isEmpty())
-            throw new IOException("No " + (cellsOnly ? "cell objects" : "detections") + " found.");
-
-        // Extract class labels from configured sources
-        PathObjectHierarchy hierarchy = imageData.getHierarchy();
+        // Gather detections from all selected images
+        List<PathObject> allDetections = new ArrayList<>();
+        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
         List<String> classNames = new ArrayList<>();
-        int[] classLabels = extractClassLabels(hierarchy, detections, classNames,
-                labelFromLocked, labelFromPoints, labelFromDetections);
+        List<Integer> allLabels = new ArrayList<>();
 
+        // Build image list: use selected entries, or fall back to current image
+        List<ImageData<BufferedImage>> imageDatas = new ArrayList<>();
+        if (selectedImages != null && !selectedImages.isEmpty()) {
+            for (int idx = 0; idx < selectedImages.size(); idx++) {
+                ProjectImageEntry<BufferedImage> entry = selectedImages.get(idx);
+                report(progressCallback, "Loading image " + (idx + 1) + "/"
+                        + selectedImages.size() + ": " + entry.getImageName());
+                try {
+                    // Use live ImageData for current image
+                    var currentData = qupath.getImageData();
+                    var currentEntry = (qupath.getProject() != null && currentData != null)
+                            ? qupath.getProject().getEntry(currentData) : null;
+                    if (currentEntry != null && currentEntry.equals(entry)) {
+                        imageDatas.add(currentData);
+                    } else {
+                        imageDatas.add(entry.readImageData());
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                }
+            }
+        } else {
+            ImageData<BufferedImage> current = qupath.getImageData();
+            if (current == null) throw new IOException("No image is open");
+            imageDatas.add(current);
+        }
+
+        if (imageDatas.isEmpty()) throw new IOException("No images could be loaded.");
+
+        // Collect detections and labels from each image
+        for (ImageData<BufferedImage> imageData : imageDatas) {
+            PathObjectHierarchy hierarchy = imageData.getHierarchy();
+            List<PathObject> dets = new ArrayList<>(hierarchy.getDetectionObjects());
+            if (cellsOnly) dets.removeIf(d -> !d.isCell());
+            if (dets.isEmpty()) continue;
+
+            // Extract labels for this image's detections
+            List<String> imgClassNames = new ArrayList<>();
+            int[] imgLabels = extractClassLabels(hierarchy, dets, imgClassNames,
+                    labelFromLocked, labelFromPoints, labelFromDetections);
+
+            // Merge class names (maintain consistent ordering across images)
+            for (String cn : imgClassNames) {
+                if (!classNames.contains(cn)) classNames.add(cn);
+            }
+
+            // Re-map labels to the merged class name order
+            for (int i = 0; i < dets.size(); i++) {
+                if (imgLabels[i] >= 0) {
+                    String cn = imgClassNames.get(imgLabels[i]);
+                    allLabels.add(classNames.indexOf(cn));
+                } else {
+                    allLabels.add(-1);
+                }
+            }
+
+            allDetections.addAll(dets);
+            groups.add(new MeasurementExtractor.ImageDetectionGroup(
+                    null, imageData, dets));
+        }
+
+        if (allDetections.isEmpty())
+            throw new IOException("No " + (cellsOnly ? "cell objects" : "detections")
+                    + " found in selected images.");
+
+        int[] classLabels = allLabels.stream().mapToInt(Integer::intValue).toArray();
         int nLabeled = 0;
         for (int l : classLabels) if (l >= 0) nLabeled++;
-        logger.info("[TEST] Autoencoder ({}): {} cells, {} labeled, {} classes",
-                inputMode, detections.size(), nLabeled, classNames.size());
+        logger.info("[TEST] Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
+                inputMode, allDetections.size(), imageDatas.size(), nLabeled, classNames.size());
 
-        // For measurement mode, extract measurements
+        // For measurement mode, extract measurements across all images
         MeasurementExtractor.ExtractionResult extraction = null;
         if (!useTiles) {
-            report(progressCallback, "Extracting measurements and labels...");
+            report(progressCallback, "Extracting measurements from "
+                    + imageDatas.size() + " images...");
             MeasurementExtractor extractor = new MeasurementExtractor();
-            extraction = extractor.extract(detections, selectedMeasurements);
+            extraction = extractor.extractMultiImage(groups, selectedMeasurements);
         }
 
-        // For tile mode, read multi-channel tiles
+        // For tile mode, read tiles from each image and concatenate
         float[] tileData = null;
         int nChannels = 0;
         if (useTiles) {
-            ImageServer<BufferedImage> server = imageData.getServer();
-            nChannels = server.nChannels();
-            report(progressCallback, "Reading " + detections.size() + " tiles ("
-                    + tileSize + "x" + tileSize + "x" + nChannels + " channels)...");
-            tileData = readMultiChannelTilesAroundCentroids(
-                    server, detections, tileSize, includeCellMask, progressCallback);
-            if (includeCellMask) nChannels++; // mask added as extra channel
+            List<float[]> tileChunks = new ArrayList<>();
+            for (ImageData<BufferedImage> imageData : imageDatas) {
+                ImageServer<BufferedImage> server = imageData.getServer();
+                if (nChannels == 0) {
+                    nChannels = server.nChannels();
+                    if (includeCellMask) nChannels++;
+                }
+                List<PathObject> dets = new ArrayList<>(
+                        imageData.getHierarchy().getDetectionObjects());
+                if (cellsOnly) dets.removeIf(d -> !d.isCell());
+                if (dets.isEmpty()) continue;
+
+                report(progressCallback, "Reading tiles from "
+                        + imageData.getServer().getMetadata().getName() + "...");
+                float[] chunk = readMultiChannelTilesAroundCentroids(
+                        server, dets, tileSize, includeCellMask, progressCallback);
+                tileChunks.add(chunk);
+            }
+            // Concatenate all chunks
+            int totalLen = tileChunks.stream().mapToInt(c -> c.length).sum();
+            tileData = new float[totalLen];
+            int offset = 0;
+            for (float[] chunk : tileChunks) {
+                System.arraycopy(chunk, 0, tileData, offset, chunk.length);
+                offset += chunk.length;
+            }
         }
 
-        int nCells = detections.size();
+        int nCells = allDetections.size();
         report(progressCallback, "Training autoencoder (" + nCells
                 + " cells, " + nLabeled + " labeled)...");
 
@@ -1804,7 +1902,7 @@ public class ClusteringWorkflow {
 
                 // Apply latent features as measurements
                 List<PathObject> targetDetections = useTiles
-                        ? detections : finalExtraction.getDetections();
+                        ? allDetections : finalExtraction.getDetections();
                 for (int i = 0; i < nCells; i++) {
                     var ml = targetDetections.get(i).getMeasurements();
                     for (int d = 0; d < latentDim; d++) {
@@ -1838,7 +1936,28 @@ public class ClusteringWorkflow {
             throw new IOException("Autoencoder training failed: " + e.getMessage(), e);
         }
 
-        // Fire hierarchy update
+        // Save results for non-current images; fire hierarchy update for current
+        if (selectedImages != null) {
+            report(progressCallback, "Saving results to " + imageDatas.size() + " images...");
+            for (int i = 0; i < selectedImages.size() && i < imageDatas.size(); i++) {
+                var currentData = qupath.getImageData();
+                var currentEntry = (qupath.getProject() != null && currentData != null)
+                        ? qupath.getProject().getEntry(currentData) : null;
+                if (currentEntry != null && currentEntry.equals(selectedImages.get(i))) {
+                    // Current image: already modified in-memory, just fire update
+                    continue;
+                }
+                try {
+                    selectedImages.get(i).saveImageData(imageDatas.get(i));
+                    logger.info("Saved training results for {}",
+                            selectedImages.get(i).getImageName());
+                } catch (Exception e) {
+                    logger.error("Failed to save {}: {}",
+                            selectedImages.get(i).getImageName(), e.getMessage());
+                }
+            }
+        }
+
         Platform.runLater(() -> {
             ImageData<BufferedImage> current = qupath.getImageData();
             if (current != null) {
@@ -1849,6 +1968,7 @@ public class ClusteringWorkflow {
         long elapsed = System.currentTimeMillis() - startTime;
         OperationLogger.getInstance().logOperation("AUTOENCODER_TRAIN",
                 Map.of("Cells", String.valueOf(nCells),
+                       "Images", String.valueOf(imageDatas.size()),
                        "Labeled", String.valueOf(nLabeled),
                        "Classes", String.valueOf(classNames.size()),
                        "LatentDim", String.valueOf(latentDim),
