@@ -41,7 +41,7 @@ public class ApposeClusteringService {
      * Expected environment version. Must match _ENVIRONMENT_VERSION in init_services.py
      * and the version in build.gradle.kts.
      */
-    static final String EXPECTED_ENV_VERSION = "0.5.0";
+    static final String EXPECTED_ENV_VERSION = "0.2.0";
 
     private static ApposeClusteringService instance;
 

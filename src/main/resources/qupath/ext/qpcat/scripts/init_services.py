@@ -26,7 +26,7 @@ logger = logging.getLogger("qpcat.appose")
 # or scripts change in a way that requires a new environment, bump this version.
 # The Java side checks this after init to detect stale environments that
 # rebuilt from pixi.toml changes but may still have outdated pip packages.
-_ENVIRONMENT_VERSION = "0.5.0"
+_ENVIRONMENT_VERSION = "0.2.0"
 
 try:
     # Set non-interactive backend before any matplotlib import (scanpy pulls it in)
