@@ -7,7 +7,7 @@ plugins {
 qupathExtension {
     name = "qupath-extension-cluster-analysis-tools"
     group = "io.github.uw-loci"
-    version = "0.1.0"
+    version = "0.5.0"
     description = "QP-CAT: Cluster Analysis Tools for QuPath. Python-powered clustering, phenotyping, and spatial analysis for multiplexed imaging data."
     automaticModule = "io.github.uw-loci.extension.qpcat"
 }

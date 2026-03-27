@@ -37,6 +37,12 @@ public class ApposeClusteringService {
     private static final String SCRIPTS_BASE = RESOURCE_BASE + "scripts/";
     private static final String ENV_NAME = "qupath-qpcat";
 
+    /**
+     * Expected environment version. Must match _ENVIRONMENT_VERSION in init_services.py
+     * and the version in build.gradle.kts.
+     */
+    static final String EXPECTED_ENV_VERSION = "0.5.0";
+
     private static ApposeClusteringService instance;
 
     private Environment environment;
@@ -177,7 +183,8 @@ public class ApposeClusteringService {
                         "import anndata\n" +
                         "task.outputs['sklearn_version'] = sklearn.__version__\n" +
                         "task.outputs['scanpy_version'] = scanpy.__version__\n" +
-                        "task.outputs['umap_version'] = umap.__version__\n";
+                        "task.outputs['umap_version'] = umap.__version__\n" +
+                        "task.outputs['env_version'] = _ENVIRONMENT_VERSION\n";
 
                 Task verifyTask = pythonService.task(verifyScript);
                 verifyTask.listen(event -> {
@@ -191,15 +198,28 @@ public class ApposeClusteringService {
                 String sklearnVersion = String.valueOf(verifyTask.outputs.get("sklearn_version"));
                 String scanpyVersion = String.valueOf(verifyTask.outputs.get("scanpy_version"));
                 String umapVersion = String.valueOf(verifyTask.outputs.get("umap_version"));
-                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}",
-                        sklearnVersion, scanpyVersion, umapVersion);
+                String envVersion = String.valueOf(verifyTask.outputs.get("env_version"));
+                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {}",
+                        sklearnVersion, scanpyVersion, umapVersion, envVersion);
+
+                // Version check: warn if environment version doesn't match expected
+                if (!EXPECTED_ENV_VERSION.equals(envVersion)) {
+                    logger.warn("Environment version mismatch: expected {}, got {}. "
+                            + "Some features may not work correctly. "
+                            + "Use Utilities > Rebuild Clustering Environment to update.",
+                            EXPECTED_ENV_VERSION, envVersion);
+                    report(statusCallback,
+                            "Warning: environment version mismatch (expected "
+                            + EXPECTED_ENV_VERSION + ", got " + envVersion
+                            + "). Rebuild recommended.");
+                }
 
                 initialized = true;
                 initError = null;
                 registerShutdownHook();
                 report(statusCallback, "Setup complete! (scikit-learn " + sklearnVersion
-                        + ", scanpy " + scanpyVersion + ")");
-                logger.info("QPCAT Appose service initialized");
+                        + ", scanpy " + scanpyVersion + ", env v" + envVersion + ")");
+                logger.info("QPCAT Appose service initialized (env v{})", envVersion);
             } finally {
                 Thread.currentThread().setContextClassLoader(original);
             }

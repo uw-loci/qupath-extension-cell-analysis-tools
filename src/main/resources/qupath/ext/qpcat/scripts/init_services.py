@@ -21,6 +21,13 @@ logging.basicConfig(
 
 logger = logging.getLogger("qpcat.appose")
 
+# --- Environment version ---
+# This version MUST match build.gradle.kts. When the JAR-bundled pixi.toml
+# or scripts change in a way that requires a new environment, bump this version.
+# The Java side checks this after init to detect stale environments that
+# rebuilt from pixi.toml changes but may still have outdated pip packages.
+_ENVIRONMENT_VERSION = "0.5.0"
+
 try:
     # Set non-interactive backend before any matplotlib import (scanpy pulls it in)
     import matplotlib
@@ -38,7 +45,7 @@ try:
     import harmonypy
     import banksy
 
-    logger.info("QP-CAT packages loaded successfully")
+    logger.info("QP-CAT environment v%s", _ENVIRONMENT_VERSION)
     logger.info("  scikit-learn: %s", sklearn.__version__)
     logger.info("  scanpy: %s", scanpy.__version__)
     logger.info("  umap-learn: %s", umap.__version__)
@@ -47,6 +54,20 @@ try:
     logger.info("  squidpy: %s", squidpy.__version__)
     logger.info("  harmonypy: available")
     logger.info("  pybanksy: available")
+
+    # Check for new optional dependencies (may not be present in older environments)
+    _optional_packages = {
+        "torch": "PyTorch",
+        "timm": "timm",
+        "open_clip": "open-clip-torch",
+    }
+    for pkg, display in _optional_packages.items():
+        try:
+            mod = __import__(pkg)
+            ver = getattr(mod, "__version__", "available")
+            logger.info("  %s: %s", display, ver)
+        except ImportError:
+            logger.info("  %s: NOT INSTALLED (feature extraction/zero-shot unavailable)", display)
 
     init_error = None
 
