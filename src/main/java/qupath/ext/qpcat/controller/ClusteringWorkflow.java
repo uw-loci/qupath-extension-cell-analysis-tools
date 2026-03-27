@@ -1509,39 +1509,133 @@ public class ClusteringWorkflow {
     // ==================== Autoencoder Training & Inference [TEST FEATURE] ====================
 
     /**
-     * Extracts existing PathClass labels from detections as integer indices.
-     * Unlabeled cells (null PathClass or "Cluster *" from prior clustering) get -1.
+     * Extracts class labels for detections from multiple sources.
+     * <p>
+     * Label sources (any combination):
+     * <ul>
+     *   <li><b>Locked annotations:</b> detections inside a locked, classified annotation
+     *       inherit the annotation's class. Most detections in the region get labeled.</li>
+     *   <li><b>Point annotations:</b> each point in a classified points annotation
+     *       labels the nearest detection within 50 pixels.</li>
+     *   <li><b>Detection classifications:</b> existing PathClass on detections
+     *       (excluding "Cluster *" from prior clustering runs).</li>
+     * </ul>
+     * Priority: detection class > locked annotation > point annotation (if multiple
+     * sources label the same cell, detection class wins).
      *
-     * @param detections ordered detection list
-     * @param classNames output: populated with discovered class names in order
+     * @param hierarchy      the object hierarchy for spatial queries
+     * @param detections     ordered detection list
+     * @param classNames     output: populated with discovered class names in order
+     * @param useLocked      include labels from locked annotations
+     * @param usePoints      include labels from point annotations
+     * @param useDetections  include labels from existing detection classifications
      * @return int array with class index per detection (-1 = unlabeled)
      */
-    private static int[] extractClassLabels(List<PathObject> detections,
-                                             List<String> classNames) {
-        // Discover unique class names (excluding cluster labels)
-        LinkedHashSet<String> uniqueClasses = new LinkedHashSet<>();
-        for (PathObject det : detections) {
-            PathClass pc = det.getPathClass();
-            if (pc != null && pc != PathClass.getNullClass()) {
-                String name = pc.toString();
-                if (!name.startsWith("Cluster ") && !name.equals("Unclassified")) {
-                    uniqueClasses.add(name);
+    private static int[] extractClassLabels(PathObjectHierarchy hierarchy,
+                                             List<PathObject> detections,
+                                             List<String> classNames,
+                                             boolean useLocked,
+                                             boolean usePoints,
+                                             boolean useDetections) {
+        int n = detections.size();
+        String[] assignedClass = new String[n];
+
+        // Build detection index for spatial lookup
+        Map<PathObject, Integer> detectionIndex = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            detectionIndex.put(detections.get(i), i);
+        }
+
+        // Source 1: Locked annotations -> label all detections inside
+        if (useLocked) {
+            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
+                if (!annotation.isLocked()) continue;
+                PathClass pc = annotation.getPathClass();
+                if (pc == null || pc == PathClass.getNullClass()) continue;
+                String className = pc.toString();
+                if (className.startsWith("Cluster ")) continue;
+
+                // Find detections inside this annotation
+                Collection<PathObject> inside =
+                        hierarchy.getAllDetectionsForROI(annotation.getROI());
+                for (PathObject det : inside) {
+                    Integer idx = detectionIndex.get(det);
+                    if (idx != null && assignedClass[idx] == null) {
+                        assignedClass[idx] = className;
+                    }
                 }
             }
+            int lockedCount = 0;
+            for (String s : assignedClass) if (s != null) lockedCount++;
+            if (lockedCount > 0)
+                logger.info("Labels from locked annotations: {} cells", lockedCount);
+        }
+
+        // Source 2: Point annotations -> label nearest detection to each point
+        if (usePoints) {
+            int pointLabeled = 0;
+            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
+                if (annotation.getROI() == null || !annotation.getROI().isPoint()) continue;
+                PathClass pc = annotation.getPathClass();
+                if (pc == null || pc == PathClass.getNullClass()) continue;
+                String className = pc.toString();
+                if (className.startsWith("Cluster ")) continue;
+
+                for (var point : annotation.getROI().getAllPoints()) {
+                    double px = point.getX();
+                    double py = point.getY();
+
+                    // Find nearest detection within 50 pixels
+                    double bestDist = 50.0 * 50.0;
+                    int bestIdx = -1;
+                    for (int i = 0; i < n; i++) {
+                        double cx = detections.get(i).getROI().getCentroidX();
+                        double cy = detections.get(i).getROI().getCentroidY();
+                        double dist = (cx - px) * (cx - px) + (cy - py) * (cy - py);
+                        if (dist < bestDist) {
+                            bestDist = dist;
+                            bestIdx = i;
+                        }
+                    }
+                    if (bestIdx >= 0 && assignedClass[bestIdx] == null) {
+                        assignedClass[bestIdx] = className;
+                        pointLabeled++;
+                    }
+                }
+            }
+            if (pointLabeled > 0)
+                logger.info("Labels from point annotations: {} cells", pointLabeled);
+        }
+
+        // Source 3: Detection classifications (overrides other sources)
+        if (useDetections) {
+            int detLabeled = 0;
+            for (int i = 0; i < n; i++) {
+                PathClass pc = detections.get(i).getPathClass();
+                if (pc != null && pc != PathClass.getNullClass()) {
+                    String name = pc.toString();
+                    if (!name.startsWith("Cluster ") && !name.equals("Unclassified")) {
+                        assignedClass[i] = name;
+                        detLabeled++;
+                    }
+                }
+            }
+            if (detLabeled > 0)
+                logger.info("Labels from detection classes: {} cells", detLabeled);
+        }
+
+        // Discover unique class names
+        LinkedHashSet<String> uniqueClasses = new LinkedHashSet<>();
+        for (String s : assignedClass) {
+            if (s != null) uniqueClasses.add(s);
         }
         classNames.addAll(uniqueClasses);
 
-        // Map each detection to its class index
-        int[] labels = new int[detections.size()];
+        // Map to integer indices
         List<String> nameList = new ArrayList<>(classNames);
-        for (int i = 0; i < detections.size(); i++) {
-            PathClass pc = detections.get(i).getPathClass();
-            if (pc == null || pc == PathClass.getNullClass()) {
-                labels[i] = -1;
-            } else {
-                int idx = nameList.indexOf(pc.toString());
-                labels[i] = idx; // -1 if not found (e.g., cluster labels)
-            }
+        int[] labels = new int[n];
+        for (int i = 0; i < n; i++) {
+            labels[i] = assignedClass[i] != null ? nameList.indexOf(assignedClass[i]) : -1;
         }
         return labels;
     }
@@ -1584,6 +1678,7 @@ public class ClusteringWorkflow {
             String inputMode, int tileSize, boolean includeCellMask,
             double validationSplit, int earlyStoppingPatience,
             boolean enableClassWeights, boolean enableAugmentation,
+            boolean labelFromLocked, boolean labelFromPoints, boolean labelFromDetections,
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
@@ -1597,9 +1692,11 @@ public class ClusteringWorkflow {
         if (detections.isEmpty())
             throw new IOException("No detections found.");
 
-        // Extract class labels from existing PathClass assignments
+        // Extract class labels from configured sources
+        PathObjectHierarchy hierarchy = imageData.getHierarchy();
         List<String> classNames = new ArrayList<>();
-        int[] classLabels = extractClassLabels(detections, classNames);
+        int[] classLabels = extractClassLabels(hierarchy, detections, classNames,
+                labelFromLocked, labelFromPoints, labelFromDetections);
 
         int nLabeled = 0;
         for (int l : classLabels) if (l >= 0) nLabeled++;

@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.service.MeasurementExtractor;
+import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
@@ -65,7 +66,11 @@ public class AutoencoderDialog {
     private Spinner<Integer> earlyStopSpinner;
     private CheckBox classWeightsCheck;
     private CheckBox augmentationCheck;
+    private CheckBox labelLockedCheck;
+    private CheckBox labelPointsCheck;
+    private CheckBox labelDetectionsCheck;
     private Label labelSummaryLabel;
+    private ListView<String> imageListView;
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button trainButton;
@@ -102,7 +107,10 @@ public class AutoencoderDialog {
 
         content.getChildren().addAll(
                 createTestBanner(),
+                createLabelSourceSection(),
                 createLabelSummarySection(),
+                new Separator(),
+                createImageSelectionSection(),
                 new Separator(),
                 createMeasurementSection(),
                 new Separator(),
@@ -135,6 +143,94 @@ public class AutoencoderDialog {
         HBox box = new HBox(banner);
         HBox.setHgrow(banner, Priority.ALWAYS);
         return box;
+    }
+
+    private VBox createLabelSourceSection() {
+        Label heading = new Label("Label Sources");
+        heading.setStyle("-fx-font-weight: bold;");
+
+        labelLockedCheck = new CheckBox("Locked annotations (region-based labeling)");
+        labelLockedCheck.setSelected(QpcatPreferences.isAeLabelFromLockedAnnotations());
+        labelLockedCheck.setTooltip(new Tooltip(
+                "Label detections based on locked, classified annotations.\n"
+                + "All detections inside a locked annotation inherit its class.\n\n"
+                + "Workflow: draw annotation -> assign class -> lock it.\n"
+                + "Efficient for labeling many cells in a region at once."));
+
+        labelPointsCheck = new CheckBox("Point annotations (per-cell labeling)");
+        labelPointsCheck.setSelected(QpcatPreferences.isAeLabelFromPoints());
+        labelPointsCheck.setTooltip(new Tooltip(
+                "Label individual cells via classified point annotations.\n"
+                + "Each point labels the nearest detection within 50 pixels.\n\n"
+                + "Workflow: select Points tool -> assign class -> click on cells.\n"
+                + "Precise for labeling specific cells one at a time."));
+
+        labelDetectionsCheck = new CheckBox("Existing detection classifications");
+        labelDetectionsCheck.setSelected(QpcatPreferences.isAeLabelFromDetections());
+        labelDetectionsCheck.setTooltip(new Tooltip(
+                "Use existing PathClass labels already assigned to detections.\n"
+                + "Ignores 'Cluster *' labels from prior clustering runs.\n\n"
+                + "Off by default to avoid inheriting old cluster labels."));
+
+        // Update summary when sources change
+        labelLockedCheck.selectedProperty().addListener((obs, o, n) -> refreshLabelSummary());
+        labelPointsCheck.selectedProperty().addListener((obs, o, n) -> refreshLabelSummary());
+        labelDetectionsCheck.selectedProperty().addListener((obs, o, n) -> refreshLabelSummary());
+
+        return new VBox(5, heading, labelLockedCheck, labelPointsCheck, labelDetectionsCheck);
+    }
+
+    private VBox createImageSelectionSection() {
+        Label heading = new Label("Training Images");
+        heading.setStyle("-fx-font-weight: bold;");
+
+        imageListView = new ListView<>();
+        imageListView.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        imageListView.setPrefHeight(80);
+        imageListView.setTooltip(new Tooltip(
+                "Select which project images to include in training.\n"
+                + "Multi-image training combines detections from all selected\n"
+                + "images for a more robust classifier.\n\n"
+                + "The current image is always pre-selected.\n"
+                + "Ctrl+click or Shift+click to select multiple images."));
+
+        // Populate from project
+        Project<BufferedImage> project = qupath.getProject();
+        if (project != null) {
+            List<String> imageNames = new ArrayList<>();
+            for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
+                imageNames.add(entry.getImageName());
+            }
+            imageListView.setItems(FXCollections.observableArrayList(imageNames));
+
+            // Pre-select current image
+            if (qupath.getImageData() != null) {
+                String currentName = qupath.getImageData().getServer().getMetadata().getName();
+                for (int i = 0; i < imageNames.size(); i++) {
+                    if (imageNames.get(i).equals(currentName)) {
+                        imageListView.getSelectionModel().select(i);
+                        break;
+                    }
+                }
+            }
+            // If nothing selected, select first
+            if (imageListView.getSelectionModel().isEmpty() && !imageNames.isEmpty()) {
+                imageListView.getSelectionModel().selectFirst();
+            }
+        } else {
+            Label noProject = new Label("No project open -- training on current image only.");
+            noProject.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+            return new VBox(5, heading, noProject);
+        }
+
+        Label hint = new Label("Select multiple images for more robust training. "
+                + "Labels are read from each image independently.");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        hint.setWrapText(true);
+
+        VBox section = new VBox(5, heading, imageListView, hint);
+        VBox.setVgrow(imageListView, Priority.ALWAYS);
+        return section;
     }
 
     private VBox createLabelSummarySection() {
@@ -172,7 +268,7 @@ public class AutoencoderDialog {
         ToggleGroup inputModeGroup = new ToggleGroup();
         measurementModeRadio = new RadioButton("Cell measurements (mean channel intensities)");
         measurementModeRadio.setToggleGroup(inputModeGroup);
-        measurementModeRadio.setSelected(true);
+        measurementModeRadio.setSelected(!"tiles".equals(QpcatPreferences.getAeInputMode()));
         measurementModeRadio.setTooltip(new Tooltip(
                 "Use per-cell measurement values as input.\n"
                 + "Fast, works on CPU. Recommended for most cases."));
@@ -206,7 +302,7 @@ public class AutoencoderDialog {
         }
 
         // Tile size spinner (visible in tile mode)
-        tileSizeSpinner = new Spinner<>(16, 128, 32, 8);
+        tileSizeSpinner = new Spinner<>(16, 128, QpcatPreferences.getAeTileSize(), 8);
         tileSizeSpinner.setEditable(true);
         tileSizeSpinner.setPrefWidth(80);
         tileSizeSpinner.setDisable(true);
@@ -224,7 +320,7 @@ public class AutoencoderDialog {
         tileInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
 
         includeMaskCheck = new CheckBox("Include cell mask channel");
-        includeMaskCheck.setSelected(true);
+        includeMaskCheck.setSelected(QpcatPreferences.isAeIncludeMask());
         includeMaskCheck.setDisable(true);
         includeMaskCheck.setTooltip(new Tooltip(
                 "Append a binary mask channel (1 inside the cell ROI, 0 outside).\n"
@@ -251,7 +347,9 @@ public class AutoencoderDialog {
 
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "Z-score", "Min-Max [0,1]", "None"));
-        normalizationCombo.getSelectionModel().selectFirst();
+        String savedNorm = QpcatPreferences.getAeNormalization();
+        int normIdx = "minmax".equals(savedNorm) ? 1 : "none".equals(savedNorm) ? 2 : 0;
+        normalizationCombo.getSelectionModel().select(normIdx);
         normalizationCombo.setTooltip(new Tooltip(
                 "Normalization applied before training.\n"
                 + "Z-score: recommended for measurements.\n"
@@ -272,7 +370,7 @@ public class AutoencoderDialog {
         Label heading = new Label("Training Parameters");
         heading.setStyle("-fx-font-weight: bold;");
 
-        latentDimSpinner = new Spinner<>(2, 128, 16);
+        latentDimSpinner = new Spinner<>(2, 128, QpcatPreferences.getAeLatentDim());
         latentDimSpinner.setEditable(true);
         latentDimSpinner.setPrefWidth(80);
         latentDimSpinner.setTooltip(new Tooltip(
@@ -281,7 +379,7 @@ public class AutoencoderDialog {
                 + "Lower values = more compressed; higher = more expressive.\n"
                 + "For 20-60 markers, 8-32 is typically effective."));
 
-        epochsSpinner = new Spinner<>(10, 1000, 100, 10);
+        epochsSpinner = new Spinner<>(10, 1000, QpcatPreferences.getAeEpochs(), 10);
         epochsSpinner.setEditable(true);
         epochsSpinner.setPrefWidth(80);
         epochsSpinner.setTooltip(new Tooltip(
@@ -289,21 +387,21 @@ public class AutoencoderDialog {
                 + "Default: 100. More epochs = better fit but slower.\n"
                 + "For 1k-10k cells, 50-200 epochs is usually sufficient."));
 
-        learningRateSpinner = new Spinner<>(0.00001, 0.1, 0.001, 0.0001);
+        learningRateSpinner = new Spinner<>(0.00001, 0.1, QpcatPreferences.getAeLearningRate(), 0.0001);
         learningRateSpinner.setEditable(true);
         learningRateSpinner.setPrefWidth(100);
         learningRateSpinner.setTooltip(new Tooltip(
                 "Adam optimizer learning rate.\n"
                 + "Default: 0.001. Reduce if training is unstable."));
 
-        batchSizeSpinner = new Spinner<>(16, 1024, 128, 32);
+        batchSizeSpinner = new Spinner<>(16, 1024, QpcatPreferences.getAeBatchSize(), 32);
         batchSizeSpinner.setEditable(true);
         batchSizeSpinner.setPrefWidth(80);
         batchSizeSpinner.setTooltip(new Tooltip(
                 "Training batch size.\n"
                 + "Default: 128. Larger = faster but uses more memory."));
 
-        supervisionWeightSpinner = new Spinner<>(0.0, 10.0, 1.0, 0.1);
+        supervisionWeightSpinner = new Spinner<>(0.0, 10.0, QpcatPreferences.getAeSupervisionWeight(), 0.1);
         supervisionWeightSpinner.setEditable(true);
         supervisionWeightSpinner.setPrefWidth(80);
         supervisionWeightSpinner.setTooltip(new Tooltip(
@@ -311,7 +409,7 @@ public class AutoencoderDialog {
                 + "Default: 1.0. Higher values = stronger label enforcement.\n"
                 + "Set to 0 for purely unsupervised VAE (reconstruction only)."));
 
-        valSplitSpinner = new Spinner<>(0.0, 0.5, 0.2, 0.05);
+        valSplitSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeValSplit(), 0.05);
         valSplitSpinner.setEditable(true);
         valSplitSpinner.setPrefWidth(80);
         valSplitSpinner.setTooltip(new Tooltip(
@@ -320,7 +418,7 @@ public class AutoencoderDialog {
                 + "Validation accuracy is used for early stopping\n"
                 + "and best-model selection."));
 
-        earlyStopSpinner = new Spinner<>(0, 100, 15);
+        earlyStopSpinner = new Spinner<>(0, 100, QpcatPreferences.getAeEarlyStopPatience());
         earlyStopSpinner.setEditable(true);
         earlyStopSpinner.setPrefWidth(80);
         earlyStopSpinner.setTooltip(new Tooltip(
@@ -331,7 +429,7 @@ public class AutoencoderDialog {
                 + "is restored. Prevents overfitting."));
 
         classWeightsCheck = new CheckBox("Class weighting (handle imbalanced populations)");
-        classWeightsCheck.setSelected(true);
+        classWeightsCheck.setSelected(QpcatPreferences.isAeClassWeights());
         classWeightsCheck.setTooltip(new Tooltip(
                 "Compute inverse-frequency class weights for the\n"
                 + "classification loss. Gives rare cell types more\n"
@@ -340,7 +438,7 @@ public class AutoencoderDialog {
                 + "(e.g., 5000 tumor cells vs 200 immune cells)."));
 
         augmentationCheck = new CheckBox("Data augmentation (noise + scaling)");
-        augmentationCheck.setSelected(true);
+        augmentationCheck.setSelected(QpcatPreferences.isAeAugmentation());
         augmentationCheck.setTooltip(new Tooltip(
                 "Apply random perturbations during training:\n"
                 + "  Measurement mode: Gaussian noise + per-channel scaling\n"
@@ -483,6 +581,16 @@ public class AutoencoderDialog {
         int earlyStopPatience = earlyStopSpinner.getValue();
         boolean useClassWeights = classWeightsCheck.isSelected();
         boolean useAugmentation = augmentationCheck.isSelected();
+        boolean labelLocked = labelLockedCheck.isSelected();
+        boolean labelPoints = labelPointsCheck.isSelected();
+        boolean labelDetections = labelDetectionsCheck.isSelected();
+
+        // Save preferences for next session
+        QpcatPreferences.saveFromDialog(
+                latentDim, epochs, lr, batchSize, supWeight,
+                valSplit, earlyStopPatience, useClassWeights, useAugmentation,
+                inputMode, tileSize, includeMask, normId,
+                labelLocked, labelPoints, labelDetections);
 
         Thread thread = new Thread(() -> {
             try {
@@ -492,6 +600,7 @@ public class AutoencoderDialog {
                         latentDim, epochs, lr, batchSize, supWeight,
                         inputMode, tileSize, includeMask,
                         valSplit, earlyStopPatience, useClassWeights, useAugmentation,
+                        labelLocked, labelPoints, labelDetections,
                         progress);
 
                 trainedModelState = (String) result.get("model_state");

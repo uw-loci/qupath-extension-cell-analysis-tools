@@ -228,10 +228,14 @@ BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does 
 
 ### How It Works
 
-1. Label representative cells in QuPath using the standard classification tools (100-200 per cell type recommended)
-2. The VAE learns a compressed latent representation of all cell measurements
-3. A classifier head trained on the labeled subset propagates labels to all cells
-4. The trained model can be applied across all images in a project
+1. Label cells using one or more methods:
+   - **Locked annotations** (default ON): draw region, assign class, lock it -- all detections inside inherit the class
+   - **Point annotations** (default ON): use Points tool with a class to click on individual cells
+   - **Detection classifications** (default OFF): use existing PathClass labels on detections
+2. Select one or more project images for training (multi-image for better generalization)
+3. The VAE learns a compressed latent representation from all cells
+4. A classifier head trained on the labeled subset propagates labels to all cells
+5. The trained model can be applied across all images in a project
 
 ### Architecture
 

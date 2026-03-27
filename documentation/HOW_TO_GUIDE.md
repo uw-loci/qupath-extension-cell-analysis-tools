@@ -293,9 +293,13 @@ Train a VAE-based classifier on labeled cells, then apply across the project. Th
 
 ### Training
 
-1. **Label cells** in QuPath using the standard classification tools (right-click > Set class). Label 100-200 cells per cell type for best results. Cluster labels (e.g., "Cluster 0") are ignored -- only your custom class names are used.
+1. **Label cells** using any combination of these methods (100-200 per cell type recommended):
+   - **Locked annotations** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
+   - **Point annotations** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels. Precise for single-cell labeling.
+   - **Detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
 2. **Extensions > QP-CAT > [TEST] Autoencoder Classifier...**
-3. **Choose input mode:**
+3. **Select training images**: Choose one or more project images. Multi-image training produces more robust classifiers. The current image is pre-selected.
+4. **Choose input mode:**
    - **Measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
    - **Tile images**: Uses pixel data around each cell. Captures morphology and texture. Choose tile size (32x32 recommended). Slower, benefits from GPU.
 4. **Cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
@@ -329,6 +333,10 @@ Each detection receives:
 - PathClass label: predicted cell type (only if labeled cells were provided)
 
 The latent features (AE_*) can be used as input for clustering (select them as measurements in the clustering dialog) or visualized via UMAP.
+
+### Persistent Settings
+
+All dialog settings (input mode, tile size, hyperparameters, label sources, augmentation, etc.) are saved between QuPath sessions. The next time you open the dialog, your previous settings are restored.
 
 ### Performance Notes
 
