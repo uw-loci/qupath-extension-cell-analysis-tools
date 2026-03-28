@@ -28,6 +28,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -2007,7 +2008,199 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * [TEST FEATURE] Applies a trained autoencoder to all images in a project.
+     * [TEST FEATURE] Evaluates a trained autoencoder against existing labels.
+     * Runs inference on checked images and compares predictions to ground truth
+     * WITHOUT modifying any object classifications.
+     *
+     * @return map with confusion_matrix, correct, total_labeled, total_cells, class_names
+     */
+    public Map<String, Object> evaluateAutoencoder(
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            List<String> measurements, String modelStateBase64,
+            String[] classNames, String inputMode, int tileSize,
+            boolean includeCellMask, boolean cellsOnly,
+            boolean labelFromLocked, boolean labelFromPoints, boolean labelFromDetections,
+            Consumer<String> progressCallback) throws IOException {
+
+        boolean useTiles = "tiles".equals(inputMode);
+        int totalCells = 0;
+        int totalCorrect = 0;
+        int totalLabeled = 0;
+
+        // confusion_matrix[actual][predicted] = count
+        Map<String, Map<String, Integer>> confusionMatrix = new LinkedHashMap<>();
+        for (String cn : classNames) {
+            confusionMatrix.put(cn, new LinkedHashMap<>());
+            for (String cn2 : classNames) {
+                confusionMatrix.get(cn).put(cn2, 0);
+            }
+        }
+
+        for (int idx = 0; idx < imageEntries.size(); idx++) {
+            ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
+            report(progressCallback, "Evaluating image " + (idx + 1) + "/"
+                    + imageEntries.size() + ": " + entry.getImageName());
+
+            ImageData<BufferedImage> imageData;
+            try {
+                var currentData = qupath.getImageData();
+                var currentEntry = (qupath.getProject() != null && currentData != null)
+                        ? qupath.getProject().getEntry(currentData) : null;
+                if (currentEntry != null && currentEntry.equals(entry)) {
+                    imageData = currentData;
+                } else {
+                    imageData = entry.readImageData();
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                continue;
+            }
+
+            List<PathObject> detections = new ArrayList<>(
+                    imageData.getHierarchy().getDetectionObjects());
+            if (cellsOnly) detections.removeIf(d -> !d.isCell());
+            if (detections.isEmpty()) continue;
+
+            // Get ground truth labels
+            List<String> imgClassNames = new ArrayList<>();
+            int[] groundTruth = extractClassLabels(imageData.getHierarchy(), detections,
+                    imgClassNames, labelFromLocked, labelFromPoints, labelFromDetections);
+
+            // Run inference (same as apply, but don't write results back)
+            // For measurement mode, filter to objects with all measurements
+            List<PathObject> validDetections = detections;
+            if (!useTiles && measurements != null && !measurements.isEmpty()) {
+                List<PathObject> filtered = new ArrayList<>();
+                List<Integer> filteredGT = new ArrayList<>();
+                for (int i = 0; i < detections.size(); i++) {
+                    boolean hasMissing = false;
+                    for (String m : measurements) {
+                        if (detections.get(i).getMeasurements().get(m) == null) {
+                            hasMissing = true;
+                            break;
+                        }
+                    }
+                    if (!hasMissing) {
+                        filtered.add(detections.get(i));
+                        filteredGT.add(groundTruth[i]);
+                    }
+                }
+                validDetections = filtered;
+                groundTruth = filteredGT.stream().mapToInt(Integer::intValue).toArray();
+            }
+
+            if (validDetections.isEmpty()) continue;
+            totalCells += validDetections.size();
+
+            // Run inference via Appose
+            MeasurementExtractor.ExtractionResult extraction = null;
+            Path inferTileFile = null;
+            int nChannels = 0;
+
+            if (useTiles) {
+                ImageServer<BufferedImage> server = imageData.getServer();
+                nChannels = server.nChannels();
+                if (includeCellMask) nChannels++;
+                inferTileFile = Files.createTempFile(getProjectTempDir(), "qpcat_eval_", ".bin");
+                try (var raf = new java.io.RandomAccessFile(inferTileFile.toFile(), "rw")) {
+                    int batchSz = 500;
+                    for (int bs = 0; bs < validDetections.size(); bs += batchSz) {
+                        int be = Math.min(bs + batchSz, validDetections.size());
+                        float[] batch = readMultiChannelTilesAroundCentroids(
+                                server, validDetections.subList(bs, be), tileSize, includeCellMask, null);
+                        java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(batch.length * 4);
+                        bb.order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                        bb.asFloatBuffer().put(batch);
+                        raf.write(bb.array());
+                    }
+                }
+            } else {
+                MeasurementExtractor extractor = new MeasurementExtractor();
+                extraction = extractor.extract(validDetections, measurements);
+            }
+
+            final MeasurementExtractor.ExtractionResult fExtraction = extraction;
+            final Path fInferTileFile = inferTileFile;
+            final int fNChannels = nChannels;
+            final int nCells = validDetections.size();
+
+            int[] predictions;
+            try {
+                predictions = ApposeClusteringService.withExtensionClassLoader(() -> {
+                    Map<String, Object> inputs = new HashMap<>();
+                    inputs.put("model_state_base64", modelStateBase64);
+
+                    if (useTiles) {
+                        inputs.put("tile_file_path", fInferTileFile.toAbsolutePath().toString());
+                        inputs.put("n_cells", nCells);
+                        inputs.put("n_channels", fNChannels);
+                        inputs.put("tile_size", tileSize);
+                    } else {
+                        int nMeasurements = fExtraction.getNMeasurements();
+                        NDArray.Shape shape = new NDArray.Shape(
+                                NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                        var buf = measurementsNd.buffer().asDoubleBuffer();
+                        for (double[] row : fExtraction.getData()) buf.put(row);
+                        inputs.put("measurements", measurementsNd);
+                        inputs.put("marker_names", List.of(fExtraction.getMeasurementNames()));
+                    }
+
+                    ApposeClusteringService service = ApposeClusteringService.getInstance();
+                    Task task = service.runTask("infer_autoencoder", inputs);
+
+                    NDArray predNd = (NDArray) task.outputs.get("predicted_labels");
+                    int[] preds = new int[nCells];
+                    predNd.buffer().asIntBuffer().get(preds);
+                    try { predNd.close(); } catch (Exception ignored) {}
+                    return preds;
+                });
+            } catch (Exception e) {
+                logger.error("Inference failed for {}: {}", entry.getImageName(), e.getMessage());
+                deleteTempFile(inferTileFile);
+                continue;
+            }
+
+            deleteTempFile(inferTileFile);
+
+            // Compare predictions to ground truth
+            final int[] gt = groundTruth;
+            for (int i = 0; i < nCells; i++) {
+                if (gt[i] < 0) continue; // unlabeled
+                totalLabeled++;
+
+                // Map ground truth index to class name (using merged order)
+                String actualClass = gt[i] < imgClassNames.size()
+                        ? imgClassNames.get(gt[i]) : "Unknown";
+                String predictedClass = predictions[i] >= 0 && predictions[i] < classNames.length
+                        ? classNames[predictions[i]] : "Unknown";
+
+                if (actualClass.equals(predictedClass)) totalCorrect++;
+
+                // Update confusion matrix
+                Map<String, Integer> row = confusionMatrix.get(actualClass);
+                if (row != null) {
+                    row.merge(predictedClass, 1, Integer::sum);
+                }
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("confusion_matrix", confusionMatrix);
+        result.put("correct", totalCorrect);
+        result.put("total_labeled", totalLabeled);
+        result.put("total_cells", totalCells);
+        result.put("class_names", classNames);
+
+        double accuracy = totalLabeled > 0 ? (double) totalCorrect / totalLabeled * 100 : 0;
+        logger.info("[TEST] Evaluation: %.1f%% accuracy (%d/%d labeled cells across %d images)",
+                accuracy, totalCorrect, totalLabeled, imageEntries.size());
+
+        return result;
+    }
+
+    /**
+     * [TEST FEATURE] Applies a trained autoencoder to selected images.
      *
      * @param imageEntries     project images to apply to
      * @param measurements     measurement names (must match training)

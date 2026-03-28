@@ -77,6 +77,7 @@ public class AutoencoderDialog {
     private Button trainButton;
     private Button applyProjectButton;
     private Button saveModelButton;
+    private Button evaluateButton;
 
     // Project image entries (parallel to imageListView items)
     private List<ProjectImageEntry<BufferedImage>> projectEntries = List.of();
@@ -525,15 +526,24 @@ public class AutoencoderDialog {
         loadModelButton.setOnAction(e -> loadModel());
         loadModelButton.setTooltip(new Tooltip(
                 "Load a previously saved autoencoder model.\n"
-                + "After loading, you can apply it to checked images."));
+                + "After loading, you can evaluate or apply it."));
 
-        // Keep references for enable/disable
+        Button evaluateButton = new Button("Evaluate on Checked Images");
+        evaluateButton.setDisable(true);
+        evaluateButton.setOnAction(e -> evaluateModel());
+        evaluateButton.setTooltip(new Tooltip(
+                "Run inference on checked images and compare predictions\n"
+                + "against existing labels. Shows accuracy and per-class\n"
+                + "breakdown WITHOUT modifying any classifications.\n"
+                + "Use this to validate the model before applying."));
+
         this.saveModelButton = saveModelButton;
+        this.evaluateButton = evaluateButton;
 
         HBox trainRow = new HBox(10, trainButton, saveModelButton, loadModelButton);
         trainRow.setAlignment(Pos.CENTER_RIGHT);
 
-        HBox applyRow = new HBox(10, applyProjectButton);
+        HBox applyRow = new HBox(10, evaluateButton, applyProjectButton);
         applyRow.setAlignment(Pos.CENTER_RIGHT);
 
         VBox box = new VBox(5, trainRow, applyRow);
@@ -855,6 +865,7 @@ public class AutoencoderDialog {
                     trainButton.setDisable(false);
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
+                    evaluateButton.setDisable(false);
                     Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT",
                             "Autoencoder training complete.\n" + msg);
                 });
@@ -928,6 +939,7 @@ public class AutoencoderDialog {
                     trainButton.setDisable(false);
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
+                    evaluateButton.setDisable(false);
                     Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT",
                             "Classifier applied to " + entries.size() + " image(s).");
                 });
@@ -939,6 +951,7 @@ public class AutoencoderDialog {
                     trainButton.setDisable(false);
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
+                    evaluateButton.setDisable(false);
                     Dialogs.showErrorNotification(TEST_BADGE + "QP-CAT",
                             "Failed to apply: " + e.getMessage());
                 });
@@ -946,6 +959,147 @@ public class AutoencoderDialog {
         }, "QPCAT-AutoencoderApply");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    // ==================== Evaluate Model ====================
+
+    /**
+     * Runs inference on checked images and compares predictions to existing labels.
+     * Shows accuracy, per-class precision/recall, and a confusion matrix.
+     * Does NOT modify any object classifications.
+     */
+    private void evaluateModel() {
+        if (trainedModelState == null || trainedModelState.isEmpty()) {
+            Dialogs.showWarningNotification("QP-CAT", "No trained model. Train or load one first.");
+            return;
+        }
+
+        List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
+        for (int i = 0; i < projectEntries.size(); i++) {
+            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
+                entries.add(projectEntries.get(i));
+            }
+        }
+        if (entries.isEmpty()) {
+            Dialogs.showWarningNotification("QP-CAT", "Check at least one image to evaluate on.");
+            return;
+        }
+
+        boolean cellsOnly = cellsOnlyRadio.isSelected();
+        boolean labelLocked = labelLockedCheck.isSelected();
+        boolean labelPoints = labelPointsCheck.isSelected();
+        boolean labelDetections = labelDetectionsCheck.isSelected();
+
+        trainButton.setDisable(true);
+        applyProjectButton.setDisable(true);
+        evaluateButton.setDisable(true);
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        statusLabel.setText("Evaluating model on checked images...");
+
+        Thread thread = new Thread(() -> {
+            try {
+                ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
+
+                // Run inference (read-only -- does not modify objects)
+                Map<String, Object> evalResult = workflow.evaluateAutoencoder(
+                        entries, trainedMeasurements, trainedModelState,
+                        trainedClassNames, trainedInputMode, trainedTileSize,
+                        trainedIncludeMask, cellsOnly,
+                        labelLocked, labelPoints, labelDetections,
+                        msg -> Platform.runLater(() -> statusLabel.setText(msg)));
+
+                Platform.runLater(() -> {
+                    progressBar.setProgress(1);
+                    trainButton.setDisable(false);
+                    applyProjectButton.setDisable(false);
+                    evaluateButton.setDisable(false);
+                    saveModelButton.setDisable(false);
+
+                    showEvaluationResults(evalResult);
+                });
+            } catch (Exception e) {
+                logger.error("Evaluation failed", e);
+                Platform.runLater(() -> {
+                    statusLabel.setText("Evaluation failed: " + e.getMessage());
+                    progressBar.setVisible(false);
+                    trainButton.setDisable(false);
+                    applyProjectButton.setDisable(false);
+                    evaluateButton.setDisable(false);
+                    saveModelButton.setDisable(false);
+                });
+            }
+        }, "QPCAT-AutoencoderEval");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void showEvaluationResults(Map<String, Object> evalResult) {
+        @SuppressWarnings("unchecked")
+        Map<String, Map<String, Integer>> confusionMatrix =
+                (Map<String, Map<String, Integer>>) evalResult.get("confusion_matrix");
+        int totalCorrect = ((Number) evalResult.get("correct")).intValue();
+        int totalLabeled = ((Number) evalResult.get("total_labeled")).intValue();
+        int totalCells = ((Number) evalResult.get("total_cells")).intValue();
+        String[] classNames = (String[]) evalResult.get("class_names");
+
+        double accuracy = totalLabeled > 0 ? (double) totalCorrect / totalLabeled * 100 : 0;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("Overall accuracy: %.1f%% (%d / %d labeled cells)\n",
+                accuracy, totalCorrect, totalLabeled));
+        sb.append(String.format("Total cells evaluated: %d\n\n", totalCells));
+
+        // Per-class breakdown
+        sb.append("Per-class results:\n");
+        sb.append(String.format("%-20s %8s %8s %8s\n", "Class", "Correct", "Total", "Accuracy"));
+        sb.append("-".repeat(50)).append("\n");
+
+        for (String className : classNames) {
+            Map<String, Integer> row = confusionMatrix.getOrDefault(className, Map.of());
+            int classTotal = row.values().stream().mapToInt(Integer::intValue).sum();
+            int classCorrect = row.getOrDefault(className, 0);
+            double classAcc = classTotal > 0 ? (double) classCorrect / classTotal * 100 : 0;
+            sb.append(String.format("%-20s %8d %8d %7.1f%%\n",
+                    className, classCorrect, classTotal, classAcc));
+        }
+
+        // Confusion matrix
+        sb.append("\nConfusion Matrix (rows=actual, cols=predicted):\n");
+        sb.append(String.format("%-15s", "Actual\\Pred"));
+        for (String cn : classNames) {
+            sb.append(String.format(" %10s", cn.length() > 10 ? cn.substring(0, 10) : cn));
+        }
+        sb.append("\n");
+        for (String actual : classNames) {
+            sb.append(String.format("%-15s",
+                    actual.length() > 15 ? actual.substring(0, 15) : actual));
+            Map<String, Integer> row = confusionMatrix.getOrDefault(actual, Map.of());
+            for (String predicted : classNames) {
+                sb.append(String.format(" %10d", row.getOrDefault(predicted, 0)));
+            }
+            sb.append("\n");
+        }
+
+        statusLabel.setText(String.format("Evaluation: %.1f%% accuracy (%d/%d)",
+                accuracy, totalCorrect, totalLabeled));
+
+        // Show in a text dialog
+        TextArea textArea = new TextArea(sb.toString());
+        textArea.setEditable(false);
+        textArea.setFont(javafx.scene.text.Font.font("monospace", 12));
+        textArea.setPrefRowCount(Math.min(classNames.length + 12, 30));
+        textArea.setPrefColumnCount(60);
+
+        Dialog<Void> resultDialog = new Dialog<>();
+        resultDialog.initOwner(owner);
+        resultDialog.setTitle(TEST_BADGE + "Evaluation Results");
+        resultDialog.setHeaderText(String.format("Accuracy: %.1f%% (%d/%d labeled cells)",
+                accuracy, totalCorrect, totalLabeled));
+        resultDialog.getDialogPane().setContent(textArea);
+        resultDialog.getDialogPane().getButtonTypes().add(ButtonType.OK);
+        resultDialog.setResizable(true);
+        resultDialog.show();
     }
 
     // ==================== Save / Load Model ====================
@@ -1094,6 +1248,7 @@ public class AutoencoderDialog {
 
             applyProjectButton.setDisable(false);
             saveModelButton.setDisable(false);
+            evaluateButton.setDisable(false);
 
             String info = "Loaded: " + selected;
             if (trainedClassNames != null) {
