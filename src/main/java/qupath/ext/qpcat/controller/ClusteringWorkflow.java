@@ -1822,21 +1822,9 @@ public class ClusteringWorkflow {
                 break;
             }
 
-            // Store temp file in project folder if available (may need significant disk space)
-            Path tempDir = null;
-            if (qupath.getProject() != null) {
-                try {
-                    Path projectDir = qupath.getProject().getPath().getParent();
-                    tempDir = projectDir.resolve(".qpcat_temp");
-                    Files.createDirectories(tempDir);
-                } catch (Exception e) {
-                    tempDir = null; // fall back to system temp
-                }
-            }
-            tileTempFile = tempDir != null
-                    ? Files.createTempFile(tempDir, "qpcat_tiles_", ".bin")
-                    : Files.createTempFile("qpcat_tiles_", ".bin");
-            tileTempFile.toFile().deleteOnExit();
+            // Store temp file inside the project folder (can be several GB)
+            Path tempDir = getProjectTempDir();
+            tileTempFile = Files.createTempFile(tempDir, "qpcat_tiles_", ".bin");
             long totalFloats = 0;
 
             try (var raf = new java.io.RandomAccessFile(tileTempFile.toFile(), "rw")) {
@@ -2012,6 +2000,9 @@ public class ClusteringWorkflow {
                        "Epochs", String.valueOf(epochs)),
                 "[TEST] Autoencoder trained", elapsed);
 
+        // Clean up tile temp file
+        deleteTempFile(tileTempFile);
+
         return resultMap;
     }
 
@@ -2119,18 +2110,8 @@ public class ClusteringWorkflow {
                 if (includeCellMask) nChannels++;
 
                 // Write tiles to temp file in batches (same pattern as training)
-                Path inferTempDir = null;
-                if (qupath.getProject() != null) {
-                    try {
-                        Path projDir = qupath.getProject().getPath().getParent();
-                        inferTempDir = projDir.resolve(".qpcat_temp");
-                        Files.createDirectories(inferTempDir);
-                    } catch (Exception ignored) {}
-                }
-                inferTileFile = inferTempDir != null
-                        ? Files.createTempFile(inferTempDir, "qpcat_infer_", ".bin")
-                        : Files.createTempFile("qpcat_infer_", ".bin");
-                inferTileFile.toFile().deleteOnExit();
+                inferTileFile = Files.createTempFile(
+                        getProjectTempDir(), "qpcat_infer_", ".bin");
                 try (var raf = new java.io.RandomAccessFile(inferTileFile.toFile(), "rw")) {
                     int batchSz = 500;
                     for (int bs = 0; bs < detections.size(); bs += batchSz) {
@@ -2248,6 +2229,9 @@ public class ClusteringWorkflow {
                     logger.error("Failed to save {}: {}", entry.getImageName(), e.getMessage());
                 }
             }
+
+            // Clean up per-image tile temp file
+            if (useTiles) deleteTempFile(inferTileFile);
         }
 
         // Fire hierarchy update for currently open image
@@ -2273,6 +2257,32 @@ public class ClusteringWorkflow {
         List<Integer> list = new ArrayList<>(arr.length);
         for (int v : arr) list.add(v);
         return list;
+    }
+
+    /**
+     * Returns the temp directory inside the project folder for large temp files.
+     * Creates .qpcat_temp/ if it doesn't exist. Requires a project to be open.
+     */
+    private Path getProjectTempDir() throws IOException {
+        if (qupath.getProject() == null) {
+            throw new IOException("A project must be open for tile-based training "
+                    + "(temp files are stored in the project folder).");
+        }
+        Path projectDir = qupath.getProject().getPath().getParent();
+        Path tempDir = projectDir.resolve(".qpcat_temp");
+        Files.createDirectories(tempDir);
+        return tempDir;
+    }
+
+    /** Deletes a temp file if it exists. Logs on failure rather than throwing. */
+    private static void deleteTempFile(Path file) {
+        if (file != null) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                logger.warn("Failed to delete temp file {}: {}", file, e.getMessage());
+            }
+        }
     }
 
     private static void report(Consumer<String> callback, String message) {
