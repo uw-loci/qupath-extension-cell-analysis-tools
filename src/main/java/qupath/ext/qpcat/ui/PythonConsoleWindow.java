@@ -43,6 +43,8 @@ public class PythonConsoleWindow {
     private Label lineCountLabel;
     private int lineCount = 0;
     private boolean autoScroll = true;
+    // Buffer messages received before the window is created
+    private final java.util.List<String> pendingMessages = new java.util.ArrayList<>();
 
     private PythonConsoleWindow() {}
 
@@ -139,6 +141,14 @@ public class PythonConsoleWindow {
             e.consume();
             stage.hide();
         });
+
+        // Flush any messages received before window was created
+        synchronized (pendingMessages) {
+            for (String msg : pendingMessages) {
+                doAppend(msg);
+            }
+            pendingMessages.clear();
+        }
     }
 
     private void saveLogToFile() {
@@ -163,7 +173,15 @@ public class PythonConsoleWindow {
     }
 
     private void doAppend(String text) {
-        if (textArea == null) return;
+        if (textArea == null) {
+            // Buffer messages until window is created
+            synchronized (pendingMessages) {
+                if (pendingMessages.size() < MAX_LINES) {
+                    pendingMessages.add(text);
+                }
+            }
+            return;
+        }
 
         String timestamp = LocalTime.now().format(TIME_FMT);
         textArea.appendText("[" + timestamp + "] " + text + "\n");
