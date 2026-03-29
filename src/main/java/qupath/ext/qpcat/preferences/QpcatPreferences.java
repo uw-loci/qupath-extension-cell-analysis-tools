@@ -49,6 +49,9 @@ public final class QpcatPreferences {
     private static final BooleanProperty aeIncludeMask = PathPrefs.createPersistentPreference(
             "qpcat.ae.includeMask", true);
 
+    private static final DoubleProperty aeDownsample = PathPrefs.createPersistentPreference(
+            "qpcat.ae.downsample", 1.0);
+
     private static final StringProperty aeNormalization = PathPrefs.createPersistentPreference(
             "qpcat.ae.normalization", "zscore");
 
@@ -104,6 +107,9 @@ public final class QpcatPreferences {
     public static boolean isAeIncludeMask() { return aeIncludeMask.get(); }
     public static void setAeIncludeMask(boolean v) { aeIncludeMask.set(v); }
 
+    public static double getAeDownsample() { return aeDownsample.get(); }
+    public static void setAeDownsample(double v) { aeDownsample.set(v); }
+
     public static String getAeNormalization() { return aeNormalization.get(); }
     public static void setAeNormalization(String v) { aeNormalization.set(v); }
 
@@ -126,8 +132,8 @@ public final class QpcatPreferences {
                                        int batchSize, double supervisionWeight,
                                        double valSplit, int earlyStopPatience,
                                        boolean classWeights, boolean augmentation,
-                                       String inputMode, int tileSize, boolean includeMask,
-                                       String normalization,
+                                       String inputMode, int tileSize, double downsample,
+                                       boolean includeMask, String normalization,
                                        boolean labelLocked, boolean labelPoints,
                                        boolean labelDetections, boolean cellsOnly) {
         setAeLatentDim(latentDim);
@@ -141,6 +147,7 @@ public final class QpcatPreferences {
         setAeAugmentation(augmentation);
         setAeInputMode(inputMode);
         setAeTileSize(tileSize);
+        setAeDownsample(downsample);
         setAeIncludeMask(includeMask);
         setAeNormalization(normalization);
         setAeLabelFromLockedAnnotations(labelLocked);

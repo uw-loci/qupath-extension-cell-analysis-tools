@@ -1176,10 +1176,16 @@ public class ClusteringWorkflow {
      * @param progressCallback optional progress callback
      * @return float array packed as NCHW (channels = image channels + mask if enabled)
      */
+    /**
+     * @param downsample downsample factor (1 = full resolution, 2 = half, etc.)
+     *                   The tileSize is in full-resolution pixels; the output
+     *                   array dimensions are tileSize/downsample per side.
+     */
     private float[] readMultiChannelTilesAroundCentroids(
             ImageServer<BufferedImage> server,
             List<PathObject> detections,
             int tileSize,
+            double downsample,
             boolean includeMask,
             Consumer<String> progressCallback) {
 
@@ -1187,13 +1193,16 @@ public class ClusteringWorkflow {
         int imageChannels = server.nChannels();
         int totalChannels = imageChannels + (includeMask ? 1 : 0);
         int halfTile = tileSize / 2;
-        long tileArraySize = (long) nCells * totalChannels * tileSize * tileSize;
+        // Output dimensions after downsample
+        int outSize = (int) Math.round(tileSize / downsample);
+        if (outSize < 2) outSize = 2;
+
+        long tileArraySize = (long) nCells * totalChannels * outSize * outSize;
         if (tileArraySize > Integer.MAX_VALUE) {
             throw new IllegalArgumentException(
                     "Tile data too large: " + nCells + " cells * " + totalChannels
-                    + " channels * " + tileSize + "x" + tileSize
-                    + " = " + tileArraySize + " floats (max " + Integer.MAX_VALUE
-                    + "). Reduce tile size, number of cells, or use measurement mode.");
+                    + " channels * " + outSize + "x" + outSize
+                    + " = " + tileArraySize + " floats. Increase downsample or use measurement mode.");
         }
         float[] tileData = new float[(int) tileArraySize];
 
@@ -1202,6 +1211,7 @@ public class ClusteringWorkflow {
             double cx = det.getROI().getCentroidX();
             double cy = det.getROI().getCentroidY();
 
+            // Request region in full-resolution coordinates
             int x = Math.max(0, (int) cx - halfTile);
             int y = Math.max(0, (int) cy - halfTile);
             x = Math.min(x, Math.max(0, server.getWidth() - tileSize));
@@ -1211,21 +1221,23 @@ public class ClusteringWorkflow {
             int readH = Math.min(tileSize, server.getHeight() - y);
 
             try {
+                // Server returns image at the downsampled resolution
                 RegionRequest request = RegionRequest.createInstance(
-                        server.getPath(), 1.0, x, y, readW, readH);
+                        server.getPath(), downsample, x, y, readW, readH);
                 BufferedImage tile = server.readRegion(request);
                 var raster = tile.getRaster();
 
+                int tileW = Math.min(outSize, tile.getWidth());
+                int tileH = Math.min(outSize, tile.getHeight());
+
                 // Pack image channels as NCHW: [cell_idx][channel][y][x]
-                int cellOffset = i * totalChannels * tileSize * tileSize;
+                int cellOffset = i * totalChannels * outSize * outSize;
                 for (int c = 0; c < imageChannels; c++) {
-                    int channelOffset = cellOffset + c * tileSize * tileSize;
-                    for (int ty = 0; ty < tileSize; ty++) {
-                        for (int tx = 0; tx < tileSize; tx++) {
-                            if (tx < tile.getWidth() && ty < tile.getHeight()) {
-                                tileData[channelOffset + ty * tileSize + tx] =
-                                        raster.getSampleFloat(tx, ty, c);
-                            }
+                    int channelOffset = cellOffset + c * outSize * outSize;
+                    for (int ty = 0; ty < tileH; ty++) {
+                        for (int tx = 0; tx < tileW; tx++) {
+                            tileData[channelOffset + ty * outSize + tx] =
+                                    raster.getSampleFloat(tx, ty, c);
                         }
                     }
                 }
@@ -1233,14 +1245,14 @@ public class ClusteringWorkflow {
                 // Add binary cell mask channel (last channel)
                 if (includeMask) {
                     java.awt.Shape roiShape = det.getROI().getShape();
-                    int maskOffset = cellOffset + imageChannels * tileSize * tileSize;
-                    for (int ty = 0; ty < tileSize; ty++) {
-                        for (int tx = 0; tx < tileSize; tx++) {
-                            // Convert tile pixel coords to image coords
-                            double imgX = x + tx;
-                            double imgY = y + ty;
+                    int maskOffset = cellOffset + imageChannels * outSize * outSize;
+                    for (int ty = 0; ty < outSize; ty++) {
+                        for (int tx = 0; tx < outSize; tx++) {
+                            // Convert downsampled pixel coords to full-resolution image coords
+                            double imgX = x + tx * downsample;
+                            double imgY = y + ty * downsample;
                             if (roiShape.contains(imgX, imgY)) {
-                                tileData[maskOffset + ty * tileSize + tx] = 1.0f;
+                                tileData[maskOffset + ty * outSize + tx] = 1.0f;
                             }
                         }
                     }
@@ -1715,7 +1727,7 @@ public class ClusteringWorkflow {
             List<String> selectedMeasurements, String normalization,
             int latentDim, int epochs, double learningRate,
             int batchSize, double supervisionWeight,
-            String inputMode, int tileSize, boolean includeCellMask,
+            String inputMode, int tileSize, double downsample, boolean includeCellMask,
             double validationSplit, int earlyStoppingPatience,
             boolean enableClassWeights, boolean enableAugmentation,
             boolean labelFromLocked, boolean labelFromPoints, boolean labelFromDetections,
@@ -1846,7 +1858,7 @@ public class ClusteringWorkflow {
                         int batchEnd = Math.min(batchStart + tileBatchSize, dets.size());
                         List<PathObject> batch = dets.subList(batchStart, batchEnd);
                         float[] batchTiles = readMultiChannelTilesAroundCentroids(
-                                server, batch, tileSize, includeCellMask, null);
+                                server, batch, tileSize, downsample, includeCellMask, null);
 
                         // Write floats as little-endian bytes (numpy float32 format)
                         java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(batchTiles.length * 4);
@@ -1904,7 +1916,7 @@ public class ClusteringWorkflow {
                     inputs.put("tile_file_path", finalTileTempFile.toAbsolutePath().toString());
                     inputs.put("n_cells", nCells);
                     inputs.put("n_channels", finalNChannels);
-                    inputs.put("tile_size", tileSize);
+                    inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
                 }
 
                 ApposeClusteringService service = ApposeClusteringService.getInstance();
@@ -2017,7 +2029,7 @@ public class ClusteringWorkflow {
     public Map<String, Object> evaluateAutoencoder(
             List<ProjectImageEntry<BufferedImage>> imageEntries,
             List<String> measurements, String modelStateBase64,
-            String[] classNames, String inputMode, int tileSize,
+            String[] classNames, String inputMode, int tileSize, double downsample,
             boolean includeCellMask, boolean cellsOnly,
             boolean labelFromLocked, boolean labelFromPoints, boolean labelFromDetections,
             Consumer<String> progressCallback) throws IOException {
@@ -2106,7 +2118,7 @@ public class ClusteringWorkflow {
                     for (int bs = 0; bs < validDetections.size(); bs += batchSz) {
                         int be = Math.min(bs + batchSz, validDetections.size());
                         float[] batch = readMultiChannelTilesAroundCentroids(
-                                server, validDetections.subList(bs, be), tileSize, includeCellMask, null);
+                                server, validDetections.subList(bs, be), tileSize, downsample, includeCellMask, null);
                         java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(batch.length * 4);
                         bb.order(java.nio.ByteOrder.LITTLE_ENDIAN);
                         bb.asFloatBuffer().put(batch);
@@ -2133,7 +2145,7 @@ public class ClusteringWorkflow {
                         inputs.put("tile_file_path", fInferTileFile.toAbsolutePath().toString());
                         inputs.put("n_cells", nCells);
                         inputs.put("n_channels", fNChannels);
-                        inputs.put("tile_size", tileSize);
+                        inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
                     } else {
                         int nMeasurements = fExtraction.getNMeasurements();
                         NDArray.Shape shape = new NDArray.Shape(
@@ -2218,7 +2230,7 @@ public class ClusteringWorkflow {
             List<String> measurements,
             String modelStateBase64,
             String[] classNames,
-            String inputMode, int tileSize, boolean includeCellMask,
+            String inputMode, int tileSize, double downsample, boolean includeCellMask,
             boolean cellsOnly,
             Consumer<String> progressCallback) throws IOException {
 
@@ -2311,7 +2323,7 @@ public class ClusteringWorkflow {
                     for (int bs = 0; bs < detections.size(); bs += batchSz) {
                         int be = Math.min(bs + batchSz, detections.size());
                         float[] batch = readMultiChannelTilesAroundCentroids(
-                                server, detections.subList(bs, be), tileSize, includeCellMask, null);
+                                server, detections.subList(bs, be), tileSize, downsample, includeCellMask, null);
                         java.nio.ByteBuffer bb = java.nio.ByteBuffer.allocate(batch.length * 4);
                         bb.order(java.nio.ByteOrder.LITTLE_ENDIAN);
                         bb.asFloatBuffer().put(batch);
@@ -2343,7 +2355,7 @@ public class ClusteringWorkflow {
                                 finalInferTileFile.toAbsolutePath().toString());
                         inputs.put("n_cells", nCells);
                         inputs.put("n_channels", finalNChannels);
-                        inputs.put("tile_size", tileSize);
+                        inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
                     } else {
                         int nMeasurements = finalExtraction.getNMeasurements();
                         NDArray.Shape shape = new NDArray.Shape(

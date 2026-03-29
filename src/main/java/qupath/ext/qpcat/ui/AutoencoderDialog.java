@@ -53,6 +53,8 @@ public class AutoencoderDialog {
     private CheckBox includeMaskCheck;
     private CheckComboBox<String> measurementCombo;
     private Spinner<Integer> tileSizeSpinner;
+    private ComboBox<String> downsampleCombo;
+    private Label downsampleWarning;
     private ComboBox<String> normalizationCombo;
     private Spinner<Integer> latentDimSpinner;
     private Spinner<Integer> epochsSpinner;
@@ -88,6 +90,7 @@ public class AutoencoderDialog {
     private List<String> trainedMeasurements;
     private String trainedInputMode;
     private int trainedTileSize;
+    private double trainedDownsample;
     private boolean trainedIncludeMask;
     private boolean trainedCellsOnly;
 
@@ -392,13 +395,40 @@ public class AutoencoderDialog {
                 "Append a binary mask channel (1 inside cell ROI, 0 outside).\n"
                 + "CellSighter approach (Amitay et al. 2023, Nat. Comm.)."));
 
-        HBox tileRow = new HBox(10, new Label("Tile size (px):"), tileSizeSpinner, tileInfo);
+        // Downsample
+        downsampleCombo = new ComboBox<>(FXCollections.observableArrayList(
+                "1x", "2x", "4x", "8x", "16x", "32x", "64x"));
+        double savedDs = QpcatPreferences.getAeDownsample();
+        int dsIdx = 0;
+        double[] dsValues = {1, 2, 4, 8, 16, 32, 64};
+        for (int di = 0; di < dsValues.length; di++) {
+            if (Math.abs(dsValues[di] - savedDs) < 0.01) { dsIdx = di; break; }
+        }
+        downsampleCombo.getSelectionModel().select(dsIdx);
+        downsampleCombo.setTooltip(new Tooltip(
+                "Downsample factor for tile reading.\n"
+                + "1x = full resolution, 2x = half, 4x = quarter, etc.\n"
+                + "Higher values reduce memory and speed up training\n"
+                + "but lose fine detail. Needed for large tile sizes\n"
+                + "or images with high-resolution pixel data.\n"
+                + "Values above 8x may lose important cell features."));
+        downsampleCombo.setDisable(true);
+
+        downsampleWarning = new Label("");
+        downsampleWarning.setStyle("-fx-text-fill: #CC6600; -fx-font-size: 10px;");
+        downsampleWarning.setWrapText(true);
+        downsampleCombo.setOnAction(e -> updateDownsampleWarning());
+        updateDownsampleWarning();
+
+        HBox tileRow = new HBox(10, new Label("Tile size (px):"), tileSizeSpinner,
+                new Label("Downsample:"), downsampleCombo, tileInfo);
         tileRow.setAlignment(Pos.CENTER_LEFT);
         tileRow.setDisable(true);
 
         measurementModeRadio.selectedProperty().addListener((obs, oldVal, newVal) -> {
             measurementCombo.setDisable(!newVal);
             tileSizeSpinner.setDisable(newVal);
+            downsampleCombo.setDisable(newVal);
             tileRow.setDisable(newVal);
             includeMaskCheck.setDisable(newVal);
         });
@@ -418,7 +448,7 @@ public class AutoencoderDialog {
 
         return new VBox(5, heading,
                 measurementModeRadio, measurementCombo,
-                tileModeRadio, tileRow, includeMaskCheck,
+                tileModeRadio, tileRow, downsampleWarning, includeMaskCheck,
                 normRow);
     }
 
@@ -759,6 +789,30 @@ public class AutoencoderDialog {
 
     // ==================== Actions ====================
 
+    private double getDownsample() {
+        double[] dsValues = {1, 2, 4, 8, 16, 32, 64};
+        int idx = downsampleCombo.getSelectionModel().getSelectedIndex();
+        return idx >= 0 && idx < dsValues.length ? dsValues[idx] : 1.0;
+    }
+
+    private void updateDownsampleWarning() {
+        double ds = getDownsample();
+        if (ds >= 16) {
+            downsampleWarning.setText("Warning: " + (int) ds + "x downsample may lose "
+                    + "important cell morphology features. Use with caution.");
+            downsampleWarning.setVisible(true);
+            downsampleWarning.setManaged(true);
+        } else if (ds >= 8) {
+            downsampleWarning.setText("Note: " + (int) ds + "x downsample -- fine detail "
+                    + "reduced. Suitable for large overview tiles.");
+            downsampleWarning.setVisible(true);
+            downsampleWarning.setManaged(true);
+        } else {
+            downsampleWarning.setVisible(false);
+            downsampleWarning.setManaged(false);
+        }
+    }
+
     private String getNormId() {
         int idx = normalizationCombo.getSelectionModel().getSelectedIndex();
         return switch (idx) {
@@ -821,6 +875,7 @@ public class AutoencoderDialog {
         String normId = getNormId();
         String inputMode = useTiles ? "tiles" : "measurements";
         int tileSize = tileSizeSpinner.getValue();
+        double dsample = getDownsample();
         boolean includeMask = useTiles && includeMaskCheck.isSelected();
         double valSplit = valSplitSpinner.getValue();
         int earlyStopPatience = earlyStopSpinner.getValue();
@@ -842,7 +897,7 @@ public class AutoencoderDialog {
         QpcatPreferences.saveFromDialog(
                 latentDim, epochs, lr, batchSize, supWeight,
                 valSplit, earlyStopPatience, useClassWeights, useAugmentation,
-                inputMode, tileSize, includeMask, normId,
+                inputMode, tileSize, dsample, includeMask, normId,
                 labelLocked, labelPoints, labelDetections, cellsOnly);
 
         Thread thread = new Thread(() -> {
@@ -852,7 +907,7 @@ public class AutoencoderDialog {
                         selectedImageEntries.isEmpty() ? null : selectedImageEntries,
                         selectedMeasurements, normId,
                         latentDim, epochs, lr, batchSize, supWeight,
-                        inputMode, tileSize, includeMask,
+                        inputMode, tileSize, dsample, includeMask,
                         valSplit, earlyStopPatience, useClassWeights, useAugmentation,
                         labelLocked, labelPoints, labelDetections, cellsOnly,
                         progress);
@@ -862,6 +917,7 @@ public class AutoencoderDialog {
                 trainedMeasurements = selectedMeasurements;
                 trainedInputMode = inputMode;
                 trainedTileSize = tileSize;
+                trainedDownsample = dsample;
                 trainedIncludeMask = includeMask;
                 trainedCellsOnly = cellsOnly;
 
@@ -943,7 +999,7 @@ public class AutoencoderDialog {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 boolean currentImageChanged = workflow.applyAutoencoderToProject(
                         entries, trainedMeasurements, trainedModelState,
-                        trainedClassNames, trainedInputMode, trainedTileSize,
+                        trainedClassNames, trainedInputMode, trainedTileSize, trainedDownsample,
                         trainedIncludeMask, trainedCellsOnly, progress);
 
                 Platform.runLater(() -> {
@@ -1039,7 +1095,7 @@ public class AutoencoderDialog {
                 // Run inference (read-only -- does not modify objects)
                 Map<String, Object> evalResult = workflow.evaluateAutoencoder(
                         entries, trainedMeasurements, trainedModelState,
-                        trainedClassNames, trainedInputMode, trainedTileSize,
+                        trainedClassNames, trainedInputMode, trainedTileSize, trainedDownsample,
                         trainedIncludeMask, cellsOnly,
                         labelLocked, labelPoints, labelDetections,
                         msg -> Platform.runLater(() -> statusLabel.setText(msg)));
@@ -1160,6 +1216,7 @@ public class AutoencoderDialog {
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("input_mode", trainedInputMode);
             metadata.put("tile_size", trainedTileSize);
+            metadata.put("downsample", trainedDownsample);
             metadata.put("include_mask", trainedIncludeMask);
             metadata.put("cells_only", trainedCellsOnly);
             metadata.put("class_names", trainedClassNames != null
@@ -1275,6 +1332,7 @@ public class AutoencoderDialog {
                 // Simple JSON parsing for known fields
                 trainedInputMode = parseJsonString(metaJson, "input_mode", "measurements");
                 trainedTileSize = parseJsonInt(metaJson, "tile_size", 64);
+                trainedDownsample = parseJsonDouble(metaJson, "downsample", 1.0);
                 trainedIncludeMask = parseJsonBool(metaJson, "include_mask", true);
                 trainedCellsOnly = parseJsonBool(metaJson, "cells_only", false);
                 trainedClassNames = parseJsonStringArray(metaJson, "class_names");
@@ -1306,6 +1364,12 @@ public class AutoencoderDialog {
         String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
         var m = java.util.regex.Pattern.compile(pattern).matcher(json);
         return m.find() ? m.group(1) : defaultVal;
+    }
+
+    private static double parseJsonDouble(String json, String key, double defaultVal) {
+        String pattern = "\"" + key + "\"\\s*:\\s*([\\d.]+)";
+        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
+        return m.find() ? Double.parseDouble(m.group(1)) : defaultVal;
     }
 
     private static int parseJsonInt(String json, String key, int defaultVal) {
