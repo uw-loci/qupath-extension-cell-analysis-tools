@@ -2090,7 +2090,6 @@ public class ClusteringWorkflow {
             }
 
             if (validDetections.isEmpty()) continue;
-            totalCells += validDetections.size();
 
             // Run inference via Appose
             MeasurementExtractor.ExtractionResult extraction = null;
@@ -2162,6 +2161,7 @@ public class ClusteringWorkflow {
             }
 
             deleteTempFile(inferTileFile);
+            totalCells += validDetections.size();
 
             // Compare predictions to ground truth
             final int[] gt = groundTruth;
