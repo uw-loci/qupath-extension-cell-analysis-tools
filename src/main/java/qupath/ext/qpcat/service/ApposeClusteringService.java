@@ -249,24 +249,41 @@ public class ApposeClusteringService {
             throw new IOException("Failed to load task script: " + scriptName, e);
         }
 
+        int maxAttempts = 3;
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
         try {
-            Task task = pythonService.task(script, inputs);
-            task.listen(event -> {
-                if (event.responseType == ResponseType.CRASH) {
-                    logger.error("Task '{}' CRASH: {}", scriptName, task.error);
-                } else if (event.responseType == ResponseType.FAILURE) {
-                    logger.error("Task '{}' FAILURE: {}", scriptName, task.error);
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    Task task = pythonService.task(script, inputs);
+                    task.listen(event -> {
+                        if (event.responseType == ResponseType.CRASH) {
+                            logger.error("Task '{}' CRASH: {}", scriptName, task.error);
+                        } else if (event.responseType == ResponseType.FAILURE) {
+                            logger.error("Task '{}' FAILURE: {}", scriptName, task.error);
+                        }
+                    });
+                    task.waitFor();
+                    return task;
+                } catch (TaskException e) {
+                    if (e.getMessage() != null
+                            && e.getMessage().contains("thread death")
+                            && attempt < maxAttempts) {
+                        logger.warn("Task '{}' thread death (attempt {}/{}), retrying...",
+                                scriptName, attempt, maxAttempts);
+                        try { Thread.sleep(200); } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Task '" + scriptName + "' interrupted", ie);
+                        }
+                        continue;
+                    }
+                    throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
                 }
-            });
-            task.waitFor();
-            return task;
+            }
+            throw new IOException("Task '" + scriptName + "' failed after " + maxAttempts + " attempts");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Task '" + scriptName + "' interrupted", e);
-        } catch (TaskException e) {
-            throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
         } finally {
             Thread.currentThread().setContextClassLoader(original);
         }
@@ -287,18 +304,40 @@ public class ApposeClusteringService {
             throw new IOException("Failed to load task script: " + scriptName, e);
         }
 
+        // Retry on "thread death" -- Appose spawns a Python thread per task.
+        // Stale thread deaths from previous tasks can get misattributed to the
+        // current task, causing a spurious failure. Retrying after a brief pause
+        // lets the stale cleanup messages drain before resubmitting.
+        // Same pattern as the DL pixel classifier extension.
+        int maxAttempts = 3;
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
         try {
-            Task task = pythonService.task(script, inputs);
-            task.listen(eventListener::accept);
-            task.waitFor();
-            return task;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    Task task = pythonService.task(script, inputs);
+                    task.listen(eventListener::accept);
+                    task.waitFor();
+                    return task;
+                } catch (TaskException e) {
+                    if (e.getMessage() != null
+                            && e.getMessage().contains("thread death")
+                            && attempt < maxAttempts) {
+                        logger.warn("Task '{}' failed with thread death (attempt {}/{}), retrying...",
+                                scriptName, attempt, maxAttempts);
+                        try { Thread.sleep(200); } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            throw new IOException("Task '" + scriptName + "' interrupted", ie);
+                        }
+                        continue;
+                    }
+                    throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
+                }
+            }
+            throw new IOException("Task '" + scriptName + "' failed after " + maxAttempts + " attempts");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Task '" + scriptName + "' interrupted", e);
-        } catch (TaskException e) {
-            throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
         } finally {
             Thread.currentThread().setContextClassLoader(original);
         }
