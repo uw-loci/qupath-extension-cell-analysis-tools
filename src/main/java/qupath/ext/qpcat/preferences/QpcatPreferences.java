@@ -12,7 +12,12 @@ import qupath.lib.gui.prefs.PathPrefs;
  */
 public final class QpcatPreferences {
 
-    private static final String CATEGORY_VAE = "QP-CAT: Autoencoder (Advanced)";
+    // Categories match the menu item names so users can associate preferences with tools
+    private static final String CATEGORY_VAE = "QP-CAT: [TEST] Autoencoder Classifier";
+    private static final String CATEGORY_CLUSTERING = "QP-CAT: Run Clustering";
+    private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
+    private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";
+    private static final String CATEGORY_ZERO_SHOT = "QP-CAT: Zero-Shot Phenotyping";
     private static final String CATEGORY_GENERAL = "QP-CAT";
 
     private QpcatPreferences() {}
@@ -116,6 +121,73 @@ public final class QpcatPreferences {
     private static final IntegerProperty aeTileBatchSize = PathPrefs.createPersistentPreference(
             "qpcat.ae.tileBatchSize", 500);
 
+    // ==================== Run Clustering ====================
+
+    private static final IntegerProperty clusterSpatialKnn = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.spatialKnn", 15);
+
+    private static final DoubleProperty clusterTsnePerplexity = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.tsnePerplexity", 30.0);
+
+    private static final IntegerProperty clusterHdbscanMinSamples = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.hdbscanMinSamples", 5);
+
+    private static final IntegerProperty clusterMiniBatchSize = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.miniBatchKmeansBatchSize", 1024);
+
+    private static final IntegerProperty clusterBanksyPcaDims = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.banksyPcaDims", 20);
+
+    private static final IntegerProperty clusterPlotDpi = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.plotDpi", 150);
+
+    // ==================== Run Phenotyping ====================
+
+    private static final IntegerProperty phenoHistogramBins = PathPrefs.createPersistentPreference(
+            "qpcat.pheno.histogramBins", 50);
+
+    private static final IntegerProperty phenoMinValidValues = PathPrefs.createPersistentPreference(
+            "qpcat.pheno.minValidValues", 10);
+
+    private static final IntegerProperty phenoGmmMaxIter = PathPrefs.createPersistentPreference(
+            "qpcat.pheno.gmmMaxIter", 200);
+
+    private static final DoubleProperty phenoGammaStdMultiplier = PathPrefs.createPersistentPreference(
+            "qpcat.pheno.gammaStdMultiplier", 1.0);
+
+    private static final DoubleProperty phenoGateMax = PathPrefs.createPersistentPreference(
+            "qpcat.pheno.gateMax", 5.0);
+
+    // ==================== Extract Foundation Model Features ====================
+
+    private static final IntegerProperty fmTileSize = PathPrefs.createPersistentPreference(
+            "qpcat.fm.tileSize", 224);
+
+    private static final IntegerProperty fmBatchSize = PathPrefs.createPersistentPreference(
+            "qpcat.fm.batchSize", 32);
+
+    // ==================== Zero-Shot Phenotyping ====================
+
+    private static final IntegerProperty zsTileSize = PathPrefs.createPersistentPreference(
+            "qpcat.zs.tileSize", 224);
+
+    private static final IntegerProperty zsBatchSize = PathPrefs.createPersistentPreference(
+            "qpcat.zs.batchSize", 32);
+
+    private static final DoubleProperty zsMinSimilarity = PathPrefs.createPersistentPreference(
+            "qpcat.zs.minSimilarity", 0.1);
+
+    // ==================== General / Services ====================
+
+    private static final IntegerProperty taskMaxRetries = PathPrefs.createPersistentPreference(
+            "qpcat.service.taskMaxRetries", 3);
+
+    private static final IntegerProperty taskRetrySleepMs = PathPrefs.createPersistentPreference(
+            "qpcat.service.taskRetrySleepMs", 200);
+
+    private static final IntegerProperty shutdownTimeoutMs = PathPrefs.createPersistentPreference(
+            "qpcat.service.shutdownTimeoutMs", 5000);
+
     // ==================== Getters / Setters ====================
 
     public static int getAeLatentDim() { return aeLatentDim.get(); }
@@ -218,6 +290,35 @@ public final class QpcatPreferences {
     public static int getAeLrSchedulerPatience() { return aeLrSchedulerPatience.get(); }
     public static int getAePointMatchDistance() { return aePointMatchDistance.get(); }
     public static int getAeTileBatchSize() { return aeTileBatchSize.get(); }
+
+    // Clustering getters
+    public static int getClusterSpatialKnn() { return clusterSpatialKnn.get(); }
+    public static double getClusterTsnePerplexity() { return clusterTsnePerplexity.get(); }
+    public static int getClusterHdbscanMinSamples() { return clusterHdbscanMinSamples.get(); }
+    public static int getClusterMiniBatchSize() { return clusterMiniBatchSize.get(); }
+    public static int getClusterBanksyPcaDims() { return clusterBanksyPcaDims.get(); }
+    public static int getClusterPlotDpi() { return clusterPlotDpi.get(); }
+
+    // Phenotyping getters
+    public static int getPhenoHistogramBins() { return phenoHistogramBins.get(); }
+    public static int getPhenoMinValidValues() { return phenoMinValidValues.get(); }
+    public static int getPhenoGmmMaxIter() { return phenoGmmMaxIter.get(); }
+    public static double getPhenoGammaStdMultiplier() { return phenoGammaStdMultiplier.get(); }
+    public static double getPhenoGateMax() { return phenoGateMax.get(); }
+
+    // Feature extraction getters
+    public static int getFmTileSize() { return fmTileSize.get(); }
+    public static int getFmBatchSize() { return fmBatchSize.get(); }
+
+    // Zero-shot getters
+    public static int getZsTileSize() { return zsTileSize.get(); }
+    public static int getZsBatchSize() { return zsBatchSize.get(); }
+    public static double getZsMinSimilarity() { return zsMinSimilarity.get(); }
+
+    // Service getters
+    public static int getTaskMaxRetries() { return taskMaxRetries.get(); }
+    public static int getTaskRetrySleepMs() { return taskRetrySleepMs.get(); }
+    public static int getShutdownTimeoutMs() { return shutdownTimeoutMs.get(); }
 
     // ==================== Preferences Pane ====================
 
@@ -325,6 +426,149 @@ public final class QpcatPreferences {
                 .category(CATEGORY_VAE)
                 .description("Number of tiles read/written per batch during tile-mode training (default: 500). "
                         + "Higher values use more memory but fewer I/O operations. Range: 100-2000.")
+                .build());
+
+        // --- Run Clustering ---
+
+        items.add(new PropertyItemBuilder<>(clusterSpatialKnn, Integer.class)
+                .name("Spatial Smoothing K-NN")
+                .category(CATEGORY_CLUSTERING)
+                .description("Number of spatial neighbors for graph convolution smoothing (default: 15). "
+                        + "Higher = more smoothing across nearby cells. Range: 5-50.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterTsnePerplexity, Double.class)
+                .name("t-SNE Perplexity")
+                .category(CATEGORY_CLUSTERING)
+                .description("Perplexity for t-SNE embedding (default: 30). "
+                        + "Controls local vs global structure balance. Range: 5-100.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterHdbscanMinSamples, Integer.class)
+                .name("HDBSCAN Min Samples")
+                .category(CATEGORY_CLUSTERING)
+                .description("HDBSCAN min_samples parameter (default: 5). "
+                        + "Lower = more clusters found, higher = denser clusters required. Range: 1-50.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterMiniBatchSize, Integer.class)
+                .name("MiniBatch KMeans Batch Size")
+                .category(CATEGORY_CLUSTERING)
+                .description("Batch size for MiniBatch KMeans algorithm (default: 1024). "
+                        + "Larger = more accurate but slower. Range: 256-8192.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterBanksyPcaDims, Integer.class)
+                .name("BANKSY PCA Dimensions")
+                .category(CATEGORY_CLUSTERING)
+                .description("Number of PCA dimensions for BANKSY spatial clustering (default: 20). "
+                        + "Higher captures more variance but slower. Range: 5-50.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterPlotDpi, Integer.class)
+                .name("Plot DPI")
+                .category(CATEGORY_CLUSTERING)
+                .description("Resolution for saved clustering plots in DPI (default: 150). "
+                        + "Higher = larger files but sharper images. Range: 72-300.")
+                .build());
+
+        // --- Run Phenotyping ---
+
+        items.add(new PropertyItemBuilder<>(phenoHistogramBins, Integer.class)
+                .name("Histogram Bins")
+                .category(CATEGORY_PHENOTYPING)
+                .description("Number of bins for marker histograms and threshold computation (default: 50). "
+                        + "More bins = finer resolution but noisier for small datasets. Range: 20-200.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(phenoMinValidValues, Integer.class)
+                .name("Min Valid Values for Threshold")
+                .category(CATEGORY_PHENOTYPING)
+                .description("Minimum non-zero values per marker to compute auto-threshold (default: 10). "
+                        + "Markers with fewer values are skipped. Range: 2-100.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(phenoGmmMaxIter, Integer.class)
+                .name("GMM Max Iterations")
+                .category(CATEGORY_PHENOTYPING)
+                .description("Maximum iterations for Gaussian Mixture Model threshold fitting (default: 200). "
+                        + "Increase if GMM fails to converge. Range: 50-1000.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(phenoGammaStdMultiplier, Double.class)
+                .name("Gamma Threshold Std Multiplier")
+                .category(CATEGORY_PHENOTYPING)
+                .description("Threshold = mode + N*std for gamma distribution method (default: 1.0). "
+                        + "Higher = stricter positive threshold. Range: 0.5-3.0.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(phenoGateMax, Double.class)
+                .name("Gate Threshold Max")
+                .category(CATEGORY_PHENOTYPING)
+                .description("Maximum value for per-marker gate threshold spinners (default: 5.0). "
+                        + "Increase if your normalized values exceed this range.")
+                .build());
+
+        // --- Extract Foundation Model Features ---
+
+        items.add(new PropertyItemBuilder<>(fmTileSize, Integer.class)
+                .name("Tile Size")
+                .category(CATEGORY_FEATURES)
+                .description("Tile size in pixels for foundation model input (default: 224). "
+                        + "Most models expect 224. Only change if using a model with different input size.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(fmBatchSize, Integer.class)
+                .name("Batch Size")
+                .category(CATEGORY_FEATURES)
+                .description("Number of tiles per GPU batch for feature extraction (default: 32). "
+                        + "Reduce if running out of GPU memory. Range: 1-128.")
+                .build());
+
+        // --- Zero-Shot Phenotyping ---
+
+        items.add(new PropertyItemBuilder<>(zsTileSize, Integer.class)
+                .name("Tile Size")
+                .category(CATEGORY_ZERO_SHOT)
+                .description("Tile size in pixels for BiomedCLIP input (default: 224). "
+                        + "BiomedCLIP expects 224. Only change for different vision-language models.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(zsBatchSize, Integer.class)
+                .name("Batch Size")
+                .category(CATEGORY_ZERO_SHOT)
+                .description("Number of tiles per GPU batch for zero-shot inference (default: 32). "
+                        + "Reduce if running out of GPU memory. Range: 1-128.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(zsMinSimilarity, Double.class)
+                .name("Min Similarity Threshold")
+                .category(CATEGORY_ZERO_SHOT)
+                .description("Minimum cosine similarity for phenotype assignment (default: 0.1). "
+                        + "Cells below this threshold are classified as 'Unknown'. Range: 0.0-1.0.")
+                .build());
+
+        // --- General ---
+
+        items.add(new PropertyItemBuilder<>(taskMaxRetries, Integer.class)
+                .name("Task Max Retries")
+                .category(CATEGORY_GENERAL)
+                .description("Maximum retry attempts on Appose 'thread death' errors (default: 3). "
+                        + "Increase if thread death errors persist. Range: 1-10.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(taskRetrySleepMs, Integer.class)
+                .name("Task Retry Sleep (ms)")
+                .category(CATEGORY_GENERAL)
+                .description("Milliseconds to wait between task retries (default: 200). "
+                        + "Increase if retries fail. Range: 100-2000.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(shutdownTimeoutMs, Integer.class)
+                .name("Python Shutdown Timeout (ms)")
+                .category(CATEGORY_GENERAL)
+                .description("Milliseconds to wait for Python service shutdown (default: 5000). "
+                        + "Increase if Python tasks take longer to stop gracefully.")
                 .build());
     }
 }

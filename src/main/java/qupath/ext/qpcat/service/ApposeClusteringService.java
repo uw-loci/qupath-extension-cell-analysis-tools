@@ -259,7 +259,7 @@ public class ApposeClusteringService {
             throw new IOException("Failed to load task script: " + scriptName, e);
         }
 
-        int maxAttempts = 3;
+        int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
         try {
@@ -281,7 +281,7 @@ public class ApposeClusteringService {
                             && attempt < maxAttempts) {
                         logger.warn("Task '{}' thread death (attempt {}/{}), retrying...",
                                 scriptName, attempt, maxAttempts);
-                        try { Thread.sleep(200); } catch (InterruptedException ie) {
+                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             throw new IOException("Task '" + scriptName + "' interrupted", ie);
                         }
@@ -319,7 +319,7 @@ public class ApposeClusteringService {
         // current task, causing a spurious failure. Retrying after a brief pause
         // lets the stale cleanup messages drain before resubmitting.
         // Same pattern as the DL pixel classifier extension.
-        int maxAttempts = 3;
+        int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
         try {
@@ -335,7 +335,7 @@ public class ApposeClusteringService {
                             && attempt < maxAttempts) {
                         logger.warn("Task '{}' failed with thread death (attempt {}/{}), retrying...",
                                 scriptName, attempt, maxAttempts);
-                        try { Thread.sleep(200); } catch (InterruptedException ie) {
+                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
                             throw new IOException("Task '" + scriptName + "' interrupted", ie);
                         }
@@ -361,7 +361,7 @@ public class ApposeClusteringService {
                 if (pythonService.isAlive()) {
                     long deadline = System.currentTimeMillis() + 5000;
                     while (pythonService.isAlive() && System.currentTimeMillis() < deadline) {
-                        try { Thread.sleep(200); }
+                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); }
                         catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                             break;

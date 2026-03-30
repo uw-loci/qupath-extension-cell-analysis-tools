@@ -1,0 +1,111 @@
+{
+  "_description": "Hardcoded constants across ALL QP-CAT tools (excluding VAE, documented separately). Each entry explains what it controls and why it should NOT be changed. See vae_hardcoded_defaults.json for VAE-specific constants.",
+
+  "clustering": {
+    "umap_n_components": {
+      "value": 2,
+      "file": "run_clustering.py",
+      "description": "Number of UMAP/PCA/t-SNE embedding dimensions.",
+      "why_not_change": "Embeddings are used for 2D visualization and stored as two measurements (e.g., UMAP1, UMAP2). Changing to 3 would require 3D plotting support and a third measurement column. The ResultApplier hardcodes '1' and '2' suffixes."
+    },
+    "random_state": {
+      "value": 42,
+      "file": "run_clustering.py (UMAP, PCA, t-SNE, KMeans, GMM)",
+      "description": "Random seed for reproducibility across all stochastic algorithms.",
+      "why_not_change": "Ensures identical results when rerunning with same parameters. Changing would make results non-reproducible and break comparison between runs."
+    },
+    "kmeans_n_init": {
+      "value": 10,
+      "file": "run_clustering.py",
+      "description": "Number of KMeans initializations (best of N runs selected).",
+      "why_not_change": "Scikit-learn default. Lower values risk suboptimal clusters. Higher values are slower with diminishing returns. 10 is the established standard."
+    },
+    "banksy_max_m": {
+      "value": 1,
+      "file": "run_clustering.py",
+      "description": "BANKSY spatial kernel order parameter.",
+      "why_not_change": "Higher orders capture more complex spatial patterns but increase computation exponentially. Order 1 (first-order neighbors) is sufficient for cell-level spatial analysis."
+    },
+    "percentile_normalization_bounds": {
+      "value": [0.01, 0.99],
+      "file": "run_clustering.py, compute_thresholds.py",
+      "description": "1st and 99th percentile quantiles for percentile normalization.",
+      "why_not_change": "Statistical convention for robust normalization. 1st/99th percentile clips extreme outliers while preserving 98% of the data distribution. Changing to 5th/95th would lose too much dynamic range."
+    },
+    "scatter_plot_aesthetics": {
+      "value": {"point_size": 1, "alpha": 0.5, "legend_marker_scale": 5},
+      "file": "run_clustering.py",
+      "description": "Scatter plot visual parameters for UMAP/t-SNE/PCA plots.",
+      "why_not_change": "Optimized for typical cell datasets (1k-100k cells). Larger points or higher alpha would create overlapping blobs. These could be configurable but are purely aesthetic."
+    }
+  },
+
+  "phenotyping": {
+    "gmm_n_components": {
+      "value": 2,
+      "file": "compute_thresholds.py",
+      "description": "Number of Gaussian components for GMM threshold fitting.",
+      "why_not_change": "Marker expression is bimodal (negative/positive populations). 2-component GMM captures this biology. 3+ components would find subpopulations within positive cells, which is not what thresholding needs."
+    },
+    "gamma_shift_increment": {
+      "value": 0.001,
+      "file": "compute_thresholds.py",
+      "description": "Small shift added to values <= 0 before gamma distribution fitting.",
+      "why_not_change": "Gamma distribution requires strictly positive values. 0.001 is small enough to not affect the fit but large enough to avoid log(0). Standard numerical workaround."
+    },
+    "rounding_decimals": {
+      "value": 4,
+      "file": "compute_thresholds.py",
+      "description": "Decimal places for threshold values in output.",
+      "why_not_change": "4 decimal places provide sufficient precision for normalized fluorescence values. More would be false precision. Less would lose meaningful differences."
+    },
+    "default_gate_thresholds": {
+      "value": {"minmax": 0.5, "percentile": 0.5, "zscore": 0.0},
+      "file": "run_phenotyping.py",
+      "description": "Default gating thresholds when no per-marker gate is specified.",
+      "why_not_change": "These are sensible midpoints: 0.5 for [0,1]-normalized data (midpoint), 0.0 for z-scored data (mean). They match the normalization method semantics. Users override these per-marker in the dialog."
+    }
+  },
+
+  "feature_extraction": {
+    "model_embedding_dims": {
+      "value": {"h-optimus-0": 1536, "virchow": 2560, "hibou-l": 1024, "hibou-b": 768, "midnight": 1536, "dinov2-large": 1024},
+      "file": "model_utils.py",
+      "description": "Output embedding dimensions for each foundation model.",
+      "why_not_change": "Fixed by the model architecture. These are NOT hyperparameters -- they are the number of features each pre-trained model outputs. Changing them would cause shape mismatches."
+    },
+    "progress_log_interval": {
+      "value": 5,
+      "file": "extract_features.py, zero_shot_phenotyping.py",
+      "description": "Log progress every N batches.",
+      "why_not_change": "Display-only constant. Changing it has no effect on results."
+    }
+  },
+
+  "services": {
+    "shutdown_poll_interval": {
+      "value": 200,
+      "file": "ApposeClusteringService.java (shutdown loop)",
+      "description": "Milliseconds between checks for Python service shutdown.",
+      "why_not_change": "Internal polling interval. 200ms gives responsive shutdown without busy-waiting. Shorter wastes CPU. Longer delays QuPath exit."
+    },
+    "nan_replacement": {
+      "value": 0.0,
+      "file": "MeasurementExtractor.java",
+      "description": "Value used to replace NaN/null measurements.",
+      "why_not_change": "Zero is the standard imputation for missing fluorescence values (absence of signal). Other values (mean, median) would require additional computation and change the data semantics."
+    },
+    "cluster_label_prefix": {
+      "value": "Cluster ",
+      "file": "ResultApplier.java",
+      "description": "Prefix for cluster classification names (e.g., 'Cluster 0', 'Cluster 1').",
+      "why_not_change": "Used throughout the codebase to identify and filter cluster labels (e.g., extractClassLabels skips names starting with 'Cluster '). Changing it would break label filtering."
+    },
+    "debug_message_truncation": {
+      "value": 2000,
+      "file": "ApposeClusteringService.java",
+      "description": "Maximum characters for Python debug log messages.",
+      "why_not_change": "Safety limit to prevent 25MB Appose protocol messages from flooding the log. 2000 chars captures any meaningful error message."
+    }
+  }
+}
