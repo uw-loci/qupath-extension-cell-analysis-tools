@@ -227,13 +227,13 @@ public class ZeroShotPhenotypingDialog {
                 + "Reduce to 8-16 if you encounter out-of-memory errors."));
 
         HBox row1 = new HBox(10,
-                new Label("Min. similarity:"), thresholdSpinner,
-                new Label("Mode:"), assignmentModeCombo);
+                tipLabel("Min. similarity:", thresholdSpinner), thresholdSpinner,
+                tipLabel("Mode:", assignmentModeCombo), assignmentModeCombo);
         row1.setAlignment(Pos.CENTER_LEFT);
 
         HBox row2 = new HBox(10,
-                new Label("Tile size (px):"), tileSizeSpinner,
-                new Label("Batch size:"), batchSizeSpinner);
+                tipLabel("Tile size (px):", tileSizeSpinner), tileSizeSpinner,
+                tipLabel("Batch size:", batchSizeSpinner), batchSizeSpinner);
         row2.setAlignment(Pos.CENTER_LEFT);
 
         return new VBox(5, heading, row1, row2);
@@ -331,5 +331,14 @@ public class ZeroShotPhenotypingDialog {
         }, "QPCAT-ZeroShotPhenotyping");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Creates a Label that shares the tooltip of its associated control. */
+    private static Label tipLabel(String text, javafx.scene.control.Control control) {
+        Label label = new Label(text);
+        if (control.getTooltip() != null) {
+            label.setTooltip(control.getTooltip());
+        }
+        return label;
     }
 }

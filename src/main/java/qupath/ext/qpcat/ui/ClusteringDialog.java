@@ -199,7 +199,7 @@ public class ClusteringDialog {
                 + "  Percentile - robust min-max using 1st/99th percentiles\n"
                 + "  None - use raw measurement values"));
 
-        HBox box = new HBox(10, new Label("Normalization:"), normalizationCombo);
+        HBox box = new HBox(10, tipLabel("Normalization:", normalizationCombo), normalizationCombo);
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
     }
@@ -235,12 +235,12 @@ public class ClusteringDialog {
                 + "larger values spread points more evenly.\n"
                 + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
-        HBox embRow = new HBox(10, new Label("Method:"), embeddingCombo);
+        HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo);
         embRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox paramsRow = new HBox(10,
-                new Label("n_neighbors:"), umapNeighborsSpinner,
-                new Label("min_dist:"), umapMinDistSpinner);
+                tipLabel("n_neighbors:", umapNeighborsSpinner), umapNeighborsSpinner,
+                tipLabel("min_dist:", umapMinDistSpinner), umapMinDistSpinner);
         paramsRow.setAlignment(Pos.CENTER_LEFT);
 
         // Show/hide UMAP params based on selection
@@ -358,7 +358,7 @@ public class ClusteringDialog {
                 + "Range: 0.01-10.0. Default: 0.7.\n"
                 + "Higher values produce more, smaller clusters."));
 
-        HBox algoRow = new HBox(10, new Label("Algorithm:"), algorithmCombo);
+        HBox algoRow = new HBox(10, tipLabel("Algorithm:", algorithmCombo), algorithmCombo);
         algoRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(5, algoRow, algorithmParamsBox);
@@ -408,7 +408,7 @@ public class ClusteringDialog {
         });
 
         HBox smoothingRow = new HBox(8, spatialSmoothingCheck,
-                new Label("Iterations:"), smoothingIterationsSpinner);
+                tipLabel("Iterations:", smoothingIterationsSpinner), smoothingIterationsSpinner);
         smoothingRow.setAlignment(Pos.CENTER_LEFT);
 
         batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");
@@ -448,43 +448,43 @@ public class ClusteringDialog {
         switch (algo) {
             case LEIDEN -> {
                 HBox row = new HBox(10,
-                        new Label("n_neighbors:"), leidenNeighborsSpinner,
-                        new Label("resolution:"), leidenResolutionSpinner);
+                        tipLabel("n_neighbors:", leidenNeighborsSpinner), leidenNeighborsSpinner,
+                        tipLabel("resolution:", leidenResolutionSpinner), leidenResolutionSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
             case KMEANS, MINIBATCHKMEANS -> {
                 HBox row = new HBox(10,
-                        new Label("n_clusters:"), kmeansClusterSpinner);
+                        tipLabel("n_clusters:", kmeansClusterSpinner), kmeansClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
             case HDBSCAN -> {
                 HBox row = new HBox(10,
-                        new Label("min_cluster_size:"), hdbscanMinClusterSpinner);
+                        tipLabel("min_cluster_size:", hdbscanMinClusterSpinner), hdbscanMinClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
             case AGGLOMERATIVE -> {
                 HBox row = new HBox(10,
-                        new Label("n_clusters:"), aggClusterSpinner,
-                        new Label("linkage:"), aggLinkageCombo);
+                        tipLabel("n_clusters:", aggClusterSpinner), aggClusterSpinner,
+                        tipLabel("linkage:", aggLinkageCombo), aggLinkageCombo);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
             case GMM -> {
                 HBox row = new HBox(10,
-                        new Label("n_components:"), kmeansClusterSpinner);
+                        tipLabel("n_components:", kmeansClusterSpinner), kmeansClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
             }
             case BANKSY -> {
                 HBox row1 = new HBox(10,
-                        new Label("lambda (spatial weight):"), banksyLambdaSpinner,
-                        new Label("k_geom (spatial neighbors):"), banksyKGeomSpinner);
+                        tipLabel("lambda (spatial weight):", banksyLambdaSpinner), banksyLambdaSpinner,
+                        tipLabel("k_geom (spatial neighbors):", banksyKGeomSpinner), banksyKGeomSpinner);
                 row1.setAlignment(Pos.CENTER_LEFT);
                 HBox row2 = new HBox(10,
-                        new Label("resolution:"), banksyResolutionSpinner);
+                        tipLabel("resolution:", banksyResolutionSpinner), banksyResolutionSpinner);
                 row2.setAlignment(Pos.CENTER_LEFT);
                 Label note = new Label("Uses cell centroid coordinates for spatially-aware clustering");
                 note.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
@@ -1223,5 +1223,14 @@ public class ClusteringDialog {
             logger.warn("Failed to format marker rankings: {}", e.getMessage());
             return json;
         }
+    }
+
+    /** Creates a Label that shares the tooltip of its associated control. */
+    private static Label tipLabel(String text, javafx.scene.control.Control control) {
+        Label label = new Label(text);
+        if (control.getTooltip() != null) {
+            label.setTooltip(control.getTooltip());
+        }
+        return label;
     }
 }

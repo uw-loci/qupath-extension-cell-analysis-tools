@@ -223,8 +223,8 @@ public class PhenotypingDialog {
         updateGateInfo();
 
         HBox row = new HBox(15,
-                new Label("Normalization:"), normalizationCombo,
-                new Label("Default gate:"), defaultGateSpinner);
+                tipLabel("Normalization:", normalizationCombo), normalizationCombo,
+                tipLabel("Default gate:", defaultGateSpinner), defaultGateSpinner);
         row.setAlignment(Pos.CENTER_LEFT);
 
         return new VBox(5, row, gateInfoLabel);
@@ -1142,5 +1142,14 @@ public class PhenotypingDialog {
             return parts[0].trim();
         }
         return fullName;
+    }
+
+    /** Creates a Label that shares the tooltip of its associated control. */
+    private static Label tipLabel(String text, javafx.scene.control.Control control) {
+        Label label = new Label(text);
+        if (control.getTooltip() != null) {
+            label.setTooltip(control.getTooltip());
+        }
+        return label;
     }
 }

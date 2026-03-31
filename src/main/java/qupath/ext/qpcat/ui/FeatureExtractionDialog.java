@@ -155,8 +155,8 @@ public class FeatureExtractionDialog {
                 + "Reduce if you encounter out-of-memory errors."));
 
         HBox row = new HBox(10,
-                new Label("Tile size (px):"), tileSizeSpinner,
-                new Label("Batch size:"), batchSizeSpinner);
+                tipLabel("Tile size (px):", tileSizeSpinner), tileSizeSpinner,
+                tipLabel("Batch size:", batchSizeSpinner), batchSizeSpinner);
         row.setAlignment(Pos.CENTER_LEFT);
 
         return new VBox(5, heading, row);
@@ -261,5 +261,14 @@ public class FeatureExtractionDialog {
         }, "QPCAT-FeatureExtraction");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Creates a Label that shares the tooltip of its associated control. */
+    private static Label tipLabel(String text, javafx.scene.control.Control control) {
+        Label label = new Label(text);
+        if (control.getTooltip() != null) {
+            label.setTooltip(control.getTooltip());
+        }
+        return label;
     }
 }

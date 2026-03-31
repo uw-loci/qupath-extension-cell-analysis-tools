@@ -134,7 +134,7 @@ public class EmbeddingDialog {
                 + "  Percentile - robust min-max using 1st/99th percentiles\n"
                 + "  None - use raw measurement values"));
 
-        HBox box = new HBox(10, new Label("Normalization:"), normalizationCombo);
+        HBox box = new HBox(10, tipLabel("Normalization:", normalizationCombo), normalizationCombo);
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
     }
@@ -174,12 +174,12 @@ public class EmbeddingDialog {
                 + "larger values spread points more evenly.\n"
                 + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
-        HBox methodRow = new HBox(10, new Label("Method:"), embeddingCombo);
+        HBox methodRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo);
         methodRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox paramsRow = new HBox(10,
-                new Label("n_neighbors:"), umapNeighborsSpinner,
-                new Label("min_dist:"), umapMinDistSpinner);
+                tipLabel("n_neighbors:", umapNeighborsSpinner), umapNeighborsSpinner,
+                tipLabel("min_dist:", umapMinDistSpinner), umapMinDistSpinner);
         paramsRow.setAlignment(Pos.CENTER_LEFT);
 
         embeddingCombo.setOnAction(e -> {
@@ -290,5 +290,14 @@ public class EmbeddingDialog {
         }, "QPCAT-Embedding");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /** Creates a Label that shares the tooltip of its associated control. */
+    private static Label tipLabel(String text, javafx.scene.control.Control control) {
+        Label label = new Label(text);
+        if (control.getTooltip() != null) {
+            label.setTooltip(control.getTooltip());
+        }
+        return label;
     }
 }
