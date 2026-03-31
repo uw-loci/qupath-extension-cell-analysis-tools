@@ -116,7 +116,6 @@ public class ZeroShotPhenotypingDialog {
 
         // Run button
         runButton = new Button("Run Zero-Shot Phenotyping");
-        runButton.setDefaultButton(true);
         runButton.setOnAction(e -> runPhenotyping());
 
         HBox buttonBox = new HBox(10, runButton);

@@ -532,7 +532,6 @@ public class AutoencoderDialog {
 
     private VBox createButtonSection() {
         trainButton = new Button("Train on Selected Images");
-        trainButton.setDefaultButton(true);
         trainButton.setOnAction(e -> runTraining());
         trainButton.setTooltip(new Tooltip(
                 "Train the autoencoder on detections from all checked images."));

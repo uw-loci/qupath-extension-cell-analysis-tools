@@ -95,7 +95,6 @@ public class FeatureExtractionDialog {
 
         // Add Run button manually (like other QPCAT dialogs)
         runButton = new Button("Extract Features");
-        runButton.setDefaultButton(true);
         runButton.setOnAction(e -> runExtraction());
 
         HBox buttonBox = new HBox(10, runButton);
