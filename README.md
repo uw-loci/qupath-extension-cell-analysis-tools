@@ -314,7 +314,6 @@ VAE best practices and training infrastructure:
 ### Current Limitations (Test Feature)
 
 - No data augmentation for tile mode yet (spatial transforms planned)
-- Model checkpoint held in memory only (not persisted to disk between sessions)
 - Fixed encoder architecture (3-layer conv or 2-layer MLP); no architecture tuning
 - Training loss displayed in log only, no live chart
 - Tile mode with many channels (40+) and large tiles (64x64) can exhaust GPU memory
@@ -518,6 +517,8 @@ src/main/java/qupath/ext/qpcat/
     ClusteringConfig.java         Configuration with enums for algorithms/normalization/embedding
     ClusteringResult.java         Result container with labels, stats, plots, spatial data
     PhenotypeRuleSet.java         Serializable phenotype rule definitions
+  preferences/
+    QpcatPreferences.java         Extension preferences and persistent settings
   service/
     ApposeClusteringService.java  Appose Python IPC singleton
     MeasurementExtractor.java     Extracts measurements from QuPath detections
@@ -527,25 +528,33 @@ src/main/java/qupath/ext/qpcat/
     PhenotypeRuleSetManager.java  Rule set save/load to project directory
     ChannelValidator.java         Cross-image measurement consistency checking
   ui/
+    AutoencoderDialog.java        Autoencoder classifier training and inference dialog
     ClusteringDialog.java         Main clustering configuration dialog
-    PhenotypingDialog.java        Phenotyping rules and gating dialog
-    EmbeddingDialog.java          Embedding-only computation dialog
-    HistogramPanel.java           Interactive histogram with draggable threshold
     ClusterHeatmapPanel.java      Interactive cluster-by-marker heatmap
-    EmbeddingScatterPanel.java    Interactive 2D embedding scatter plot
     ClusterManagementDialog.java  Rename/merge cluster classifications
+    EmbeddingDialog.java          Embedding-only computation dialog
+    EmbeddingScatterPanel.java    Interactive 2D embedding scatter plot
+    FeatureExtractionDialog.java  Foundation model feature extraction dialog
+    HistogramPanel.java           Interactive histogram with draggable threshold
+    PhenotypingDialog.java        Phenotyping rules and gating dialog
     PythonConsoleWindow.java      Real-time Python stderr viewer
     SetupEnvironmentDialog.java   Environment download progress dialog
+    ZeroShotPhenotypingDialog.java  Zero-shot BiomedCLIP phenotyping dialog
 
 src/main/resources/qupath/ext/qpcat/
   pixi.toml                       Python environment specification
   scripts/
-    init_services.py              Python worker initialization
-    run_clustering.py             Clustering pipeline
-    run_phenotyping.py            Phenotyping pipeline
     compute_thresholds.py         Auto-threshold computation
     export_anndata.py             AnnData export
+    extract_features.py           Foundation model feature extraction
+    infer_autoencoder.py          Autoencoder inference on new data
+    init_services.py              Python worker initialization
+    model_utils.py                Model save/load and architecture utilities
+    run_clustering.py             Clustering pipeline
+    run_phenotyping.py            Phenotyping pipeline
     system_info.py                Python environment info collection
+    train_autoencoder.py          VAE autoencoder training pipeline
+    zero_shot_phenotyping.py      BiomedCLIP zero-shot cell phenotyping
 ```
 
 ---

@@ -445,6 +445,18 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 
 **Used in:** [TEST] Autoencoder Classifier (architecture adapted for continuous protein measurements with Gaussian likelihood)
 
+**Cyclical KL annealing schedule:**
+> Fu H, Li C, Liu X, et al. "Cyclical Annealing Schedule: A Simple Approach to Mitigating KL Vanishing." *Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics (NAACL)* (2019).
+> https://doi.org/10.18653/v1/N19-1021
+
+**Used in:** [TEST] Autoencoder Classifier (4-cycle KL beta ramp prevents posterior collapse)
+
+**Free bits regularization:**
+> Kingma DP, Salimans T, Jozefowicz R, et al. "Improved Variational Inference with Inverse Autoregressive Flow." *Advances in Neural Information Processing Systems 29 (NeurIPS)* (2016).
+> https://doi.org/10.48550/arXiv.1606.04934
+
+**Used in:** [TEST] Autoencoder Classifier (minimum 0.25 nats KL per latent dimension prevents dimension collapse)
+
 **Cell mask as attention channel (CellSighter approach):**
 > Amitay Y, Bussi Y, Feinstein B, et al. "CellSighter: a neural network to classify cells in highly multiplexed images." *Nature Communications* 14, 4302 (2023).
 > https://doi.org/10.1038/s41467-023-40066-7

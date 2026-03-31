@@ -21,10 +21,11 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 8. [Extracting Foundation Model Features](#8-extracting-foundation-model-features)
 9. [Zero-Shot Phenotyping](#9-zero-shot-phenotyping)
 10. [Managing Clusters (Rename/Merge)](#10-managing-clusters-renamemerge)
-11. [Exporting AnnData](#11-exporting-anndata)
-12. [Saving and Loading Configurations](#12-saving-and-loading-configurations)
-13. [Viewing the Python Console](#13-viewing-the-python-console)
-14. [Reviewing the Operation Audit Trail](#14-reviewing-the-operation-audit-trail)
+11. [Autoencoder Cell Classifier (TEST)](#11-test-autoencoder-cell-classifier)
+12. [Exporting AnnData](#12-exporting-anndata)
+13. [Saving and Loading Configurations](#13-saving-and-loading-configurations)
+14. [Viewing the Python Console](#14-viewing-the-python-console)
+15. [Reviewing the Operation Audit Trail](#15-reviewing-the-operation-audit-trail)
 
 ---
 
@@ -287,7 +288,7 @@ Changes are applied immediately to detection objects.
 
 ---
 
-## 10. [TEST] Autoencoder Cell Classifier
+## 11. [TEST] Autoencoder Cell Classifier
 
 Train a VAE-based classifier on labeled cells, then apply across the project. This is a **test feature**.
 
@@ -302,19 +303,19 @@ Train a VAE-based classifier on labeled cells, then apply across the project. Th
 4. **Choose input mode:**
    - **Measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
    - **Tile images**: Uses pixel data around each cell. Captures morphology and texture. Choose tile size (32x32 recommended). Slower, benefits from GPU.
-4. **Cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
-5. **Adjust training parameters** if desired (defaults work well for most cases):
+5. **Cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
+6. **Adjust training parameters** if desired (defaults work well for most cases):
    - Latent dimensions: 16 (how compressed the representation is; 8-32 typical)
    - Epochs: 100 (maximum training iterations; early stopping may stop sooner)
    - Supervision weight: 1.0 (how strongly labels influence the model; 0 = unsupervised)
-   - Learning rate: 0.001 (OneCycleLR scheduler adjusts this automatically)
+   - Learning rate: 0.001 (ReduceLROnPlateau scheduler adjusts this automatically)
    - Batch size: 128 (reduce for tile mode if out of memory)
    - Validation split: 0.2 (20% holdout for early stopping and best model selection)
    - Early stop patience: 15 (epochs without val improvement before stopping; 0 = disabled)
    - Class weighting: ON (handles imbalanced cell populations via inverse-frequency weights)
    - Data augmentation: ON (Gaussian noise + per-channel scaling for measurement mode)
-6. Click **Train on Current Image**
-7. Review accuracy on labeled cells in the status bar
+7. Click **Train on Current Image**
+8. Review accuracy on labeled cells in the status bar
 
 ### Applying to Project
 
@@ -357,7 +358,7 @@ All dialog settings (input mode, tile size, hyperparameters, label sources, augm
 
 ---
 
-## 11. Exporting AnnData
+## 12. Exporting AnnData
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 
@@ -379,7 +380,7 @@ print(adata)
 
 ---
 
-## 12. Saving and Loading Configurations
+## 13. Saving and Loading Configurations
 
 ### Clustering Configs
 
@@ -401,7 +402,7 @@ Rule sets are stored in `<project>/qpcat/phenotype_rules/`.
 
 ---
 
-## 13. Viewing the Python Console
+## 14. Viewing the Python Console
 
 Monitor Python-side output in real time.
 
@@ -415,7 +416,7 @@ Useful for diagnosing errors, monitoring long operations, and seeing detailed Py
 
 ---
 
-## 14. Reviewing the Operation Audit Trail
+## 15. Reviewing the Operation Audit Trail
 
 Every QP-CAT operation is logged to a persistent file in your project.
 

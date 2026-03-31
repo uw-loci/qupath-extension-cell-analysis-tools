@@ -436,3 +436,37 @@ Name rule sets with versions (e.g., "Immune Panel v1", "Immune Panel v2") rather
 
 **Problem:** Cells cluster by image source rather than biology.
 **Solution:** Enable Harmony batch correction, or verify that technical variation is minimal before clustering without it.
+
+---
+
+## 7. [TEST] Autoencoder Cell Classifier
+
+### When to Use
+
+- **Measurement mode**: When marker expression patterns distinguish cell types. Fast, works on CPU. Start here.
+- **Tile mode**: When morphology or spatial texture matters (e.g., differentiating activated vs resting T cells by size/shape). Slower, benefits from GPU.
+- **vs Clustering**: Use the autoencoder when you have labeled examples and want to propagate labels. Use clustering when exploring unlabeled data.
+- **vs Zero-shot**: Use the autoencoder when you have labeled training data. Use zero-shot when you have no labels but can describe phenotypes in text.
+
+### Labeling Strategy
+
+- Label 100-200 cells per class for reliable results
+- Use locked annotations for region-based labeling (efficient for many cells)
+- Use point annotations for precise per-cell labeling
+- Include "Unclassified" as a class if you want the model to learn what "none of the above" looks like
+- Label across multiple images for better generalization
+
+### Training Tips
+
+- Start with measurement mode (faster iteration)
+- Use the default hyperparameters initially -- they follow VAE best practices
+- Monitor validation accuracy in the log -- if it plateaus early, try more latent dimensions
+- If accuracy is low, add more labeled cells before tuning hyperparameters
+- Use the Evaluate button to check performance before applying destructively
+- Save the model before applying so you can reload if results are unsatisfactory
+
+### Tile Mode Tips
+
+- Use downsample 2x-4x for large tile sizes (saves memory, preserves most features)
+- The cell mask channel (default ON) helps the model focus on the target cell
+- All image channels are included automatically
