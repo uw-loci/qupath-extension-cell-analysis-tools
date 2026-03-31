@@ -106,6 +106,31 @@ public final class QpcatPreferences {
     private static final DoubleProperty aeAugDropout = PathPrefs.createPersistentPreference(
             "qpcat.ae.augDropout", 0.1);
 
+    // Tile-mode augmentation (same pattern as DL pixel classifier)
+    private static final BooleanProperty aeAugFlipH = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augFlipH", true);
+
+    private static final BooleanProperty aeAugFlipV = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augFlipV", true);
+
+    private static final BooleanProperty aeAugRotation90 = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augRotation90", true);
+
+    private static final BooleanProperty aeAugElastic = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augElastic", false);
+
+    private static final DoubleProperty aeAugElasticAlpha = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augElasticAlpha", 120.0);
+
+    private static final StringProperty aeAugIntensityMode = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augIntensityMode", "none");
+
+    private static final DoubleProperty aeAugIntensityAmount = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augIntensityAmount", 0.2);
+
+    private static final DoubleProperty aeAugGaussNoise = PathPrefs.createPersistentPreference(
+            "qpcat.ae.augGaussNoise", 0.05);
+
     private static final DoubleProperty aeGradClipNorm = PathPrefs.createPersistentPreference(
             "qpcat.ae.gradClipNorm", 1.0);
 
@@ -282,9 +307,31 @@ public final class QpcatPreferences {
     public static double getAeKlRampFraction() { return aeKlRampFraction.get(); }
     public static double getAeFreeBits() { return aeFreeBits.get(); }
     public static double getAePretrainFraction() { return aePretrainFraction.get(); }
+    // Measurement-mode augmentation
     public static double getAeAugNoise() { return aeAugNoise.get(); }
+    public static void setAeAugNoise(double v) { aeAugNoise.set(v); }
     public static double getAeAugScale() { return aeAugScale.get(); }
+    public static void setAeAugScale(double v) { aeAugScale.set(v); }
     public static double getAeAugDropout() { return aeAugDropout.get(); }
+    public static void setAeAugDropout(double v) { aeAugDropout.set(v); }
+
+    // Tile-mode augmentation
+    public static boolean isAeAugFlipH() { return aeAugFlipH.get(); }
+    public static void setAeAugFlipH(boolean v) { aeAugFlipH.set(v); }
+    public static boolean isAeAugFlipV() { return aeAugFlipV.get(); }
+    public static void setAeAugFlipV(boolean v) { aeAugFlipV.set(v); }
+    public static boolean isAeAugRotation90() { return aeAugRotation90.get(); }
+    public static void setAeAugRotation90(boolean v) { aeAugRotation90.set(v); }
+    public static boolean isAeAugElastic() { return aeAugElastic.get(); }
+    public static void setAeAugElastic(boolean v) { aeAugElastic.set(v); }
+    public static double getAeAugElasticAlpha() { return aeAugElasticAlpha.get(); }
+    public static void setAeAugElasticAlpha(double v) { aeAugElasticAlpha.set(v); }
+    public static String getAeAugIntensityMode() { return aeAugIntensityMode.get(); }
+    public static void setAeAugIntensityMode(String v) { aeAugIntensityMode.set(v); }
+    public static double getAeAugIntensityAmount() { return aeAugIntensityAmount.get(); }
+    public static void setAeAugIntensityAmount(double v) { aeAugIntensityAmount.set(v); }
+    public static double getAeAugGaussNoise() { return aeAugGaussNoise.get(); }
+    public static void setAeAugGaussNoise(double v) { aeAugGaussNoise.set(v); }
     public static double getAeGradClipNorm() { return aeGradClipNorm.get(); }
     public static double getAeLrSchedulerFactor() { return aeLrSchedulerFactor.get(); }
     public static int getAeLrSchedulerPatience() { return aeLrSchedulerPatience.get(); }
@@ -374,27 +421,7 @@ public final class QpcatPreferences {
                         + "Gives the latent space structure before labels are introduced. Range: 0.0-0.5.")
                 .build());
 
-        // --- Augmentation ---
-        items.add(new PropertyItemBuilder<>(aeAugNoise, Double.class)
-                .name("Augmentation Noise Std")
-                .category(CATEGORY_VAE)
-                .description("Gaussian noise standard deviation for measurement augmentation (default: 0.02). "
-                        + "Applied to normalized features. Range: 0.0-0.1.")
-                .build());
-
-        items.add(new PropertyItemBuilder<>(aeAugScale, Double.class)
-                .name("Augmentation Scale Range")
-                .category(CATEGORY_VAE)
-                .description("Per-feature random scaling range +/- (default: 0.1 = +/-10%). "
-                        + "Simulates staining variability. Range: 0.0-0.3.")
-                .build());
-
-        items.add(new PropertyItemBuilder<>(aeAugDropout, Double.class)
-                .name("Augmentation Feature Dropout")
-                .category(CATEGORY_VAE)
-                .description("Probability of zeroing each feature during training (default: 0.1). "
-                        + "Improves robustness to missing measurements. Range: 0.0-0.3.")
-                .build());
+        // Augmentation settings are in the dialog's collapsible section, not here.
 
         // --- Training ---
         items.add(new PropertyItemBuilder<>(aeGradClipNorm, Double.class)

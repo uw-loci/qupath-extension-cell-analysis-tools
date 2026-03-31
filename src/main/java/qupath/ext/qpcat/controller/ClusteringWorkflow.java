@@ -1922,9 +1922,20 @@ public class ClusteringWorkflow {
                 inputs.put("kl_ramp_fraction", QpcatPreferences.getAeKlRampFraction());
                 inputs.put("free_bits", QpcatPreferences.getAeFreeBits());
                 inputs.put("pretrain_fraction", QpcatPreferences.getAePretrainFraction());
+                // Measurement-mode augmentation
                 inputs.put("aug_noise_std", QpcatPreferences.getAeAugNoise());
                 inputs.put("aug_scale_range", QpcatPreferences.getAeAugScale());
                 inputs.put("aug_dropout_p", QpcatPreferences.getAeAugDropout());
+                // Tile-mode augmentation
+                inputs.put("aug_flip_h", QpcatPreferences.isAeAugFlipH());
+                inputs.put("aug_flip_v", QpcatPreferences.isAeAugFlipV());
+                inputs.put("aug_rotation_90", QpcatPreferences.isAeAugRotation90());
+                inputs.put("aug_elastic", QpcatPreferences.isAeAugElastic());
+                inputs.put("aug_elastic_alpha", QpcatPreferences.getAeAugElasticAlpha());
+                inputs.put("aug_intensity_mode", QpcatPreferences.getAeAugIntensityMode());
+                inputs.put("aug_intensity_amount", QpcatPreferences.getAeAugIntensityAmount());
+                inputs.put("aug_gauss_noise", QpcatPreferences.getAeAugGaussNoise());
+
                 inputs.put("grad_clip_norm", QpcatPreferences.getAeGradClipNorm());
                 inputs.put("lr_scheduler_factor", QpcatPreferences.getAeLrSchedulerFactor());
                 inputs.put("lr_scheduler_patience", QpcatPreferences.getAeLrSchedulerPatience());

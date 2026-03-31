@@ -65,6 +65,18 @@ public class AutoencoderDialog {
     private Spinner<Integer> earlyStopSpinner;
     private CheckBox classWeightsCheck;
     private CheckBox augmentationCheck;
+    // Augmentation controls (in collapsible section)
+    private Spinner<Double> augNoiseSpinner;
+    private Spinner<Double> augScaleSpinner;
+    private Spinner<Double> augDropoutSpinner;
+    private CheckBox augFlipHCheck;
+    private CheckBox augFlipVCheck;
+    private CheckBox augRot90Check;
+    private CheckBox augElasticCheck;
+    private Spinner<Double> augElasticAlphaSpinner;
+    private ComboBox<String> augIntensityModeCombo;
+    private Spinner<Double> augIntensityAmountSpinner;
+    private Spinner<Double> augGaussNoiseSpinner;
     private CheckBox labelLockedCheck;
     private CheckBox labelPointsCheck;
     private CheckBox labelDetectionsCheck;
@@ -124,6 +136,7 @@ public class AutoencoderDialog {
                 createMeasurementSection(),
                 new Separator(),
                 createHyperparamSection(),
+                createAugmentationSection(),
                 new Separator(),
                 createWarningBanner(),
                 createStatusSection(),
@@ -511,10 +524,6 @@ public class AutoencoderDialog {
         classWeightsCheck.setSelected(QpcatPreferences.isAeClassWeights());
         classWeightsCheck.setTooltip(new Tooltip("Inverse-frequency weights for rare cell types."));
 
-        augmentationCheck = new CheckBox("Data augmentation (noise + scaling)");
-        augmentationCheck.setSelected(QpcatPreferences.isAeAugmentation());
-        augmentationCheck.setTooltip(new Tooltip("Gaussian noise + per-channel scaling (measurement mode)."));
-
         GridPane grid = new GridPane();
         grid.setHgap(10);
         grid.setVgap(5);
@@ -526,7 +535,172 @@ public class AutoencoderDialog {
                        tipLabel("Val. split:", valSplitSpinner), valSplitSpinner);
         grid.addRow(3, tipLabel("Early stop patience:", earlyStopSpinner), earlyStopSpinner);
 
-        return new VBox(5, heading, grid, classWeightsCheck, augmentationCheck);
+        return new VBox(5, heading, grid, classWeightsCheck);
+    }
+
+    private TitledPane createAugmentationSection() {
+        VBox content = new VBox(8);
+        content.setPadding(new Insets(10));
+
+        // --- Master enable ---
+        augmentationCheck = new CheckBox("Enable data augmentation");
+        augmentationCheck.setSelected(QpcatPreferences.isAeAugmentation());
+        augmentationCheck.setTooltip(new Tooltip(
+                "Apply random perturbations during training to improve\n"
+                + "generalization and reduce overfitting. Augmentation is\n"
+                + "applied to training data only, never to validation."));
+
+        // === Measurement-mode augmentation ===
+        Label measHeading = new Label("Measurement Mode");
+        measHeading.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+
+        Spinner<Double> noiseSpinner = new Spinner<>(0.0, 0.2, QpcatPreferences.getAeAugNoise(), 0.005);
+        noiseSpinner.setEditable(true);
+        noiseSpinner.setPrefWidth(80);
+        noiseSpinner.setTooltip(new Tooltip(
+                "Gaussian noise standard deviation (default: 0.02).\n"
+                + "Added to normalized feature values. Simulates measurement noise.\n"
+                + "Higher = more aggressive augmentation. Range: 0.0-0.2."));
+
+        Spinner<Double> scaleSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeAugScale(), 0.05);
+        scaleSpinner.setEditable(true);
+        scaleSpinner.setPrefWidth(80);
+        scaleSpinner.setTooltip(new Tooltip(
+                "Per-feature random scaling range +/- (default: 0.1 = +/-10%).\n"
+                + "Simulates staining intensity variability. Range: 0.0-0.5."));
+
+        Spinner<Double> dropoutSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeAugDropout(), 0.05);
+        dropoutSpinner.setEditable(true);
+        dropoutSpinner.setPrefWidth(80);
+        dropoutSpinner.setTooltip(new Tooltip(
+                "Probability of zeroing each feature (default: 0.1).\n"
+                + "Improves robustness to missing measurements. Range: 0.0-0.5."));
+
+        GridPane measGrid = new GridPane();
+        measGrid.setHgap(10);
+        measGrid.setVgap(4);
+        measGrid.addRow(0, tipLabel("Noise std:", noiseSpinner), noiseSpinner,
+                           tipLabel("Scaling +/-:", scaleSpinner), scaleSpinner);
+        measGrid.addRow(1, tipLabel("Feature dropout:", dropoutSpinner), dropoutSpinner);
+
+        // === Tile-mode augmentation ===
+        Label tileHeading = new Label("Tile Mode (Spatial)");
+        tileHeading.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+
+        CheckBox flipHCheck = new CheckBox("Horizontal flip");
+        flipHCheck.setSelected(QpcatPreferences.isAeAugFlipH());
+        flipHCheck.setTooltip(new Tooltip("Randomly mirror tiles left-right (p=0.5)."));
+
+        CheckBox flipVCheck = new CheckBox("Vertical flip");
+        flipVCheck.setSelected(QpcatPreferences.isAeAugFlipV());
+        flipVCheck.setTooltip(new Tooltip("Randomly mirror tiles top-bottom (p=0.5)."));
+
+        CheckBox rot90Check = new CheckBox("Random rotation (90 deg)");
+        rot90Check.setSelected(QpcatPreferences.isAeAugRotation90());
+        rot90Check.setTooltip(new Tooltip(
+                "Randomly rotate tiles by 0/90/180/270 degrees.\n"
+                + "Preserves pixel alignment (no interpolation artifacts).\n"
+                + "Combined with flips, provides 8x augmentation."));
+
+        CheckBox elasticCheck = new CheckBox("Elastic deformation");
+        elasticCheck.setSelected(QpcatPreferences.isAeAugElastic());
+        elasticCheck.setTooltip(new Tooltip(
+                "Apply smooth random spatial deformations to tiles.\n"
+                + "Simulates tissue deformation and cell shape variability.\n"
+                + "Can slow training. Off by default."));
+
+        Spinner<Double> elasticAlphaSpinner = new Spinner<>(10.0, 500.0,
+                QpcatPreferences.getAeAugElasticAlpha(), 10.0);
+        elasticAlphaSpinner.setEditable(true);
+        elasticAlphaSpinner.setPrefWidth(80);
+        elasticAlphaSpinner.setTooltip(new Tooltip(
+                "Elastic deformation intensity (default: 120).\n"
+                + "Higher = stronger deformation. Range: 10-500."));
+        elasticAlphaSpinner.disableProperty().bind(elasticCheck.selectedProperty().not());
+
+        HBox spatialRow1 = new HBox(15, flipHCheck, flipVCheck, rot90Check);
+        HBox spatialRow2 = new HBox(10, elasticCheck,
+                tipLabel("Intensity:", elasticAlphaSpinner), elasticAlphaSpinner);
+        spatialRow2.setAlignment(Pos.CENTER_LEFT);
+
+        // Tile intensity augmentation
+        Label intensityHeading = new Label("Tile Mode (Intensity)");
+        intensityHeading.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+
+        ComboBox<String> intensityModeCombo = new ComboBox<>(FXCollections.observableArrayList(
+                "None", "Brightfield (color jitter)", "Fluorescence (per-channel)"));
+        String savedMode = QpcatPreferences.getAeAugIntensityMode();
+        int modeIdx = "brightfield".equals(savedMode) ? 1 : "fluorescence".equals(savedMode) ? 2 : 0;
+        intensityModeCombo.getSelectionModel().select(modeIdx);
+        intensityModeCombo.setTooltip(new Tooltip(
+                "Intensity augmentation mode for tile images:\n"
+                + "  None: no intensity changes\n"
+                + "  Brightfield: correlated RGB brightness/contrast/gamma jitter\n"
+                + "  Fluorescence: independent per-channel intensity jitter\n"
+                + "Choose based on your imaging modality."));
+
+        Spinner<Double> intensityAmountSpinner = new Spinner<>(0.0, 1.0,
+                QpcatPreferences.getAeAugIntensityAmount(), 0.05);
+        intensityAmountSpinner.setEditable(true);
+        intensityAmountSpinner.setPrefWidth(80);
+        intensityAmountSpinner.setTooltip(new Tooltip(
+                "Intensity jitter amount (default: 0.2).\n"
+                + "Controls how much brightness/contrast varies.\n"
+                + "Higher = more aggressive color augmentation. Range: 0.0-1.0."));
+
+        Spinner<Double> gaussNoiseSpinner = new Spinner<>(0.0, 0.5,
+                QpcatPreferences.getAeAugGaussNoise(), 0.01);
+        gaussNoiseSpinner.setEditable(true);
+        gaussNoiseSpinner.setPrefWidth(80);
+        gaussNoiseSpinner.setTooltip(new Tooltip(
+                "Gaussian noise std for tile pixel values (default: 0.05).\n"
+                + "Added to normalized tile data. Range: 0.0-0.5."));
+
+        HBox intensityRow = new HBox(10,
+                tipLabel("Mode:", intensityModeCombo), intensityModeCombo,
+                tipLabel("Amount:", intensityAmountSpinner), intensityAmountSpinner,
+                tipLabel("Noise:", gaussNoiseSpinner), gaussNoiseSpinner);
+        intensityRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Disable all controls when augmentation is off
+        augmentationCheck.selectedProperty().addListener((obs, o, n) -> {
+            measGrid.setDisable(!n);
+            spatialRow1.setDisable(!n);
+            spatialRow2.setDisable(!n);
+            intensityRow.setDisable(!n);
+        });
+        boolean augEnabled = augmentationCheck.isSelected();
+        measGrid.setDisable(!augEnabled);
+        spatialRow1.setDisable(!augEnabled);
+        spatialRow2.setDisable(!augEnabled);
+        intensityRow.setDisable(!augEnabled);
+
+        content.getChildren().addAll(
+                augmentationCheck,
+                measHeading, measGrid,
+                tileHeading, spatialRow1, spatialRow2,
+                intensityHeading, intensityRow);
+
+        // Store references for saving preferences on train
+        this.augNoiseSpinner = noiseSpinner;
+        this.augScaleSpinner = scaleSpinner;
+        this.augDropoutSpinner = dropoutSpinner;
+        this.augFlipHCheck = flipHCheck;
+        this.augFlipVCheck = flipVCheck;
+        this.augRot90Check = rot90Check;
+        this.augElasticCheck = elasticCheck;
+        this.augElasticAlphaSpinner = elasticAlphaSpinner;
+        this.augIntensityModeCombo = intensityModeCombo;
+        this.augIntensityAmountSpinner = intensityAmountSpinner;
+        this.augGaussNoiseSpinner = gaussNoiseSpinner;
+
+        TitledPane pane = new TitledPane("Advanced -- Augmentation", content);
+        pane.setExpanded(false);
+        pane.setTooltip(new Tooltip(
+                "Configure data augmentation to improve model generalization.\n"
+                + "Measurement mode: noise, scaling, feature dropout.\n"
+                + "Tile mode: flips, rotations, elastic deformation, intensity jitter."));
+        return pane;
     }
 
     private VBox createStatusSection() {
@@ -905,6 +1079,24 @@ public class AutoencoderDialog {
                 valSplit, earlyStopPatience, useClassWeights, useAugmentation,
                 inputMode, tileSize, dsample, includeMask, normId,
                 labelLocked, labelPoints, labelDetections, cellsOnly);
+
+        // Save augmentation settings
+        QpcatPreferences.setAeAugNoise(augNoiseSpinner.getValue());
+        QpcatPreferences.setAeAugScale(augScaleSpinner.getValue());
+        QpcatPreferences.setAeAugDropout(augDropoutSpinner.getValue());
+        QpcatPreferences.setAeAugFlipH(augFlipHCheck.isSelected());
+        QpcatPreferences.setAeAugFlipV(augFlipVCheck.isSelected());
+        QpcatPreferences.setAeAugRotation90(augRot90Check.isSelected());
+        QpcatPreferences.setAeAugElastic(augElasticCheck.isSelected());
+        QpcatPreferences.setAeAugElasticAlpha(augElasticAlphaSpinner.getValue());
+        String intensityMode = switch (augIntensityModeCombo.getSelectionModel().getSelectedIndex()) {
+            case 1 -> "brightfield";
+            case 2 -> "fluorescence";
+            default -> "none";
+        };
+        QpcatPreferences.setAeAugIntensityMode(intensityMode);
+        QpcatPreferences.setAeAugIntensityAmount(augIntensityAmountSpinner.getValue());
+        QpcatPreferences.setAeAugGaussNoise(augGaussNoiseSpinner.getValue());
 
         Thread thread = new Thread(() -> {
             try {

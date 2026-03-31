@@ -316,14 +316,64 @@ class EarlyStopping:
 
 # ==================== Data Augmentation ====================
 
+def augment_tile(tile, flip_h=True, flip_v=True, rot90=True, elastic=False,
+                 elastic_alpha=120.0, intensity_mode="none", intensity_amount=0.2,
+                 gauss_noise=0.05):
+    """
+    Tile-mode augmentation using torch operations (no albumentations needed).
+    Applied per-tile in the DataLoader. tile shape: (C, H, W).
+    """
+    import random
+    # Spatial: flips and 90-degree rotation (same as DL pixel classifier)
+    if flip_h and random.random() > 0.5:
+        tile = torch.flip(tile, [2])  # flip W
+    if flip_v and random.random() > 0.5:
+        tile = torch.flip(tile, [1])  # flip H
+    if rot90 and random.random() > 0.5:
+        k = random.choice([1, 2, 3])
+        tile = torch.rot90(tile, k, [1, 2])
+
+    # Elastic deformation (simplified: random affine + noise)
+    if elastic and random.random() > 0.7:
+        # Simple approach: add small random displacement field
+        _, h, w = tile.shape
+        noise_scale = elastic_alpha / max(h, w) * 0.01
+        dx = torch.randn(1, h, w) * noise_scale
+        dy = torch.randn(1, h, w) * noise_scale
+        grid_y, grid_x = torch.meshgrid(
+            torch.linspace(-1, 1, h), torch.linspace(-1, 1, w), indexing='ij')
+        grid = torch.stack([grid_x + dx.squeeze(), grid_y + dy.squeeze()], dim=-1).unsqueeze(0)
+        tile = F.grid_sample(tile.unsqueeze(0), grid, mode='bilinear',
+                             padding_mode='zeros', align_corners=True).squeeze(0)
+
+    # Intensity augmentation
+    if intensity_mode == "brightfield" and intensity_amount > 0:
+        # Correlated: same brightness/contrast shift for all channels
+        brightness = 1.0 + (random.random() - 0.5) * 2 * intensity_amount
+        contrast = 1.0 + (random.random() - 0.5) * 2 * intensity_amount * 0.5
+        tile = tile * contrast + (brightness - 1.0)
+    elif intensity_mode == "fluorescence" and intensity_amount > 0:
+        # Per-channel: independent scaling per channel
+        c = tile.shape[0]
+        scales = 1.0 + (torch.rand(c, 1, 1) - 0.5) * 2 * intensity_amount
+        tile = tile * scales
+
+    # Gaussian noise
+    if gauss_noise > 0:
+        tile = tile + torch.randn_like(tile) * gauss_noise
+
+    return tile
+
+
 class TileMmapDataset(torch.utils.data.Dataset):
     """Dataset that reads tiles from a memory-mapped file on demand."""
 
-    def __init__(self, mmap_array, labels, norm_method, mean_stat, std_stat, dmin_stat, dmax_stat):
+    def __init__(self, mmap_array, labels, norm_method, mean_stat, std_stat,
+                 dmin_stat, dmax_stat, augment_config=None):
         self.mmap = mmap_array
         self.labels = labels
         self.norm_method = norm_method
-        # Reshape stats for NCHW broadcast: (C,) -> (C, 1, 1)
+        self.aug_config = augment_config  # dict or None
         if mean_stat is not None:
             self.mean = torch.tensor(mean_stat, dtype=torch.float32).view(-1, 1, 1)
             self.std = torch.tensor(std_stat, dtype=torch.float32).view(-1, 1, 1)
@@ -346,6 +396,9 @@ class TileMmapDataset(torch.utils.data.Dataset):
             tile = (tile - self.mean) / self.std
         elif self.norm_method == "minmax" and self.dmin is not None:
             tile = (tile - self.dmin) / self.drange
+        # Apply tile augmentation if configured
+        if self.aug_config is not None:
+            tile = augment_tile(tile, **self.aug_config)
         label = self.labels[idx] if idx < len(self.labels) else -1
         return tile, torch.tensor(label, dtype=torch.long)
 
@@ -470,6 +523,23 @@ try:
     do_augmentation = enable_augmentation
 except NameError:
     do_augmentation = True
+
+# Tile augmentation config
+tile_aug_config = None
+if do_augmentation:
+    try:
+        tile_aug_config = {
+            'flip_h': bool(aug_flip_h) if 'aug_flip_h' in dir() else True,
+            'flip_v': bool(aug_flip_v) if 'aug_flip_v' in dir() else True,
+            'rot90': bool(aug_rotation_90) if 'aug_rotation_90' in dir() else True,
+            'elastic': bool(aug_elastic) if 'aug_elastic' in dir() else False,
+            'elastic_alpha': float(aug_elastic_alpha) if 'aug_elastic_alpha' in dir() else 120.0,
+            'intensity_mode': str(aug_intensity_mode) if 'aug_intensity_mode' in dir() else 'none',
+            'intensity_amount': float(aug_intensity_amount) if 'aug_intensity_amount' in dir() else 0.2,
+            'gauss_noise': float(aug_gauss_noise) if 'aug_gauss_noise' in dir() else 0.05,
+        }
+    except Exception:
+        tile_aug_config = None
 
 # Advanced parameters from Preferences (override module-level defaults)
 try:
@@ -624,7 +694,8 @@ label_tensor = torch.tensor(label_array, dtype=torch.long)
 # Build dataset
 if use_tiles:
     full_dataset = TileMmapDataset(raw_tiles, label_array, norm_method,
-                                    mean_stat, std_stat, dmin_stat, dmax_stat)
+                                    mean_stat, std_stat, dmin_stat, dmax_stat,
+                                    augment_config=tile_aug_config if do_augmentation else None)
 else:
     full_dataset = TensorDataset(data_tensor, label_tensor)
 
