@@ -240,6 +240,11 @@ public class AutoencoderDialog {
         imageListView = new ListView<>();
         imageListView.setMinHeight(80);
         imageListView.setMaxHeight(120);
+        imageListView.setTooltip(new Tooltip(
+                "Check images to include in training or application.\n"
+                + "Multi-image training produces more robust classifiers.\n"
+                + "Uncheck training images before applying to avoid\n"
+                + "re-classifying them."));
 
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || project.getImageList().isEmpty()) {
@@ -283,8 +288,10 @@ public class AutoencoderDialog {
         // Select All / Deselect All buttons
         Button selectAll = new Button("Select All");
         selectAll.setOnAction(e -> imageCheckProps.forEach(p -> p.set(true)));
+        selectAll.setTooltip(new Tooltip("Check all project images."));
         Button deselectAll = new Button("Deselect All");
         deselectAll.setOnAction(e -> imageCheckProps.forEach(p -> p.set(false)));
+        deselectAll.setTooltip(new Tooltip("Uncheck all project images."));
         HBox btnRow = new HBox(5, selectAll, deselectAll);
 
         return new VBox(5, heading, imageListView, btnRow);
