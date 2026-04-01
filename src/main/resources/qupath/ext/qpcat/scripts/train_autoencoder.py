@@ -170,16 +170,24 @@ class CellVAE(nn.Module):
 class ConvCellVAE(nn.Module):
     """
     Convolutional VAE for tile-based cell classification.
-    Uses LayerNorm where applicable (after flatten for FC layers).
-    Conv layers use no normalization (small model, AdaptiveAvgPool handles scale).
+    Optionally accepts per-cell measurements alongside tile images
+    (hybrid multi-modal input). Measurements provide explicit numeric
+    signals (e.g., solidity, area, circularity) that complement the
+    visual features learned by the conv encoder.
+
+    Architecture when n_measurements > 0:
+      Tile (C,H,W) -> Conv encoder -> 128-dim visual features
+      Measurements (M,) -> Linear(M, 64) -> LayerNorm -> LeakyReLU -> 64-dim
+      Concatenated: 192-dim -> (mu, logvar) of latent_dim
     """
 
-    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0):
+    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0):
         super().__init__()
         self.n_channels = n_channels
         self.tile_size = tile_size
         self.latent_dim = latent_dim
         self.n_classes = n_classes
+        self.n_measurements = n_measurements
 
         self.encoder = nn.Sequential(
             nn.Conv2d(n_channels, 32, 3, stride=2, padding=1),
@@ -192,8 +200,21 @@ class ConvCellVAE(nn.Module):
             nn.Flatten(),
         )
 
-        self.fc_mu = nn.Linear(128, latent_dim)
-        self.fc_logvar = nn.Linear(128, latent_dim)
+        # Optional measurement encoder branch
+        if n_measurements > 0:
+            meas_hidden = min(64, max(16, n_measurements))
+            self.meas_encoder = nn.Sequential(
+                nn.Linear(n_measurements, meas_hidden),
+                nn.LayerNorm(meas_hidden),
+                nn.LeakyReLU(),
+            )
+            combined_dim = 128 + meas_hidden
+        else:
+            self.meas_encoder = None
+            combined_dim = 128
+
+        self.fc_mu = nn.Linear(combined_dim, latent_dim)
+        self.fc_logvar = nn.Linear(combined_dim, latent_dim)
 
         self.dec_spatial = max(tile_size // 8, 1)
         self.dec_fc = nn.Linear(latent_dim, 128 * self.dec_spatial * self.dec_spatial)
@@ -211,8 +232,11 @@ class ConvCellVAE(nn.Module):
         else:
             self.classifier = None
 
-    def encode(self, x):
+    def encode(self, x, measurements=None):
         h = self.encoder(x)
+        if self.meas_encoder is not None and measurements is not None:
+            m = self.meas_encoder(measurements)
+            h = torch.cat([h, m], dim=1)
         mu = self.fc_mu(h)
         logvar = torch.clamp(self.fc_logvar(h), LOGVAR_CLAMP_MIN, LOGVAR_CLAMP_MAX)
         return mu, logvar
@@ -233,8 +257,8 @@ class ConvCellVAE(nn.Module):
             return None
         return self.classifier(z)
 
-    def forward(self, x):
-        mu, logvar = self.encode(x)
+    def forward(self, x, measurements=None):
+        mu, logvar = self.encode(x, measurements)
         z = self.reparameterize(mu, logvar)
         recon = self.decode(z)
         class_logits = self.classify(z)
@@ -366,14 +390,23 @@ def augment_tile(tile, flip_h=True, flip_v=True, rot90=True, elastic=False,
 
 
 class TileMmapDataset(torch.utils.data.Dataset):
-    """Dataset that reads tiles from a memory-mapped file on demand."""
+    """Dataset that reads tiles from a memory-mapped file on demand.
+    Optionally includes per-cell measurements for hybrid ConvVAE input."""
 
     def __init__(self, mmap_array, labels, norm_method, mean_stat, std_stat,
-                 dmin_stat, dmax_stat, augment_config=None):
+                 dmin_stat, dmax_stat, augment_config=None,
+                 measurements=None, meas_mean=None, meas_std=None):
         self.mmap = mmap_array
         self.labels = labels
         self.norm_method = norm_method
         self.aug_config = augment_config  # dict or None
+        # Optional measurements (numpy array N x M, already z-scored if provided)
+        self.measurements = measurements
+        if measurements is not None and meas_mean is not None:
+            self.meas_mean = torch.tensor(meas_mean, dtype=torch.float32)
+            self.meas_std = torch.tensor(meas_std, dtype=torch.float32)
+        else:
+            self.meas_mean = self.meas_std = None
         if mean_stat is not None:
             self.mean = torch.tensor(mean_stat, dtype=torch.float32).view(-1, 1, 1)
             self.std = torch.tensor(std_stat, dtype=torch.float32).view(-1, 1, 1)
@@ -400,7 +433,13 @@ class TileMmapDataset(torch.utils.data.Dataset):
         if self.aug_config is not None:
             tile = augment_tile(tile, **self.aug_config)
         label = self.labels[idx] if idx < len(self.labels) else -1
-        return tile, torch.tensor(label, dtype=torch.long)
+        # Include measurements if available
+        if self.measurements is not None:
+            meas = torch.tensor(self.measurements[idx], dtype=torch.float32)
+            if self.meas_mean is not None:
+                meas = (meas - self.meas_mean) / (self.meas_std + 1e-8)
+            return tile, meas, torch.tensor(label, dtype=torch.long)
+        return tile, torch.tensor(0.0), torch.tensor(label, dtype=torch.long)
 
 
 def augment_measurements(data, noise_std=0.02, scale_range=0.1, dropout_p=0.1):
@@ -708,11 +747,32 @@ else:
 
 label_tensor = torch.tensor(label_array, dtype=torch.long)
 
+# Load optional measurements for hybrid ConvVAE (tile + measurements)
+tile_meas_data = None
+tile_meas_mean = None
+tile_meas_std = None
+n_tile_measurements = 0
+has_tile_measurements = False
+if use_tiles:
+    try:
+        if tile_measurements is not None:
+            tile_meas_data = tile_measurements.ndarray().copy().astype(np.float32)
+            n_tile_measurements = tile_meas_data.shape[1]
+            tile_meas_mean = tile_meas_data.mean(axis=0)
+            tile_meas_std = tile_meas_data.std(axis=0)
+            tile_meas_std[tile_meas_std == 0] = 1
+            has_tile_measurements = True
+            logger.info("Hybrid mode: %d measurements alongside tiles", n_tile_measurements)
+    except NameError:
+        pass
+
 # Build dataset
 if use_tiles:
     full_dataset = TileMmapDataset(raw_tiles, label_array, norm_method,
                                     mean_stat, std_stat, dmin_stat, dmax_stat,
-                                    augment_config=tile_aug_config if do_augmentation else None)
+                                    augment_config=tile_aug_config if do_augmentation else None,
+                                    measurements=tile_meas_data,
+                                    meas_mean=tile_meas_mean, meas_std=tile_meas_std)
 else:
     full_dataset = TensorDataset(data_tensor, label_tensor)
 
@@ -744,7 +804,8 @@ val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
 # 5. Build model and optimizer
 if use_tiles:
     model = ConvCellVAE(img_channels, img_tile_size, ldim,
-                        n_classes if has_labels else 0).to(device)
+                        n_classes if has_labels else 0,
+                        n_measurements=n_tile_measurements).to(device)
 else:
     model = CellVAE(n_markers, ldim, n_classes if has_labels else 0).to(device)
 
@@ -798,7 +859,16 @@ for epoch in range(epochs):
     train_labeled = 0
     n_batches = 0
 
-    for batch_data, batch_labels in train_loader:
+    for batch_items in train_loader:
+        if use_tiles and has_tile_measurements:
+            batch_data, batch_meas, batch_labels = batch_items
+            batch_meas = batch_meas.to(device)
+        elif use_tiles:
+            batch_data, _, batch_labels = batch_items
+            batch_meas = None
+        else:
+            batch_data, batch_labels = batch_items
+            batch_meas = None
         batch_data = batch_data.to(device)
         batch_labels = batch_labels.to(device)
 
@@ -809,7 +879,7 @@ for epoch in range(epochs):
 
         with torch.amp.autocast(device, enabled=use_amp):
             if use_tiles:
-                recon, _, mu, logvar, z, class_logits = model(batch_data)
+                recon, _, mu, logvar, z, class_logits = model(batch_data, batch_meas)
                 recon_loss = F.mse_loss(recon, target_data, reduction='mean')
             else:
                 recon_mu, recon_logvar, mu, logvar, z, class_logits = model(batch_data)
@@ -862,11 +932,20 @@ for epoch in range(epochs):
         val_correct = 0
         val_labeled = 0
         with torch.no_grad():
-            for batch_data, batch_labels in val_loader:
+            for val_items in val_loader:
+                if use_tiles and has_tile_measurements:
+                    batch_data, batch_meas, batch_labels = val_items
+                    batch_meas = batch_meas.to(device)
+                elif use_tiles:
+                    batch_data, _, batch_labels = val_items
+                    batch_meas = None
+                else:
+                    batch_data, batch_labels = val_items
+                    batch_meas = None
                 batch_data = batch_data.to(device)
                 batch_labels = batch_labels.to(device)
                 if use_tiles:
-                    _, _, mu_v, _, _, class_logits_v = model(batch_data)
+                    _, _, mu_v, _, _, class_logits_v = model(batch_data, batch_meas)
                 else:
                     _, _, mu_v, _, _, class_logits_v = model(batch_data)
                 if class_logits_v is not None:
@@ -927,9 +1006,21 @@ with torch.no_grad():
     all_mu = []
     all_logits = []
 
-    for batch_data_enc, _ in encode_loader:
+    for enc_items in encode_loader:
+        if use_tiles and has_tile_measurements:
+            batch_data_enc, batch_meas_enc, _ = enc_items
+            batch_meas_enc = batch_meas_enc.to(device)
+        elif use_tiles:
+            batch_data_enc, _, _ = enc_items
+            batch_meas_enc = None
+        else:
+            batch_data_enc, _ = enc_items
+            batch_meas_enc = None
         batch_data_enc = batch_data_enc.to(device)
-        mu_batch, _ = model.encode(batch_data_enc)
+        if use_tiles:
+            mu_batch, _ = model.encode(batch_data_enc, batch_meas_enc)
+        else:
+            mu_batch, _ = model.encode(batch_data_enc)
         all_mu.append(mu_batch.cpu())
         if has_labels and model.classifier is not None:
             logits_batch = model.classify(mu_batch)
@@ -1006,6 +1097,10 @@ checkpoint_data = {
 if use_tiles:
     checkpoint_data['n_channels'] = img_channels
     checkpoint_data['tile_size'] = img_tile_size
+    checkpoint_data['n_tile_measurements'] = n_tile_measurements
+    if tile_meas_mean is not None:
+        checkpoint_data['tile_meas_mean'] = tile_meas_mean.tolist()
+        checkpoint_data['tile_meas_std'] = tile_meas_std.tolist()
 else:
     checkpoint_data['n_markers'] = n_markers
     checkpoint_data['marker_names'] = list(marker_names)

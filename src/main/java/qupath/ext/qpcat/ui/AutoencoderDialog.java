@@ -385,6 +385,8 @@ public class AutoencoderDialog {
         measurementCombo.setTooltip(new Tooltip(
                 "Check which measurements to use as input features.\n"
                 + "All measurement types available: intensity, morphology, texture, etc.\n"
+                + "In tile mode: checked measurements are combined with tile images\n"
+                + "(hybrid input). Include Solidity, Area, Circularity for shape help.\n"
                 + "Right-click for Select All / Deselect All."));
 
         if (qupath.getImageData() != null) {
@@ -471,7 +473,7 @@ public class AutoencoderDialog {
         tileRow.setDisable(true);
 
         measurementModeRadio.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            measurementCombo.setDisable(!newVal);
+            // Measurements always available (tile mode uses them as hybrid input)
             tileSizeSpinner.setDisable(newVal);
             downsampleCombo.setDisable(newVal);
             tileRow.setDisable(newVal);

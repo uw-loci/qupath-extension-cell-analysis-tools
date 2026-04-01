@@ -74,20 +74,32 @@ class CellVAE(nn.Module):
 
 
 class ConvCellVAE(nn.Module):
-    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0):
+    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0):
         super().__init__()
         self.n_channels = n_channels
         self.tile_size = tile_size
         self.latent_dim = latent_dim
         self.n_classes = n_classes
+        self.n_measurements = n_measurements
         self.encoder = nn.Sequential(
             nn.Conv2d(n_channels, 32, 3, stride=2, padding=1), nn.LeakyReLU(),
             nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.LeakyReLU(),
             nn.Conv2d(64, 128, 3, stride=2, padding=1), nn.LeakyReLU(),
             nn.AdaptiveAvgPool2d(1), nn.Flatten(),
         )
-        self.fc_mu = nn.Linear(128, latent_dim)
-        self.fc_logvar = nn.Linear(128, latent_dim)
+        if n_measurements > 0:
+            meas_hidden = min(64, max(16, n_measurements))
+            self.meas_encoder = nn.Sequential(
+                nn.Linear(n_measurements, meas_hidden),
+                nn.LayerNorm(meas_hidden),
+                nn.LeakyReLU(),
+            )
+            combined_dim = 128 + meas_hidden
+        else:
+            self.meas_encoder = None
+            combined_dim = 128
+        self.fc_mu = nn.Linear(combined_dim, latent_dim)
+        self.fc_logvar = nn.Linear(combined_dim, latent_dim)
         self.dec_spatial = max(tile_size // 8, 1)
         self.dec_fc = nn.Linear(latent_dim, 128 * self.dec_spatial * self.dec_spatial)
         self.decoder = nn.Sequential(
@@ -100,8 +112,11 @@ class ConvCellVAE(nn.Module):
         else:
             self.classifier = None
 
-    def encode(self, x):
+    def encode(self, x, measurements=None):
         h = self.encoder(x)
+        if self.meas_encoder is not None and measurements is not None:
+            m = self.meas_encoder(measurements)
+            h = torch.cat([h, m], dim=1)
         mu = self.fc_mu(h)
         logvar = torch.clamp(self.fc_logvar(h), LOGVAR_CLAMP_MIN, LOGVAR_CLAMP_MAX)
         return mu, logvar
@@ -185,30 +200,57 @@ else:
 # 3. Load model and run inference
 device = detect_device()
 if use_tiles:
-    model = ConvCellVAE(ckpt_channels, ckpt_tile_size, ldim, n_classes).to(device)
+    n_tile_meas = checkpoint.get('n_tile_measurements', 0)
+    model = ConvCellVAE(ckpt_channels, ckpt_tile_size, ldim, n_classes,
+                        n_measurements=n_tile_meas).to(device)
 else:
     model = CellVAE(checkpoint['n_markers'], ldim, n_classes).to(device)
 model.load_state_dict(checkpoint['state_dict'])
 model.eval()
 
+# Load hybrid measurements for tile mode if present
+infer_tile_meas = None
+infer_meas_mean = None
+infer_meas_std = None
+if use_tiles and n_tile_meas > 0:
+    try:
+        if tile_measurements is not None:
+            infer_tile_meas = tile_measurements.ndarray().copy().astype(np.float32)
+            ckpt_meas_mean = checkpoint.get('tile_meas_mean')
+            ckpt_meas_std = checkpoint.get('tile_meas_std')
+            if ckpt_meas_mean is not None:
+                infer_meas_mean = torch.tensor(ckpt_meas_mean, dtype=torch.float32)
+                infer_meas_std = torch.tensor(ckpt_meas_std, dtype=torch.float32)
+            logger.info("Hybrid inference: %d measurements alongside tiles", n_tile_meas)
+    except NameError:
+        pass
+
 with torch.no_grad():
-    # Encode in batches for memory efficiency
     encode_bs = 512
     all_mu = []
     all_logits = []
     for i in range(0, n_cells, encode_bs):
         end = min(i + encode_bs, n_cells)
+        batch_meas = None
         if use_tiles:
-            # Read batch from memmap and normalize on the fly
             batch = torch.tensor(np.array(raw_data[i:end]), dtype=torch.float32)
             if tile_norm_mean is not None:
                 batch = (batch - tile_norm_mean) / tile_norm_std
             elif tile_norm_min is not None:
                 batch = (batch - tile_norm_min) / tile_norm_range
             batch = batch.to(device)
+            # Hybrid measurements
+            if infer_tile_meas is not None:
+                batch_meas = torch.tensor(infer_tile_meas[i:end], dtype=torch.float32)
+                if infer_meas_mean is not None:
+                    batch_meas = (batch_meas - infer_meas_mean) / (infer_meas_std + 1e-8)
+                batch_meas = batch_meas.to(device)
         else:
             batch = torch.tensor(np.array(data_norm[i:end]), dtype=torch.float32).to(device)
-        mu_b, _ = model.encode(batch)
+        if use_tiles:
+            mu_b, _ = model.encode(batch, batch_meas)
+        else:
+            mu_b, _ = model.encode(batch)
         all_mu.append(mu_b.cpu())
         if n_classes > 0 and model.classifier is not None:
             all_logits.append(model.classify(mu_b).cpu())

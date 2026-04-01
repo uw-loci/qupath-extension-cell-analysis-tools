@@ -1830,13 +1830,18 @@ public class ClusteringWorkflow {
         logger.info("[TEST] Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
                 inputMode, allDetections.size(), imageDatas.size(), nLabeled, classNames.size());
 
-        // For measurement mode, extract measurements across all images
+        // Extract measurements (for measurement mode, or hybrid tile+measurements mode)
         MeasurementExtractor.ExtractionResult extraction = null;
-        if (!useTiles) {
+        boolean hybridMode = useTiles && selectedMeasurements != null && !selectedMeasurements.isEmpty();
+        if (!useTiles || hybridMode) {
             report(progressCallback, "Extracting measurements from "
                     + imageDatas.size() + " images...");
             MeasurementExtractor extractor = new MeasurementExtractor();
             extraction = extractor.extractMultiImage(groups, selectedMeasurements);
+            if (hybridMode) {
+                logger.info("Hybrid tile+measurement mode: {} measurements alongside tiles",
+                        extraction.getNMeasurements());
+            }
         }
 
         // For tile mode, write tiles to a temp file that Python memory-maps.
@@ -1963,6 +1968,17 @@ public class ClusteringWorkflow {
                     inputs.put("n_cells", nCells);
                     inputs.put("n_channels", finalNChannels);
                     inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
+
+                    // Hybrid mode: also pass measurements alongside tiles
+                    if (finalExtraction != null && finalExtraction.getNMeasurements() > 0) {
+                        int nMeasurements = finalExtraction.getNMeasurements();
+                        NDArray.Shape mShape = new NDArray.Shape(
+                                NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                        NDArray tileMeasNd = new NDArray(NDArray.DType.FLOAT64, mShape);
+                        var mBuf = tileMeasNd.buffer().asDoubleBuffer();
+                        for (double[] row : finalExtraction.getData()) mBuf.put(row);
+                        inputs.put("tile_measurements", tileMeasNd);
+                    }
                 }
 
                 ApposeClusteringService service = ApposeClusteringService.getInstance();
