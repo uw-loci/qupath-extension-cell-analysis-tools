@@ -77,7 +77,8 @@ For even faster exploration, use **Quick Cluster** submenu items which run with 
 
 ---
 
-## Clustering
+<details>
+<summary><h2>Clustering</h2></summary>
 
 ### Supported Algorithms
 
@@ -110,9 +111,12 @@ The **Compute Embedding Only** dialog allows computing embeddings without cluste
 
 Select "All project images" scope in the clustering dialog to cluster detections across your entire project simultaneously. This ensures globally consistent cluster assignments. Optionally enable **Harmony batch correction** to remove per-image technical variation before clustering.
 
+</details>
+
 ---
 
-## Phenotyping
+<details>
+<summary><h2>Phenotyping</h2></summary>
 
 Rule-based cell type classification using marker gating thresholds.
 
@@ -140,9 +144,12 @@ Select a marker column header to view its histogram with an interactive draggabl
 
 Phenotype rules, gates, and marker selections can be saved to and loaded from the QuPath project directory (`<project>/qpcat/phenotype_rules/`). This allows reuse across sessions and sharing between team members.
 
+</details>
+
 ---
 
-## Spatial Analysis
+<details>
+<summary><h2>Spatial Analysis</h2></summary>
 
 When enabled in the clustering dialog, QP-CAT computes spatial statistics using cell centroid coordinates:
 
@@ -174,9 +181,12 @@ Enable the **"Spatial feature smoothing"** checkbox in the clustering dialog. Th
 
 This is a lighter-weight alternative to BANKSY when you want spatial awareness without switching to a fully spatial algorithm.
 
+</details>
+
 ---
 
-## Foundation Model Feature Extraction
+<details>
+<summary><h2>Foundation Model Feature Extraction</h2></summary>
 
 **Extensions > QP-CAT > Extract Foundation Model Features...** extracts tile-level morphological embeddings from pre-trained vision foundation models and stores them as per-detection measurements (`FM_0`, `FM_1`, ..., `FM_N`).
 
@@ -199,9 +209,12 @@ Foundation model features capture rich morphological information from the image 
 
 Feature extraction is powered by [LazySlide](https://doi.org/10.1038/s41592-026-03044-7).
 
+</details>
+
 ---
 
-## Zero-Shot Phenotyping
+<details>
+<summary><h2>Zero-Shot Phenotyping</h2></summary>
 
 **Extensions > QP-CAT > Zero-Shot Phenotyping (BiomedCLIP)...** assigns cell phenotypes using natural language text prompts -- no marker gating rules or training data required.
 
@@ -220,9 +233,12 @@ Feature extraction is powered by [LazySlide](https://doi.org/10.1038/s41592-026-
 
 BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does not require a HuggingFace auth token.
 
+</details>
+
 ---
 
-## [TEST] Autoencoder Cell Classifier
+<details>
+<summary><h2>[TEST] Autoencoder Cell Classifier</h2></summary>
 
 **Extensions > QP-CAT > [TEST] Autoencoder Classifier...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. This is a **test feature** under active development.
 
@@ -324,9 +340,12 @@ VAE best practices and training infrastructure:
 - Tile mode with many channels (40+) and large tiles (64x64) can exhaust GPU memory
 - Results should be validated before use in published analyses
 
+</details>
+
 ---
 
-## Post-Analysis Outputs
+<details>
+<summary><h2>Post-Analysis Outputs</h2></summary>
 
 After clustering, QP-CAT can generate:
 
@@ -340,9 +359,12 @@ After clustering, QP-CAT can generate:
 | **Stacked violin** | Expression distributions per cluster |
 | **Spatial scatter** | Cell positions colored by cluster (when spatial analysis enabled) |
 
+</details>
+
 ---
 
-## Data Export
+<details>
+<summary><h2>Data Export</h2></summary>
 
 ### AnnData (.h5ad)
 
@@ -359,9 +381,12 @@ The exported file includes:
 
 Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cell analysis tools.
 
+</details>
+
 ---
 
-## Cluster Management
+<details>
+<summary><h2>Cluster Management</h2></summary>
 
 **Extensions > QP-CAT > Manage Clusters...** opens a dialog for post-hoc cluster organization:
 
@@ -370,9 +395,12 @@ Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cel
 
 Changes are applied directly to detection objects and reflected immediately in QuPath's viewer.
 
+</details>
+
 ---
 
-## Configuration Persistence
+<details>
+<summary><h2>Configuration Persistence</h2></summary>
 
 ### Clustering Configs
 
@@ -388,9 +416,12 @@ Every operation (clustering, phenotyping, embedding, export, threshold computati
 
 This provides a reproducibility trail -- you can always see exactly what parameters were used for any analysis. Log files are human-readable text.
 
+</details>
+
 ---
 
-## Python Console
+<details>
+<summary><h2>Python Console</h2></summary>
 
 **Extensions > QP-CAT > Utilities > Python Console** opens a window showing real-time Python stderr/debug output from the embedded Python environment. Useful for:
 
@@ -400,9 +431,12 @@ This provides a reproducibility trail -- you can always see exactly what paramet
 
 The console includes a **Save Log...** button to export its contents to a text file.
 
+</details>
+
 ---
 
-## Python Environment
+<details>
+<summary><h2>Python Environment</h2></summary>
 
 QP-CAT manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). The environment is stored at:
 
@@ -438,9 +472,12 @@ If the environment becomes corrupted or you need to update packages:
 2. Confirm the rebuild (this deletes the existing environment)
 3. Click "Setup" in the dialog that appears
 
+</details>
+
 ---
 
-## Menu Reference
+<details>
+<summary><h2>Menu Reference</h2></summary>
 
 All items are under **Extensions > QP-CAT**:
 
@@ -462,9 +499,12 @@ All items are under **Extensions > QP-CAT**:
 | Utilities > System Info... | Show version and environment details | Environment ready |
 | Utilities > Rebuild Environment | Delete and re-download Python environment | None |
 
+</details>
+
 ---
 
-## Troubleshooting
+<details>
+<summary><h2>Troubleshooting</h2></summary>
 
 ### Environment setup fails
 
@@ -492,9 +532,12 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 - Reduce the number of selected measurements
 - Consider clustering a subset (select detections within an annotation)
 
+</details>
+
 ---
 
-## Building from Source
+<details>
+<summary><h2>Building from Source</h2></summary>
 
 ```bash
 git clone https://github.com/uw-loci/qupath-extension-cell-analysis-tools.git
@@ -509,9 +552,12 @@ To compile only (no tests):
 ./gradlew compileJava
 ```
 
+</details>
+
 ---
 
-## Project Structure
+<details>
+<summary><h2>Project Structure</h2></summary>
 
 ```
 src/main/java/qupath/ext/qpcat/
@@ -561,6 +607,8 @@ src/main/resources/qupath/ext/qpcat/
     train_autoencoder.py          VAE autoencoder training pipeline
     zero_shot_phenotyping.py      BiomedCLIP zero-shot cell phenotyping
 ```
+
+</details>
 
 ---
 
