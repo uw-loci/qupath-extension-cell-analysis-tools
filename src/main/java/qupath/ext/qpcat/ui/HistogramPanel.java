@@ -89,9 +89,17 @@ public class HistogramPanel extends VBox {
         statsLabel = new Label("Pos: - | Neg: -");
         statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
 
+        Label methodLabel = new Label("Method:");
+        if (methodCombo.getTooltip() != null) {
+            methodLabel.setTooltip(methodCombo.getTooltip());
+        }
+        Label thresholdLabel = new Label("Threshold:");
+        if (thresholdSpinner.getTooltip() != null) {
+            thresholdLabel.setTooltip(thresholdSpinner.getTooltip());
+        }
         HBox controlsRow = new HBox(8,
-                new Label("Method:"), methodCombo,
-                new Label("Threshold:"), thresholdSpinner);
+                methodLabel, methodCombo,
+                thresholdLabel, thresholdSpinner);
         controlsRow.setAlignment(Pos.CENTER_LEFT);
 
         getChildren().addAll(markerLabel, canvas, controlsRow, statsLabel);
