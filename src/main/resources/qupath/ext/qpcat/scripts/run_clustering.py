@@ -165,7 +165,17 @@ except NameError:
 
 if do_batch and batch_labels_list is not None:
     task.update("Running batch correction (Harmony)...")
-    import harmonypy as hm
+    try:
+        import harmonypy as hm
+    except ImportError as _hp_err:
+        # The Java UI grays out the checkbox when the init-time probe reports
+        # harmonypy missing, so reaching this branch means the probe and the
+        # task script disagree about the env state - usually a stale install.
+        raise RuntimeError(
+            "Harmony batch correction is not available in this Python "
+            "environment. Use Utilities > Rebuild Clustering Environment "
+            "to refresh, or uncheck 'Batch correction (Harmony)' to run "
+            "without it. Underlying error: %s" % _hp_err)
 
     n_batches = len(set(batch_labels_list))
     if n_batches > 1:

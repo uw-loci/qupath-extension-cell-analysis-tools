@@ -26,7 +26,13 @@ logger = logging.getLogger("qpcat.appose")
 # or scripts change in a way that requires a new environment, bump this version.
 # The Java side checks this after init to detect stale environments that
 # rebuilt from pixi.toml changes but may still have outdated pip packages.
-ENVIRONMENT_VERSION = "0.2.2"
+ENVIRONMENT_VERSION = "0.2.3"
+
+# Capability flags exported to the Java side via the verification task in
+# ApposeClusteringService.initialize(). When a probed package is missing,
+# the corresponding feature must surface as visibly-disabled in the UI
+# rather than crashing the worker at init time.
+HARMONYPY_AVAILABLE = False
 
 try:
     # Set non-interactive backend before any matplotlib import (scanpy pulls it in)
@@ -42,7 +48,6 @@ try:
     import scanpy
     import anndata
     import squidpy
-    import harmonypy
     import banksy
 
     logger.info("QP-CAT environment v%s", ENVIRONMENT_VERSION)
@@ -52,8 +57,19 @@ try:
     logger.info("  leidenalg: %s", leidenalg.__version__)
     logger.info("  anndata: %s", anndata.__version__)
     logger.info("  squidpy: %s", squidpy.__version__)
-    logger.info("  harmonypy: available")
     logger.info("  pybanksy: available")
+
+    # Probe harmonypy without crashing init. Required for the
+    # "Batch correction (Harmony)" feature in multi-image clustering.
+    try:
+        import harmonypy
+        HARMONYPY_AVAILABLE = True
+        _hp_ver = getattr(harmonypy, "__version__", "available")
+        logger.info("  harmonypy: %s", _hp_ver)
+    except ImportError as _hp_err:
+        HARMONYPY_AVAILABLE = False
+        logger.warning("  harmonypy: NOT INSTALLED (Harmony batch correction "
+                       "will be disabled in the Clustering dialog) - %s", _hp_err)
 
     # Check for new optional dependencies (may not be present in older environments)
     _optional_packages = {

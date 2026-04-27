@@ -111,6 +111,37 @@ The **Compute Embedding Only** dialog allows computing embeddings without cluste
 
 Select "All project images" scope in the clustering dialog to cluster detections across your entire project simultaneously. This ensures globally consistent cluster assignments. Optionally enable **Harmony batch correction** to remove per-image technical variation before clustering.
 
+### Batch correction (Harmony)
+
+QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python port of [Harmony](https://github.com/immunogenomics/harmony), Korsunsky et al. 2019, *Nature Methods*) to remove per-image technical variation before clustering. This is essential for multi-image / multi-batch projects where each slide carries its own staining intensity profile.
+
+**When the checkbox is enabled in the Clustering dialog:**
+
+- Scope is set to "All project images" (single-image mode has no batches to correct), AND
+- The harmonypy package was successfully imported when the QP-CAT Python environment started.
+
+**When the checkbox is grayed out:**
+
+- "All project images" is not selected -> single-image clustering does not need batch correction.
+- harmonypy failed to install in the Python environment -> the tooltip on the disabled checkbox links you here.
+
+**Platform support matrix:**
+
+| Platform | Harmony version installed | Status |
+|---|---|---|
+| Linux x86_64 | harmonypy 0.2.0 (pure Python) | Supported |
+| macOS (Intel + Apple Silicon) | harmonypy 0.2.0 (pure Python) | Supported |
+| Windows x86_64 | harmonypy 0.2.0 (pure Python) | Supported |
+
+QP-CAT pins `harmonypy >= 0.2.0, < 2`. Version 2.0.0+ is a pybind11/CMake build with no Windows wheel, which would force users to install MSVC Build Tools to use this feature. The 0.2.x series is the latest pure-Python release with the same `run_harmony()` API.
+
+**If the checkbox is unexpectedly grayed out:**
+
+1. Open the QP-CAT Python log (Extensions > QP-CAT > System Info, or check the QuPath log).
+2. Look for the line `harmonypy: <version>` -- if you instead see `harmonypy: NOT INSTALLED`, the env build skipped or failed for this package.
+3. **Use Extensions > QP-CAT > Utilities > Rebuild Clustering Environment** to delete and re-create the pixi env from a clean slate. This re-resolves the harmonypy pin and should produce a working install.
+4. If rebuild still fails, file a bug report with the full QuPath log attached.
+
 </details>
 
 ---

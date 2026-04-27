@@ -41,7 +41,7 @@ public class ApposeClusteringService {
      * Expected environment version. Must match ENVIRONMENT_VERSION in init_services.py
      * and the version in build.gradle.kts.
      */
-    static final String EXPECTED_ENV_VERSION = "0.2.2";
+    static final String EXPECTED_ENV_VERSION = "0.2.3";
 
     private static ApposeClusteringService instance;
 
@@ -51,6 +51,11 @@ public class ApposeClusteringService {
     private String initError;
     private Thread shutdownHook;
     private Consumer<String> debugListener;
+
+    // Capability flags reported by init_services.py at verification time.
+    // Java reads these to gray out features whose Python deps are missing
+    // rather than crashing the whole extension. Default false until init.
+    private boolean harmonypyAvailable;
 
     private ApposeClusteringService() {}
 
@@ -198,7 +203,8 @@ public class ApposeClusteringService {
                         "task.outputs['sklearn_version'] = sklearn.__version__\n" +
                         "task.outputs['scanpy_version'] = scanpy.__version__\n" +
                         "task.outputs['umap_version'] = umap.__version__\n" +
-                        "task.outputs['env_version'] = ENVIRONMENT_VERSION\n";
+                        "task.outputs['env_version'] = ENVIRONMENT_VERSION\n" +
+                        "task.outputs['harmonypy_available'] = HARMONYPY_AVAILABLE\n";
 
                 Task verifyTask = pythonService.task(verifyScript);
                 verifyTask.listen(event -> {
@@ -213,8 +219,11 @@ public class ApposeClusteringService {
                 String scanpyVersion = String.valueOf(verifyTask.outputs.get("scanpy_version"));
                 String umapVersion = String.valueOf(verifyTask.outputs.get("umap_version"));
                 String envVersion = String.valueOf(verifyTask.outputs.get("env_version"));
-                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {}",
-                        sklearnVersion, scanpyVersion, umapVersion, envVersion);
+                Object harmonypyFlag = verifyTask.outputs.get("harmonypy_available");
+                harmonypyAvailable = Boolean.TRUE.equals(harmonypyFlag);
+                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {} (harmonypy={})",
+                        sklearnVersion, scanpyVersion, umapVersion, envVersion,
+                        harmonypyAvailable ? "available" : "MISSING");
 
                 // Version check: warn if environment version doesn't match expected
                 if (!EXPECTED_ENV_VERSION.equals(envVersion)) {
@@ -412,6 +421,16 @@ public class ApposeClusteringService {
     }
 
     public String getInitError() { return initError; }
+
+    /**
+     * Whether the Python environment has the harmonypy package available.
+     * Drives gray-out of the "Batch correction (Harmony)" UI in
+     * {@code ClusteringDialog}. Returns false until {@link #initialize}
+     * has completed successfully.
+     */
+    public boolean isHarmonypyAvailable() {
+        return initialized && harmonypyAvailable;
+    }
 
     /**
      * Sets a listener that receives Python debug/stderr output.

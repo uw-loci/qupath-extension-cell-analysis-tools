@@ -14,6 +14,7 @@ import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.MeasurementExtractor;
@@ -414,15 +415,33 @@ public class ClusteringDialog {
         batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");
         batchCorrectionCheck.setSelected(false);
         batchCorrectionCheck.setDisable(true);
-        batchCorrectionCheck.setTooltip(new Tooltip(
+
+        // Probe the Python service for Harmony availability. The checkbox
+        // stays visible regardless so users can see the feature exists, but
+        // is grayed out (with an explanatory tooltip) when the runtime
+        // capability flag is false.
+        boolean harmonypyAvailable =
+                ApposeClusteringService.getInstance().isHarmonypyAvailable();
+
+        Tooltip activeTooltip = new Tooltip(
                 "Apply Harmony batch correction to remove per-image\n"
                 + "technical variation before clustering.\n"
                 + "Only available when clustering all project images.\n"
-                + "Ref: Korsunsky et al. (2019) Nature Methods"));
+                + "Ref: Korsunsky et al. (2019) Nature Methods");
+        Tooltip unavailableTooltip = new Tooltip(
+                "Harmony batch correction is not installed in this\n"
+                + "Python environment. Use Utilities > Rebuild Clustering\n"
+                + "Environment to refresh, or see the QP-CAT README for\n"
+                + "the platform support matrix.");
+        batchCorrectionCheck.setTooltip(harmonypyAvailable ? activeTooltip : unavailableTooltip);
 
-        // Enable batch correction only when "All project images" is selected
+        // Enable batch correction only when (a) "All project images" is
+        // selected AND (b) the harmonypy probe succeeded at init time.
+        // If harmonypy is missing we keep the checkbox visibly disabled
+        // even when scope changes, so the user can see the feature exists
+        // but understands it is currently unusable.
         scopeAllImages.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            batchCorrectionCheck.setDisable(!newVal);
+            batchCorrectionCheck.setDisable(!newVal || !harmonypyAvailable);
             if (!newVal) batchCorrectionCheck.setSelected(false);
         });
 
