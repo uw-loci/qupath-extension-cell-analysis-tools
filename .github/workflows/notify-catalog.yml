@@ -4,30 +4,68 @@ name: Notify catalog of release
 # of type `extension-release` to the QuPath extension catalog so it can
 # auto-bump catalog.json to the new tag and asset URL.
 #
-# See uw-loci/qupath-catalog-mikenelson/MAINTAINERS.md for the full
-# auto-update flow, the org-level CATALOG_DISPATCH_TOKEN secret it uses,
-# and recovery steps if a dispatch fails.
+# Also exposes a workflow_dispatch button for manual triggering -- useful
+# for verifying the auto-update round-trip without cutting a fresh release,
+# or for backfilling a release whose original `release: published` event
+# never reached the workflow (rare but possible).
+#
+# See uw-loci/qupath-catalog-mikenelson/MAINTAINERS.md for the full auto-update flow, the
+# org-level CATALOG_DISPATCH_TOKEN secret it uses, and recovery steps if
+# a dispatch fails.
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to dispatch (default: latest published release)"
+        required: false
 
 jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release tag and asset URL
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              TAG=$(gh release view --repo "${{ github.repository }}" --json tagName --jq '.tagName')
+            fi
+            ASSETS_JSON=$(gh release view "$TAG" --repo "${{ github.repository }}" --json assets --jq '.assets')
+          else
+            TAG="${{ github.event.release.tag_name }}"
+            ASSETS_JSON='${{ toJSON(github.event.release.assets) }}'
+          fi
+          # Prefer *-all.jar (shadow jar, the standard QuPath extension asset).
+          # Fall back to any *.jar so repos that don't yet ship a shadow jar
+          # still work; the catalog-side bump_catalog.py just stores whatever
+          # URL we send, so consistency with the existing main_url is more
+          # important than the suffix.
+          ASSET_URL=$(echo "$ASSETS_JSON" | jq -r '
+            ([.[] | select(.name | endswith("-all.jar"))][0]?.browser_download_url
+             // [.[] | select(.name | endswith(".jar"))][0]?.browser_download_url
+             // empty)')
+          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+            echo "::error::No .jar asset found on release $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "Resolved: tag=$TAG asset=$ASSET_URL"
+
       - name: Send release event to catalog
         env:
           GH_TOKEN: ${{ secrets.CATALOG_DISPATCH_TOKEN }}
         run: |
-          ASSET_URL=$(echo '${{ toJSON(github.event.release.assets) }}' \
-            | jq -r '[.[] | select(.name | endswith("-all.jar"))][0].browser_download_url')
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "::error::No '*-all.jar' asset found on release ${{ github.event.release.tag_name }}"
-            exit 1
-          fi
+          set -euo pipefail
           gh api repos/uw-loci/qupath-catalog-mikenelson/dispatches \
             -f event_type=extension-release \
             -F "client_payload[repo]=${{ github.repository }}" \
-            -F "client_payload[tag]=${{ github.event.release.tag_name }}" \
-            -F "client_payload[asset_url]=$ASSET_URL"
+            -F "client_payload[tag]=${{ steps.rel.outputs.tag }}" \
+            -F "client_payload[asset_url]=${{ steps.rel.outputs.asset_url }}"
