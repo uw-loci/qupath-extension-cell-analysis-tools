@@ -8,7 +8,7 @@ plugins {
 qupathExtension {
     name = "qupath-extension-cell-analysis-tools"
     group = "io.github.uw-loci"
-    version = "0.2.3"
+    version = "0.2.4"
     description = "QP-CAT: Cell Analysis Tools for QuPath. Python-powered clustering, phenotyping, classification, and spatial analysis for multiplexed imaging data."
     automaticModule = "io.github.uw-loci.extension.qpcat"
 }
@@ -33,7 +33,7 @@ dependencies {
     shadow(libs.gson)
 
     // Appose for embedded Java-Python IPC with shared memory
-    implementation("org.apposed:appose:0.10.0")
+    implementation("org.apposed:appose:0.11.0")
 
     shadow(libs.bundles.groovy)
 
