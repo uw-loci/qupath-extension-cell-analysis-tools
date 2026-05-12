@@ -20,12 +20,13 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 7. [Using Auto-Thresholding](#7-using-auto-thresholding)
 8. [Extracting Foundation Model Features](#8-extracting-foundation-model-features)
 9. [Zero-Shot Phenotyping](#9-zero-shot-phenotyping)
-10. [Managing Clusters (Rename/Merge)](#10-managing-clusters-renamemerge)
-11. [Autoencoder Cell Classifier (TEST)](#11-test-autoencoder-cell-classifier)
-12. [Exporting AnnData](#12-exporting-anndata)
-13. [Saving and Loading Configurations](#13-saving-and-loading-configurations)
-14. [Viewing the Python Console](#14-viewing-the-python-console)
-15. [Reviewing the Operation Audit Trail](#15-reviewing-the-operation-audit-trail)
+10. [Explaining Clusters with an LLM (Beta)](#10-explaining-clusters-with-an-llm-beta)
+11. [Managing Clusters (Rename/Merge)](#11-managing-clusters-renamemerge)
+12. [Autoencoder Cell Classifier (TEST)](#12-test-autoencoder-cell-classifier)
+13. [Exporting AnnData](#13-exporting-anndata)
+14. [Saving and Loading Configurations](#14-saving-and-loading-configurations)
+15. [Viewing the Python Console](#15-viewing-the-python-console)
+16. [Reviewing the Operation Audit Trail](#16-reviewing-the-operation-audit-trail)
 
 ---
 
@@ -271,7 +272,161 @@ Assign cell phenotypes using natural language text prompts and the BiomedCLIP vi
 
 ---
 
-## 10. Managing Clusters (Rename/Merge)
+## 10. Explaining Clusters with an LLM [Beta]
+
+Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
+
+This feature is marked **[Beta]** for v1. The prompt template, output JSON shape, and audit-log row format may evolve in v1.1.
+
+### When to use this feature
+
+- **vs Zero-Shot Phenotyping (BiomedCLIP)** -- BiomedCLIP labels *individual cells* from pixel tiles; this labels *clusters* from marker statistics. The two are complementary -- if both run on the same project, comparing them is itself useful: agreement is reassuring, disagreement is a flag to investigate (often a low-quality cluster, a faint marker, or a tissue artifact)
+- **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
+- **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
+- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude 3.5 Sonnet on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
+
+### Requirements
+
+Choose one of:
+
+- **Anthropic Claude** -- a current Anthropic API key from [console.anthropic.com](https://console.anthropic.com/). Pay-as-you-go (~$0.003-0.015 per cluster set in current Sonnet pricing; see *Cost expectations* below).
+- **A running Ollama instance** -- [Ollama](https://ollama.com/) installed locally (or reachable on your network) with at least one chat model pulled. Recommended models: `llama3.1:8b` (4-5 GB, fast, decent), `qwen2.5:14b` (~9 GB, more accurate), or any other model you trust. No API costs; no data leaves your machine.
+
+OpenAI is **not** supported in v1.
+
+### Quick Start
+
+1. Open an image (or project), run **Run Clustering...** to completion
+2. In the results dialog, open the **Cluster Explainer (LLM) [Beta]** tab
+3. In the tab itself, select a provider, model, and (for Anthropic) paste your API key
+4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model
+5. Read the table: suggested phenotype, confidence, supporting markers, one-paragraph rationale per cluster
+
+The results are also persisted to `SavedClusteringResult` so reopening past results shows the same table without re-paying the API call.
+
+### Provider Setup
+
+<details>
+<summary><strong>Anthropic Claude (cloud, paid)</strong></summary>
+
+1. Go to [console.anthropic.com](https://console.anthropic.com/), create an account if needed, and create a new API key
+2. In the explainer tab, set **Provider** to "Anthropic"
+3. Set **Model** to the default `claude-3-5-sonnet-latest` (or a different Claude model from the dropdown)
+4. Paste your API key into the **API Key** field. The key is held in memory only for this QuPath session and is never written to disk
+5. Click **Run Explainer**
+
+**Environment variable shortcut:** set `QPCAT_ANTHROPIC_KEY=<your-key>` before launching QuPath. The explainer tab will show the key as masked text and you can leave the field alone. This is the recommended setup for shared workstations where you want the key to follow your user account rather than the QuPath GUI.
+
+**Note:** the API key field is intentionally session-scoped -- there is no "remember this key" checkbox. Re-enter (or rely on the env var) each session. If this becomes painful, please file an issue; an OS-keychain integration is a candidate for v1.1.
+
+</details>
+
+<details>
+<summary><strong>Ollama (local, free)</strong></summary>
+
+1. Install [Ollama](https://ollama.com/) on your machine (or a machine reachable from this one)
+2. Pull a chat model: `ollama pull llama3.1:8b` (or any other model)
+3. Confirm Ollama is running: `curl http://localhost:11434/api/tags` should list your installed models
+4. In the explainer tab, set **Provider** to "Ollama"
+5. The **Endpoint** field is pre-populated with `http://localhost:11434` -- the standard Ollama default. Change it only if your Ollama server runs on a different host or port
+6. Set **Model** to the exact tag you pulled (e.g. `llama3.1:8b`). The dropdown will be pre-populated with whatever the endpoint reports; you can also type a tag manually
+7. Click **Run Explainer**
+
+**Tips:**
+- Quality varies widely by model. A 7-8B parameter model is usually good enough for a "what cell type is this cluster" question; a 1-3B model often hallucinates marker associations
+- The first call after `ollama pull` may be slow while the model warms up; subsequent calls are typically 5-15 seconds
+- Remote Ollama is fine: set the endpoint to `http://<host>:11434`. Be aware that traffic is unencrypted by default; restrict access at the network level
+
+</details>
+
+### What the LLM Sees
+
+The prompt contains, per cluster:
+
+- The cluster id (e.g. `Cluster 3`) and cell count
+- The top-N (default 10) markers by Wilcoxon score, each with score, log fold change, and adjusted p-value
+- The cluster-by-marker mean expression table for those markers (so the LLM can see "this cluster is high in CD8 and low in CD20" without needing to compute it)
+
+The prompt **does not** contain:
+- Pixel data of any kind
+- Individual cell measurements
+- Image metadata, file names, or paths
+- Patient identifiers, sample names, or any project metadata
+- Spatial coordinates of cells
+- Anything from QuPath beyond the per-cluster summary statistics
+
+You can see the exact prompt that was sent by opening the audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` and finding the `=== LLM EXPLAIN ===` entry. The prompt is reproduced verbatim in the indented `Prompt:` block. Both the Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload is logged, so the audit trail never contains the API key.
+
+### Interpreting the Output
+
+Each row of the result table has:
+
+| Column | Meaning |
+|---|---|
+| **Cluster** | The cluster id (`Cluster 0`, `Cluster 1`, ...) |
+| **Suggested phenotype** | The LLM's primary phenotype guess (e.g. "CD8+ cytotoxic T lymphocyte"). May show **(no suggestion)** -- see "Refused-to-guess rows" below |
+| **Confidence** | One of `high`, `medium`, `low` -- the LLM's self-reported confidence. Treat with skepticism; `high` does not mean correct |
+| **Supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
+| **Rationale** | One-paragraph explanation of why the LLM made this call |
+
+**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale column still explains *why* the model refused (e.g. "insufficient signal: top markers are mutually inconsistent and adjusted p-values are above 0.5 across the board"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer.
+
+**The LLM may be wrong.** Common failure modes:
+- **Marker name confusion** -- if your panel uses a non-standard naming convention (e.g. `MarkerCh01` or `tumor_marker_1`), the LLM has no way to know what the marker actually targets. Use real marker names in measurement columns whenever possible
+- **Tissue-context blindness** -- the LLM doesn't know what tissue you're imaging. A "CD8+ T cell" suggestion is reasonable in tumor microenvironment but suspicious in tonsil cortex. Pass the tissue type as a future parameter if/when the UI exposes it
+- **Plausible-but-wrong** -- an LLM will always produce *some* answer (when it doesn't refuse). A cluster with no biologically coherent marker signature may still get a confident label. Cross-check by inspecting the cluster's heatmap row and marker rankings yourself before trusting the suggestion
+- **Hallucinated marker functions** -- the LLM may attribute behavior to a marker that does not match published literature. The audit log captures the full rationale so you can spot-check claims
+
+**Cross-checking strategies:**
+- Open the **Marker Rankings** tab and verify the supporting markers are actually top-ranked for that cluster
+- If Zero-Shot Phenotyping has also been run on the project, see if the dominant BiomedCLIP label per cluster agrees with the LLM suggestion (perfect agreement is rare; broad agreement is reassuring)
+- For publication-tier analyses, treat LLM suggestions as **hypotheses to validate** with rule-based gating, not as final labels
+
+### Reproducibility Caveats
+
+LLM output is **not deterministic** unless the provider exposes a temperature=0 / seed control and the model has been pinned. By default:
+
+- Anthropic Claude with `temperature=0` is approximately deterministic but not guaranteed byte-identical across requests
+- Ollama with `temperature=0` and the same model snapshot is closer to deterministic, but the model can be re-pulled with a different hash at any time
+
+The audit log captures the full prompt and response for every call. For a paper-grade trail:
+
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-3-5-sonnet-20241022`)
+2. Record the **prompt template version** (e.g. `cluster_phenotype_v1`)
+3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
+
+The goal is **reproducibility of input** -- anyone reading your paper can run the same prompt against the same model and judge the answer for themselves. Reproducibility of *output* is not a property the LLM provides.
+
+### Cost Expectations
+
+One **Run Explainer** click is one LLM call with all clusters batched into the same prompt. Rough order-of-magnitude per click (Anthropic, current Sonnet pricing):
+
+| Clusters | Top markers per cluster | Approx. input tokens | Approx. output tokens | Approx. cost |
+|---|---|---|---|---|
+| 5 | 10 | 1,500 | 800 | ~$0.005-0.01 |
+| 10 | 10 | 3,000 | 1,500 | ~$0.01-0.02 |
+| 20 | 10 | 6,000 | 3,000 | ~$0.02-0.05 |
+
+Pricing changes; the audit log captures the exact `Tokens used:` for every call, so you can monitor real spend. Ollama is free.
+
+A **Cancel** button is exposed during the in-flight call. Cancelled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
+
+### [Beta] notice
+
+This is the first feature in QP-CAT that calls a remote LLM API. The surface area is intentionally narrow for v1:
+
+- One prompt template (`cluster_phenotype_v1`); not user-editable yet
+- Two providers (Anthropic, Ollama); OpenAI deferred
+- One batched call per Run Explainer click; per-cluster async deferred
+- API key is session-scoped; OS-keychain integration deferred
+
+The shape of the audit-log entry, the result-table JSON, and the prompt template may change in v1.1 based on feedback. If you build downstream tooling against these surfaces, expect to adjust.
+
+Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets` in `run_llm_explainer.py`) redact `Authorization:` headers and `sk-ant-*` keys before any payload reaches the audit log -- a tested invariant covered by `LlmKeyRedactionTest`.
+
+---
+
+## 11. Managing Clusters (Rename/Merge)
 
 Organize cluster assignments after clustering.
 
@@ -288,7 +443,7 @@ Changes are applied immediately to detection objects.
 
 ---
 
-## 11. [TEST] Autoencoder Cell Classifier
+## 12. [TEST] Autoencoder Cell Classifier
 
 Train a VAE-based classifier on labeled cells, then apply across the project. This is a **test feature**.
 
@@ -362,7 +517,7 @@ All dialog settings (input mode, tile size, hyperparameters, label sources, augm
 
 ---
 
-## 12. Exporting AnnData
+## 13. Exporting AnnData
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 
@@ -384,7 +539,7 @@ print(adata)
 
 ---
 
-## 13. Saving and Loading Configurations
+## 14. Saving and Loading Configurations
 
 ### Clustering Configs
 
@@ -406,7 +561,7 @@ Rule sets are stored in `<project>/qpcat/phenotype_rules/`.
 
 ---
 
-## 14. Viewing the Python Console
+## 15. Viewing the Python Console
 
 Monitor Python-side output in real time.
 
@@ -420,7 +575,7 @@ Useful for diagnosing errors, monitoring long operations, and seeing detailed Py
 
 ---
 
-## 15. Reviewing the Operation Audit Trail
+## 16. Reviewing the Operation Audit Trail
 
 Every QP-CAT operation is logged to a persistent file in your project.
 

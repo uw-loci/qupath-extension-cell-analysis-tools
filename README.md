@@ -21,6 +21,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 - **No-setup install** -- one click downloads and configures the full Python environment for you. No conda, no command line, no environment fights. ~1.5-2.5 GB download, ~2.5 GB on disk
 - **Discover cell types without labels** -- automatic grouping of cells by their marker expression. Pick the algorithm that fits your question: Leiden or KMeans for first-pass discovery, HDBSCAN when you expect rare populations or noise, BANKSY when tissue architecture matters; plus Agglomerative, MiniBatch KMeans, and Gaussian Mixture for special cases
 - **Phenotype with plain-English prompts** -- type "exhausted T cell" or "tumor-associated macrophage" and the model labels matching cells, no training required (zero-shot via [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224), MIT License, Microsoft)
+- **Get a phenotype suggestion for each cluster, in plain English** [Beta] -- after clustering, push one button and the model reads each cluster's top markers, then proposes a cell-type label and a short rationale citing the markers it relied on. Useful when the panel is unfamiliar, when reviewing a student's clusters, or when writing up results. Bring your own key for Anthropic Claude, or point at a local Ollama endpoint for no-API-spend / offline use; the prompt and response are saved to the project audit log every time (LLM cluster explainer; Anthropic + Ollama providers)
 - **Annotate a few cells, classify the rest** *(test feature)* -- label a small subset of cells in QuPath and a variational autoencoder (VAE) extends those labels to every cell in the project. Learns from your marker measurements, from the actual image patch around each cell (optionally with a CellSighter-style cell-mask channel so the network knows which cell is "the" cell), or both combined
 - **Cluster on what cells look like, not just what markers say** -- pretrained vision models turn each tile into a numerical fingerprint of its morphology, so clusters can be driven by tissue appearance in addition to marker intensities. Useful when staining is variable, channels are limited, or morphology carries information your markers miss (H-optimus-0, Virchow, Hibou-B/L, Midnight, DINOv2-Large via [LazySlide](https://doi.org/10.1038/s41592-026-03044-7))
 - **Cleaner clusters via tissue context** -- optional pre-step that averages each cell's features with its spatial neighbors before clustering, so niches and tissue zones come out as connected regions instead of salt-and-pepper noise. Turns any of the algorithms above into a spatially-aware version (graph convolution smoothing)
@@ -42,6 +43,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 - **Disk space** ~2.5 GB for the Python environment
 - No GPU required -- all operations run on CPU (foundation model extraction benefits from GPU but works on CPU)
 - **HuggingFace account** (optional) -- required only for gated models (H-optimus-0, Virchow, Hibou); set your auth token in the dialog
+- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Beta]* feature. Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
 
@@ -266,6 +268,50 @@ Feature extraction is powered by [LazySlide](https://doi.org/10.1038/s41592-026-
 3. Each detection receives a classification matching the highest-scoring prompt
 
 BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does not require a HuggingFace auth token.
+
+</details>
+
+---
+
+<details>
+<summary><h2>Cluster Explainer (LLM) [Beta]</h2></summary>
+
+**Cluster results dialog > Cluster Explainer (LLM) [Beta] tab** turns each cluster's top-marker statistics into a plain-English phenotype suggestion with rationale. The LLM reads only the per-cluster marker rankings and cluster summary statistics -- no pixels, no cell-level data, no patient-identifiable information.
+
+This feature is marked **[Beta]** for v1: the surface area (prompt template, output JSON, audit-log row shape) may change in v1.1 based on user feedback. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
+
+### Providers
+
+| Provider | Pros | Cons | Default model |
+|---|---|---|---|
+| **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-3-5-sonnet-latest` |
+| **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
+
+OpenAI is intentionally **not** supported in v1.
+
+### How It Works
+
+1. After clustering completes (or after "View Past Results"), open the **Cluster Explainer (LLM) [Beta]** tab in the results dialog
+2. Pick a provider and model directly in the tab, and -- for Anthropic -- paste your API key
+3. Click **Run Explainer**. One LLM call is made with all clusters' Wilcoxon marker rankings + cell counts as input
+4. Results render as a per-cluster table: suggested phenotype, confidence band, top supporting markers, one-paragraph rationale
+5. The full prompt and full response are written to the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag
+
+### What the LLM Sees
+
+The LLM input is constructed from `ClusteringResult.markerRankingsJson` plus per-cluster cell counts and the cluster-by-marker mean expression table. Concretely, for each cluster:
+
+- Cluster id and cell count
+- Top-N (default 10) markers by Wilcoxon score, with score, log fold change, and adjusted p-value
+- Mean expression of those markers in this cluster vs. other clusters
+
+It does **not** see pixels, individual cell measurements, image metadata, patient identifiers, file paths, or anything from the QuPath project beyond the per-cluster statistics described above.
+
+### BYO Key Handling
+
+The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never serialized into `SavedClusteringResult`. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
+
+See [How-To Guide section 10](documentation/HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta) for the full workflow and [Best Practices](documentation/BEST_PRACTICES.md#when-to-use-the-llm-cluster-explainer) for guidance on when to trust the output.
 
 </details>
 
@@ -565,6 +611,12 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 - Use MiniBatch KMeans for datasets with >100,000 cells
 - Reduce the number of selected measurements
 - Consider clustering a subset (select detections within an annotation)
+
+### Cluster Explainer (LLM) issues
+
+The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, malformed response, Ollama endpoint down, Ollama model not pulled, request cancelled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
+
+See [`documentation/TROUBLESHOOTING_LLM_EXPLAINER.md`](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md) for the full list with what-you-see / what-it-means / what-to-do for every case.
 
 </details>
 

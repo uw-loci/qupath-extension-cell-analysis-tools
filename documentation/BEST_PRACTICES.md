@@ -15,10 +15,11 @@ Recommendations for getting the best results from cell clustering and phenotypin
 7. [Foundation Model Features vs Channel Measurements](#foundation-model-features-vs-channel-measurements)
 8. [Phenotyping Strategy](#phenotyping-strategy)
 9. [Zero-Shot vs Rule-Based Phenotyping](#zero-shot-vs-rule-based-phenotyping)
-10. [Spatial Analysis](#spatial-analysis)
-11. [Multi-Image Projects](#multi-image-projects)
-12. [Reproducibility](#reproducibility)
-13. [Common Pitfalls](#common-pitfalls)
+10. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
+11. [Spatial Analysis](#spatial-analysis)
+12. [Multi-Image Projects](#multi-image-projects)
+13. [Reproducibility](#reproducibility)
+14. [Common Pitfalls](#common-pitfalls)
 
 ---
 
@@ -309,6 +310,47 @@ A recommended workflow:
 - The model was trained on biomedical literature and may not perfectly match every tissue type
 - Confidence scores should be checked -- low-confidence assignments may be unreliable
 - Not deterministic across model versions if BiomedCLIP is updated upstream
+
+---
+
+## When to Use the LLM Cluster Explainer
+
+The LLM cluster explainer ([HOW_TO_GUIDE section 10](HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)) sits alongside Zero-Shot Phenotyping and Rule-Based Phenotyping as a third, complementary tool. It is the only one of the three that operates on **per-cluster statistics** rather than per-cell data.
+
+### When to Trust the LLM Output
+
+- **As a starting hypothesis** -- use the suggested phenotype to seed your own thinking, then verify the supporting markers against the cluster's heatmap row and marker ranking before adopting the label
+- **For exploration on unfamiliar panels** -- the LLM is most useful when you are not yet fluent in the marker vocabulary. It turns "what does CD163 mean again?" into a one-paragraph rationale
+- **For sanity-checking student work** -- a PI reviewing a clustering run can scan the LLM suggestions next to the marker rankings and quickly flag clusters that warrant a closer look
+
+### When to Cross-Check or Defer to Other Methods
+
+- **For publication-tier phenotype labels** -- prefer rule-based gating. Use the LLM suggestion to design your gating strategy; cite the rules, not the LLM, in your methods section
+- **When the suggestion is plausible but the markers don't support it** -- the LLM will produce confident answers for incoherent clusters (when it doesn't refuse outright). If the cluster's heatmap row is uniform or the top markers are biologically unrelated, ignore the suggestion and re-cluster instead
+- **When the LLM emits "(no suggestion)"** -- this is a deliberate refusal, not an error. The rationale column explains why; treat it as a useful flag that the cluster itself probably warrants a closer look before trusting any label
+- **When BiomedCLIP and the LLM explainer disagree** -- this is informative. Often one of: (a) the cluster is morphologically distinct but marker-flat (BiomedCLIP right), (b) the cluster is marker-rich but morphologically mixed (LLM right), (c) the cluster is poorly defined and both are guessing
+
+### Prompt-Shape Limitations
+
+The LLM sees **marker statistics, not individual cells**. This means:
+
+- It cannot tell you why a single outlier cell ended up in a cluster
+- It cannot reason about cell morphology (size, shape, texture) -- that information is not in the prompt
+- It cannot account for tissue type unless you tell it (v1 does not surface this)
+- It cannot validate the clustering itself -- it accepts the cluster boundaries QP-CAT gave it. If the clustering is bad, the LLM's confident labels for those bad clusters will also be bad
+
+If you need cell-level or morphology-level reasoning, run BiomedCLIP zero-shot phenotyping in parallel and compare.
+
+### Audit-Log Discipline for Publications
+
+Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail is safe to share but does not contain the API key. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
+
+- **Provider and exact model string** (e.g. `claude-3-5-sonnet-20241022`, not just "Claude")
+- **Prompt template version** as logged (currently `cluster_phenotype_v1`)
+- **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
+- **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories
+
+Archive the audit log alongside your other reproducibility artifacts (clustering configs, rule sets, exported AnnData). The plain-text format is intentionally diff-friendly and version-control-friendly.
 
 ---
 
