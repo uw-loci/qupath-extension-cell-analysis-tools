@@ -280,6 +280,8 @@ BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does 
 
 This feature is marked **[Beta]** for v1: the surface area (prompt template, output JSON, audit-log row shape) may change in v1.1 based on user feedback. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See `documentation/HOW_TO_GUIDE.md` Section 10 for the workflow.
+
 ### Providers
 
 | Provider | Pros | Cons | Default model |
