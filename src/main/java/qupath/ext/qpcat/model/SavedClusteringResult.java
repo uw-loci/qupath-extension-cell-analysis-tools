@@ -2,6 +2,7 @@ package qupath.ext.qpcat.model;
 
 import qupath.lib.common.GeneralTools;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +37,9 @@ public class SavedClusteringResult {
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
+
+    // LLM Cluster Explainer (optional; null on older saves)
+    private LlmExplanationsBundle llmExplanations;
 
     // Provenance
     private String extensionVersion;
@@ -104,6 +108,15 @@ public class SavedClusteringResult {
     public String getSpatialAutocorrJson() { return spatialAutocorrJson; }
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
 
+    // --- LLM Cluster Explainer ---
+    public LlmExplanationsBundle getLlmExplanations() { return llmExplanations; }
+    public void setLlmExplanations(LlmExplanationsBundle bundle) { this.llmExplanations = bundle; }
+    public boolean hasLlmExplanations() {
+        return llmExplanations != null
+                && llmExplanations.getExplanations() != null
+                && !llmExplanations.getExplanations().isEmpty();
+    }
+
     // --- Provenance ---
     public String getExtensionVersion() { return extensionVersion; }
     public void setExtensionVersion(String v) { this.extensionVersion = v; }
@@ -171,5 +184,43 @@ public class SavedClusteringResult {
     public String getSummary() {
         return nClusters + " clusters, " + nCells + " cells"
                 + (algorithm != null ? " (" + algorithm + ")" : "");
+    }
+
+    /**
+     * Serializable bundle of saved LLM Cluster Explainer output.
+     * <p>
+     * Gson-friendly: every field defaults to a sensible empty value on load
+     * when missing from older saves. The API key is intentionally absent --
+     * only the response is persisted.
+     */
+    public static class LlmExplanationsBundle {
+        private String provider;            // e.g. "ANTHROPIC", "OLLAMA"
+        private String model;
+        private String promptTemplate;      // e.g. "cluster_phenotype_v1"
+        private String promptHash;          // sha256 of the rendered prompt
+        private String timestamp;           // ISO-8601
+        private List<ClusterExplanation> explanations;
+
+        public LlmExplanationsBundle() {}
+
+        public String getProvider() { return provider; }
+        public void setProvider(String provider) { this.provider = provider; }
+
+        public String getModel() { return model; }
+        public void setModel(String model) { this.model = model; }
+
+        public String getPromptTemplate() { return promptTemplate; }
+        public void setPromptTemplate(String promptTemplate) { this.promptTemplate = promptTemplate; }
+
+        public String getPromptHash() { return promptHash; }
+        public void setPromptHash(String promptHash) { this.promptHash = promptHash; }
+
+        public String getTimestamp() { return timestamp; }
+        public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+
+        public List<ClusterExplanation> getExplanations() { return explanations; }
+        public void setExplanations(List<ClusterExplanation> explanations) {
+            this.explanations = explanations;
+        }
     }
 }

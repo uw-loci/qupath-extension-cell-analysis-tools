@@ -26,7 +26,7 @@ logger = logging.getLogger("qpcat.appose")
 # or scripts change in a way that requires a new environment, bump this version.
 # The Java side checks this after init to detect stale environments that
 # rebuilt from pixi.toml changes but may still have outdated pip packages.
-ENVIRONMENT_VERSION = "0.2.3"
+ENVIRONMENT_VERSION = "0.2.6"
 
 # Capability flags exported to the Java side via the verification task in
 # ApposeClusteringService.initialize(). When a probed package is missing,

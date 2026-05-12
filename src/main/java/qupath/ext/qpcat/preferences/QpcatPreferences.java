@@ -18,6 +18,7 @@ public final class QpcatPreferences {
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
     private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";
     private static final String CATEGORY_ZERO_SHOT = "QP-CAT: Zero-Shot Phenotyping";
+    private static final String CATEGORY_LLM = "QP-CAT: [Beta] LLM Cluster Explainer";
     private static final String CATEGORY_GENERAL = "QP-CAT";
 
     private QpcatPreferences() {}
@@ -202,6 +203,27 @@ public final class QpcatPreferences {
     private static final DoubleProperty zsMinSimilarity = PathPrefs.createPersistentPreference(
             "qpcat.zs.minSimilarity", 0.1);
 
+    // ==================== LLM Cluster Explainer ====================
+    // The API key is intentionally NOT persisted (in-memory + env-var fallback only).
+
+    private static final StringProperty llmProvider = PathPrefs.createPersistentPreference(
+            "qpcat.llm.provider", "NONE");
+
+    private static final StringProperty llmAnthropicModel = PathPrefs.createPersistentPreference(
+            "qpcat.llm.anthropicModel", "claude-sonnet-4-5");
+
+    private static final StringProperty llmOllamaModel = PathPrefs.createPersistentPreference(
+            "qpcat.llm.ollamaModel", "llama3.1:8b");
+
+    private static final StringProperty llmOllamaEndpoint = PathPrefs.createPersistentPreference(
+            "qpcat.llm.ollamaEndpoint", "http://localhost:11434");
+
+    private static final IntegerProperty llmTopMarkers = PathPrefs.createPersistentPreference(
+            "qpcat.llm.topMarkers", 10);
+
+    private static final IntegerProperty llmTimeoutSec = PathPrefs.createPersistentPreference(
+            "qpcat.llm.timeoutSec", 60);
+
     // ==================== General / Services ====================
 
     private static final IntegerProperty taskMaxRetries = PathPrefs.createPersistentPreference(
@@ -366,6 +388,20 @@ public final class QpcatPreferences {
     public static void setZsBatchSize(int v) { zsBatchSize.set(v); }
     public static double getZsMinSimilarity() { return zsMinSimilarity.get(); }
     public static void setZsMinSimilarity(double v) { zsMinSimilarity.set(v); }
+
+    // LLM Cluster Explainer getters / setters
+    public static String getLlmProvider() { return llmProvider.get(); }
+    public static void setLlmProvider(String v) { llmProvider.set(v); }
+    public static String getLlmAnthropicModel() { return llmAnthropicModel.get(); }
+    public static void setLlmAnthropicModel(String v) { llmAnthropicModel.set(v); }
+    public static String getLlmOllamaModel() { return llmOllamaModel.get(); }
+    public static void setLlmOllamaModel(String v) { llmOllamaModel.set(v); }
+    public static String getLlmOllamaEndpoint() { return llmOllamaEndpoint.get(); }
+    public static void setLlmOllamaEndpoint(String v) { llmOllamaEndpoint.set(v); }
+    public static int getLlmTopMarkers() { return llmTopMarkers.get(); }
+    public static void setLlmTopMarkers(int v) { llmTopMarkers.set(v); }
+    public static int getLlmTimeoutSec() { return llmTimeoutSec.get(); }
+    public static void setLlmTimeoutSec(int v) { llmTimeoutSec.set(v); }
 
     // Service getters
     public static int getTaskMaxRetries() { return taskMaxRetries.get(); }
@@ -578,6 +614,54 @@ public final class QpcatPreferences {
                 .category(CATEGORY_ZERO_SHOT)
                 .description("Minimum cosine similarity for phenotype assignment (default: 0.1). "
                         + "Cells below this threshold are classified as 'Unknown'. Range: 0.0-1.0.")
+                .build());
+
+        // --- LLM Cluster Explainer ---
+
+        items.add(new PropertyItemBuilder<>(llmProvider, String.class)
+                .name("Provider")
+                .category(CATEGORY_LLM)
+                .description("LLM provider used by the Cluster Explainer tab "
+                        + "(NONE / ANTHROPIC / OLLAMA). Pick a provider, then enter "
+                        + "your API key or Ollama endpoint inside the tab itself. "
+                        + "The API key is held in memory only and is never written "
+                        + "to this preferences file.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(llmAnthropicModel, String.class)
+                .name("Anthropic Model")
+                .category(CATEGORY_LLM)
+                .description("Anthropic model id used when Provider is ANTHROPIC "
+                        + "(default: claude-sonnet-4-5).")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(llmOllamaModel, String.class)
+                .name("Ollama Model")
+                .category(CATEGORY_LLM)
+                .description("Local Ollama model id used when Provider is OLLAMA "
+                        + "(default: llama3.1:8b). Run 'ollama pull <name>' first.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(llmOllamaEndpoint, String.class)
+                .name("Ollama Endpoint")
+                .category(CATEGORY_LLM)
+                .description("Base URL of your local Ollama server "
+                        + "(default: http://localhost:11434).")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(llmTopMarkers, Integer.class)
+                .name("Top Markers Per Cluster")
+                .category(CATEGORY_LLM)
+                .description("Default number of top markers per cluster sent in the "
+                        + "prompt (default: 10). The dialog clamps to the number of "
+                        + "markers actually available in the marker rankings JSON.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(llmTimeoutSec, Integer.class)
+                .name("Request Timeout (seconds)")
+                .category(CATEGORY_LLM)
+                .description("Timeout for a single LLM HTTP request "
+                        + "(default: 60). Increase for slow local models on CPU.")
                 .build());
 
         // --- General ---

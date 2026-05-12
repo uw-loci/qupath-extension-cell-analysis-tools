@@ -952,6 +952,22 @@ public class ClusteringDialog {
             tabPane.getTabs().add(tab);
         }
 
+        // LLM Cluster Explainer tab (Beta) -- text-analysis sibling of the
+        // marker rankings tab. Only built when marker rankings are present;
+        // see ClusterExplainerPanel for state diagram and design contract.
+        if (result.hasMarkerRankings()) {
+            ClusterExplainerPanel explainerPanel = new ClusterExplainerPanel(result);
+            Tab tab = new Tab("Cluster Explainer (LLM) [Beta]",
+                    wrapWithGuide(explainerPanel.build(),
+                    "Suggests cell-type names for each cluster from its top markers, "
+                    + "using a remote or local LLM. Suggestions are starting points -- "
+                    + "always check against the Marker Rankings tab and your domain "
+                    + "knowledge. The API key is held in memory only; you re-enter it "
+                    + "each QuPath session, or set QPCAT_ANTHROPIC_KEY in your shell."));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
         // Plot tabs (PNGs from Python)
         if (result.hasPlots()) {
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {

@@ -136,6 +136,92 @@ public class OperationLogger {
     }
 
     /**
+     * Log an operation that carries one or more "large" multi-line bodies
+     * (e.g. an LLM prompt + response) alongside the regular parameter map.
+     * <p>
+     * Behaviour matches {@link #logOperation(String, Map, String, long)} for the
+     * one-liner parameters and result/duration, then appends each named block
+     * indented two spaces deep:
+     *
+     * <pre>
+     * === LLM EXPLAIN === 2026-05-12 14:30:42
+     *   QPCAT version: 0.2.5
+     *   QuPath version: 0.7.0
+     *   Provider: ANTHROPIC
+     *   Model: claude-sonnet-4-5
+     *   Prompt template: cluster_phenotype_v1
+     *   Prompt hash: 5e9f2c...
+     *   Cluster ids: 0, 1, 2, 3, 4
+     *   Token count: 1234
+     *   Result: 5 clusters explained
+     *   Duration: 12.3s
+     *   Prompt:
+     *     {indented body}
+     *   Response:
+     *     {indented body}
+     * </pre>
+     *
+     * Each entry of {@code blocks} renders as one labelled block; iteration
+     * order is preserved. {@code null} or empty values render as an empty
+     * "(empty)" placeholder so the audit trail still records that the slot
+     * existed. Bodies are emitted verbatim except that every line gets two
+     * spaces of indent.
+     *
+     * @param operationType  short label (e.g. "LLM EXPLAIN")
+     * @param parameters     ordered map of parameter names to one-line values
+     * @param blocks         ordered map of block names (no trailing colon)
+     *                       to multi-line body strings (each rendered indented)
+     * @param resultSummary  one-line result description (may be null)
+     * @param durationMs     wall-clock duration in milliseconds (-1 if unknown)
+     */
+    public synchronized void logLargeOperation(String operationType,
+                                                Map<String, String> parameters,
+                                                Map<String, String> blocks,
+                                                String resultSummary,
+                                                long durationMs) {
+        Path logFile = resolveLogFile();
+        if (logFile == null) return;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== ").append(operationType).append(" === ")
+                .append(LocalDateTime.now().format(TIMESTAMP_FMT)).append("\n");
+        appendVersionInfo(sb);
+
+        if (parameters != null) {
+            for (Map.Entry<String, String> entry : parameters.entrySet()) {
+                sb.append("  ").append(entry.getKey()).append(": ")
+                        .append(entry.getValue()).append("\n");
+            }
+        }
+
+        if (resultSummary != null) {
+            sb.append("  Result: ").append(resultSummary).append("\n");
+        }
+
+        if (durationMs >= 0) {
+            sb.append("  Duration: ").append(formatDuration(durationMs)).append("\n");
+        }
+
+        if (blocks != null) {
+            for (Map.Entry<String, String> block : blocks.entrySet()) {
+                sb.append("  ").append(block.getKey()).append(":\n");
+                String body = block.getValue();
+                if (body == null || body.isEmpty()) {
+                    sb.append("    (empty)\n");
+                } else {
+                    for (String line : body.split("\n", -1)) {
+                        sb.append("    ").append(line).append("\n");
+                    }
+                }
+            }
+        }
+
+        sb.append("\n");
+
+        appendToFile(logFile, sb.toString());
+    }
+
+    /**
      * Log a simple event (e.g. config save/load, environment setup).
      */
     public synchronized void logEvent(String eventType, String description) {
