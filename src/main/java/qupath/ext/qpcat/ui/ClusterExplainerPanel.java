@@ -176,12 +176,15 @@ public class ClusterExplainerPanel {
                 "Your Anthropic API key (starts with 'sk-ant-...'). Held in "
                 + "memory only; not written to disk. Re-enter each QuPath "
                 + "session, or set QPCAT_ANTHROPIC_KEY in your environment."));
+        apiKeyField.setAccessibleText("Anthropic API key, password field, "
+                + "in-memory only");
         apiKeyField.textProperty().addListener((obs, oldV, newV) -> refreshState());
 
         Button clearKeyBtn = new Button("Clear");
         clearKeyBtn.setTooltip(new Tooltip(
                 "Wipe the API key from memory. The field empties and the key "
                 + "cannot be sent again until you re-enter it."));
+        clearKeyBtn.setAccessibleText("Clear API key from memory");
         clearKeyBtn.setOnAction(e -> {
             apiKeyField.clear();
             keyStatusLabel.setText("(in-memory)");
@@ -273,6 +276,7 @@ public class ClusterExplainerPanel {
                 "Send the prompt to the chosen provider and wait for the "
                 + "response. The dialog stays usable; the call runs on a "
                 + "background thread."));
+        runBtn.setAccessibleText("Run LLM explainer");
 
         cancelBtn = new Button("Cancel");
         cancelBtn.setDisable(true);
@@ -281,11 +285,13 @@ public class ClusterExplainerPanel {
                 "Stop waiting for the current LLM response. Already-spent "
                 + "tokens cannot be refunded; nothing will be applied to "
                 + "the project."));
+        cancelBtn.setAccessibleText("Cancel in-flight LLM call");
 
         statusLabel = new Label("Ready.");
         progressBar = new ProgressBar(0);
         progressBar.setPrefWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
+        progressBar.setAccessibleText("LLM call progress indicator");
 
         HBox scopeRow = new HBox(8,
                 new Label("Clusters:"), scopeRadioAll, scopeRadioOne, clusterCombo);
@@ -358,12 +364,21 @@ public class ClusterExplainerPanel {
                 "Copy the results table to the clipboard as tab-separated "
                 + "values, ready to paste into a spreadsheet or report."));
         copyTsvBtn.setOnAction(e -> copyTsvToClipboard());
+        // Disable until at least one result row exists -- copying an empty
+        // table is never the user's intent and the prior "Copied 0 rows"
+        // status message was misleading.
+        copyTsvBtn.disableProperty().bind(
+                javafx.beans.binding.Bindings.isEmpty(tableRows));
 
         regenSelectedBtn = new Button("Regenerate selected cluster");
         regenSelectedBtn.setTooltip(new Tooltip(
                 "Re-run the explainer on the currently-selected cluster "
                 + "only. The new result replaces the old row."));
         regenSelectedBtn.setOnAction(e -> onRegenSelected());
+        // Disable until a row is selected -- regenerating "nothing" was
+        // previously a silent no-op that surfaced as a status label.
+        regenSelectedBtn.disableProperty().bind(
+                resultsTable.getSelectionModel().selectedItemProperty().isNull());
 
         HBox btnRow = new HBox(8, copyTsvBtn, regenSelectedBtn);
         btnRow.setAlignment(Pos.CENTER_LEFT);
