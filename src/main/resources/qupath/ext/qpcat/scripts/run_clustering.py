@@ -631,6 +631,13 @@ if has_spatial and n_clusters_found > 1:
         _spatial_plot_dir = None
     _spatial_persist = bool(pref_spatial_persist_plots) and bool(_spatial_plot_dir)
 
+    # Pre-init plot_paths so the spatial-stats helpers' on-disk PNGs can
+    # be advertised to SavedClusteringResult.plotPaths under the keys
+    # Feature B's PlotKind enum consumes (ripley_k, ripley_l, geary_c,
+    # cooc_pairwise, cooc_one_vs_rest). Section 7 reuses the same dict
+    # below and emits it via task.outputs['plot_paths'].
+    plot_paths = {}
+
     if pref_enable_ripley:
         task.update("Computing Ripley K and L...")
         _qpcat_spatial.run_ripley(
@@ -638,6 +645,15 @@ if has_spatial and n_clusters_found > 1:
             graph_type=pref_spatial_graph_type,
             plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
             persist_plots=_spatial_persist)
+        if _spatial_persist:
+            _ripley_path = os.path.join(_spatial_plot_dir,
+                                          _qpcat_spatial.PLOT_FILE_RIPLEY)
+            if os.path.exists(_ripley_path):
+                # The single PNG carries both K and L panels; expose under
+                # both PlotKind savedPlotKey values so either checkbox in
+                # Feature B's exporter finds it.
+                plot_paths['ripley_k'] = _ripley_path
+                plot_paths['ripley_l'] = _ripley_path
 
     if pref_enable_geary:
         task.update("Computing Geary's C...")
@@ -647,6 +663,11 @@ if has_spatial and n_clusters_found > 1:
             graph_type=pref_spatial_graph_type,
             plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
             persist_plots=_spatial_persist)
+        if _spatial_persist:
+            _geary_path = os.path.join(_spatial_plot_dir,
+                                         _qpcat_spatial.PLOT_FILE_GEARY)
+            if os.path.exists(_geary_path):
+                plot_paths['geary_c'] = _geary_path
 
     if pref_enable_co_occurrence_pairwise:
         task.update("Computing co-occurrence (pairwise)...")
@@ -656,6 +677,11 @@ if has_spatial and n_clusters_found > 1:
             graph_type=pref_spatial_graph_type,
             plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
             persist_plots=_spatial_persist)
+        if _spatial_persist:
+            _cooc_p_path = os.path.join(_spatial_plot_dir,
+                                          _qpcat_spatial.PLOT_FILE_COOC_PAIRWISE)
+            if os.path.exists(_cooc_p_path):
+                plot_paths['cooc_pairwise'] = _cooc_p_path
 
     if pref_enable_co_occurrence_one_vs_rest:
         task.update("Computing co-occurrence (one-vs-rest)...")
@@ -665,6 +691,11 @@ if has_spatial and n_clusters_found > 1:
             graph_type=pref_spatial_graph_type,
             plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
             persist_plots=_spatial_persist)
+        if _spatial_persist:
+            _cooc_o_path = os.path.join(_spatial_plot_dir,
+                                          _qpcat_spatial.PLOT_FILE_COOC_ONE_VS_REST)
+            if os.path.exists(_cooc_o_path):
+                plot_paths['cooc_one_vs_rest'] = _cooc_o_path
 
     if any_v1_stats:
         # Surface the resolved adaptive count to the Java side so the
@@ -686,7 +717,12 @@ if do_plots and plot_dir and can_analyze:
     import matplotlib.pyplot as plt
 
     os.makedirs(plot_dir, exist_ok=True)
-    plot_paths = {}
+    # plot_paths was pre-initialised in section 6c when spatial-stats ran,
+    # so we either inherit the spatial PNG entries or start fresh here.
+    try:
+        plot_paths  # noqa: F821 -- name probe
+    except NameError:
+        plot_paths = {}
 
     # Dotplot with dendrogram -- fraction expressing + mean expression per cluster
     try:
@@ -794,6 +830,15 @@ if do_plots and plot_dir and can_analyze:
 
     if plot_paths:
         task.outputs['plot_paths'] = json.dumps(plot_paths)
+else:
+    # do_plots was False but spatial-stats may still have populated
+    # plot_paths in section 6c -- emit it so Feature B can find the
+    # spatial PNGs even when matplotlib plots are disabled.
+    try:
+        if plot_paths:
+            task.outputs['plot_paths'] = json.dumps(plot_paths)
+    except NameError:
+        pass
 
 # 8. Package core outputs
 task.update("Packaging results...", current=6, maximum=6)

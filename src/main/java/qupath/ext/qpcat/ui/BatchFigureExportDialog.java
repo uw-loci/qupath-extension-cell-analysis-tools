@@ -174,10 +174,12 @@ public class BatchFigureExportDialog {
     private TitledPane buildOutputDirSection() {
         outputDirField.setEditable(false);
         outputDirField.setPromptText("Pick an output folder");
+        outputDirField.setAccessibleText("Output folder for exported figures");
         outputDirField.setTooltip(
                 tip("Folder where exported figures will be saved. Subfolders are not created automatically."));
 
         Button browseBtn = new Button("Browse...");
+        browseBtn.setAccessibleText("Browse for output folder");
         browseBtn.setTooltip(tip("Pick the output folder."));
         browseBtn.setOnAction(e -> {
             DirectoryChooser chooser = new DirectoryChooser();
@@ -187,6 +189,7 @@ public class BatchFigureExportDialog {
         });
 
         Button projectBtn = new Button("Project");
+        projectBtn.setAccessibleText("Use project default output folder");
         projectBtn.setTooltip(tip(
                 "Use the project's default qpcat/figures/<date>/ folder (created if missing)."));
         projectBtn.setOnAction(e -> {
@@ -223,6 +226,9 @@ public class BatchFigureExportDialog {
         scopeSubsetRadio.setToggleGroup(group);
         scopeCurrentRadio.setSelected(true);
 
+        scopeCurrentRadio.setAccessibleText("Scope: current image only");
+        scopeAllRadio.setAccessibleText("Scope: all images in project");
+        scopeSubsetRadio.setAccessibleText("Scope: subset of images");
         scopeCurrentRadio.setTooltip(tip(
                 "Export figures only from the image currently open in the viewer."));
         scopeAllRadio.setTooltip(tip(
@@ -230,6 +236,7 @@ public class BatchFigureExportDialog {
         scopeSubsetRadio.setTooltip(tip("Pick specific images from the list below."));
 
         Button selectAllBtn = new Button("Select All");
+        selectAllBtn.setAccessibleText("Select all visible images");
         selectAllBtn.setTooltip(tip("Check every visible image in the list."));
         selectAllBtn.setOnAction(e -> {
             for (ImageEntryItem item : imageListView.getItems()) item.selected.set(true);
@@ -238,6 +245,7 @@ public class BatchFigureExportDialog {
         });
 
         Button deselectAllBtn = new Button("Deselect All");
+        deselectAllBtn.setAccessibleText("Deselect all visible images");
         deselectAllBtn.setTooltip(tip("Uncheck every visible image in the list."));
         deselectAllBtn.setOnAction(e -> {
             for (ImageEntryItem item : imageListView.getItems()) item.selected.set(false);
@@ -246,6 +254,7 @@ public class BatchFigureExportDialog {
         });
 
         imageFilterField.setPromptText("Filter by image name");
+        imageFilterField.setAccessibleText("Filter images by name");
         imageFilterField.setTooltip(tip("Show only images whose name contains this text."));
 
         imageListView.setCellFactory(CheckBoxListCell.forListView(
@@ -276,13 +285,38 @@ public class BatchFigureExportDialog {
 
     private TitledPane buildPlotsSection() {
         VBox matBox = new VBox(4);
-        matBox.getChildren().add(new Label("Saved plots (matplotlib, available when clustering saved):"));
+        Label matHeader = new Label("Saved plots (matplotlib, available when clustering saved):");
+        matHeader.setStyle("-fx-font-weight: bold;");
+        matBox.getChildren().add(matHeader);
         VBox fxBox = new VBox(4);
-        fxBox.getChildren().add(new Label("Interactive plots (JavaFX, GUI-only -- snapshot of open dialog):"));
+        Label fxHeader = new Label(
+                "Interactive plots (JavaFX, GUI-only -- not exportable in v1):");
+        fxHeader.setStyle("-fx-font-weight: bold;");
+        fxBox.getChildren().add(fxHeader);
+        Label fxNote = new Label(
+                "These rows are listed for visibility; v1 records them as failures at export time. "
+                        + "Planned for v1.1.");
+        fxNote.setWrapText(true);
+        fxNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
+        fxBox.getChildren().add(fxNote);
         for (PlotKind plot : PlotKind.values()) {
-            CheckBox cb = new CheckBox(plot.getDisplayName());
+            String label = plot.getDisplayName();
+            if (plot.getSource() == PlotKind.Source.JAVAFX) {
+                label = label + "  (GUI-only -- not exportable in v1)";
+            }
+            CheckBox cb = new CheckBox(label);
             cb.setSelected(plot.isDefaultEnabled());
             cb.setOnAction(e -> updateExpectedFiles());
+            cb.setAccessibleText("Plot kind: " + plot.getDisplayName());
+            if (plot.getSource() == PlotKind.Source.JAVAFX) {
+                cb.setTooltip(tip(
+                        "JavaFX-rendered plot. Not exportable in v1 -- skipped at export time. "
+                                + "Planned for v1.1 via a snapshot of the open Clustering Results dialog."));
+            } else {
+                cb.setTooltip(tip(
+                        "Matplotlib PNG persisted by the clustering run. "
+                                + "Available when the image has a saved clustering result."));
+            }
             plotCheckboxes.put(plot, cb);
             switch (plot.getSource()) {
                 case MATPLOTLIB -> matBox.getChildren().add(cb);
@@ -292,6 +326,7 @@ public class BatchFigureExportDialog {
         }
 
         Button selectAllBtn = new Button("Select All");
+        selectAllBtn.setAccessibleText("Select all plot kinds");
         selectAllBtn.setTooltip(tip(
                 "Check every plot kind that is available for at least one selected image."));
         selectAllBtn.setOnAction(e -> {
@@ -299,6 +334,7 @@ public class BatchFigureExportDialog {
             updateExpectedFiles();
         });
         Button deselectAllBtn = new Button("Deselect All");
+        deselectAllBtn.setAccessibleText("Deselect all plot kinds");
         deselectAllBtn.setTooltip(tip(
                 "Uncheck every plot. The Export button is disabled until at least one is checked."));
         deselectAllBtn.setOnAction(e -> {
@@ -320,15 +356,19 @@ public class BatchFigureExportDialog {
 
     private TitledPane buildFormatDpiSection() {
         pngCheck.setSelected(true);
+        pngCheck.setAccessibleText("Output format: PNG");
+        tiffCheck.setAccessibleText("Output format: TIFF");
         pngCheck.setTooltip(tip(
                 "Lossless raster, broadest compatibility. Recommended for publications and slides."));
         tiffCheck.setTooltip(tip(
                 "Lossless raster, larger files. Preferred by some journals; LZW compression not used in v1."));
 
         Label vectorNote = new Label("[ SVG / PDF / EPS planned for v1.1 ]");
-        vectorNote.setStyle("-fx-text-fill: gray; -fx-font-size: 11px;");
+        // #595959 reaches 7:1 against white -- WCAG AA-safe for small text.
+        vectorNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
 
         dpiSpinner.setEditable(true);
+        dpiSpinner.setAccessibleText("DPI for raster output");
         dpiSpinner.setTooltip(tip(
                 "Pixel density for raster formats. 300 is the publication standard. "
                 + "Vector formats ignore this."));
@@ -353,11 +393,13 @@ public class BatchFigureExportDialog {
     }
 
     private TitledPane buildPatternSection() {
+        patternField.setAccessibleText("Filename pattern");
         patternField.setTooltip(tip(
                 "Template for output filenames. Must include {image}, {plot}, and {ext}."));
         patternField.textProperty().addListener((obs, oldV, newV) -> validatePattern());
 
         Button resetBtn = new Button("Reset");
+        resetBtn.setAccessibleText("Reset filename pattern to default");
         resetBtn.setTooltip(tip("Restore the default pattern: {image}_{plot}.{ext}"));
         resetBtn.setOnAction(e -> patternField.setText(ExportOptions.DEFAULT_PATTERN));
 
@@ -369,7 +411,7 @@ public class BatchFigureExportDialog {
 
         Label tokensLabel = new Label(
                 "Tokens: {image}, {plot}, {result_name}, {date}, {ext}");
-        tokensLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: gray;");
+        tokensLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #595959;");
 
         VBox box = new VBox(4, row, tokensLabel, patternErrorLabel);
 
@@ -382,7 +424,10 @@ public class BatchFigureExportDialog {
 
     private Node buildProgressFooter() {
         progressBar.setMaxWidth(Double.MAX_VALUE);
+        progressBar.setAccessibleText("Export progress");
+        // #555 is 7.46:1 on white -- WCAG AA-safe.
         statusLabel.setStyle("-fx-text-fill: #555;");
+        statusLabel.setAccessibleText("Export status");
         HBox.setHgrow(progressBar, Priority.ALWAYS);
 
         HBox row = new HBox(8, progressBar, statusLabel);
