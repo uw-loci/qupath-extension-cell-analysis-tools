@@ -28,6 +28,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 15. [Viewing the Python Console](#15-viewing-the-python-console)
 16. [Reviewing the Operation Audit Trail](#16-reviewing-the-operation-audit-trail)
 17. [Spatial Statistics (Ripley, Geary, Co-occurrence)](#17-spatial-statistics-ripley-geary-co-occurrence)
+18. [Exporting Figures](#18-exporting-figures)
 
 ---
 
@@ -681,6 +682,110 @@ When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplot
 These are picked up by the Multi-Figure Batch Export dialog so they can be exported alongside the other clustering plots. Disable the preference to keep the in-dialog charts but skip the savefig step.
 
 For the programmatic Groovy API see [SCRIPTING.md](SCRIPTING.md).
+
+---
+
+## 18. Exporting Figures
+
+QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter, plus the Feature A spatial-stats charts (Ripley K/L, Geary's C, co-occurrence). The **Batch Figure Export** feature writes every one of those to disk in a single pass, with a per-project image subset and a deterministic filename pattern. Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action; QP-CAT adds the mandatory image-subset checklist and a Groovy scripting surface (consumed by the YAML batch feature) on top.
+
+### When to use this feature
+
+- **Writing a paper or thesis chapter** -- you have your final clustering and need 8-30 figures laid out consistently. One click instead of 30 right-clicks.
+- **Group-meeting slide decks** -- export everything, drop the directory into a slide deck builder.
+- **Reviewer-ready bundles** -- a single output directory you can zip and email.
+- **Comparing analyses side by side** -- run the export twice with different output directories, diff the figures.
+
+### Supported formats (v1)
+
+| Format | DPI applies? | Notes |
+|---|---|---|
+| **PNG** | Yes (default 300) | Universal raster; recommended for figures and posters. Source PNGs from matplotlib are copied verbatim so the DPI baked in by Python is preserved. |
+| **TIFF** | Yes (default 300) | Lossless raster; preferred by some journals. Bare uncompressed TIFF in v1 -- LZW compression is a v1.1 add. |
+
+**Vector formats (SVG, PDF, EPS) are deferred to v1.1.** The toggle buttons are not shown in the v1 dialog. Honest vector export requires re-running the Python plot pipeline with a vector matplotlib backend (not a simple file transcode), which is a v1.1-scope refactor.
+
+### Quick Start
+
+1. **Run clustering** on at least one image (and save the result if you haven't already)
+2. **Extensions > QP-CAT > Export Figures...**
+3. Pick **Output directory**, check the images and plots you want, pick a format and DPI
+4. Click **Export Figures**
+5. Watch the progress bar; when it finishes, browse the output folder to inspect the files
+
+### Image-subset selection
+
+The dialog's **Images to export** section has three radio choices:
+
+- **Current image only** -- export figures from the image currently open in the viewer.
+- **All images in project** -- export figures from every image in the project.
+- **Subset (pick from list below)** -- check specific images in the list. Filter by name with the **Filter** field; **Select All** / **Deselect All** operate on the filtered view.
+
+The selector is intentionally mandatory in v1 -- batch export across a 50+ image project can produce 500+ files and your output directory deserves to be the size you intend. For each image in the list, the dialog reports which plot kinds are available (saved with the clustering result on disk). Rows showing "(no result)" do not have a saved clustering result -- run **Run Clustering...** on that image first if you want it in the export.
+
+### Plot-availability explanation
+
+Not every plot exists for every image / clustering result. The dialog shows this honestly:
+
+- **Saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter) -- written to disk when `Run Clustering` completes and persisted with the project. These export with or without the results dialog open.
+- **Spatial-stats plots** (Ripley K/L, Geary's C, co-occurrence pairwise / one-vs-rest) -- saved with the result when Feature A's stats were enabled AND the spatial-stats PNG-output enhancement was on. If they weren't, the rows in the plot list show as missing for that image.
+- **Live JavaFX plots** (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) -- only exportable when the results dialog is open for that image. Default off in the checklist for v1; flip on if you have the right dialog open.
+
+For the **headless scripting API** (see [SCRIPTING.md](SCRIPTING.md#figureexportscripts)), only saved plots are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
+
+### Filename patterns
+
+Default pattern: `{image}_{plot}.{ext}` -- example: `Slide_07_dotplot.png`, `Slide_07_ripley_k.png`.
+
+Available substitution variables:
+
+| Token | Expands to | Example |
+|---|---|---|
+| `{image}` | QuPath image name (filesystem-sanitised) | `Slide_07` |
+| `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
+| `{result_name}` | Saved-result name from `ClusteringResultManager`, sanitised | `Leiden_res1.0_2026-05-13` |
+| `{date}` | YYYY-MM-DD date of export | `2026-05-13` |
+| `{ext}` | File extension matching the format (`png` or `tif`) | `png` |
+
+Validation rules:
+
+- Pattern must include at least `{image}`, `{plot}`, and `{ext}`. The Export Figures button stays disabled until all three are present.
+- Invalid filename characters (`< > : " / \ | ? *`) are stripped per `qupath.lib.common.GeneralTools.stripInvalidFilenameChars`.
+- Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) are guarded by prepending `_` after substitution.
+- If a token expands to the empty string after sanitisation, the literal `figure` is substituted.
+- The filename-pattern section is collapsed under "Advanced" by default -- 90% of users will not touch it.
+
+### Large-batch tips
+
+Where to put the output directory:
+
+- **Not inside the QuPath project directory.** Output goes into a sibling directory or a paper / thesis folder. Mixing QuPath project metadata with export artifacts makes both harder to manage.
+- **A new subdirectory under a paper folder** is the canonical choice -- e.g. `~/paper-cd8-spatial/figures/2026-05-13_qpcat_run3/`. The **Project** button in the Output Directory section creates `<project>/qpcat/figures/<date>/` as a starting point.
+
+Expected file counts for a typical project:
+
+| Project size | Plots per image (typical) | Total files |
+|---|---|---|
+| 1 image | 7-12 | 7-12 |
+| 10 images | 7-12 | 70-120 |
+| 50 images | 7-12 | 350-600 |
+| 100 images | 7-12 | 700-1200 |
+
+At 300 DPI PNG, each plot is typically 50-300 KB; total disk usage for a 50-image project is roughly 50-150 MB. The dialog reports an "Expected files: N" preview before you click Export Figures so there are no surprises.
+
+### What gets logged
+
+Each export run writes one row to the project's audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `FIGURE EXPORT` event tag. The row captures:
+
+- Output directory (absolute path)
+- Image scope and (when SUBSET and N <= 20) the explicit name list
+- Plot kinds in the subset
+- Format(s) and DPI
+- Filename pattern
+- File count written, total bytes
+- Failure count (zero on a clean run)
+
+For the programmatic Groovy API see [SCRIPTING.md](SCRIPTING.md#figureexportscripts).
 
 ---
 

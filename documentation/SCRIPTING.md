@@ -1,6 +1,6 @@
 # QP-CAT -- Scripting (Groovy)
 
-Programmatic access to QP-CAT's spatial graph and spatial-statistics surface, callable from QuPath workflow scripts. v1 covers spatial graph construction and the stats catalog (Ripley K/L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment). Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
+Programmatic access to QP-CAT's spatial graph, spatial-statistics, and figure-export surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley K/L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), and batch figure export. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
 
 ## When to script vs. use the dialog
 
@@ -36,7 +36,7 @@ def geary = SpatialStatsScripts.gearyC(graph, [
 
 Each method returns a normalised, canonical options map. To execute, pass these maps to the clustering workflow via the standard `Run Clustering...` dialog or wire them into a recorded workflow step that calls into the dialog programmatically. v1 ships the option-map vocabulary as the public API; full end-to-end "run from script without the dialog" is on the v2 roadmap.
 
-> **Stability promise (v1).** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`), and recognised option keys listed in this document are part of QP-CAT's public scripting API. Breaking changes will be announced in release notes and accompanied by a deprecation period of at least one minor version. New option keys may be added at any time (additive); semantics of existing keys will not change without notice.
+> **Stability promise (v1).** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`, `FigureExportScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`, `exportFigures`), and recognised option keys listed in this document are part of QP-CAT's public scripting API. Breaking changes will be announced in release notes and accompanied by a deprecation period of at least one minor version. New option keys may be added at any time (additive); semantics of existing keys will not change without notice.
 
 ## SpatialGraphScripts
 
@@ -155,6 +155,96 @@ When the dialog dispatches the staged option maps, results materialise as:
 
 All three are Gson-serialisable and persist on `SavedClusteringResult.spatialStats` so reopening a saved result re-renders the same charts and tables.
 
+## FigureExportScripts
+
+Static facade for batch figure export. Writes one or more plots from saved clustering results to a directory. Matches the behavior of the **Extensions > QP-CAT > Export Figures...** dialog but without the GUI -- callable from scripts, the **Run for project** workflow, and the QP-CAT YAML batch (Feature C).
+
+> **Headless plot scope.** The scripting API exports only **saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment matrix, spatial scatter, plus the Feature A spatial-stats line charts when the Feature A persisted-PNG path is implemented). The four JavaFX-rendered plots (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) are GUI-thread-only and require the interactive **Export Figures** dialog -- the script call records them as failures in the returned `ExportResult` and continues. This restriction is per v1 architect design; v1.1 may lift it via off-screen scene-graph rendering on `Platform.runLater`.
+
+### `exportFigures(Map opts) -> ExportResult`
+
+Exports figures from one or more images to a directory.
+
+| Option key | Type | Default | Notes |
+|---|---|---|---|
+| `imageNames` | `List<String>` | empty = current image only | Image names within the project. Empty = current image; explicit list = those images; `["*"]` = every image in the project. |
+| `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Unknown slugs are warned and skipped. |
+| `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. v1.1 adds `"svg"`, `"pdf"`, `"eps"`. Unrecognised values are warned and skipped. |
+| `dpi` | int | 300 | Output DPI for raster formats. Range 72-1200. Ignored for vector formats (when they land in v1.1). |
+| `outputDir` | `String` or `Path` | required | Directory to write into. Created if it does not exist. |
+| `filenamePattern` | `String` | `"{image}_{plot}.{ext}"` | Substitution tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain at least `{image}`, `{plot}`, `{ext}`. |
+| `resultName` | `String` | inferred from image | Saved-result name to export from. If omitted, the per-image fall-back logic in `BatchFigureExporter` picks the best match (a saved result whose name matches or starts with the image name; otherwise the most-recent saved result). |
+| `overwriteExisting` | boolean | false | If false, the exporter fails-fast on the first existing file (per-file failure row in `ExportResult.failures`). |
+| `skipMissingPlots` | boolean | true | If true, missing plots are recorded as failures but the export continues. |
+
+**Returns:** `ExportResult` -- a thin POJO with `getFilesWritten()`, `getFailures()` (list of per-file failure messages, including "skipped (JavaFX-only plot...)" rows), `getTotalBytes()`, `isCancelled()`, and `summary()`.
+
+**Logs:** one audit-log row (`FIGURE EXPORT`) on the project's `qpcat/logs/qpcat_YYYY-MM-DD.log` capturing output directory, image / plot subset, format / DPI, filename pattern, file count, and bytes. (The dialog produces the same log row; the headless path skips it on direct `BatchFigureExporter` calls, so wire `OperationLogger` yourself if you need audit rows from a Groovy pipeline.)
+
+**Example: export a 5-image subset as PNG at 300 DPI**
+
+```groovy
+import qupath.ext.qpcat.scripting.FigureExportScripts
+
+def imageSubset = [
+    "Patient03_ROI1",
+    "Patient03_ROI2",
+    "Patient07_ROI1",
+    "Patient09_ROI1",
+    "Patient12_ROI2"
+]
+
+def result = FigureExportScripts.exportFigures([
+    imageNames:      imageSubset,
+    plotKinds:       [],                        // empty = every matplotlib kind
+    formats:         ["png"],
+    dpi:             300,
+    outputDir:       "/home/me/paper-cd8/figures/2026-05-13_revision1",
+    filenamePattern: "{image}_{plot}.{ext}",
+    overwriteExisting: false,
+    skipMissingPlots:  true
+])
+
+println "Wrote ${result.getFilesWritten()} files; ${result.getFailures().size()} failures"
+result.getFailures().each { println "  $it" }
+```
+
+**Example: export every image, every matplotlib plot, as both PNG and TIFF**
+
+```groovy
+import qupath.ext.qpcat.scripting.FigureExportScripts
+
+def result = FigureExportScripts.exportFigures([
+    imageNames: ["*"],                                  // all images
+    formats:    ["png", "tiff"],
+    dpi:        600,
+    outputDir:  "/home/me/group-meeting/figures"
+])
+
+println result.summary()
+```
+
+### Plot-kind reference
+
+| Key | Source | JavaFX-only? |
+|---|---|---|
+| `dotplot` | scanpy `sc.pl.rank_genes_groups_dotplot` saved PNG | No -- exportable headlessly |
+| `matrixplot` | scanpy `sc.pl.matrixplot` saved PNG | No |
+| `paga` | scanpy `sc.pl.paga` saved PNG | No |
+| `violin` | scanpy `sc.pl.stacked_violin` saved PNG | No |
+| `embedding_scanpy` | scanpy `sc.pl.embedding` saved PNG | No |
+| `neighborhood` | squidpy `sq.pl.nhood_enrichment` saved PNG | No |
+| `spatial_scatter` | scanpy `sc.pl.spatial` saved PNG | No |
+| `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Feature A persisted PNGs (when the spatial-stats PNG-output enhancement is enabled) | No (when persisted) |
+| `heatmap`, `embedding_interactive` | JavaFX `Canvas.snapshot()` | **Yes -- requires open dialog** |
+| `autoencoder_pie`, `histogram` | JavaFX `PieChart` / `Canvas` snapshot | **Yes -- requires open dialog** |
+
+If `plotKinds` includes a JavaFX-only key when called from script mode, the call records it as a failure in `ExportResult.getFailures()` and continues with the remaining plots.
+
+### Integration with the YAML batch (Feature C)
+
+The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds`; `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
+
 ## Adaptive permutation default
 
 Use `SpatialStatsScripts.PERMUTATIONS_ADAPTIVE` (== -1) to request the adaptive default. The Java side resolves the actual permutation count from the cell count just before dispatching the Python task; the resolved value is recorded in the audit-log row for each statistic.
@@ -168,6 +258,7 @@ Every staged statistic that runs through the dialog produces one row in the proj
 - `=== SPATIAL STATS GEARY === ...` -- one row per Geary's C run
 - `=== SPATIAL STATS COOC PAIRWISE === ...` -- one row per pairwise co-occurrence run
 - `=== SPATIAL STATS COOC ONE-VS-REST === ...` -- one row per one-vs-rest run
+- `--- FIGURE EXPORT --- ...` -- one row per dialog-driven batch figure export
 
 Each row captures method name, graph type, permutation count, cell count, and a short result summary. Re-running with different graph constructors leaves a clear comparative trail.
 

@@ -32,6 +32,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 - **Compare across slides and batches** -- batch correction so your clusters reflect biology, not slide-of-origin or staining-day effects, when you analyze a multi-image project all at once (Harmony integration)
 - **Publication-ready follow-up** -- find the markers that define each cluster (Wilcoxon ranking) and generate dotplots, violin plots, and PAGA trajectory graphs without leaving QuPath
 - **Easy hand-off to Python / R** -- export results as standard `.h5ad` AnnData files. Compatible with Scanpy, Seurat, and cellxgene, so you can keep going in your usual notebook when you want to
+- **Export every figure from a clustering run in one click** -- pick the project images you want, pick which plots you need (dotplot, matrix plot, PAGA, violin, scanpy embedding, neighborhood enrichment, spatial scatter, Ripley K/L, Geary's C, co-occurrence, ...), and write the lot to a directory at 300 DPI by default. PNG and TIFF in v1 (SVG / PDF / EPS arrive in v1.1). Image subsetting is mandatory, not just an "all / current" toggle. Callable from a Groovy script for batch / headless use (inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action)
 - **Reproducible audit trail** -- every operation is logged per-project with the full parameters used, so you (or a reviewer) can retrace exactly what was run, when, and how
 
 ---

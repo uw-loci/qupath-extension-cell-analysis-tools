@@ -17,9 +17,10 @@ Recommendations for getting the best results from cell clustering and phenotypin
 9. [Zero-Shot vs Rule-Based Phenotyping](#zero-shot-vs-rule-based-phenotyping)
 10. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
 11. [Spatial Analysis](#spatial-analysis)
-12. [Multi-Image Projects](#multi-image-projects)
-13. [Reproducibility](#reproducibility)
-14. [Common Pitfalls](#common-pitfalls)
+12. [When to Batch-Export Figures](#when-to-batch-export-figures)
+13. [Multi-Image Projects](#multi-image-projects)
+14. [Reproducibility](#reproducibility)
+15. [Common Pitfalls](#common-pitfalls)
 
 ---
 
@@ -433,6 +434,58 @@ Resist the temptation to use different graph parameters for different stats in t
 - **Small images (< 200 cells):** all of the new permutation-based tests will be underpowered. Stick with neighborhood enrichment.
 - **Single-cluster scenarios:** Ripley K/L and co-occurrence are inherently multi-cluster.
 - **Time-series or per-condition comparisons:** the v1 stats are within-image / within-project. Cross-condition spatial comparison needs a downstream tool; use the AnnData export.
+
+---
+
+## When to Batch-Export Figures
+
+QP-CAT's batch figure export ([HOW_TO_GUIDE section 18](HOW_TO_GUIDE.md#18-exporting-figures)) writes every plot from one or more saved clustering results to a directory at one chosen format and DPI. It is intentionally a single dialog rather than a wizard because the option surface is small and the use cases are concentrated.
+
+### Batch-export vs save-individual-plot
+
+| Situation | Use |
+|---|---|
+| Writing up a paper / thesis -- need every figure for a clustering run | Batch export |
+| Slide deck for a group meeting -- need 10-30 figures across 5-15 images | Batch export |
+| Reviewer requests "the dotplot" for one image | Batch-export with a single plot checked is the cleanest path |
+| Iterating on cluster labels and want to compare before / after | Batch-export both runs to separate directories, then diff |
+| Headless / scripted / YAML-driven analysis pipeline | Scripting API (`FigureExportScripts.exportFigures`) -- see [SCRIPTING.md](SCRIPTING.md#figureexportscripts) |
+
+A rule of thumb: **if you need more than two figures at a time, batch-export is faster.** If you need one figure, picking a single image + a single plot in the batch dialog is still a one-click operation.
+
+### Picking a format
+
+- **PNG at 300 DPI** is the journal-default raster choice in v1. Most journals will accept this for supplementary; many accept it for main figures too. The matplotlib-side PNGs are copied verbatim so the Python savefig DPI is preserved.
+- **TIFF at 300 DPI** is the lossless raster choice. Slightly larger files than PNG, but some journals specifically request TIFF for figures.
+- **Vector formats are v1.1.** When SVG / PDF / EPS land in v1.1, they will be the right choice for main figures destined for journals that require vector. Until then, render raster at the highest DPI your workflow tolerates (600+ for poster-grade; 300 for typical paper figures).
+
+### Integrating with a paper / poster workflow
+
+A workflow that holds up across multiple revision rounds:
+
+1. **Lock the clustering parameters early.** Save the clustering config to the project (`<project>/qpcat/cluster_configs/`) so you can re-run with byte-identical parameters.
+2. **Run all images with the locked config.** Make sure each image has the saved `ClusteringResult` available before batch-exporting.
+3. **Export figures into a versioned subdirectory.** Name it after the revision: `figures/2026-05-13_revision1/`. Avoid overwriting an earlier directory unless you're sure you don't need the previous run; the dialog defaults to fail-fast on existing files for exactly this reason.
+4. **Keep the audit log alongside the figures.** Copy `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` into the figures directory so future-you can answer "what parameters made these figures?" without digging.
+5. **For the paper itself, switch to vector when v1.1 lands.** Until then, render the final figures at the highest DPI your journal accepts (typically 600 DPI for raster main figures) and use PNG (broader software support than TIFF in most editors).
+
+For a **poster**, 300 DPI PNG at the rendered figure size is typically enough. If the figure will be enlarged 4-8x in the poster layout (typical), bump the export DPI to 600-1200 to keep edges crisp.
+
+### Vector-formats teaser (v1.1)
+
+v1.1 will add SVG, PDF, and EPS via a re-run of the Python matplotlib pipeline with a vector backend. The JavaFX-rendered plots (heatmap canvas, embedding scatter canvas) will render to SVG via a graphics2D bridge. Plan paper figures with vector in mind if you're not on a tight deadline; raster at 600 DPI is the right interim choice and is accepted by most journals for raster figures.
+
+### Filenames and cross-platform sharing
+
+The default filename pattern (`{image}_{plot}.{ext}`) is filesystem-safe across Windows / macOS / Linux. If you customise the pattern:
+
+- Avoid characters that one OS allows but another doesn't (`:` and `\` are notable Windows traps).
+- Avoid Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) -- the exporter prepends `_` if a sanitised filename collides with one, but it's clearer to avoid these in the pattern itself.
+- Use `{result_name}` if you have multiple saved clustering runs per image and want each in its own group; otherwise leave it out for shorter filenames.
+
+If you're sharing the exported folder with collaborators on different OSes, the default pattern is the safest choice.
+
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action; QP-CAT adds the mandatory image-subset checklist and a Groovy scripting surface on top.
 
 ---
 
