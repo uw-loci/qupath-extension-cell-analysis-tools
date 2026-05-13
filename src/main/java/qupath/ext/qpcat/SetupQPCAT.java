@@ -21,6 +21,7 @@ import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.ui.AutoencoderDialog;
+import qupath.ext.qpcat.ui.BatchFigureExportDialog;
 import qupath.ext.qpcat.ui.FeatureExtractionDialog;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
@@ -283,6 +284,15 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         exportAnnDataItem.setOnAction(e -> exportAnnData(qupath));
         exportAnnDataItem.visibleProperty().bind(environmentReady);
 
+        // Export Figures (batch multi-figure exporter)
+        MenuItem exportFiguresItem = new MenuItem(res.getString("menu.exportFigures"));
+        exportFiguresItem.setOnAction(e -> new BatchFigureExportDialog(qupath).show());
+        exportFiguresItem.visibleProperty().bind(environmentReady);
+        exportFiguresItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getProject() == null,
+                        qupath.projectProperty()));
+
         SeparatorMenuItem sep1 = new SeparatorMenuItem();
         sep1.visibleProperty().bind(environmentReady);
 
@@ -327,6 +337,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 manageClustersItem,
                 viewResultsItem,
                 exportAnnDataItem,
+                exportFiguresItem,
                 utilitiesMenu
         );
 
