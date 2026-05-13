@@ -26,6 +26,9 @@ import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -38,6 +41,9 @@ import qupath.ext.qpcat.service.LlmExplainerService;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainRequest;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainResult;
 import qupath.ext.qpcat.service.LlmExplainerService.Provider;
+import qupath.lib.gui.QuPathGUI;
+import qupath.lib.images.ImageData;
+import qupath.lib.projects.Project;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -61,6 +67,7 @@ public class ClusterExplainerPanel {
     private static final Logger logger = LoggerFactory.getLogger(ClusterExplainerPanel.class);
 
     private final ClusteringResult result;
+    private final String resultName;
     private final LlmExplainerService service = new LlmExplainerService();
 
     // ---- Controls (Section 2 of the UI/UX draft) ----
@@ -90,7 +97,19 @@ public class ClusterExplainerPanel {
     private int availableMarkers;
 
     public ClusterExplainerPanel(ClusteringResult result) {
+        this(result, null);
+    }
+
+    /**
+     * Construct the panel with an optional {@code resultName} -- the saved
+     * clustering result this dialog is showing (or {@code null} for a live
+     * run). Phase 5 (pi-1) plumbs this through to the audit-log row so a
+     * reviewer can tie the LLM call back to the clustering run that produced
+     * the marker rankings.
+     */
+    public ClusterExplainerPanel(ClusteringResult result, String resultName) {
         this.result = result;
+        this.resultName = resultName;
         this.availableMarkers = computeAvailableMarkers(result);
     }
 
@@ -106,6 +125,26 @@ public class ClusterExplainerPanel {
                 new Separator(),
                 buildResultsSection()
         );
+
+        // Phase 5 (sci-2 / sci-3): Ctrl+Enter fires Run when the Run button
+        // is enabled; Esc fires Cancel while a call is in flight. Handled at
+        // the root level so the PasswordField (which consumes plain Enter)
+        // does not swallow the shortcut. "Shortcut+Enter" maps to Ctrl+Enter
+        // on Windows/Linux and Cmd+Enter on macOS via the JavaFX convention.
+        final KeyCombination runCombo = KeyCombination.keyCombination("Shortcut+Enter");
+        root.addEventHandler(KeyEvent.KEY_PRESSED, ev -> {
+            if (runCombo.match(ev)) {
+                if (runBtn != null && !runBtn.isDisabled()) {
+                    onRunPressed();
+                    ev.consume();
+                }
+            } else if (ev.getCode() == KeyCode.ESCAPE) {
+                if (cancelBtn != null && !cancelBtn.isDisabled()) {
+                    onCancelPressed();
+                    ev.consume();
+                }
+            }
+        });
 
         // Initial state: snap to S0/S1 depending on env-var
         String envKey = LlmExplainerService.readEnvAnthropicKey();
@@ -409,14 +448,7 @@ public class ClusterExplainerPanel {
             return;
         }
 
-        ExplainRequest req = new ExplainRequest();
-        req.provider = provider;
-        req.apiKey = apiKeyField.getText();
-        req.endpoint = endpointField.getText();
-        req.markerTableJson = result.getMarkerRankingsJson();
-        req.topN = topMarkersSpinner.getValue();
-        req.timeoutSec = QpcatPreferences.getLlmTimeoutSec();
-        req.model = modelCombo.getValue();
+        ExplainRequest req = buildBaseRequest(provider);
         if (scopeRadioOne.isSelected() && clusterCombo.getValue() != null) {
             req.clusterIds = List.of(clusterCombo.getValue());
         }
@@ -440,6 +472,19 @@ public class ClusterExplainerPanel {
             return;
         }
 
+        ExplainRequest req = buildBaseRequest(provider);
+        req.clusterIds = List.of(selected.getClusterId());
+
+        dispatch(req);
+    }
+
+    /**
+     * Phase 5 (pi-1, pi-5): assemble the per-call request with project /
+     * clustering-result / image / user provenance pulled from the QuPath GUI
+     * state at dispatch time. Missing context (e.g. no project loaded) drops
+     * empty strings and the audit-log row renders them as {@code "(unknown)"}.
+     */
+    private ExplainRequest buildBaseRequest(Provider provider) {
         ExplainRequest req = new ExplainRequest();
         req.provider = provider;
         req.apiKey = apiKeyField.getText();
@@ -448,9 +493,33 @@ public class ClusterExplainerPanel {
         req.topN = topMarkersSpinner.getValue();
         req.timeoutSec = QpcatPreferences.getLlmTimeoutSec();
         req.model = modelCombo.getValue();
-        req.clusterIds = List.of(selected.getClusterId());
-
-        dispatch(req);
+        req.resultName = resultName != null ? resultName : "";
+        // Best-effort context capture: no exceptions cross the boundary.
+        req.projectName = "";
+        req.imageName = "";
+        try {
+            QuPathGUI qupath = QuPathGUI.getInstance();
+            if (qupath != null) {
+                Project<?> project = qupath.getProject();
+                if (project != null && project.getPath() != null) {
+                    java.nio.file.Path projDir = project.getPath().getParent();
+                    if (projDir != null && projDir.getFileName() != null) {
+                        req.projectName = projDir.getFileName().toString();
+                    }
+                }
+                ImageData<?> imageData = qupath.getImageData();
+                if (imageData != null && imageData.getServer() != null) {
+                    String n = imageData.getServer().getMetadata().getName();
+                    if (n != null) req.imageName = n;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not capture project/image context for audit log: {}",
+                    e.getMessage());
+        }
+        String user = System.getProperty("user.name");
+        req.operatorUser = user != null ? user : "";
+        return req;
     }
 
     private void onCancelPressed() {

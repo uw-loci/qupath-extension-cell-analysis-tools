@@ -956,7 +956,8 @@ public class ClusteringDialog {
         // marker rankings tab. Only built when marker rankings are present;
         // see ClusterExplainerPanel for state diagram and design contract.
         if (result.hasMarkerRankings()) {
-            ClusterExplainerPanel explainerPanel = new ClusterExplainerPanel(result);
+            ClusterExplainerPanel explainerPanel =
+                    new ClusterExplainerPanel(result, loadedResultName);
             Tab tab = new Tab("Cluster Explainer (LLM) [Beta]",
                     wrapWithGuide(explainerPanel.build(),
                     "Suggests cell-type names for each cluster from its top markers, "

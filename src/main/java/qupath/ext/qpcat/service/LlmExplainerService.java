@@ -10,7 +10,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult.LlmExplanationsBundle;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -51,13 +51,16 @@ public class LlmExplainerService {
         public final String promptHash;
         public final String prompt;
         public final String responseRaw;
-        public final int tokenCount;
+        public final int tokenCount;        // legacy: input + output, or -1
+        public final int inputTokens;       // -1 when provider didn't report
+        public final int outputTokens;      // -1 when provider didn't report
         public final String errorType;       // null on success
         public final String errorDetail;     // null on success
 
         ExplainResult(List<ClusterExplanation> explanations,
                       String promptTemplate, String promptHash,
-                      String prompt, String responseRaw, int tokenCount,
+                      String prompt, String responseRaw,
+                      int tokenCount, int inputTokens, int outputTokens,
                       String errorType, String errorDetail) {
             this.explanations = explanations;
             this.promptTemplate = promptTemplate;
@@ -65,6 +68,8 @@ public class LlmExplainerService {
             this.prompt = prompt;
             this.responseRaw = responseRaw;
             this.tokenCount = tokenCount;
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
             this.errorType = errorType;
             this.errorDetail = errorDetail;
         }
@@ -72,7 +77,16 @@ public class LlmExplainerService {
         public boolean isSuccess() { return errorType == null; }
     }
 
-    /** Parameters of a single LLM call. */
+    /**
+     * Parameters of a single LLM call.
+     * <p>
+     * Phase 5 (pi-1, pi-5): {@code projectName}, {@code resultName},
+     * {@code imageName}, {@code operatorUser} are optional context fields
+     * surfaced in the audit-log row so a reviewer can tie an
+     * {@code === LLM EXPLAIN ===} block back to the clustering run and
+     * operator that produced its input. All four are best-effort -- empty /
+     * null strings render as {@code "(unknown)"} in the log.
+     */
     public static class ExplainRequest {
         public Provider provider = Provider.NONE;
         public String model = "";
@@ -82,6 +96,10 @@ public class LlmExplainerService {
         public int topN = 10;
         public List<Integer> clusterIds = Collections.emptyList(); // empty = all
         public int timeoutSec = 60;
+        public String projectName = "";     // pi-1: project-level provenance
+        public String resultName = "";      // pi-1: clustering-result name/hash
+        public String imageName = "";       // pi-1: image-level provenance
+        public String operatorUser = "";    // pi-5: OS user attribution
     }
 
     /**
@@ -162,11 +180,9 @@ public class LlmExplainerService {
         String promptTemplate = stringOr(out.get("prompt_template"),
                 "cluster_phenotype_v1");
         String responseRaw = stringOr(out.get("response_raw"), "");
-        int tokenCount = -1;
-        Object tcObj = out.get("token_count");
-        if (tcObj instanceof Number) {
-            tokenCount = ((Number) tcObj).intValue();
-        }
+        int tokenCount = intOr(out.get("token_count"), -1);
+        int inputTokens = intOr(out.get("input_tokens"), -1);
+        int outputTokens = intOr(out.get("output_tokens"), -1);
 
         List<ClusterExplanation> explanations;
         String explanationsJson = stringOr(out.get("explanations_json"), "");
@@ -177,12 +193,13 @@ public class LlmExplainerService {
         }
 
         return new ExplainResult(explanations, promptTemplate, promptHash,
-                prompt, responseRaw, tokenCount, errorType, errorDetail);
+                prompt, responseRaw, tokenCount, inputTokens, outputTokens,
+                errorType, errorDetail);
     }
 
     private static ExplainResult cancelledResult() {
         return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v1",
-                "", "", "", -1, "REQUEST_CANCELLED",
+                "", "", "", -1, -1, -1, "REQUEST_CANCELLED",
                 "Cancelled by user; result discarded.");
     }
 
@@ -235,6 +252,12 @@ public class LlmExplainerService {
     /**
      * Build the {@link LlmExplanationsBundle} that gets attached to
      * {@code SavedClusteringResult} for persistence.
+     * <p>
+     * Phase 5 (pi-4): persists the verbatim prompt and response text
+     * (already scrubbed via {@link LlmAuditScrubber} so the saved JSON is
+     * safe to share). Phase 5 (pi-3): persists input/output tokens
+     * separately. Phase 5 (pi-9): timestamp is an ISO-8601 string with a
+     * zone offset (replaces the prior zone-less {@code LocalDateTime}).
      */
     public static LlmExplanationsBundle toBundle(ExplainResult result,
                                                    Provider provider,
@@ -244,13 +267,30 @@ public class LlmExplainerService {
         bundle.setModel(model);
         bundle.setPromptTemplate(result.promptTemplate);
         bundle.setPromptHash(result.promptHash);
-        bundle.setTimestamp(LocalDateTime.now().toString());
+        bundle.setTimestamp(OffsetDateTime.now().toString());
+        bundle.setPromptText(LlmAuditScrubber.scrub(
+                result.prompt != null ? result.prompt : ""));
+        bundle.setResponseRaw(LlmAuditScrubber.scrub(
+                result.responseRaw != null ? result.responseRaw : ""));
+        bundle.setInputTokens(result.inputTokens);
+        bundle.setOutputTokens(result.outputTokens);
         bundle.setExplanations(result.explanations);
         return bundle;
     }
 
     /**
      * Write a multi-line audit-log entry for a successful or failed call.
+     * <p>
+     * Phase 5 (pi-1): emits {@code Project}, {@code Clustering result}, and
+     * {@code Image} so a reviewer can tie the row back to the clustering run
+     * even after the log file is moved or excerpted into supplementary
+     * material. Phase 5 (pi-5): emits {@code User} for lab-internal
+     * attribution on shared workstations. Phase 5 (pi-3): emits
+     * {@code Input tokens} and {@code Output tokens} separately; the legacy
+     * {@code Token count} (combined) is retained for backward compatibility.
+     * Phase 5 (pi-6): emits {@code Cancelled: true} when the call was
+     * soft-cancelled by the user, matching the existing doc.
+     * <p>
      * The bearer-token redaction lives in the Python error classifier, so
      * by the time we get an errorDetail string here it is already scrubbed;
      * we still avoid logging the API key itself by construction (we never
@@ -259,6 +299,10 @@ public class LlmExplainerService {
     public static void writeAuditLog(ExplainRequest req, ExplainResult result,
                                       long durationMs) {
         Map<String, String> params = new LinkedHashMap<>();
+        params.put("Project", emptyToUnknown(req.projectName));
+        params.put("Clustering result", emptyToUnknown(req.resultName));
+        params.put("Image", emptyToUnknown(req.imageName));
+        params.put("User", emptyToUnknown(req.operatorUser));
         params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
         params.put("Model", req.model != null ? req.model : "");
         if (req.provider == Provider.OLLAMA) {
@@ -273,6 +317,10 @@ public class LlmExplainerService {
                         ? "all"
                         : req.clusterIds.toString());
         params.put("Top markers", String.valueOf(req.topN));
+        params.put("Input tokens",
+                result.inputTokens >= 0 ? String.valueOf(result.inputTokens) : "unknown");
+        params.put("Output tokens",
+                result.outputTokens >= 0 ? String.valueOf(result.outputTokens) : "unknown");
         params.put("Token count",
                 result.tokenCount >= 0 ? String.valueOf(result.tokenCount) : "unknown");
 
@@ -290,10 +338,17 @@ public class LlmExplainerService {
             params.put("Error detail",
                     LlmAuditScrubber.scrub(
                             result.errorDetail != null ? result.errorDetail : ""));
+            if ("REQUEST_CANCELLED".equals(result.errorType)) {
+                params.put("Cancelled", "true");
+            }
             summary = "FAILED: " + result.errorType;
         }
         OperationLogger.getInstance().logLargeOperation(
                 "LLM EXPLAIN", params, blocks, summary, durationMs);
+    }
+
+    private static String emptyToUnknown(String s) {
+        return (s == null || s.isEmpty()) ? "(unknown)" : s;
     }
 
     private static String stringOr(Object o, String fallback) {
@@ -302,5 +357,16 @@ public class LlmExplainerService {
 
     private static String stringOrNull(Object o) {
         return o != null ? o.toString() : null;
+    }
+
+    private static int intOr(Object o, int fallback) {
+        if (o instanceof Number) {
+            return ((Number) o).intValue();
+        }
+        if (o != null) {
+            try { return Integer.parseInt(o.toString()); }
+            catch (NumberFormatException ignored) {}
+        }
+        return fallback;
     }
 }

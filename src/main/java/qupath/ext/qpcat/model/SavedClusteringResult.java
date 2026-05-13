@@ -192,13 +192,26 @@ public class SavedClusteringResult {
      * Gson-friendly: every field defaults to a sensible empty value on load
      * when missing from older saves. The API key is intentionally absent --
      * only the response is persisted.
+     * <p>
+     * Phase 5 (pi-4): {@code promptText} and {@code responseRaw} are persisted
+     * verbatim so a saved-result JSON is self-contained when archived without
+     * the day-stamped audit-log file. Both are scrubbed of API-key-shaped
+     * substrings before persistence, matching the audit-log invariant.
+     * Phase 5 (pi-3): {@code inputTokens} and {@code outputTokens} replace
+     * the prior single {@code tokenCount} field so spend computations have
+     * the split they need. Phase 5 (pi-9): {@code timestamp} is ISO-8601
+     * with a zone offset.
      */
     public static class LlmExplanationsBundle {
         private String provider;            // e.g. "ANTHROPIC", "OLLAMA"
         private String model;
         private String promptTemplate;      // e.g. "cluster_phenotype_v1"
         private String promptHash;          // sha256 of the rendered prompt
-        private String timestamp;           // ISO-8601
+        private String timestamp;           // ISO-8601 with zone offset
+        private String promptText;          // scrubbed verbatim prompt
+        private String responseRaw;         // scrubbed verbatim response
+        private int inputTokens = -1;       // -1 when provider didn't report
+        private int outputTokens = -1;      // -1 when provider didn't report
         private List<ClusterExplanation> explanations;
 
         public LlmExplanationsBundle() {}
@@ -217,6 +230,18 @@ public class SavedClusteringResult {
 
         public String getTimestamp() { return timestamp; }
         public void setTimestamp(String timestamp) { this.timestamp = timestamp; }
+
+        public String getPromptText() { return promptText; }
+        public void setPromptText(String promptText) { this.promptText = promptText; }
+
+        public String getResponseRaw() { return responseRaw; }
+        public void setResponseRaw(String responseRaw) { this.responseRaw = responseRaw; }
+
+        public int getInputTokens() { return inputTokens; }
+        public void setInputTokens(int inputTokens) { this.inputTokens = inputTokens; }
+
+        public int getOutputTokens() { return outputTokens; }
+        public void setOutputTokens(int outputTokens) { this.outputTokens = outputTokens; }
 
         public List<ClusterExplanation> getExplanations() { return explanations; }
         public void setExplanations(List<ClusterExplanation> explanations) {

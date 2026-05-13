@@ -36,7 +36,9 @@ Outputs (task.outputs):
   prompt_hash          str   -- sha256 of the prompt
   prompt_template      str   -- "cluster_phenotype_v1"
   response_raw         str   -- raw response text from the LLM
-  token_count          int   -- token count if the provider reports it, else -1
+  token_count          int   -- total tokens (input + output) if reported, else -1
+  input_tokens         int   -- input/prompt tokens if reported, else -1
+  output_tokens        int   -- output/completion tokens if reported, else -1
   error_type           str   -- enum-shaped failure reason (only on failure)
   error_detail         str   -- short human-readable error (only on failure)
 """
@@ -75,6 +77,8 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
         "prompt_template": PROMPT_TEMPLATE_ID,
         "response_raw": "",
         "token_count": -1,
+        "input_tokens": -1,
+        "output_tokens": -1,
     }
 
     try:
@@ -95,7 +99,7 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
     out["prompt_hash"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     try:
-        raw, token_count = _call_provider(
+        raw, input_tokens, output_tokens = _call_provider(
             provider, model, api_key, endpoint, prompt, int(timeout_sec))
     except _LlmError as e:
         out["error_type"] = e.error_type
@@ -107,7 +111,12 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
         return out
 
     out["response_raw"] = raw
-    out["token_count"] = token_count
+    out["input_tokens"] = int(input_tokens) if input_tokens is not None else -1
+    out["output_tokens"] = int(output_tokens) if output_tokens is not None else -1
+    if out["input_tokens"] >= 0 and out["output_tokens"] >= 0:
+        out["token_count"] = out["input_tokens"] + out["output_tokens"]
+    else:
+        out["token_count"] = -1
 
     explanations = parse_response(raw, cluster_ids)
     out["explanations_json"] = json.dumps(explanations)
@@ -209,8 +218,13 @@ class _LlmError(Exception):
 
 def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec):
     """
-    Dispatch to the chosen provider. Returns (raw_response_text, token_count).
-    Raises `_LlmError` with a classified error_type on any provider-shaped
+    Dispatch to the chosen provider. Returns
+    ``(raw_response_text, input_tokens, output_tokens)``. Either token count
+    may be ``-1`` if the provider did not report it. Phase 5 (pi-3) split the
+    legacy single ``token_count`` into input/output components because
+    Anthropic Sonnet output costs ~5x input -- summing them blocks any
+    correct spend computation downstream.
+    Raises ``_LlmError`` with a classified error_type on any provider-shaped
     failure. The provider-abstraction shape (this function's signature) is
     stable across v1 and accepts a future third provider as just another
     branch.
@@ -246,8 +260,8 @@ def _call_anthropic(model, api_key, prompt, timeout_sec):
         raise _classify_anthropic_error(e)
 
     text = _extract_anthropic_text(msg)
-    token_count = _extract_anthropic_tokens(msg)
-    return text, token_count
+    inp_tokens, out_tokens = _extract_anthropic_tokens(msg)
+    return text, inp_tokens, out_tokens
 
 
 def _extract_anthropic_text(msg):
@@ -263,15 +277,18 @@ def _extract_anthropic_text(msg):
 
 
 def _extract_anthropic_tokens(msg):
+    """Return ``(input_tokens, output_tokens)``; either may be ``-1``."""
     try:
         usage = getattr(msg, "usage", None)
         if usage is None:
-            return -1
-        inp = getattr(usage, "input_tokens", 0) or 0
-        out = getattr(usage, "output_tokens", 0) or 0
-        return int(inp) + int(out)
+            return -1, -1
+        inp = getattr(usage, "input_tokens", None)
+        out = getattr(usage, "output_tokens", None)
+        inp_v = int(inp) if isinstance(inp, (int, float)) else -1
+        out_v = int(out) if isinstance(out, (int, float)) else -1
+        return inp_v, out_v
     except Exception:
-        return -1
+        return -1, -1
 
 
 def _classify_anthropic_error(e):
@@ -345,11 +362,9 @@ def _call_ollama(model, endpoint, prompt, timeout_sec):
                         "Ollama 'response' field is not a string.")
     eval_count = data.get("eval_count")
     prompt_eval_count = data.get("prompt_eval_count")
-    if isinstance(eval_count, int) and isinstance(prompt_eval_count, int):
-        token_count = eval_count + prompt_eval_count
-    else:
-        token_count = -1
-    return text, token_count
+    out_tokens = int(eval_count) if isinstance(eval_count, int) else -1
+    inp_tokens = int(prompt_eval_count) if isinstance(prompt_eval_count, int) else -1
+    return text, inp_tokens, out_tokens
 
 
 # ---------------------------------------------------------------------------
