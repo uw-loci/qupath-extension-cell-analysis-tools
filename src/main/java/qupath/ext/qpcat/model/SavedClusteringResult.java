@@ -41,6 +41,9 @@ public class SavedClusteringResult {
     // LLM Cluster Explainer (optional; null on older saves)
     private LlmExplanationsBundle llmExplanations;
 
+    // Spatial stats expansion (v1; optional; null on older saves)
+    private SpatialStatsBundle spatialStats;
+
     // Provenance
     private String extensionVersion;
     private String qupathVersion;
@@ -117,6 +120,13 @@ public class SavedClusteringResult {
                 && !llmExplanations.getExplanations().isEmpty();
     }
 
+    // --- Spatial Stats Expansion (v1) ---
+    public SpatialStatsBundle getSpatialStats() { return spatialStats; }
+    public void setSpatialStats(SpatialStatsBundle b) { this.spatialStats = b; }
+    public boolean hasSpatialStats() {
+        return spatialStats != null && spatialStats.isAnyPresent();
+    }
+
     // --- Provenance ---
     public String getExtensionVersion() { return extensionVersion; }
     public void setExtensionVersion(String v) { this.extensionVersion = v; }
@@ -154,6 +164,19 @@ public class SavedClusteringResult {
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
 
+        // Spatial stats expansion (v1) -- bundle only set when at least one
+        // statistic ran. Older code paths leave this null and the result
+        // saves identically to pre-v1.
+        if (result.hasAnySpatialStats()) {
+            SpatialStatsBundle bundle = new SpatialStatsBundle();
+            bundle.setGraphType(result.getSpatialGraphType());
+            bundle.setRipley(result.getRipley());
+            bundle.setGeary(result.getGeary());
+            bundle.setCoOccurrencePairwise(result.getCoOccurrencePairwise());
+            bundle.setCoOccurrenceOneVsRest(result.getCoOccurrenceOneVsRest());
+            saved.setSpatialStats(bundle);
+        }
+
         // Provenance
         String extVer = GeneralTools.getPackageVersion(SavedClusteringResult.class);
         saved.setExtensionVersion(extVer != null ? extVer : "dev");
@@ -175,6 +198,18 @@ public class SavedClusteringResult {
         result.setNhoodEnrichment(nhoodEnrichment);
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
+
+        // Spatial stats expansion (v1) -- absent on older saves; the
+        // hasAnySpatialStats() check on the ClusteringResult guards the
+        // results-dialog tab branches downstream.
+        if (spatialStats != null) {
+            result.setSpatialGraphType(spatialStats.getGraphType());
+            result.setRipley(spatialStats.getRipley());
+            result.setGeary(spatialStats.getGeary());
+            result.setCoOccurrencePairwise(spatialStats.getCoOccurrencePairwise());
+            result.setCoOccurrenceOneVsRest(spatialStats.getCoOccurrenceOneVsRest());
+        }
+
         return result;
     }
 

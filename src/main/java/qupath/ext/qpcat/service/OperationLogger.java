@@ -351,6 +351,47 @@ public class OperationLogger {
     }
 
     /**
+     * Build a parameter map for the v1 spatial-graph build step.
+     * One row per graph build (per clustering run that requested spatial
+     * stats), recording the constructor type and parameters used.
+     */
+    public static Map<String, String> graphConstructorParams(String graphType,
+                                                              int knnK,
+                                                              double radius,
+                                                              double delaunayMaxEdge,
+                                                              int nCells) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("Graph type", graphType);
+        if ("knn".equals(graphType)) {
+            params.put("k", String.valueOf(knnK));
+        } else if ("radius".equals(graphType)) {
+            params.put("Radius (px)", radius < 0 ? "auto" : String.valueOf(radius));
+        } else if ("delaunay".equals(graphType)) {
+            params.put("Max edge (px)",
+                    delaunayMaxEdge < 0 ? "no pruning" : String.valueOf(delaunayMaxEdge));
+        }
+        params.put("Input", nCells + " cells");
+        return params;
+    }
+
+    /**
+     * Build a parameter map for a single v1 spatial-statistic invocation.
+     * One row per statistic per clustering run; the {@code resultSummary}
+     * passed to {@link #logOperation} carries the per-stat headline number.
+     */
+    public static Map<String, String> spatialStatsParams(String method,
+                                                          String graphType,
+                                                          int nPermutations,
+                                                          int nCells) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("Method", method);
+        params.put("Graph type", graphType);
+        params.put("Permutations", String.valueOf(nPermutations));
+        params.put("Input", nCells + " cells");
+        return params;
+    }
+
+    /**
      * Build a parameter map for threshold computation.
      */
     public static Map<String, String> thresholdParams(String normalization,

@@ -64,4 +64,46 @@ public class ClusteringResult {
     public String getSpatialAutocorrJson() { return spatialAutocorrJson; }
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
     public boolean hasSpatialAutocorr() { return spatialAutocorrJson != null; }
+
+    // ==================== Spatial Stats Expansion (v1) ====================
+    //
+    // Optional results for the v1 spatial-statistics surface: Ripley K/L,
+    // Geary's C, and co-occurrence (pairwise + one-vs-rest). Older callers
+    // that never set these get null on each accessor and the dialog renders
+    // exactly as it did pre-v1.
+
+    private RipleyResult ripley;
+    private GearyCResult geary;
+    private CoOccurrenceResult coOccurrencePairwise;
+    private CoOccurrenceResult coOccurrenceOneVsRest;
+    private String spatialGraphType;       // "knn" | "radius" | "delaunay"
+
+    public RipleyResult getRipley() { return ripley; }
+    public void setRipley(RipleyResult v) { this.ripley = v; }
+    public boolean hasRipley() { return ripley != null; }
+
+    public GearyCResult getGeary() { return geary; }
+    public void setGeary(GearyCResult v) { this.geary = v; }
+    public boolean hasGeary() { return geary != null; }
+
+    public CoOccurrenceResult getCoOccurrencePairwise() { return coOccurrencePairwise; }
+    public void setCoOccurrencePairwise(CoOccurrenceResult v) { this.coOccurrencePairwise = v; }
+    public boolean hasCoOccurrencePairwise() { return coOccurrencePairwise != null; }
+
+    public CoOccurrenceResult getCoOccurrenceOneVsRest() { return coOccurrenceOneVsRest; }
+    public void setCoOccurrenceOneVsRest(CoOccurrenceResult v) { this.coOccurrenceOneVsRest = v; }
+    public boolean hasCoOccurrenceOneVsRest() { return coOccurrenceOneVsRest != null; }
+
+    public String getSpatialGraphType() { return spatialGraphType; }
+    public void setSpatialGraphType(String v) { this.spatialGraphType = v; }
+
+    /**
+     * True if at least one v1 spatial statistic is populated. Used by the
+     * results-dialog tab-builder to decide whether the new tabs should
+     * appear at all.
+     */
+    public boolean hasAnySpatialStats() {
+        return hasRipley() || hasGeary()
+                || hasCoOccurrencePairwise() || hasCoOccurrenceOneVsRest();
+    }
 }

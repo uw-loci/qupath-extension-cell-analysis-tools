@@ -89,6 +89,48 @@ try:
 except NameError:
     pref_plot_dpi = 150
 
+# Spatial stats expansion (v1) inputs
+try:
+    pref_spatial_graph_type = spatial_graph_type
+except NameError:
+    pref_spatial_graph_type = "knn"
+try:
+    pref_spatial_graph_k = spatial_graph_k
+except NameError:
+    pref_spatial_graph_k = 15
+try:
+    pref_spatial_graph_radius = spatial_graph_radius
+except NameError:
+    pref_spatial_graph_radius = -1.0
+try:
+    pref_spatial_graph_delaunay_max_edge = spatial_graph_delaunay_max_edge
+except NameError:
+    pref_spatial_graph_delaunay_max_edge = -1.0
+try:
+    pref_spatial_permutations = spatial_permutations
+except NameError:
+    pref_spatial_permutations = 0
+try:
+    pref_use_squidpy_smoothing = use_squidpy_graph_for_smoothing
+except NameError:
+    pref_use_squidpy_smoothing = False
+try:
+    pref_enable_ripley = enable_ripley
+except NameError:
+    pref_enable_ripley = False
+try:
+    pref_enable_geary = enable_geary
+except NameError:
+    pref_enable_geary = False
+try:
+    pref_enable_co_occurrence_pairwise = enable_co_occurrence_pairwise
+except NameError:
+    pref_enable_co_occurrence_pairwise = False
+try:
+    pref_enable_co_occurrence_one_vs_rest = enable_co_occurrence_one_vs_rest
+except NameError:
+    pref_enable_co_occurrence_one_vs_rest = False
+
 # 2. Normalize
 task.update("Normalizing measurements...", current=0, maximum=6)
 
@@ -128,28 +170,67 @@ except NameError:
 
 if do_spatial_smoothing and has_spatial_coords:
     task.update("Applying spatial feature smoothing...")
-    from sklearn.neighbors import NearestNeighbors
     import scipy.sparse as sp
 
     n = len(spatial_data)
-    k = min(pref_spatial_knn, n - 1)
-    nn = NearestNeighbors(n_neighbors=k, metric='euclidean')
-    nn.fit(spatial_data)
-    distances, indices = nn.kneighbors(spatial_data)
 
-    # Build row-normalized adjacency matrix (A + I)
-    rows = np.repeat(np.arange(n), k)
-    cols = indices.ravel()
-    adj = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
-    adj = adj + sp.eye(n)
-    row_sums = np.array(adj.sum(axis=1)).flatten()
-    adj_norm = sp.diags(1.0 / row_sums) @ adj
+    if pref_use_squidpy_smoothing:
+        # Hybrid graph reuse path (Phase 2 contract #2): same squidpy
+        # spatial_neighbors graph backs smoothing AND the new statistics.
+        # Pure-A row-normalised connectivity (no +I diagonal); produces
+        # subtly different cluster labels at boundaries vs the legacy
+        # (A + I) path. Gated behind qpcat.spatial.useSquidpyGraphForSmoothing
+        # so existing projects retain bit-for-bit reproducibility.
+        try:
+            from spatial_stats import build_smoothing_adjacency_squidpy
+        except ImportError:
+            # Inline import path for Appose script bundle (scripts dir is
+            # copied verbatim from JAR resources at task dispatch time)
+            import importlib.util
+            import os as _os
+            _spec = importlib.util.spec_from_file_location(
+                "spatial_stats",
+                _os.path.join(_os.path.dirname(__file__), "spatial_stats.py"))
+            _spatial_stats = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_spatial_stats)
+            build_smoothing_adjacency_squidpy = \
+                _spatial_stats.build_smoothing_adjacency_squidpy
+        adj_norm = build_smoothing_adjacency_squidpy(
+            spatial_data,
+            graph_type=pref_spatial_graph_type,
+            k=pref_spatial_graph_k,
+            radius=pref_spatial_graph_radius,
+            delaunay_max_edge=pref_spatial_graph_delaunay_max_edge,
+        )
+        logger.info(
+            "Spatial smoothing using squidpy graph (%s, pure-A row-normalised)",
+            pref_spatial_graph_type)
+    else:
+        # Legacy path - sklearn kNN with (A + I) row-normalisation.
+        # This path is byte-stable with respect to prior QP-CAT releases.
+        from sklearn.neighbors import NearestNeighbors
+
+        k = min(pref_spatial_knn, n - 1)
+        nn = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        nn.fit(spatial_data)
+        distances, indices = nn.kneighbors(spatial_data)
+
+        # Build row-normalized adjacency matrix (A + I)
+        rows = np.repeat(np.arange(n), k)
+        cols = indices.ravel()
+        adj = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+        adj = adj + sp.eye(n)
+        row_sums = np.array(adj.sum(axis=1)).flatten()
+        adj_norm = sp.diags(1.0 / row_sums) @ adj
+        logger.info(
+            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)",
+            k)
 
     smoothed = df_norm.values.copy()
     for it in range(smoothing_iters):
         smoothed = adj_norm @ smoothed
     df_norm = pd.DataFrame(smoothed, columns=df_norm.columns)
-    logger.info("Spatial smoothing applied: k=%d, iterations=%d", k, smoothing_iters)
+    logger.info("Spatial smoothing applied: iterations=%d", smoothing_iters)
 elif do_spatial_smoothing and not has_spatial_coords:
     logger.warning("Spatial smoothing requested but no spatial coordinates available, skipping")
 
@@ -439,18 +520,50 @@ else:
 # 6c. Spatial analysis (if coordinates provided)
 has_spatial = has_spatial_coords
 
+# Decide whether we are going to do anything spatial at all. The v0 path
+# runs whenever spatial_coords are passed; the v1 path adds per-statistic
+# toggles that gate the new heavy permutation tests.
+any_v1_stats = (
+    pref_enable_ripley
+    or pref_enable_geary
+    or pref_enable_co_occurrence_pairwise
+    or pref_enable_co_occurrence_one_vs_rest
+)
+
 if has_spatial and n_clusters_found > 1:
     task.update("Running spatial analysis...")
     import squidpy as sq
+
+    # Lazy-import the v1 spatial-stats helpers from the bundled module.
+    try:
+        import spatial_stats as _qpcat_spatial
+    except ImportError:
+        import importlib.util as _ilu
+        import os as _os
+        _spec = _ilu.spec_from_file_location(
+            "spatial_stats",
+            _os.path.join(_os.path.dirname(__file__), "spatial_stats.py"))
+        _qpcat_spatial = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_qpcat_spatial)
 
     adata.obsm['spatial'] = spatial_data
     adata.obsm['X_spatial'] = spatial_data  # for scanpy plotting (basis='spatial')
     logger.info("Spatial coordinates loaded (%d cells)", spatial_data.shape[0])
 
-    # Build spatial neighbor graph (Delaunay triangulation)
+    # Build the spatial neighbor graph using the v1 explicit constructor
+    # (kNN / Radius / Delaunay). Pre-v1 always used Delaunay; the new
+    # default is kNN at k = 15 to match the smoothing default.
     try:
-        sq.gr.spatial_neighbors(adata, coord_type='generic', delaunay=True)
-        logger.info("Spatial neighbor graph built (Delaunay)")
+        _qpcat_spatial.build_spatial_graph(
+            adata,
+            graph_type=pref_spatial_graph_type,
+            k=pref_spatial_graph_k,
+            radius=pref_spatial_graph_radius,
+            delaunay_max_edge=pref_spatial_graph_delaunay_max_edge,
+        )
+        logger.info("Spatial neighbor graph built (%s)",
+                    pref_spatial_graph_type)
+        task.outputs["spatial_graph_type"] = pref_spatial_graph_type
     except Exception as e:
         logger.warning("Spatial neighbor graph failed: %s", e)
         has_spatial = False
@@ -489,6 +602,45 @@ if has_spatial and n_clusters_found > 1:
                     len(autocorr_results))
     except Exception as e:
         logger.warning("Spatial autocorrelation failed: %s", e)
+
+    # ---- v1 spatial stats expansion ----
+    # Each new statistic wraps in its own try/except via the helper module
+    # and never escapes to the parent task. Java side checks task.outputs
+    # for each key independently (hasRipley / hasGeary / etc.).
+    n_perms = _qpcat_spatial.adaptive_permutations(
+        n_cells, override=pref_spatial_permutations)
+
+    if pref_enable_ripley:
+        task.update("Computing Ripley K and L...")
+        _qpcat_spatial.run_ripley(
+            adata, task, cluster_key='cluster', n_permutations=n_perms,
+            graph_type=pref_spatial_graph_type)
+
+    if pref_enable_geary:
+        task.update("Computing Geary's C...")
+        _qpcat_spatial.run_geary_c(
+            adata, task, n_permutations=n_perms,
+            measurements=list(marker_names),
+            graph_type=pref_spatial_graph_type)
+
+    if pref_enable_co_occurrence_pairwise:
+        task.update("Computing co-occurrence (pairwise)...")
+        _qpcat_spatial.run_co_occurrence(
+            adata, task, cluster_key='cluster', mode='pairwise',
+            n_permutations=n_perms, spatial_data=spatial_data,
+            graph_type=pref_spatial_graph_type)
+
+    if pref_enable_co_occurrence_one_vs_rest:
+        task.update("Computing co-occurrence (one-vs-rest)...")
+        _qpcat_spatial.run_co_occurrence(
+            adata, task, cluster_key='cluster', mode='oneVsRest',
+            n_permutations=n_perms, spatial_data=spatial_data,
+            graph_type=pref_spatial_graph_type)
+
+    if any_v1_stats:
+        # Surface the resolved adaptive count to the Java side so the
+        # audit log row can report the value actually used.
+        task.outputs["spatial_n_permutations"] = int(n_perms)
 
 # 7. Generate plots (optional)
 try:

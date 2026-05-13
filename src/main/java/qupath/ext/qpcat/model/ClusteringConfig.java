@@ -91,6 +91,26 @@ public class ClusteringConfig {
     private boolean enableSpatialSmoothing = false;
     private int spatialSmoothingIterations = 1;
 
+    // ---- Spatial stats expansion (v1) ----
+    // Graph constructor type and parameters used by spatial smoothing and
+    // every v1 spatial statistic. These default from QpcatPreferences when
+    // the dialog populates the config, but live on the config so they
+    // round-trip through save / load.
+    private String spatialGraphType = "knn";       // "knn" | "radius" | "delaunay"
+    private int spatialGraphK = 15;                // kNN only
+    private double spatialGraphRadius = -1.0;      // radius only; -1 = auto
+    private double spatialGraphDelaunayMaxEdge = -1.0; // delaunay only; -1 = no pruning
+
+    // Per-statistic toggles (independent of spatialAnalysisCheck which still
+    // drives neighborhood enrichment + Moran's I).
+    private boolean enableRipley = false;
+    private boolean enableGeary = false;
+    private boolean enableCoOccurrencePairwise = false;
+    private boolean enableCoOccurrenceOneVsRest = false;
+
+    // 0 = adaptive default (1000 / 100 / 50 by cell count); positive = fixed.
+    private int spatialPermutations = 0;
+
     public ClusteringConfig() {
         // Set sensible defaults
         algorithmParams.put("n_neighbors", 50);
@@ -140,4 +160,66 @@ public class ClusteringConfig {
 
     public int getSpatialSmoothingIterations() { return spatialSmoothingIterations; }
     public void setSpatialSmoothingIterations(int v) { this.spatialSmoothingIterations = v; }
+
+    // ---- Spatial stats expansion (v1) accessors ----
+
+    public String getSpatialGraphType() { return spatialGraphType; }
+    public void setSpatialGraphType(String v) {
+        if (v == null) { this.spatialGraphType = "knn"; return; }
+        String norm = v.trim().toLowerCase();
+        switch (norm) {
+            case "knn":
+            case "radius":
+            case "delaunay":
+                this.spatialGraphType = norm;
+                break;
+            default:
+                this.spatialGraphType = "knn";
+        }
+    }
+
+    public int getSpatialGraphK() { return spatialGraphK; }
+    public void setSpatialGraphK(int v) { this.spatialGraphK = v; }
+
+    public double getSpatialGraphRadius() { return spatialGraphRadius; }
+    public void setSpatialGraphRadius(double v) { this.spatialGraphRadius = v; }
+
+    public double getSpatialGraphDelaunayMaxEdge() { return spatialGraphDelaunayMaxEdge; }
+    public void setSpatialGraphDelaunayMaxEdge(double v) { this.spatialGraphDelaunayMaxEdge = v; }
+
+    public boolean isEnableRipley() { return enableRipley; }
+    public void setEnableRipley(boolean v) { this.enableRipley = v; }
+
+    public boolean isEnableGeary() { return enableGeary; }
+    public void setEnableGeary(boolean v) { this.enableGeary = v; }
+
+    public boolean isEnableCoOccurrencePairwise() { return enableCoOccurrencePairwise; }
+    public void setEnableCoOccurrencePairwise(boolean v) { this.enableCoOccurrencePairwise = v; }
+
+    public boolean isEnableCoOccurrenceOneVsRest() { return enableCoOccurrenceOneVsRest; }
+    public void setEnableCoOccurrenceOneVsRest(boolean v) { this.enableCoOccurrenceOneVsRest = v; }
+
+    public int getSpatialPermutations() { return spatialPermutations; }
+    public void setSpatialPermutations(int v) { this.spatialPermutations = v; }
+
+    /**
+     * True if any of the v1 spatial statistics is enabled.
+     */
+    public boolean isAnySpatialStatEnabled() {
+        return enableRipley || enableGeary
+                || enableCoOccurrencePairwise || enableCoOccurrenceOneVsRest;
+    }
+
+    /**
+     * Resolve the requested permutation count given the actual cell count.
+     * Returns the user override when {@code spatialPermutations > 0},
+     * otherwise the adaptive default: 1000 perms for n &lt;= 50k cells,
+     * 100 for 50k-500k, 50 above 500k.
+     */
+    public int resolvePermutations(int nCells) {
+        if (spatialPermutations > 0) return spatialPermutations;
+        if (nCells <= 50_000) return 1000;
+        if (nCells <= 500_000) return 100;
+        return 50;
+    }
 }

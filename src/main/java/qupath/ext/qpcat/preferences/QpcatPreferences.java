@@ -167,6 +167,36 @@ public final class QpcatPreferences {
     private static final IntegerProperty clusterPlotDpi = PathPrefs.createPersistentPreference(
             "qpcat.cluster.plotDpi", 150);
 
+    // ==================== Spatial Statistics Expansion (v1) ====================
+    //
+    // Graph constructor + per-statistic prefs. Used by spatial smoothing
+    // and the new Ripley K/L, Geary's C, co-occurrence calls. Shared so
+    // smoothing and stats round-trip through the same graph definition.
+
+    private static final StringProperty spatialGraphType = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.graphType", "knn");  // "knn" | "radius" | "delaunay"
+
+    private static final IntegerProperty spatialGraphK = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.knnNeighbors", 15);
+
+    private static final DoubleProperty spatialGraphRadius = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.radius", -1.0);  // -1 = auto
+
+    private static final DoubleProperty spatialGraphDelaunayMaxEdge = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.delaunayMaxEdge", -1.0);  // -1 = no pruning
+
+    // 0 = adaptive default; positive = fixed user override.
+    private static final IntegerProperty spatialPermutations = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.permutations", 0);
+
+    // Smoothing-rewrite feature flag. Per Phase 2 contract #2: when we
+    // cannot run the numerical-equivalence check in this environment, the
+    // smoothing rewrite is gated and defaults off so existing cluster
+    // labels are preserved bit-for-bit. Enable in Preferences to opt into
+    // the squidpy-backed smoothing path (delivers hybrid graph reuse).
+    private static final BooleanProperty spatialUseSquidpyGraphForSmoothing = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.useSquidpyGraphForSmoothing", false);
+
     // ==================== Run Phenotyping ====================
 
     private static final IntegerProperty phenoHistogramBins = PathPrefs.createPersistentPreference(
@@ -368,6 +398,24 @@ public final class QpcatPreferences {
     public static int getClusterBanksyPcaDims() { return clusterBanksyPcaDims.get(); }
     public static int getClusterPlotDpi() { return clusterPlotDpi.get(); }
 
+    // Spatial Stats Expansion (v1) getters / setters
+    public static String getSpatialGraphType() { return spatialGraphType.get(); }
+    public static void setSpatialGraphType(String v) { spatialGraphType.set(v); }
+    public static int getSpatialGraphK() { return spatialGraphK.get(); }
+    public static void setSpatialGraphK(int v) { spatialGraphK.set(v); }
+    public static double getSpatialGraphRadius() { return spatialGraphRadius.get(); }
+    public static void setSpatialGraphRadius(double v) { spatialGraphRadius.set(v); }
+    public static double getSpatialGraphDelaunayMaxEdge() { return spatialGraphDelaunayMaxEdge.get(); }
+    public static void setSpatialGraphDelaunayMaxEdge(double v) { spatialGraphDelaunayMaxEdge.set(v); }
+    public static int getSpatialPermutations() { return spatialPermutations.get(); }
+    public static void setSpatialPermutations(int v) { spatialPermutations.set(v); }
+    public static boolean isSpatialUseSquidpyGraphForSmoothing() {
+        return spatialUseSquidpyGraphForSmoothing.get();
+    }
+    public static void setSpatialUseSquidpyGraphForSmoothing(boolean v) {
+        spatialUseSquidpyGraphForSmoothing.set(v);
+    }
+
     // Phenotyping getters
     public static int getPhenoHistogramBins() { return phenoHistogramBins.get(); }
     public static int getPhenoMinValidValues() { return phenoMinValidValues.get(); }
@@ -538,6 +586,61 @@ public final class QpcatPreferences {
                 .category(CATEGORY_CLUSTERING)
                 .description("Resolution for saved clustering plots in DPI (default: 150). "
                         + "Higher = larger files but sharper images. Range: 72-300.")
+                .build());
+
+        // --- Spatial Statistics Expansion (v1) ---
+
+        items.add(new PropertyItemBuilder<>(spatialGraphType, String.class)
+                .name("Spatial Graph Type")
+                .category(CATEGORY_CLUSTERING)
+                .description("Graph constructor used by spatial feature smoothing and the new "
+                        + "Ripley/Geary/co-occurrence statistics. One of 'knn', 'radius', or "
+                        + "'delaunay'. Default: knn. Pick in the Run Clustering dialog as well; "
+                        + "this preference is the persisted default.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialGraphK, Integer.class)
+                .name("Spatial Graph kNN k")
+                .category(CATEGORY_CLUSTERING)
+                .description("Number of nearest neighbors when graph type is kNN (default: 15). "
+                        + "Range: 2-200. Higher values produce smoother spatial structure but "
+                        + "blur small features.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialGraphRadius, Double.class)
+                .name("Spatial Graph Radius (px)")
+                .category(CATEGORY_CLUSTERING)
+                .description("Maximum distance for two cells to be neighbors when graph type is "
+                        + "radius (pixel units of detection centroids). -1 = auto-derive from "
+                        + "median nearest-neighbor distance.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialGraphDelaunayMaxEdge, Double.class)
+                .name("Spatial Graph Delaunay Max Edge (px)")
+                .category(CATEGORY_CLUSTERING)
+                .description("Maximum allowed edge length after Delaunay triangulation; longer "
+                        + "edges are pruned. -1 = keep all edges. Useful when the tissue has "
+                        + "large empty regions that should not be bridged.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialPermutations, Integer.class)
+                .name("Spatial Stats Permutations")
+                .category(CATEGORY_CLUSTERING)
+                .description("Number of random permutations for the new spatial statistics. "
+                        + "0 = adaptive default (1000 for <= 50k cells, 100 for 50k-500k, "
+                        + "50 above). Positive values override the adaptive default.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialUseSquidpyGraphForSmoothing, Boolean.class)
+                .name("Spatial Smoothing: Use Squidpy Graph")
+                .category(CATEGORY_CLUSTERING)
+                .description("Route spatial feature smoothing through squidpy's spatial_neighbors "
+                        + "so the same graph backs both smoothing and the new statistics. "
+                        + "Default: off. The v0 smoothing path uses an inline sklearn kNN graph "
+                        + "with (A + I) row-normalisation; the squidpy path uses pure-A "
+                        + "connectivity, which can produce subtly different cluster labels at "
+                        + "boundaries. Enable only after verifying numerical equivalence on a "
+                        + "representative project.")
                 .build());
 
         // --- Run Phenotyping ---
