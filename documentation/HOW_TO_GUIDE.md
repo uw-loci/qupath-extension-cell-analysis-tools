@@ -313,7 +313,7 @@ The results are also persisted to `SavedClusteringResult` so reopening past resu
 
 1. Go to [console.anthropic.com](https://console.anthropic.com/), create an account if needed, and create a new API key
 2. In the explainer tab, set **Provider** to "Anthropic"
-3. Set **Model** to the default `claude-3-5-sonnet-latest` (or a different Claude model from the dropdown)
+3. Set **Model** to the default `claude-sonnet-4-5` (or pick `claude-opus-4-7` from the dropdown for a stronger model)
 4. Paste your API key into the **API Key** field. The key is held in memory only for this QuPath session and is never written to disk
 5. Click **Run Explainer**
 
@@ -393,7 +393,7 @@ LLM output is **not deterministic** unless the provider exposes a temperature=0 
 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
-1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-3-5-sonnet-20241022`)
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-4-5`)
 2. Record the **prompt template version** (e.g. `cluster_phenotype_v1`)
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
@@ -409,7 +409,7 @@ One **Run Explainer** click is one LLM call with all clusters batched into the s
 | 10 | 10 | 3,000 | 1,500 | ~$0.01-0.02 |
 | 20 | 10 | 6,000 | 3,000 | ~$0.02-0.05 |
 
-Pricing changes; the audit log captures the exact `Tokens used:` for every call, so you can monitor real spend. Ollama is free.
+Pricing changes; the audit log captures the exact `Input tokens:` and `Output tokens:` for every call so you can compute real spend at the right rate. (Anthropic charges different rates for input vs output -- Sonnet output is ~5x input -- so a combined number alone undercounts cost.) The combined `Token count:` is still emitted for backward compatibility. Ollama is free.
 
 A **Cancel** button is exposed during the in-flight call. Cancelled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
 

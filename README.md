@@ -286,7 +286,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 
 | Provider | Pros | Cons | Default model |
 |---|---|---|---|
-| **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-3-5-sonnet-latest` |
+| **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-sonnet-4-5` (also `claude-opus-4-7`) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
 OpenAI is intentionally **not** supported in v1.

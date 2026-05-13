@@ -345,7 +345,7 @@ If you need cell-level or morphology-level reasoning, run BiomedCLIP zero-shot p
 
 Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail is safe to share but does not contain the API key. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
-- **Provider and exact model string** (e.g. `claude-3-5-sonnet-20241022`, not just "Claude")
+- **Provider and exact model string** (e.g. `claude-sonnet-4-5`, not just "Claude")
 - **Prompt template version** as logged (currently `cluster_phenotype_v1`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
 - **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories

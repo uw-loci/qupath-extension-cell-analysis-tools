@@ -14,7 +14,7 @@ See also:
 <details>
 <summary><strong>"No network connection" or "Could not reach Anthropic"</strong></summary>
 
-**What you see:** The Run Explainer button completes quickly with a red status banner: *"Network error: could not reach the LLM provider. Check your internet connection and try again."*
+**What you see:** The Run Explainer button completes quickly with a red status banner: *"Failed: cannot reach the provider."*
 
 **What it usually means:** Your machine cannot reach `api.anthropic.com` over HTTPS. Most common causes: laptop is offline, corporate firewall/proxy is blocking the request, or DNS is misconfigured.
 
@@ -28,7 +28,7 @@ See also:
 <details>
 <summary><strong>"Invalid API key" or "401 Authentication failed"</strong></summary>
 
-**What you see:** Red status banner: *"Anthropic rejected the API key (401). Check the key in your console.anthropic.com dashboard."*
+**What you see:** Red status banner: *"Failed: 401 -- API key was rejected."*
 
 **What it usually means:** The key was mistyped, has been revoked, or has been rotated and the old value is still in the TextField or env var.
 
@@ -42,7 +42,7 @@ See also:
 <details>
 <summary><strong>"Rate limit exceeded" or "429"</strong></summary>
 
-**What you see:** Red status banner: *"Provider rate limit hit. Wait <N> seconds and retry."* The button re-enables after the wait, if the provider returned a `Retry-After` header.
+**What you see:** Red status banner: *"Failed: 429 -- provider rate limit hit."* The Run button re-enables immediately; the provider's own `Retry-After` header is not currently surfaced in the UI.
 
 **What it usually means:** You've made too many calls in too short a window, or your account is on a free/trial tier with low per-minute limits.
 
@@ -56,7 +56,7 @@ See also:
 <details>
 <summary><strong>"Malformed response" or "Could not parse LLM output"</strong></summary>
 
-**What you see:** Red status banner: *"The LLM returned an unexpected response shape. The full response is in the audit log; please file an issue."*
+**What you see:** Red status banner: *"Failed: provider returned an unexpected response shape."* The full response is in the audit log; please file an issue.
 
 **What it usually means:** The LLM did not produce JSON in the expected schema. Often happens with Ollama + a small/weak model, or after a provider-side change to default behavior.
 
@@ -73,7 +73,7 @@ See also:
 <details>
 <summary><strong>"Could not reach Ollama at &lt;endpoint&gt;"</strong></summary>
 
-**What you see:** Red status banner: *"Could not connect to Ollama at http://localhost:11434. Is the server running?"*
+**What you see:** Red status banner: *"Failed: cannot reach the provider."* (This is the same banner the Anthropic-network-down case uses; the audit-log entry's `Endpoint:` row and `Error detail:` line will name Ollama and the URL it could not reach.)
 
 **What it usually means:** The Ollama server is not running, has crashed, or is listening on a different host/port.
 
@@ -88,7 +88,7 @@ See also:
 <details>
 <summary><strong>"Ollama model not found" or "model '&lt;tag&gt;' not pulled"</strong></summary>
 
-**What you see:** Red status banner: *"Ollama does not have model 'llama3.1:8b'. Pull it with: ollama pull llama3.1:8b"*
+**What you see:** Red status banner: *"Failed: model not found on provider."* The audit-log `Error detail:` line names the missing tag and suggests `ollama pull <tag>`.
 
 **What it usually means:** The model tag you selected (or typed) is not present on the Ollama server.
 
@@ -103,7 +103,7 @@ See also:
 <details>
 <summary><strong>"Request cancelled" / Cancel button was clicked</strong></summary>
 
-**What you see:** Status banner: *"Explainer cancelled. No results were applied."*
+**What you see:** Status banner: *"Cancelled. No results applied."*
 
 **What it usually means:** You clicked Cancel while the call was in flight, or QuPath was closed before the call returned.
 
