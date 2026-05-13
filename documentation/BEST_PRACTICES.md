@@ -386,6 +386,56 @@ Use BANKSY when spatial proximity should influence cluster membership (e.g., tis
 
 ---
 
+## Choosing Spatial Statistics
+
+The Spatial Analysis surface gained four new statistics in v1: Ripley's K, Ripley's L, Geary's C, and co-occurrence (pairwise + one-vs-rest). Picking the right one for your question is the difference between a credible figure and a noisy table. For the mechanics of each test see [HOW_TO_GUIDE Section 17](HOW_TO_GUIDE.md#17-spatial-statistics-ripley-geary-co-occurrence).
+
+### Which statistic answers which question
+
+| Question | Statistic | Reason |
+|---|---|---|
+| Do cluster A cells tend to be neighbors of cluster B cells? | Neighborhood enrichment | One Z-score per pair; cheapest test; no radius dependence |
+| At what spatial scale do clusters A and B co-localize? | Ripley's L (or K) | Radius-resolved; the curve tells you the *r* where the relationship is strongest |
+| Is marker M spatially structured within a single image? | Geary's C (short range) or Moran's I (long range) | Geary's C is sensitive to local structure, Moran's I to global |
+| How does cluster A's neighborhood composition change with distance? | Co-occurrence (pairwise) | Radius profile per pair |
+| What does the rest of the tissue look like around cluster A specifically? | Co-occurrence (one-vs-rest) | Same as pairwise but with all-other-clusters collapsed |
+
+A rule of thumb: **start with neighborhood enrichment** (cheap, headline answer), then **add Ripley's L** for the cluster pairs that flagged as interesting, then **add Geary's C / Moran's I** if you also have per-marker questions, then **add co-occurrence** only if you specifically need a radius profile.
+
+### Graph constructor choice: kNN vs Radius vs Delaunay
+
+| Constructor | Best for | Watch out for |
+|---|---|---|
+| **kNN (default)** | First-pass exploration; varying cell density. Robust because every cell has exactly k neighbors | Picks an arbitrary k; tune to your data. k = 15 is a sensible default. |
+| **Radius** | A biologically motivated distance (synapse, niche). Interpretable parameter (microns / pixels) | Cells in sparse regions can be isolated. Increase r or switch to kNN if that happens. |
+| **Delaunay** | Densely packed tissue (epithelia, tumor cores) where you want geometric neighbors only | Without max-edge pruning, cells across a tissue gap get artificially connected. Prune at ~2-3x the typical inter-cell distance. |
+
+**Pick kNN unless you have a reason to switch.** Radius and Delaunay are precision tools; kNN is the workhorse.
+
+### Permutation count tradeoffs at scale
+
+Permutation-based significance testing is exact in principle but expensive: each permutation re-shuffles the labels and re-evaluates the statistic. v1's adaptive default scales the count to the cell count (1000 / 100 / 50). Override via `qpcat.spatial.permutations` if you need a fixed value (e.g. for a paper that needs every image analysed at the same count). The audit log records the value used.
+
+A common pattern: **explore with the adaptive default; lock to 1000 for the final figure-grade run, on a subset of images if cell counts make 1000 prohibitive**.
+
+### Same graph, multiple stats: a value, not a trick
+
+The biggest user-facing change in this expansion is that one graph constructor backs every post-clustering statistic in a single run. This means:
+
+- The graph parameters you pick are visible in the dialog and persisted to the audit log -- no hidden defaults
+- Comparing Ripley K to Geary's C on the same data is apples-to-apples: same neighborhood definition for both
+- Re-running with a different graph constructor gives you a clean a/b: did the conclusion change because of the graph or because of the data?
+
+Resist the temptation to use different graph parameters for different stats in the same paper -- it makes the comparison much harder to interpret.
+
+### When NOT to add the new stats
+
+- **Small images (< 200 cells):** all of the new permutation-based tests will be underpowered. Stick with neighborhood enrichment.
+- **Single-cluster scenarios:** Ripley K/L and co-occurrence are inherently multi-cluster.
+- **Time-series or per-condition comparisons:** the v1 stats are within-image / within-project. Cross-condition spatial comparison needs a downstream tool; use the AnnData export.
+
+---
+
 ## Multi-Image Projects
 
 ### When to Cluster Together

@@ -27,6 +27,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 14. [Saving and Loading Configurations](#14-saving-and-loading-configurations)
 15. [Viewing the Python Console](#15-viewing-the-python-console)
 16. [Reviewing the Operation Audit Trail](#16-reviewing-the-operation-audit-trail)
+17. [Spatial Statistics (Ripley, Geary, Co-occurrence)](#17-spatial-statistics-ripley-geary-co-occurrence)
 
 ---
 
@@ -604,6 +605,71 @@ Each log entry records:
 ```
 
 Log files are plain text and can be opened in any text editor. A new file is created each day automatically.
+
+---
+
+## 17. Spatial Statistics (Ripley, Geary, Co-occurrence)
+
+Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the rest of squidpy's standard spatial-statistics catalog: Ripley's K and L, Geary's C, and co-occurrence (pairwise + one-vs-rest). Each is driven by a single graph constructor you pick once at the top of the dialog; the same graph backs spatial feature smoothing (when the preference is enabled) so the parameters are visible and consistent across the run. QP-CAT's v1 catalog closes the gap with [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats surface while keeping the squidpy backend the extension already ships with -- no new dependencies.
+
+### When to use each statistic
+
+- **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" Cheap, no permutation cost.
+- **Ripley's K** -- *cluster-to-cluster at a range of distances*: "are CD8 cells within 50 microns of tumor cells more often than chance would predict? What about within 200 microns?" K(r) is the cumulative count of neighbors within distance r, normalised by cluster density. K above the Poisson null = clustering / co-localization; below = dispersion / avoidance.
+- **Ripley's L** -- the variance-stabilised transform of K. `L(r) = sqrt(K(r) / pi) - r`. Read L instead of K when comparing across radii (L is centred at 0 under the Poisson null at every r). If you can only show one plot in a figure, show L.
+- **Geary's C** -- per-marker spatial autocorrelation, dual to Moran's I but weighted toward *local* differences. Use Geary's C when you suspect a marker is structured at short range (sharp tissue boundaries, immune infiltrates) and Moran's I when the structure is global.
+- **Co-occurrence (pairwise)** -- *radius profile* for every cluster pair: "as we expand the radius from r1 to r2, how does the probability of finding a cluster-B cell near a cluster-A cell change?"
+- **Co-occurrence (one-vs-rest)** -- the same radius profile but with "all other clusters" collapsed into a single comparison. Useful when a single cluster is what you care about.
+
+### Graph constructor choice
+
+All four spatial stats need a definition of "neighbor". v1 surfaces three options:
+
+- **kNN (default, k = 15)** -- robust to varying cell density; every cell has exactly k neighbors. Recommended starting point. Pick k = 10-20 for typical multiplexed-imaging tissue.
+- **Radius** -- pick this when the biology has a natural distance scale. Example: 20 microns captures immune-synapse-level contacts; 50-100 microns captures niche-level relationships.
+- **Delaunay** -- a parameter-free triangulation. Use when you want the graph topology to follow tissue geometry. Optional max-edge pruning drops edges longer than a given distance.
+
+**Default for first-pass exploration:** kNN at k = 15. Switch to Radius once you understand your data's cell density and have a biologically motivated distance.
+
+### BANKSY uses its own graph
+
+BANKSY is excluded from the kNN/Radius/Delaunay constructor in v1. BANKSY's pybanksy implementation builds its own neighbor model internally and does not expose a "bring your own graph" hook. If you select BANKSY as the clustering algorithm and also enable the new spatial stats, the stats use the constructor you picked at the top of the dialog (independent of BANKSY's `k_geom`).
+
+### Adaptive permutation defaults
+
+Ripley K/L, Geary's C, and co-occurrence use permutation tests for significance. v1 picks the permutation count automatically based on cell count:
+
+| Cells | Permutations | Notes |
+|---|---|---|
+| <= 50k | 1000 | Matches squidpy's literature default |
+| 50k - 500k | 100 | Multi-image projects; minutes per stat at this count |
+| > 500k | 50 | Very large projects; effects must be strong to clear significance |
+
+Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations** (positive integer to force, 0 to leave at adaptive). The audit-log row for each statistic records the value actually used.
+
+### Step-by-step
+
+1. Open an image (or project) with cell detections
+2. **Extensions > QP-CAT > Run Clustering...**
+3. Configure measurements, normalization, algorithm as usual
+4. In the **Analysis options** group:
+   - Optionally check **Neighborhood enrichment + Moran's I** (the v0 cheap checkbox)
+   - Expand the **Spatial statistics** group
+   - Pick a graph type (**kNN** / **Radius** / **Delaunay**) and the matching parameter
+   - Tick any of: **Ripley K and L**, **Geary's C**, **Co-occurrence -- pairwise**, **Co-occurrence -- one vs rest**
+5. (Optional) Check **Spatial feature smoothing** as a pre-clustering pass
+6. Click **Run Clustering**
+7. In the results dialog, navigate to the new tabs:
+   - **Ripley K and L** -- side-by-side line charts with Poisson null overlay (stacked vertically below ~700 px width)
+   - **Geary's C** -- per-marker table with C, p-value, permutation count
+   - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
+   - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
+
+### What gets logged
+
+Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPATIAL STATS GEARY`, `SPATIAL STATS COOC PAIRWISE`, `SPATIAL STATS COOC ONE-VS-REST`) plus one `SPATIAL GRAPH` row for the graph build under your project's `qpcat/logs/qpcat_YYYY-MM-DD.log`. Each row records the method name, graph constructor + parameters, permutation count, and a short result summary.
+
+For the programmatic Groovy API see [SCRIPTING.md](SCRIPTING.md).
 
 ---
 

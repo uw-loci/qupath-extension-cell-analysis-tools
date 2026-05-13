@@ -10,6 +10,7 @@ QP-CAT embeds a full scientific Python environment (via [Appose](https://github.
 
 - **[How-To Guide](documentation/HOW_TO_GUIDE.md)** -- Step-by-step instructions for every workflow
 - **[Best Practices](documentation/BEST_PRACTICES.md)** -- Recommendations for measurement selection, normalization, algorithm choice, and phenotyping strategy
+- **[Scripting (Groovy)](documentation/SCRIPTING.md)** -- programmatic API for the spatial graph + statistics, callable from QuPath workflow scripts
 - **[References](documentation/REFERENCES.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
 
 ---
@@ -27,7 +28,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 - **Cleaner clusters via tissue context** -- optional pre-step that averages each cell's features with its spatial neighbors before clustering, so niches and tissue zones come out as connected regions instead of salt-and-pepper noise. Turns any of the algorithms above into a spatially-aware version (graph convolution smoothing)
 - **Marker gating with auto-thresholds** -- classic flow-cytometry-style cell typing, with sensible threshold suggestions per marker (Triangle, GMM, and Gamma auto-threshold methods)
 - **Click the plot, see the cells** -- interactive UMAP / PCA / t-SNE: brush a region of the embedding and the corresponding cells highlight on the slide
-- **Test where cell types live in tissue** -- ask whether two phenotypes co-localize, avoid each other, or scatter randomly across the tissue (neighborhood enrichment + Moran's I autocorrelation via squidpy)
+- **Test where cell types live in tissue** -- ask whether two phenotypes co-localize or avoid each other, whether a marker is spatially structured at short range or long range, and how often two cell types meet at a given distance. Choose the graph behind the analysis explicitly (kNN, Radius, or Delaunay) so the same neighborhood backs every stat (neighborhood enrichment, Ripley's K/L, Geary's C, Moran's I, pairwise + one-vs-rest co-occurrence via squidpy; matches OpenIMC's spatial-stats catalog while reusing the squidpy backend QP-CAT already ships)
 - **Compare across slides and batches** -- batch correction so your clusters reflect biology, not slide-of-origin or staining-day effects, when you analyze a multi-image project all at once (Harmony integration)
 - **Publication-ready follow-up** -- find the markers that define each cluster (Wilcoxon ranking) and generate dotplots, violin plots, and PAGA trajectory graphs without leaving QuPath
 - **Easy hand-off to Python / R** -- export results as standard `.h5ad` AnnData files. Compatible with Scanpy, Seurat, and cellxgene, so you can keep going in your usual notebook when you want to
@@ -187,12 +188,43 @@ Phenotype rules, gates, and marker selections can be saved to and loaded from th
 <details>
 <summary><h2>Spatial Analysis</h2></summary>
 
-When enabled in the clustering dialog, QP-CAT computes spatial statistics using cell centroid coordinates:
+When enabled in the clustering dialog, QP-CAT computes spatial statistics over cell centroid coordinates. v1 covers the catalog OpenIMC ships (Ripley K/L, Geary's C, neighborhood enrichment, co-occurrence) on top of squidpy, with one explicit graph constructor driving every analysis so the parameters are visible and the same neighborhood backs every result.
+
+### Available statistics
 
 - **Neighborhood enrichment** -- Z-score matrix showing which clusters tend to co-localize (or avoid each other) in tissue space
-- **Moran's I autocorrelation** -- Per-marker spatial autocorrelation, identifying markers with spatially structured expression patterns
+- **Ripley's K** and **Ripley's L** -- cumulative distance distribution of cluster A around cluster B (or any cluster around itself), tested against a Poisson null. L is the variance-stabilised transform of K; most users read L
+- **Geary's C** -- per-marker spatial autocorrelation. Sensitive to short-range / local patterns; complements Moran's I which weights long-range structure more heavily
+- **Moran's I autocorrelation** -- per-marker spatial autocorrelation (already in QP-CAT v0)
+- **Co-occurrence** (pairwise + one-vs-rest) -- how often cluster A is found within distance r of cluster B across a range of r. Pairwise gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison
 
-Results are displayed in the results dialog and available as static plot outputs.
+Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [SCRIPTING.md](documentation/SCRIPTING.md) for the Groovy API.
+
+### Graph constructor (kNN / Radius / Delaunay)
+
+Spatial statistics need a definition of "neighbor". In v1 the clustering dialog exposes this explicitly:
+
+- **kNN** (default) -- each cell is connected to its k nearest neighbors by centroid distance. Default k = 15. Recommended starting point.
+- **Radius** -- each cell is connected to every neighbor within a fixed radius (in pixel units of the detection centroids). Use when the biology has a natural distance scale (e.g. immune synapse distance ~ 20 microns).
+- **Delaunay** -- a triangulation that connects each cell to its geometric neighbors; no k or radius. Optional max-edge pruning drops over-long edges (use for tissue with large gaps).
+
+The same graph backs **spatial feature smoothing** (the pre-clustering step) and **all post-clustering spatial stats** when you opt in via Preferences. The shared graph parameters are visible in the dialog and recorded in the audit log on every run.
+
+**BANKSY is independent.** When BANKSY is selected as the clustering algorithm, it keeps its own internal pybanksy neighbor model (the `k_geom` spinner). BANKSY's graph is not surfaced as the kNN/Radius/Delaunay constructor in v1 because pybanksy does not expose a "bring your own graph" hook. This is by design and documented in the dialog.
+
+QP-CAT's v1 statistic surface matches [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats catalog (Ripley + Geary + co-occurrence + neighborhood enrichment) while keeping the squidpy backend the extension already ships with -- no new dependencies.
+
+### Permutation tests
+
+Ripley K/L, Geary's C, and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
+
+| Cell count | Permutations |
+|---|---|
+| <= 50k | 1000 |
+| 50k - 500k | 100 |
+| > 500k | 50 |
+
+The chosen value shows next to the result and is recorded in the audit log. Override via the `qpcat.spatial.permutations` preference (set to a positive integer to force; leave at 0 for adaptive).
 
 ### BANKSY Spatial Clustering
 
@@ -535,7 +567,7 @@ QP-CAT manages its own isolated Python environment via [Appose](https://github.c
 | scikit-learn | KMeans, HDBSCAN, GMM, Agglomerative clustering |
 | leidenalg | Leiden community detection |
 | umap-learn | UMAP dimensionality reduction |
-| squidpy | Spatial analysis (neighborhood enrichment, Moran's I) |
+| squidpy | Spatial analysis (neighborhood enrichment, Moran's I, Geary's C, Ripley K/L, co-occurrence) |
 | harmonypy | Batch correction for multi-sample integration |
 | pybanksy | Spatially-aware BANKSY clustering |
 | anndata | AnnData format for interoperability |
