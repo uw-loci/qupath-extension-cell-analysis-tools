@@ -17,6 +17,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
@@ -54,6 +55,17 @@ public class ClusteringDialog {
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
     private CheckBox batchCorrectionCheck;
+
+    // Spatial Statistics Expansion (v1) controls
+    private ComboBox<String> spatialGraphTypeCombo;
+    private Spinner<Integer> spatialGraphKSpinner;
+    private Spinner<Double> spatialGraphRadiusSpinner;
+    private Spinner<Double> spatialGraphDelaunayMaxEdgeSpinner;
+    private CheckBox enableRipleyCheck;
+    private CheckBox enableGearyCheck;
+    private CheckBox enableCoOccPairwiseCheck;
+    private CheckBox enableCoOccOneVsRestCheck;
+    private Label permutationLabel;
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
@@ -376,7 +388,7 @@ public class ClusteringDialog {
                 "Generate static PNG plots for marker rankings (Wilcoxon rank-sum),\n"
                 + "PAGA trajectory graph, dotplot, and stacked violin plots."));
 
-        spatialAnalysisCheck = new CheckBox("Spatial analysis (neighborhood enrichment, Moran's I)");
+        spatialAnalysisCheck = new CheckBox("Neighborhood enrichment + Moran's I");
         spatialAnalysisCheck.setSelected(false);
         spatialAnalysisCheck.setTooltip(new Tooltip(
                 "Compute spatial statistics using cell centroid coordinates:\n"
@@ -445,9 +457,166 @@ public class ClusteringDialog {
             if (!newVal) batchCorrectionCheck.setSelected(false);
         });
 
+        // ---- Spatial statistics expansion (v1) ----
+        TitledPane spatialStatsPane = createSpatialStatsPane();
+
         VBox box = new VBox(5, generatePlotsCheck, spatialAnalysisCheck,
-                smoothingRow, batchCorrectionCheck);
+                smoothingRow, batchCorrectionCheck, spatialStatsPane);
         return box;
+    }
+
+    /**
+     * v1 spatial-statistics surface. Builds the graph constructor sub-group
+     * (kNN / Radius / Delaunay) plus the per-statistic checkboxes for
+     * Ripley K/L, Geary's C, co-occurrence pairwise + one-vs-rest, and the
+     * adaptive-permutation label. All controls default from
+     * {@link QpcatPreferences} so the dialog round-trips with the prefs UI.
+     */
+    private TitledPane createSpatialStatsPane() {
+        spatialGraphTypeCombo = new ComboBox<>();
+        spatialGraphTypeCombo.getItems().addAll("kNN", "Radius", "Delaunay");
+        String pref = QpcatPreferences.getSpatialGraphType();
+        spatialGraphTypeCombo.setValue(
+                "radius".equals(pref) ? "Radius"
+                : "delaunay".equals(pref) ? "Delaunay" : "kNN");
+        spatialGraphTypeCombo.setTooltip(new Tooltip(
+                "Type of spatial neighbor graph. kNN connects each cell to "
+                + "its k closest neighbors;\nRadius connects all cells within "
+                + "a fixed distance; Delaunay uses the Delaunay triangulation.\n"
+                + "Default: kNN. These graph settings drive spatial smoothing "
+                + "and the statistics\nin this section. BANKSY clustering "
+                + "uses its own neighbor model and is unaffected."));
+
+        spatialGraphKSpinner = new Spinner<>(2, 200,
+                QpcatPreferences.getSpatialGraphK());
+        spatialGraphKSpinner.setEditable(true);
+        spatialGraphKSpinner.setPrefWidth(80);
+        spatialGraphKSpinner.setTooltip(new Tooltip(
+                "Number of nearest neighbors per cell (kNN graph only).\n"
+                + "Range: 2-200. Default: 15. Higher values produce smoother\n"
+                + "spatial structure but blur small features."));
+
+        spatialGraphRadiusSpinner = new Spinner<>(-1.0, 1.0e6,
+                QpcatPreferences.getSpatialGraphRadius(),
+                5.0);
+        spatialGraphRadiusSpinner.setEditable(true);
+        spatialGraphRadiusSpinner.setPrefWidth(100);
+        spatialGraphRadiusSpinner.setTooltip(new Tooltip(
+                "Maximum distance for two cells to be neighbors (Radius graph only).\n"
+                + "Pixel units of detection centroids. Leave at -1 to auto-derive\n"
+                + "(median nearest-neighbor distance x 5)."));
+
+        spatialGraphDelaunayMaxEdgeSpinner = new Spinner<>(-1.0, 1.0e6,
+                QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
+                5.0);
+        spatialGraphDelaunayMaxEdgeSpinner.setEditable(true);
+        spatialGraphDelaunayMaxEdgeSpinner.setPrefWidth(100);
+        spatialGraphDelaunayMaxEdgeSpinner.setTooltip(new Tooltip(
+                "Maximum allowed edge length after Delaunay triangulation;\n"
+                + "longer edges are pruned (Delaunay graph only). Leave at -1\n"
+                + "to skip pruning. Useful for tissues with large gaps."));
+
+        // Gate enable/disable on selected graph type so users see what each
+        // type uses without losing the values when switching back.
+        Runnable updateSpinnerEnablement = () -> {
+            String t = spatialGraphTypeCombo.getValue();
+            spatialGraphKSpinner.setDisable(!"kNN".equals(t));
+            spatialGraphRadiusSpinner.setDisable(!"Radius".equals(t));
+            spatialGraphDelaunayMaxEdgeSpinner.setDisable(!"Delaunay".equals(t));
+        };
+        spatialGraphTypeCombo.valueProperty().addListener((obs, oldV, newV) ->
+                updateSpinnerEnablement.run());
+        updateSpinnerEnablement.run();
+
+        HBox typeRow = new HBox(8,
+                tipLabel("Type:", spatialGraphTypeCombo), spatialGraphTypeCombo);
+        typeRow.setAlignment(Pos.CENTER_LEFT);
+        HBox kRow = new HBox(8,
+                tipLabel("k:", spatialGraphKSpinner), spatialGraphKSpinner);
+        kRow.setAlignment(Pos.CENTER_LEFT);
+        HBox radiusRow = new HBox(8,
+                tipLabel("Radius:", spatialGraphRadiusSpinner), spatialGraphRadiusSpinner);
+        radiusRow.setAlignment(Pos.CENTER_LEFT);
+        HBox delaunayRow = new HBox(8,
+                tipLabel("Delaunay max edge:", spatialGraphDelaunayMaxEdgeSpinner),
+                spatialGraphDelaunayMaxEdgeSpinner);
+        delaunayRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox graphBox = new VBox(4,
+                new Label("Graph constructor:"),
+                typeRow, kRow, radiusRow, delaunayRow);
+        graphBox.setPadding(new Insets(2, 0, 6, 0));
+
+        // ---- Statistic checkboxes ----
+        enableRipleyCheck = new CheckBox("Ripley K and L (point-pattern, dual plot)");
+        enableRipleyCheck.setTooltip(new Tooltip(
+                "Compute Ripley's K and L functions per cluster against a Poisson null.\n"
+                + "Detects spatial clustering (curve above null) or inhibition (below).\n"
+                + "Results show as two LineCharts side by side."));
+
+        enableGearyCheck = new CheckBox("Geary's C (local autocorrelation)");
+        enableGearyCheck.setTooltip(new Tooltip(
+                "Compute Geary's C per marker as a local-pattern alternative to\n"
+                + "Moran's I. Values near 0 indicate spatial clustering;\n"
+                + "values near 2 indicate dispersion."));
+
+        enableCoOccPairwiseCheck = new CheckBox("Co-occurrence -- pairwise");
+        enableCoOccPairwiseCheck.setTooltip(new Tooltip(
+                "For each pair of clusters, compute the ratio of observed vs\n"
+                + "expected co-occurrence at multiple radii. Surfaces cluster pairs\n"
+                + "that systematically appear together or avoid each other."));
+
+        enableCoOccOneVsRestCheck = new CheckBox("Co-occurrence -- one vs rest");
+        enableCoOccOneVsRestCheck.setTooltip(new Tooltip(
+                "For each cluster, compute its co-occurrence against all other\n"
+                + "clusters combined. Faster than pairwise and useful when you only\n"
+                + "want to flag one cluster's spatial behavior."));
+
+        VBox statsBox = new VBox(4,
+                new Label("Statistics:"),
+                enableRipleyCheck, enableGearyCheck,
+                enableCoOccPairwiseCheck, enableCoOccOneVsRestCheck);
+
+        // ---- Adaptive-permutation indicator ----
+        permutationLabel = new Label(formatPermutationsLabel(-1));
+        permutationLabel.setTooltip(new Tooltip(
+                "Number of random permutations for significance testing.\n"
+                + "Higher = more accurate p-values, slower. Adaptive default\n"
+                + "uses 1000 for projects under 50,000 cells, 100 for 50k-500k,\n"
+                + "and 50 above. Override via Preferences > QP-CAT: Run Clustering."));
+
+        // BANKSY independence note (muted, ASCII only)
+        Label banksyNote = new Label(
+                "Note: BANKSY uses its own neighbor model; these graph "
+                + "controls drive spatial smoothing\nand the statistics above.");
+        banksyNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
+        banksyNote.setWrapText(true);
+
+        VBox content = new VBox(6, graphBox, statsBox, permutationLabel, banksyNote);
+
+        TitledPane pane = new TitledPane("Spatial statistics", content);
+        pane.setExpanded(false);
+        pane.setCollapsible(true);
+        return pane;
+    }
+
+    /**
+     * Render the permutation label using the adaptive default. Pass -1
+     * for cell count when no clustering scope is selected yet.
+     */
+    private String formatPermutationsLabel(int nCellsHint) {
+        int override = QpcatPreferences.getSpatialPermutations();
+        if (override > 0) {
+            return "Permutations: " + override + " (manual override; "
+                    + "edit in Preferences > QP-CAT: Run Clustering)";
+        }
+        if (nCellsHint <= 0) {
+            return "Permutations: auto (1000 for <= 50k cells, 100 for 50k-500k, 50 above)";
+        }
+        int perms = nCellsHint <= 50_000 ? 1000
+                : nCellsHint <= 500_000 ? 100 : 50;
+        return "Permutations: " + perms + " (auto from " + nCellsHint + " cells; "
+                + "override in Preferences)";
     }
 
     private VBox createStatusSection() {
@@ -542,6 +711,26 @@ public class ClusteringDialog {
         config.setEnableSpatialSmoothing(spatialSmoothingCheck.isSelected());
         config.setSpatialSmoothingIterations(smoothingIterationsSpinner.getValue());
         config.setEnableBatchCorrection(batchCorrectionCheck.isSelected());
+
+        // Spatial statistics expansion (v1)
+        String graphTypeLabel = spatialGraphTypeCombo.getValue();
+        if ("Radius".equals(graphTypeLabel)) {
+            config.setSpatialGraphType("radius");
+        } else if ("Delaunay".equals(graphTypeLabel)) {
+            config.setSpatialGraphType("delaunay");
+        } else {
+            config.setSpatialGraphType("knn");
+        }
+        config.setSpatialGraphK(spatialGraphKSpinner.getValue());
+        config.setSpatialGraphRadius(spatialGraphRadiusSpinner.getValue());
+        config.setSpatialGraphDelaunayMaxEdge(
+                spatialGraphDelaunayMaxEdgeSpinner.getValue());
+        config.setEnableRipley(enableRipleyCheck.isSelected());
+        config.setEnableGeary(enableGearyCheck.isSelected());
+        config.setEnableCoOccurrencePairwise(enableCoOccPairwiseCheck.isSelected());
+        config.setEnableCoOccurrenceOneVsRest(enableCoOccOneVsRestCheck.isSelected());
+        config.setSpatialPermutations(
+                QpcatPreferences.getSpatialPermutations());
 
         // Selected measurements
         List<String> selected = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
@@ -752,6 +941,25 @@ public class ClusteringDialog {
         smoothingIterationsSpinner.getValueFactory().setValue(config.getSpatialSmoothingIterations());
         batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
 
+        // Spatial statistics expansion (v1) -- the saved-config schema may
+        // pre-date these fields; the ClusteringConfig defaults cover that case.
+        String gtype = config.getSpatialGraphType();
+        if ("radius".equals(gtype)) {
+            spatialGraphTypeCombo.setValue("Radius");
+        } else if ("delaunay".equals(gtype)) {
+            spatialGraphTypeCombo.setValue("Delaunay");
+        } else {
+            spatialGraphTypeCombo.setValue("kNN");
+        }
+        spatialGraphKSpinner.getValueFactory().setValue(config.getSpatialGraphK());
+        spatialGraphRadiusSpinner.getValueFactory().setValue(config.getSpatialGraphRadius());
+        spatialGraphDelaunayMaxEdgeSpinner.getValueFactory().setValue(
+                config.getSpatialGraphDelaunayMaxEdge());
+        enableRipleyCheck.setSelected(config.isEnableRipley());
+        enableGearyCheck.setSelected(config.isEnableGeary());
+        enableCoOccPairwiseCheck.setSelected(config.isEnableCoOccurrencePairwise());
+        enableCoOccOneVsRestCheck.setSelected(config.isEnableCoOccurrenceOneVsRest());
+
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();
         if (configMeasurements != null && !configMeasurements.isEmpty()) {
@@ -767,6 +975,18 @@ public class ClusteringDialog {
     private void runClustering() {
         ClusteringConfig config = buildConfig();
         if (config == null) return;
+
+        // Persist spatial graph parameters so the dialog round-trips with
+        // the Preferences UI. Per-statistic toggles are per-run, not
+        // persisted (matches the existing spatialAnalysisCheck contract).
+        QpcatPreferences.setSpatialGraphType(
+                config.getSpatialGraphType());
+        QpcatPreferences.setSpatialGraphK(
+                config.getSpatialGraphK());
+        QpcatPreferences.setSpatialGraphRadius(
+                config.getSpatialGraphRadius());
+        QpcatPreferences.setSpatialGraphDelaunayMaxEdge(
+                config.getSpatialGraphDelaunayMaxEdge());
 
         // Disable UI during run
         runButton.setDisable(true);
@@ -801,7 +1021,8 @@ public class ClusteringDialog {
                             "Clustering complete: " + result.getNClusters() + " clusters found.");
 
                     if (result.hasPlots() || result.hasMarkerRankings()
-                            || result.hasSpatialAutocorr()) {
+                            || result.hasSpatialAutocorr()
+                            || result.hasAnySpatialStats()) {
                         showResultsDialog(result);
                     }
                 });
@@ -948,6 +1169,70 @@ public class ClusteringDialog {
                     + "Markers with high Moran's I and significant p-values show tissue-level "
                     + "spatial structure -- they are good candidates for spatially-aware analyses "
                     + "like BANKSY clustering."));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        // ---- Spatial Statistics Expansion (v1) tabs ----
+        // Each tab is lazily added when the corresponding result is present.
+        // Ripley K/L is rendered as a dual LineChart side-by-side (stacks
+        // vertically when the dialog width drops below ~700 px). Geary's C
+        // and co-occurrence use a monospaced TextArea mirroring the
+        // Moran's I rendering style.
+        if (result.hasRipley()) {
+            javafx.scene.Node ripleyNode = buildRipleyChartPane(result.getRipley());
+            Tab tab = new Tab("Ripley K and L", wrapWithGuide(ripleyNode,
+                    "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
+                    + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
+                    + "variance-stabilised transform of K; under the null L is centred at zero.\n"
+                    + "Curves above the null = spatial clustering; below = inhibition / dispersion.\n"
+                    + "The Poisson reference is drawn as a dashed line on each chart."));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        if (result.hasGeary()) {
+            TextArea gearyText = new TextArea(formatGearyC(result.getGeary()));
+            gearyText.setEditable(false);
+            gearyText.setWrapText(false);
+            gearyText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            Tab tab = new Tab("Geary's C", wrapWithGuide(gearyText,
+                    "Geary's C per marker measures local spatial autocorrelation.\n"
+                    + "  C < 1: positive autocorrelation (nearby cells have similar values).\n"
+                    + "  C ~ 1: spatial randomness.\n"
+                    + "  C > 1: dispersion (nearby cells have dissimilar values).\n"
+                    + "Sensitive to local detail; pairs naturally with Moran's I which\n"
+                    + "weights global structure more heavily."));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        if (result.hasCoOccurrencePairwise()) {
+            TextArea cooText = new TextArea(formatCoOccurrence(
+                    result.getCoOccurrencePairwise()));
+            cooText.setEditable(false);
+            cooText.setWrapText(false);
+            cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            Tab tab = new Tab("Co-occurrence (pairwise)", wrapWithGuide(cooText,
+                    "For each pair of clusters (A, B), the table reports the ratio\n"
+                    + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
+                    + "as a function of radius. Values > 1 mean A's neighborhood is enriched\n"
+                    + "for B at that radius; < 1 means depleted; ~ 1 means random."));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        if (result.hasCoOccurrenceOneVsRest()) {
+            TextArea cooText = new TextArea(formatCoOccurrence(
+                    result.getCoOccurrenceOneVsRest()));
+            cooText.setEditable(false);
+            cooText.setWrapText(false);
+            cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            Tab tab = new Tab("Co-occurrence (one vs rest)", wrapWithGuide(cooText,
+                    "For each cluster A, the table reports the ratio of A's neighborhood\n"
+                    + "composition vs all-other-clusters combined, as a function of radius.\n"
+                    + "Same scale interpretation as the pairwise table; smaller and easier\n"
+                    + "to scan when you only care about one cluster's spatial behavior."));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1226,6 +1511,215 @@ public class ClusteringDialog {
             logger.warn("Failed to format spatial autocorrelation: {}", e.getMessage());
             return json;
         }
+    }
+
+    /**
+     * Build the dual K(r) + L(r) chart pane for the Ripley result tab.
+     * Responsive layout: side-by-side above ~700 px width, stacked
+     * vertically below.
+     */
+    private static javafx.scene.Node buildRipleyChartPane(
+            qupath.ext.qpcat.model.RipleyResult ripley) {
+        if (ripley == null || ripley.getRadii() == null
+                || ripley.getRadii().length == 0) {
+            return new Label("No Ripley K/L data available.");
+        }
+
+        javafx.scene.chart.NumberAxis xAxisK = new javafx.scene.chart.NumberAxis();
+        javafx.scene.chart.NumberAxis yAxisK = new javafx.scene.chart.NumberAxis();
+        xAxisK.setLabel("r (pixels)");
+        yAxisK.setLabel("K(r)");
+        javafx.scene.chart.LineChart<Number, Number> kChart =
+                new javafx.scene.chart.LineChart<>(xAxisK, yAxisK);
+        kChart.setTitle("Ripley K(r)");
+        kChart.setCreateSymbols(false);
+
+        javafx.scene.chart.NumberAxis xAxisL = new javafx.scene.chart.NumberAxis();
+        javafx.scene.chart.NumberAxis yAxisL = new javafx.scene.chart.NumberAxis();
+        xAxisL.setLabel("r (pixels)");
+        yAxisL.setLabel("L(r)");
+        javafx.scene.chart.LineChart<Number, Number> lChart =
+                new javafx.scene.chart.LineChart<>(xAxisL, yAxisL);
+        lChart.setTitle("Ripley L(r)");
+        lChart.setCreateSymbols(false);
+
+        double[] radii = ripley.getRadii();
+        double[][] kValues = ripley.getKValues();
+        double[][] lValues = ripley.getLValues();
+        List<String> clusterNames = ripley.getClusterNames();
+
+        if (kValues != null && clusterNames != null) {
+            for (int i = 0; i < clusterNames.size() && i < kValues.length; i++) {
+                javafx.scene.chart.XYChart.Series<Number, Number> series =
+                        new javafx.scene.chart.XYChart.Series<>();
+                series.setName("Cluster " + clusterNames.get(i));
+                for (int r = 0; r < radii.length && r < kValues[i].length; r++) {
+                    series.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                            radii[r], kValues[i][r]));
+                }
+                kChart.getData().add(series);
+            }
+        }
+        if (lValues != null && clusterNames != null) {
+            for (int i = 0; i < clusterNames.size() && i < lValues.length; i++) {
+                javafx.scene.chart.XYChart.Series<Number, Number> series =
+                        new javafx.scene.chart.XYChart.Series<>();
+                series.setName("Cluster " + clusterNames.get(i));
+                for (int r = 0; r < radii.length && r < lValues[i].length; r++) {
+                    series.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                            radii[r], lValues[i][r]));
+                }
+                lChart.getData().add(series);
+            }
+        }
+
+        // Poisson null overlay (dashed, neutral grey)
+        if (ripley.getPoissonK() != null && ripley.getPoissonK().length > 0) {
+            javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
+                    new javafx.scene.chart.XYChart.Series<>();
+            nullSeries.setName("Poisson null");
+            double[] poissonK = ripley.getPoissonK();
+            for (int r = 0; r < radii.length && r < poissonK.length; r++) {
+                nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                        radii[r], poissonK[r]));
+            }
+            kChart.getData().add(nullSeries);
+        }
+        if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
+            javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
+                    new javafx.scene.chart.XYChart.Series<>();
+            nullSeries.setName("Poisson null");
+            double[] poissonL = ripley.getPoissonL();
+            for (int r = 0; r < radii.length && r < poissonL.length; r++) {
+                nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                        radii[r], poissonL[r]));
+            }
+            lChart.getData().add(nullSeries);
+        }
+
+        // Responsive container -- side-by-side or stacked depending on width.
+        HBox sideBySide = new HBox(8, kChart, lChart);
+        HBox.setHgrow(kChart, javafx.scene.layout.Priority.ALWAYS);
+        HBox.setHgrow(lChart, javafx.scene.layout.Priority.ALWAYS);
+
+        VBox stacked = new VBox(8, kChart, lChart);
+        VBox.setVgrow(kChart, javafx.scene.layout.Priority.ALWAYS);
+        VBox.setVgrow(lChart, javafx.scene.layout.Priority.ALWAYS);
+
+        // Default to side-by-side; the wrapping VBox in wrapWithGuide
+        // takes care of vertical growth. A simple width listener swaps
+        // children based on a 700-px breakpoint.
+        VBox responsive = new VBox(sideBySide);
+        responsive.widthProperty().addListener((obs, oldW, newW) -> {
+            boolean narrow = newW != null && newW.doubleValue() < 700.0;
+            responsive.getChildren().clear();
+            if (narrow) {
+                // Remove from prior parent to avoid duplicate-child errors.
+                sideBySide.getChildren().clear();
+                stacked.getChildren().setAll(kChart, lChart);
+                responsive.getChildren().add(stacked);
+            } else {
+                stacked.getChildren().clear();
+                sideBySide.getChildren().setAll(kChart, lChart);
+                responsive.getChildren().add(sideBySide);
+            }
+        });
+
+        return responsive;
+    }
+
+    /**
+     * Render Geary's C as a per-marker monospace table; mirrors the
+     * formatSpatialAutocorr style for visual consistency.
+     */
+    private static String formatGearyC(qupath.ext.qpcat.model.GearyCResult geary) {
+        if (geary == null || geary.getMarkerStats() == null
+                || geary.getMarkerStats().isEmpty()) {
+            return "No Geary's C data available.";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%-35s %10s %12s%n", "Marker", "Geary C", "P-value"));
+        sb.append("-".repeat(59)).append("\n");
+        geary.getMarkerStats().entrySet().stream()
+                .sorted((a, b) -> Double.compare(a.getValue().getC(), b.getValue().getC()))
+                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e%n",
+                        entry.getKey(),
+                        entry.getValue().getC(),
+                        entry.getValue().getPValue())));
+        if (geary.getNPermutations() > 0) {
+            sb.append("\n").append("Permutations: ").append(geary.getNPermutations());
+        }
+        if (geary.getGraphType() != null) {
+            sb.append("\nGraph: ").append(geary.getGraphType());
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Render a co-occurrence matrix (pairwise or one-vs-rest) as a
+     * monospace table. For each interval the table prints the per-pair
+     * ratio; intervals are listed in rows for compactness when there are
+     * many of them.
+     */
+    private static String formatCoOccurrence(qupath.ext.qpcat.model.CoOccurrenceResult coo) {
+        if (coo == null || coo.getData() == null || coo.getIntervals() == null
+                || coo.getClusterNames() == null) {
+            return "No co-occurrence data available.";
+        }
+        double[][][] data = coo.getData();
+        double[] intervals = coo.getIntervals();
+        List<String> names = coo.getClusterNames();
+        boolean isOneVsRest = "oneVsRest".equals(coo.getMode());
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Mode: ").append(coo.getMode() == null ? "pairwise" : coo.getMode())
+                .append("\n");
+        if (coo.getGraphType() != null) {
+            sb.append("Graph: ").append(coo.getGraphType()).append("\n");
+        }
+        if (coo.getNPermutations() > 0) {
+            sb.append("Permutations: ").append(coo.getNPermutations()).append("\n");
+        }
+        sb.append("\n");
+
+        // Per-interval table: rows are intervals, columns are cluster pairs.
+        // For pairwise we show the diagonal-major flat list of (A -> B) pairs;
+        // for one-vs-rest we show A -> rest.
+        sb.append(String.format("%-12s", "r"));
+        if (isOneVsRest) {
+            for (String name : names) {
+                sb.append(String.format("%12s", name + " vs rest"));
+            }
+        } else {
+            for (String a : names) {
+                for (String b : names) {
+                    sb.append(String.format("%12s", a + ">" + b));
+                }
+            }
+        }
+        sb.append("\n");
+        sb.append("-".repeat(12 + 12 * (isOneVsRest ? names.size()
+                : names.size() * names.size()))).append("\n");
+
+        for (int r = 0; r < intervals.length; r++) {
+            sb.append(String.format("%-12.2f", intervals[r]));
+            if (isOneVsRest) {
+                for (int a = 0; a < names.size() && a < data.length; a++) {
+                    double v = (data[a].length > 0 && data[a][0].length > r)
+                            ? data[a][0][r] : Double.NaN;
+                    sb.append(String.format("%12.3f", v));
+                }
+            } else {
+                for (int a = 0; a < names.size() && a < data.length; a++) {
+                    for (int b = 0; b < names.size() && b < data[a].length; b++) {
+                        double v = data[a][b].length > r ? data[a][b][r] : Double.NaN;
+                        sb.append(String.format("%12.3f", v));
+                    }
+                }
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 
     private static String formatMarkerRankings(ClusteringResult result) {

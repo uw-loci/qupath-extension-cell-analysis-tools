@@ -624,10 +624,12 @@ public class ClusteringWorkflow {
             }
         }
 
-        // Create spatial coordinates NDArray if spatial analysis, smoothing, or BANKSY
+        // Create spatial coordinates NDArray if spatial analysis, smoothing,
+        // BANKSY, or any v1 spatial statistic is enabled.
         NDArray spatialCoordsNd = null;
         boolean needsSpatialCoords = config.isEnableSpatialAnalysis()
                 || config.isEnableSpatialSmoothing()
+                || config.isAnySpatialStatEnabled()
                 || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY;
         if (needsSpatialCoords) {
             double[][] centroids = MeasurementExtractor.extractCentroids(
@@ -686,6 +688,23 @@ public class ClusteringWorkflow {
         inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
+
+        // ---- Spatial stats expansion (v1) inputs ----
+        // Always pass; the Python side gates the heavy work on per-statistic flags.
+        inputs.put("spatial_graph_type", config.getSpatialGraphType());
+        inputs.put("spatial_graph_k", config.getSpatialGraphK());
+        inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
+        inputs.put("spatial_graph_delaunay_max_edge",
+                config.getSpatialGraphDelaunayMaxEdge());
+        inputs.put("spatial_permutations", config.getSpatialPermutations());
+        inputs.put("use_squidpy_graph_for_smoothing",
+                QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
+        inputs.put("enable_ripley", config.isEnableRipley());
+        inputs.put("enable_geary", config.isEnableGeary());
+        inputs.put("enable_co_occurrence_pairwise",
+                config.isEnableCoOccurrencePairwise());
+        inputs.put("enable_co_occurrence_one_vs_rest",
+                config.isEnableCoOccurrenceOneVsRest());
 
         NDArray labelsNd = null;
         NDArray embNd = null;
@@ -789,6 +808,128 @@ public class ClusteringWorkflow {
                 result.setSpatialAutocorrJson(
                         (String) task.outputs.get("spatial_autocorr"));
                 logger.info("Received spatial autocorrelation results");
+            }
+
+            // ---- Spatial stats expansion (v1) outputs ----
+            // Each output is independent; the Java side checks per-key
+            // existence rather than a bundled flag so a partial Python
+            // success still surfaces the statistics that did complete.
+            if (task.outputs.containsKey("spatial_graph_type")) {
+                result.setSpatialGraphType(
+                        (String) task.outputs.get("spatial_graph_type"));
+            }
+
+            int spatialPermsUsed = 0;
+            if (task.outputs.containsKey("spatial_n_permutations")) {
+                spatialPermsUsed = ((Number) task.outputs.get(
+                        "spatial_n_permutations")).intValue();
+            }
+
+            Gson spatialGson = new Gson();
+            long spatialStartTs = System.currentTimeMillis();
+
+            if (task.outputs.containsKey("ripley")) {
+                try {
+                    qupath.ext.qpcat.model.RipleyResult ripley = parseRipley(
+                            (String) task.outputs.get("ripley"), spatialGson);
+                    result.setRipley(ripley);
+                    logger.info("Received Ripley K/L for {} clusters",
+                            ripley.pairCount());
+                    OperationLogger.getInstance().logOperation(
+                            "SPATIAL STATS RIPLEY",
+                            OperationLogger.spatialStatsParams(
+                                    "Ripley K/L",
+                                    result.getSpatialGraphType(),
+                                    spatialPermsUsed > 0 ? spatialPermsUsed
+                                            : ripley.getNPermutations(),
+                                    nCells),
+                            "Curves for " + ripley.pairCount() + " clusters",
+                            System.currentTimeMillis() - spatialStartTs);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse Ripley result: {}", e.getMessage());
+                }
+            }
+
+            if (task.outputs.containsKey("geary_c")) {
+                try {
+                    qupath.ext.qpcat.model.GearyCResult geary = parseGeary(
+                            (String) task.outputs.get("geary_c"), spatialGson);
+                    result.setGeary(geary);
+                    logger.info("Received Geary's C for {} markers",
+                            geary.measurementCount());
+                    OperationLogger.getInstance().logOperation(
+                            "SPATIAL STATS GEARY",
+                            OperationLogger.spatialStatsParams(
+                                    "Geary C",
+                                    result.getSpatialGraphType(),
+                                    spatialPermsUsed > 0 ? spatialPermsUsed
+                                            : geary.getNPermutations(),
+                                    nCells),
+                            geary.measurementCount() + " markers scored",
+                            System.currentTimeMillis() - spatialStartTs);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse Geary's C result: {}", e.getMessage());
+                }
+            }
+
+            if (task.outputs.containsKey("co_occurrence_pairwise")) {
+                try {
+                    qupath.ext.qpcat.model.CoOccurrenceResult coOcc = parseCoOccurrence(
+                            (String) task.outputs.get("co_occurrence_pairwise"),
+                            spatialGson);
+                    result.setCoOccurrencePairwise(coOcc);
+                    logger.info("Received co-occurrence (pairwise)");
+                    OperationLogger.getInstance().logOperation(
+                            "SPATIAL STATS COOC PAIRWISE",
+                            OperationLogger.spatialStatsParams(
+                                    "Co-occurrence (pairwise)",
+                                    result.getSpatialGraphType(),
+                                    spatialPermsUsed > 0 ? spatialPermsUsed
+                                            : coOcc.getNPermutations(),
+                                    nCells),
+                            coOcc.cellCount() + " clusters",
+                            System.currentTimeMillis() - spatialStartTs);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse co-occurrence pairwise: {}",
+                            e.getMessage());
+                }
+            }
+
+            if (task.outputs.containsKey("co_occurrence_one_vs_rest")) {
+                try {
+                    qupath.ext.qpcat.model.CoOccurrenceResult coOcc = parseCoOccurrence(
+                            (String) task.outputs.get("co_occurrence_one_vs_rest"),
+                            spatialGson);
+                    result.setCoOccurrenceOneVsRest(coOcc);
+                    logger.info("Received co-occurrence (one-vs-rest)");
+                    OperationLogger.getInstance().logOperation(
+                            "SPATIAL STATS COOC ONE-VS-REST",
+                            OperationLogger.spatialStatsParams(
+                                    "Co-occurrence (one-vs-rest)",
+                                    result.getSpatialGraphType(),
+                                    spatialPermsUsed > 0 ? spatialPermsUsed
+                                            : coOcc.getNPermutations(),
+                                    nCells),
+                            coOcc.cellCount() + " clusters",
+                            System.currentTimeMillis() - spatialStartTs);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse co-occurrence one-vs-rest: {}",
+                            e.getMessage());
+                }
+            }
+
+            if (result.hasAnySpatialStats()
+                    && task.outputs.containsKey("spatial_graph_type")) {
+                OperationLogger.getInstance().logOperation(
+                        "SPATIAL GRAPH",
+                        OperationLogger.graphConstructorParams(
+                                result.getSpatialGraphType(),
+                                config.getSpatialGraphK(),
+                                config.getSpatialGraphRadius(),
+                                config.getSpatialGraphDelaunayMaxEdge(),
+                                nCells),
+                        "Spatial neighbor graph built for " + nCells + " cells",
+                        -1);
             }
 
             return result;
@@ -2584,6 +2725,125 @@ public class ClusteringWorkflow {
             resource.close();
         } catch (Exception e) {
             logger.debug("Failed to close {}: {}", name, e.getMessage());
+        }
+    }
+
+    // ==================== Spatial Stats Expansion (v1) parsers ====================
+
+    private static qupath.ext.qpcat.model.RipleyResult parseRipley(String json, Gson gson) {
+        Map<String, Object> raw = gson.fromJson(json,
+                new TypeToken<Map<String, Object>>(){}.getType());
+        qupath.ext.qpcat.model.RipleyResult out = new qupath.ext.qpcat.model.RipleyResult();
+        out.setClusterNames(asStringList(raw.get("cluster_names")));
+        out.setRadii(asDoubleArray(raw.get("radii")));
+        out.setKValues(asDouble2D(raw.get("k_values")));
+        out.setLValues(asDouble2D(raw.get("l_values")));
+        out.setPoissonK(asDoubleArray(raw.get("poisson_k")));
+        out.setPoissonL(asDoubleArray(raw.get("poisson_l")));
+        Object pv = raw.get("p_values");
+        if (pv instanceof Map<?, ?> pvm) {
+            Map<String, Double> pMap = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : pvm.entrySet()) {
+                if (e.getKey() != null && e.getValue() instanceof Number n) {
+                    pMap.put(e.getKey().toString(), n.doubleValue());
+                }
+            }
+            out.setPValues(pMap);
+        }
+        Object n = raw.get("n_permutations");
+        if (n instanceof Number num) out.setNPermutations(num.intValue());
+        if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        return out;
+    }
+
+    private static qupath.ext.qpcat.model.GearyCResult parseGeary(String json, Gson gson) {
+        Map<String, Object> raw = gson.fromJson(json,
+                new TypeToken<Map<String, Object>>(){}.getType());
+        qupath.ext.qpcat.model.GearyCResult out = new qupath.ext.qpcat.model.GearyCResult();
+        Object stats = raw.get("marker_stats");
+        if (stats instanceof Map<?, ?> mstats) {
+            for (Map.Entry<?, ?> e : mstats.entrySet()) {
+                if (e.getKey() == null) continue;
+                String marker = e.getKey().toString();
+                if (e.getValue() instanceof Map<?, ?> entry) {
+                    double c = readNumber(entry.get("c"), Double.NaN);
+                    double p = readNumber(entry.get("p_value"), Double.NaN);
+                    out.putMarker(marker, c, p);
+                }
+            }
+        }
+        Object n = raw.get("n_permutations");
+        if (n instanceof Number num) out.setNPermutations(num.intValue());
+        if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        return out;
+    }
+
+    private static qupath.ext.qpcat.model.CoOccurrenceResult parseCoOccurrence(String json, Gson gson) {
+        Map<String, Object> raw = gson.fromJson(json,
+                new TypeToken<Map<String, Object>>(){}.getType());
+        qupath.ext.qpcat.model.CoOccurrenceResult out =
+                new qupath.ext.qpcat.model.CoOccurrenceResult();
+        if (raw.get("mode") != null) out.setMode(raw.get("mode").toString());
+        out.setClusterNames(asStringList(raw.get("cluster_names")));
+        out.setIntervals(asDoubleArray(raw.get("intervals")));
+        out.setData(asDouble3D(raw.get("data")));
+        Object n = raw.get("n_permutations");
+        if (n instanceof Number num) out.setNPermutations(num.intValue());
+        if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        return out;
+    }
+
+    private static List<String> asStringList(Object raw) {
+        if (raw instanceof List<?> list) {
+            List<String> out = new ArrayList<>(list.size());
+            for (Object o : list) {
+                out.add(o == null ? "" : o.toString());
+            }
+            return out;
+        }
+        return new ArrayList<>();
+    }
+
+    private static double[] asDoubleArray(Object raw) {
+        if (raw instanceof List<?> list) {
+            double[] out = new double[list.size()];
+            for (int i = 0; i < list.size(); i++) {
+                out[i] = readNumber(list.get(i), 0.0);
+            }
+            return out;
+        }
+        return new double[0];
+    }
+
+    private static double[][] asDouble2D(Object raw) {
+        if (raw instanceof List<?> list) {
+            double[][] out = new double[list.size()][];
+            for (int i = 0; i < list.size(); i++) {
+                out[i] = asDoubleArray(list.get(i));
+            }
+            return out;
+        }
+        return new double[0][];
+    }
+
+    private static double[][][] asDouble3D(Object raw) {
+        if (raw instanceof List<?> list) {
+            double[][][] out = new double[list.size()][][];
+            for (int i = 0; i < list.size(); i++) {
+                out[i] = asDouble2D(list.get(i));
+            }
+            return out;
+        }
+        return new double[0][][];
+    }
+
+    private static double readNumber(Object raw, double fallback) {
+        if (raw instanceof Number n) return n.doubleValue();
+        if (raw == null) return fallback;
+        try {
+            return Double.parseDouble(raw.toString());
+        } catch (NumberFormatException e) {
+            return fallback;
         }
     }
 }
