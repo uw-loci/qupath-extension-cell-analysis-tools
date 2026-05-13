@@ -14,6 +14,7 @@ Zero new pip dependencies (see Phase 0 feasibility 4.0):
       sq.gr.spatial_autocorr(mode='geary') - Geary's C per measurement
       sq.gr.co_occurrence               - co-occurrence (pairwise + one-vs-rest)
   - scipy >= 1.10 (already pinned) provides scipy.spatial.Delaunay
+  - matplotlib >= 3.7 (transitive via scanpy/squidpy) - Phase 5 PNG output
 
 Function contract: every callable below either populates `task.outputs`
 with a JSON or NDArray-backed entry, or logs a warning and returns
@@ -21,16 +22,56 @@ without setting outputs. Failures never bubble out of the helper - the
 Java side checks `task.outputs.containsKey(...)` per the existing
 `hasSpatialAutocorr` / `hasNhoodEnrichment` pattern.
 
+Phase 5 enhancement (Feature B precondition): each helper accepts an
+optional `plot_dir` + `plot_dpi` + `persist_plots` triplet. When all are
+supplied and persist_plots is truthy, a matplotlib PNG is written next
+to the existing run_clustering.py outputs. Filenames are part of the
+public contract consumed by FigureExportScripts' PlotKind enum:
+  ripley_k_l.png
+  geary_c.png
+  co_occurrence_pairwise.png
+  co_occurrence_one_vs_rest.png
+
 ASCII-only logging and error messages per the QPSC encoding policy
 (Windows cp1252 production).
 """
 import json
 import logging
 import math
+import os
 
 import numpy as np
 
 logger = logging.getLogger("qpcat.spatial_stats")
+
+
+# Phase 5: Public filename contract consumed by Feature B's PlotKind enum.
+# Keep these stable; downstream FigureExportScripts.exportFigures references
+# the exact strings. Bumping a name is a breaking change for the export API.
+PLOT_FILE_RIPLEY = "ripley_k_l.png"
+PLOT_FILE_GEARY = "geary_c.png"
+PLOT_FILE_COOC_PAIRWISE = "co_occurrence_pairwise.png"
+PLOT_FILE_COOC_ONE_VS_REST = "co_occurrence_one_vs_rest.png"
+
+
+def _should_persist(plot_dir, persist_plots):
+    """Common gate for the Phase 5 PNG-output enhancement.
+
+    Returns True only when persist_plots is truthy AND plot_dir is a
+    non-empty string AND we can create / reach that directory. Every
+    savefig path checks this first; a False result means "skip the plot,
+    return JSON only" - the existing v1 contract.
+    """
+    if not persist_plots:
+        return False
+    if not plot_dir:
+        return False
+    try:
+        os.makedirs(plot_dir, exist_ok=True)
+    except Exception as e:
+        logger.warning("spatial-stats plot dir not writable: %s (%s)", plot_dir, e)
+        return False
+    return True
 
 
 def adaptive_permutations(n_cells, override=0):
@@ -110,7 +151,8 @@ def build_spatial_graph(adata, graph_type="knn", k=15, radius=-1.0,
 
 
 def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
-                max_radius=-1.0, n_steps=50, graph_type="knn"):
+                max_radius=-1.0, n_steps=50, graph_type="knn",
+                plot_dir=None, plot_dpi=150, persist_plots=True):
     """Compute Ripley K and L per cluster.
 
     Writes task.outputs["ripley"] as a JSON blob shaped:
@@ -257,12 +299,61 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
         task.outputs["ripley"] = json.dumps(payload)
         logger.info("Ripley K/L computed for %d clusters (%d radii, %d perms)",
                     len(cluster_names), n_r, n_permutations)
+
+        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        if _should_persist(plot_dir, persist_plots) and radii:
+            try:
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+
+                fig, (ax_k, ax_l) = plt.subplots(1, 2, figsize=(12, 5))
+                n_clusters = len(cluster_names)
+                cmap_name = "tab20" if n_clusters > 10 else "tab10"
+                cmap = plt.get_cmap(cmap_name, max(n_clusters, 1))
+
+                for idx, cname in enumerate(cluster_names):
+                    color = cmap(idx)
+                    if idx < len(k_curves):
+                        ax_k.plot(radii, k_curves[idx], color=color,
+                                   label=str(cname), linewidth=1.2)
+                    if idx < len(l_curves):
+                        ax_l.plot(radii, l_curves[idx], color=color,
+                                   label=str(cname), linewidth=1.2)
+
+                # Poisson null overlays (dashed black for visibility)
+                ax_k.plot(radii, poisson_k, "--", color="black",
+                           label="Poisson null", linewidth=1.0)
+                ax_l.plot(radii, poisson_l, "--", color="black",
+                           label="Poisson null", linewidth=1.0)
+
+                ax_k.set_xlabel("Radius (px)")
+                ax_k.set_ylabel("K(r)")
+                ax_k.set_title("Ripley K")
+                ax_k.legend(fontsize="small", loc="best")
+                ax_k.grid(True, alpha=0.3)
+
+                ax_l.set_xlabel("Radius (px)")
+                ax_l.set_ylabel("L(r)")
+                ax_l.set_title("Ripley L")
+                ax_l.legend(fontsize="small", loc="best")
+                ax_l.grid(True, alpha=0.3)
+
+                fig.suptitle("Ripley K and L (graph: %s, perms: %d)"
+                             % (graph_type, int(n_permutations)))
+                out_path = os.path.join(plot_dir, PLOT_FILE_RIPLEY)
+                fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
+                plt.close(fig)
+                logger.info("Saved Ripley K/L PNG: %s", out_path)
+            except Exception as e:
+                logger.warning("Ripley K/L plot failed: %s", e)
     except Exception as e:
         logger.warning("Ripley K/L failed: %s", e)
 
 
 def run_geary_c(adata, task, n_permutations=1000, measurements=None,
-                 graph_type="knn"):
+                 graph_type="knn",
+                 plot_dir=None, plot_dpi=150, persist_plots=True):
     """Compute Geary's C per marker.
 
     Writes task.outputs["geary_c"] as a JSON blob shaped:
@@ -304,6 +395,46 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
         task.outputs["geary_c"] = json.dumps(payload)
         logger.info("Geary's C computed for %d markers (%d perms)",
                     len(marker_stats), n_permutations)
+
+        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        if _should_persist(plot_dir, persist_plots) and marker_stats:
+            try:
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+
+                markers = list(marker_stats.keys())
+                c_vals = [marker_stats[m].get("c", float("nan"))
+                          for m in markers]
+                # Replace NaNs with 0 for plotting; the bar still appears
+                # but at height 0 so the marker name remains visible.
+                c_plot = [0.0 if (v is None or math.isnan(v)) else float(v)
+                          for v in c_vals]
+
+                n_markers = len(markers)
+                width = max(8.0, min(0.4 * n_markers + 2.0, 24.0))
+                fig, ax = plt.subplots(figsize=(width, 5))
+                xs = np.arange(n_markers)
+                ax.bar(xs, c_plot, color="steelblue", edgecolor="black",
+                        linewidth=0.4)
+                # Null expectation for Geary's C is 1.0 (no autocorrelation).
+                ax.axhline(1.0, color="red", linestyle="--", linewidth=1.0,
+                            label="Null (C = 1)")
+                ax.set_xticks(xs)
+                ax.set_xticklabels(markers, rotation=45, ha="right",
+                                    fontsize="small")
+                ax.set_ylabel("Geary's C")
+                ax.set_title("Geary's C per marker (graph: %s, perms: %d)"
+                              % (graph_type, int(n_permutations)))
+                ax.legend(fontsize="small", loc="best")
+                ax.grid(True, axis="y", alpha=0.3)
+
+                out_path = os.path.join(plot_dir, PLOT_FILE_GEARY)
+                fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
+                plt.close(fig)
+                logger.info("Saved Geary's C PNG: %s", out_path)
+            except Exception as e:
+                logger.warning("Geary's C plot failed: %s", e)
     except Exception as e:
         logger.warning("Geary's C failed: %s", e)
 
@@ -311,7 +442,8 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
 def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
                        min_radius=-1.0, max_radius=-1.0, n_intervals=50,
                        n_permutations=1000, spatial_data=None,
-                       graph_type="knn"):
+                       graph_type="knn",
+                       plot_dir=None, plot_dpi=150, persist_plots=True):
     """Compute co-occurrence as a function of radius.
 
     Mode controls the output shape:
@@ -389,6 +521,79 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
         task.outputs[output_key] = json.dumps(payload)
         logger.info("Co-occurrence (%s) computed: %d clusters, %d intervals",
                     payload["mode"], len(cluster_names), len(intervals_list))
+
+        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        # For "pairwise" mode we save a square heatmap averaged across radii;
+        # for "oneVsRest" we save a per-cluster vs radius heatmap (which is
+        # the natural 2-D view of that collapsed tensor).
+        if _should_persist(plot_dir, persist_plots) and cluster_names \
+                and intervals_list:
+            try:
+                import matplotlib
+                matplotlib.use("Agg")
+                import matplotlib.pyplot as plt
+
+                if mode == "oneVsRest":
+                    # collapsed shape is (n_clusters, 1, n_intervals);
+                    # squeeze the middle axis for a (n_clusters x intervals)
+                    # heatmap
+                    arr = np.asarray(data_list, dtype=np.float64)
+                    if arr.ndim == 3 and arr.shape[1] == 1:
+                        arr = arr[:, 0, :]
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    im = ax.imshow(arr, aspect="auto", cmap="viridis",
+                                    origin="lower")
+                    ax.set_yticks(np.arange(len(cluster_names)))
+                    ax.set_yticklabels(cluster_names, fontsize="small")
+                    # Sparse x ticks at evenly spaced intervals (max ~10)
+                    n_iv = len(intervals_list)
+                    step = max(1, n_iv // 10)
+                    x_ticks = np.arange(0, n_iv, step)
+                    ax.set_xticks(x_ticks)
+                    ax.set_xticklabels(["%.1f" % intervals_list[i]
+                                         for i in x_ticks],
+                                        rotation=45, ha="right",
+                                        fontsize="small")
+                    ax.set_xlabel("Radius (px)")
+                    ax.set_ylabel("Cluster")
+                    ax.set_title("Co-occurrence (one vs rest) - "
+                                 "graph: %s, perms: %d"
+                                 % (graph_type, int(n_permutations)))
+                    fig.colorbar(im, ax=ax, label="Ratio")
+                    out_name = PLOT_FILE_COOC_ONE_VS_REST
+                else:
+                    # Pairwise: average across the radius axis to get a
+                    # (n_clusters x n_clusters) square heatmap. The full
+                    # per-radius tensor remains in the JSON output for
+                    # interactive viewing.
+                    arr = np.asarray(data_list, dtype=np.float64)
+                    if arr.ndim == 3:
+                        heat = arr.mean(axis=2)
+                    else:
+                        heat = arr
+                    fig, ax = plt.subplots(figsize=(8, 7))
+                    im = ax.imshow(heat, aspect="equal", cmap="viridis",
+                                    origin="lower")
+                    ax.set_xticks(np.arange(len(cluster_names)))
+                    ax.set_yticks(np.arange(len(cluster_names)))
+                    ax.set_xticklabels(cluster_names, rotation=45, ha="right",
+                                        fontsize="small")
+                    ax.set_yticklabels(cluster_names, fontsize="small")
+                    ax.set_xlabel("Cluster B")
+                    ax.set_ylabel("Cluster A")
+                    ax.set_title("Co-occurrence (pairwise, mean over radius) - "
+                                 "graph: %s, perms: %d"
+                                 % (graph_type, int(n_permutations)))
+                    fig.colorbar(im, ax=ax, label="Mean ratio")
+                    out_name = PLOT_FILE_COOC_PAIRWISE
+
+                out_path = os.path.join(plot_dir, out_name)
+                fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
+                plt.close(fig)
+                logger.info("Saved co-occurrence (%s) PNG: %s",
+                             payload["mode"], out_path)
+            except Exception as e:
+                logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
     except Exception as e:
         logger.warning("Co-occurrence (%s) failed: %s", mode, e)
 

@@ -131,6 +131,17 @@ try:
 except NameError:
     pref_enable_co_occurrence_one_vs_rest = False
 
+# Phase 5 enhancement: persist spatial-stats plots as PNG. Gated by the
+# qpcat.spatial.persistPlots preference (default true). When the parent
+# task is also generating plots (generate_plots + output_dir), the new
+# spatial-stats PNGs land in the same directory so Feature B's batch
+# figure exporter can pick them up alongside the existing matplotlib
+# outputs.
+try:
+    pref_spatial_persist_plots = spatial_persist_plots
+except NameError:
+    pref_spatial_persist_plots = True
+
 # 2. Normalize
 task.update("Normalizing measurements...", current=0, maximum=6)
 
@@ -610,32 +621,50 @@ if has_spatial and n_clusters_found > 1:
     n_perms = _qpcat_spatial.adaptive_permutations(
         n_cells, override=pref_spatial_permutations)
 
+    # Phase 5: route PNG output for the new stats into the same directory
+    # the existing matplotlib plots write to (output_dir, when set). If
+    # the user disabled plots entirely (plot_dir is None) we skip the
+    # savefig step regardless of persist_plots.
+    try:
+        _spatial_plot_dir = output_dir
+    except NameError:
+        _spatial_plot_dir = None
+    _spatial_persist = bool(pref_spatial_persist_plots) and bool(_spatial_plot_dir)
+
     if pref_enable_ripley:
         task.update("Computing Ripley K and L...")
         _qpcat_spatial.run_ripley(
             adata, task, cluster_key='cluster', n_permutations=n_perms,
-            graph_type=pref_spatial_graph_type)
+            graph_type=pref_spatial_graph_type,
+            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist)
 
     if pref_enable_geary:
         task.update("Computing Geary's C...")
         _qpcat_spatial.run_geary_c(
             adata, task, n_permutations=n_perms,
             measurements=list(marker_names),
-            graph_type=pref_spatial_graph_type)
+            graph_type=pref_spatial_graph_type,
+            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist)
 
     if pref_enable_co_occurrence_pairwise:
         task.update("Computing co-occurrence (pairwise)...")
         _qpcat_spatial.run_co_occurrence(
             adata, task, cluster_key='cluster', mode='pairwise',
             n_permutations=n_perms, spatial_data=spatial_data,
-            graph_type=pref_spatial_graph_type)
+            graph_type=pref_spatial_graph_type,
+            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist)
 
     if pref_enable_co_occurrence_one_vs_rest:
         task.update("Computing co-occurrence (one-vs-rest)...")
         _qpcat_spatial.run_co_occurrence(
             adata, task, cluster_key='cluster', mode='oneVsRest',
             n_permutations=n_perms, spatial_data=spatial_data,
-            graph_type=pref_spatial_graph_type)
+            graph_type=pref_spatial_graph_type,
+            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist)
 
     if any_v1_stats:
         # Surface the resolved adaptive count to the Java side so the

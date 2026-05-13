@@ -28,6 +28,17 @@ public final class SpatialStatsScripts {
     /** Adaptive permutation sentinel: -1 = pick at runtime from cell count. */
     public static final int PERMUTATIONS_ADAPTIVE = -1;
 
+    /**
+     * Phase 5 cross-feature contract. When {@code persistPlots} is set on
+     * an options map, the corresponding statistic also writes a
+     * matplotlib PNG into the result's plot directory so the
+     * Multi-Figure Batch Export dialog (Feature B) can pick it up.
+     * Default behaviour (no key set) reads
+     * {@code QpcatPreferences.isSpatialPersistPlots()} which itself
+     * defaults to {@code true}.
+     */
+    public static final String OPTION_PERSIST_PLOTS = "persistPlots";
+
     private SpatialStatsScripts() {}
 
     /**
@@ -43,6 +54,10 @@ public final class SpatialStatsScripts {
      *   <li>{@code clusters}  - {@code List<String>} to restrict the analysis
      *       to specific clusters. Null / empty = all clusters present on
      *       detections.</li>
+     *   <li>{@code persistPlots} - boolean. When true (default) a
+     *       matplotlib PNG named {@code ripley_k_l.png} is also written
+     *       to the result's plot directory (Phase 5 cross-feature
+     *       contract with Multi-Figure Batch Export).</li>
      * </ul>
      */
     public static Map<String, Object> ripley(Map<String, Object> graphHandle,
@@ -64,6 +79,8 @@ public final class SpatialStatsScripts {
                     case "nPermutations" -> resolved.put("nPermutations",
                             SpatialGraphScripts.readInt(value, PERMUTATIONS_ADAPTIVE));
                     case "clusters" -> resolved.put("clusters", coerceStringList(value));
+                    case OPTION_PERSIST_PLOTS -> resolved.put(OPTION_PERSIST_PLOTS,
+                            coerceBoolean(value, true));
                     default -> logger.warn(
                             "[spatial-stats][ripley] Ignoring unrecognised key '{}'", key);
                 }
@@ -83,6 +100,9 @@ public final class SpatialStatsScripts {
      *       measurement.</li>
      *   <li>{@code nPermutations} - {@link #PERMUTATIONS_ADAPTIVE} = adaptive
      *       default. Positive = fixed.</li>
+     *   <li>{@code persistPlots} - boolean. When true (default) a
+     *       matplotlib PNG named {@code geary_c.png} is also written to
+     *       the result's plot directory.</li>
      * </ul>
      */
     public static Map<String, Object> gearyC(Map<String, Object> graphHandle,
@@ -98,6 +118,8 @@ public final class SpatialStatsScripts {
                     case "measurements" -> resolved.put("measurements", coerceStringList(value));
                     case "nPermutations" -> resolved.put("nPermutations",
                             SpatialGraphScripts.readInt(value, PERMUTATIONS_ADAPTIVE));
+                    case OPTION_PERSIST_PLOTS -> resolved.put(OPTION_PERSIST_PLOTS,
+                            coerceBoolean(value, true));
                     default -> logger.warn(
                             "[spatial-stats][geary] Ignoring unrecognised key '{}'", key);
                 }
@@ -144,6 +166,10 @@ public final class SpatialStatsScripts {
      *   <li>{@code minRadius} - smallest r (pixel units). -1 = auto.</li>
      *   <li>{@code maxRadius} - largest r (pixel units). -1 = auto.</li>
      *   <li>{@code nIntervals} - number of radius bins. Default 50.</li>
+     *   <li>{@code persistPlots} - boolean. When true (default) a
+     *       matplotlib PNG named {@code co_occurrence_pairwise.png} or
+     *       {@code co_occurrence_one_vs_rest.png} (per the {@code mode}
+     *       key) is also written to the result's plot directory.</li>
      * </ul>
      */
     public static Map<String, Object> coOccurrence(Map<String, Object> graphHandle,
@@ -166,6 +192,8 @@ public final class SpatialStatsScripts {
                             SpatialGraphScripts.readDouble(value, -1.0));
                     case "nIntervals" -> resolved.put("nIntervals",
                             SpatialGraphScripts.readInt(value, 50));
+                    case OPTION_PERSIST_PLOTS -> resolved.put(OPTION_PERSIST_PLOTS,
+                            coerceBoolean(value, true));
                     default -> logger.warn(
                             "[spatial-stats][co-occurrence] Ignoring unrecognised key '{}'", key);
                 }
@@ -196,6 +224,18 @@ public final class SpatialStatsScripts {
                         + "defaulting to 'pairwise'", raw);
                 yield "pairwise";
             }
+        };
+    }
+
+    private static boolean coerceBoolean(Object raw, boolean defaultValue) {
+        if (raw == null) return defaultValue;
+        if (raw instanceof Boolean b) return b;
+        if (raw instanceof Number n) return n.doubleValue() != 0.0;
+        String s = raw.toString().trim().toLowerCase();
+        return switch (s) {
+            case "true", "yes", "y", "1", "on" -> true;
+            case "false", "no", "n", "0", "off" -> false;
+            default -> defaultValue;
         };
     }
 

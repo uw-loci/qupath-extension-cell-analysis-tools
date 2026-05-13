@@ -104,4 +104,35 @@ class SpatialStatsScriptsTest {
         // changes, every cached recorded-workflow script breaks.
         assertThat(SpatialStatsScripts.PERMUTATIONS_ADAPTIVE).isEqualTo(-1);
     }
+
+    @Test
+    void persistPlotsOptionKeyStable() {
+        // Phase 5 cross-feature contract with Multi-Figure Batch Export:
+        // the option key string is part of the public API surface.
+        assertThat(SpatialStatsScripts.OPTION_PERSIST_PLOTS).isEqualTo("persistPlots");
+    }
+
+    @Test
+    void ripleyRecognisesPersistPlotsOption() {
+        Map<String, Object> opts = new HashMap<>();
+        opts.put(SpatialStatsScripts.OPTION_PERSIST_PLOTS, false);
+        Map<String, Object> out = SpatialStatsScripts.ripley(null, opts);
+        assertThat(out).containsEntry(SpatialStatsScripts.OPTION_PERSIST_PLOTS, false);
+    }
+
+    @Test
+    void gearyRecognisesPersistPlotsOption() {
+        Map<String, Object> opts = new HashMap<>();
+        opts.put(SpatialStatsScripts.OPTION_PERSIST_PLOTS, true);
+        Map<String, Object> out = SpatialStatsScripts.gearyC(null, opts);
+        assertThat(out).containsEntry(SpatialStatsScripts.OPTION_PERSIST_PLOTS, true);
+    }
+
+    @Test
+    void coOccurrenceRecognisesPersistPlotsOption() {
+        Map<String, Object> opts = new HashMap<>();
+        opts.put(SpatialStatsScripts.OPTION_PERSIST_PLOTS, "yes");  // string coercion
+        Map<String, Object> out = SpatialStatsScripts.coOccurrence(null, opts);
+        assertThat(out).containsEntry(SpatialStatsScripts.OPTION_PERSIST_PLOTS, true);
+    }
 }

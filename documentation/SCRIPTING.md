@@ -81,6 +81,7 @@ Stages Ripley's K and L for every cluster (or the subset listed in `clusters`).
 | `nSteps` | int | 50 | Number of r values between 0 and `maxRadius`. |
 | `nPermutations` | int | -1 (adaptive) | Permutation count. -1 = adaptive default (1000 / 100 / 50 by cell count). |
 | `clusters` | List<String> | empty = all | Cluster labels to evaluate. Empty = all clusters present on detections. |
+| `persistPlots` | boolean | true | Also write `ripley_k_l.png` to the per-result plot directory so the Multi-Figure Batch Export dialog can pick it up. Defaults to the `qpcat.spatial.persistPlots` preference when omitted. |
 
 **Example:**
 
@@ -101,6 +102,7 @@ Stages Geary's C for the listed measurements (or every numeric measurement when 
 |---|---|---|---|
 | `measurements` | List<String> | empty = all numeric | Measurements to evaluate. |
 | `nPermutations` | int | -1 (adaptive) | Permutation count. |
+| `persistPlots` | boolean | true | Also write `geary_c.png` to the per-result plot directory. |
 
 **Example:**
 
@@ -125,6 +127,7 @@ Stages co-occurrence as a function of radius.
 | `minRadius` | double | -1 (auto) | Smallest r (pixel units). |
 | `maxRadius` | double | -1 (auto) | Largest r (pixel units). |
 | `nIntervals` | int | 50 | Number of radius bins. |
+| `persistPlots` | boolean | true | Also write `co_occurrence_pairwise.png` or `co_occurrence_one_vs_rest.png` (per `mode`) to the per-result plot directory. |
 
 **Example:**
 

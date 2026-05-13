@@ -699,6 +699,10 @@ public class ClusteringWorkflow {
         inputs.put("spatial_permutations", config.getSpatialPermutations());
         inputs.put("use_squidpy_graph_for_smoothing",
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
+        // Phase 5 enhancement: PNG output for spatial-stats plots so the
+        // Multi-Figure Batch Export dialog (Feature B) can pick them up.
+        inputs.put("spatial_persist_plots",
+                QpcatPreferences.isSpatialPersistPlots());
         inputs.put("enable_ripley", config.isEnableRipley());
         inputs.put("enable_geary", config.isEnableGeary());
         inputs.put("enable_co_occurrence_pairwise",
