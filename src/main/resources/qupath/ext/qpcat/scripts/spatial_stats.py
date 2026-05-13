@@ -159,7 +159,10 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
         p_values = {}
 
         # squidpy stores per-cluster results under 'bins' / 'pvalues' / 'sims_stat'
-        # but the exact key set varies by version. Read defensively.
+        # but the exact key set varies by version. Read defensively and log
+        # which shape matched so the audit log reveals the live squidpy
+        # contract on the workstation env (Phase 3 narrowing target).
+        k_shape_matched = None
         try:
             bins_df = k_data.get("bins") if isinstance(k_data, dict) else None
             stats_df = k_data.get("stats") if isinstance(k_data, dict) else None
@@ -170,6 +173,7 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
                         k_curves.append([float(v) for v in stats_df[cname]])
                     else:
                         k_curves.append([0.0] * len(radii))
+                k_shape_matched = "dict(bins,stats)"
             else:
                 # Fallback for the alternative squidpy shape: DataFrame with
                 # 'bins' / 'stats' columns
@@ -184,11 +188,23 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
                                 if not radii:
                                     radii = [float(r) for r in sub["bins"]]
                                 k_curves.append([float(v) for v in sub["stats"]])
+                            k_shape_matched = "DataFrame(bins,stats,cluster_col)"
                         else:
                             radii = [float(r) for r in k_data["bins"]]
                             k_curves = [[float(v) for v in k_data["stats"]]]
+                            k_shape_matched = "DataFrame(bins,stats)"
         except Exception as e:
             logger.warning("Ripley K extraction failed: %s", e)
+        if k_shape_matched:
+            logger.info("Ripley K shape matched: %s (squidpy=%s)",
+                        k_shape_matched, getattr(sq, "__version__", "?"))
+        else:
+            logger.warning("Ripley K: no shape matched; curves will be zero-filled. "
+                           "Type=%s, keys=%s",
+                           type(k_data).__name__,
+                           list(k_data.keys()) if isinstance(k_data, dict)
+                           else (list(k_data.columns) if hasattr(k_data, "columns")
+                                 else "n/a"))
 
         try:
             if hasattr(l_data, "columns"):

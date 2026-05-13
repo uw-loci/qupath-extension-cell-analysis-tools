@@ -486,6 +486,8 @@ public class ClusteringDialog {
                 + "Default: kNN. These graph settings drive spatial smoothing "
                 + "and the statistics\nin this section. BANKSY clustering "
                 + "uses its own neighbor model and is unaffected."));
+        spatialGraphTypeCombo.setAccessibleText(
+                "Spatial neighbor graph type: kNN, Radius, or Delaunay");
 
         spatialGraphKSpinner = new Spinner<>(2, 200,
                 QpcatPreferences.getSpatialGraphK());
@@ -495,6 +497,8 @@ public class ClusteringDialog {
                 "Number of nearest neighbors per cell (kNN graph only).\n"
                 + "Range: 2-200. Default: 15. Higher values produce smoother\n"
                 + "spatial structure but blur small features."));
+        spatialGraphKSpinner.setAccessibleText(
+                "Number of nearest neighbors k for kNN graph");
 
         spatialGraphRadiusSpinner = new Spinner<>(-1.0, 1.0e6,
                 QpcatPreferences.getSpatialGraphRadius(),
@@ -505,6 +509,8 @@ public class ClusteringDialog {
                 "Maximum distance for two cells to be neighbors (Radius graph only).\n"
                 + "Pixel units of detection centroids. Leave at -1 to auto-derive\n"
                 + "(median nearest-neighbor distance x 5)."));
+        spatialGraphRadiusSpinner.setAccessibleText(
+                "Maximum neighbor distance for Radius graph, in pixels; -1 for auto");
 
         spatialGraphDelaunayMaxEdgeSpinner = new Spinner<>(-1.0, 1.0e6,
                 QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
@@ -515,6 +521,8 @@ public class ClusteringDialog {
                 "Maximum allowed edge length after Delaunay triangulation;\n"
                 + "longer edges are pruned (Delaunay graph only). Leave at -1\n"
                 + "to skip pruning. Useful for tissues with large gaps."));
+        spatialGraphDelaunayMaxEdgeSpinner.setAccessibleText(
+                "Maximum Delaunay edge length in pixels; -1 to skip pruning");
 
         // Gate enable/disable on selected graph type so users see what each
         // type uses without losing the values when switching back.
@@ -553,24 +561,32 @@ public class ClusteringDialog {
                 "Compute Ripley's K and L functions per cluster against a Poisson null.\n"
                 + "Detects spatial clustering (curve above null) or inhibition (below).\n"
                 + "Results show as two LineCharts side by side."));
+        enableRipleyCheck.setAccessibleText(
+                "Enable Ripley K and L point-pattern statistics");
 
         enableGearyCheck = new CheckBox("Geary's C (local autocorrelation)");
         enableGearyCheck.setTooltip(new Tooltip(
                 "Compute Geary's C per marker as a local-pattern alternative to\n"
                 + "Moran's I. Values near 0 indicate spatial clustering;\n"
                 + "values near 2 indicate dispersion."));
+        enableGearyCheck.setAccessibleText(
+                "Enable Geary's C local spatial autocorrelation");
 
         enableCoOccPairwiseCheck = new CheckBox("Co-occurrence -- pairwise");
         enableCoOccPairwiseCheck.setTooltip(new Tooltip(
                 "For each pair of clusters, compute the ratio of observed vs\n"
                 + "expected co-occurrence at multiple radii. Surfaces cluster pairs\n"
                 + "that systematically appear together or avoid each other."));
+        enableCoOccPairwiseCheck.setAccessibleText(
+                "Enable pairwise co-occurrence at multiple radii");
 
         enableCoOccOneVsRestCheck = new CheckBox("Co-occurrence -- one vs rest");
         enableCoOccOneVsRestCheck.setTooltip(new Tooltip(
                 "For each cluster, compute its co-occurrence against all other\n"
                 + "clusters combined. Faster than pairwise and useful when you only\n"
                 + "want to flag one cluster's spatial behavior."));
+        enableCoOccOneVsRestCheck.setAccessibleText(
+                "Enable one-vs-rest co-occurrence");
 
         VBox statsBox = new VBox(4,
                 new Label("Statistics:"),
@@ -584,11 +600,14 @@ public class ClusteringDialog {
                 + "Higher = more accurate p-values, slower. Adaptive default\n"
                 + "uses 1000 for projects under 50,000 cells, 100 for 50k-500k,\n"
                 + "and 50 above. Override via Preferences > QP-CAT: Run Clustering."));
+        permutationLabel.setAccessibleText(
+                "Permutation count for spatial statistics significance testing");
 
-        // BANKSY independence note (muted, ASCII only)
+        // BANKSY independence note (muted, ASCII only). No manual newline --
+        // wrapText handles soft wrap at the dialog width.
         Label banksyNote = new Label(
                 "Note: BANKSY uses its own neighbor model; these graph "
-                + "controls drive spatial smoothing\nand the statistics above.");
+                + "controls drive spatial smoothing and the statistics above.");
         banksyNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         banksyNote.setWrapText(true);
 
@@ -1529,19 +1548,27 @@ public class ClusteringDialog {
         javafx.scene.chart.NumberAxis yAxisK = new javafx.scene.chart.NumberAxis();
         xAxisK.setLabel("r (pixels)");
         yAxisK.setLabel("K(r)");
+        xAxisK.setAccessibleText("Radius r in pixels");
+        yAxisK.setAccessibleText("Ripley K of r");
         javafx.scene.chart.LineChart<Number, Number> kChart =
                 new javafx.scene.chart.LineChart<>(xAxisK, yAxisK);
         kChart.setTitle("Ripley K(r)");
         kChart.setCreateSymbols(false);
+        kChart.setAccessibleText(
+                "Ripley K function chart per cluster with Poisson null overlay (dashed)");
 
         javafx.scene.chart.NumberAxis xAxisL = new javafx.scene.chart.NumberAxis();
         javafx.scene.chart.NumberAxis yAxisL = new javafx.scene.chart.NumberAxis();
         xAxisL.setLabel("r (pixels)");
         yAxisL.setLabel("L(r)");
+        xAxisL.setAccessibleText("Radius r in pixels");
+        yAxisL.setAccessibleText("Ripley L of r");
         javafx.scene.chart.LineChart<Number, Number> lChart =
                 new javafx.scene.chart.LineChart<>(xAxisL, yAxisL);
         lChart.setTitle("Ripley L(r)");
         lChart.setCreateSymbols(false);
+        lChart.setAccessibleText(
+                "Ripley L function chart per cluster with Poisson null overlay (dashed)");
 
         double[] radii = ripley.getRadii();
         double[][] kValues = ripley.getKValues();
@@ -1573,7 +1600,11 @@ public class ClusteringDialog {
             }
         }
 
-        // Poisson null overlay (dashed, neutral grey)
+        // Poisson null overlay (dashed, neutral grey). Style applied via a
+        // node listener so the dash + grey land on the actual rendered Line;
+        // shape (dashed) carries the meaning, not colour alone -- this is
+        // the colorblind-safety contract from the Phase 1 accessibility
+        // pass.
         if (ripley.getPoissonK() != null && ripley.getPoissonK().length > 0) {
             javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
                     new javafx.scene.chart.XYChart.Series<>();
@@ -1584,6 +1615,7 @@ public class ClusteringDialog {
                         radii[r], poissonK[r]));
             }
             kChart.getData().add(nullSeries);
+            stylePoissonNullSeries(nullSeries);
         }
         if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
             javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
@@ -1595,6 +1627,7 @@ public class ClusteringDialog {
                         radii[r], poissonL[r]));
             }
             lChart.getData().add(nullSeries);
+            stylePoissonNullSeries(nullSeries);
         }
 
         // Responsive container -- side-by-side or stacked depending on width.
@@ -1626,6 +1659,25 @@ public class ClusteringDialog {
         });
 
         return responsive;
+    }
+
+    /**
+     * Apply the dashed grey style to a Poisson null overlay series once
+     * its line node is rendered. JavaFX assigns the .chart-series-line
+     * node lazily; the listener fires on the first non-null assignment.
+     * Colorblind-safe: shape (dash pattern) carries the "this is the null
+     * reference" meaning, not colour alone.
+     */
+    private static void stylePoissonNullSeries(
+            javafx.scene.chart.XYChart.Series<Number, Number> series) {
+        series.nodeProperty().addListener((obs, oldNode, newNode) -> {
+            if (newNode != null) {
+                newNode.setStyle(
+                        "-fx-stroke: -fx-text-base-color;"
+                        + "-fx-stroke-dash-array: 6 4;"
+                        + "-fx-opacity: 0.7;");
+            }
+        });
     }
 
     /**

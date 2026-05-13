@@ -15,10 +15,11 @@ import java.util.Map;
  * task.
  *
  * <p><strong>Stability promise (v1).</strong> Package path, class name,
- * method names ({@code ripley}, {@code rippleyL} alias, {@code gearyC},
- * {@code moranI}, {@code coOccurrence}, {@code neighborhoodEnrichment}),
- * and the option-key set listed below are part of QP-CAT's public
- * scripting API.</p>
+ * method names ({@code ripley}, {@code gearyC}, {@code moranI},
+ * {@code coOccurrence}, {@code neighborhoodEnrichment}), and the
+ * option-key set listed below are part of QP-CAT's public scripting API.
+ * The single {@code ripley(...)} method covers both K and L curves (the
+ * payload always carries both arrays).</p>
  */
 public final class SpatialStatsScripts {
 
