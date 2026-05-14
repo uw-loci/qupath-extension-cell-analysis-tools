@@ -148,25 +148,65 @@ Principal Component Analysis. Linear dimensionality reduction projecting onto to
 
 ### Squidpy
 
-Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis.
+Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis. Used by QP-CAT as the Python-side backend for every spatial-stat exposed in v1: `sq.gr.spatial_neighbors` for graph construction (kNN / Radius / Delaunay), `sq.gr.nhood_enrichment` for neighborhood enrichment, `sq.gr.spatial_autocorr` for Moran's I and Geary's C, `sq.gr.ripley` for Ripley K and L, and `sq.gr.co_occurrence` for pairwise + one-vs-rest co-occurrence.
 
 **Original paper:**
 > Palla G, Spitzer H, Klein M, et al. "Squidpy: a scalable framework for spatial omics analysis." *Nature Methods* 19, 171-178 (2022).
 > https://doi.org/10.1038/s41592-021-01358-2
 
-**Used in:** Spatial analysis (neighborhood enrichment, Moran's I), spatial neighbor graphs
+**Used in:** Spatial analysis (every v1 spatial statistic and graph constructor; see the individual entries below for the underlying mathematics)
 
 ---
 
 ### Moran's I Spatial Autocorrelation
 
-Measures the degree to which expression values are spatially clustered, dispersed, or random.
+Measures the degree to which expression values are spatially clustered, dispersed, or random. Weighted toward long-range / global structure.
 
 **Original paper:**
 > Moran PAP. "Notes on Continuous Stochastic Phenomena." *Biometrika* 37(1-2), 17-23 (1950).
 > https://doi.org/10.1093/biomet/37.1-2.17
 
-**Used in:** Spatial analysis (per-marker spatial autocorrelation)
+**Implementation:** `squidpy.gr.spatial_autocorr(mode="moran")`.
+
+**Used in:** Spatial analysis (per-marker global spatial autocorrelation)
+
+---
+
+### Geary's C Spatial Autocorrelation
+
+Dual to Moran's I. Weighted toward short-range / local differences, so it is more sensitive to sharp tissue boundaries and small immune-infiltrate niches than Moran's I. v0.2.7 surfaces Geary's C in the clustering dialog and the YAML batch alongside Moran's I.
+
+**Original paper:**
+> Geary RC. "The Contiguity Ratio and Statistical Mapping." *The Incorporated Statistician* 5(3), 115-145 (1954).
+> https://doi.org/10.2307/2986645
+
+**Implementation:** `squidpy.gr.spatial_autocorr(mode="geary")`.
+
+**Used in:** Spatial analysis (per-marker local spatial autocorrelation; v0.2.7+)
+
+---
+
+### Ripley's K and L Functions
+
+Cumulative point-pattern statistics for cluster-on-cluster spatial relationships at a range of distances. K(r) is the cumulative count of neighbors within distance r normalised by cluster density (above the Poisson null = clustering / co-localization; below = dispersion / avoidance); L is the variance-stabilised transform L(r) = sqrt(K(r) / pi) - r and is the recommended reading on radial plots because L is centred at 0 under the Poisson null at every r.
+
+**Original paper:**
+> Ripley BD. "The Second-Order Analysis of Stationary Point Processes." *Journal of Applied Probability* 13(2), 255-266 (1976).
+> https://doi.org/10.2307/3212829
+
+**Implementation:** `squidpy.gr.ripley(mode="K")` and `squidpy.gr.ripley(mode="L")`. QP-CAT plots both panels in a single chart with the Poisson null overlay; the permutation count adapts to the cell count (1000 / 100 / 50) unless overridden via the `qpcat.spatial.permutations` preference.
+
+**Used in:** Spatial analysis (Ripley K and L tabs in the clustering results dialog; v0.2.7+)
+
+---
+
+### Co-occurrence
+
+Probability that a cluster-B cell is found within distance r of a cluster-A cell, evaluated across a range of r. Pairwise mode gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison.
+
+**Implementation:** `squidpy.gr.co_occurrence`. Permutation count follows the same adaptive default as Ripley and Geary; results render in their own tabs and persist on `SavedClusteringResult`.
+
+**Used in:** Spatial analysis (Co-occurrence pairwise / one-vs-rest tabs; v0.2.7+)
 
 ---
 
@@ -178,7 +218,22 @@ Tests whether cell types (clusters) are enriched or depleted as spatial neighbor
 > Palla G, Spitzer H, Klein M, et al. "Squidpy: a scalable framework for spatial omics analysis." *Nature Methods* 19, 171-178 (2022).
 > https://doi.org/10.1038/s41592-021-01358-2
 
+**Implementation:** `squidpy.gr.nhood_enrichment`.
+
 **Used in:** Spatial analysis (cluster co-localization z-score matrix)
+
+---
+
+### Delaunay Triangulation (Graph Constructor)
+
+Parameter-free planar triangulation connecting each cell to its geometric neighbors. Used in v0.2.7 as one of three explicit graph constructors backing the post-clustering spatial-stats catalog (kNN / Radius / Delaunay); optional max-edge pruning drops over-long edges so cells across a tissue gap are not artificially connected.
+
+**Foundational reference:**
+> Delaunay BN. "Sur la sphere vide." *Bulletin de l'Academie des Sciences de l'URSS, Classe des sciences mathematiques et naturelles* 6, 793-800 (1934).
+
+**Implementation:** `squidpy.gr.spatial_neighbors(coord_type="generic", delaunay=True)` with QP-CAT-side max-edge pruning.
+
+**Used in:** Spatial analysis (Delaunay option in the graph-constructor dropdown; v0.2.7+)
 
 ---
 
