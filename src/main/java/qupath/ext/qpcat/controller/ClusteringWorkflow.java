@@ -52,6 +52,18 @@ public class ClusteringWorkflow {
 
     private final QuPathGUI qupath;
 
+    /**
+     * Construct a workflow bound to a live QuPathGUI. The GUI is required
+     * for the single-image entry points ({@link #runClustering},
+     * {@link #runPhenotyping}, {@link #computeThresholds},
+     * {@link #runSubClustering}, {@link #exportAnnData}) which all read
+     * {@code qupath.getImageData()}.
+     *
+     * <p>For headless dispatch (YAML batch), pass {@code null} and call
+     * only {@link #runProjectClustering(List, ClusteringConfig,
+     * java.util.function.Consumer)}. The internal FX-thread hierarchy
+     * notifications are null-safe when {@code qupath} is null.</p>
+     */
     public ClusteringWorkflow(QuPathGUI qupath) {
         this.qupath = qupath;
     }
@@ -305,13 +317,18 @@ public class ClusteringWorkflow {
             report(progressCallback, "Saved results for " + entry.getImageName());
         }
 
-        // Fire hierarchy update for the currently open image (if it was clustered)
-        Platform.runLater(() -> {
-            ImageData<BufferedImage> currentImageData = qupath.getImageData();
-            if (currentImageData != null) {
-                currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
-            }
-        });
+        // Fire hierarchy update for the currently open image (if it was clustered).
+        // Null-safe: headless dispatch (YAML batch) passes a null QuPathGUI, in
+        // which case there is no FX viewer to notify -- the per-image saves
+        // above already persisted the labels.
+        if (qupath != null) {
+            Platform.runLater(() -> {
+                ImageData<BufferedImage> currentImageData = qupath.getImageData();
+                if (currentImageData != null) {
+                    currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+                }
+            });
+        }
 
         String completeMsg = "Project clustering complete: " + result.getNClusters()
                 + " clusters found for " + result.getNCells() + " cells across "
