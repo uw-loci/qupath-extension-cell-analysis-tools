@@ -35,6 +35,13 @@ dependencies {
     // Appose for embedded Java-Python IPC with shared memory
     implementation("org.apposed:appose:0.11.0")
 
+    // SnakeYAML for the v1 YAML headless-batch parser. Already present on
+    // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)
+    // but not on compileClasspath; declare explicitly so the batch parser
+    // compiles against the same version that ships at runtime.
+    compileOnly("org.yaml:snakeyaml:2.3")
+    testImplementation("org.yaml:snakeyaml:2.3")
+
     shadow(libs.bundles.groovy)
 
     testImplementation(libs.bundles.qupath)
