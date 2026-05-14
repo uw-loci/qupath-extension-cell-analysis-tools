@@ -245,6 +245,110 @@ If `plotKinds` includes a JavaFX-only key when called from script mode, the call
 
 The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds`; `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
 
+## YamlBatchScripts
+
+Static facade for invoking the YAML headless-batch runner from a Groovy script. The same entry point that `qpcat_batch.groovy` uses, exposed for users who want to construct or transform the YAML config in Groovy before running it.
+
+The primary user-facing surface for headless QP-CAT is the YAML config file consumed by `QuPath script qpcat_batch.groovy --args=config.yaml`. The Groovy facade is the layer underneath -- useful when you want to:
+
+- Modify a config before running (e.g., bump `dpi` for a poster pass).
+- Run the batch from inside an existing Groovy workflow that has other QuPath steps before / after.
+- Re-use the validator + orchestrator from a custom CI harness.
+
+For users who just want to run an existing YAML file from the command line, ignore this section and use `qpcat_batch.groovy` directly per [HOW_TO_GUIDE section 19](HOW_TO_GUIDE.md#19-yaml-headless-batch).
+
+### `runBatch(Map opts) -> BatchOutcome`
+
+Runs the YAML batch from a YAML file path or an inline YAML string.
+
+| Option key | Type | Default | Notes |
+|---|---|---|---|
+| `config` | `Path` / `String` (path) / `String` (YAML content) | required | Either a path to a YAML file on disk, or an inline YAML string (auto-detected by leading `version:` token). |
+| `dryRun` | boolean | `false` | If `true`, validate + describe without executing. Returns a `BatchOutcome` with `isDryRun() == true`. |
+| `emitter` | `ProgressEmitter` | `StdoutProgressEmitter` | Override to capture progress in tests / other surfaces. |
+
+**Returns:** `YamlBatchOrchestrator.BatchOutcome` -- a thin POJO with `getImages()` (per-image successes / failures), `getExitCode()`, `getTotalElapsedMs()`, `getYamlSha256()`, `isDryRun()`, `getFiguresWritten()`, `succeeded()` / `failed()`.
+
+**Example: run an existing YAML file**
+
+```groovy
+import qupath.ext.qpcat.scripting.YamlBatchScripts
+
+def outcome = YamlBatchScripts.runBatch([
+    config: "/path/to/analysis.yaml"
+])
+
+println "Exit code: ${outcome.getExitCode()}"
+println "Succeeded: ${outcome.succeeded()} / ${outcome.getImages().size()}"
+outcome.getImages().findAll { !it.isSuccess() }.each {
+    println "  FAILED: ${it.getImageName()} -- ${it.getError()}"
+}
+```
+
+**Example: validate (dry-run) before running**
+
+```groovy
+import qupath.ext.qpcat.scripting.YamlBatchScripts
+
+def yamlPath = "/path/to/analysis.yaml"
+
+// Validate first -- non-zero exit code means E0xx errors surfaced.
+def dry = YamlBatchScripts.runBatch([config: yamlPath, dryRun: true])
+if (dry.getExitCode() != 0) {
+    println "Validation failed; aborting."
+    return
+}
+
+// All clear -- run for real.
+def outcome = YamlBatchScripts.runBatch([config: yamlPath])
+println "Run complete; exit code ${outcome.getExitCode()}"
+```
+
+### Integration with the YAML file entry point
+
+`qpcat_batch.groovy` is a thin shim that parses its `--args` argument and calls `YamlBatchScripts.runBatch(config: <yaml-path>)`. Anything you can express via the YAML file works through the scripting facade as well. The file entry point is the recommended user-facing surface (diff-friendly, committable); the Groovy facade is for users who specifically need programmatic dispatch.
+
+## Batch Workflows
+
+A pure-Groovy workflow that walks a directory of projects:
+
+```groovy
+import qupath.ext.qpcat.scripting.YamlBatchScripts
+import java.nio.file.Files
+import java.nio.file.Paths
+
+def yamlTemplate = """
+version: '1.0'
+scope:
+  projects: [{{PROJECT}}]
+clustering:
+  type: leiden
+  resolution: 0.8
+  normalization: zscore
+  random_seed: 42
+figure_export:
+  enabled: true
+  output_dir: ./qpcat/figures
+  figures: [dotplot, neighborhood]
+  formats: [png]
+  dpi: 300
+on_error: continue
+"""
+
+def projectsRoot = Paths.get("/data/experiments")
+def projectFiles = Files.walk(projectsRoot, 2)
+    .filter { it.getFileName().toString() == "project.qpproj" }
+    .collect()
+
+projectFiles.each { pf ->
+    def yaml = yamlTemplate.replace("{{PROJECT}}", pf.toString())
+    def outcome = YamlBatchScripts.runBatch([
+        config: yaml
+    ])
+    println "${pf}: exit=${outcome.getExitCode()}"
+}
+```
+
 ## Adaptive permutation default
 
 Use `SpatialStatsScripts.PERMUTATIONS_ADAPTIVE` (== -1) to request the adaptive default. The Java side resolves the actual permutation count from the cell count just before dispatching the Python task; the resolved value is recorded in the audit-log row for each statistic.

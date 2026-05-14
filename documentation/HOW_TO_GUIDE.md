@@ -29,6 +29,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 16. [Reviewing the Operation Audit Trail](#16-reviewing-the-operation-audit-trail)
 17. [Spatial Statistics (Ripley, Geary, Co-occurrence)](#17-spatial-statistics-ripley-geary-co-occurrence)
 18. [Exporting Figures](#18-exporting-figures)
+19. [YAML Headless Batch](#19-yaml-headless-batch)
 
 ---
 
@@ -786,6 +787,100 @@ Each export run writes one row to the project's audit log at `<project>/qpcat/lo
 - Failure count (zero on a clean run)
 
 For the programmatic Groovy API see [SCRIPTING.md](SCRIPTING.md#figureexportscripts).
+
+---
+
+## 19. YAML Headless Batch
+
+Run QP-CAT without opening the QuPath GUI by writing a YAML config file and invoking it via QuPath's `script` subcommand. Same analysis surface as the dialog; same Appose env; same audit log. The right call when you need to run the identical analysis across many projects, or when you want a reproducible record of "this is the analysis we ran for this paper." Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` command; QP-CAT's variant runs inside QuPath's extension class loader so the analysis is identical to the GUI.
+
+The full YAML field-by-field reference is in [YAML_SCHEMA.md](YAML_SCHEMA.md). This chapter is the workflow narrative.
+
+### When to use the YAML batch (vs. the GUI)
+
+- **GUI** -- exploratory analysis, one-off images, anything where you want to inspect intermediate results visually before committing to parameters.
+- **YAML batch** -- the parameters are locked, you want to run them across N projects / images, and you want a single config file you can commit alongside the data or paper draft.
+- **Groovy via Script Editor** -- power users who want to script around QP-CAT's facades but don't need the cross-project iteration the YAML provides. See [SCRIPTING.md](SCRIPTING.md).
+
+Rule of thumb: **if the analysis appears in a paper, commit a YAML batch config alongside the figures and data**.
+
+### Prerequisites
+
+1. Run **Extensions > QP-CAT > Setup Clustering Environment** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
+2. Confirm the QuPath launcher's `script` subcommand is reachable:
+
+   ```bash
+   ~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath script --help
+   ```
+
+   On macOS / Windows substitute `/Applications/QuPath.app/Contents/MacOS/QuPath` or `C:\Program Files\QuPath\QuPath.exe`.
+
+### Quick Start (3 steps)
+
+1. **Write the YAML.** Start from one of the examples in [YAML_SCHEMA.md](YAML_SCHEMA.md#examples); copy the closest one, point `scope.projects` at your project, save as `analysis.yaml`.
+2. **Run.** From a terminal:
+
+   ```bash
+   ~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath \
+       script /path/to/qpcat_batch.groovy \
+       --args /path/to/analysis.yaml
+   ```
+
+3. **Check output.** Each project's audit log lands at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`. The `YAML BATCH START` row records the YAML SHA-256 + duration; subsequent rows are one per operation. Any figures land at the directory you named in `figure_export.output_dir`.
+
+### Invocation details
+
+`qpcat_batch.groovy` ships inside the QP-CAT shadow JAR at `qupath/ext/qpcat/scripts/batch/qpcat_batch.groovy`. Recommended pattern: extract it once to a known location and reference that path in subsequent invocations.
+
+```bash
+# One-time: extract the bundled script
+unzip -p ~/QuPath/v0.7/extensions/qupath-extension-cluster-analysis-tools-*.jar \
+    qupath/ext/qpcat/scripts/batch/qpcat_batch.groovy \
+    > /usr/local/share/qpcat/qpcat_batch.groovy
+
+# Each run:
+QuPath script /usr/local/share/qpcat/qpcat_batch.groovy --args /path/to/config.yaml
+```
+
+Pass `--args=--dry-run` to validate the YAML without executing:
+
+```bash
+QuPath script qpcat_batch.groovy --args config.yaml --args=--dry-run
+```
+
+Exit codes (POSIX, per design Section 6):
+
+| Code | Meaning |
+|---|---|
+| 0 | Success (also dry-run success) |
+| 1 | Partial failure (`on_error: continue` and >=1 image failed) |
+| 2 | Fatal validation error |
+| 3 | Fatal runtime error (`on_error: stop` triggered) |
+
+### Debugging a failed run
+
+If the batch errors out or any image fails:
+
+1. **Read the audit log** at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`. The failure row records image, step, and the exception message.
+2. **Read the QuPath stderr.** The Groovy entry logs progress per image; the last printed line before the failure is the breadcrumb.
+3. **Cross-reference [TROUBLESHOOTING_YAML_BATCH.md](TROUBLESHOOTING_YAML_BATCH.md).** The error-code map covers parse errors, validation errors, env-not-built, image-not-found, mid-run failure, and launcher-not-found.
+4. **Re-run with `--args=--dry-run`** to confirm the YAML is structurally valid. If dry-run succeeds and the actual run still fails, the failure is in the analysis or env, not the YAML.
+
+### Recovering from a partial failure
+
+If `on_error: continue` and a few images failed, the run completes with the rest of the images processed. To re-run only the failed images, narrow `scope.images`:
+
+```yaml
+scope:
+  projects: [/data/experiments/cohort_2025_q2/project.qpproj]
+  images:
+    - Patient03_ROI1
+    - Patient07_ROI2
+```
+
+Already-processed images that show up again will be re-clustered (and their previous saved results overwritten); to avoid this, set `clustering.mode: reuse_saved` and use the existing saved-result name.
+
+If `on_error: stop` aborted on the first failure, fix the cause (env, data, or YAML) and re-run from scratch. There is no resume-from-checkpoint in v1.
 
 ---
 
