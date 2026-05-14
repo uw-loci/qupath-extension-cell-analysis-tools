@@ -98,7 +98,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `resolution` | double | `1.0` | Leiden / Louvain only. Range `(0, 10]`. |
 | `k` | int | `10` | KMeans / MiniBatch KMeans only. Range `[2, 200]`. |
 | `n_clusters` | int | `10` | Agglomerative / GMM only. |
-| `min_cluster_size` | int | `50` | HDBSCAN only. |
+| `min_cluster_size` | int | `15` | HDBSCAN only. Matches the dialog default; smaller = more clusters, also more noise rows. |
 | `linkage` | string | `ward` | Agglomerative only. `ward`, `complete`, `average`, `single`. |
 | `banksy_lambda` | double | `0.2` | BANKSY only. |
 | `banksy_k_geom` | int | `15` | BANKSY only. |

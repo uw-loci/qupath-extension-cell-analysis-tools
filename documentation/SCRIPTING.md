@@ -1,6 +1,6 @@
 # QP-CAT -- Scripting (Groovy)
 
-Programmatic access to QP-CAT's spatial graph, spatial-statistics, and figure-export surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley K/L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), and batch figure export. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
+Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley K/L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
 
 ## When to script vs. use the dialog
 
@@ -36,7 +36,7 @@ def geary = SpatialStatsScripts.gearyC(graph, [
 
 Each method returns a normalised, canonical options map. To execute, pass these maps to the clustering workflow via the standard `Run Clustering...` dialog or wire them into a recorded workflow step that calls into the dialog programmatically. v1 ships the option-map vocabulary as the public API; full end-to-end "run from script without the dialog" is on the v2 roadmap.
 
-> **Stability promise (v1).** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`, `FigureExportScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`, `exportFigures`), and recognised option keys listed in this document are part of QP-CAT's public scripting API. Breaking changes will be announced in release notes and accompanied by a deprecation period of at least one minor version. New option keys may be added at any time (additive); semantics of existing keys will not change without notice.
+> **Stability promise (v1).** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`, `FigureExportScripts`, `YamlBatchScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`, `exportFigures`, `runBatch`), and recognised option keys listed in this document are part of QP-CAT's public scripting API. Breaking changes will be announced in release notes and accompanied by a deprecation period of at least one minor version. New option keys may be added at any time (additive); semantics of existing keys will not change without notice.
 
 ## SpatialGraphScripts
 
@@ -241,9 +241,13 @@ println result.summary()
 
 If `plotKinds` includes a JavaFX-only key when called from script mode, the call records it as a failure in `ExportResult.getFailures()` and continues with the remaining plots.
 
+### Ripley slug shorthand
+
+The YAML schema accepts `ripley` in `figure_export.figures` as shorthand that expands to both `ripley_k` and `ripley_l` at validation time. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass both slugs explicitly (`plotKinds: ["ripley_k", "ripley_l"]`) or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](YAML_SCHEMA.md#filename-slug-shorthand) for the YAML-side rule.
+
 ### Integration with the YAML batch (Feature C)
 
-The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds`; `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
+The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds` (with the `ripley` slug shorthand already expanded); `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
 
 ## YamlBatchScripts
 
@@ -362,6 +366,8 @@ Every staged statistic that runs through the dialog produces one row in the proj
 - `=== SPATIAL STATS GEARY === ...` -- one row per Geary's C run
 - `=== SPATIAL STATS COOC PAIRWISE === ...` -- one row per pairwise co-occurrence run
 - `=== SPATIAL STATS COOC ONE-VS-REST === ...` -- one row per one-vs-rest run
+- `=== LLM EXPLAIN === ...` -- one row per cluster-explainer call (provider, model, prompt template version, token counts; prompt + response captured under indented blocks)
+- `=== YAML BATCH START === ...` / `=== YAML BATCH END === ...` -- bracketing rows for every YAML batch run, with YAML SHA-256 + duration + per-image outcome summary
 - `--- FIGURE EXPORT --- ...` -- one row per dialog-driven batch figure export
 
 Each row captures method name, graph type, permutation count, cell count, and a short result summary. Re-running with different graph constructors leaves a clear comparative trail.

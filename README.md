@@ -10,8 +10,10 @@ QP-CAT embeds a full scientific Python environment (via [Appose](https://github.
 
 - **[How-To Guide](documentation/HOW_TO_GUIDE.md)** -- Step-by-step instructions for every workflow
 - **[Best Practices](documentation/BEST_PRACTICES.md)** -- Recommendations for measurement selection, normalization, algorithm choice, and phenotyping strategy
-- **[Scripting (Groovy)](documentation/SCRIPTING.md)** -- programmatic API for the spatial graph + statistics, callable from QuPath workflow scripts
+- **[Scripting (Groovy)](documentation/SCRIPTING.md)** -- programmatic API for the spatial graph, spatial statistics, batch figure export, and the YAML headless-batch runner, callable from QuPath workflow scripts
 - **[YAML Schema](documentation/YAML_SCHEMA.md)** -- field-by-field reference for the YAML headless-batch config file
+- **[Troubleshooting -- LLM Cluster Explainer](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md)** -- error states for the Cluster Explainer (LLM) [Beta] tab with what-you-see / what-it-means / what-to-do for every case
+- **[Troubleshooting -- YAML Headless Batch](documentation/TROUBLESHOOTING_YAML_BATCH.md)** -- error-by-error remediation for the YAML batch runner, keyed by `E0xx` validation codes
 - **[References](documentation/REFERENCES.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
 
 ---
@@ -612,6 +614,7 @@ All items are under **Extensions > QP-CAT**:
 | Quick Cluster > Quick HDBSCAN | One-click HDBSCAN with defaults | Image + detections |
 | Manage Clusters... | Rename and merge cluster classifications | Image |
 | Export AnnData (.h5ad)... | Export data for external analysis tools | Image + detections |
+| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes saved matplotlib plots in one pass. See [HOW_TO_GUIDE chapter 18](documentation/HOW_TO_GUIDE.md#18-exporting-figures) | Project + at least one saved clustering result |
 | Utilities > Python Console | View Python debug output | None |
 | Utilities > System Info... | Show version and environment details | Environment ready |
 | Utilities > Rebuild Environment | Delete and re-download Python environment | None |

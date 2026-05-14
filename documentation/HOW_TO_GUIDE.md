@@ -288,7 +288,7 @@ This feature is marked **[Beta]** for v1. The prompt template, output JSON shape
 - **vs Zero-Shot Phenotyping (BiomedCLIP)** -- BiomedCLIP labels *individual cells* from pixel tiles; this labels *clusters* from marker statistics. The two are complementary -- if both run on the same project, comparing them is itself useful: agreement is reassuring, disagreement is a flag to investigate (often a low-quality cluster, a faint marker, or a tissue artifact)
 - **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
 - **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
-- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude 3.5 Sonnet on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
+- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 4.5 (`claude-sonnet-4-5`) on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
 
 ### Requirements
 
@@ -682,7 +682,7 @@ When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplot
 
 These are picked up by the Multi-Figure Batch Export dialog so they can be exported alongside the other clustering plots. Disable the preference to keep the in-dialog charts but skip the savefig step.
 
-For the programmatic Groovy API see [SCRIPTING.md](SCRIPTING.md).
+For the programmatic Groovy API see [SCRIPTING.md `SpatialGraphScripts`](SCRIPTING.md#spatialgraphscripts) (graph construction) and [SCRIPTING.md `SpatialStatsScripts`](SCRIPTING.md#spatialstatsscripts) (Ripley / Geary / co-occurrence / Moran's I / neighborhood enrichment).
 
 ---
 
@@ -800,7 +800,7 @@ The full YAML field-by-field reference is in [YAML_SCHEMA.md](YAML_SCHEMA.md). T
 
 - **GUI** -- exploratory analysis, one-off images, anything where you want to inspect intermediate results visually before committing to parameters.
 - **YAML batch** -- the parameters are locked, you want to run them across N projects / images, and you want a single config file you can commit alongside the data or paper draft.
-- **Groovy via Script Editor** -- power users who want to script around QP-CAT's facades but don't need the cross-project iteration the YAML provides. See [SCRIPTING.md](SCRIPTING.md).
+- **Groovy via Script Editor** -- power users who want to script around QP-CAT's facades but don't need the cross-project iteration the YAML provides. See [SCRIPTING.md `YamlBatchScripts`](SCRIPTING.md#yamlbatchscripts) for the programmatic batch runner, [SCRIPTING.md Batch Workflows](SCRIPTING.md#batch-workflows) for a directory-walking template, and [YAML_SCHEMA.md](YAML_SCHEMA.md) for the field-by-field config reference.
 
 Rule of thumb: **if the analysis appears in a paper, commit a YAML batch config alongside the figures and data**.
 
