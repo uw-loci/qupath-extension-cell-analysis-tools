@@ -4,6 +4,19 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.2.8] -- 2026-05-28
+
+Small patch release for remote-system testing. Fixes a Pixi env regression that blocked spatial-stats on Windows, plus an Autoencoder dialog polish pass.
+
+### Fixed
+
+- **Spatial-stats failed on Windows with `ModuleNotFoundError: No module named 'pkg_resources'`.** `xarray_schema` (transitive: `squidpy` -> `spatialdata` -> `xarray_schema`) still imports `pkg_resources` at module load, and modern Pixi envs do not preinstall `setuptools` (which provides it). Pinned `setuptools >= 65` in `pixi.toml`; `syncPixiToml()` detects the change and triggers a one-time incremental env rebuild on next launch.
+- **Autoencoder dialog warning banner was unreadable in dark mode.** The "WARNING: Applying the classifier will REPLACE..." banner had a hardcoded pink background (`#F8D7DA`) but no explicit text color, so dark-theme default light-gray text washed out. Pinned `-fx-text-fill: #721C24` (the dark-red companion to the alert-danger background) so it reads cleanly in both themes.
+
+### Changed
+
+- **Dropped `[TEST]` / `[TEST FEATURE]` framing across the Autoencoder Cell Classifier dialog.** The classifier has been working well in practice; the experimental-feature signposting is no longer warranted. Affected surfaces: dialog title, header text, standalone yellow `TEST FEATURE` banner (removed entirely), Apply confirmation prompt, Save/Load/Evaluate dialog titles, and all six toast notifications (train ok/err, apply ok/err, save ok/err, load ok/err).
+
 ## [0.2.7] -- 2026-05-14
 
 Four substantial features added since v0.2.4. All [Beta] markers reflect first-release scope; user feedback welcome.
