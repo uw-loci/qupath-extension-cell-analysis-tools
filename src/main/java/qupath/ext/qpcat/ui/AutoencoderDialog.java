@@ -35,14 +35,13 @@ import java.util.*;
 import java.util.function.Consumer;
 
 /**
- * [TEST FEATURE] Dialog for training and applying an autoencoder-based cell classifier.
+ * Dialog for training and applying an autoencoder-based cell classifier.
  *
  * @since 0.2.0
  */
 public class AutoencoderDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(AutoencoderDialog.class);
-    private static final String TEST_BADGE = "[TEST] ";
 
     private final QuPathGUI qupath;
     private final Stage owner;
@@ -120,9 +119,9 @@ public class AutoencoderDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle(TEST_BADGE + "QP-CAT - Autoencoder Cell Classifier");
+        dialog.setTitle("QP-CAT - Autoencoder Cell Classifier");
         dialog.setHeaderText(
-                "[TEST FEATURE] Train a VAE classifier on labeled cells,\n"
+                "Train a VAE classifier on labeled cells,\n"
                 + "then apply across the project.\n"
                 + "Label cells using QuPath's class tools before training.");
         dialog.setResizable(true);
@@ -131,7 +130,6 @@ public class AutoencoderDialog {
         content.setPadding(new Insets(15));
 
         content.getChildren().addAll(
-                createTestBanner(),
                 createObjectTypeSection(),
                 createLabelSourceSection(),
                 createLabelSummarySection(),
@@ -164,26 +162,13 @@ public class AutoencoderDialog {
 
     // ==================== Section Builders ====================
 
-    private HBox createTestBanner() {
-        Label banner = new Label(
-                "TEST FEATURE -- This is an experimental autoencoder classifier. "
-                + "Results should be validated before use in published analyses.");
-        banner.setStyle("-fx-background-color: #FFF3CD; -fx-padding: 8; "
-                + "-fx-border-color: #FFEEBA; -fx-border-radius: 4; "
-                + "-fx-background-radius: 4; -fx-font-size: 11px;");
-        banner.setWrapText(true);
-        banner.setMaxWidth(Double.MAX_VALUE);
-        HBox box = new HBox(banner);
-        HBox.setHgrow(banner, Priority.ALWAYS);
-        return box;
-    }
-
     private HBox createWarningBanner() {
         Label warning = new Label(
                 "WARNING: Applying the classifier will REPLACE all existing cell/detection "
                 + "classifications. If you used detection classifications as training labels, "
                 + "back up your project first (File > Project > Export/Backup).");
-        warning.setStyle("-fx-background-color: #F8D7DA; -fx-padding: 8; "
+        warning.setStyle("-fx-background-color: #F8D7DA; -fx-text-fill: #721C24; "
+                + "-fx-padding: 8; "
                 + "-fx-border-color: #F5C6CB; -fx-border-radius: 4; "
                 + "-fx-background-radius: 4; -fx-font-size: 11px;");
         warning.setWrapText(true);
@@ -1262,7 +1247,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
-                    Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT",
+                    Dialogs.showInfoNotification("QP-CAT",
                             "Autoencoder training complete.\n" + msg);
                 });
             } catch (Exception e) {
@@ -1275,7 +1260,7 @@ public class AutoencoderDialog {
                     statusLabel.setText("Training failed: " + e.getMessage());
                     progressBar.setVisible(false);
                     trainButton.setDisable(false);
-                    Dialogs.showErrorNotification(TEST_BADGE + "QP-CAT",
+                    Dialogs.showErrorNotification("QP-CAT",
                             "Autoencoder training failed: " + e.getMessage());
                 });
             }
@@ -1303,14 +1288,13 @@ public class AutoencoderDialog {
         }
 
         boolean confirm = Dialogs.showConfirmDialog(
-                TEST_BADGE + "Apply Autoencoder to Checked Images",
+                "Apply Autoencoder to Checked Images",
                 "Apply the trained autoencoder classifier to "
                 + entries.size() + " checked image(s)?\n\n"
                 + "WARNING: This will REPLACE all existing cell/detection\n"
                 + "classifications with predicted labels on those images.\n\n"
                 + "Tip: Uncheck training images first if you don't want\n"
-                + "to re-classify them.\n\n"
-                + "This is a TEST FEATURE. Validate results before publishing.");
+                + "to re-classify them.");
         if (!confirm) return;
 
         trainButton.setDisable(true);
@@ -1342,7 +1326,7 @@ public class AutoencoderDialog {
                         // stale in-memory data. Offer to reload (same pattern as
                         // QuPath's "Run for project" in the script editor).
                         boolean reload = Dialogs.showConfirmDialog(
-                                TEST_BADGE + "Reload Current Image?",
+                                "Reload Current Image?",
                                 "The currently open image was classified and saved.\n"
                                 + "The viewer is showing the old (pre-classification) data.\n\n"
                                 + "Reload the image to see the updated classifications?");
@@ -1357,7 +1341,7 @@ public class AutoencoderDialog {
                             }
                         }
                     } else {
-                        Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT",
+                        Dialogs.showInfoNotification("QP-CAT",
                                 "Classifier applied to " + entries.size() + " image(s).");
                     }
                 });
@@ -1370,7 +1354,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
-                    Dialogs.showErrorNotification(TEST_BADGE + "QP-CAT",
+                    Dialogs.showErrorNotification("QP-CAT",
                             "Failed to apply: " + e.getMessage());
                 });
             }
@@ -1566,7 +1550,7 @@ public class AutoencoderDialog {
 
         Dialog<Void> resultDialog = new Dialog<>();
         resultDialog.initOwner(owner);
-        resultDialog.setTitle(TEST_BADGE + "Evaluation Results");
+        resultDialog.setTitle("Evaluation Results");
         resultDialog.setHeaderText(String.format("Accuracy: %.1f%% (%d/%d labeled cells)",
                 accuracy, totalCorrect, totalLabeled));
         resultDialog.getDialogPane().setContent(content);
@@ -1684,7 +1668,7 @@ public class AutoencoderDialog {
             int nClasses = trainedClassNames != null ? trainedClassNames.length : 0;
             String defaultName = "autoencoder_" + nClasses + "classes";
             String name = Dialogs.showInputDialog(
-                    TEST_BADGE + "Save Autoencoder Model",
+                    "Save Autoencoder Model",
                     "Enter a name for this classifier:",
                     defaultName);
             if (name == null || name.isBlank()) return;
@@ -1727,13 +1711,13 @@ public class AutoencoderDialog {
 
             long sizeMB = Files.size(ckptFile) / (1024 * 1024);
             statusLabel.setText("Model saved: " + name + " (" + sizeMB + " MB)");
-            Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT",
+            Dialogs.showInfoNotification("QP-CAT",
                     "Model saved to:\n" + ckptFile.toAbsolutePath());
             logger.info("Model saved to {} ({} MB)", ckptFile, sizeMB);
 
         } catch (IOException e) {
             logger.error("Failed to save model", e);
-            Dialogs.showErrorNotification(TEST_BADGE + "QP-CAT",
+            Dialogs.showErrorNotification("QP-CAT",
                     "Failed to save model: " + e.getMessage());
         }
     }
@@ -1774,7 +1758,7 @@ public class AutoencoderDialog {
 
         // Let user pick
         String selected = Dialogs.showChoiceDialog(
-                TEST_BADGE + "Load Autoencoder Model",
+                "Load Autoencoder Model",
                 "Select a saved model to load:",
                 modelNames, modelNames.get(0));
         if (selected == null) return;
@@ -1808,12 +1792,12 @@ public class AutoencoderDialog {
                         + String.join(", ", trainedClassNames) + ")";
             }
             statusLabel.setText(info);
-            Dialogs.showInfoNotification(TEST_BADGE + "QP-CAT", info);
+            Dialogs.showInfoNotification("QP-CAT", info);
             logger.info("Model loaded: {} from {}", selected, ckptFile);
 
         } catch (IOException e) {
             logger.error("Failed to load model", e);
-            Dialogs.showErrorNotification(TEST_BADGE + "QP-CAT",
+            Dialogs.showErrorNotification("QP-CAT",
                     "Failed to load model: " + e.getMessage());
         }
     }
