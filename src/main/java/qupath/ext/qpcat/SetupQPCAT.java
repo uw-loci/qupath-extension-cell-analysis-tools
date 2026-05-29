@@ -345,6 +345,18 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         MenuItem pythonConsoleItem = new MenuItem(res.getString("menu.pythonConsole"));
         pythonConsoleItem.setOnAction(e -> PythonConsoleWindow.getInstance().show());
 
+        // Clear cell connections (wipes ALL PathObjectConnectionGroups from
+        // ImageData; useful when overlays stack across runs, or when a
+        // legacy QuPath Delaunay-clustering run left an unwanted group
+        // behind). Bound to imageData != null. Confirms before wiping
+        // when at least one group is currently attached.
+        MenuItem clearConnectionsItem = new MenuItem(res.getString("menu.clearConnections"));
+        clearConnectionsItem.setOnAction(e -> clearCellConnections(qupath));
+        clearConnectionsItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getImageData() == null,
+                        qupath.imageDataProperty()));
+
         // System Info
         MenuItem systemInfoItem = new MenuItem("System Info...");
         systemInfoItem.setOnAction(e -> showSystemInfo());
@@ -354,8 +366,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         MenuItem rebuildItem = new MenuItem(res.getString("menu.rebuildEnvironment"));
         rebuildItem.setOnAction(e -> rebuildEnvironment(qupath));
 
-        utilitiesMenu.getItems().addAll(pythonConsoleItem, systemInfoItem,
-                new SeparatorMenuItem(), rebuildItem);
+        utilitiesMenu.getItems().addAll(pythonConsoleItem, clearConnectionsItem,
+                systemInfoItem, new SeparatorMenuItem(), rebuildItem);
 
         SeparatorMenuItem sep3 = new SeparatorMenuItem();
         sep3.visibleProperty().bind(environmentReady);
@@ -395,6 +407,31 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 }
         );
         dialog.show();
+    }
+
+    private void clearCellConnections(QuPathGUI qupath) {
+        var imageData = qupath.getImageData();
+        if (imageData == null) {
+            Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+            return;
+        }
+        try {
+            SpatialConnectionsScripts.ClearResult result =
+                    SpatialConnectionsScripts.clearConnections(imageData);
+            if (result.wasNoOp()) {
+                Dialogs.showInfoNotification(EXTENSION_NAME,
+                        "No cell connections were attached to this image.");
+            } else {
+                Dialogs.showInfoNotification(EXTENSION_NAME,
+                        "Cleared " + result.getNGroupsRemoved()
+                                + " connection group(s) ("
+                                + result.getNEdgesRemoved() + " edges).");
+            }
+        } catch (Exception ex) {
+            logger.error("clearCellConnections failed", ex);
+            Dialogs.showErrorNotification(EXTENSION_NAME,
+                    "Failed to clear connections: " + ex.getMessage());
+        }
     }
 
     private void rebuildEnvironment(QuPathGUI qupath) {

@@ -1150,3 +1150,19 @@ Four things to check when the overlay does not appear after a run:
 2. Was the 250k-edge prompt declined? (Lower or raise the threshold to taste; see above.)
 3. Is the result on disk? See [chapter 16](#16-reviewing-the-operation-audit-trail) for the audit-log row.
 4. The project was created in v0.2.x and the saved spatial-stats result predates the edge-COO write path -- re-run clustering once on v0.3 to populate the overlay.
+
+### Clearing the overlay -- `Utilities > Clear cell connections...` (`clear-connections`)
+
+`Extensions > QP-CAT > Utilities > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or simply when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
+
+The action is reversible: re-running clustering with **Viewer overlay** enabled, or clicking **Push to viewer now** on a saved result, repopulates the connection group. No data is lost; the overlay payload lives in `ImageData` properties only, not in the saved result on disk.
+
+Equivalent script:
+
+```groovy
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+
+SpatialConnectionsScripts.clearConnections(getCurrentImageData())
+```
+
+Returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch scripting. Records a workflow step so the operation is replayable from the image's history, and writes a `SPATIAL OVERLAY CLEAR` row to the project's operation audit log.

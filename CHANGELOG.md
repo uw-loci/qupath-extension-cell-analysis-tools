@@ -4,6 +4,19 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.3] -- 2026-05-29
+
+Patch release. Adds a one-click way to wipe the spatial-graph overlay from the current image.
+
+### Added
+
+- **`Extensions > QP-CAT > Utilities > Clear cell connections...`** -- removes every `PathObjectConnectionGroup` attached to the current image (QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot) and clears QP-CAT's same-class filter stash. QuPath core has no built-in clear action -- the only way to drop these groups was to re-run cell detection (which discards the detections that carry the edges). Reports the number of groups and edges removed via an info notification, records a workflow step (`SpatialConnectionsScripts.clearConnections(getCurrentImageData())`), and writes a `SPATIAL OVERLAY CLEAR` row to the operation audit log.
+- **Public scripting facade**: `SpatialConnectionsScripts.clearConnections(ImageData)` returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch scripts. See [HOW_TO_GUIDE chapter 21](documentation/HOW_TO_GUIDE.md#clearing-the-overlay----utilities--clear-cell-connections-clear-connections).
+
+### Notes
+
+The action is reversible -- re-running clustering with Viewer overlay enabled or clicking "Push to viewer now" on any saved result repopulates the connection group. The overlay payload lives in `ImageData` properties only; saved results on disk are untouched.
+
 ## [0.3.2] -- 2026-05-29
 
 Patch release. Quick Delaunay learns to honor your preferences, gains a "(custom)..." sibling for per-invoke overrides, and auto-recovers from a class of stale-Pixi-env failures that v0.2.8's setuptools pin doesn't always reach.

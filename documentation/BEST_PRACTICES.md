@@ -765,6 +765,10 @@ On the first push of connections per session, QuPath 0.7 logs:
 
 This is harmless. QuPath core's `PathObjectConnections` API is marked `@Deprecated` for replacement by `DelaunayTools.Subdivision` in a future major release, but the old API is fully functional in 0.7 and is the only API surface that can carry kNN and Radius graphs (the `Subdivision` replacement is Delaunay-only). The warning fires once per session, not per push -- subsequent pushes within the same session do not re-trigger it. Do not flag this as a bug; document it in user issue reports if it appears.
 
+### Clearing the overlay between runs (`clearing-the-overlay`)
+
+QP-CAT's own clustering runs replace the previously-attached connection group with the new one -- they do not stack. Connections from other tools (the legacy QuPath core Delaunay Clustering plugin in particular) do stack alongside QP-CAT's overlay, because QuPath has no built-in clear-connections action and re-running cell detection is the only stock way to drop them. Use **Utilities > Clear cell connections...** when an overlay from a previous tool or a previous saved-result push is in the way; the action is reversible -- the underlying spatial data is untouched on disk, so you can repopulate the overlay via **Push to viewer now** on any saved result.
+
 ### Performance and the 250k threshold (`performance-and-threshold`)
 
 The default `qpcat.spatial.connectionsPromptThreshold` value of 250000 edges is empirical. It is the count at which QuPath's stock connections overlay (which draws every edge with a single `Graphics2D.draw(Line2D)` call per edge) starts to feel sluggish at typical whole-slide zoom on commodity hardware. Below 250000, pan and zoom are smooth. Above 250000, frame time grows roughly linearly with edge count, viewport-culled. Above 1000000 the experience is noticeably degraded even with the cull.

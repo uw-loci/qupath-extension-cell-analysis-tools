@@ -99,6 +99,26 @@ public final class SpatialConnectionsScripts {
     }
 
     /**
+     * Outcome of {@link #clearConnections(ImageData)}. Carries the number
+     * of connection groups removed and the total edge count across all
+     * removed groups so the caller (menu action, script) can report the
+     * cleanup precisely.
+     */
+    public static final class ClearResult {
+        private final int nGroupsRemoved;
+        private final int nEdgesRemoved;
+
+        ClearResult(int nGroupsRemoved, int nEdgesRemoved) {
+            this.nGroupsRemoved = nGroupsRemoved;
+            this.nEdgesRemoved = nEdgesRemoved;
+        }
+
+        public int getNGroupsRemoved() { return nGroupsRemoved; }
+        public int getNEdgesRemoved() { return nEdgesRemoved; }
+        public boolean wasNoOp() { return nGroupsRemoved == 0; }
+    }
+
+    /**
      * Outcome of {@link #applySameClassFilter(ImageData, boolean)}.
      * Carries the edge counts before and after the filter rebuild so the
      * dialog can surface a transient status notification. When
@@ -369,6 +389,85 @@ public final class SpatialConnectionsScripts {
         }
     }
 
+    /**
+     * Remove every {@link PathObjectConnectionGroup} attached to
+     * {@code imageData} and drop the QP-CAT overlay stash properties
+     * (source group + result name). Use when connections from prior
+     * runs (QP-CAT's own previous overlay, QuPath's legacy Delaunay
+     * Clustering plugin, or any other tool that writes to
+     * {@link PathObjectConnections}) need to be wiped without rerunning
+     * cell detection.
+     *
+     * <p>Records a {@link DefaultScriptableWorkflowStep} so the action
+     * is replayable from the image's history, and writes an
+     * {@code OperationLogger} entry under
+     * {@code SPATIAL OVERLAY CLEAR}.</p>
+     *
+     * @throws IllegalArgumentException if {@code imageData} is null
+     */
+    public static ClearResult clearConnections(ImageData<?> imageData) {
+        long startMs = System.currentTimeMillis();
+        if (imageData == null) {
+            throw new IllegalArgumentException("imageData must not be null");
+        }
+        int nGroupsRemoved;
+        int nEdgesRemoved = 0;
+        synchronized (imageData) {
+            Object o = imageData.getProperty(
+                    DefaultPathObjectConnectionGroup.KEY_OBJECT_CONNECTIONS);
+            if (!(o instanceof PathObjectConnections connections)) {
+                logger.info("clearConnections: no PathObjectConnections attached; nothing to clear");
+                ClearResult noop = new ClearResult(0, 0);
+                logClearOperation(imageData, noop, startMs);
+                return noop;
+            }
+            List<PathObjectConnectionGroup> groups =
+                    new ArrayList<>(connections.getConnectionGroups());
+            nGroupsRemoved = groups.size();
+            for (PathObjectConnectionGroup g : groups) {
+                nEdgesRemoved += countEdges(g);
+                connections.removeGroup(g);
+            }
+            imageData.setProperty(KEY_OVERLAY_SOURCE_GROUP, null);
+            imageData.setProperty(KEY_OVERLAY_RESULT_NAME, null);
+        }
+        fireHierarchyChanged(imageData);
+
+        try {
+            String script = buildClearWorkflowScript();
+            imageData.getHistoryWorkflow().addStep(new DefaultScriptableWorkflowStep(
+                    "QP-CAT: clear spatial connections", script));
+        } catch (Exception e) {
+            logger.warn("Failed to record workflow step for clear-connections: {}", e.getMessage());
+        }
+        logger.info("Cleared {} connection group(s) ({} edges) from viewer",
+                nGroupsRemoved, nEdgesRemoved);
+        ClearResult result = new ClearResult(nGroupsRemoved, nEdgesRemoved);
+        logClearOperation(imageData, result, startMs);
+        return result;
+    }
+
+    private static void logClearOperation(ImageData<?> imageData, ClearResult result,
+                                           long startMs) {
+        try {
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("feature", "spatial-graph-overlay");
+            params.put("action", "clear");
+            params.put("image", describeImage(imageData));
+            params.put("n_groups_removed", Integer.toString(result.getNGroupsRemoved()));
+            params.put("n_edges_removed", Integer.toString(result.getNEdgesRemoved()));
+            String summary = result.wasNoOp()
+                    ? "Clear connections no-op (none attached)"
+                    : "Cleared " + result.getNGroupsRemoved() + " group(s), "
+                            + result.getNEdgesRemoved() + " edges";
+            OperationLogger.getInstance().logOperation(
+                    "SPATIAL OVERLAY CLEAR", params, summary,
+                    System.currentTimeMillis() - startMs);
+        } catch (Exception e) {
+            logger.warn("OperationLogger clear entry failed: {}", e.getMessage());
+        }
+    }
+
     // ---- Internals ----
 
     private static DefaultPathObjectConnectionGroup buildGroupFromBundle(
@@ -491,6 +590,11 @@ public final class SpatialConnectionsScripts {
         sb.append("    \"").append(escape(resultName)).append("\"\n");
         sb.append(")\n");
         return sb.toString();
+    }
+
+    private static String buildClearWorkflowScript() {
+        return "import qupath.ext.qpcat.scripting.SpatialConnectionsScripts\n"
+                + "SpatialConnectionsScripts.clearConnections(getCurrentImageData())\n";
     }
 
     private static String escape(String s) {

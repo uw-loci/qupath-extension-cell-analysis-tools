@@ -180,6 +180,19 @@ SpatialConnectionsScripts.applySameClassFilter(getCurrentImageData(), true)
 
 The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](REFERENCES.md#spatial-graph-overlay-pathobjectconnections) and [HOW_TO_GUIDE chapter 21 -- API deprecation note](HOW_TO_GUIDE.md#api-deprecation-note) for the rationale.
 
+### `clearConnections(ImageData imageData) -> ClearResult`
+
+Remove every `PathObjectConnectionGroup` attached to `imageData` and drop QP-CAT's same-class-filter stash + overlay-result-name properties. Returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch reporting. Use when overlays from prior runs (QP-CAT's own previous overlay -- replaced automatically -- or the legacy QuPath core Delaunay Clustering plugin's group -- not replaced automatically) need to be wiped without re-running cell detection.
+
+The action is recorded in the image's history workflow so it can be replayed, and a `SPATIAL OVERLAY CLEAR` row is appended to the project's operation audit log.
+
+```groovy
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+
+def result = SpatialConnectionsScripts.clearConnections(getCurrentImageData())
+println "Removed ${result.getNGroupsRemoved()} group(s), ${result.getNEdgesRemoved()} edges"
+```
+
 ## Result types
 
 When the dialog dispatches the staged option maps, results materialise as:
