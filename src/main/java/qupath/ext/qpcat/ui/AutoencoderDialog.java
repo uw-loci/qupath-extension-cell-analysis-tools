@@ -46,6 +46,18 @@ public class AutoencoderDialog {
     private final QuPathGUI qupath;
     private final Stage owner;
 
+    /** True while a training / apply / eval task is running. Parameter
+     *  controls (spinners, checkboxes, radios, combos) lock themselves
+     *  off via disableProperty().bind(trainingInProgress). Buttons keep
+     *  their existing setDisable() logic, since they need finer-grained
+     *  enable/disable based on whether a trained model exists. */
+    private final SimpleBooleanProperty trainingInProgress = new SimpleBooleanProperty(false);
+
+    /** Session-scoped flag so the slow-training warning shows once per QuPath
+     *  launch rather than nagging on every Train click. Reset when the user
+     *  restarts QuPath. */
+    private static boolean slowTrainingWarningShown = false;
+
     // UI components
     private RadioButton measurementModeRadio;
     private RadioButton tileModeRadio;
@@ -154,10 +166,92 @@ public class AutoencoderDialog {
         dialog.getDialogPane().setContent(scrollPane);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
+        // Lock parameter controls during long-running training/apply/eval tasks.
+        // disableProperty().bind() replaces any existing disable state, so this
+        // is only safe for controls that don't otherwise toggle their own
+        // disable flag based on model state -- buttons keep their imperative
+        // setDisable() and are NOT in this list.
+        bindLockedDuringTraining(
+                detectionsRadio, cellsOnlyRadio,
+                labelLockedCheck, labelPointsCheck, labelDetectionsCheck,
+                measurementModeRadio, tileModeRadio,
+                tileSizeSpinner, downsampleCombo,
+                includeMaskCheck,
+                normalizationCombo,
+                latentDimSpinner, epochsSpinner, learningRateSpinner,
+                batchSizeSpinner, supervisionWeightSpinner,
+                valSplitSpinner, earlyStopSpinner,
+                classWeightsCheck, augmentationCheck,
+                augNoiseSpinner, augScaleSpinner, augDropoutSpinner,
+                augFlipHCheck, augFlipVCheck, augRot90Check,
+                augElasticCheck, augElasticAlphaSpinner,
+                augIntensityModeCombo, augIntensityAmountSpinner, augGaussNoiseSpinner,
+                imageListView);
+        // measurementCombo is a ControlsFX CheckComboBox (not a JavaFX Control),
+        // so bind its disable property explicitly:
+        if (measurementCombo != null) {
+            measurementCombo.disableProperty().bind(trainingInProgress);
+        }
+
         // Initial refresh
         Platform.runLater(this::refreshClassDistribution);
 
+        // Sweep any orphan tile-buffer files left over from a previous crashed
+        // run. Project-scoped, age-gated so a concurrent run isn't disturbed.
+        cleanupOrphanTempFilesAsync();
+
         dialog.show();
+    }
+
+    /** Bind each control's disableProperty to trainingInProgress so it locks
+     *  off during long-running tasks and re-enables when they finish. Null
+     *  controls are skipped (some are only built conditionally). */
+    private void bindLockedDuringTraining(Control... controls) {
+        for (Control c : controls) {
+            if (c != null) c.disableProperty().bind(trainingInProgress);
+        }
+    }
+
+    /** Schedule a non-blocking sweep of `<project>/.qpcat_temp/qpcat_*.bin`
+     *  files older than 1 hour. VAE training/eval/infer write large memmap
+     *  buffers there; if QuPath crashes mid-run they linger. Anything that
+     *  hasn't been touched for an hour is safely an orphan because (a) any
+     *  active task fsyncs continuously, (b) a real training run on this
+     *  scope completes well under 60 minutes. */
+    private void cleanupOrphanTempFilesAsync() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null || project.getPath() == null) return;
+        Path tempDir = project.getPath().getParent().resolve(".qpcat_temp");
+        if (!Files.isDirectory(tempDir)) return;
+
+        Thread t = new Thread(() -> {
+            int deleted = 0;
+            long cutoff = System.currentTimeMillis() - 60L * 60L * 1000L;
+            try (var stream = Files.list(tempDir)) {
+                for (Path p : (Iterable<Path>) stream::iterator) {
+                    String name = p.getFileName().toString();
+                    if (!name.startsWith("qpcat_") || !name.endsWith(".bin")) continue;
+                    try {
+                        long ts = Files.getLastModifiedTime(p).toMillis();
+                        if (ts < cutoff) {
+                            Files.deleteIfExists(p);
+                            deleted++;
+                        }
+                    } catch (IOException ioe) {
+                        logger.debug("Could not stat/delete {}: {}", p, ioe.getMessage());
+                    }
+                }
+            } catch (IOException e) {
+                logger.debug("Could not list {}: {}", tempDir, e.getMessage());
+                return;
+            }
+            if (deleted > 0) {
+                logger.info("Removed {} orphan qpcat tile-buffer file(s) from {}",
+                        deleted, tempDir);
+            }
+        }, "QPCAT-AutoencoderTempCleanup");
+        t.setDaemon(true);
+        t.start();
     }
 
     // ==================== Section Builders ====================
@@ -889,6 +983,13 @@ public class AutoencoderDialog {
                 }
 
                 if (useDetections) {
+                    // The user opted in to "Existing detection classifications" --
+                    // honour whatever class each detection currently carries, including
+                    // "Cluster N" labels from a prior QP-CAT run. The "Cluster" skip
+                    // is kept in the Locked / Points paths above (where it prevents
+                    // cluster *annotations* from being misread as ground truth) but
+                    // dropped here, where the user is asking explicitly to train on
+                    // existing detection classes.
                     for (PathObject det : dets) {
                         PathClass pc = det.getPathClass();
                         String name;
@@ -898,7 +999,6 @@ public class AutoencoderDialog {
                             color = 0x404040;
                         } else {
                             name = pc.toString();
-                            if (name.startsWith("Cluster ")) continue;
                             color = pc.getColor();
                         }
                         assigned.put(det, name);
@@ -1114,6 +1214,70 @@ public class AutoencoderDialog {
             return;
         }
 
+        // Preflight: warn if the label summary scan turned up nothing -- training
+        // on zero labeled cells is pointless and the failure surface downstream
+        // is less obvious than a one-shot prompt here.
+        String summary = labelSummaryLabel == null ? "" : labelSummaryLabel.getText();
+        if (summary != null && summary.contains("No labeled cells found")) {
+            boolean proceed = Dialogs.showConfirmDialog(
+                    "QP-CAT - no labeled cells",
+                    "The class-distribution scan found 0 labeled cells across the\n"
+                    + "selected images.\n\n"
+                    + "Common causes:\n"
+                    + "  - The current image has unsaved label edits that haven't been\n"
+                    + "    written to the project's .qpdata file yet (try File > Save).\n"
+                    + "  - The Label Sources at the top of this dialog are unchecked or\n"
+                    + "    do not match how you labeled cells.\n"
+                    + "  - The selected images legitimately contain no labels yet.\n\n"
+                    + "Continue training anyway? (Not recommended -- training will fail.)");
+            if (!proceed) return;
+        }
+
+        // Preflight: one-time-per-session reminder that VAE training is slow.
+        // The autoencoder is CPU-bound in QP-CAT v0.x; even modest cell counts
+        // can take 10s of minutes per epoch on commodity hardware. Set
+        // expectations before the user walks away wondering if it crashed.
+        if (!slowTrainingWarningShown) {
+            boolean acknowledge = Dialogs.showConfirmDialog(
+                    "QP-CAT - VAE training is slow",
+                    "VAE training is CPU-bound and is NOT comparable in speed to\n"
+                    + "QuPath's regular ML classifiers (Random Forest, ANN).\n\n"
+                    + "Typical run time on commodity hardware:\n"
+                    + "  - 10s of minutes for small projects (<50k labeled cells, <50 epochs).\n"
+                    + "  - Several hours for larger projects or 100+ epochs.\n\n"
+                    + "Plan to leave QuPath running. Training can be left unattended;\n"
+                    + "progress is reported in the status bar at the bottom of this dialog.\n\n"
+                    + "Proceed?");
+            if (!acknowledge) return;
+            slowTrainingWarningShown = true;
+        }
+
+        // Preflight: offer to save the current image if it has unsaved hierarchy
+        // edits. Without this, freshly drawn / classified cells aren't written to
+        // .qpdata before the worker reads it back, and the user trains on stale
+        // data without realising.
+        ImageData<BufferedImage> currentData = qupath.getImageData();
+        if (currentData != null && currentData.isChanged() && qupath.getProject() != null) {
+            ProjectImageEntry<BufferedImage> entry = qupath.getProject().getEntry(currentData);
+            if (entry != null) {
+                boolean save = Dialogs.showConfirmDialog(
+                        "QP-CAT - save before training?",
+                        "The current image has unsaved changes.\n\n"
+                        + "Save the project's .qpdata before training? (Recommended --\n"
+                        + "training reads labels from the on-disk .qpdata, so unsaved\n"
+                        + "label edits would be invisible to the trainer.)");
+                if (save) {
+                    try {
+                        entry.saveImageData(currentData);
+                    } catch (IOException ioe) {
+                        Dialogs.showErrorMessage("QP-CAT",
+                                "Failed to save image data: " + ioe.getMessage());
+                        return;
+                    }
+                }
+            }
+        }
+
         boolean useTiles = tileModeRadio.isSelected();
         List<String> selectedMeasurements;
         if (useTiles) {
@@ -1165,6 +1329,9 @@ public class AutoencoderDialog {
                 selectedImageEntries.add(projectEntries.get(i));
             }
         }
+
+        // Now committed to running -- lock parameter controls.
+        trainingInProgress.set(true);
 
         QpcatPreferences.saveFromDialog(
                 latentDim, epochs, lr, batchSize, supWeight,
@@ -1247,6 +1414,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
+                    trainingInProgress.set(false);
                     Dialogs.showInfoNotification("QP-CAT",
                             "Autoencoder training complete.\n" + msg);
                 });
@@ -1260,6 +1428,7 @@ public class AutoencoderDialog {
                     statusLabel.setText("Training failed: " + e.getMessage());
                     progressBar.setVisible(false);
                     trainButton.setDisable(false);
+                    trainingInProgress.set(false);
                     Dialogs.showErrorNotification("QP-CAT",
                             "Autoencoder training failed: " + e.getMessage());
                 });
@@ -1299,6 +1468,7 @@ public class AutoencoderDialog {
 
         trainButton.setDisable(true);
         applyProjectButton.setDisable(true);
+        trainingInProgress.set(true);
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
 
@@ -1320,6 +1490,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
+                    trainingInProgress.set(false);
 
                     if (currentImageChanged && qupath.getImageData() != null) {
                         // Current image was modified on disk but the viewer shows
@@ -1354,6 +1525,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
+                    trainingInProgress.set(false);
                     Dialogs.showErrorNotification("QP-CAT",
                             "Failed to apply: " + e.getMessage());
                 });
@@ -1395,6 +1567,7 @@ public class AutoencoderDialog {
         trainButton.setDisable(true);
         applyProjectButton.setDisable(true);
         evaluateButton.setDisable(true);
+        trainingInProgress.set(true);
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         statusLabel.setText("Evaluating model on checked images...");
@@ -1417,6 +1590,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     evaluateButton.setDisable(false);
                     saveModelButton.setDisable(false);
+                    trainingInProgress.set(false);
 
                     showEvaluationResults(evalResult);
                 });
@@ -1429,6 +1603,7 @@ public class AutoencoderDialog {
                     applyProjectButton.setDisable(false);
                     evaluateButton.setDisable(false);
                     saveModelButton.setDisable(false);
+                    trainingInProgress.set(false);
                 });
             }
         }, "QPCAT-AutoencoderEval");

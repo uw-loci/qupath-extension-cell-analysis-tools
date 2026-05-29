@@ -247,17 +247,36 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         MenuItem quickLeiden = new MenuItem(res.getString("menu.quickLeiden"));
         quickLeiden.setOnAction(e -> runQuickCluster(qupath, Algorithm.LEIDEN,
-                Map.of("n_neighbors", 50, "resolution", 1.0)));
+                Map.of("n_neighbors", 50, "resolution", 1.0), c -> {}));
 
         MenuItem quickKmeans = new MenuItem(res.getString("menu.quickKmeans"));
         quickKmeans.setOnAction(e -> runQuickCluster(qupath, Algorithm.KMEANS,
-                Map.of("n_clusters", 10)));
+                Map.of("n_clusters", 10), c -> {}));
 
         MenuItem quickHdbscan = new MenuItem(res.getString("menu.quickHdbscan"));
         quickHdbscan.setOnAction(e -> runQuickCluster(qupath, Algorithm.HDBSCAN,
-                Map.of("min_cluster_size", 15)));
+                Map.of("min_cluster_size", 15), c -> {}));
 
-        quickClusterMenu.getItems().addAll(quickLeiden, quickKmeans, quickHdbscan);
+        // Quick Delaunay: Leiden over a Delaunay-graph spatial-smoothing pass.
+        // Naming follows "Quick <distinguishing feature>" (cf. Quick KMeans,
+        // Quick HDBSCAN) -- the Delaunay graph is what differentiates this
+        // entry from Quick Leiden, even though the underlying algorithm is
+        // still Leiden. Useful as a one-click "graph-aware" clustering for
+        // users coming off QuPath core's legacy Delaunay clustering tool.
+        MenuItem quickDelaunay = new MenuItem(res.getString("menu.quickDelaunay"));
+        quickDelaunay.setOnAction(e -> runQuickCluster(qupath, Algorithm.LEIDEN,
+                Map.of("n_neighbors", 50, "resolution", 1.0),
+                c -> {
+                    c.setEnableSpatialSmoothing(true);
+                    c.setSpatialSmoothingIterations(1);
+                    c.setSpatialGraphType("delaunay");
+                    // -1 == no max-edge pruning; users can tighten this in
+                    // the full Run Clustering dialog if tissue gaps matter.
+                    c.setSpatialGraphDelaunayMaxEdge(-1.0);
+                }));
+
+        quickClusterMenu.getItems().addAll(
+                quickLeiden, quickKmeans, quickHdbscan, quickDelaunay);
 
         // View Past Results
         MenuItem viewResultsItem = new MenuItem("View Past Results...");
@@ -430,7 +449,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
     }
 
     private void runQuickCluster(QuPathGUI qupath, Algorithm algorithm,
-                                 Map<String, Object> params) {
+                                 Map<String, Object> params,
+                                 Consumer<ClusteringConfig> configCustomiser) {
         var imageData = qupath.getImageData();
         if (imageData == null) {
             Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
@@ -464,6 +484,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         config.setNormalization(Normalization.ZSCORE);
         config.setEmbeddingMethod(EmbeddingMethod.UMAP);
         config.setGeneratePlots(true);
+        // Per-quick-action customisation (e.g. Quick Delaunay enables
+        // spatial smoothing with a Delaunay graph here).
+        if (configCustomiser != null) configCustomiser.accept(config);
 
         String algoName = algorithm.getDisplayName();
         Dialogs.showInfoNotification(EXTENSION_NAME,
