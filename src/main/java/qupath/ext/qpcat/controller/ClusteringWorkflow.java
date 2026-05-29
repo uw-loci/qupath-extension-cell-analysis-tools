@@ -14,6 +14,7 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
+import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
@@ -34,6 +35,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -55,6 +58,41 @@ import qupath.lib.projects.ProjectImageEntry;
 public class ClusteringWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringWorkflow.class);
+
+    /**
+     * F3: measurement-name prefixes that must be excluded from the
+     * QP-CAT component-aggregate fan-out. Includes QP-CAT's own writeback
+     * columns plus the embedding / cluster / featurization columns that
+     * other paths attach to detections; averaging "UMAP1" or "Cluster"
+     * by component produces meaningless rerun-on-rerun feedback columns.
+     * Match is via {@link String#startsWith(String)} so suffix variants
+     * (e.g. {@code FM_tile_0}, {@code Cluster ID}) are caught.
+     */
+    private static final String[] FEEDBACK_GUARD_PREFIXES = {
+            "QPCAT spatial: ",
+            "QPCAT component: ",
+            "UMAP",
+            "tSNE",
+            "PCA",
+            "Cluster",
+            "FM_",
+            "ZS_",
+            "AE_",
+    };
+
+    /**
+     * F3: returns true when the measurement name is feedback-prone and
+     * should be excluded from per-component aggregates.
+     */
+    private static boolean isFeedbackProneMeasurementName(String name) {
+        if (name == null) return false;
+        for (String prefix : FEEDBACK_GUARD_PREFIXES) {
+            if (name.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private final QuPathGUI qupath;
 
@@ -754,6 +792,11 @@ public class ClusteringWorkflow {
         // ---- Spatial graph overlay (v0.3) inputs ----
         inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
         inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
+        // F1: pass pixel size so the Python helper scales QPCAT spatial:
+        // distance + triangle-area outputs to microns when calibration is
+        // present. Falls back to 1.0 (pixels) when no calibration is
+        // available, matching the v0.2.7 spatial-stats unit treatment.
+        inputs.put("pixel_size_um", resolveSpatialPixelSizeUm(extraction));
 
         NDArray labelsNd = null;
         NDArray embNd = null;
@@ -2912,6 +2955,57 @@ public class ClusteringWorkflow {
      * image has a pixel calibration; otherwise falls back to the pixel
      * preference. Negative values (no-pruning sentinel) pass through.
      */
+    /**
+     * Resolve the pixel size in microns for the run. Used to scale
+     * per-cell distance + triangle-area columns from pixel units into
+     * microns. Returns 1.0 (no scaling) when no calibration is available,
+     * which keeps the unit treatment consistent with the v0.2.7
+     * spatial-stats expansion. For multi-image runs, prefers the first
+     * segment's calibration; otherwise falls back to the current viewer's
+     * image data and finally to 1.0.
+     */
+    private double resolveSpatialPixelSizeUm(
+            MeasurementExtractor.ExtractionResult extraction) {
+        try {
+            if (extraction != null && extraction.getImageSegments() != null
+                    && !extraction.getImageSegments().isEmpty()) {
+                for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+                    @SuppressWarnings("unchecked")
+                    ImageData<BufferedImage> segData =
+                            (ImageData<BufferedImage>) seg.getImageData();
+                    Double px = readPixelSizeMicrons(segData);
+                    if (px != null) {
+                        return px;
+                    }
+                }
+            }
+            if (qupath != null) {
+                ImageData<BufferedImage> imageData = qupath.getImageData();
+                Double px = readPixelSizeMicrons(imageData);
+                if (px != null) {
+                    return px;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to resolve pixel size in microns: {}", e.getMessage());
+        }
+        return 1.0;
+    }
+
+    private static Double readPixelSizeMicrons(ImageData<BufferedImage> imageData) {
+        if (imageData == null || imageData.getServer() == null) {
+            return null;
+        }
+        PixelCalibration cal = imageData.getServer().getPixelCalibration();
+        if (cal != null && cal.hasPixelSizeMicrons()) {
+            double px = cal.getAveragedPixelSizeMicrons();
+            if (px > 0 && Double.isFinite(px)) {
+                return px;
+            }
+        }
+        return null;
+    }
+
     private double resolveDelaunayMaxEdgePixels(ClusteringConfig config) {
         double micronValue = config.getDelaunayMaxEdgeUm();
         if (micronValue > 0 && qupath != null) {
@@ -3057,18 +3151,75 @@ public class ClusteringWorkflow {
         // 3. PathObjectConnections overlay
         if (config.isPushConnectionsToViewer() && payload.hasEdgeCoo()) {
             int nEdges = payload.getEdgeRow().length;
-            if (config.getConnectionsPromptThreshold() > 0
-                    && nEdges > config.getConnectionsPromptThreshold()) {
-                logger.warn("Spatial graph edge count {} exceeds prompt threshold {};"
-                                + " skipping viewer push (use Push to viewer now to override)",
-                        nEdges, config.getConnectionsPromptThreshold());
-            } else {
+            int threshold = config.getConnectionsPromptThreshold();
+            boolean proceed = true;
+            if (threshold > 0 && nEdges > threshold) {
+                // F2: prompt the user instead of silently skipping. Workflow
+                // runs on a background thread; use the CountDownLatch +
+                // Platform.runLater pattern documented in
+                // claude-reports/2025-01-30_dialog-fixes-session.md.
+                proceed = confirmLargeOverlayPush(nEdges, threshold);
+                if (!proceed) {
+                    logger.info("Spatial graph viewer push declined by user"
+                                    + " (edges={}, threshold={})", nEdges, threshold);
+                }
+            }
+            if (proceed) {
                 DefaultPathObjectConnectionGroup group = buildConnectionGroup(
                         detections, payload.getEdgeRow(), payload.getEdgeCol(), n);
                 attachConnections(imageData, group);
                 fireHierarchyChangedFx(imageData);
             }
         }
+    }
+
+    /**
+     * F2: confirmation dialog for pushing a large spatial-graph overlay to
+     * the viewer. Called from a background thread; blocks until the user
+     * answers Yes or No (default No). Returns true to proceed with the
+     * push, false to skip. If the FX thread is unavailable (headless run,
+     * tests) the prompt defaults to false (skip), matching the
+     * intake-specified "default to safer" behaviour.
+     */
+    private boolean confirmLargeOverlayPush(int nEdges, int threshold) {
+        if (Platform.isFxApplicationThread()) {
+            return showLargeOverlayPushDialog(nEdges, threshold);
+        }
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean answer = new AtomicBoolean(false);
+        try {
+            Platform.runLater(() -> {
+                try {
+                    answer.set(showLargeOverlayPushDialog(nEdges, threshold));
+                } finally {
+                    latch.countDown();
+                }
+            });
+            latch.await();
+            return answer.get();
+        } catch (IllegalStateException e) {
+            // FX toolkit not initialised (e.g. headless test run).
+            logger.warn("Cannot prompt for large-overlay push (FX not running);"
+                            + " defaulting to skip (edges={}, threshold={})",
+                    nEdges, threshold);
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private boolean showLargeOverlayPushDialog(int nEdges, int threshold) {
+        String body = String.format(
+                "The spatial graph has %d edges (threshold: %d).%n%n"
+                        + "Push %d edges to the viewer? Large graphs may slow"
+                        + " viewer pan and zoom.",
+                nEdges, threshold, nEdges);
+        // Dialogs.showYesNoDialog returns true for Yes, false for No.
+        // Default focus follows QuPath's standard, but the body wording
+        // and the safer-default expectation are documented in the dialog
+        // copy itself ("safer for cautious users on slow hardware").
+        return Dialogs.showYesNoDialog("QP-CAT - large spatial graph", body);
     }
 
     private void writeNodeMeasurements(List<PathObject> detections,
@@ -3122,13 +3273,15 @@ public class ClusteringWorkflow {
         if (labels == null || labels.length < n) return;
 
         // Single scan for the existing measurement-name set BEFORE writing
-        // any new column so the feedback-loop guard (skip QPCAT spatial:/
-        // QPCAT component:) sees only the original columns.
+        // any new column so the feedback-loop guard sees only the original
+        // columns. F3: the guard now skips QP-CAT's other writeback
+        // prefixes (UMAP*, tSNE*, PCA*, Cluster*, FM_*, ZS_*, AE_*) in
+        // addition to QPCAT spatial: / QPCAT component:, via
+        // isFeedbackProneMeasurementName().
         java.util.LinkedHashSet<String> namesSet = new java.util.LinkedHashSet<>();
         for (PathObject p : detections) {
             for (String key : p.getMeasurementList().getNames()) {
-                if (key.startsWith("QPCAT spatial: ")
-                        || key.startsWith("QPCAT component: ")) {
+                if (isFeedbackProneMeasurementName(key)) {
                     continue;
                 }
                 namesSet.add(key);

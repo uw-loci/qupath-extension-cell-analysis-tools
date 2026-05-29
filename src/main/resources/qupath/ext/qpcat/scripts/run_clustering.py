@@ -146,6 +146,15 @@ try:
 except NameError:
     pref_write_component_measurements = False
 
+# Pixel calibration scaling for QPCAT spatial: distance / triangle-area
+# columns. Java passes PixelCalibration.getAveragedPixelSizeMicrons() when
+# the image has a calibration, otherwise 1.0 (columns stay in pixels for
+# uncalibrated images). See F1 in 06_test_response.md.
+try:
+    pref_spatial_pixel_size_um = float(pixel_size_um)
+except (NameError, TypeError, ValueError):
+    pref_spatial_pixel_size_um = 1.0
+
 # Phase 5 enhancement: persist spatial-stats plots as PNG. Gated by the
 # qpcat.spatial.persistPlots preference (default true). When the parent
 # task is also generating plots (generate_plots + output_dir), the new
@@ -630,6 +639,7 @@ if has_spatial and n_clusters_found > 1:
                 adata.obsp.get("spatial_distances"),
                 spatial_data,
                 pref_spatial_graph_type,
+                pixel_size_um=pref_spatial_pixel_size_um,
             )
             _qpcat_spatial.emit_spatial_node_outputs(
                 task,

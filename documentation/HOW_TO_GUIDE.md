@@ -669,6 +669,8 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
 
+After the run completes, see [Chapter 21 -- Spatial graph overlay](#21-spatial-graph-overlay) for how to view the underlying graph in the QuPath viewer.
+
 ### What gets logged
 
 Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPATIAL STATS GEARY`, `SPATIAL STATS COOC PAIRWISE`, `SPATIAL STATS COOC ONE-VS-REST`) plus one `SPATIAL GRAPH` row for the graph build under your project's `qpcat/logs/qpcat_YYYY-MM-DD.log`. Each row records the method name, graph constructor + parameters, permutation count, and a short result summary.
@@ -1142,8 +1144,9 @@ SpatialConnectionsScripts.pushConnectionsToViewer(
 
 ### Quick troubleshooting (`troubleshooting`)
 
-Three things to check when the overlay does not appear after a run:
+Four things to check when the overlay does not appear after a run:
 
 1. Is **View -> Show object connections** checked? (Default off in fresh installs.)
 2. Was the 250k-edge prompt declined? (Lower or raise the threshold to taste; see above.)
 3. Is the result on disk? See [chapter 16](#16-reviewing-the-operation-audit-trail) for the audit-log row.
+4. The project was created in v0.2.x and the saved spatial-stats result predates the edge-COO write path -- re-run clustering once on v0.3 to populate the overlay.

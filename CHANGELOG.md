@@ -11,7 +11,7 @@ Minor release. Spatial graph overlay -- QP-CAT now writes its spatial neighbor g
 ### Added
 
 - **Spatial graph overlay** -- every Spatial Statistics run pushes the spatial neighbor graph (kNN, Radius, or Delaunay) to QuPath's `PathObjectConnections` slot so **View -> Show object connections** renders the edges. New "Viewer overlay" sub-section in the Run Clustering dialog's Spatial Statistics pane (default on; 250000-edge prompt threshold). Inspired by the image.sc Delauney-clustering thread (https://forum.image.sc/t/qupath-delauney-clustering/49959/5). See [HOW_TO_GUIDE chapter 21](documentation/HOW_TO_GUIDE.md#21-spatial-graph-overlay), [BEST_PRACTICES](documentation/BEST_PRACTICES.md#spatial-graph-overlay), and [REFERENCES](documentation/REFERENCES.md#spatial-graph-overlay-pathobjectconnections).
-- **Per-cell node measurements** -- `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean / Median / Max / Min distance` written to every cell on every Spatial Statistics run (default on; toggle via `qpcat.spatial.writeNodeMeasurements`). For Delaunay graphs only, `QPCAT spatial: Mean / Max triangle area` are also written. One-for-one drop-in for the legacy QuPath core Delaunay Clustering plugin's `Delaunay: ...` columns.
+- **Per-cell node measurements** -- `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean / Median / Max / Min distance` written to every cell on every Spatial Statistics run (default on; toggle via `qpcat.spatial.writeNodeMeasurements`). For Delaunay graphs only, `QPCAT spatial: Mean / Max triangle area` are also written. Distances scale to microns when the image has pixel calibration; otherwise they stay in pixels (matching the v0.2.7 spatial-stats unit treatment). One-for-one drop-in for the legacy QuPath core Delaunay Clustering plugin's `Delaunay: ...` columns.
 - **Per-component aggregate measurements** -- opt-in (default off, `qpcat.spatial.writeComponentMeasurements`). For each graph-connected component, writes `QPCAT component: size` and `QPCAT component: mean: <existing measurement>` to every cell in the component. Deliberately uses the `component` namespace to disambiguate from Leiden phenotype clusters; see the [Component vs Cluster](documentation/BEST_PRACTICES.md#component-vs-cluster-naming) worked example.
 - **Limit edges to same class (post-hoc filter)** -- toggleable filter in the Viewer-overlay sub-section that rebuilds the displayed connections to within-class edges only. Mirrors the legacy plugin's `Limit by class` option but applied post-hoc so users can phenotype first, then filter, without re-running the graph build.
 - **Micron-aware Delaunay max-edge threshold** -- new `qpcat.spatial.delaunayMaxEdgeUm` preference; the dialog shows the micron spinner on calibrated images and the existing pixel spinner on uncalibrated ones (decide-once at dialog open).
@@ -22,11 +22,22 @@ Minor release. Spatial graph overlay -- QP-CAT now writes its spatial neighbor g
 
 - **`spatial_graph_delaunay_max_edge` passed to Python is now resolved Java-side** -- the canonical micron value (`qpcat.spatial.delaunayMaxEdgeUm`) is converted to pixels using the current image's pixel calibration; on uncalibrated images the existing pixel preference still applies. Zero change to the Python contract.
 
+### Fixed during pre-release testing
+
+- F1: per-cell `QPCAT spatial:` distance + triangle-area columns now scale to microns when pixel calibration is present; unchanged in pixels when uncalibrated. Docs previously claimed micron-aware behaviour that the code did not implement.
+- F2: edge-count prompt threshold (default 250000) now triggers an actual confirmation dialog when crossed. Previously it logged a warning and silently skipped the viewer push.
+- F3: component-measurement feedback-loop guard now skips QP-CAT's other prefixes (UMAP, tSNE, PCA, Cluster, FM_, ZS_, AE_) in addition to `QPCAT spatial:` and `QPCAT component:`. Prevents nonsense `QPCAT component: mean: UMAP1` columns on rerun.
+- F4: pushing a saved spatial-stats result that predates v0.3 (no edge COO on disk) now shows a clear warning instead of a misleading success notification.
+- F5: `SpatialConnectionsScripts.pushConnectionsToViewer` and `applySameClassFilter` now write to the project-wide OperationLogger audit trail alongside the per-image workflow step.
+- F8: "Push to viewer now" surfaces the saved-result name when one result is present and opens a picker when multiple results are saved. Previously silently iterated and picked the first.
+- F9: same-class filter toggle now surfaces the edge-count change as a transient notification, with an explicit "cells may be un-classified" message when the filter empties the overlay.
+
 ### Known limitations
 
 - The underlying QuPath `PathObjectConnections` API is marked `@Deprecated` in 0.7. QP-CAT uses it deliberately because the planned `DelaunayTools.Subdivision` replacement cannot represent kNN or Radius graphs. v0.3 ships an "uses today's API while it exists" overlay; the next major QuPath release that removes the deprecated API will need QP-CAT to ship either a custom overlay or wait for an `Subdivision` superset. See [HOW_TO_GUIDE chapter 21 -- API deprecation note](documentation/HOW_TO_GUIDE.md#api-deprecation-note).
 - macOS and Windows have not yet been smoke-tested in v0.3; the release was developed and statically verified on Linux WSL2.
 - Saved-result push-to-viewer in v0.3 attaches an empty connection group when the saved bundle predates the edge-COO write path (legacy `SavedClusteringResult` JSON does not yet persist the COO). Re-run clustering once on v0.3 to populate the new payload.
+- Project clustering builds a single global spatial graph from concatenated per-image pixel coordinates. Cells at the same coordinate in different images can become spurious neighbours in the global graph; per-segment edges are filtered out by `SpatialGraphPayload.slice` but per-cell measurement aggregates remain global. Use single-image clustering for v0.3 if cross-image neighbours would distort your analysis. Targeted fix in v0.3.1.
 
 ## [0.2.10] -- 2026-05-28
 

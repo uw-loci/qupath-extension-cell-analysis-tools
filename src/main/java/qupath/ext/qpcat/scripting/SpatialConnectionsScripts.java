@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.SpatialStatsBundle;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.OperationLogger;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.DefaultPathObjectConnectionGroup;
 import qupath.lib.objects.PathObject;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +71,60 @@ public final class SpatialConnectionsScripts {
     public static final String KEY_OVERLAY_RESULT_NAME =
             "QPCAT_SPATIAL_OVERLAY_RESULT_NAME";
 
+    /**
+     * Outcome of {@link #pushConnectionsToViewer(ImageData, String)}.
+     * Carries the saved-result name, the number of edges actually pushed,
+     * the detection count, and whether the saved bundle predated the v0.3
+     * edge-COO write path (legacy bundles attach an empty group; the
+     * dialog uses {@link #isLegacyBundle()} to warn the user).
+     */
+    public static final class PushResult {
+        private final String resultName;
+        private final int nEdges;
+        private final int nDetections;
+        private final boolean legacyBundle;
+
+        PushResult(String resultName, int nEdges, int nDetections,
+                   boolean legacyBundle) {
+            this.resultName = resultName;
+            this.nEdges = nEdges;
+            this.nDetections = nDetections;
+            this.legacyBundle = legacyBundle;
+        }
+
+        public String getResultName() { return resultName; }
+        public int getNEdges() { return nEdges; }
+        public int getNDetections() { return nDetections; }
+        public boolean isLegacyBundle() { return legacyBundle; }
+    }
+
+    /**
+     * Outcome of {@link #applySameClassFilter(ImageData, boolean)}.
+     * Carries the edge counts before and after the filter rebuild so the
+     * dialog can surface a transient status notification. When
+     * {@link #wasNoOp()} is true the filter was a no-op (e.g. toggle-off
+     * with no stashed source) and the counts are zero.
+     */
+    public static final class FilterResult {
+        private final boolean enabled;
+        private final int nEdgesBefore;
+        private final int nEdgesAfter;
+        private final boolean noOp;
+
+        FilterResult(boolean enabled, int nEdgesBefore, int nEdgesAfter,
+                     boolean noOp) {
+            this.enabled = enabled;
+            this.nEdgesBefore = nEdgesBefore;
+            this.nEdgesAfter = nEdgesAfter;
+            this.noOp = noOp;
+        }
+
+        public boolean isEnabled() { return enabled; }
+        public int getNEdgesBefore() { return nEdgesBefore; }
+        public int getNEdgesAfter() { return nEdgesAfter; }
+        public boolean wasNoOp() { return noOp; }
+    }
+
     private SpatialConnectionsScripts() {}
 
     /**
@@ -98,7 +154,8 @@ public final class SpatialConnectionsScripts {
      *         result does not exist, the saved result has no spatial
      *         stats bundle, or the cell count does not match
      */
-    public static void pushConnectionsToViewer(ImageData<?> imageData, String resultName) {
+    public static PushResult pushConnectionsToViewer(ImageData<?> imageData, String resultName) {
+        long startMs = System.currentTimeMillis();
         if (imageData == null) {
             throw new IllegalArgumentException("imageData must not be null");
         }
@@ -154,6 +211,9 @@ public final class SpatialConnectionsScripts {
         DefaultPathObjectConnectionGroup group = buildGroupFromBundle(bundle, detections);
         attachGroup(imageData, group, resultName);
 
+        int nEdges = countEdges(group);
+        boolean legacyBundle = nEdges == 0;
+
         // Workflow-step recording follows the GatedObjectClassifier
         // pattern: imperative Groovy that calls back into this facade.
         try {
@@ -163,8 +223,31 @@ public final class SpatialConnectionsScripts {
         } catch (Exception e) {
             logger.warn("Failed to record workflow step for push-to-viewer: {}", e.getMessage());
         }
-        logger.info("Pushed spatial graph from result '{}' to viewer ({} cells)",
-                resultName, detections.size());
+        logger.info("Pushed spatial graph from result '{}' to viewer ({} cells, {} edges)",
+                resultName, detections.size(), nEdges);
+
+        // F5: project-wide audit trail. Best-effort; never raise on log
+        // failure (matches the workflow-step recording shape above).
+        try {
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("feature", "spatial-graph-overlay");
+            params.put("action", "push");
+            params.put("result_name", resultName);
+            params.put("image", describeImage(imageData));
+            params.put("n_edges", Integer.toString(nEdges));
+            params.put("n_detections", Integer.toString(detections.size()));
+            params.put("legacy_bundle", Boolean.toString(legacyBundle));
+            String summary = legacyBundle
+                    ? "Legacy bundle: attached empty overlay (re-run on v0.3 to populate)"
+                    : "Pushed " + nEdges + " edges from '" + resultName + "' to viewer";
+            OperationLogger.getInstance().logOperation(
+                    "SPATIAL OVERLAY PUSH", params, summary,
+                    System.currentTimeMillis() - startMs);
+        } catch (Exception e) {
+            logger.warn("OperationLogger push entry failed: {}", e.getMessage());
+        }
+
+        return new PushResult(resultName, nEdges, detections.size(), legacyBundle);
     }
 
     /**
@@ -186,14 +269,17 @@ public final class SpatialConnectionsScripts {
      * filter (intended behaviour -- the tooltip and HOW_TO_GUIDE call
      * this out).</p>
      */
-    public static void applySameClassFilter(ImageData<?> imageData, boolean enabled) {
+    public static FilterResult applySameClassFilter(ImageData<?> imageData, boolean enabled) {
+        long startMs = System.currentTimeMillis();
         if (imageData == null) {
             throw new IllegalArgumentException("imageData must not be null");
         }
         Object o = imageData.getProperty(DefaultPathObjectConnectionGroup.KEY_OBJECT_CONNECTIONS);
         if (!(o instanceof PathObjectConnections connections)) {
             logger.warn("No PathObjectConnections attached; same-class filter is a no-op");
-            return;
+            FilterResult noop = new FilterResult(enabled, 0, 0, true);
+            logFilterOperation(imageData, noop, startMs);
+            return noop;
         }
 
         if (enabled) {
@@ -209,10 +295,14 @@ public final class SpatialConnectionsScripts {
             } else {
                 logger.warn("Cannot decide which group to filter (multiple groups attached);"
                         + " same-class filter aborted");
-                return;
+                FilterResult noop = new FilterResult(true, 0, 0, true);
+                logFilterOperation(imageData, noop, startMs);
+                return noop;
             }
 
+            int nEdgesBefore = countEdges(sourceGroup);
             DefaultPathObjectConnectionGroup filtered = buildFilteredGroup(sourceGroup);
+            int nEdgesAfter = countEdges(filtered);
             // Swap. Remove every group so we know exactly what is on
             // screen; add back the filtered view. If the source group
             // was distinct from what is currently shown we keep it in
@@ -223,21 +313,59 @@ public final class SpatialConnectionsScripts {
             connections.addGroup(filtered);
             imageData.setProperty(KEY_OVERLAY_SOURCE_GROUP, sourceGroup);
             fireHierarchyChanged(imageData);
-            logger.info("Applied same-class spatial-graph filter ({} cells)",
-                    sourceGroup.getPathObjects().size());
+            logger.info("Applied same-class spatial-graph filter ({} cells, {} -> {} edges)",
+                    sourceGroup.getPathObjects().size(), nEdgesBefore, nEdgesAfter);
+            FilterResult res = new FilterResult(true, nEdgesBefore, nEdgesAfter, false);
+            logFilterOperation(imageData, res, startMs);
+            return res;
         } else {
             Object stash = imageData.getProperty(KEY_OVERLAY_SOURCE_GROUP);
             if (!(stash instanceof PathObjectConnectionGroup source)) {
                 logger.info("Same-class filter toggle-off: no stashed source group; no-op");
-                return;
+                FilterResult noop = new FilterResult(false, 0, 0, true);
+                logFilterOperation(imageData, noop, startMs);
+                return noop;
             }
+            int nEdgesBefore = 0;
+            for (PathObjectConnectionGroup g : connections.getConnectionGroups()) {
+                nEdgesBefore += countEdges(g);
+            }
+            int nEdgesAfter = countEdges(source);
             for (PathObjectConnectionGroup g : new ArrayList<>(connections.getConnectionGroups())) {
                 connections.removeGroup(g);
             }
             connections.addGroup(source);
             imageData.setProperty(KEY_OVERLAY_SOURCE_GROUP, null);
             fireHierarchyChanged(imageData);
-            logger.info("Removed same-class spatial-graph filter; restored unfiltered group");
+            logger.info("Removed same-class spatial-graph filter; restored unfiltered group"
+                            + " ({} -> {} edges)", nEdgesBefore, nEdgesAfter);
+            FilterResult res = new FilterResult(false, nEdgesBefore, nEdgesAfter, false);
+            logFilterOperation(imageData, res, startMs);
+            return res;
+        }
+    }
+
+    private static void logFilterOperation(ImageData<?> imageData, FilterResult result,
+                                            long startMs) {
+        try {
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("feature", "spatial-graph-overlay");
+            params.put("action", "same-class-filter");
+            params.put("enabled", Boolean.toString(result.isEnabled()));
+            params.put("image", describeImage(imageData));
+            params.put("n_edges_before", Integer.toString(result.getNEdgesBefore()));
+            params.put("n_edges_after", Integer.toString(result.getNEdgesAfter()));
+            params.put("no_op", Boolean.toString(result.wasNoOp()));
+            String summary = result.wasNoOp()
+                    ? "Same-class filter no-op (no source group or no attached connections)"
+                    : "Same-class filter " + (result.isEnabled() ? "on" : "off")
+                            + ": " + result.getNEdgesBefore() + " -> "
+                            + result.getNEdgesAfter() + " edges";
+            OperationLogger.getInstance().logOperation(
+                    "SPATIAL OVERLAY FILTER", params, summary,
+                    System.currentTimeMillis() - startMs);
+        } catch (Exception e) {
+            logger.warn("OperationLogger same-class-filter entry failed: {}", e.getMessage());
         }
     }
 
@@ -368,6 +496,45 @@ public final class SpatialConnectionsScripts {
     private static String escape(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /**
+     * Count undirected edges in a connection group. Each unordered pair
+     * is counted exactly once by requiring i &lt; j on object identity
+     * hash (deterministic per JVM run; sufficient for the audit-trail
+     * + status-notification edge-count surface, no exact-set semantics
+     * required across runs).
+     */
+    private static int countEdges(PathObjectConnectionGroup group) {
+        if (group == null) return 0;
+        int total = 0;
+        for (PathObject p : group.getPathObjects()) {
+            List<PathObject> connected = group.getConnectedObjects(p);
+            if (connected == null) continue;
+            int pid = System.identityHashCode(p);
+            for (PathObject q : connected) {
+                if (q == null) continue;
+                int qid = System.identityHashCode(q);
+                if (pid < qid) {
+                    total++;
+                }
+            }
+        }
+        return total;
+    }
+
+    private static String describeImage(ImageData<?> imageData) {
+        if (imageData == null) return "(null)";
+        try {
+            if (imageData.getServer() != null
+                    && imageData.getServer().getMetadata() != null) {
+                String name = imageData.getServer().getMetadata().getName();
+                if (name != null && !name.isBlank()) return name;
+            }
+        } catch (Exception ignored) {
+            // best-effort describe; fall through
+        }
+        return "(unknown)";
     }
 
     /**

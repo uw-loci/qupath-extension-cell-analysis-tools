@@ -855,14 +855,20 @@ public class ClusteringDialog {
                     "A project must be open to push saved spatial connections.");
             return;
         }
-        // Pick the most-recent saved result with a spatial-stats bundle.
-        String chosen = null;
+        // F8: collect every saved spatial-stats result name (not just the
+        // first). If there is exactly one, use it; if there are several,
+        // open a ChoiceDialog so the user picks explicitly. The previous
+        // implementation silently picked the first.
+        List<String> candidates = new ArrayList<>();
         try {
             for (String name : ClusteringResultManager.listResults(project)) {
-                var saved = ClusteringResultManager.loadSavedResult(project, name);
-                if (saved != null && saved.hasSpatialStats()) {
-                    chosen = name;
-                    break;
+                try {
+                    var saved = ClusteringResultManager.loadSavedResult(project, name);
+                    if (saved != null && saved.hasSpatialStats()) {
+                        candidates.add(name);
+                    }
+                } catch (Exception ignored) {
+                    // best-effort scan: skip unreadable entries
                 }
             }
         } catch (Exception e) {
@@ -870,20 +876,46 @@ public class ClusteringDialog {
                     "Failed to scan saved results: " + e.getMessage());
             return;
         }
-        if (chosen == null) {
+        if (candidates.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT",
                     "No saved spatial-stats result on this image yet -- "
                     + "run clustering with the Viewer overlay enabled first.");
             return;
         }
-        final String resultName = chosen;
+        final String resultName;
+        if (candidates.size() == 1) {
+            resultName = candidates.get(0);
+        } else {
+            String picked = Dialogs.showChoiceDialog(
+                    "QP-CAT - choose saved result",
+                    "Multiple saved spatial-stats results found. Choose which graph"
+                            + " to push to the viewer:",
+                    candidates,
+                    candidates.get(0));
+            if (picked == null || picked.isBlank()) {
+                // User cancelled the picker.
+                return;
+            }
+            resultName = picked;
+        }
         Thread t = new Thread(() -> {
             try {
-                SpatialConnectionsScripts.pushConnectionsToViewer(
-                        imageData, resultName);
-                Platform.runLater(() ->
+                SpatialConnectionsScripts.PushResult outcome =
+                        SpatialConnectionsScripts.pushConnectionsToViewer(
+                                imageData, resultName);
+                Platform.runLater(() -> {
+                    if (outcome.isLegacyBundle()) {
+                        // F4: legacy bundle predates v0.3's edge COO write.
+                        Dialogs.showWarningNotification("QPCAT",
+                                "This saved result predates v0.3 and contains no"
+                                        + " edge data. Re-run clustering once on v0.3"
+                                        + " to populate the overlay.");
+                    } else {
                         Dialogs.showInfoNotification("QPCAT",
-                                "Pushed connections from '" + resultName + "' to viewer."));
+                                "Pushed graph from '" + resultName + "' to viewer ("
+                                        + outcome.getNEdges() + " edges).");
+                    }
+                });
             } catch (Exception e) {
                 logger.error("Push-to-viewer-now failed", e);
                 Platform.runLater(() ->
@@ -901,8 +933,32 @@ public class ClusteringDialog {
         QpcatPreferences.setSpatialLimitEdgesBySameClass(enabled);
         Thread t = new Thread(() -> {
             try {
-                SpatialConnectionsScripts.applySameClassFilter(
-                        imageData, enabled);
+                SpatialConnectionsScripts.FilterResult outcome =
+                        SpatialConnectionsScripts.applySameClassFilter(
+                                imageData, enabled);
+                // F9: surface the edge-count change as a transient
+                // notification. Skip the toast on no-op toggles (no
+                // attached connections, no stashed source) since the
+                // user did not actually change anything visible.
+                if (outcome.wasNoOp()) {
+                    return;
+                }
+                Platform.runLater(() -> {
+                    int before = outcome.getNEdgesBefore();
+                    int after = outcome.getNEdgesAfter();
+                    String message;
+                    if (outcome.isEnabled() && after == 0) {
+                        // F4 secondary: filter dropped every edge -- usually
+                        // because the cells have no PathClass assigned.
+                        message = "Same-class filter applied: 0 edges remain"
+                                + " (cells may be un-classified).";
+                    } else {
+                        message = "Same-class filter "
+                                + (outcome.isEnabled() ? "applied" : "removed")
+                                + ": " + before + " edges -> " + after + " edges.";
+                    }
+                    Dialogs.showInfoNotification("QPCAT", message);
+                });
             } catch (Exception e) {
                 logger.warn("Same-class filter toggle failed: {}", e.getMessage());
             }

@@ -599,7 +599,7 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
 
 
 def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
-                                       coords, graph_type):
+                                       coords, graph_type, pixel_size_um=1.0):
     """Return a dict of per-cell measurement arrays + edge-COO triplet.
 
     Read by ClusteringWorkflow.java to:
@@ -619,6 +619,13 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
     type since connected components are well-defined on kNN, Radius, and
     Delaunay graphs alike.
 
+    pixel_size_um scales the distance + triangle-area outputs into microns.
+    Java passes PixelCalibration.getAveragedPixelSizeMicrons() when
+    PixelCalibration.hasPixelSizeMicrons() is true, otherwise 1.0 (units
+    remain pixels for uncalibrated images). Distances scale by
+    pixel_size_um; triangle areas scale by pixel_size_um ** 2. Edge COO
+    indices and num_neighbors counts are unit-free and unaffected.
+
     Returns dict with keys: row, col, num_neighbors, mean_distance,
     median_distance, max_distance, min_distance, component_labels, and
     optionally triangle_areas.
@@ -626,6 +633,12 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
     import scipy.sparse as sp
     from scipy.sparse.csgraph import connected_components
 
+    try:
+        scale = float(pixel_size_um)
+    except (TypeError, ValueError):
+        scale = 1.0
+    if not np.isfinite(scale) or scale <= 0.0:
+        scale = 1.0
     n_cells = spatial_connectivities.shape[0]
     conn_csr = spatial_connectivities.tocsr()
     # Symmetrise just in case (squidpy returns a symmetric matrix for
@@ -666,10 +679,10 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             row_vals = row_vals[row_vals > 0]
             if row_vals.size == 0:
                 continue
-            mean_distance[i] = float(np.mean(row_vals))
-            median_distance[i] = float(np.median(row_vals))
-            max_distance[i] = float(np.max(row_vals))
-            min_distance[i] = float(np.min(row_vals))
+            mean_distance[i] = float(np.mean(row_vals)) * scale
+            median_distance[i] = float(np.median(row_vals)) * scale
+            max_distance[i] = float(np.max(row_vals)) * scale
+            min_distance[i] = float(np.min(row_vals)) * scale
 
     # Delaunay-only triangle areas via a fresh scipy Delaunay (squidpy
     # only ships edges, not faces, so we rebuild the triangulation from
@@ -704,6 +717,11 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             mean_areas = np.full(n_cells, np.nan, dtype=np.float64)
             nonzero = count_areas > 0
             mean_areas[nonzero] = sum_areas[nonzero] / count_areas[nonzero]
+            # Triangle areas scale by pixel_size_um ** 2; NaN entries
+            # propagate through the multiply unchanged.
+            area_scale = scale * scale
+            mean_areas = mean_areas * area_scale
+            max_areas = max_areas * area_scale
             triangle_areas = np.column_stack([mean_areas, max_areas])
         except qhull.QhullError as e:
             logger.warning(
