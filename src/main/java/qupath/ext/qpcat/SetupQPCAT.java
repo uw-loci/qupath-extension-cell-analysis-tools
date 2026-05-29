@@ -6,6 +6,7 @@ import javafx.beans.binding.BooleanBinding;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.*;
+import javafx.scene.layout.GridPane;
 import javafx.scene.text.Font;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.BatchFigureExportDialog;
 import qupath.ext.qpcat.ui.FeatureExtractionDialog;
@@ -258,25 +260,43 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 Map.of("min_cluster_size", 15), c -> {}));
 
         // Quick Delaunay: Leiden over a Delaunay-graph spatial-smoothing pass.
-        // Naming follows "Quick <distinguishing feature>" (cf. Quick KMeans,
-        // Quick HDBSCAN) -- the Delaunay graph is what differentiates this
-        // entry from Quick Leiden, even though the underlying algorithm is
-        // still Leiden. Useful as a one-click "graph-aware" clustering for
-        // users coming off QuPath core's legacy Delaunay clustering tool.
+        // Honours the user's existing qpcat.spatial.* preferences for the
+        // Delaunay max-edge cutoff (microns or pixels per calibration) and
+        // the same-class post-hoc edge filter; defaults are sensible (-1 =
+        // no pruning, filter off) until the user sets them in
+        // Edit > Preferences > QP-CAT: Run Clustering.
         MenuItem quickDelaunay = new MenuItem(res.getString("menu.quickDelaunay"));
         quickDelaunay.setOnAction(e -> runQuickCluster(qupath, Algorithm.LEIDEN,
                 Map.of("n_neighbors", 50, "resolution", 1.0),
-                c -> {
-                    c.setEnableSpatialSmoothing(true);
-                    c.setSpatialSmoothingIterations(1);
-                    c.setSpatialGraphType("delaunay");
-                    // -1 == no max-edge pruning; users can tighten this in
-                    // the full Run Clustering dialog if tissue gaps matter.
-                    c.setSpatialGraphDelaunayMaxEdge(-1.0);
-                }));
+                c -> applyDelaunayPrefs(c, QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
+                        QpcatPreferences.getSpatialDelaunayMaxEdgeUm(),
+                        QpcatPreferences.isSpatialLimitEdgesBySameClass())));
+
+        // Quick Delaunay (custom): one-shot override of the two values that
+        // most often vary by tissue without dropping back into the full
+        // Run Clustering dialog. Mini-dialog pops a Spinner<Double> for the
+        // distance threshold (unit picked by image calibration) and a
+        // CheckBox for the same-class filter.
+        MenuItem quickDelaunayCustom = new MenuItem(res.getString("menu.quickDelaunayCustom"));
+        quickDelaunayCustom.setOnAction(e -> {
+            var imageData = qupath.getImageData();
+            if (imageData == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+                return;
+            }
+            var cal = imageData.getServer().getPixelCalibration();
+            boolean hasMicrons = cal != null && cal.hasPixelSizeMicrons();
+            QuickDelaunayCustomOptions opts = promptQuickDelaunayCustom(hasMicrons);
+            if (opts == null) return;
+            double maxEdgeUm = hasMicrons ? opts.maxEdge() : -1.0;
+            double maxEdgePx = hasMicrons ? -1.0 : opts.maxEdge();
+            runQuickCluster(qupath, Algorithm.LEIDEN,
+                    Map.of("n_neighbors", 50, "resolution", 1.0),
+                    c -> applyDelaunayPrefs(c, maxEdgePx, maxEdgeUm, opts.limitBySameClass()));
+        });
 
         quickClusterMenu.getItems().addAll(
-                quickLeiden, quickKmeans, quickHdbscan, quickDelaunay);
+                quickLeiden, quickKmeans, quickHdbscan, quickDelaunay, quickDelaunayCustom);
 
         // View Past Results
         MenuItem viewResultsItem = new MenuItem("View Past Results...");
@@ -448,6 +468,72 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         }
     }
 
+    /** Configure a ClusteringConfig for a Delaunay-smoothed Leiden run.
+     *  Shared by the two Quick Delaunay menu entries -- the regular one
+     *  reads from QpcatPreferences, the custom one reads from the mini
+     *  dialog. Both micron and pixel max-edge values are set; the
+     *  workflow's resolveDelaunayMaxEdgePixels picks the right one based
+     *  on PixelCalibration.hasPixelSizeMicrons. */
+    private static void applyDelaunayPrefs(ClusteringConfig c,
+                                            double maxEdgePixels,
+                                            double maxEdgeUm,
+                                            boolean limitBySameClass) {
+        c.setEnableSpatialSmoothing(true);
+        c.setSpatialSmoothingIterations(1);
+        c.setSpatialGraphType("delaunay");
+        c.setSpatialGraphDelaunayMaxEdge(maxEdgePixels);
+        c.setDelaunayMaxEdgeUm(maxEdgeUm);
+        c.setLimitEdgesBySameClass(limitBySameClass);
+    }
+
+    /** Two-field record returned by the Quick Delaunay (custom) prompt. */
+    private record QuickDelaunayCustomOptions(double maxEdge, boolean limitBySameClass) {}
+
+    /** Pop a small two-field dialog (max-edge spinner + same-class checkbox)
+     *  and return the selection; null on cancel. Spinner unit follows the
+     *  current image's calibration -- microns when present, pixels otherwise. */
+    private static QuickDelaunayCustomOptions promptQuickDelaunayCustom(boolean hasMicrons) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("QP-CAT - Quick Delaunay (custom)");
+        dialog.setHeaderText("One-shot overrides for this Quick Delaunay run.\n"
+                + "To persist, use Edit > Preferences > QP-CAT: Run Clustering.");
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        String unit = hasMicrons ? "microns" : "pixels";
+        double prefValue = hasMicrons
+                ? QpcatPreferences.getSpatialDelaunayMaxEdgeUm()
+                : QpcatPreferences.getSpatialGraphDelaunayMaxEdge();
+
+        Spinner<Double> maxEdgeSpinner = new Spinner<>(-1.0, 1_000_000.0, prefValue, 1.0);
+        maxEdgeSpinner.setEditable(true);
+        maxEdgeSpinner.setPrefWidth(110);
+        Tooltip maxEdgeTip = new Tooltip(
+                "Maximum Delaunay edge length in " + unit + "; longer edges are pruned.\n"
+                + "Useful for tissues with large gaps. Leave at -1 to skip pruning.");
+        maxEdgeSpinner.setTooltip(maxEdgeTip);
+
+        CheckBox limitClass = new CheckBox("Limit edges to same class");
+        limitClass.setSelected(QpcatPreferences.isSpatialLimitEdgesBySameClass());
+        limitClass.setTooltip(new Tooltip(
+                "Apply a post-hoc filter that hides edges connecting cells of\n"
+                + "different classes. Useful when running on already-phenotyped\n"
+                + "data; on unclassified data the filter empties the overlay."));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(8);
+        grid.setVgap(8);
+        grid.setPadding(new javafx.geometry.Insets(15));
+        grid.add(new Label("Distance threshold (" + unit + "):"), 0, 0);
+        grid.add(maxEdgeSpinner, 1, 0);
+        grid.add(limitClass, 0, 1, 2, 1);
+        dialog.getDialogPane().setContent(grid);
+
+        var clicked = dialog.showAndWait();
+        if (clicked.isEmpty() || clicked.get() != ButtonType.OK) return null;
+        return new QuickDelaunayCustomOptions(
+                maxEdgeSpinner.getValue(), limitClass.isSelected());
+    }
+
     private void runQuickCluster(QuPathGUI qupath, Algorithm algorithm,
                                  Map<String, Object> params,
                                  Consumer<ClusteringConfig> configCustomiser) {
@@ -500,6 +586,21 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         Platform.runLater(() -> logger.info("Quick {}: {}", algoName, msg));
                 // runClustering already logs to OperationLogger internally
                 ClusteringResult result = workflow.runClustering(config, progress);
+
+                // Apply the post-hoc same-class edge filter on the FX thread
+                // when the user opted in (via preferences or the custom prompt).
+                // The filter mutates the PathObjectConnections we just attached
+                // and fires a hierarchy event; must run on FX thread.
+                if (config.isLimitEdgesBySameClass()) {
+                    Platform.runLater(() -> {
+                        try {
+                            SpatialConnectionsScripts.applySameClassFilter(imageData, true);
+                        } catch (Exception ex) {
+                            logger.warn("Same-class filter could not be applied: {}",
+                                    ex.getMessage());
+                        }
+                    });
+                }
 
                 Platform.runLater(() ->
                         Dialogs.showInfoNotification(EXTENSION_NAME,

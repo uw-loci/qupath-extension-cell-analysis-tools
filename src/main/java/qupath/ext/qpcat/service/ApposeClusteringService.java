@@ -194,12 +194,18 @@ public class ApposeClusteringService {
                 report(statusCallback, "Verifying installed packages...");
                 logger.info("Running environment verification...");
 
+                // squidpy is imported here so the stale-env case (xarray_schema
+                // -> pkg_resources missing because setuptools didn't land in the
+                // env) is caught at init time, not at first clustering run. The
+                // catch block below detects that signature and auto-wipes the
+                // env so the next launch rebuilds cleanly.
                 String verifyScript =
                         "import sklearn\n" +
                         "import umap\n" +
                         "import leidenalg\n" +
                         "import scanpy\n" +
                         "import anndata\n" +
+                        "import squidpy\n" +
                         "task.outputs['sklearn_version'] = sklearn.__version__\n" +
                         "task.outputs['scanpy_version'] = scanpy.__version__\n" +
                         "task.outputs['umap_version'] = umap.__version__\n" +
@@ -251,6 +257,31 @@ public class ApposeClusteringService {
             initError = e.getMessage();
             initialized = false;
             logger.error("Failed to initialize QPCAT Appose: {}", e.getMessage(), e);
+
+            // Detect the well-known "stale env" case: the on-disk pixi.toml
+            // appears current but the resolved env is missing a required
+            // package (most commonly setuptools / pkg_resources, surfaced
+            // transitively via the xarray_schema -> spatialdata -> squidpy
+            // import chain). Auto-wipe .pixi/ + pixi.lock so the next launch
+            // forces a clean Pixi sync.
+            if (looksLikeStaleEnv(e.getMessage())) {
+                if (wipeEnvForRebuild()) {
+                    String advice = "QP-CAT detected a stale Pixi environment and cleaned "
+                            + "it up automatically. Restart QuPath to rebuild "
+                            + "the environment from scratch (~30 sec to 2 min, "
+                            + "depending on cached downloads).";
+                    logger.warn(advice);
+                    report(statusCallback, advice);
+                    try {
+                        qupath.fx.dialogs.Dialogs.showWarningNotification(
+                                "QP-CAT", advice);
+                    } catch (Exception fxEx) {
+                        // FX may not be initialized in some headless contexts
+                        // -- the log + status callback already told the user.
+                    }
+                }
+            }
+
             throw e instanceof IOException ? (IOException) e : new IOException(e);
         }
     }
@@ -465,6 +496,48 @@ public class ApposeClusteringService {
      *
      * @return true if the environment was wiped for rebuild
      */
+    /** True when the init exception message carries a well-known signature
+     *  that means the Pixi env is structurally OK on disk but missing a
+     *  package the verify import needed -- usually setuptools / pkg_resources
+     *  surfaced via xarray_schema (transitive dep of squidpy). */
+    private static boolean looksLikeStaleEnv(String message) {
+        if (message == null) return false;
+        String m = message;
+        return m.contains("No module named 'pkg_resources'")
+                || m.contains("No module named 'setuptools'")
+                || m.contains("No module named 'xarray_schema'")
+                || m.contains("No module named 'spatialdata'")
+                || m.contains("No module named 'squidpy'");
+    }
+
+    /** Best-effort delete of .pixi/ + pixi.lock so the next QuPath launch
+     *  triggers a clean Pixi sync from the JAR-bundled pixi.toml. Returns
+     *  true on success (anything was deleted), false on any IO failure. */
+    private boolean wipeEnvForRebuild() {
+        try {
+            Path envDir = getEnvironmentPath();
+            if (!Files.isDirectory(envDir)) return false;
+            boolean wiped = false;
+            Path pixiLock = envDir.resolve("pixi.lock");
+            if (Files.exists(pixiLock)) {
+                Files.deleteIfExists(pixiLock);
+                wiped = true;
+            }
+            Path pixiDir = envDir.resolve(".pixi");
+            if (Files.isDirectory(pixiDir)) {
+                deleteDirectoryRecursively(pixiDir);
+                wiped = true;
+            }
+            if (wiped) {
+                logger.info("Wiped Pixi env at {} -- will rebuild on next launch", envDir);
+            }
+            return wiped;
+        } catch (IOException ioe) {
+            logger.warn("Failed to wipe stale Pixi env: {}", ioe.getMessage());
+            return false;
+        }
+    }
+
     private boolean syncPixiToml(String expectedContent) {
         try {
             Path envDir = getEnvironmentPath();

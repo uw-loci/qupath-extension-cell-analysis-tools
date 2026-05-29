@@ -4,6 +4,25 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.2] -- 2026-05-29
+
+Patch release. Quick Delaunay learns to honor your preferences, gains a "(custom)..." sibling for per-invoke overrides, and auto-recovers from a class of stale-Pixi-env failures that v0.2.8's setuptools pin doesn't always reach.
+
+### Added
+
+- **`Extensions > QP-CAT > Quick Cluster > Quick Delaunay (custom)...`** -- a new sibling to the existing one-click Quick Delaunay. Pops a small two-field dialog (Distance threshold with unit auto-selected by the current image's pixel calibration + Limit edges to same class), then runs the same Leiden + Delaunay-smoothing code path with those overrides. Use the one-click `Quick Delaunay` for muscle-memory runs and `Quick Delaunay (custom)...` for per-tissue tweaks.
+- **Auto-recovery from stale Pixi environments.** The init verify step now also imports `squidpy`, catching the `xarray_schema -> pkg_resources` failure (the well-known signature where the env's `pixi.toml` says `setuptools >= 65` but the resolved env never installed it). When detected, QP-CAT wipes `~/.local/share/appose/qupath-qpcat/.pixi/` + `pixi.lock` automatically and tells the user to restart QuPath; the next launch rebuilds the env cleanly. Other stale-env signatures covered: `No module named 'setuptools'`, `'xarray_schema'`, `'spatialdata'`, `'squidpy'`.
+
+### Fixed
+
+- **Quick Delaunay ignored `qpcat.spatial.delaunayMaxEdge*` and `qpcat.spatial.limitEdgesBySameClass` preferences** -- it hard-coded `delaunayMaxEdge = -1` (no pruning) and never applied the same-class filter even when the preference was set. Now reads both from `QpcatPreferences` (microns when the image is calibrated, pixels otherwise) and applies the same-class filter after the run via `SpatialConnectionsScripts.applySameClassFilter`. Configure once in `Edit > Preferences > QP-CAT: Run Clustering` and every subsequent Quick Delaunay run respects the values.
+
+### Upgrade
+
+If your Windows or macOS workstation is currently stuck on the `ModuleNotFoundError: No module named 'pkg_resources'` error from squidpy import, install v0.3.2 and launch QuPath. The init verify will catch the stale env, wipe it automatically, and ask you to restart -- second launch rebuilds and clustering works again.
+
+Manual workaround (if for any reason the auto-wipe doesn't run): close QuPath, delete `~/.local/share/appose/qupath-qpcat/.pixi/` and `pixi.lock`, relaunch.
+
 ## [0.3.1] -- 2026-05-29
 
 Patch release. Three coordinated fixes pulled from a v0.2.x training-run log: the VAE training pathway also dropped `Cluster N` labels (v0.2.10 only fixed the pie chart display path), residual `[TEST FEATURE]` strings the v0.2.8 cleanup missed, and two noisy Dask + scanpy FutureWarnings worth silencing in the Python console.
