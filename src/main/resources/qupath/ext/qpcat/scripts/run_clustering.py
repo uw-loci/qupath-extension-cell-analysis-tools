@@ -131,6 +131,21 @@ try:
 except NameError:
     pref_enable_co_occurrence_one_vs_rest = False
 
+# v0.3 spatial graph overlay flags. push_connections_to_viewer drives the
+# Java-side rebuild of PathObjectConnections; the edge COO is emitted
+# unconditionally so the Java side can also rebuild on demand from saved
+# results without a re-run. write_node_measurements toggles per-cell
+# QPCAT spatial: columns; write_component_measurements toggles emission
+# of connected-component labels (the Java side does the groupby fan-out).
+try:
+    pref_write_node_measurements = write_node_measurements
+except NameError:
+    pref_write_node_measurements = True
+try:
+    pref_write_component_measurements = write_component_measurements
+except NameError:
+    pref_write_component_measurements = False
+
 # Phase 5 enhancement: persist spatial-stats plots as PNG. Gated by the
 # qpcat.spatial.persistPlots preference (default true). When the parent
 # task is also generating plots (generate_plots + output_dir), the new
@@ -602,6 +617,29 @@ if has_spatial and n_clusters_found > 1:
         logger.info("Spatial neighbor graph built (%s)",
                     pref_spatial_graph_type)
         task.outputs["spatial_graph_type"] = pref_spatial_graph_type
+
+        # v0.3 spatial graph overlay: emit edge COO + optional per-cell
+        # node measurements + optional component labels. The edge COO is
+        # always emitted so the Java side can rebuild PathObjectConnections
+        # without re-running clustering. The measurement-write flags are
+        # honoured Python-side so the wire payload stays minimal for
+        # measurement-disabled runs.
+        try:
+            _node_payload = _qpcat_spatial.compute_spatial_node_measurements(
+                adata.obsp["spatial_connectivities"],
+                adata.obsp.get("spatial_distances"),
+                spatial_data,
+                pref_spatial_graph_type,
+            )
+            _qpcat_spatial.emit_spatial_node_outputs(
+                task,
+                _node_payload,
+                pref_spatial_graph_type,
+                pref_write_node_measurements,
+                pref_write_component_measurements,
+            )
+        except Exception as e:
+            logger.warning("Spatial node measurements failed: %s", e)
     except Exception as e:
         logger.warning("Spatial neighbor graph failed: %s", e)
         has_spatial = False

@@ -237,6 +237,24 @@ Parameter-free planar triangulation connecting each cell to its geometric neighb
 
 ---
 
+### Spatial Graph Overlay (PathObjectConnections)
+
+QuPath core's `qupath.lib.objects.PathObjectConnections` is the slot on `ImageData` that drives **View -> Show object connections**. QP-CAT v0.3 writes its per-cell spatial neighbor graph (kNN / Radius / Delaunay) into this slot so the same QuPath core overlay machinery used by the legacy Delaunay Clustering plugin renders QP-CAT's modern graph constructors.
+
+**Note on the API status:** `PathObjectConnections`, `PathObjectConnectionGroup`, and `DefaultPathObjectConnectionGroup` are marked `@Deprecated` in QuPath 0.7.0 with a JavaDoc comment indicating they will be replaced by `qupath.lib.analysis.DelaunayTools.Subdivision` in a future release. QP-CAT uses the deprecated API deliberately because the `Subdivision` replacement is a Delaunay-triangulation type and cannot represent kNN or Radius graphs -- the API surface QP-CAT needs has no non-deprecated equivalent in QuPath 0.7. The JavaDoc itself does not link a specific GitHub issue; track the QuPath GitHub issue tracker for the eventual removal milestone.
+
+**Legacy parity target:** QuPath core's `qupath.opencv.features.DelaunayClusteringPlugin` is the plugin QP-CAT's overlay + measurement output is designed to be a drop-in successor to. QP-CAT v0.3 reproduces its connecting-line overlay, its per-cell node measurements (`Num neighbors`, `Mean/Median/Max/Min distance`, `Mean/Max triangle area`), its per-cluster aggregate measurements (renamed to `QPCAT component: ...` for namespace clarity -- see [BEST_PRACTICES -- Component vs Cluster](BEST_PRACTICES.md#component-vs-cluster-naming)), its `limit by class` edge filter (applied post-hoc instead of at build time), and its micron-aware distance threshold. The migration table in [HOW_TO_GUIDE chapter 21](HOW_TO_GUIDE.md#legacy-delaunay-clustering-migration) shows the one-for-one mapping.
+
+**Forum context:**
+> Pete Bankhead, "QuPath Delauney clustering" thread, image.sc, 2021-ongoing.
+> https://forum.image.sc/t/qupath-delauney-clustering/49959/5
+
+The post linked above is the image.sc thread that motivated the v0.3 overlay feature -- Pete's note that QuPath core is phasing out the built-in Delaunay clustering tool, plus user demand for a parametrised modern replacement, opened the door for QP-CAT to populate the same overlay slot.
+
+**Used in:** Spatial Statistics workflow (chapter 17 + 21); viewer overlay after a Spatial Statistics run; per-cell and per-component measurement table writes.
+
+---
+
 ## Batch Correction
 
 ### Harmony

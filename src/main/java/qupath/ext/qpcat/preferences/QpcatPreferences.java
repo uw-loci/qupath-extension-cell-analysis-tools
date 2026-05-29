@@ -205,6 +205,36 @@ public final class QpcatPreferences {
     private static final BooleanProperty spatialPersistPlots = PathPrefs.createPersistentPreference(
             "qpcat.spatial.persistPlots", true);
 
+    // ---- Spatial graph overlay (v0.3) ----
+    // Defaults match 02_design.md "Decisions carried" section. The overlay
+    // pushes the spatial neighbor graph into QuPath's PathObjectConnections
+    // slot after a Spatial Statistics run so the legacy
+    // View -> Show object connections menu item renders it.
+
+    private static final BooleanProperty spatialPushConnectionsToViewer =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.pushConnectionsToViewer", true);
+
+    private static final IntegerProperty spatialConnectionsPromptThreshold =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.connectionsPromptThreshold", 250_000);
+
+    private static final DoubleProperty spatialDelaunayMaxEdgeUm =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.delaunayMaxEdgeUm", -1.0);
+
+    private static final BooleanProperty spatialWriteNodeMeasurements =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.writeNodeMeasurements", true);
+
+    private static final BooleanProperty spatialWriteComponentMeasurements =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.writeComponentMeasurements", false);
+
+    private static final BooleanProperty spatialLimitEdgesBySameClass =
+            PathPrefs.createPersistentPreference(
+                    "qpcat.spatial.limitEdgesBySameClass", false);
+
     // ==================== Run Phenotyping ====================
 
     private static final IntegerProperty phenoHistogramBins = PathPrefs.createPersistentPreference(
@@ -428,6 +458,44 @@ public final class QpcatPreferences {
     }
     public static void setSpatialPersistPlots(boolean v) {
         spatialPersistPlots.set(v);
+    }
+
+    // Spatial graph overlay (v0.3) getters / setters
+    public static boolean isSpatialPushConnectionsToViewer() {
+        return spatialPushConnectionsToViewer.get();
+    }
+    public static void setSpatialPushConnectionsToViewer(boolean v) {
+        spatialPushConnectionsToViewer.set(v);
+    }
+    public static int getSpatialConnectionsPromptThreshold() {
+        return spatialConnectionsPromptThreshold.get();
+    }
+    public static void setSpatialConnectionsPromptThreshold(int v) {
+        spatialConnectionsPromptThreshold.set(v);
+    }
+    public static double getSpatialDelaunayMaxEdgeUm() {
+        return spatialDelaunayMaxEdgeUm.get();
+    }
+    public static void setSpatialDelaunayMaxEdgeUm(double v) {
+        spatialDelaunayMaxEdgeUm.set(v);
+    }
+    public static boolean isSpatialWriteNodeMeasurements() {
+        return spatialWriteNodeMeasurements.get();
+    }
+    public static void setSpatialWriteNodeMeasurements(boolean v) {
+        spatialWriteNodeMeasurements.set(v);
+    }
+    public static boolean isSpatialWriteComponentMeasurements() {
+        return spatialWriteComponentMeasurements.get();
+    }
+    public static void setSpatialWriteComponentMeasurements(boolean v) {
+        spatialWriteComponentMeasurements.set(v);
+    }
+    public static boolean isSpatialLimitEdgesBySameClass() {
+        return spatialLimitEdgesBySameClass.get();
+    }
+    public static void setSpatialLimitEdgesBySameClass(boolean v) {
+        spatialLimitEdgesBySameClass.set(v);
     }
 
     // Phenotyping getters
@@ -666,6 +734,66 @@ public final class QpcatPreferences {
                         + "geary_c.png, co_occurrence_pairwise.png, co_occurrence_one_vs_rest.png. "
                         + "Required for the Multi-Figure Batch Export dialog to include these "
                         + "plots; disable only to skip the savefig step entirely.")
+                .build());
+
+        // --- Spatial Graph Overlay (v0.3) ---
+
+        items.add(new PropertyItemBuilder<>(spatialPushConnectionsToViewer, Boolean.class)
+                .name("Spatial Overlay: Push Connections to Viewer")
+                .category(CATEGORY_CLUSTERING)
+                .description("When enabled (default), the spatial neighbor graph is "
+                        + "pushed to QuPath's PathObjectConnections slot after every "
+                        + "Spatial Statistics run so View -> Show object connections "
+                        + "renders the edges. Disable to keep the graph internal to "
+                        + "QP-CAT.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialConnectionsPromptThreshold, Integer.class)
+                .name("Spatial Overlay: Prompt Above N Edges")
+                .category(CATEGORY_CLUSTERING)
+                .description("Above this undirected edge count (default 250000), "
+                        + "QP-CAT prompts before pushing the spatial graph to the "
+                        + "viewer. Large graphs can slow pan and zoom. Raise on a "
+                        + "fast workstation, lower on a remote-desktop session.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialDelaunayMaxEdgeUm, Double.class)
+                .name("Spatial Overlay: Delaunay Max Edge (microns)")
+                .category(CATEGORY_CLUSTERING)
+                .description("Maximum allowed edge length after Delaunay "
+                        + "triangulation, in microns; longer edges are pruned. "
+                        + "-1 = no pruning. Used when the current image has a "
+                        + "pixel-size calibration; otherwise the pixel-based "
+                        + "delaunayMaxEdge preference applies.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialWriteNodeMeasurements, Boolean.class)
+                .name("Spatial Overlay: Write Node Measurements")
+                .category(CATEGORY_CLUSTERING)
+                .description("When enabled (default), every Spatial Statistics run "
+                        + "writes QPCAT spatial: Num neighbors, Mean/Median/Max/Min "
+                        + "distance to each cell's measurement table. With Delaunay "
+                        + "graphs, Mean/Max triangle area are also written.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialWriteComponentMeasurements, Boolean.class)
+                .name("Spatial Overlay: Write Component Measurements")
+                .category(CATEGORY_CLUSTERING)
+                .description("Opt-in (default off). For each graph-connected "
+                        + "component, write QPCAT component: size and "
+                        + "QPCAT component: mean: <X> for every existing numeric "
+                        + "measurement. NOTE: graph components are NOT Leiden "
+                        + "clusters; see BEST_PRACTICES.md.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialLimitEdgesBySameClass, Boolean.class)
+                .name("Spatial Overlay: Limit Edges to Same Class")
+                .category(CATEGORY_CLUSTERING)
+                .description("Post-hoc filter on the displayed spatial graph "
+                        + "(default off). Hides edges connecting cells of different "
+                        + "classes. Toggle on after phenotyping to visualise "
+                        + "same-type neighborhoods; toggle off to restore the full "
+                        + "graph. Does not re-run clustering.")
                 .build());
 
         // --- Run Phenotyping ---

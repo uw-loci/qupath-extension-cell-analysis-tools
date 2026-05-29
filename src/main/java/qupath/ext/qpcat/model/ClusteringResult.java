@@ -106,4 +106,138 @@ public class ClusteringResult {
         return hasRipley() || hasGeary()
                 || hasCoOccurrencePairwise() || hasCoOccurrenceOneVsRest();
     }
+
+    // ==================== Spatial Graph Overlay (v0.3) ====================
+    //
+    // Transient payload carrying the edge COO plus per-cell measurement
+    // arrays returned by the Python helper. NOT persisted to disk -- the
+    // arrays are too large for the JSON round-trip and the QuPath
+    // PathObjectConnections payload itself is reconstructed inline.
+
+    private SpatialGraphPayload spatialGraphPayload;
+
+    public SpatialGraphPayload getSpatialGraphPayload() { return spatialGraphPayload; }
+    public void setSpatialGraphPayload(SpatialGraphPayload p) { this.spatialGraphPayload = p; }
+    public boolean hasSpatialGraphPayload() { return spatialGraphPayload != null; }
+
+    /**
+     * Transient bundle of v0.3 spatial-graph outputs. Lives only on the
+     * in-memory ClusteringResult so the workflow can materialise the
+     * graph + per-cell measurements after the Appose task completes.
+     */
+    public static final class SpatialGraphPayload {
+        private long[] edgeRow;             // undirected edge COO row index
+        private long[] edgeCol;             // undirected edge COO column index
+        private int[] numNeighbors;         // per-cell degree
+        private double[] meanDistance;      // per-cell mean neighbor distance
+        private double[] medianDistance;
+        private double[] maxDistance;
+        private double[] minDistance;
+        private double[] meanTriangleArea;  // per-cell mean adjacent Delaunay triangle area; null when graph != delaunay
+        private double[] maxTriangleArea;
+        private int[] componentLabels;      // per-cell connected-component label; null when write_component_measurements off
+
+        public long[] getEdgeRow() { return edgeRow; }
+        public void setEdgeRow(long[] v) { this.edgeRow = v; }
+
+        public long[] getEdgeCol() { return edgeCol; }
+        public void setEdgeCol(long[] v) { this.edgeCol = v; }
+
+        public int[] getNumNeighbors() { return numNeighbors; }
+        public void setNumNeighbors(int[] v) { this.numNeighbors = v; }
+
+        public double[] getMeanDistance() { return meanDistance; }
+        public void setMeanDistance(double[] v) { this.meanDistance = v; }
+
+        public double[] getMedianDistance() { return medianDistance; }
+        public void setMedianDistance(double[] v) { this.medianDistance = v; }
+
+        public double[] getMaxDistance() { return maxDistance; }
+        public void setMaxDistance(double[] v) { this.maxDistance = v; }
+
+        public double[] getMinDistance() { return minDistance; }
+        public void setMinDistance(double[] v) { this.minDistance = v; }
+
+        public double[] getMeanTriangleArea() { return meanTriangleArea; }
+        public void setMeanTriangleArea(double[] v) { this.meanTriangleArea = v; }
+
+        public double[] getMaxTriangleArea() { return maxTriangleArea; }
+        public void setMaxTriangleArea(double[] v) { this.maxTriangleArea = v; }
+
+        public int[] getComponentLabels() { return componentLabels; }
+        public void setComponentLabels(int[] v) { this.componentLabels = v; }
+
+        public boolean hasEdgeCoo() {
+            return edgeRow != null && edgeCol != null
+                    && edgeRow.length == edgeCol.length
+                    && edgeRow.length > 0;
+        }
+
+        public boolean hasNodeMeasurements() { return numNeighbors != null; }
+
+        public boolean hasTriangleAreas() {
+            return meanTriangleArea != null && maxTriangleArea != null;
+        }
+
+        public boolean hasComponentLabels() { return componentLabels != null; }
+
+        /**
+         * Return a payload that covers only the cells in [start, end).
+         * Used by the project-clustering path which combines multiple
+         * images for a global graph build but applies results back per
+         * image. Edge entries whose endpoints land outside the slice
+         * are dropped; surviving endpoints are remapped to [0, end-start).
+         */
+        public SpatialGraphPayload slice(int start, int end) {
+            SpatialGraphPayload out = new SpatialGraphPayload();
+            int n = end - start;
+            if (numNeighbors != null && numNeighbors.length >= end) {
+                int[] arr = new int[n];
+                System.arraycopy(numNeighbors, start, arr, 0, n);
+                out.setNumNeighbors(arr);
+            }
+            out.setMeanDistance(sliceDouble(meanDistance, start, end));
+            out.setMedianDistance(sliceDouble(medianDistance, start, end));
+            out.setMaxDistance(sliceDouble(maxDistance, start, end));
+            out.setMinDistance(sliceDouble(minDistance, start, end));
+            out.setMeanTriangleArea(sliceDouble(meanTriangleArea, start, end));
+            out.setMaxTriangleArea(sliceDouble(maxTriangleArea, start, end));
+            if (componentLabels != null && componentLabels.length >= end) {
+                int[] arr = new int[n];
+                System.arraycopy(componentLabels, start, arr, 0, n);
+                out.setComponentLabels(arr);
+            }
+            if (edgeRow != null && edgeCol != null) {
+                int cap = edgeRow.length;
+                long[] tmpRow = new long[cap];
+                long[] tmpCol = new long[cap];
+                int kept = 0;
+                for (int e = 0; e < cap; e++) {
+                    long r = edgeRow[e];
+                    long c = edgeCol[e];
+                    if (r >= start && r < end && c >= start && c < end) {
+                        tmpRow[kept] = r - start;
+                        tmpCol[kept] = c - start;
+                        kept++;
+                    }
+                }
+                if (kept > 0) {
+                    long[] finalRow = new long[kept];
+                    long[] finalCol = new long[kept];
+                    System.arraycopy(tmpRow, 0, finalRow, 0, kept);
+                    System.arraycopy(tmpCol, 0, finalCol, 0, kept);
+                    out.setEdgeRow(finalRow);
+                    out.setEdgeCol(finalCol);
+                }
+            }
+            return out;
+        }
+
+        private static double[] sliceDouble(double[] src, int start, int end) {
+            if (src == null || src.length < end) return null;
+            double[] arr = new double[end - start];
+            System.arraycopy(src, start, arr, 0, end - start);
+            return arr;
+        }
+    }
 }

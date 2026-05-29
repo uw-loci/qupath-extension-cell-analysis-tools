@@ -111,6 +111,27 @@ public class ClusteringConfig {
     // 0 = adaptive default (1000 / 100 / 50 by cell count); positive = fixed.
     private int spatialPermutations = 0;
 
+    // ---- Spatial graph overlay (v0.3) ----
+    // pushConnectionsToViewer: when true, materialise the spatial graph as
+    // PathObjectConnections after the run; the user toggles the overlay via
+    // View -> Show object connections.
+    private boolean pushConnectionsToViewer = true;
+    // connectionsPromptThreshold: prompt the user before pushing when the
+    // undirected edge count exceeds this value (jankiness guard).
+    private int connectionsPromptThreshold = 250_000;
+    // delaunayMaxEdgeUm: canonical micron value for Delaunay edge pruning;
+    // -1 = no pruning. The existing spatialGraphDelaunayMaxEdge stays as
+    // the pixel-side fallback for uncalibrated images.
+    private double delaunayMaxEdgeUm = -1.0;
+    // writeNodeMeasurements / writeComponentMeasurements: drive emission of
+    // per-cell QPCAT spatial: columns and per-component QPCAT component:
+    // columns. Defaults match the v0.3 must-have decisions in 02_design.md.
+    private boolean writeNodeMeasurements = true;
+    private boolean writeComponentMeasurements = false;
+    // limitEdgesBySameClass: post-hoc Java-side filter applied to the
+    // attached PathObjectConnections; toggling rebuilds the visible group.
+    private boolean limitEdgesBySameClass = false;
+
     public ClusteringConfig() {
         // Set sensible defaults
         algorithmParams.put("n_neighbors", 50);
@@ -201,6 +222,26 @@ public class ClusteringConfig {
 
     public int getSpatialPermutations() { return spatialPermutations; }
     public void setSpatialPermutations(int v) { this.spatialPermutations = v; }
+
+    // ---- Spatial graph overlay (v0.3) accessors ----
+
+    public boolean isPushConnectionsToViewer() { return pushConnectionsToViewer; }
+    public void setPushConnectionsToViewer(boolean v) { this.pushConnectionsToViewer = v; }
+
+    public int getConnectionsPromptThreshold() { return connectionsPromptThreshold; }
+    public void setConnectionsPromptThreshold(int v) { this.connectionsPromptThreshold = v; }
+
+    public double getDelaunayMaxEdgeUm() { return delaunayMaxEdgeUm; }
+    public void setDelaunayMaxEdgeUm(double v) { this.delaunayMaxEdgeUm = v; }
+
+    public boolean isWriteNodeMeasurements() { return writeNodeMeasurements; }
+    public void setWriteNodeMeasurements(boolean v) { this.writeNodeMeasurements = v; }
+
+    public boolean isWriteComponentMeasurements() { return writeComponentMeasurements; }
+    public void setWriteComponentMeasurements(boolean v) { this.writeComponentMeasurements = v; }
+
+    public boolean isLimitEdgesBySameClass() { return limitEdgesBySameClass; }
+    public void setLimitEdgesBySameClass(boolean v) { this.limitEdgesBySameClass = v; }
 
     /**
      * True if any of the v1 spatial statistics is enabled.

@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -37,6 +38,11 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import qupath.lib.images.servers.ImageServer;
+import qupath.lib.images.servers.PixelCalibration;
+import qupath.lib.measurements.MeasurementList;
+import qupath.lib.objects.DefaultPathObjectConnectionGroup;
+import qupath.lib.objects.PathObjectConnectionGroup;
+import qupath.lib.objects.PathObjectConnections;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.regions.RegionRequest;
 
@@ -158,6 +164,15 @@ public class ClusteringWorkflow {
             String prefix = ResultApplier.getEmbeddingPrefix(
                     config.getEmbeddingMethod().getId());
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
+        }
+
+        // v0.3 spatial graph overlay: build PathObjectConnections + write
+        // QPCAT spatial: / QPCAT component: measurements per the config
+        // toggles. Runs on the current background thread; the helper
+        // fires the hierarchy change event on the FX thread itself.
+        if (result.hasSpatialGraphPayload()) {
+            applySpatialGraphPayload(imageData, extraction.getDetections(), config,
+                    result.getSpatialGraphPayload());
         }
 
         // Fire hierarchy update on FX thread
@@ -304,6 +319,14 @@ public class ClusteringWorkflow {
             @SuppressWarnings("unchecked")
             ImageData<BufferedImage> imageData =
                     (ImageData<BufferedImage>) segment.getImageData();
+
+            // v0.3 spatial graph overlay -- per-segment slice + apply.
+            if (result.hasSpatialGraphPayload()) {
+                ClusteringResult.SpatialGraphPayload sliced =
+                        result.getSpatialGraphPayload().slice(start, end);
+                applySpatialGraphPayload(imageData,
+                        new ArrayList<>(segmentDetections), config, sliced);
+            }
 
             try {
                 entry.saveImageData(imageData);
@@ -711,8 +734,10 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_type", config.getSpatialGraphType());
         inputs.put("spatial_graph_k", config.getSpatialGraphK());
         inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
+        // v0.3: prefer the canonical micron value when calibration is
+        // available; otherwise fall back to the pixel preference.
         inputs.put("spatial_graph_delaunay_max_edge",
-                config.getSpatialGraphDelaunayMaxEdge());
+                resolveDelaunayMaxEdgePixels(config));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
         inputs.put("use_squidpy_graph_for_smoothing",
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
@@ -726,6 +751,9 @@ public class ClusteringWorkflow {
                 config.isEnableCoOccurrencePairwise());
         inputs.put("enable_co_occurrence_one_vs_rest",
                 config.isEnableCoOccurrenceOneVsRest());
+        // ---- Spatial graph overlay (v0.3) inputs ----
+        inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
+        inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
 
         NDArray labelsNd = null;
         NDArray embNd = null;
@@ -951,6 +979,13 @@ public class ClusteringWorkflow {
                                 nCells),
                         "Spatial neighbor graph built for " + nCells + " cells",
                         -1);
+            }
+
+            // ---- Spatial graph overlay (v0.3) outputs ----
+            ClusteringResult.SpatialGraphPayload payload = retrieveSpatialGraphPayload(
+                    task, nCells);
+            if (payload != null) {
+                result.setSpatialGraphPayload(payload);
             }
 
             return result;
@@ -2866,5 +2901,354 @@ public class ClusteringWorkflow {
         } catch (NumberFormatException e) {
             return fallback;
         }
+    }
+
+    // ==================== Spatial Graph Overlay (v0.3) ====================
+
+    /**
+     * Resolve the Delaunay max-edge threshold to send to Python in pixel
+     * units. Prefers the canonical micron value
+     * ({@link ClusteringConfig#getDelaunayMaxEdgeUm}) when the current
+     * image has a pixel calibration; otherwise falls back to the pixel
+     * preference. Negative values (no-pruning sentinel) pass through.
+     */
+    private double resolveDelaunayMaxEdgePixels(ClusteringConfig config) {
+        double micronValue = config.getDelaunayMaxEdgeUm();
+        if (micronValue > 0 && qupath != null) {
+            try {
+                ImageData<BufferedImage> imageData = qupath.getImageData();
+                if (imageData != null && imageData.getServer() != null) {
+                    PixelCalibration cal = imageData.getServer().getPixelCalibration();
+                    if (cal != null && cal.hasPixelSizeMicrons()) {
+                        double pxSize = cal.getAveragedPixelSizeMicrons();
+                        if (pxSize > 0) {
+                            return micronValue / pxSize;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to resolve Delaunay max-edge microns to pixels: {}",
+                        e.getMessage());
+            }
+        }
+        return config.getSpatialGraphDelaunayMaxEdge();
+    }
+
+    /**
+     * Pull the v0.3 spatial-graph payload from {@code task.outputs}.
+     * Returns {@code null} when no edge COO is present. Each output is
+     * optional; missing arrays are left null on the payload.
+     */
+    private ClusteringResult.SpatialGraphPayload retrieveSpatialGraphPayload(
+            Task task, int nCells) {
+        if (!task.outputs.containsKey("spatial_graph_row")
+                && !task.outputs.containsKey("spatial_num_neighbors")
+                && !task.outputs.containsKey("component_labels")) {
+            return null;
+        }
+
+        ClusteringResult.SpatialGraphPayload payload = new ClusteringResult.SpatialGraphPayload();
+        List<NDArray> opened = new ArrayList<>();
+        try {
+            if (task.outputs.containsKey("spatial_graph_row")
+                    && task.outputs.containsKey("spatial_graph_col")) {
+                NDArray rowNd = (NDArray) task.outputs.get("spatial_graph_row");
+                NDArray colNd = (NDArray) task.outputs.get("spatial_graph_col");
+                opened.add(rowNd);
+                opened.add(colNd);
+                int nEdges = (int) Math.min(rowNd.shape().numElements(),
+                        Integer.MAX_VALUE);
+                long[] rowArr = new long[nEdges];
+                long[] colArr = new long[nEdges];
+                rowNd.buffer().asLongBuffer().get(rowArr);
+                colNd.buffer().asLongBuffer().get(colArr);
+                payload.setEdgeRow(rowArr);
+                payload.setEdgeCol(colArr);
+                logger.info("Received spatial graph edge COO ({} undirected edges)", nEdges);
+            }
+
+            if (task.outputs.containsKey("spatial_num_neighbors")) {
+                NDArray nd = (NDArray) task.outputs.get("spatial_num_neighbors");
+                opened.add(nd);
+                int[] arr = new int[nCells];
+                nd.buffer().asIntBuffer().get(arr);
+                payload.setNumNeighbors(arr);
+            }
+
+            payload.setMeanDistance(readDoubleArray(task, "spatial_mean_distance", nCells, opened));
+            payload.setMedianDistance(readDoubleArray(task, "spatial_median_distance", nCells, opened));
+            payload.setMaxDistance(readDoubleArray(task, "spatial_max_distance", nCells, opened));
+            payload.setMinDistance(readDoubleArray(task, "spatial_min_distance", nCells, opened));
+
+            if (task.outputs.containsKey("spatial_triangle_areas")) {
+                NDArray nd = (NDArray) task.outputs.get("spatial_triangle_areas");
+                opened.add(nd);
+                double[] flat = new double[nCells * 2];
+                nd.buffer().asDoubleBuffer().get(flat);
+                double[] mean = new double[nCells];
+                double[] max = new double[nCells];
+                for (int i = 0; i < nCells; i++) {
+                    mean[i] = flat[i * 2];
+                    max[i] = flat[i * 2 + 1];
+                }
+                payload.setMeanTriangleArea(mean);
+                payload.setMaxTriangleArea(max);
+                logger.info("Received Delaunay triangle areas for {} cells", nCells);
+            }
+
+            if (task.outputs.containsKey("component_labels")) {
+                NDArray nd = (NDArray) task.outputs.get("component_labels");
+                opened.add(nd);
+                int[] arr = new int[nCells];
+                nd.buffer().asIntBuffer().get(arr);
+                payload.setComponentLabels(arr);
+                logger.info("Received connected-component labels for {} cells", nCells);
+            }
+
+            return payload;
+        } finally {
+            for (NDArray nd : opened) {
+                try { nd.close(); } catch (Exception ignored) { /* best-effort */ }
+            }
+        }
+    }
+
+    private static double[] readDoubleArray(Task task, String key, int n, List<NDArray> opened) {
+        if (!task.outputs.containsKey(key)) return null;
+        NDArray nd = (NDArray) task.outputs.get(key);
+        opened.add(nd);
+        double[] arr = new double[n];
+        nd.buffer().asDoubleBuffer().get(arr);
+        return arr;
+    }
+
+    /**
+     * Apply a v0.3 spatial-graph payload to the given image data: build
+     * {@link PathObjectConnections}, write {@code QPCAT spatial:} per-cell
+     * measurements, and (when {@code writeComponentMeasurements} is true)
+     * write per-component {@code QPCAT component:} aggregates. Fires a
+     * hierarchy event on the FX thread when an FX runtime is available.
+     *
+     * <p>Called once per image (single-image runs, per-segment in
+     * project runs). The order is deterministic against
+     * {@code detections.get(i)}; the i-th cell maps to the i-th element
+     * of each per-cell array on the payload.</p>
+     */
+    @SuppressWarnings("deprecation")
+    public void applySpatialGraphPayload(
+            ImageData<BufferedImage> imageData,
+            List<PathObject> detections,
+            ClusteringConfig config,
+            ClusteringResult.SpatialGraphPayload payload) {
+
+        if (imageData == null || detections == null || payload == null) return;
+        int n = detections.size();
+
+        // 1. Per-cell node measurements
+        if (config.isWriteNodeMeasurements() && payload.hasNodeMeasurements()) {
+            writeNodeMeasurements(detections, payload);
+        }
+
+        // 2. Per-component aggregates (Java-side groupby)
+        if (config.isWriteComponentMeasurements() && payload.hasComponentLabels()) {
+            writeComponentMeasurements(detections, payload.getComponentLabels());
+        }
+
+        // 3. PathObjectConnections overlay
+        if (config.isPushConnectionsToViewer() && payload.hasEdgeCoo()) {
+            int nEdges = payload.getEdgeRow().length;
+            if (config.getConnectionsPromptThreshold() > 0
+                    && nEdges > config.getConnectionsPromptThreshold()) {
+                logger.warn("Spatial graph edge count {} exceeds prompt threshold {};"
+                                + " skipping viewer push (use Push to viewer now to override)",
+                        nEdges, config.getConnectionsPromptThreshold());
+            } else {
+                DefaultPathObjectConnectionGroup group = buildConnectionGroup(
+                        detections, payload.getEdgeRow(), payload.getEdgeCol(), n);
+                attachConnections(imageData, group);
+                fireHierarchyChangedFx(imageData);
+            }
+        }
+    }
+
+    private void writeNodeMeasurements(List<PathObject> detections,
+                                        ClusteringResult.SpatialGraphPayload payload) {
+        int n = detections.size();
+        int[] numNeighbors = payload.getNumNeighbors();
+        double[] mean = payload.getMeanDistance();
+        double[] median = payload.getMedianDistance();
+        double[] max = payload.getMaxDistance();
+        double[] min = payload.getMinDistance();
+        double[] triMean = payload.getMeanTriangleArea();
+        double[] triMax = payload.getMaxTriangleArea();
+
+        int limit = Math.min(n, numNeighbors == null ? n : numNeighbors.length);
+        for (int i = 0; i < limit; i++) {
+            MeasurementList ml = detections.get(i).getMeasurementList();
+            if (numNeighbors != null) {
+                ml.put("QPCAT spatial: Num neighbors", numNeighbors[i]);
+            }
+            putIfFinite(ml, "QPCAT spatial: Mean distance", mean, i);
+            putIfFinite(ml, "QPCAT spatial: Median distance", median, i);
+            putIfFinite(ml, "QPCAT spatial: Max distance", max, i);
+            putIfFinite(ml, "QPCAT spatial: Min distance", min, i);
+            putIfFinite(ml, "QPCAT spatial: Mean triangle area", triMean, i);
+            putIfFinite(ml, "QPCAT spatial: Max triangle area", triMax, i);
+            ml.close();
+        }
+        logger.info("Wrote QPCAT spatial: measurements to {} cells", limit);
+    }
+
+    private static void putIfFinite(MeasurementList ml, String name, double[] arr, int idx) {
+        if (arr == null || idx >= arr.length) return;
+        double v = arr[idx];
+        if (Double.isFinite(v)) {
+            ml.put(name, v);
+        }
+    }
+
+    /**
+     * Per-component Java-side fan-out. Mirrors
+     * {@code DelaunayTriangulation.addClusterMeasurements}: scan once
+     * for the existing numeric measurement names (excluding any name
+     * starting with {@code QPCAT spatial: } or {@code QPCAT component: }
+     * to prevent feedback-loop columns on rerun), groupby on the labels,
+     * compute the mean, write back as {@code QPCAT component: mean: <X>}
+     * to every cell in the component, and write {@code QPCAT component:
+     * size} = component cell count.
+     */
+    private void writeComponentMeasurements(List<PathObject> detections, int[] labels) {
+        int n = detections.size();
+        if (labels == null || labels.length < n) return;
+
+        // Single scan for the existing measurement-name set BEFORE writing
+        // any new column so the feedback-loop guard (skip QPCAT spatial:/
+        // QPCAT component:) sees only the original columns.
+        java.util.LinkedHashSet<String> namesSet = new java.util.LinkedHashSet<>();
+        for (PathObject p : detections) {
+            for (String key : p.getMeasurementList().getNames()) {
+                if (key.startsWith("QPCAT spatial: ")
+                        || key.startsWith("QPCAT component: ")) {
+                    continue;
+                }
+                namesSet.add(key);
+            }
+        }
+        List<String> names = new ArrayList<>(namesSet);
+
+        // Buckets per component label.
+        Map<Integer, List<Integer>> buckets = new HashMap<>();
+        for (int i = 0; i < n; i++) {
+            buckets.computeIfAbsent(labels[i], k -> new ArrayList<>()).add(i);
+        }
+
+        for (Map.Entry<Integer, List<Integer>> entry : buckets.entrySet()) {
+            List<Integer> members = entry.getValue();
+            int size = members.size();
+            double[] sums = new double[names.size()];
+            int[] counts = new int[names.size()];
+            for (int idx : members) {
+                MeasurementList ml = detections.get(idx).getMeasurementList();
+                for (int m = 0; m < names.size(); m++) {
+                    double v = ml.get(names.get(m));
+                    if (Double.isFinite(v)) {
+                        sums[m] += v;
+                        counts[m]++;
+                    }
+                }
+            }
+            double[] means = new double[names.size()];
+            for (int m = 0; m < names.size(); m++) {
+                means[m] = counts[m] > 0 ? sums[m] / counts[m] : Double.NaN;
+            }
+            for (int idx : members) {
+                MeasurementList ml = detections.get(idx).getMeasurementList();
+                for (int m = 0; m < names.size(); m++) {
+                    if (Double.isFinite(means[m])) {
+                        ml.put("QPCAT component: mean: " + names.get(m), means[m]);
+                    }
+                }
+                ml.put("QPCAT component: size", size);
+                ml.close();
+            }
+        }
+        logger.info("Wrote QPCAT component: measurements ({} components, {} cells)",
+                buckets.size(), n);
+    }
+
+    @SuppressWarnings("deprecation")
+    private DefaultPathObjectConnectionGroup buildConnectionGroup(
+            List<PathObject> detections, long[] rows, long[] cols, int nCells) {
+        // Build adjacency lists from the COO triplet so we can hand the
+        // copy-constructor an anonymous PathObjectConnectionGroup that
+        // exposes per-cell neighbors directly. The undirected edge (i, j)
+        // contributes to both i and j's neighbor list.
+        List<List<PathObject>> neighbors = new ArrayList<>(nCells);
+        for (int i = 0; i < nCells; i++) {
+            neighbors.add(new ArrayList<>());
+        }
+        int nEdges = rows.length;
+        for (int e = 0; e < nEdges; e++) {
+            int i = (int) rows[e];
+            int j = (int) cols[e];
+            if (i < 0 || i >= nCells || j < 0 || j >= nCells) continue;
+            neighbors.get(i).add(detections.get(j));
+            neighbors.get(j).add(detections.get(i));
+        }
+
+        final Map<PathObject, List<PathObject>> map = new HashMap<>(nCells);
+        for (int i = 0; i < nCells; i++) {
+            map.put(detections.get(i), neighbors.get(i));
+        }
+
+        PathObjectConnectionGroup view = new PathObjectConnectionGroup() {
+            @Override
+            public boolean containsObject(PathObject pathObject) {
+                return map.containsKey(pathObject);
+            }
+
+            @Override
+            public java.util.Collection<PathObject> getPathObjects() {
+                return map.keySet();
+            }
+
+            @Override
+            public List<PathObject> getConnectedObjects(PathObject pathObject) {
+                List<PathObject> conn = map.get(pathObject);
+                return conn == null ? java.util.Collections.emptyList() : conn;
+            }
+        };
+        return new DefaultPathObjectConnectionGroup(view);
+    }
+
+    @SuppressWarnings("deprecation")
+    private static void attachConnections(ImageData<BufferedImage> imageData,
+                                           DefaultPathObjectConnectionGroup group) {
+        synchronized (imageData) {
+            Object o = imageData.getProperty(DefaultPathObjectConnectionGroup.KEY_OBJECT_CONNECTIONS);
+            PathObjectConnections connections;
+            if (o instanceof PathObjectConnections existing) {
+                connections = existing;
+            } else {
+                connections = new PathObjectConnections();
+                imageData.setProperty(DefaultPathObjectConnectionGroup.KEY_OBJECT_CONNECTIONS, connections);
+            }
+            // Drop a stale same-class-filter stash from a prior run.
+            imageData.setProperty(
+                    SpatialConnectionsScripts.KEY_OVERLAY_SOURCE_GROUP,
+                    null);
+            for (PathObjectConnectionGroup g : new ArrayList<>(connections.getConnectionGroups())) {
+                connections.removeGroup(g);
+            }
+            connections.addGroup(group);
+        }
+    }
+
+    private static void fireHierarchyChangedFx(ImageData<BufferedImage> imageData) {
+        Platform.runLater(() -> {
+            if (imageData.getHierarchy() != null) {
+                imageData.getHierarchy().fireHierarchyChangedEvent(ClusteringWorkflow.class);
+            }
+        });
     }
 }

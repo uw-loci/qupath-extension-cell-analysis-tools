@@ -20,8 +20,10 @@ import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.images.ImageData;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -72,6 +74,17 @@ public class ClusteringDialog {
     private CheckBox enableCoOccPairwiseCheck;
     private CheckBox enableCoOccOneVsRestCheck;
     private Label permutationLabel;
+
+    // Spatial Graph Overlay (v0.3) controls
+    private CheckBox pushConnectionsCheck;
+    private Spinner<Integer> connectionsPromptThresholdSpinner;
+    private Spinner<Double> spatialGraphDelaunayMaxEdgeUmSpinner;
+    private HBox delaunayMaxEdgePxRow;
+    private HBox delaunayMaxEdgeUmRow;
+    private CheckBox writeNodeMeasurementsCheck;
+    private CheckBox writeComponentMeasurementsCheck;
+    private CheckBox limitEdgesBySameClassCheck;
+    private Button pushNowButton;
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
@@ -551,14 +564,14 @@ public class ClusteringDialog {
         HBox radiusRow = new HBox(8,
                 tipLabel("Radius:", spatialGraphRadiusSpinner), spatialGraphRadiusSpinner);
         radiusRow.setAlignment(Pos.CENTER_LEFT);
-        HBox delaunayRow = new HBox(8,
-                tipLabel("Delaunay max edge:", spatialGraphDelaunayMaxEdgeSpinner),
+        delaunayMaxEdgePxRow = new HBox(8,
+                tipLabel("Delaunay max edge (px):", spatialGraphDelaunayMaxEdgeSpinner),
                 spatialGraphDelaunayMaxEdgeSpinner);
-        delaunayRow.setAlignment(Pos.CENTER_LEFT);
+        delaunayMaxEdgePxRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox graphBox = new VBox(4,
                 new Label("Graph constructor:"),
-                typeRow, kRow, radiusRow, delaunayRow);
+                typeRow, kRow, radiusRow, delaunayMaxEdgePxRow);
         graphBox.setPadding(new Insets(2, 0, 6, 0));
 
         // ---- Statistic checkboxes ----
@@ -617,12 +630,285 @@ public class ClusteringDialog {
         banksyNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         banksyNote.setWrapText(true);
 
-        VBox content = new VBox(6, graphBox, statsBox, permutationLabel, banksyNote);
+        // ---- v0.3 Viewer overlay + measurements block ----
+        VBox overlayBlock = createViewerOverlayBlock();
+
+        VBox content = new VBox(6, graphBox, statsBox, permutationLabel, banksyNote,
+                overlayBlock);
 
         TitledPane pane = new TitledPane("Spatial statistics", content);
         pane.setExpanded(false);
         pane.setCollapsible(true);
         return pane;
+    }
+
+    /**
+     * v0.3 viewer-overlay block: 7 new controls below the BANKSY note in
+     * the Spatial Statistics TitledPane. Tooltip strings from
+     * {@code 02_ui_design.md} lines 125-133. Visibility/enable rules from
+     * lines 156-174.
+     */
+    private VBox createViewerOverlayBlock() {
+        pushConnectionsCheck = new CheckBox("Push graph edges to viewer");
+        pushConnectionsCheck.setSelected(
+                QpcatPreferences.isSpatialPushConnectionsToViewer());
+        pushConnectionsCheck.setTooltip(new Tooltip(
+                "Push the spatial graph edges to QuPath's viewer overlay so "
+                + "you can see the connections you are computing statistics on. "
+                + "Use View -> Show object connections to toggle the overlay "
+                + "on or off after pushing. Default: on."));
+        pushConnectionsCheck.setAccessibleText(
+                "Push spatial graph edges to viewer overlay");
+
+        connectionsPromptThresholdSpinner = new Spinner<>(1, 100_000_000,
+                QpcatPreferences.getSpatialConnectionsPromptThreshold(),
+                10_000);
+        connectionsPromptThresholdSpinner.setEditable(true);
+        connectionsPromptThresholdSpinner.setPrefWidth(110);
+        connectionsPromptThresholdSpinner.setTooltip(new Tooltip(
+                "Above this edge count, QP-CAT asks for confirmation before "
+                + "pushing to the viewer. Large graphs (kNN with high k, "
+                + "dense Delaunay) can slow viewer pan and zoom. Default: "
+                + "250000 edges."));
+        connectionsPromptThresholdSpinner.setAccessibleText(
+                "Prompt threshold in edge count for the viewer push");
+
+        HBox promptThresholdRow = new HBox(8,
+                tipLabel("Prompt above:", connectionsPromptThresholdSpinner),
+                connectionsPromptThresholdSpinner,
+                new Label("edges"));
+        promptThresholdRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Decide-once micron spinner (mirrors the pixel spinner in graphBox).
+        spatialGraphDelaunayMaxEdgeUmSpinner = new Spinner<>(-1.0, 1.0e6,
+                QpcatPreferences.getSpatialDelaunayMaxEdgeUm(),
+                1.0);
+        spatialGraphDelaunayMaxEdgeUmSpinner.setEditable(true);
+        spatialGraphDelaunayMaxEdgeUmSpinner.setPrefWidth(100);
+        spatialGraphDelaunayMaxEdgeUmSpinner.setTooltip(new Tooltip(
+                "Maximum allowed edge length after Delaunay triangulation, "
+                + "in microns; longer edges are pruned. Useful for tissues "
+                + "with large gaps. Leave at -1 to skip pruning. Shown when "
+                + "the current image has a pixel-size calibration."));
+        spatialGraphDelaunayMaxEdgeUmSpinner.setAccessibleText(
+                "Maximum Delaunay edge length in microns; -1 to skip pruning");
+        delaunayMaxEdgeUmRow = new HBox(8,
+                tipLabel("Delaunay max edge (microns):",
+                        spatialGraphDelaunayMaxEdgeUmSpinner),
+                spatialGraphDelaunayMaxEdgeUmSpinner,
+                new Label("um"));
+        delaunayMaxEdgeUmRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Decide-once visibility swap (pixel vs micron) based on current
+        // image's pixel calibration. Both rows are also enable-gated on
+        // graph type = Delaunay below.
+        boolean hasMicrons = currentImageHasMicronCalibration();
+        delaunayMaxEdgeUmRow.setVisible(hasMicrons);
+        delaunayMaxEdgeUmRow.setManaged(hasMicrons);
+        delaunayMaxEdgePxRow.setVisible(!hasMicrons);
+        delaunayMaxEdgePxRow.setManaged(!hasMicrons);
+
+        writeNodeMeasurementsCheck = new CheckBox("Write per-cell node measurements");
+        writeNodeMeasurementsCheck.setSelected(
+                QpcatPreferences.isSpatialWriteNodeMeasurements());
+        writeNodeMeasurementsCheck.setTooltip(new Tooltip(
+                "After building the graph, write per-cell columns to the "
+                + "measurement table: QPCAT spatial: Num neighbors, Mean / "
+                + "Median / Max / Min distance. With Delaunay, also writes "
+                + "Mean / Max triangle area. Default: on (matches the legacy "
+                + "Delaunay clustering tool)."));
+        writeNodeMeasurementsCheck.setAccessibleText(
+                "Write per-cell graph measurements to the measurement table");
+
+        writeComponentMeasurementsCheck = new CheckBox("Write component cluster measurements");
+        writeComponentMeasurementsCheck.setSelected(
+                QpcatPreferences.isSpatialWriteComponentMeasurements());
+        writeComponentMeasurementsCheck.setTooltip(new Tooltip(
+                "For each graph-connected component (cells reachable from "
+                + "each other through edges), write QPCAT component: size and "
+                + "QPCAT component: mean: <X> for each existing measurement. "
+                + "NOTE: graph components are NOT the same as QP-CAT's Leiden "
+                + "clusters; see the BEST_PRACTICES guide. Default: off."));
+        writeComponentMeasurementsCheck.setAccessibleText(
+                "Write connected-component measurements to the measurement table");
+
+        limitEdgesBySameClassCheck = new CheckBox("Limit edges to same class (post-hoc filter)");
+        limitEdgesBySameClassCheck.setSelected(
+                QpcatPreferences.isSpatialLimitEdgesBySameClass());
+        limitEdgesBySameClassCheck.setTooltip(new Tooltip(
+                "After phenotyping, hide edges that connect cells of "
+                + "different classes. This is a post-hoc filter applied to "
+                + "the existing graph; toggling rebuilds the displayed "
+                + "connections in seconds and does not re-run clustering. "
+                + "Useful because the graph is normally built before cells "
+                + "are classified. Default: off."));
+        limitEdgesBySameClassCheck.setAccessibleText(
+                "Limit graph edges to same-class neighbors, post-hoc filter");
+
+        pushNowButton = new Button("Push to viewer now");
+        pushNowButton.setTooltip(new Tooltip(
+                "Rebuild the viewer overlay from the most recent "
+                + "spatial-stats result without re-running clustering. Use "
+                + "this when you opened a project that pre-dates this "
+                + "feature, or after toggling 'Limit edges to same class'."));
+        pushNowButton.setAccessibleText(
+                "Push connections to viewer using the most recent spatial-stats result");
+        // Enable when a saved result with a spatial-stats bundle exists.
+        boolean canPushNow = hasSavedSpatialStatsResult();
+        pushNowButton.setDisable(!canPushNow);
+        if (!canPushNow) {
+            pushNowButton.setTooltip(new Tooltip(
+                    "No saved spatial-stats result on this image yet -- "
+                    + "run clustering with the Viewer overlay enabled first."));
+        }
+        pushNowButton.setOnAction(e -> runPushToViewerNow());
+
+        Label overlayNote = new Label(
+                "See View -> Show object connections to toggle the overlay.");
+        overlayNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
+        overlayNote.setWrapText(true);
+
+        // ---- Listeners ----
+        pushConnectionsCheck.selectedProperty().addListener((obs, oldV, newV) ->
+                connectionsPromptThresholdSpinner.setDisable(!newV));
+        connectionsPromptThresholdSpinner.setDisable(!pushConnectionsCheck.isSelected());
+
+        // Same-class filter listener: drive
+        // SpatialConnectionsScripts.applySameClassFilter on the current
+        // ImageData. Dispatched on a background thread; the script fires
+        // the hierarchy event itself.
+        limitEdgesBySameClassCheck.selectedProperty().addListener((obs, oldV, newV) ->
+                runSameClassFilterToggle(newV));
+
+        // Delaunay max-edge spinners gate on graph type. Update both rows;
+        // only the visible one is interactive at any time.
+        Runnable updateDelaunayEnable = () -> {
+            boolean isDelaunay = "Delaunay".equals(spatialGraphTypeCombo.getValue());
+            spatialGraphDelaunayMaxEdgeUmSpinner.setDisable(!isDelaunay);
+            // The pixel spinner enablement is already maintained by the
+            // existing updateSpinnerEnablement runnable in
+            // createSpatialStatsPane(); we redundantly set it here for
+            // safety.
+            spatialGraphDelaunayMaxEdgeSpinner.setDisable(!isDelaunay);
+        };
+        spatialGraphTypeCombo.valueProperty().addListener((obs, oldV, newV) ->
+                updateDelaunayEnable.run());
+        updateDelaunayEnable.run();
+
+        Separator sep = new Separator();
+        VBox box = new VBox(6,
+                sep,
+                pushConnectionsCheck,
+                promptThresholdRow,
+                delaunayMaxEdgeUmRow,
+                new Label("Measurements:"),
+                writeNodeMeasurementsCheck,
+                writeComponentMeasurementsCheck,
+                limitEdgesBySameClassCheck,
+                pushNowButton,
+                overlayNote);
+        box.setPadding(new Insets(8, 0, 4, 0));
+        return box;
+    }
+
+    private boolean currentImageHasMicronCalibration() {
+        try {
+            ImageData<BufferedImage> imageData = qupath.getImageData();
+            if (imageData == null || imageData.getServer() == null) return false;
+            var cal = imageData.getServer().getPixelCalibration();
+            return cal != null && cal.hasPixelSizeMicrons();
+        } catch (Exception e) {
+            logger.debug("Pixel calibration probe failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean hasSavedSpatialStatsResult() {
+        try {
+            Project<BufferedImage> project = qupath.getProject();
+            if (project == null) return false;
+            for (String name : ClusteringResultManager.listResults(project)) {
+                try {
+                    var saved = ClusteringResultManager.loadSavedResult(project, name);
+                    if (saved != null && saved.hasSpatialStats()) {
+                        return true;
+                    }
+                } catch (Exception ignored) {
+                    // best-effort scan
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Saved-result probe failed: {}", e.getMessage());
+        }
+        return false;
+    }
+
+    private void runPushToViewerNow() {
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            Dialogs.showWarningNotification("QPCAT", "No image is open.");
+            return;
+        }
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "A project must be open to push saved spatial connections.");
+            return;
+        }
+        // Pick the most-recent saved result with a spatial-stats bundle.
+        String chosen = null;
+        try {
+            for (String name : ClusteringResultManager.listResults(project)) {
+                var saved = ClusteringResultManager.loadSavedResult(project, name);
+                if (saved != null && saved.hasSpatialStats()) {
+                    chosen = name;
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            Dialogs.showErrorNotification("QPCAT",
+                    "Failed to scan saved results: " + e.getMessage());
+            return;
+        }
+        if (chosen == null) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "No saved spatial-stats result on this image yet -- "
+                    + "run clustering with the Viewer overlay enabled first.");
+            return;
+        }
+        final String resultName = chosen;
+        Thread t = new Thread(() -> {
+            try {
+                SpatialConnectionsScripts.pushConnectionsToViewer(
+                        imageData, resultName);
+                Platform.runLater(() ->
+                        Dialogs.showInfoNotification("QPCAT",
+                                "Pushed connections from '" + resultName + "' to viewer."));
+            } catch (Exception e) {
+                logger.error("Push-to-viewer-now failed", e);
+                Platform.runLater(() ->
+                        Dialogs.showErrorNotification("QPCAT",
+                                "Push-to-viewer-now failed: " + e.getMessage()));
+            }
+        }, "qpcat-push-connections");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void runSameClassFilterToggle(boolean enabled) {
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) return;
+        QpcatPreferences.setSpatialLimitEdgesBySameClass(enabled);
+        Thread t = new Thread(() -> {
+            try {
+                SpatialConnectionsScripts.applySameClassFilter(
+                        imageData, enabled);
+            } catch (Exception e) {
+                logger.warn("Same-class filter toggle failed: {}", e.getMessage());
+            }
+        }, "qpcat-same-class-filter");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**
@@ -756,6 +1042,17 @@ public class ClusteringDialog {
         config.setEnableCoOccurrenceOneVsRest(enableCoOccOneVsRestCheck.isSelected());
         config.setSpatialPermutations(
                 QpcatPreferences.getSpatialPermutations());
+
+        // v0.3 spatial graph overlay
+        config.setPushConnectionsToViewer(pushConnectionsCheck.isSelected());
+        config.setConnectionsPromptThreshold(
+                connectionsPromptThresholdSpinner.getValue());
+        config.setDelaunayMaxEdgeUm(
+                spatialGraphDelaunayMaxEdgeUmSpinner.getValue());
+        config.setWriteNodeMeasurements(writeNodeMeasurementsCheck.isSelected());
+        config.setWriteComponentMeasurements(
+                writeComponentMeasurementsCheck.isSelected());
+        config.setLimitEdgesBySameClass(limitEdgesBySameClassCheck.isSelected());
 
         // Selected measurements
         List<String> selected = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
@@ -984,6 +1281,18 @@ public class ClusteringDialog {
         enableGearyCheck.setSelected(config.isEnableGeary());
         enableCoOccPairwiseCheck.setSelected(config.isEnableCoOccurrencePairwise());
         enableCoOccOneVsRestCheck.setSelected(config.isEnableCoOccurrenceOneVsRest());
+
+        // v0.3 spatial graph overlay
+        pushConnectionsCheck.setSelected(config.isPushConnectionsToViewer());
+        if (config.getConnectionsPromptThreshold() > 0) {
+            connectionsPromptThresholdSpinner.getValueFactory().setValue(
+                    config.getConnectionsPromptThreshold());
+        }
+        spatialGraphDelaunayMaxEdgeUmSpinner.getValueFactory().setValue(
+                config.getDelaunayMaxEdgeUm());
+        writeNodeMeasurementsCheck.setSelected(config.isWriteNodeMeasurements());
+        writeComponentMeasurementsCheck.setSelected(config.isWriteComponentMeasurements());
+        limitEdgesBySameClassCheck.setSelected(config.isLimitEdgesBySameClass());
 
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();

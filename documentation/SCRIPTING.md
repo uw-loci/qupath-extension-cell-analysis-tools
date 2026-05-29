@@ -145,6 +145,41 @@ def coOcc = SpatialStatsScripts.coOccurrence(graph, [
 
 Stages the cluster-pair Z-score matrix (the existing v0 statistic). Options map is currently empty; reserved for future extension.
 
+## SpatialConnectionsScripts
+
+Static facade for the v0.3 spatial graph overlay. Materialises the spatial neighbor graph from a saved spatial-stats result as `PathObjectConnections` on the active `ImageData`, and toggles the post-hoc same-class edge filter without re-running clustering.
+
+### `pushConnectionsToViewer(ImageData imageData, String resultName) -> void`
+
+Reads the named saved spatial-stats result from the active project and materializes its graph as `PathObjectConnections` on `imageData`. Equivalent to clicking "Push to viewer now" in the **Run Clustering...** dialog. Raises `IllegalStateException` when no project is open, the named result does not exist, the saved result has no spatial-stats bundle, or the detection count does not match.
+
+The action is recorded in the image's history workflow so it can be replayed.
+
+```groovy
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+
+// Push the saved spatial-stats result named "default" onto the current viewer
+SpatialConnectionsScripts.pushConnectionsToViewer(
+    getCurrentImageData(),
+    "default"
+)
+```
+
+### `applySameClassFilter(ImageData imageData, boolean enabled) -> void`
+
+Toggle the post-hoc same-class edge filter on the currently-attached `PathObjectConnections`. When `enabled` is `true`, the unfiltered source group is stashed under the ImageData property `QPCAT_SPATIAL_OVERLAY_SOURCE_GROUP`, a fresh filtered group is built via `removeGroup + addGroup`, and a hierarchy change event fires. When `enabled` is `false`, the stashed source group is restored.
+
+Cells with no `PathClass` drop their edges entirely under the filter. This is intended behaviour -- the filter is a viewer affordance; it does not retroactively change any computed statistic.
+
+```groovy
+import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+
+// Hide cross-class edges in the overlay
+SpatialConnectionsScripts.applySameClassFilter(getCurrentImageData(), true)
+```
+
+The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](REFERENCES.md#spatial-graph-overlay-pathobjectconnections) and [HOW_TO_GUIDE chapter 21 -- API deprecation note](HOW_TO_GUIDE.md#api-deprecation-note) for the rationale.
+
 ## Result types
 
 When the dialog dispatches the staged option maps, results materialise as:

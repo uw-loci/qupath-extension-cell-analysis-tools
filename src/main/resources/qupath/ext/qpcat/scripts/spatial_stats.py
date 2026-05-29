@@ -598,6 +598,205 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
         logger.warning("Co-occurrence (%s) failed: %s", mode, e)
 
 
+def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
+                                       coords, graph_type):
+    """Return a dict of per-cell measurement arrays + edge-COO triplet.
+
+    Read by ClusteringWorkflow.java to:
+      (1) Build PathObjectConnections from the edge COO (rows/cols).
+      (2) Write QPCAT spatial: <X> per-cell measurements.
+      (3) Compute triangle areas (Delaunay only) and connected components.
+
+    The edge COO triplet is deduped to i < j so each undirected edge is
+    listed exactly once. Per-cell measurement arrays are length N_cells;
+    triangle_areas is shape (N_cells, 2) of (mean_area, max_area) per
+    vertex. component_labels is length N_cells int32 from
+    scipy.sparse.csgraph.connected_components on the undirected adjacency.
+
+    Triangle-area columns are only meaningful for graph_type == 'delaunay'
+    (the squidpy graph carries edges, not faces); for other graph types
+    triangle_areas is None. component_labels is returned for every graph
+    type since connected components are well-defined on kNN, Radius, and
+    Delaunay graphs alike.
+
+    Returns dict with keys: row, col, num_neighbors, mean_distance,
+    median_distance, max_distance, min_distance, component_labels, and
+    optionally triangle_areas.
+    """
+    import scipy.sparse as sp
+    from scipy.sparse.csgraph import connected_components
+
+    n_cells = spatial_connectivities.shape[0]
+    conn_csr = spatial_connectivities.tocsr()
+    # Symmetrise just in case (squidpy returns a symmetric matrix for
+    # undirected graphs but we want to be safe before the dedup).
+    sym_csr = (conn_csr + conn_csr.T).tolil()
+    # Boolean mask of edges where i < j (deduped undirected COO triplet)
+    row_arr, col_arr = sym_csr.nonzero()
+    keep = row_arr < col_arr
+    row_kept = np.asarray(row_arr[keep], dtype=np.int64)
+    col_kept = np.asarray(col_arr[keep], dtype=np.int64)
+
+    # Per-cell aggregates from the distances CSR.
+    dist_csr = spatial_distances.tocsr() if spatial_distances is not None else None
+    num_neighbors = np.zeros(n_cells, dtype=np.int32)
+    mean_distance = np.full(n_cells, np.nan, dtype=np.float64)
+    median_distance = np.full(n_cells, np.nan, dtype=np.float64)
+    max_distance = np.full(n_cells, np.nan, dtype=np.float64)
+    min_distance = np.full(n_cells, np.nan, dtype=np.float64)
+
+    # Use CSR adjacency row-pointer for neighbor count -- that mirrors
+    # the legacy plugin which counts every connection regardless of
+    # whether it carries a distance.
+    conn_indptr = conn_csr.indptr
+    for i in range(n_cells):
+        num_neighbors[i] = int(conn_indptr[i + 1] - conn_indptr[i])
+
+    if dist_csr is not None:
+        d_indptr = dist_csr.indptr
+        d_data = dist_csr.data
+        for i in range(n_cells):
+            row_start = d_indptr[i]
+            row_end = d_indptr[i + 1]
+            if row_end <= row_start:
+                continue
+            row_vals = d_data[row_start:row_end]
+            # Squidpy populates explicit-zero entries on the diagonal;
+            # filter them so the aggregates are over real edges.
+            row_vals = row_vals[row_vals > 0]
+            if row_vals.size == 0:
+                continue
+            mean_distance[i] = float(np.mean(row_vals))
+            median_distance[i] = float(np.median(row_vals))
+            max_distance[i] = float(np.max(row_vals))
+            min_distance[i] = float(np.min(row_vals))
+
+    # Delaunay-only triangle areas via a fresh scipy Delaunay (squidpy
+    # only ships edges, not faces, so we rebuild the triangulation from
+    # the coordinates). Degenerate inputs raise QhullError -- guard and
+    # fall through to None.
+    triangle_areas = None
+    if graph_type == "delaunay" and coords is not None and n_cells >= 3:
+        try:
+            from scipy.spatial import Delaunay, qhull
+            tri = Delaunay(np.asarray(coords, dtype=np.float64))
+            simplices = tri.simplices  # shape (n_tri, 3)
+            # Vectorised shoelace per triangle
+            pts = np.asarray(coords, dtype=np.float64)
+            p0 = pts[simplices[:, 0]]
+            p1 = pts[simplices[:, 1]]
+            p2 = pts[simplices[:, 2]]
+            areas = 0.5 * np.abs(
+                (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1])
+                - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1]))
+            # Aggregate areas per vertex (mean and max).
+            sum_areas = np.zeros(n_cells, dtype=np.float64)
+            count_areas = np.zeros(n_cells, dtype=np.int32)
+            max_areas = np.full(n_cells, np.nan, dtype=np.float64)
+            for t in range(simplices.shape[0]):
+                area = float(areas[t])
+                for vid in simplices[t]:
+                    sum_areas[vid] += area
+                    count_areas[vid] += 1
+                    cur_max = max_areas[vid]
+                    if np.isnan(cur_max) or area > cur_max:
+                        max_areas[vid] = area
+            mean_areas = np.full(n_cells, np.nan, dtype=np.float64)
+            nonzero = count_areas > 0
+            mean_areas[nonzero] = sum_areas[nonzero] / count_areas[nonzero]
+            triangle_areas = np.column_stack([mean_areas, max_areas])
+        except qhull.QhullError as e:
+            logger.warning(
+                "spatial-stats Delaunay triangle areas skipped (QhullError): %s",
+                e)
+            triangle_areas = None
+        except Exception as e:
+            logger.warning(
+                "spatial-stats Delaunay triangle areas failed: %s", e)
+            triangle_areas = None
+
+    # Connected components on the undirected adjacency.
+    try:
+        n_components, component_labels = connected_components(
+            csgraph=conn_csr, directed=False, return_labels=True)
+        component_labels = component_labels.astype(np.int32, copy=False)
+        logger.info("spatial-stats connected components: %d", n_components)
+    except Exception as e:
+        logger.warning("spatial-stats connected_components failed: %s", e)
+        component_labels = np.zeros(n_cells, dtype=np.int32)
+
+    return {
+        "row": row_kept,
+        "col": col_kept,
+        "num_neighbors": num_neighbors,
+        "mean_distance": mean_distance,
+        "median_distance": median_distance,
+        "max_distance": max_distance,
+        "min_distance": min_distance,
+        "triangle_areas": triangle_areas,
+        "component_labels": component_labels,
+    }
+
+
+def emit_spatial_node_outputs(task, payload, graph_type,
+                                write_node_measurements,
+                                write_component_measurements):
+    """Push the payload from compute_spatial_node_measurements onto task.outputs.
+
+    Edge COO is always emitted (overlay can be rebuilt without measurement
+    writes). Per-cell scalar arrays only emitted when
+    write_node_measurements is True. Triangle areas only emitted for
+    Delaunay graphs. Component labels only emitted when
+    write_component_measurements is True (Java-side groupby).
+    """
+    from appose import NDArray as PyNDArray
+
+    if payload is None:
+        return
+
+    row_arr = payload.get("row")
+    col_arr = payload.get("col")
+    if row_arr is not None and col_arr is not None and row_arr.size > 0:
+        row_nd = PyNDArray(dtype="int64", shape=[int(row_arr.size)])
+        np.copyto(row_nd.ndarray(), row_arr.astype(np.int64))
+        task.outputs["spatial_graph_row"] = row_nd
+        col_nd = PyNDArray(dtype="int64", shape=[int(col_arr.size)])
+        np.copyto(col_nd.ndarray(), col_arr.astype(np.int64))
+        task.outputs["spatial_graph_col"] = col_nd
+        logger.info("spatial-stats edge COO emitted: %d edges",
+                    int(row_arr.size))
+
+    if write_node_measurements:
+        for key in ("num_neighbors", "mean_distance", "median_distance",
+                    "max_distance", "min_distance"):
+            arr = payload.get(key)
+            if arr is None:
+                continue
+            out_key = "spatial_" + key
+            if key == "num_neighbors":
+                nd = PyNDArray(dtype="int32", shape=[int(arr.size)])
+                np.copyto(nd.ndarray(), arr.astype(np.int32))
+            else:
+                nd = PyNDArray(dtype="float64", shape=[int(arr.size)])
+                np.copyto(nd.ndarray(), arr.astype(np.float64))
+            task.outputs[out_key] = nd
+        triangle = payload.get("triangle_areas")
+        if triangle is not None and graph_type == "delaunay":
+            t_nd = PyNDArray(dtype="float64",
+                              shape=[int(triangle.shape[0]), 2])
+            np.copyto(t_nd.ndarray(), triangle.astype(np.float64))
+            task.outputs["spatial_triangle_areas"] = t_nd
+            logger.info("spatial-stats triangle areas emitted")
+
+    if write_component_measurements:
+        labels = payload.get("component_labels")
+        if labels is not None:
+            c_nd = PyNDArray(dtype="int32", shape=[int(labels.size)])
+            np.copyto(c_nd.ndarray(), labels.astype(np.int32))
+            task.outputs["component_labels"] = c_nd
+            logger.info("spatial-stats component labels emitted")
+
+
 def build_smoothing_adjacency_squidpy(spatial_data, graph_type="knn", k=15,
                                        radius=-1.0, delaunay_max_edge=-1.0):
     """Hybrid-graph-reuse smoothing path (Phase 2 contract #2).

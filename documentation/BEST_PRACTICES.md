@@ -717,3 +717,56 @@ Name rule sets with versions (e.g., "Immune Panel v1", "Immune Panel v2") rather
 - Use **Auto-Balance** when class populations are significantly imbalanced (e.g., 10:1 ratio or worse). This computes inverse-frequency weights so rare classes contribute equally to the loss.
 - Manually adjust per-class weight spinners when you want to prioritize accuracy on specific classes -- increase the weight for classes where misclassification is most costly.
 - If all classes are roughly equally represented, the default weight of 1.0 for each class is fine and Auto-Balance is unnecessary.
+
+---
+
+## Spatial graph overlay
+
+The spatial graph overlay is a sanity-check tool first, a presentation tool second, and a "leave it on all the time" tool never. This chapter covers when the overlay is informative versus noisy, when to enable per-class edge filtering, and how to read the per-cell and per-component measurements without confusing graph-connected components with Leiden phenotype clusters.
+
+### When the overlay is informative (`overlay-informative`)
+
+The overlay earns its keep on small-to-medium populations where you can actually see individual edges -- typically under ~50,000 cells per annotated region, or a single zoomed-in tissue niche on a larger slide. Use it to:
+
+- confirm a Delaunay graph is not spanning a tissue gap (look for long straight edges crossing background);
+- confirm a kNN graph is not over-connecting dense regions (cells in the dense area should have ~k visible edges, no more);
+- confirm a Radius graph is not under-connecting sparse regions (isolated cells should still have at least one or two neighbors).
+
+### When the overlay is noisy (`overlay-noisy`)
+
+Above ~250,000 edges -- which is roughly a 50,000-cell Delaunay graph, or a 25,000-cell kNN(k=15) graph -- the overlay degrades from sanity-check to confetti. Edges blur into a uniform gray haze at whole-slide zoom; panning feels sluggish; nothing about the graph structure is visible. At 1,000,000+ edges QuPath's stock connections overlay was not designed for this density and pan/zoom interactions become jerky. Recommended: turn the overlay on once at a representative zoom level, sanity-check, turn it off, run the rest of the analysis without it.
+
+### When to enable `limitEdgesBySameClass` (`limit-edges-by-class-when`)
+
+Enable when you want to *visualise* same-cell-type neighborhoods after a Leiden + Phenotyping pass -- e.g., showing CD8 T cell clusters touching each other, or fibroblast networks. Leave off when you want to see the full graph the spatial statistics actually ran on. The filter is purely a viewer affordance; it does not retroactively change any computed statistic.
+
+Edge cases: cells with no pathClass (null) drop their edges entirely under the filter. If you phenotyped only part of the cell population, expect to see large patches of empty overlay where unphenotyped cells live. The fix is to run phenotyping over the whole population, not to disable the filter.
+
+### Component vs Cluster naming (`component-vs-cluster-naming`)
+
+QP-CAT v0.3 writes per-component aggregate measurements as `QPCAT component: ...` instead of `Cluster ...` -- a deliberate rename. The reason: a Leiden cluster (from QP-CAT's clustering pipeline) and a graph-connected component (from a kNN / Radius / Delaunay graph) are different things, and the legacy QuPath core plugin reusing "Cluster" for the graph-connected set has confused users on image.sc more than once.
+
+Worked example. Suppose you have two CD8 T cells, both Leiden cluster 3, sitting on opposite sides of a 5 mm tumor:
+
+- Same Leiden cluster: yes. Both have the same phenotype.
+- Same graph-connected component: no. There is no neighbor path between them in any reasonable spatial graph.
+
+Conversely, two touching cells in the same Delaunay component can have different Leiden cluster labels -- one is a CD8 T cell (Leiden 3), the other is a CD4 T cell (Leiden 7). They share a `QPCAT component: ...` aggregate row because they touch, but their `Cluster` (Leiden) labels are distinct.
+
+Rule of thumb: **Cluster** answers "what cell type is this?" **Component** answers "what spatial neighborhood is this in?" The two are independent.
+
+A practical aside on the three-colon `QPCAT component: mean: <Marker>` header layout: at default Measurements-table column widths the prefix may truncate the marker name on narrow tables. Drag the column wider or use the column-visibility menu to filter to the columns you need.
+
+### The deprecated-API warn-once log line (`api-deprecation-log`)
+
+On the first push of connections per session, QuPath 0.7 logs:
+
+`Legacy 'Delaunay cluster features 2D' connections are being shown in the viewer - this command is deprecated, and support will be removed in a future version`
+
+This is harmless. QuPath core's `PathObjectConnections` API is marked `@Deprecated` for replacement by `DelaunayTools.Subdivision` in a future major release, but the old API is fully functional in 0.7 and is the only API surface that can carry kNN and Radius graphs (the `Subdivision` replacement is Delaunay-only). The warning fires once per session, not per push -- subsequent pushes within the same session do not re-trigger it. Do not flag this as a bug; document it in user issue reports if it appears.
+
+### Performance and the 250k threshold (`performance-and-threshold`)
+
+The default `qpcat.spatial.connectionsPromptThreshold` value of 250000 edges is empirical. It is the count at which QuPath's stock connections overlay (which draws every edge with a single `Graphics2D.draw(Line2D)` call per edge) starts to feel sluggish at typical whole-slide zoom on commodity hardware. Below 250000, pan and zoom are smooth. Above 250000, frame time grows roughly linearly with edge count, viewport-culled. Above 1000000 the experience is noticeably degraded even with the cull.
+
+Adjust the threshold to taste. Raise it on a fast workstation; lower it on a remote-desktop session or a slow machine. The threshold is per-machine, not per-project -- it lives in QuPath preferences, which are user-scoped.
