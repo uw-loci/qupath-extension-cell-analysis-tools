@@ -4,6 +4,16 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.2.9] -- 2026-05-28
+
+Patch release. Four Results-dialog bugs surfaced by v0.2.8 testing.
+
+### Fixed
+
+- **Marker Rankings tab rendered as a single line.** `scanpy.tl.rank_genes_groups` produces NaN/Inf `logfoldchanges` whenever a marker is absent from a comparison group; Python's `json.dumps` writes these as bare `NaN` / `Infinity` tokens, which Gson's strict parser rejects, and the catch fell back to returning the raw single-line JSON dump. Sanitized NaN/Inf to `null` Python-side (new `_sanitize_json_tree` helper, applied to `marker_rankings` and `spatial_autocorr` outputs), added Gson lenient parsing + null-safe formatting on the Java side as defense-in-depth (so existing saved results with the old NaN-emitting payloads still display), and bumped the TextArea `prefRowCount` to 30.
+- **Dotplot and Matrix Plot outputs were drastically smaller than the Heatmap tab.** The plot-loading loop hardcoded `ImageView.setFitWidth(800)` for every PNG, which made `ScrollPane.setFitToWidth(true)` a no-op. Narrow-aspect plots (dotplot, matrixplot) ended up much shorter than wide-aspect plots (heatmap) at the same nominal width. Image-view width now binds to the ScrollPane viewport width with an 800 px floor, so every plot scales with the dialog.
+- **Embedding Plot cluster colors disagreed with the interactive UMAP / embedding panel.** `pd.Categorical(cluster_labels_str)` without an explicit `categories=` argument defaulted to lexicographic order (`0, 1, 10, 11, 12, 13, 2, 3, ...`); scanpy then assigned palette colors in that order, while the interactive Java panel uses `CLUSTER_COLORS[cluster_id % 20]` (numeric). Pinned the Categorical's category order to numeric so both views agree.
+
 ## [0.2.8] -- 2026-05-28
 
 Small patch release for remote-system testing. Fixes a Pixi env regression that blocked spatial-stats on Windows, plus an Autoencoder dialog polish pass.
