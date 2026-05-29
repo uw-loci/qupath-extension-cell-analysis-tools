@@ -461,12 +461,39 @@ task.update("Analyzing clusters...", current=4, maximum=6)
 import scanpy as sc
 import anndata as ad
 import json
+import math
+
+
+def _finite_or_none(v):
+    """Coerce NaN/Inf floats to None so json.dumps emits RFC-valid output.
+    Python's default json.dumps writes NaN/Infinity as bare tokens, which
+    strict JSON parsers (including Gson on the Java side) reject."""
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
+    return v
+
+
+def _sanitize_json_tree(obj):
+    """Recursively replace non-finite floats with None throughout obj."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_json_tree(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json_tree(v) for v in obj]
+    return _finite_or_none(obj)
+
 
 # Build full AnnData for scanpy analysis
 adata = ad.AnnData(X=df_norm.drop(columns=["cluster"]).values)
 adata.var_names = pd.Index(list(marker_names))
 cluster_labels_str = [str(x) for x in labels_shifted]
-adata.obs['cluster'] = pd.Categorical(cluster_labels_str)
+# Pin the Categorical's order to NUMERIC, not lexicographic. Without this,
+# str categories sort as 0,1,10,11,12,13,2,3,... and scanpy assigns palette
+# colors in that order -- which disagrees with the interactive embedding
+# panel on the Java side (CLUSTER_COLORS[cluster_id % 20], numeric). Pinning
+# explicit numeric category order keeps both views colored consistently.
+_cluster_category_order = [str(x) for x in sorted({int(s) for s in cluster_labels_str})]
+adata.obs['cluster'] = pd.Categorical(
+    cluster_labels_str, categories=_cluster_category_order, ordered=False)
 
 if embedding_result is not None:
     adata.obsm['X_embed'] = embedding_result
@@ -506,7 +533,7 @@ if can_analyze:
                 })
             marker_result[str(cid)] = markers_list
 
-        task.outputs['marker_rankings'] = json.dumps(marker_result)
+        task.outputs['marker_rankings'] = json.dumps(_sanitize_json_tree(marker_result))
         logger.info("Marker ranking complete: top %d markers per cluster", top_n)
     except Exception as e:
         logger.warning("Marker ranking failed: %s", e)
@@ -608,7 +635,7 @@ if has_spatial and n_clusters_found > 1:
                     'pval': float(row.get('pval_norm', row.get('pval_z_sim',
                                          float('nan'))))
                 }
-        task.outputs['spatial_autocorr'] = json.dumps(autocorr_results)
+        task.outputs['spatial_autocorr'] = json.dumps(_sanitize_json_tree(autocorr_results))
         logger.info("Spatial autocorrelation (Moran's I) computed for %d markers",
                     len(autocorr_results))
     except Exception as e:

@@ -1161,6 +1161,7 @@ public class ClusteringDialog {
             TextArea rankingsText = new TextArea(formatMarkerRankings(result));
             rankingsText.setEditable(false);
             rankingsText.setWrapText(false);
+            rankingsText.setPrefRowCount(30);
             rankingsText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
             Tab tab = new Tab("Marker Rankings", wrapWithGuide(rankingsText,
                     "Top differentially expressed markers per cluster (Wilcoxon rank-sum test).\n"
@@ -1179,6 +1180,7 @@ public class ClusteringDialog {
             TextArea autocorrText = new TextArea(formatSpatialAutocorr(result));
             autocorrText.setEditable(false);
             autocorrText.setWrapText(false);
+            autocorrText.setPrefRowCount(30);
             autocorrText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
             Tab tab = new Tab("Spatial Autocorrelation", wrapWithGuide(autocorrText,
                     "Moran's I per marker measures spatial organization of expression.\n"
@@ -1281,10 +1283,19 @@ public class ClusteringDialog {
                             new File(entry.getValue()).toURI().toString());
                     javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
                     iv.setPreserveRatio(true);
-                    iv.setFitWidth(800);
+                    iv.setSmooth(true);
 
                     ScrollPane sp = new ScrollPane(iv);
-                    sp.setFitToWidth(true);
+                    // Responsive: image fills viewport width with an 800 px floor.
+                    // Without this, a hard fitWidth(800) leaves narrow-aspect plots
+                    // (dotplot, matrixplot) looking tiny relative to wide-aspect
+                    // plots (heatmap) at the same nominal width.
+                    iv.setFitWidth(800);
+                    sp.viewportBoundsProperty().addListener((obs, oldV, newV) -> {
+                        if (newV != null) {
+                            iv.setFitWidth(Math.max(800.0, newV.getWidth() - 20.0));
+                        }
+                    });
 
                     String tabName;
                     String guide;
@@ -1499,37 +1510,45 @@ public class ClusteringDialog {
         return box;
     }
 
+    @SuppressWarnings("deprecation")  // GsonBuilder.setLenient() vs the 2.11+ Strictness API
     private static String formatSpatialAutocorr(ClusteringResult result) {
         String json = result.getSpatialAutocorrJson();
         if (json == null) return "No spatial autocorrelation data available.";
 
         try {
-            com.google.gson.Gson gson = new com.google.gson.Gson();
+            com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
+                    .serializeNulls().setLenient().create();
             java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<
                     Map<String, Map<String, Double>>>(){}.getType();
             Map<String, Map<String, Double>> autocorr = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("%-35s %10s %12s\n", "Marker", "Moran's I", "P-value"));
-            sb.append("-".repeat(59)).append("\n");
+            sb.append(String.format("%-35s %10s %12s%n", "Marker", "Moran's I", "P-value"));
+            sb.append("-".repeat(59)).append(System.lineSeparator());
 
-            // Sort by Moran's I descending
+            // Sort by Moran's I descending (NaN-safe -- nulls / NaN go to the bottom)
             autocorr.entrySet().stream()
                     .sorted((a, b) -> Double.compare(
-                            b.getValue().getOrDefault("I", 0.0),
-                            a.getValue().getOrDefault("I", 0.0)))
-                    .forEach(entry -> {
-                        double mI = entry.getValue().getOrDefault("I", Double.NaN);
-                        double pval = entry.getValue().getOrDefault("pval", Double.NaN);
-                        sb.append(String.format("%-35s %10.4f %12.2e\n",
-                                entry.getKey(), mI, pval));
-                    });
+                            sortKey(b.getValue().get("I")),
+                            sortKey(a.getValue().get("I"))))
+                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s%n",
+                            entry.getKey(),
+                            formatDouble(entry.getValue().get("I"), "%.4f"),
+                            formatDouble(entry.getValue().get("pval"), "%.2e"))));
 
             return sb.toString();
         } catch (Exception e) {
             logger.warn("Failed to format spatial autocorrelation: {}", e.getMessage());
-            return json;
+            return "Spatial autocorrelation could not be parsed: " + e.getMessage()
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Raw payload:" + System.lineSeparator() + json;
         }
+    }
+
+    /** NaN/null-safe sort key: missing values sort to the bottom. */
+    private static double sortKey(Double v) {
+        if (v == null || Double.isNaN(v)) return Double.NEGATIVE_INFINITY;
+        return v;
     }
 
     /**
@@ -1774,37 +1793,51 @@ public class ClusteringDialog {
         return sb.toString();
     }
 
+    @SuppressWarnings("deprecation")  // GsonBuilder.setLenient() vs the 2.11+ Strictness API
     private static String formatMarkerRankings(ClusteringResult result) {
         String json = result.getMarkerRankingsJson();
         if (json == null) return "No marker rankings available.";
 
         try {
-            com.google.gson.Gson gson = new com.google.gson.Gson();
+            com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
+                    .serializeNulls().setLenient().create();
             java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<
                     Map<String, List<Map<String, Object>>>>(){}.getType();
             Map<String, List<Map<String, Object>>> rankings = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s\n",
+            sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
                     "Cluster", "Marker", "Score", "Log2FC", "Adj. P-val"));
-            sb.append("-".repeat(80)).append("\n");
+            sb.append("-".repeat(80)).append(System.lineSeparator());
 
             for (Map.Entry<String, List<Map<String, Object>>> cluster : rankings.entrySet()) {
                 for (Map<String, Object> marker : cluster.getValue()) {
-                    sb.append(String.format("%-12s  %-30s  %10.2f  %10.3f  %12.2e\n",
+                    sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
                             "Cluster " + cluster.getKey(),
-                            marker.get("name"),
-                            ((Number) marker.get("score")).doubleValue(),
-                            ((Number) marker.get("logfoldchange")).doubleValue(),
-                            ((Number) marker.get("pval_adj")).doubleValue()));
+                            String.valueOf(marker.get("name")),
+                            formatDouble(marker.get("score"), "%.2f"),
+                            formatDouble(marker.get("logfoldchange"), "%.3f"),
+                            formatDouble(marker.get("pval_adj"), "%.2e")));
                 }
-                sb.append("\n");
+                sb.append(System.lineSeparator());
             }
             return sb.toString();
         } catch (Exception e) {
             logger.warn("Failed to format marker rankings: {}", e.getMessage());
-            return json;
+            return "Marker rankings could not be parsed: " + e.getMessage()
+                    + System.lineSeparator() + System.lineSeparator()
+                    + "Raw payload:" + System.lineSeparator() + json;
         }
+    }
+
+    /** Format a numeric JSON value defensively -- null, NaN, and non-Number
+     *  inputs render as "n/a" instead of throwing. */
+    private static String formatDouble(Object value, String fmt) {
+        if (value == null) return "n/a";
+        if (!(value instanceof Number)) return String.valueOf(value);
+        double d = ((Number) value).doubleValue();
+        if (Double.isNaN(d) || Double.isInfinite(d)) return "n/a";
+        return String.format(fmt, d);
     }
 
     /** Creates a Label that shares the tooltip of its associated control. */
