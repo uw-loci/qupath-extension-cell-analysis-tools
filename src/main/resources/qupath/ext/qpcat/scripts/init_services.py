@@ -12,6 +12,29 @@ import os
 import logging
 import threading
 import time
+import warnings
+
+# Silence two FutureWarnings that fire on every worker init and clutter the
+# Python console for users without telling them anything actionable.
+#
+# (1) Dask: "The legacy Dask DataFrame implementation is deprecated and will
+#     be removed in a future version. Set ... dataframe.query-planning to
+#     True or None to enable the new Dask Dataframe implementation ..."
+#     -- triggered transitively via spatialdata at squidpy import time.
+#     Opt into the new implementation explicitly so the warning stops firing.
+# (2) scanpy: "__version__ is deprecated, use importlib.metadata.version(
+#     'scanpy') instead" -- scanpy's own __init__ deprecates the symbol but
+#     also still uses it internally.
+try:
+    import dask
+    dask.config.set({"dataframe.query-planning": True})
+except Exception:
+    pass
+warnings.filterwarnings(
+    "ignore",
+    message=r"`__version__` is deprecated",
+    category=FutureWarning,
+)
 
 logging.basicConfig(
     level=logging.INFO,

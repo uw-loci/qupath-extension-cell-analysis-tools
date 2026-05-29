@@ -13,7 +13,7 @@ import qupath.lib.gui.prefs.PathPrefs;
 public final class QpcatPreferences {
 
     // Categories match the menu item names so users can associate preferences with tools
-    private static final String CATEGORY_VAE = "QP-CAT: [TEST] Autoencoder Classifier";
+    private static final String CATEGORY_VAE = "QP-CAT: Autoencoder Classifier";
     private static final String CATEGORY_CLUSTERING = "QP-CAT: Run Clustering";
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
     private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";

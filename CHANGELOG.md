@@ -4,6 +4,26 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.1] -- 2026-05-29
+
+Patch release. Three coordinated fixes pulled from a v0.2.x training-run log: the VAE training pathway also dropped `Cluster N` labels (v0.2.10 only fixed the pie chart display path), residual `[TEST FEATURE]` strings the v0.2.8 cleanup missed, and two noisy Dask + scanpy FutureWarnings worth silencing in the Python console.
+
+### Fixed
+
+- **VAE training pathway dropped `Cluster N` detection classifications** even after the user explicitly opted into "Existing detection classifications." `ClusteringWorkflow.extractClassLabels` (the actual training-data extraction path) still carried the same `name.startsWith("Cluster ")` skip the v0.2.10 pie chart fix removed from `AutoencoderDialog.refreshClassDistribution`. Symptoms in the Python log: `Received N cells, 0 classes` / `Labeled: 0, Unlabeled: N, Classes: 0` even though the pie chart correctly showed the cluster classes. Drop the skip in the `useDetections` branch to match v0.2.10. The skip is retained in the Locked Annotations and Point Annotations branches where cluster annotations would be contamination.
+- **Residual `[TEST FEATURE]` / `[TEST]` strings** in Python log messages (`train_autoencoder.py` module docstring + final "training complete" log; `infer_autoencoder.py` module docstring + final "inference complete" log), the menu item (`strings.properties` `menu.autoencoderClassifier`), the preference category name (`QpcatPreferences.CATEGORY_VAE`), and three Java comments / docstrings in `SetupQPCAT` and `ClusteringWorkflow`. The v0.2.8 cleanup only addressed the live dialog title / notification surface; these leaked through.
+
+### Changed
+
+- **Silenced two FutureWarnings** that fire on every Appose worker init and clutter the Python console without conveying anything actionable:
+  - Dask `legacy DataFrame implementation is deprecated` -- now opts into `dataframe.query-planning = True` at init.
+  - scanpy `__version__ is deprecated` -- warnings filter.
+  Both wired in `init_services.py`. The Appose numpy / Windows hang warning is from Appose itself (https://github.com/apposed/appose/issues/23) and remains visible -- known harmless noise.
+
+### Upgrade
+
+No Appose env rebuild required. Both Python and Java changes ship inside the JAR (`init_services.py`, `train_autoencoder.py`, `infer_autoencoder.py` are JAR-bundled scripts loaded fresh from resources every task).
+
 ## [0.3.0] -- 2026-05-29
 
 Minor release. Spatial graph overlay -- QP-CAT now writes its spatial neighbor graph back into QuPath's `PathObjectConnections` slot so the legacy **View -> Show object connections** menu item renders the kNN / Radius / Delaunay graphs that drive every Spatial Statistics call. Includes legacy Delaunay-clustering parity for per-cell node measurements, per-component aggregate measurements, the post-hoc same-class edge filter, and the micron-aware Delaunay edge-pruning threshold.

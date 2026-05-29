@@ -212,7 +212,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         });
         featureExtractionItem.visibleProperty().bind(environmentReady);
 
-        // Autoencoder Classifier [TEST FEATURE]
+        // Autoencoder Classifier
         MenuItem autoencoderItem = new MenuItem(res.getString("menu.autoencoderClassifier"));
         autoencoderItem.setOnAction(e -> {
             // No image required -- can train from project images without opening one

@@ -1,5 +1,5 @@
 """
-[TEST FEATURE] Apply a trained autoencoder classifier to new cells.
+Apply a trained autoencoder classifier to new cells.
 
 Loads a previously trained CellVAE model checkpoint and encodes
 new cell measurements through the encoder + classifier.
@@ -305,4 +305,4 @@ task.outputs["prediction_confidence"] = conf_nd
 task.outputs["n_classes"] = n_classes
 task.outputs["label_names_json"] = json.dumps(class_names)
 
-logger.info("[TEST FEATURE] Autoencoder inference complete")
+logger.info("Autoencoder inference complete")

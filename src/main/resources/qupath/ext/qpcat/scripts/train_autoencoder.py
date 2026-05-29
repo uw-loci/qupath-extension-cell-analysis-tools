@@ -1,5 +1,5 @@
 """
-[TEST FEATURE] Semi-supervised VAE for cell classification.
+Semi-supervised VAE for cell classification.
 
 Trains a variational autoencoder with an optional classifier head on
 cell marker measurements. When some cells have user-assigned labels,
@@ -1132,5 +1132,5 @@ task.outputs["active_units"] = n_active
 task.outputs["model_state_base64"] = model_b64
 task.outputs["label_names_json"] = json.dumps(class_names)
 
-logger.info("[TEST FEATURE] Autoencoder training complete (best epoch: %d, active units: %d/%d)",
+logger.info("Autoencoder training complete (best epoch: %d, active units: %d/%d)",
             best_epoch + 1, n_active, ldim)

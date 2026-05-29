@@ -1781,7 +1781,7 @@ public class ClusteringWorkflow {
         return resultMap;
     }
 
-    // ==================== Autoencoder Training & Inference [TEST FEATURE] ====================
+    // ==================== Autoencoder Training & Inference ====================
 
     /**
      * Extracts class labels for detections from multiple sources.
@@ -1886,7 +1886,10 @@ public class ClusteringWorkflow {
         // Source 3: Detection classifications (overrides other sources)
         // Unclassified (null PathClass or NULL_CLASS) is treated as a valid
         // "Unclassified" class -- the classifier needs to learn what "not any
-        // specific type" looks like. Cluster labels from prior runs are still skipped.
+        // specific type" looks like. The user explicitly opted in to existing
+        // detection classifications by checking the option, so honour ALL
+        // classes including Cluster N from a prior QP-CAT run. Parity with
+        // the same fix in AutoencoderDialog.refreshClassDistribution in v0.2.10.
         if (useDetections) {
             int detLabeled = 0;
             for (int i = 0; i < n; i++) {
@@ -1896,7 +1899,6 @@ public class ClusteringWorkflow {
                     name = "Unclassified";
                 } else {
                     name = pc.toString();
-                    if (name.startsWith("Cluster ")) continue;
                 }
                 assignedClass[i] = name;
                 detLabeled++;
@@ -1922,21 +1924,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * [TEST FEATURE] Trains a VAE classifier on detections from the current image.
-     *
-     * @param selectedMeasurements measurements to use as input features
-     * @param normalization        normalization method id
-     * @param latentDim            latent space dimensionality
-     * @param epochs               training epochs
-     * @param learningRate         optimizer learning rate
-     * @param batchSize            training batch size
-     * @param supervisionWeight    weight of classification loss
-     * @param progressCallback     optional progress callback
-     * @return result map with model_state, class_names, accuracy, n_classes
-     * @throws IOException if training fails
-     */
-    /**
-     * [TEST FEATURE] Trains a VAE classifier on detections from the current image.
+     * Trains a VAE classifier on detections from the current image.
      *
      * @param selectedMeasurements measurements to use (for measurement mode)
      * @param normalization        normalization method id
