@@ -37,6 +37,12 @@ public class ClusteringDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringDialog.class);
 
+    /** Base URL for the HOW_TO_GUIDE; each Results-dialog tab appends a fragment
+     *  to point at its dedicated subsection in Chapter 20. */
+    private static final String DOCS_BASE =
+            "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
+            + "blob/main/documentation/HOW_TO_GUIDE.md";
+
     private final QuPathGUI qupath;
     private final Stage owner;
 
@@ -1135,9 +1141,27 @@ public class ClusteringDialog {
                     + "Red = high relative expression, blue = low. Each row is a cluster, "
                     + "each column is a marker. Hover over cells for exact values.\n"
                     + "Use this to identify which markers define each cluster and to guide "
-                    + "cell type annotation in the Phenotyping dialog."));
+                    + "cell type annotation in the Phenotyping dialog.",
+                    "heatmap-tab",
+                    java.util.List.of(makeCompareExpressionViewsLink())));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
+        }
+
+        // Dotplot and Matrix Plot live right after Heatmap so the three
+        // expression-overview views are adjacent and comparable. Both come
+        // from the Python plot_paths and are skipped in the generic loop below.
+        if (result.hasPlots()) {
+            String dotPath = result.getPlotPaths().get("dotplot");
+            if (dotPath != null) {
+                Tab dotTab = buildPlotTabFromPng("dotplot", dotPath, true);
+                if (dotTab != null) tabPane.getTabs().add(dotTab);
+            }
+            String matrixPath = result.getPlotPaths().get("matrixplot");
+            if (matrixPath != null) {
+                Tab matrixTab = buildPlotTabFromPng("matrixplot", matrixPath, true);
+                if (matrixTab != null) tabPane.getTabs().add(matrixTab);
+            }
         }
 
         // Interactive embedding scatter tab
@@ -1151,7 +1175,8 @@ public class ClusteringDialog {
                     + "Well-separated groups indicate distinct cell populations. "
                     + "Scroll to zoom, drag to pan, hover for cell details.\n"
                     + "Note: distances within a group are meaningful, but absolute "
-                    + "distances between groups should be interpreted cautiously."));
+                    + "distances between groups should be interpreted cautiously.",
+                    "embedding-tab-interactive"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1170,7 +1195,8 @@ public class ClusteringDialog {
                     + "in this cluster.\n"
                     + "  Adj. P-val: Benjamini-Hochberg corrected p-value -- smaller is more significant.\n"
                     + "Use the top-scoring markers for each cluster as starting points for cell type "
-                    + "annotation. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells."));
+                    + "annotation. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells.",
+                    "marker-rankings-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1189,7 +1215,8 @@ public class ClusteringDialog {
                     + "  I < 0: spatially dispersed (nearby cells have different expression).\n"
                     + "Markers with high Moran's I and significant p-values show tissue-level "
                     + "spatial structure -- they are good candidates for spatially-aware analyses "
-                    + "like BANKSY clustering."));
+                    + "like BANKSY clustering.",
+                    "spatial-autocorrelation-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1207,7 +1234,8 @@ public class ClusteringDialog {
                     + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
                     + "variance-stabilised transform of K; under the null L is centred at zero.\n"
                     + "Curves above the null = spatial clustering; below = inhibition / dispersion.\n"
-                    + "The Poisson reference is drawn as a dashed line on each chart."));
+                    + "The Poisson reference is drawn as a dashed line on each chart.",
+                    "ripley-k-and-l-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1223,7 +1251,8 @@ public class ClusteringDialog {
                     + "  C ~ 1: spatial randomness.\n"
                     + "  C > 1: dispersion (nearby cells have dissimilar values).\n"
                     + "Sensitive to local detail; pairs naturally with Moran's I which\n"
-                    + "weights global structure more heavily."));
+                    + "weights global structure more heavily.",
+                    "gearys-c-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1238,7 +1267,8 @@ public class ClusteringDialog {
                     "For each pair of clusters (A, B), the table reports the ratio\n"
                     + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
                     + "as a function of radius. Values > 1 mean A's neighborhood is enriched\n"
-                    + "for B at that radius; < 1 means depleted; ~ 1 means random."));
+                    + "for B at that radius; < 1 means depleted; ~ 1 means random.",
+                    "co-occurrence-tabs"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1253,7 +1283,8 @@ public class ClusteringDialog {
                     "For each cluster A, the table reports the ratio of A's neighborhood\n"
                     + "composition vs all-other-clusters combined, as a function of radius.\n"
                     + "Same scale interpretation as the pairwise table; smaller and easier\n"
-                    + "to scan when you only care about one cluster's spatial behavior."));
+                    + "to scan when you only care about one cluster's spatial behavior.",
+                    "co-occurrence-tabs"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -1270,108 +1301,24 @@ public class ClusteringDialog {
                     + "using a remote or local LLM. Suggestions are starting points -- "
                     + "always check against the Marker Rankings tab and your domain "
                     + "knowledge. The API key is held in memory only; you re-enter it "
-                    + "each QuPath session, or set QPCAT_ANTHROPIC_KEY in your shell."));
+                    + "each QuPath session, or set QPCAT_ANTHROPIC_KEY in your shell.",
+                    "cluster-explainer-llm-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
 
-        // Plot tabs (PNGs from Python)
+        // Plot tabs (PNGs from Python). Iteration order = result.getPlotPaths
+        // map order, which mirrors the order plots are produced in Python.
+        // Dotplot and Matrix Plot are deliberately surfaced earlier (right
+        // after the interactive Heatmap, see buildExpressionTrioTabs() below
+        // -- not here -- per user request) so we skip them in this loop.
         if (result.hasPlots()) {
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
-                try {
-                    javafx.scene.image.Image img = new javafx.scene.image.Image(
-                            new File(entry.getValue()).toURI().toString());
-                    javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
-                    iv.setPreserveRatio(true);
-                    iv.setSmooth(true);
-
-                    ScrollPane sp = new ScrollPane(iv);
-                    // Responsive: image fills viewport width with an 800 px floor.
-                    // Without this, a hard fitWidth(800) leaves narrow-aspect plots
-                    // (dotplot, matrixplot) looking tiny relative to wide-aspect
-                    // plots (heatmap) at the same nominal width.
-                    iv.setFitWidth(800);
-                    sp.viewportBoundsProperty().addListener((obs, oldV, newV) -> {
-                        if (newV != null) {
-                            iv.setFitWidth(Math.max(800.0, newV.getWidth() - 20.0));
-                        }
-                    });
-
-                    String tabName;
-                    String guide;
-                    switch (entry.getKey()) {
-                        case "dotplot" -> {
-                            tabName = "Dotplot";
-                            guide = "Dot size = fraction of cells in the cluster expressing the marker. "
-                                    + "Dot color = mean expression level.\n"
-                                    + "Large, dark dots indicate markers that are both highly expressed and "
-                                    + "broadly active in that cluster -- strong candidate markers for cell type identity.";
-                        }
-                        case "matrixplot" -> {
-                            tabName = "Matrix Plot";
-                            guide = "Mean expression of each marker per cluster shown as a color grid, "
-                                    + "with hierarchical clustering of rows and columns.\n"
-                                    + "Markers and clusters that are grouped together by the dendrogram "
-                                    + "have similar expression patterns. Publication-quality version of the "
-                                    + "interactive Heatmap tab.";
-                        }
-                        case "stacked_violin" -> {
-                            tabName = "Stacked Violin";
-                            guide = "Distribution of expression values for each marker within each cluster. "
-                                    + "Wider regions indicate more cells at that expression level.\n"
-                                    + "Bimodal (double-peaked) distributions within a single cluster suggest "
-                                    + "the cluster may contain two distinct subpopulations -- consider "
-                                    + "subclustering via the Cluster Management dialog.";
-                        }
-                        case "paga" -> {
-                            tabName = "PAGA Trajectory";
-                            guide = "Partition-based graph abstraction showing connectivity between clusters. "
-                                    + "Thicker edges = stronger transcriptional similarity.\n"
-                                    + "Connected clusters may represent related cell states or differentiation "
-                                    + "trajectories. Isolated clusters are transcriptionally distinct. "
-                                    + "Node size reflects cell count.";
-                        }
-                        case "embedding" -> {
-                            tabName = "Embedding Plot";
-                            guide = "Publication-quality embedding plot generated by scanpy, colored by cluster. "
-                                    + "Same data as the interactive embedding tab but with consistent styling.\n"
-                                    + "Right-click to save this image for use in presentations or publications.";
-                        }
-                        case "nhood_enrichment" -> {
-                            tabName = "Neighborhood Enrichment";
-                            guide = "Z-score matrix of spatial co-localization between cluster pairs. "
-                                    + "Red (positive) = clusters found as spatial neighbors more often "
-                                    + "than expected by chance.\n"
-                                    + "Blue (negative) = clusters that spatially avoid each other. "
-                                    + "Diagonal values show self-enrichment (spatial clustering). "
-                                    + "Use this to identify tissue microenvironment compositions.";
-                        }
-                        case "spatial_scatter" -> {
-                            tabName = "Spatial Scatter";
-                            guide = "Cells plotted at their physical tissue coordinates (X/Y centroids), "
-                                    + "colored by cluster assignment.\n"
-                                    + "Shows the spatial distribution of cell types across the tissue section. "
-                                    + "Compare with the embedding plot -- clusters that overlap in the embedding "
-                                    + "but are spatially separated may represent the same cell type in "
-                                    + "different tissue regions.";
-                        }
-                        default -> {
-                            tabName = entry.getKey();
-                            guide = null;
-                        }
-                    }
-
-                    Tab tab;
-                    if (guide != null) {
-                        tab = new Tab(tabName, wrapWithGuide(sp, guide));
-                    } else {
-                        tab = new Tab(tabName, sp);
-                    }
-                    tab.setClosable(false);
-                    tabPane.getTabs().add(tab);
-                } catch (Exception e) {
-                    logger.warn("Failed to load plot {}: {}", entry.getKey(), e.getMessage());
+                if ("dotplot".equals(entry.getKey()) || "matrixplot".equals(entry.getKey())) {
+                    continue;
                 }
+                Tab tab = buildPlotTabFromPng(entry.getKey(), entry.getValue(), false);
+                if (tab != null) tabPane.getTabs().add(tab);
             }
         }
 
@@ -1496,18 +1443,198 @@ public class ClusteringDialog {
     /**
      * Wrap content with an interpretive guide label at the top of the tab.
      */
+    /** Backward-compatible overload (no documentation link, no extras). */
     private static VBox wrapWithGuide(javafx.scene.Node content, String guideText) {
+        return wrapWithGuide(content, guideText, null, java.util.List.of());
+    }
+
+    /** Adds a Documentation hyperlink pointing at HOW_TO_GUIDE#docAnchor. */
+    private static VBox wrapWithGuide(javafx.scene.Node content, String guideText,
+                                      String docAnchor) {
+        return wrapWithGuide(content, guideText, docAnchor, java.util.List.of());
+    }
+
+    /** Adds a Documentation hyperlink plus any extras (e.g. the
+     *  "How do these compare?" link on the three expression-view tabs). */
+    private static VBox wrapWithGuide(javafx.scene.Node content, String guideText,
+                                      String docAnchor,
+                                      java.util.List<Hyperlink> extras) {
         Label guide = new Label(guideText);
         guide.setWrapText(true);
-        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: #444; "
-                + "-fx-background-color: #f5f5f0; -fx-padding: 8; "
-                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: #444;");
         guide.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(guide, Priority.ALWAYS);
 
-        VBox box = new VBox(content);
-        box.getChildren().addFirst(guide);
-        VBox.setVgrow(content, javafx.scene.layout.Priority.ALWAYS);
+        HBox bar = new HBox(8);
+        bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
+                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        bar.setAlignment(Pos.TOP_LEFT);
+        bar.getChildren().add(guide);
+
+        VBox links = new VBox(2);
+        links.setAlignment(Pos.TOP_RIGHT);
+        for (Hyperlink x : extras) {
+            styleGuideHyperlink(x);
+            links.getChildren().add(x);
+        }
+        if (docAnchor != null) {
+            Hyperlink doc = new Hyperlink("Documentation");
+            styleGuideHyperlink(doc);
+            doc.setOnAction(e -> QuPathGUI.openInBrowser(DOCS_BASE + "#" + docAnchor));
+            links.getChildren().add(doc);
+        }
+        if (!links.getChildren().isEmpty()) bar.getChildren().add(links);
+
+        VBox box = new VBox(bar, content);
+        VBox.setVgrow(content, Priority.ALWAYS);
         return box;
+    }
+
+    private static void styleGuideHyperlink(Hyperlink h) {
+        h.setStyle("-fx-font-size: 11px; -fx-padding: 0 0 0 0;");
+        h.setBorder(null);
+    }
+
+    /** "Compare expression views" hyperlink shared by Heatmap, Dotplot,
+     *  and Matrix Plot tabs. Each tab gets its own instance because a
+     *  Hyperlink node can have only one parent. */
+    private static Hyperlink makeCompareExpressionViewsLink() {
+        Hyperlink link = new Hyperlink("Compare expression views");
+        link.setOnAction(e -> showExpressionViewComparison());
+        return link;
+    }
+
+    /** Build a Results-dialog tab from a PNG written by the Python clustering
+     *  script. Returns null when the file cannot be loaded. When
+     *  withCompareLink is true (Heatmap / Dotplot / Matrix Plot), the guide
+     *  bar also exposes the "Compare expression views" hyperlink. */
+    private static Tab buildPlotTabFromPng(String key, String filePath, boolean withCompareLink) {
+        try {
+            javafx.scene.image.Image img = new javafx.scene.image.Image(
+                    new File(filePath).toURI().toString());
+            javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
+            iv.setPreserveRatio(true);
+            iv.setSmooth(true);
+
+            ScrollPane sp = new ScrollPane(iv);
+            iv.setFitWidth(800);
+            sp.viewportBoundsProperty().addListener((obs, oldV, newV) -> {
+                if (newV != null) {
+                    iv.setFitWidth(Math.max(800.0, newV.getWidth() - 20.0));
+                }
+            });
+
+            String tabName;
+            String guide;
+            String docAnchor;
+            switch (key) {
+                case "dotplot" -> {
+                    tabName = "Dotplot";
+                    guide = "Dot size = fraction of cells in the cluster expressing the marker. "
+                            + "Dot color = mean expression level.\n"
+                            + "Large, dark dots indicate markers that are both highly expressed and "
+                            + "broadly active in that cluster -- strong candidate markers for cell type identity.";
+                    docAnchor = "dotplot-tab";
+                }
+                case "matrixplot" -> {
+                    tabName = "Matrix Plot";
+                    guide = "Mean expression of each marker per cluster shown as a color grid, "
+                            + "with hierarchical clustering of rows and columns.\n"
+                            + "Markers and clusters that are grouped together by the dendrogram "
+                            + "have similar expression patterns. Publication-quality version of the "
+                            + "interactive Heatmap tab.";
+                    docAnchor = "matrix-plot-tab";
+                }
+                case "stacked_violin" -> {
+                    tabName = "Stacked Violin";
+                    guide = "Distribution of expression values for each marker within each cluster. "
+                            + "Wider regions indicate more cells at that expression level.\n"
+                            + "Bimodal (double-peaked) distributions within a single cluster suggest "
+                            + "the cluster may contain two distinct subpopulations -- consider "
+                            + "subclustering via the Cluster Management dialog.";
+                    docAnchor = "stacked-violin-tab";
+                }
+                case "paga" -> {
+                    tabName = "PAGA Trajectory";
+                    guide = "Partition-based graph abstraction showing connectivity between clusters. "
+                            + "Thicker edges = stronger expression similarity.\n"
+                            + "Connected clusters may represent related cell states or differentiation "
+                            + "trajectories. Isolated clusters have distinct expression profiles. "
+                            + "Node size reflects cell count.";
+                    docAnchor = "paga-trajectory-tab";
+                }
+                case "embedding" -> {
+                    tabName = "Embedding Plot";
+                    guide = "Publication-quality embedding plot generated by scanpy, colored by cluster. "
+                            + "Same data as the interactive embedding tab but with consistent styling.\n"
+                            + "Right-click to save this image for use in presentations or publications.";
+                    docAnchor = "embedding-plot-tab";
+                }
+                case "nhood_enrichment" -> {
+                    tabName = "Neighborhood Enrichment";
+                    guide = "Z-score matrix of spatial co-localization between cluster pairs. "
+                            + "Red (positive) = clusters found as spatial neighbors more often "
+                            + "than expected by chance.\n"
+                            + "Blue (negative) = clusters that spatially avoid each other. "
+                            + "Diagonal values show self-enrichment (spatial clustering). "
+                            + "Use this to identify tissue microenvironment compositions.";
+                    docAnchor = "neighborhood-enrichment-tab";
+                }
+                case "spatial_scatter" -> {
+                    tabName = "Spatial Scatter";
+                    guide = "Cells plotted at their physical tissue coordinates (X/Y centroids), "
+                            + "colored by cluster assignment.\n"
+                            + "Shows the spatial distribution of cell types across the tissue section. "
+                            + "Compare with the embedding plot -- clusters that overlap in the embedding "
+                            + "but are spatially separated may represent the same cell type in "
+                            + "different tissue regions.";
+                    docAnchor = "spatial-scatter-tab";
+                }
+                default -> {
+                    tabName = key;
+                    guide = null;
+                    docAnchor = null;
+                }
+            }
+
+            Tab tab;
+            if (guide != null) {
+                java.util.List<Hyperlink> extras = withCompareLink
+                        ? java.util.List.of(makeCompareExpressionViewsLink())
+                        : java.util.List.of();
+                tab = new Tab(tabName, wrapWithGuide(sp, guide, docAnchor, extras));
+            } else {
+                tab = new Tab(tabName, sp);
+            }
+            tab.setClosable(false);
+            return tab;
+        } catch (Exception e) {
+            logger.warn("Failed to load plot {}: {}", key, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Modal explanation of how Heatmap, Dotplot, and Matrix Plot differ. */
+    private static void showExpressionViewComparison() {
+        String body =
+                "QP-CAT renders three complementary views of marker expression per cluster:\n\n"
+                + "Heatmap (interactive)\n"
+                + "  - Column-normalised mean expression per cluster.\n"
+                + "  - Hover for exact values, zoom, pan.\n"
+                + "  - Use when exploring live in the dialog.\n\n"
+                + "Matrix Plot (matplotlib PNG)\n"
+                + "  - Publication-quality heatmap of mean expression with row/column dendrograms.\n"
+                + "  - Same underlying data as Heatmap; static for export.\n"
+                + "  - Use when assembling figures.\n\n"
+                + "Dotplot (matplotlib PNG)\n"
+                + "  - Two channels per cell: dot size = fraction of cells expressing,\n"
+                + "    dot color = mean expression.\n"
+                + "  - Distinguishes 'low marker in most cells' from 'high marker in few cells' --\n"
+                + "    something a heatmap cannot show.\n"
+                + "  - Use when fraction-expressing affects interpretation (e.g. low-prevalence markers).\n\n"
+                + "Rule of thumb: Matrix Plot for figures, Heatmap for exploration,\n"
+                + "Dotplot when fraction-expressing matters.";
+        Dialogs.showPlainMessage("Compare expression views", body);
     }
 
     @SuppressWarnings("deprecation")  // GsonBuilder.setLenient() vs the 2.11+ Strictness API

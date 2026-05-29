@@ -30,6 +30,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 17. [Spatial Statistics (Ripley, Geary, Co-occurrence)](#17-spatial-statistics-ripley-geary-co-occurrence)
 18. [Exporting Figures](#18-exporting-figures)
 19. [YAML Headless Batch](#19-yaml-headless-batch)
+20. [Results dialog reference](#20-results-dialog-reference)
 
 ---
 
@@ -932,3 +933,109 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 |-----------|-------|---------|-------------|
 | n_neighbors | 2-200 | 15 | Local neighborhood size. Smaller = more local detail, larger = more global structure. |
 | min_dist | 0.0-1.0 | 0.1 | Minimum distance between embedded points. Smaller = tighter clusters. |
+
+## 20. Results dialog reference
+
+The Results dialog opens automatically after a clustering run completes (or via the Load button on the main clustering dialog). Each tab is one view of the same underlying clustering result. This chapter documents what each tab shows, when to use it, and how it relates to its neighbors.
+
+The "Documentation" hyperlink in the guide bar of each tab points back to the relevant subsection below.
+
+### Heatmap vs Dotplot vs Matrix Plot
+
+These three tabs sit next to each other deliberately -- they are complementary views of the same per-cluster-per-marker expression matrix.
+
+| View | What it shows | Best for |
+|---|---|---|
+| **Heatmap** (interactive Java canvas) | Column-normalised mean expression per cluster. Hover for exact values, scroll to zoom. | Live exploration. |
+| **Matrix Plot** (matplotlib PNG) | Same data as Heatmap, plus row/column dendrograms. | Publication figures. |
+| **Dotplot** (matplotlib PNG) | Two channels per cell: dot size = fraction of cells expressing the marker; dot color = mean expression. | When fraction-expressing matters (e.g. low-prevalence markers). |
+
+Rule of thumb: Matrix Plot for figures, Heatmap for exploration, Dotplot when fraction-expressing changes your interpretation.
+
+### Heatmap tab
+
+Interactive heatmap of mean marker expression per cluster (column-normalised across clusters so each marker's relative pattern is visible). Red = high relative expression, blue = low. Each row is a cluster, each column is a marker. Hover for exact values.
+
+Use this to identify which markers define each cluster and to guide cell-type annotation in the Phenotyping dialog. For a publication-quality static version, see the Matrix Plot tab.
+
+### Embedding tab (interactive)
+
+Interactive scatter plot of cells in the chosen embedding (UMAP / PCA / t-SNE), colored by cluster. Scroll to zoom, drag to pan, hover for cell details.
+
+Distances within a cluster are meaningful (similar cells cluster together) but absolute distances between clusters should be interpreted cautiously -- embeddings preserve local topology, not global geometry.
+
+### Marker Rankings tab
+
+Top differentially expressed markers per cluster from scanpy's Wilcoxon rank-sum test. Columns:
+
+- **Score**: test statistic. Higher = stronger differential expression vs all other clusters.
+- **Log2FC**: log2 fold change vs all other clusters. Positive = upregulated in this cluster.
+- **Adj. P-val**: Benjamini-Hochberg adjusted p-value. Smaller = more significant.
+
+Use the top-scoring markers per cluster as cell-type annotation starting points. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells.
+
+### Spatial Autocorrelation tab
+
+Per-marker Moran's I -- a global measure of how spatially organised each marker's expression is across the tissue.
+
+- I > 0: spatially clustered (nearby cells express similarly).
+- I ~ 0: spatially random.
+- I < 0: spatially dispersed.
+
+Markers with high Moran's I and significant p-values have tissue-level spatial structure -- they are good candidates for spatially-aware analyses like BANKSY clustering.
+
+### Ripley K and L tab
+
+Per-cluster spatial point pattern statistics tested against a Poisson null. K(r) cumulates neighbor counts within radius r; L(r) = sqrt(K(r) / pi) - r is the variance-stabilised transform. Curves above the dashed null = clustering at that radius; below = inhibition / dispersion.
+
+### Geary's C tab
+
+Per-marker Geary's C measures local spatial autocorrelation (weights local detail more than Moran's I).
+
+- C < 1: nearby cells have similar values (positive autocorrelation).
+- C ~ 1: random.
+- C > 1: nearby cells have dissimilar values (dispersion).
+
+Pairs naturally with the Spatial Autocorrelation tab (Moran's I), which weights global structure more heavily.
+
+### Co-occurrence tabs
+
+For each pair of clusters (A, B), the ratio P(neighbor is B | center is A) / P(neighbor is B) as a function of radius. Values > 1 mean A's neighborhood is enriched for B at that radius; < 1 means depleted; ~ 1 means random.
+
+The "pairwise" table is all cluster pairs; the "one vs rest" table compares each cluster's neighborhood to all other clusters combined (smaller and easier to scan when you only care about one cluster's spatial behavior).
+
+### Cluster Explainer (LLM) tab
+
+Per-cluster cell-type suggestions from a remote (Anthropic) or local (Ollama) LLM, conditioned on the cluster's top markers. See [Chapter 10](#10-explaining-clusters-with-an-llm-beta) for setup, prompt details, and cost expectations. Always validate suggestions against the Marker Rankings tab.
+
+### Dotplot tab
+
+scanpy dot plot per cluster x marker. Dot size = fraction of cells in the cluster expressing the marker (above threshold). Dot color = mean expression. Large, dark dots indicate markers that are both highly expressed and broadly active.
+
+Distinguishes "low marker in most cells" from "high marker in few cells" -- the Heatmap and Matrix Plot tabs cannot show this distinction because they collapse to per-cluster means.
+
+### Matrix Plot tab
+
+scanpy matrix plot: a publication-quality heatmap of mean expression per cluster, with hierarchical clustering of rows and columns. Same underlying data as the interactive Heatmap tab plus dendrograms; intended for figure export.
+
+### PAGA Trajectory tab
+
+Partition-based graph abstraction (PAGA) showing connectivity between clusters. Thicker edges = stronger expression similarity. Connected clusters may represent related cell states or differentiation trajectories. Isolated clusters have distinct expression profiles. Node size reflects cell count.
+
+PAGA was designed for transcriptomics but the metric is generic -- it applies equally well to fluorescent antibody intensities or any other per-cell feature vector.
+
+### Embedding Plot tab
+
+scanpy's publication-quality embedding plot, colored by cluster. Same data as the interactive Embedding tab but with consistent styling and palette suitable for figure export.
+
+### Stacked Violin tab
+
+scanpy stacked violin: distribution of expression values for each marker within each cluster. Wider regions indicate more cells at that expression level. Bimodal distributions within a single cluster suggest the cluster may contain two distinct subpopulations -- consider subclustering via the Cluster Management dialog.
+
+### Neighborhood Enrichment tab
+
+squidpy neighborhood enrichment z-score matrix between cluster pairs. Red (positive) = clusters found as spatial neighbors more often than expected by chance. Blue (negative) = clusters that spatially avoid each other. Diagonal values show self-enrichment (spatial clustering). Use this to identify tissue microenvironment compositions.
+
+### Spatial Scatter tab
+
+Cells plotted at their physical tissue coordinates (X / Y centroids), colored by cluster. Shows the spatial distribution of cell types across the tissue section. Compare with the embedding plot -- clusters that overlap in the embedding but are spatially separated may represent the same cell type in different tissue regions.
