@@ -4,6 +4,30 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.2.10] -- 2026-05-28
+
+Patch release. Results-dialog UX pass, Autoencoder preflight + cleanup, Quick Cluster Delaunay entry.
+
+### Added
+
+- **Heatmap, Dotplot, and Matrix Plot tabs are now adjacent** in the Results dialog (previously Dotplot / Matrix Plot landed several tabs later). The three expression-overview tabs each carry a "Compare expression views" hyperlink that opens a popup explaining when to use each (Heatmap for live exploration, Matrix Plot for figures, Dotplot when fraction-expressing matters).
+- **"Documentation" hyperlink on every Results-dialog tab** opens the relevant subsection of the new `documentation/HOW_TO_GUIDE.md` Chapter 20 ("Results dialog reference"), which adds one subsection per tab.
+- **Quick Cluster -> Quick Delaunay (Leiden + Delaunay smoothing)** menu entry runs Leiden clustering with spatial smoothing backed by a squidpy Delaunay graph. Useful as a one-click "graph-aware" alternative to Quick Leiden for users coming off QuPath core's legacy Delaunay clustering tool.
+- **VAE training preflight checks** in the Autoencoder dialog:
+  - One-time-per-session reminder that VAE training is CPU-bound and slow vs. QuPath's regular ML classifiers.
+  - Confirmation prompt with diagnostic copy when the class-distribution scan returned zero labeled cells.
+  - "Save before training?" prompt when the current image has unsaved hierarchy edits (offers to call `ProjectImageEntry.saveImageData`).
+- **VAE temp-file cleanup**: dialog open sweeps `<project>/.qpcat_temp/qpcat_*.bin` files older than 1 hour. Catches orphan tile buffers from crashed training / apply / eval runs without touching files belonging to a concurrent run on another QuPath instance.
+
+### Fixed
+
+- **VAE classifier "Existing detection classifications" reported "No labeled cells found" when the project contained `Cluster N` classifications from a prior QP-CAT run.** The label scan dropped any class name starting with `Cluster ` even when the user had explicitly opted into using existing detection classes. The skip is retained in the Locked Annotations and Point Annotations paths (where cluster annotations would be contamination) and dropped from the existing-detection-classifications path.
+- **PAGA Trajectory tab said "transcriptional similarity / transcriptionally distinct"**; QP-CAT is primarily used with fluorescent antibody / IF / IMC intensities, not scRNA-seq. Reworded to "expression similarity / distinct expression profiles".
+
+### Changed
+
+- **Autoencoder dialog parameter controls now lock during training, apply, and evaluate.** Spinners, combos, radios, and checkboxes bind their `disableProperty` to a new `trainingInProgress` `BooleanProperty`. Buttons keep their existing imperative `setDisable()` (their enable state depends on whether a trained model exists).
+
 ## [0.2.9] -- 2026-05-28
 
 Patch release. Four Results-dialog bugs surfaced by v0.2.8 testing.
