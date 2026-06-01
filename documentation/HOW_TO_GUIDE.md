@@ -48,6 +48,10 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 
 **Troubleshooting:** If setup fails, check your internet connection and disk space (~2.5 GB needed). Use **Utilities > Rebuild Clustering Environment** to start fresh.
 
+**Windows file-lock during install** (`failed to link ... os error 32 ... being used by another process`): another process is holding a file open inside the env directory. QP-CAT v0.3.4+ detects this and logs the full PowerShell recovery script -- check the QuPath log. Short version: close QuPath fully (kill leftover `java.exe` / `python.exe` in Task Manager), delete `%USERPROFILE%\.local\share\appose\qupath-qpcat\.pixi` and `pixi.lock`, optionally add `%USERPROFILE%\.local\share\appose\` as an AV exclusion, then relaunch. Reboot Windows if step 3 fails -- that releases every file handle.
+
+**Stale `pkg_resources` / `xarray_schema` import on launch** (separate failure mode, not file-lock): QP-CAT v0.3.2+ detects this automatically, wipes the env, and asks you to restart -- second launch rebuilds and clustering works again.
+
 ---
 
 ## 2. Running Clustering

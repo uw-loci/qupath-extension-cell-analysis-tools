@@ -187,21 +187,33 @@ public class ClusteringResult {
          * images for a global graph build but applies results back per
          * image. Edge entries whose endpoints land outside the slice
          * are dropped; surviving endpoints are remapped to [0, end-start).
+         *
+         * <p><strong>v0.3.4 (D1 fix):</strong> per-cell aggregates
+         * (numNeighbors, mean/median/max/min distance, triangle areas)
+         * are intentionally <em>left null</em> on the sliced output.
+         * The global values are not correct per-image: a cell at
+         * pixel (100, 100) in image A and a cell at (100, 100) in image
+         * B both contribute neighbours to each other in the global
+         * graph (extractMultiImage concatenates per-image coordinates
+         * without offset), so the global numNeighbors counts include
+         * phantom cross-image edges and the global distance aggregates
+         * are computed over those phantom edges too. The
+         * single-image path bypasses {@code slice} and keeps the
+         * verbatim aggregates (correct because there is only one
+         * segment). The project path's {@code applySpatialGraphPayload}
+         * detects the null aggregates and recomputes them from the
+         * sliced edge COO + per-image centroids. Triangle areas remain
+         * null on multi-image (recomputing would require re-running
+         * the Delaunay triangulation per-image, which is expensive
+         * enough that we defer it to a future release).</p>
          */
         public SpatialGraphPayload slice(int start, int end) {
             SpatialGraphPayload out = new SpatialGraphPayload();
             int n = end - start;
-            if (numNeighbors != null && numNeighbors.length >= end) {
-                int[] arr = new int[n];
-                System.arraycopy(numNeighbors, start, arr, 0, n);
-                out.setNumNeighbors(arr);
-            }
-            out.setMeanDistance(sliceDouble(meanDistance, start, end));
-            out.setMedianDistance(sliceDouble(medianDistance, start, end));
-            out.setMaxDistance(sliceDouble(maxDistance, start, end));
-            out.setMinDistance(sliceDouble(minDistance, start, end));
-            out.setMeanTriangleArea(sliceDouble(meanTriangleArea, start, end));
-            out.setMaxTriangleArea(sliceDouble(maxTriangleArea, start, end));
+            // D1: per-cell aggregates intentionally NOT copied (see Javadoc).
+            // Component labels are graph-build-time outputs; component
+            // membership for any cell that lost all its edges to the
+            // cross-image slice is still recoverable, so we keep these.
             if (componentLabels != null && componentLabels.length >= end) {
                 int[] arr = new int[n];
                 System.arraycopy(componentLabels, start, arr, 0, n);
@@ -231,13 +243,6 @@ public class ClusteringResult {
                 }
             }
             return out;
-        }
-
-        private static double[] sliceDouble(double[] src, int start, int end) {
-            if (src == null || src.length < end) return null;
-            double[] arr = new double[end - start];
-            System.arraycopy(src, start, arr, 0, end - start);
-            return arr;
         }
     }
 }

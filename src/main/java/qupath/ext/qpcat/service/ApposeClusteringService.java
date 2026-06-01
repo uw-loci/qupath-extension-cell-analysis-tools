@@ -280,11 +280,48 @@ public class ApposeClusteringService {
                         // -- the log + status callback already told the user.
                     }
                 }
+            } else if (looksLikeWindowsFileLock(e.getMessage())) {
+                // v0.3.4: Windows file-lock during pixi link step. Do NOT auto-wipe
+                // -- another process is actively holding a file in .pixi/envs/, so
+                // a wipe risks corruption. Show the user the recovery steps.
+                String advice = WINDOWS_FILE_LOCK_ADVICE;
+                logger.warn("Pixi env install hit a Windows file lock; manual recovery required\n{}", advice);
+                report(statusCallback, "Pixi env install failed: Windows file lock. See recovery steps.");
+                try {
+                    qupath.fx.dialogs.Dialogs.showWarningNotification(
+                            "QP-CAT", "Pixi env install failed: a file was locked by another"
+                                    + " process. Close QuPath, delete the .pixi folder, and"
+                                    + " relaunch. See the log for full recovery steps.");
+                } catch (Exception fxEx) {
+                    // FX not running; log advice already emitted.
+                }
             }
 
             throw e instanceof IOException ? (IOException) e : new IOException(e);
         }
     }
+
+    /**
+     * v0.3.4: Recovery instructions for the Windows file-lock failure mode
+     * during Pixi env install (`failed to link` + os error 32). Emitted to
+     * the log; surfaced as a short notification with a pointer to the log
+     * for the full steps.
+     */
+    private static final String WINDOWS_FILE_LOCK_ADVICE =
+            "QP-CAT cannot finish building its Python environment because another"
+            + " process is holding a file open inside the env directory.\n\n"
+            + "RECOVERY STEPS (Windows):\n"
+            + "  1. Close QuPath completely (File -> Quit).\n"
+            + "  2. Open Task Manager -- end any leftover java.exe or python.exe"
+            + " running under your user.\n"
+            + "  3. In PowerShell:\n"
+            + "       Remove-Item -Recurse -Force \"$env:USERPROFILE\\.local\\share\\appose\\qupath-qpcat\\.pixi\"\n"
+            + "       Remove-Item -Force \"$env:USERPROFILE\\.local\\share\\appose\\qupath-qpcat\\pixi.lock\"\n"
+            + "  4. (If step 3 fails: reboot Windows -- guaranteed to release every file handle.)\n"
+            + "  5. (Optional) Add an antivirus exclusion for the appose folder to prevent"
+            + " repeat occurrences:\n"
+            + "       %USERPROFILE%\\.local\\share\\appose\\\n"
+            + "  6. Relaunch QuPath. Pixi will rebuild from scratch and the link step will succeed.";
 
     /**
      * Runs a named task script with the given inputs.
@@ -508,6 +545,22 @@ public class ApposeClusteringService {
                 || m.contains("No module named 'xarray_schema'")
                 || m.contains("No module named 'spatialdata'")
                 || m.contains("No module named 'squidpy'");
+    }
+
+    /** v0.3.4: True when the Pixi build failed because Windows held an
+     *  exclusive lock on a file the link step needed to replace. The
+     *  canonical signature is the conda "failed to link" line plus the
+     *  Windows "os error 32" / "being used by another process" wording.
+     *  Distinct from looksLikeStaleEnv -- this is a transient OS-level
+     *  failure, not a structural env corruption. Do NOT auto-wipe (the
+     *  blocking process may still be writing to the env). */
+    private static boolean looksLikeWindowsFileLock(String message) {
+        if (message == null) return false;
+        String m = message;
+        boolean linkFailure = m.contains("failed to link");
+        boolean processBlock = m.contains("os error 32")
+                || m.contains("being used by another process");
+        return linkFailure && processBlock;
     }
 
     /** Best-effort delete of .pixi/ + pixi.lock so the next QuPath launch

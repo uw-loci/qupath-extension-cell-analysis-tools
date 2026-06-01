@@ -30,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -328,6 +329,21 @@ public class ClusteringWorkflow {
         // Apply results back per-image and save
         report(progressCallback, "Applying results to project images...");
         ResultApplier applier = new ResultApplier();
+
+        // D1 note (v0.3.4): the project path builds a single global spatial
+        // graph over concatenated per-image coordinates. v0.3.4 fixes the
+        // per-cell numNeighbors + distance aggregates to recompute per-image
+        // from the sliced edges, but triangle areas and connected-component
+        // labels are still global-graph artefacts. The overlay PathObjectConnections
+        // per-image only show the in-segment edges, so visual results match
+        // the corrected aggregates. Document in CHANGELOG; no runtime dialog.
+        if (result.hasSpatialGraphPayload()
+                && extraction.getImageSegments() != null
+                && extraction.getImageSegments().size() > 1) {
+            logger.info("Multi-image clustering: per-cell aggregates will be recomputed"
+                    + " per-image from sliced edges. Triangle areas + component labels"
+                    + " stay global-graph values.");
+        }
 
         for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
             int start = segment.getStartIndex();
@@ -3126,6 +3142,19 @@ public class ClusteringWorkflow {
         if (imageData == null || detections == null || payload == null) return;
         int n = detections.size();
 
+        // D1 (v0.3.4): when the payload came from SpatialGraphPayload.slice
+        // (project / multi-image path), per-cell aggregates were
+        // intentionally left null because the global values include
+        // phantom cross-image neighbours. Recompute them from the sliced
+        // edge COO + this image's centroids + this image's pixel
+        // calibration. Triangle areas stay null on multi-image (would
+        // require per-image Delaunay re-triangulation).
+        if (config.isWriteNodeMeasurements()
+                && payload.hasEdgeCoo()
+                && !payload.hasNodeMeasurements()) {
+            recomputeNodeAggregatesFromEdges(imageData, detections, payload);
+        }
+
         // 1. Per-cell node measurements
         if (config.isWriteNodeMeasurements() && payload.hasNodeMeasurements()) {
             writeNodeMeasurements(detections, payload);
@@ -3244,6 +3273,99 @@ public class ClusteringWorkflow {
         if (Double.isFinite(v)) {
             ml.put(name, v);
         }
+    }
+
+    /**
+     * D1 fix (v0.3.4): recompute per-cell aggregates from the sliced
+     * edge COO of a multi-image-clustering payload, using this image's
+     * own centroids and pixel calibration. Mutates the payload in place
+     * (writes numNeighbors + meanDistance/medianDistance/maxDistance/
+     * minDistance). Triangle areas remain null on the multi-image
+     * path -- recomputing them would require re-running the Delaunay
+     * triangulation per-image, which is deferred to a future release.
+     *
+     * <p>Distance scaling matches the global path: microns when the
+     * image has pixel calibration, pixels otherwise.</p>
+     */
+    private void recomputeNodeAggregatesFromEdges(
+            ImageData<BufferedImage> imageData,
+            List<PathObject> detections,
+            ClusteringResult.SpatialGraphPayload payload) {
+        int n = detections.size();
+        if (n == 0) return;
+        long[] er = payload.getEdgeRow();
+        long[] ec = payload.getEdgeCol();
+        if (er == null || ec == null) return;
+
+        double pxSizeUm = 1.0;
+        Double cal = readPixelSizeMicrons(imageData);
+        if (cal != null) pxSizeUm = cal;
+
+        // Cache centroids once.
+        double[] cx = new double[n];
+        double[] cy = new double[n];
+        for (int i = 0; i < n; i++) {
+            cx[i] = detections.get(i).getROI().getCentroidX();
+            cy[i] = detections.get(i).getROI().getCentroidY();
+        }
+
+        // Per-cell neighbour distance lists.
+        List<List<Double>> neighbours = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) neighbours.add(new ArrayList<>());
+        int nEdges = er.length;
+        for (int e = 0; e < nEdges; e++) {
+            int a = (int) er[e];
+            int b = (int) ec[e];
+            if (a < 0 || a >= n || b < 0 || b >= n) continue;
+            double dx = (cx[a] - cx[b]) * pxSizeUm;
+            double dy = (cy[a] - cy[b]) * pxSizeUm;
+            double d = Math.sqrt(dx * dx + dy * dy);
+            neighbours.get(a).add(d);
+            neighbours.get(b).add(d);
+        }
+
+        int[] numNeighbors = new int[n];
+        double[] meanD = new double[n];
+        double[] medianD = new double[n];
+        double[] maxD = new double[n];
+        double[] minD = new double[n];
+        for (int i = 0; i < n; i++) {
+            List<Double> dl = neighbours.get(i);
+            int k = dl.size();
+            numNeighbors[i] = k;
+            if (k == 0) {
+                meanD[i] = Double.NaN;
+                medianD[i] = Double.NaN;
+                maxD[i] = Double.NaN;
+                minD[i] = Double.NaN;
+                continue;
+            }
+            double sum = 0;
+            double mn = Double.POSITIVE_INFINITY;
+            double mx = Double.NEGATIVE_INFINITY;
+            for (double v : dl) {
+                sum += v;
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+            }
+            meanD[i] = sum / k;
+            maxD[i] = mx;
+            minD[i] = mn;
+            // Median: sort the (small) per-cell list.
+            Collections.sort(dl);
+            if (k % 2 == 1) {
+                medianD[i] = dl.get(k / 2);
+            } else {
+                medianD[i] = (dl.get(k / 2 - 1) + dl.get(k / 2)) / 2.0;
+            }
+        }
+        payload.setNumNeighbors(numNeighbors);
+        payload.setMeanDistance(meanD);
+        payload.setMedianDistance(medianD);
+        payload.setMaxDistance(maxD);
+        payload.setMinDistance(minD);
+        logger.info("D1 recompute: per-cell aggregates rebuilt for {} cells from {} sliced edges",
+                n, nEdges);
     }
 
     /**

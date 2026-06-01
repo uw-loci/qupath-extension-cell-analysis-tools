@@ -4,6 +4,22 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.4] -- 2026-05-31
+
+Patch release. Closes the D1 known-limitation from v0.3.0 (project-clustering produced cross-image phantom neighbour counts in per-cell measurements) and adds a Windows file-lock detector that gives the user actionable recovery steps instead of a raw `pixi build failed` stack trace.
+
+### Fixed
+
+- **D1: project clustering per-cell aggregates were global, not per-image.** `MeasurementExtractor.extractMultiImage` concatenates per-image pixel coordinates into a single global array, so a cell at (100, 100) in image A and a cell at (100, 100) in image B became spatial neighbours in the global Delaunay / kNN graph. `SpatialGraphPayload.slice` correctly dropped cross-image *edges*, so the rendered overlay was always per-image-correct, but the per-cell `QPCAT spatial: Num neighbors` and `Mean / Median / Max / Min distance` were copied verbatim from the global aggregates -- they included the phantom edges. Fix: `slice()` now leaves per-cell aggregates null (with a Javadoc note explaining why), and `applySpatialGraphPayload` recomputes them per-image from the sliced edge COO + this image's centroids + this image's pixel calibration. Triangle areas (Delaunay-only) and component labels remain global-graph values on multi-image runs -- recomputing triangle areas would require per-image Delaunay re-triangulation, which is deferred to a future release. Single-image clustering is unchanged (bypasses `slice` entirely).
+
+### Added
+
+- **Windows file-lock recovery instructions when the Pixi build fails with `os error 32`.** Distinct failure mode from the `pkg_resources` / `xarray_schema` family v0.3.2 self-heals: Pixi cannot replace a file inside `.pixi/envs/default/Library/share/proj/proj.db` (or any other DB / SQLite file in the env) because another process is holding it open. Common causes: an orphan Java/Python process from the prior QuPath session, antivirus scanning the file, or an interrupted previous install. v0.3.4 detects the canonical "failed to link" + "os error 32" / "being used by another process" signature and emits a six-step PowerShell recovery script to the log + a short notification pointing at it. Does NOT auto-wipe -- the blocking process may still be writing to the env, and a mid-install wipe risks corruption.
+
+### Notes
+
+D1 fix is fully transparent: existing projects pick up correct per-cell aggregates on the next clustering run; no rerun-from-scratch needed unless you saved out measurements you want to recompute. The CHANGELOG known-limitation entry for D1 in v0.3.0 is now closed.
+
 ## [0.3.3] -- 2026-05-29
 
 Patch release. Adds a one-click way to wipe the spatial-graph overlay from the current image.
