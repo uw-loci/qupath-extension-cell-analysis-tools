@@ -83,6 +83,8 @@ Full clustering with all configuration options.
 9. Click **Run Clustering**
 10. View results in the results dialog (heatmap, scatter plot, marker rankings, plots)
 
+![Clustering results dialog showing the cluster-by-marker heatmap, with tabs for UMAP, marker rankings, dotplot, matrix plot, PAGA trajectory, stacked violin, and embedding plot](images/cluster-marker-heatmap.png)
+
 ### What happens to your data:
 
 - Each detection gets a **PathClass** classification like "Cluster 0", "Cluster 1", etc.
@@ -142,6 +144,9 @@ Add UMAP/PCA/t-SNE coordinates to detections without changing existing classific
 1. **Extensions > QP-CAT > Compute Embedding Only...**
 2. Select measurements and normalization
 3. Choose embedding method (UMAP recommended)
+
+![Dimensionality Reduction section with the Method dropdown open, showing UMAP, PCA, t-SNE, and None options](images/embedding-method-dropdown.png)
+
 4. Set parameters:
    - **n_neighbors** (2-200, default 15): larger = more global structure
    - **min_dist** (0.0-1.0, default 0.1): smaller = tighter clusters in the plot
@@ -457,6 +462,8 @@ Changes are applied immediately to detection objects.
 ## 12. [TEST] Autoencoder Cell Classifier
 
 Train a VAE-based classifier on labeled cells, then apply across the project. This is a **test feature**.
+
+![Autoencoder Cell Classifier dialog showing object-type and label-source options, per-class training images, input data settings, and training parameters, with a pie chart of labeled-cell class balance](images/autoencoder-classifier-dialog.png)
 
 ### Training
 
