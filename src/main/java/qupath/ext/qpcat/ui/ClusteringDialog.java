@@ -45,6 +45,12 @@ public class ClusteringDialog {
             "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
             + "blob/main/documentation/HOW_TO_GUIDE.md";
 
+    /** Base URL for BEST_PRACTICES.md; the clustering "Learn more" links append
+     *  a per-method anchor (e.g. #caution-gmm) defined in that doc. */
+    private static final String BEST_PRACTICES_BASE =
+            "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
+            + "blob/main/documentation/BEST_PRACTICES.md";
+
     private final QuPathGUI qupath;
     private final Stage owner;
 
@@ -299,7 +305,7 @@ public class ClusteringDialog {
                 + "  KMeans - centroid-based, requires k (Lloyd 1982)\n"
                 + "  HDBSCAN - density-based, auto-detects + noise (Campello et al. 2013)\n"
                 + "  Agglomerative - hierarchical, requires k\n"
-                + "  GMM - Gaussian mixture model, soft clustering\n"
+                + "  GMM - Gaussian mixture, elliptical clusters, hard labels\n"
                 + "  BANKSY - spatially-aware (Singhal et al. 2024, Nature Genetics)\n"
                 + "  None - embedding only, no clustering\n"
                 + "See documentation/REFERENCES.md for full citations."));
@@ -393,11 +399,50 @@ public class ClusteringDialog {
         HBox algoRow = new HBox(10, tipLabel("Algorithm:", algorithmCombo), algorithmCombo);
         algoRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(5, algoRow, algorithmParamsBox);
+        VBox box = new VBox(5, createClusteringWarningBanner(), algoRow, algorithmParamsBox);
         TitledPane pane = new TitledPane("Clustering Algorithm", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
         return pane;
+    }
+
+    /** Global, method-agnostic caution shown above the algorithm picker. A
+     *  cluster label is a hypothesis: every algorithm here hard-assigns each
+     *  cell to one cluster and QP-CAT does not export soft/continuous
+     *  membership, so gradients must be probed by re-running and reading the
+     *  heatmap. See BEST_PRACTICES.md#cluster-labels-are-hypotheses. */
+    private VBox createClusteringWarningBanner() {
+        Label warn = new Label(
+                "A cluster label is a hypothesis, not a measured cell type. Every method here "
+                + "assigns each cell to exactly one cluster, which hides gradients (e.g. EMT). "
+                + "QP-CAT does not export soft/continuous membership, so to probe gradients and "
+                + "trust a result: re-run with different seeds and parameters, confirm boundary "
+                + "cells stay put, and read the marker heatmap rather than a single labeling.");
+        warn.setWrapText(true);
+        warn.setMaxWidth(520);
+        warn.setStyle("-fx-font-size: 11px; -fx-text-fill: #6b4e00; "
+                + "-fx-background-color: #fff8e1; -fx-padding: 8; "
+                + "-fx-border-color: #e0c060; -fx-border-width: 1;");
+        Hyperlink learn = new Hyperlink("Learn more");
+        styleGuideHyperlink(learn);
+        learn.setOnAction(e -> QuPathGUI.openInBrowser(
+                BEST_PRACTICES_BASE + "#cluster-labels-are-hypotheses"));
+        return new VBox(2, warn, learn);
+    }
+
+    /** Append a per-method info box (code-accurate caution + a "Learn more"
+     *  link into BEST_PRACTICES.md) to the algorithm parameter box. */
+    private void addMethodInfo(String text, String anchor) {
+        Label info = new Label(text);
+        info.setWrapText(true);
+        info.setMaxWidth(520);
+        info.setStyle("-fx-font-size: 11px; -fx-text-fill: #444; "
+                + "-fx-background-color: #f5f5f0; -fx-padding: 6; "
+                + "-fx-border-color: #ddd; -fx-border-width: 1;");
+        Hyperlink learn = new Hyperlink("Learn more");
+        styleGuideHyperlink(learn);
+        learn.setOnAction(e -> QuPathGUI.openInBrowser(BEST_PRACTICES_BASE + "#" + anchor));
+        algorithmParamsBox.getChildren().add(new VBox(2, info, learn));
     }
 
     private VBox createAnalysisSection() {
@@ -1007,18 +1052,47 @@ public class ClusteringDialog {
                         tipLabel("resolution:", leidenResolutionSpinner), leidenResolutionSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                addMethodInfo(
+                        "Builds a neighbour graph and splits it into connected communities; "
+                        + "scales to millions of cells and does not need k. Assigns each cell to "
+                        + "exactly one community, so it cannot express gradients. There is no "
+                        + "single correct resolution - sweep it; n_neighbors matters as much.",
+                        "caution-leiden");
             }
             case KMEANS, MINIBATCHKMEANS -> {
                 HBox row = new HBox(10,
                         tipLabel("n_clusters:", kmeansClusterSpinner), kmeansClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                if (algo == Algorithm.MINIBATCHKMEANS) {
+                    addMethodInfo(
+                            "Approximates KMeans on small random batches: much faster, slightly "
+                            + "noisier boundaries. Same caveats as KMeans (you set k; round, "
+                            + "equal-size clusters; hard labels). Confirm important clusters with "
+                            + "a full KMeans run.",
+                            "caution-minibatch-kmeans");
+                } else {
+                    addMethodInfo(
+                            "Partitions cells into k clusters around centroids. Fast, but assumes "
+                            + "round, equal-size clusters and is sensitive to initialisation "
+                            + "(QP-CAT runs 10 inits). Choose k with elbow/silhouette/gap methods "
+                            + "and expect them to disagree; re-run with different seeds to confirm "
+                            + "stability.",
+                            "caution-kmeans");
+                }
             }
             case HDBSCAN -> {
                 HBox row = new HBox(10,
                         tipLabel("min_cluster_size:", hdbscanMinClusterSpinner), hdbscanMinClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                addMethodInfo(
+                        "Finds clusters as dense regions; needs neither k nor a distance "
+                        + "threshold. Low-density cells are kept in a separate noise cluster (not "
+                        + "discarded) - inspect them, since transitional cells often land there. "
+                        + "Sweep min_cluster_size; reduce dimensionality first, as density "
+                        + "estimates weaken in high dimensions.",
+                        "caution-hdbscan");
             }
             case AGGLOMERATIVE -> {
                 HBox row = new HBox(10,
@@ -1026,12 +1100,26 @@ public class ClusteringDialog {
                         tipLabel("linkage:", aggLinkageCombo), aggLinkageCombo);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                addMethodInfo(
+                        "Merges the most similar cells into a dendrogram you cut at k clusters. "
+                        + "Results depend strongly on the linkage rule and distance metric (Ward "
+                        + "+ Euclidean is a safe default); justify your choice. O(n^2), so "
+                        + "subsample very large datasets; merges are greedy and never undone.",
+                        "caution-agglomerative");
             }
             case GMM -> {
                 HBox row = new HBox(10,
                         tipLabel("n_components:", kmeansClusterSpinner), kmeansClusterSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                addMethodInfo(
+                        "Fits elliptical, unequal-size clusters that defeat KMeans, so it helps "
+                        + "when populations overlap. In QP-CAT it assigns each cell to its "
+                        + "most-likely component as a HARD label - it does not export "
+                        + "per-component probabilities, so it cannot represent 'partly A, partly "
+                        + "B'. You set n_components directly (not chosen by BIC/AIC). Transform "
+                        + "skewed markers first (e.g. arcsinh via Normalization).",
+                        "caution-gmm");
             }
             case BANKSY -> {
                 HBox row1 = new HBox(10,
@@ -1044,6 +1132,13 @@ public class ClusteringDialog {
                 Label note = new Label("Uses cell centroid coordinates for spatially-aware clustering");
                 note.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
                 algorithmParamsBox.getChildren().addAll(row1, row2, note);
+                addMethodInfo(
+                        "Augments each cell with a summary of its spatial neighbourhood, then "
+                        + "clusters - unifying cell typing and tissue-domain detection. lambda "
+                        + "trades 'cell type' vs 'tissue domain' emphasis; over-weighting the "
+                        + "spatial term smooths away true boundaries. Needs accurate coordinates "
+                        + "and is still a hard partition.",
+                        "caution-banksy");
             }
         }
     }

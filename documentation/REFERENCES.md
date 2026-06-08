@@ -34,6 +34,10 @@ Classic centroid-based partitioning algorithm.
 > Arthur D, Vassilvitskii S. "k-means++: The Advantages of Careful Seeding." *Proceedings of the 18th Annual ACM-SIAM Symposium on Discrete Algorithms (SODA)*, 1027-1035 (2007).
 > http://ilpubs.stanford.edu:8090/778/
 
+**Choosing the number of clusters (elbow/silhouette/gap, and why they disagree):**
+> Fu W, Perry PO. "Estimating the number of clusters using cross-validation." (2017).
+> https://doi.org/10.1080/10618600.2016.1158738
+
 **Used in:** Clustering Dialog (KMeans, MiniBatch KMeans algorithms)
 
 ---
@@ -66,6 +70,19 @@ Probabilistic clustering assuming data is generated from a mixture of Gaussian d
 > McLachlan GJ, Peel D. *Finite Mixture Models.* Wiley Series in Probability and Statistics. John Wiley & Sons (2000).
 > https://doi.org/10.1002/0471721182
 
+**Model-based clustering / choosing the number of components (mclust):**
+> Scrucca L, Fop M, Murphy TB, Raftery AE. "mclust 5: Clustering, Classification and Density Estimation Using Gaussian Finite Mixture Models." *The R Journal* 8(1), 289-317 (2016).
+> https://doi.org/10.32614/RJ-2016-021
+
+**Merging mixture components into clusters (BIC/AIC over-counts biological clusters):**
+> Baudry J-P, Raftery AE, Celeux G, Lo K, Gottardo R. "Combining Mixture Components for Clustering." *Journal of Computational and Graphical Statistics* 19(2), 332-353 (2010).
+> https://doi.org/10.1198/jcgs.2010.08111
+
+> Note: QP-CAT's GMM assigns each cell to its most-likely component as a HARD label
+> (`run_clustering.py` calls `GaussianMixture.fit_predict`); it does not export per-component
+> probabilities, and `n_components` is set by the user (not chosen by BIC/AIC). The mclust /
+> Baudry references describe model-based component selection and merging in general.
+
 **Used in:** Clustering Dialog (GMM algorithm), Auto-thresholding (2-component GMM for gate estimation)
 
 ---
@@ -77,6 +94,10 @@ Bottom-up hierarchical clustering with configurable linkage criteria.
 **Reference:**
 > Murtagh F, Contreras P. "Algorithms for hierarchical clustering: an overview." *WIREs Data Mining and Knowledge Discovery* 2(1), 86-97 (2012).
 > https://doi.org/10.1002/widm.53
+
+**Linkage choice and cluster validation:**
+> Gere A. "Recommendations for validating hierarchical clustering in consumer sensory projects." *Current Research in Food Science* 6, 100522 (2023).
+> https://doi.org/10.1016/j.crfs.2023.100522
 
 **Used in:** Clustering Dialog (Agglomerative algorithm)
 
@@ -230,6 +251,14 @@ Parameter-free planar triangulation connecting each cell to its geometric neighb
 
 **Foundational reference:**
 > Delaunay BN. "Sur la sphere vide." *Bulletin de l'Academie des Sciences de l'URSS, Classe des sciences mathematiques et naturelles* 6, 793-800 (1934).
+
+**Why cap Delaunay edges by distance (filtering spurious long edges):**
+> Moretti M, et al. "Nfinder: automatic inference of cell neighborhood in 2D and 3D using nuclear markers." *BMC Bioinformatics* 24, 230 (2023).
+> https://doi.org/10.1186/s12859-023-05284-2
+
+**k-NN graphs for continuous / differential-abundance analysis:**
+> Dann E, Henderson NC, Teichmann SA, Morgan MD, Marioni JC. "Differential abundance testing on single-cell data using k-nearest neighbor graphs." *Nature Biotechnology* (2021).
+> https://doi.org/10.1038/s41587-021-01033-z
 
 **Implementation:** `squidpy.gr.spatial_neighbors(coord_type="generic", delaunay=True)` with QP-CAT-side max-edge pruning.
 

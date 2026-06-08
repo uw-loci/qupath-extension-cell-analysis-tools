@@ -10,6 +10,7 @@ Recommendations for getting the best results from cell clustering and phenotypin
 2. [Measurement Selection](#measurement-selection)
 3. [Normalization](#normalization)
 4. [Choosing a Clustering Algorithm](#choosing-a-clustering-algorithm)
+   - [A cluster label is a hypothesis](#cluster-labels-are-hypotheses)
 5. [Spatial Feature Smoothing](#spatial-feature-smoothing)
 6. [Cluster Evaluation](#cluster-evaluation)
 7. [Foundation Model Features vs Channel Measurements](#foundation-model-features-vs-channel-measurements)
@@ -101,6 +102,82 @@ When switching normalization methods in the phenotyping dialog, your gate thresh
 
 ## Choosing a Clustering Algorithm
 
+<a name="cluster-labels-are-hypotheses"></a>
+### A cluster label is a hypothesis, not a measured cell type
+
+The number of clusters depends on the parameters you choose, and **every method in QP-CAT
+assigns each cell to exactly one cluster** -- which hides gradients (e.g. epithelial-mesenchymal
+transitions, EMT). QP-CAT clustering does **not** currently export soft or continuous membership
+(no per-cell probabilities or distance-to-centroid scores). So to probe graded biology and to
+trust a result:
+
+- **Re-run with different random seeds and parameters** and confirm that the boundary cells stay
+  put. If a cell jumps clusters between runs, its label is not reliable.
+- **Read the marker heatmap** (mean expression per cluster) rather than trusting a single
+  labeling -- it shows which markers actually separate the clusters.
+- Treat the labels as a starting hypothesis to validate, not a measured ground truth.
+
+> Planned: soft / continuous membership output (GMM `predict_proba`, KMeans distance-to-centroid)
+> is on the roadmap so gradients can be represented directly. Until it lands, the guidance above
+> is the way to detect them.
+
+### Method cautions and references
+
+Concise, code-accurate cautions per method (these mirror the in-dialog info boxes). Citations
+are in [REFERENCES.md](REFERENCES.md).
+
+<a name="caution-leiden"></a>
+**Leiden** -- Builds a neighbour graph and splits it into connected communities; scales to
+millions of cells and does not need k. Assigns each cell to exactly one community, so it cannot
+express gradients. There is no single correct **resolution** -- sweep it; the neighbour-graph
+`n_neighbors` matters as much. (Traag et al. 2019.)
+
+<a name="caution-kmeans"></a>
+**KMeans** -- Partitions cells into k clusters around centroids. Fast, but assumes round,
+equal-size clusters and is sensitive to initialisation (QP-CAT runs 10 inits). Choose k with the
+elbow/silhouette/gap methods and expect them to disagree; re-run with different seeds to confirm
+stability. (Fu & Perry 2017.)
+
+<a name="caution-minibatch-kmeans"></a>
+**MiniBatch KMeans** -- Approximates KMeans on small random batches: much faster, slightly
+noisier boundaries. Same caveats as KMeans (you set k; round/equal clusters; hard labels).
+Confirm important clusters with a full KMeans run.
+
+<a name="caution-agglomerative"></a>
+**Agglomerative (hierarchical)** -- Merges the most similar cells into a dendrogram you cut at k
+clusters. Results depend strongly on the **linkage rule and distance metric** (Ward + Euclidean
+is a safe default); justify your choice. It is O(n^2), so subsample very large datasets, and
+merges are greedy and never undone. (Gere 2023.)
+
+<a name="caution-hdbscan"></a>
+**HDBSCAN** -- Finds clusters as dense regions; needs neither k nor a distance threshold.
+Low-density cells are grouped into a separate **noise** cluster (in QP-CAT they are kept and
+labeled, not discarded) -- inspect them, since transitional cells often land there. Sweep
+`min_cluster_size`; reduce dimensionality first, as density estimates weaken in high dimensions.
+(McInnes & Healy 2017.)
+
+<a name="caution-gmm"></a>
+**Gaussian Mixture (GMM)** -- Fits elliptical, unequal-size clusters that defeat KMeans, so it
+helps when populations overlap. **In QP-CAT it assigns each cell to its most-likely component as
+a hard label** -- it does not currently export the per-component probabilities, so it cannot by
+itself represent "partly A, partly B". You set the number of components directly (it is not
+chosen by BIC/AIC). Transform skewed markers first (e.g. arcsinh via Normalization). (Scrucca et
+al. 2016; Baudry et al. 2010.)
+
+<a name="caution-banksy"></a>
+**BANKSY (spatially-aware)** -- Augments each cell with a summary of its spatial neighbourhood,
+then clusters -- unifying cell typing and tissue-domain detection. The **lambda** parameter
+trades "cell type" vs "tissue domain" emphasis; over-weighting the spatial term smooths away
+true boundaries. Needs accurate coordinates and is still a hard partition. (Singhal et al. 2024.)
+
+<a name="caution-spatial-graph"></a>
+**Spatial neighbour graph (k-NN / fixed-radius / Delaunay)** -- Spatial methods first build a
+graph of which cells are neighbours; this choice changes results as much as the clustering
+parameters. **Delaunay** is parameter-free but adds long spurious edges across gaps, so cap them
+with the max-edge control. **k-NN** adapts to local density but fixes neighbourhood size
+everywhere. **Fixed-radius** uses a real micron radius but over-connects dense regions. (Moretti
+et al. 2023; Dann et al. 2021.)
+
 ### Decision Tree
 
 ```
@@ -112,7 +189,7 @@ Do you know how many clusters to expect?
   +-- YES --> Is the number well-defined?
   |             |
   |             +-- YES --> KMeans or Agglomerative
-  |             +-- ROUGHLY --> GMM (allows soft boundaries)
+  |             +-- ROUGHLY --> GMM (elliptical/overlapping clusters; hard labels in QP-CAT)
   |
   +-- NO --> Is spatial location important?
                |
@@ -131,7 +208,7 @@ Do you know how many clusters to expect?
 | **KMeans** | Fast, simple, reproducible. Good when k is known. | Assumes spherical clusters. Sensitive to initialization. |
 | **HDBSCAN** | Detects arbitrary-shaped clusters. Identifies noise. | Can be slow on very large datasets. Sensitive to min_cluster_size. |
 | **Agglomerative** | Produces a hierarchy. Ward linkage works well. | Requires k. Computationally expensive for large n. |
-| **GMM** | Probabilistic (soft assignment). Flexible cluster shapes. | Assumes Gaussian distributions. Can be slow. |
+| **GMM** | Fits elliptical, unequal-size clusters; good for overlapping populations. | Assumes Gaussian markers (transform skewed ones first). In QP-CAT it outputs hard labels, not soft probabilities. Can be slow. |
 | **BANKSY** | Incorporates spatial context. Finds tissue domains. | Requires spatial coordinates. More parameters to tune. |
 
 ### Starting Points for Parameters
