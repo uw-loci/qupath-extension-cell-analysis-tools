@@ -849,7 +849,7 @@ Rule of thumb: **if the analysis appears in a paper, commit a YAML batch config 
 
 ```bash
 # One-time: extract the bundled script
-unzip -p ~/QuPath/v0.7/extensions/qupath-extension-cluster-analysis-tools-*.jar \
+unzip -p ~/QuPath/v0.7/extensions/qupath-extension-cell-analysis-tools-*.jar \
     qupath/ext/qpcat/scripts/batch/qpcat_batch.groovy \
     > /usr/local/share/qpcat/qpcat_batch.groovy
 
