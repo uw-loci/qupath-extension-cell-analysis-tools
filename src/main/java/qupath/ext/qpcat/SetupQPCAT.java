@@ -17,6 +17,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.ui.BugReportDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
@@ -372,6 +373,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         SeparatorMenuItem sep3 = new SeparatorMenuItem();
         sep3.visibleProperty().bind(environmentReady);
 
+        // Report a Bug (always available -- files a GitHub issue via the shared
+        // Cloudflare Worker; no GitHub account needed from the user)
+        MenuItem reportBugItem = new MenuItem("Report a Bug...");
+        reportBugItem.setOnAction(e -> BugReportDialog.show());
+
         extensionMenu.getItems().addAll(
                 setupItem,
                 setupSeparator,
@@ -389,7 +395,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 viewResultsItem,
                 exportAnnDataItem,
                 exportFiguresItem,
-                utilitiesMenu
+                utilitiesMenu,
+                new SeparatorMenuItem(),
+                reportBugItem
         );
 
         logger.info("Menu items added for extension: {}", EXTENSION_NAME);

@@ -441,6 +441,18 @@ public class OperationLogger {
         }
     }
 
+    /**
+     * Returns today's QP-CAT operation-log file if it exists on disk, for the
+     * in-app bug reporter. Returns null when no project is set or nothing has
+     * been logged yet.
+     *
+     * @return the current log file path, or null
+     */
+    public Path getExistingLogFile() {
+        Path file = resolveLogFile();
+        return (file != null && Files.isRegularFile(file)) ? file : null;
+    }
+
     private void appendToFile(Path logFile, String text) {
         try (BufferedWriter writer = Files.newBufferedWriter(logFile,
                 StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
