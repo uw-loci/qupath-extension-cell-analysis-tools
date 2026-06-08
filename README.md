@@ -1,0 +1,1 @@
+# Bug attachment storage. Holds image attachments from the in-app bug reporter.
