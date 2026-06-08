@@ -15,6 +15,7 @@ import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -1588,6 +1589,14 @@ public class ClusteringDialog {
 
         if (embName == null) embName = "Embedding";
 
+        // Shared crop reader for plot-click previews + the representative gallery.
+        // Only created when we can navigate (project image references present).
+        final CellCropService cropService = (qupath != null && result.hasCellRefs())
+                ? new CellCropService(qupath) : null;
+        if (cropService != null) {
+            dialog.setOnHidden(ev -> cropService.close());
+        }
+
         TabPane tabPane = new TabPane();
 
         // Interactive heatmap tab (cluster-marker means)
@@ -1629,14 +1638,39 @@ public class ClusteringDialog {
             EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
             scatter.setData(result.getEmbedding(), result.getClusterLabels(),
                     result.getNClusters(), embName);
+            // Wire plot-click navigation + crop preview when references exist.
+            if (cropService != null) {
+                scatter.setNavigation(result.getCellRefs(), qupath, cropService);
+            }
             Tab tab = new Tab(embName, wrapWithGuide(scatter,
                     "Each point is one cell, colored by cluster assignment. "
                     + "Cells close together have similar marker expression profiles.\n"
                     + "Well-separated groups indicate distinct cell populations. "
-                    + "Scroll to zoom, drag to pan, hover for cell details.\n"
+                    + "Scroll to zoom, middle-drag to pan, hover for details; click a point "
+                    + "to preview its cell, double-click to open the image and center on it.\n"
                     + "Note: distances within a group are meaningful, but absolute "
                     + "distances between groups should be interpreted cautiously.",
                     "embedding-tab-interactive"));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        // Representative cells gallery tab -- per-cluster montage of medoid +
+        // nearest cells. Needs both the representative indices (from Python) and
+        // the per-cell references (to crop / navigate).
+        if (result.hasRepresentatives() && cropService != null) {
+            RepresentativeGalleryPanel gallery =
+                    new RepresentativeGalleryPanel(result, qupath, cropService);
+            Tab tab = new Tab("Representative cells", wrapWithGuide(gallery,
+                    "Image crops of the most representative cells per cluster -- the medoid "
+                    + "(outlined) is the real cell closest to the cluster center, followed by "
+                    + "its nearest neighbors.\n"
+                    + "Switch between feature-space and embedding-space centers; adjust the crop "
+                    + "size (a multiple of each cell's bounding box). Click a crop to open its "
+                    + "image and center on the cell; Save montages writes one PNG per cluster.\n"
+                    + "A representative cell is typical, not 'pure' -- overlapping clusters share "
+                    + "borderline cells near their centers.",
+                    "representative-cells-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }

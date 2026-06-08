@@ -33,6 +33,15 @@ public class SavedClusteringResult {
     private String[] pagaClusterNames;
     private Map<String, String> plotPaths;   // relative to result directory
 
+    // Plot-click navigation + representative crops (optional; null on older saves).
+    // Parallel, index-aligned with clusterLabels. Image NAME is not persisted --
+    // it is looked up from the project by id at navigate time.
+    private String[] cellImageIds;
+    private double[] cellX;
+    private double[] cellY;
+    private double[] cellBboxHalf;
+    private String representativesJson;
+
     // Spatial analysis
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
@@ -101,6 +110,22 @@ public class SavedClusteringResult {
     public Map<String, String> getPlotPaths() { return plotPaths; }
     public void setPlotPaths(Map<String, String> paths) { this.plotPaths = paths; }
 
+    // --- Plot-click navigation + representatives ---
+    public String[] getCellImageIds() { return cellImageIds; }
+    public void setCellImageIds(String[] v) { this.cellImageIds = v; }
+
+    public double[] getCellX() { return cellX; }
+    public void setCellX(double[] v) { this.cellX = v; }
+
+    public double[] getCellY() { return cellY; }
+    public void setCellY(double[] v) { this.cellY = v; }
+
+    public double[] getCellBboxHalf() { return cellBboxHalf; }
+    public void setCellBboxHalf(double[] v) { this.cellBboxHalf = v; }
+
+    public String getRepresentativesJson() { return representativesJson; }
+    public void setRepresentativesJson(String json) { this.representativesJson = json; }
+
     // --- Spatial ---
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }
     public void setNhoodEnrichment(double[][] m) { this.nhoodEnrichment = m; }
@@ -164,6 +189,27 @@ public class SavedClusteringResult {
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
 
+        // Plot-click navigation + representative crops.
+        saved.setRepresentativesJson(result.getRepresentativesJson());
+        CellRef[] refs = result.getCellRefs();
+        if (refs != null && refs.length > 0) {
+            String[] ids = new String[refs.length];
+            double[] xs = new double[refs.length];
+            double[] ys = new double[refs.length];
+            double[] halves = new double[refs.length];
+            for (int i = 0; i < refs.length; i++) {
+                CellRef r = refs[i];
+                ids[i] = r != null ? r.getImageId() : null;
+                xs[i] = r != null ? r.getX() : 0;
+                ys[i] = r != null ? r.getY() : 0;
+                halves[i] = r != null ? r.getBboxHalf() : 0;
+            }
+            saved.setCellImageIds(ids);
+            saved.setCellX(xs);
+            saved.setCellY(ys);
+            saved.setCellBboxHalf(halves);
+        }
+
         // Spatial stats expansion (v1) -- bundle only set when at least one
         // statistic ran. Older code paths leave this null and the result
         // saves identically to pre-v1.
@@ -198,6 +244,19 @@ public class SavedClusteringResult {
         result.setNhoodEnrichment(nhoodEnrichment);
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
+
+        // Plot-click navigation + representative crops (null on older saves).
+        result.setRepresentativesJson(representativesJson);
+        if (cellImageIds != null && cellX != null && cellY != null) {
+            int n = cellImageIds.length;
+            CellRef[] refs = new CellRef[n];
+            for (int i = 0; i < n; i++) {
+                double half = (cellBboxHalf != null && cellBboxHalf.length == n) ? cellBboxHalf[i] : 0;
+                // Image name is not persisted -- looked up by id at navigate time.
+                refs[i] = new CellRef(cellImageIds[i], null, cellX[i], cellY[i], half);
+            }
+            result.setCellRefs(refs);
+        }
 
         // Spatial stats expansion (v1) -- absent on older saves; the
         // hasAnySpatialStats() check on the ClusteringResult guards the

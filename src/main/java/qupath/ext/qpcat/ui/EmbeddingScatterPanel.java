@@ -1,10 +1,15 @@
 package qupath.ext.qpcat.ui;
 
+import javafx.application.Platform;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.VBox;
@@ -12,6 +17,12 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
+import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.service.CellCropService;
+import qupath.ext.qpcat.service.ViewerNavigator;
+import qupath.lib.gui.QuPathGUI;
+
+import java.awt.image.BufferedImage;
 
 /**
  * Interactive JavaFX scatter plot of embedding coordinates colored by cluster.
@@ -52,13 +63,25 @@ public class EmbeddingScatterPanel extends VBox {
     private final Canvas canvas;
     private final Label titleLabel;
     private final Label statsLabel;
+    private final Label helpLabel;
     private final Tooltip tooltip;
+    private final ImageView previewView;
+    private final Label previewLabel;
 
     private double[][] embedding;
     private int[] labels;
     private int nClusters;
     private int nCells;
     private String embeddingName = "Embedding";
+
+    // Optional navigation wiring (null = plot stays display-only, as before).
+    private CellRef[] cellRefs;
+    private QuPathGUI qupath;
+    private CellCropService cropService;
+    private double cropScale = CellCropService.DEFAULT_CROP_SCALE;
+    private int selectedIndex = -1;
+    // Monotonic token so a slow crop read for an old click is discarded.
+    private long previewToken = 0;
 
     // View transform
     private double viewMinX, viewMaxX, viewMinY, viewMaxY;
@@ -88,11 +111,48 @@ public class EmbeddingScatterPanel extends VBox {
         canvas.setOnMouseDragged(this::onMouseDragged);
         canvas.setOnMouseReleased(this::onMouseReleased);
         canvas.setOnMouseMoved(this::onMouseMoved);
+        canvas.setOnMouseClicked(this::onMouseClicked);
 
-        Label helpLabel = new Label("Scroll to zoom, drag to pan");
+        helpLabel = new Label("Scroll to zoom, drag to pan");
         helpLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #999;");
 
-        getChildren().addAll(titleLabel, canvas, statsLabel, helpLabel);
+        // Crop preview (hidden until navigation is wired + a point is clicked).
+        previewLabel = new Label();
+        previewLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
+        previewLabel.setVisible(false);
+        previewView = new ImageView();
+        previewView.setPreserveRatio(true);
+        previewView.setFitWidth(160);
+        previewView.setFitHeight(160);
+        previewView.setVisible(false);
+
+        getChildren().addAll(titleLabel, canvas, statsLabel, helpLabel, previewLabel, previewView);
+    }
+
+    /**
+     * Enable click-to-navigate + crop preview. When wired, single-click selects
+     * the nearest cell (rings it, selects it in the hierarchy if its image is
+     * open, loads a crop preview) and double-click opens the image and centers
+     * the field of view on it. Index-aligned with the {@code embedding}/
+     * {@code labels} passed to {@link #setData}.
+     *
+     * @param cellRefs    per-cell back-references (may be null to stay display-only)
+     * @param qupath      the QuPath GUI instance
+     * @param cropService shared crop reader (owned by the dialog; not closed here)
+     */
+    public void setNavigation(CellRef[] cellRefs, QuPathGUI qupath, CellCropService cropService) {
+        this.cellRefs = cellRefs;
+        this.qupath = qupath;
+        this.cropService = cropService;
+        boolean enabled = cellRefs != null && qupath != null;
+        helpLabel.setText(enabled
+                ? "Scroll zoom, middle-drag pan, click to preview, double-click to go to cell"
+                : "Scroll to zoom, drag to pan");
+    }
+
+    /** Crop window size as a multiple of each cell's bounding box. */
+    public void setCropScale(double cropScale) {
+        this.cropScale = cropScale;
     }
 
     /**
@@ -177,6 +237,17 @@ public class EmbeddingScatterPanel extends VBox {
             gc.fillOval(px - r, py - r, r * 2, r * 2);
         }
 
+        // Selection ring around the clicked point
+        if (selectedIndex >= 0 && selectedIndex < nCells) {
+            double sx = MARGIN + ((embedding[selectedIndex][0] - viewMinX) / rangeX) * plotW;
+            double sy = MARGIN + ((embedding[selectedIndex][1] - viewMinY) / rangeY) * plotH;
+            if (sx >= MARGIN && sx <= CANVAS_W - MARGIN && sy >= MARGIN && sy <= CANVAS_H - MARGIN) {
+                gc.setStroke(Color.BLACK);
+                gc.setLineWidth(2);
+                gc.strokeOval(sx - 6, sy - 6, 12, 12);
+            }
+        }
+
         // Axes
         gc.setStroke(Color.BLACK);
         gc.setLineWidth(1);
@@ -230,6 +301,11 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     private Color clusterColor(int cluster) {
+        return clusterColorFor(cluster);
+    }
+
+    /** Shared cluster color, matching the scatter palette (numeric-id order). */
+    public static Color clusterColorFor(int cluster) {
         if (cluster < 0) return Color.LIGHTGRAY;
         return CLUSTER_COLORS[cluster % CLUSTER_COLORS.length];
     }
@@ -266,8 +342,14 @@ public class EmbeddingScatterPanel extends VBox {
         e.consume();
     }
 
-    // Pan
+    // Pan -- middle button when navigation is wired (left button stays free for
+    // selection); any button when display-only, preserving the original behavior.
     private void onMousePressed(MouseEvent e) {
+        boolean navWired = cellRefs != null && qupath != null;
+        if (navWired && e.getButton() != MouseButton.MIDDLE) {
+            dragging = false;
+            return;
+        }
         dragStartX = e.getX();
         dragStartY = e.getY();
         dragViewMinX = viewMinX;
@@ -304,24 +386,7 @@ public class EmbeddingScatterPanel extends VBox {
     private void onMouseMoved(MouseEvent e) {
         if (embedding == null) return;
 
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
-        double rangeX = viewMaxX - viewMinX;
-        double rangeY = viewMaxY - viewMinY;
-
-        // Find nearest point within 5 pixels
-        double bestDist = 25; // 5px squared
-        int bestIdx = -1;
-        for (int i = 0; i < nCells; i++) {
-            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
-            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
-            double dist = (px - e.getX()) * (px - e.getX()) + (py - e.getY()) * (py - e.getY());
-            if (dist < bestDist) {
-                bestDist = dist;
-                bestIdx = i;
-            }
-        }
-
+        int bestIdx = findNearestPointIndex(e.getX(), e.getY());
         if (bestIdx >= 0) {
             tooltip.setText(String.format("Cell %d | Cluster %d\n%s1=%.2f, %s2=%.2f",
                     bestIdx, labels[bestIdx],
@@ -330,5 +395,87 @@ public class EmbeddingScatterPanel extends VBox {
         } else {
             tooltip.setText("");
         }
+    }
+
+    /** Nearest plotted point to a canvas pixel, within a 5px radius; -1 if none. */
+    private int findNearestPointIndex(double mouseX, double mouseY) {
+        if (embedding == null) return -1;
+        double plotW = CANVAS_W - 2 * MARGIN;
+        double plotH = CANVAS_H - 2 * MARGIN;
+        double rangeX = viewMaxX - viewMinX;
+        double rangeY = viewMaxY - viewMinY;
+        if (rangeX == 0) rangeX = 1;
+        if (rangeY == 0) rangeY = 1;
+
+        double bestDist = 25; // 5px squared
+        int bestIdx = -1;
+        for (int i = 0; i < nCells; i++) {
+            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
+            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
+            double dist = (px - mouseX) * (px - mouseX) + (py - mouseY) * (py - mouseY);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
+    }
+
+    // Click: single = select + preview, double = navigate. Only active when
+    // navigation has been wired via setNavigation().
+    private void onMouseClicked(MouseEvent e) {
+        if (e.getButton() != MouseButton.PRIMARY) return;
+        if (cellRefs == null || qupath == null) return;
+
+        int idx = findNearestPointIndex(e.getX(), e.getY());
+        if (idx < 0 || idx >= cellRefs.length) return;
+        CellRef ref = cellRefs[idx];
+        if (ref == null) return;
+
+        if (e.getClickCount() >= 2) {
+            // Double-click: open the image and center the FoV on the cell.
+            ViewerNavigator.navigateToCell(qupath, ref.getImageId(), ref.getImageName(),
+                    ref.getX(), ref.getY());
+            return;
+        }
+
+        // Single-click: ring the point, select in hierarchy if image is open,
+        // and load a crop preview asynchronously.
+        selectedIndex = idx;
+        redraw();
+        ViewerNavigator.selectIfImageOpen(qupath, ref);
+        loadPreview(ref);
+    }
+
+    /** Read the cell's crop off the FX thread and show it when ready. */
+    private void loadPreview(CellRef ref) {
+        if (cropService == null) {
+            previewView.setVisible(false);
+            previewLabel.setVisible(false);
+            return;
+        }
+        final long token = ++previewToken;
+        previewLabel.setText("Loading crop...");
+        previewLabel.setVisible(true);
+        previewView.setVisible(false);
+
+        Thread t = new Thread(() -> {
+            BufferedImage crop = cropService.readCrop(ref, cropScale);
+            Image fx = (crop != null) ? SwingFXUtils.toFXImage(crop, null) : null;
+            Platform.runLater(() -> {
+                if (token != previewToken) return;  // superseded by a newer click
+                if (fx != null) {
+                    previewView.setImage(fx);
+                    previewView.setVisible(true);
+                    previewLabel.setText(String.format("Cell %d (cluster %d)",
+                            selectedIndex, labels[selectedIndex]));
+                } else {
+                    previewView.setVisible(false);
+                    previewLabel.setText("Crop unavailable");
+                }
+            });
+        }, "qpcat-scatter-crop");
+        t.setDaemon(true);
+        t.start();
     }
 }

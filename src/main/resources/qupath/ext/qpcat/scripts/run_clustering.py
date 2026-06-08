@@ -14,6 +14,7 @@ Optional inputs:
   generate_plots: bool (default False)
   output_dir: str (directory for plot images)
   top_n_markers: int (default 5)
+  n_representatives: int (default 5) -- top-K representative cells per cluster
   spatial_coords: NDArray (N_cells x 2, float64) -- cell XY centroids for spatial analysis
   enable_batch_correction: bool (default False)
   batch_labels: list[int] -- image index per cell for batch correction
@@ -478,6 +479,52 @@ df_norm["cluster"] = labels_shifted
 cluster_means = df_norm.groupby("cluster").mean(numeric_only=True).values
 
 logger.info("Clustering complete: %d clusters found", n_clusters_found)
+
+# 5b. Representative cells per cluster (medoids).
+# For each cluster, rank member cells by distance to the cluster center under
+# two definitions and emit the top-K indices (into the original cell order, so
+# the Java side maps them straight back to detections):
+#   feature   -- distance to the cluster mean in the normalized feature space
+#                (the same space cluster_stats lives in)
+#   embedding -- distance to the cluster mean in the 2D embedding (skipped when
+#                no embedding was computed)
+# The first index in each list is the medoid (closest to center).
+import json as _json_rep
+
+try:
+    rep_k = int(n_representatives)
+except (NameError, TypeError, ValueError):
+    rep_k = 5
+rep_k = max(1, rep_k)
+
+_feat_matrix = df_norm.drop(columns=["cluster"]).values
+representatives = {}
+for _c in range(n_clusters_found):
+    _members = np.where(labels_shifted == _c)[0]
+    if _members.size == 0:
+        representatives[str(_c)] = {"feature": [], "embedding": []}
+        continue
+
+    # Feature-space ranking (cluster_means row _c is the normalized centroid).
+    _fd = _feat_matrix[_members] - cluster_means[_c]
+    _fdist = np.einsum("ij,ij->i", _fd, _fd)  # squared L2; ordering only
+    _forder = _members[np.argsort(_fdist, kind="stable")][:rep_k]
+    feat_idx = [int(i) for i in _forder]
+
+    # Embedding-space ranking (optional).
+    emb_idx = []
+    if embedding_result is not None:
+        _ec = embedding_result[_members]
+        _ecenter = _ec.mean(axis=0)
+        _ed = _ec - _ecenter
+        _edist = np.einsum("ij,ij->i", _ed, _ed)
+        _eorder = _members[np.argsort(_edist, kind="stable")][:rep_k]
+        emb_idx = [int(i) for i in _eorder]
+
+    representatives[str(_c)] = {"feature": feat_idx, "embedding": emb_idx}
+
+task.outputs["representatives"] = _json_rep.dumps(representatives)
+logger.info("Representative cells computed: top %d per cluster", rep_k)
 
 # 6. Post-clustering analysis (marker ranking + PAGA)
 task.update("Analyzing clusters...", current=4, maximum=6)

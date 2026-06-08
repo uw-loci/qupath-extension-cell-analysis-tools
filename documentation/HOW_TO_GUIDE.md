@@ -974,9 +974,19 @@ Use this to identify which markers define each cluster and to guide cell-type an
 
 ### Embedding tab (interactive)
 
-Interactive scatter plot of cells in the chosen embedding (UMAP / PCA / t-SNE), colored by cluster. Scroll to zoom, drag to pan, hover for cell details.
+Interactive scatter plot of cells in the chosen embedding (UMAP / PCA / t-SNE), colored by cluster. Scroll to zoom, **middle-drag to pan**, hover for cell details.
+
+**Click a point** to select the nearest cell: a crop preview loads below the plot, and the cell is selected in the object hierarchy if its image is open. **Double-click a point** to open that cell's image (switching images if needed) and center the viewer's field of view on it. This closes the loop from an abstract embedding point back to the actual cell in the slide -- useful for ground-truthing boundary points and outliers.
 
 Distances within a cluster are meaningful (similar cells cluster together) but absolute distances between clusters should be interpreted cautiously -- embeddings preserve local topology, not global geometry.
+
+### Representative cells tab
+
+Per-cluster gallery of image crops of the most typical cells. For each cluster, cells are ranked by distance to the cluster center and the closest few are shown as thumbnails, with the **medoid** (the single closest real cell) outlined. Click any thumbnail to open its image and center on the cell. **Save montages** writes one horizontal PNG strip per cluster next to the other result plots (`<project>/qpcat/cluster_results/<name>_plots/cluster_<c>_representatives.png`).
+
+The **Center** dropdown chooses how "center" is defined: *Feature-space medoid* (default; nearest the cluster mean in the normalized measurement space the clustering used) or *Embedding-space medoid* (nearest the cluster's center in the 2D plot). The **Crop x bbox** spinner sets the crop window as a multiple of each cell's bounding box (default 3x), so cells fill a consistent fraction of every thumbnail regardless of magnification.
+
+A medoid is a real, observed cell -- not a synthetic prototype or an average image -- and "representative" means typical, not pure. Read these crops alongside the Heatmap and Marker Rankings tabs. See [Best Practices -> Representative Cells](BEST_PRACTICES.md#representative-cells).
 
 ### Marker Rankings tab
 

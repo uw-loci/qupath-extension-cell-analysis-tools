@@ -6,6 +6,7 @@ import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -189,6 +190,18 @@ public class ClusteringWorkflow {
             throw new IOException("Clustering failed: " + e.getMessage(), e);
         }
 
+        // Per-cell back-references for plot-click navigation + representative crops.
+        // Single-image run: segments carry no entry, so supply the open image's
+        // id (looked up from the project) + name as the fallback.
+        String fbName = imageData.getServer().getMetadata().getName();
+        String fbId = null;
+        var projectForRefs = qupath.getProject();
+        if (projectForRefs != null) {
+            var openEntry = projectForRefs.getEntry(imageData);
+            if (openEntry != null) fbId = openEntry.getID();
+        }
+        result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
+
         // Apply results back to QuPath
         report(progressCallback, "Applying results to QuPath...");
 
@@ -245,6 +258,37 @@ public class ClusteringWorkflow {
                 completeMsg, elapsed);
 
         return result;
+    }
+
+    /**
+     * Build per-cell back-references (image id/name + ROI centroid + bbox half-extent)
+     * index-aligned with the extraction's detection list. Walks the image segments so
+     * each cell is tagged with its source image. For single-image runs the segment
+     * carries no entry, so {@code fallbackId}/{@code fallbackName} (the open image)
+     * are used for every cell.
+     */
+    @SuppressWarnings("unchecked")
+    private CellRef[] buildCellRefs(MeasurementExtractor.ExtractionResult extraction,
+                                    String fallbackId, String fallbackName) {
+        List<PathObject> detections = extraction.getDetections();
+        CellRef[] refs = new CellRef[detections.size()];
+        for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+            String imageId = fallbackId;
+            String imageName = fallbackName;
+            Object entryObj = seg.getImageEntry();
+            if (entryObj instanceof ProjectImageEntry) {
+                ProjectImageEntry<BufferedImage> entry = (ProjectImageEntry<BufferedImage>) entryObj;
+                imageId = entry.getID();
+                imageName = entry.getImageName();
+            }
+            for (int i = seg.getStartIndex(); i < seg.getEndIndex(); i++) {
+                var roi = detections.get(i).getROI();
+                double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
+                refs[i] = new CellRef(imageId, imageName,
+                        roi.getCentroidX(), roi.getCentroidY(), half);
+            }
+        }
+        return refs;
     }
 
     /**
@@ -325,6 +369,10 @@ public class ClusteringWorkflow {
         } catch (Exception e) {
             throw new IOException("Clustering failed: " + e.getMessage(), e);
         }
+
+        // Per-cell back-references: multi-image segments each carry their own
+        // ProjectImageEntry, so no fallback id/name is needed.
+        result.setCellRefs(buildCellRefs(extraction, null, null));
 
         // Apply results back per-image and save
         report(progressCallback, "Applying results to project images...");
@@ -860,6 +908,13 @@ public class ClusteringWorkflow {
             if (task.outputs.containsKey("marker_rankings")) {
                 result.setMarkerRankingsJson((String) task.outputs.get("marker_rankings"));
                 logger.info("Received marker rankings for {} clusters", nClusters);
+            }
+
+            if (task.outputs.containsKey("representatives")) {
+                String repJson = (String) task.outputs.get("representatives");
+                result.setRepresentativesJson(repJson);
+                logger.info("Received representative-cell indices ({} chars)",
+                        repJson != null ? repJson.length() : 0);
             }
 
             if (task.outputs.containsKey("paga_connectivity")) {

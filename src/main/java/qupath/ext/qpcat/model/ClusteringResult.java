@@ -1,5 +1,9 @@
 package qupath.ext.qpcat.model;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -18,6 +22,18 @@ public class ClusteringResult {
     private double[][] pagaConnectivity;
     private String[] pagaClusterNames;
     private Map<String, String> plotPaths;
+
+    // Per-cell back-references (index-aligned with clusterLabels / embedding),
+    // used to navigate to / crop the cell. Transient on the live result; the
+    // persisted form reconstructs these from primitive arrays in
+    // SavedClusteringResult.
+    private CellRef[] cellRefs;
+
+    // Representative-cell indices per cluster, as returned by run_clustering.py.
+    // JSON shape: { "<cluster>": { "feature": [idx,...], "embedding": [idx,...] } }.
+    // Indices are into the same cell order as clusterLabels / cellRefs.
+    private String representativesJson;
+    private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
     public ClusteringResult(int[] clusterLabels, int nClusters, double[][] embedding,
                             double[][] clusterStats, String[] markerNames) {
@@ -49,6 +65,58 @@ public class ClusteringResult {
     public Map<String, String> getPlotPaths() { return plotPaths; }
     public void setPlotPaths(Map<String, String> paths) { this.plotPaths = paths; }
     public boolean hasPlots() { return plotPaths != null && !plotPaths.isEmpty(); }
+
+    // --- Per-cell back-references ---
+    public CellRef[] getCellRefs() { return cellRefs; }
+    public void setCellRefs(CellRef[] refs) { this.cellRefs = refs; }
+    public boolean hasCellRefs() { return cellRefs != null && cellRefs.length > 0; }
+
+    // --- Representative cells ---
+    public String getRepresentativesJson() { return representativesJson; }
+    public void setRepresentativesJson(String json) {
+        this.representativesJson = json;
+        this.representativesParsed = null;  // invalidate cache
+    }
+    public boolean hasRepresentatives() {
+        return representativesJson != null && !representativesJson.isBlank();
+    }
+
+    /**
+     * Representative-cell indices for one cluster under the requested space.
+     * The first index (when present) is the medoid.
+     *
+     * @param cluster   cluster id
+     * @param embedding true for embedding-space medoids, false for feature-space
+     * @return ordered cell indices (into clusterLabels / cellRefs); empty if none
+     */
+    public int[] getRepresentativeIndices(int cluster, boolean embedding) {
+        if (!hasRepresentatives()) return new int[0];
+        if (representativesParsed == null) {
+            try {
+                representativesParsed = new Gson().fromJson(representativesJson,
+                        new TypeToken<Map<String, Map<String, java.util.List<Double>>>>(){}.getType());
+            } catch (Exception e) {
+                representativesParsed = Collections.emptyMap();
+            }
+        }
+        Map<String, java.util.List<Double>> perCluster =
+                representativesParsed.get(String.valueOf(cluster));
+        if (perCluster == null) return new int[0];
+        java.util.List<Double> idx = perCluster.get(embedding ? "embedding" : "feature");
+        if (idx == null || idx.isEmpty()) return new int[0];
+        int[] out = new int[idx.size()];
+        for (int i = 0; i < out.length; i++) out[i] = (int) Math.round(idx.get(i));
+        return out;
+    }
+
+    /** True if embedding-space representatives are available for any cluster. */
+    public boolean hasEmbeddingRepresentatives() {
+        if (!hasEmbedding()) return false;
+        for (int c = 0; c < nClusters; c++) {
+            if (getRepresentativeIndices(c, true).length > 0) return true;
+        }
+        return false;
+    }
 
     // Spatial analysis results
     private double[][] nhoodEnrichment;

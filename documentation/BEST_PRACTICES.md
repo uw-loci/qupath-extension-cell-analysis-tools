@@ -278,6 +278,39 @@ After clustering, assess quality using the results dialog:
 - Clusters should form visually distinct groups in UMAP/t-SNE space
 - **Fragmented clusters** (same color scattered across the plot) may indicate poor clustering
 - **Overlapping clusters** may indicate too many clusters specified
+- **Click a point** to preview its cell (a crop loads below the plot) and select it in the
+  hierarchy if its image is open; **double-click** to open that cell's image and center the
+  field of view on it. Use this to ground-truth surprising points -- a cell sitting on a
+  cluster boundary, or an outlier far from its group -- by looking at the actual pixels.
+- Pan with a **middle-drag** (left-click is reserved for selection); scroll to zoom.
+
+### Representative Cells
+
+The **Representative cells** tab shows image crops of the most typical cells in each cluster.
+For each cluster, cells are ranked by distance to the cluster center and the closest few are
+shown (the **medoid** -- the single closest real cell -- is outlined). Click any crop to open
+its image and center on it; **Save montages** writes one PNG strip per cluster next to the
+other result plots.
+
+Two definitions of "center" are offered:
+
+- **Feature-space medoid** (default) -- the cell nearest the cluster mean in the normalized
+  measurement space the clustering actually used. This is the most faithful answer to "what
+  does a typical cell in this cluster look like".
+- **Embedding-space medoid** -- the cell nearest the cluster's center in the 2D UMAP/t-SNE/PCA
+  plot. Matches what you see as the visual middle of the blob, but the 2D embedding distorts
+  true distances, so prefer feature-space unless you are specifically reasoning about the plot.
+
+Caveats:
+
+- A medoid is a **real cell, not a synthetic prototype or an average image** -- it is one
+  observed cell that happens to sit near the center.
+- "Representative" means **typical, not pure**. Overlapping clusters share borderline cells,
+  and a cluster that is itself heterogeneous will have a medoid that under-represents its
+  spread. Always read the representative crops alongside the Heatmap and Marker Rankings, not
+  instead of them.
+- The crop window is a multiple of each cell's bounding box (default 3x), so the cell fills a
+  consistent fraction of every thumbnail regardless of objective magnification.
 
 ### Iterate
 

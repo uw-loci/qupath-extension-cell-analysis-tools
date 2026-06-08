@@ -18,6 +18,7 @@ import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.ViewerNavigator;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -1742,66 +1743,7 @@ public class AutoencoderDialog {
         String imageId = mis.get("imageId") != null ? String.valueOf(mis.get("imageId")) : null;
         double x = ((Number) mis.get("x")).doubleValue();
         double y = ((Number) mis.get("y")).doubleValue();
-
-        var project = qupath.getProject();
-        if (project == null) return;
-
-        // Check if we need to switch images
-        var currentData = qupath.getImageData();
-        String currentName = currentData != null
-                ? currentData.getServer().getMetadata().getName() : null;
-        boolean needsSwitch = !imageName.equals(currentName);
-
-        if (needsSwitch) {
-            for (var entry : project.getImageList()) {
-                boolean match = imageId != null
-                        ? imageId.equals(entry.getID())
-                        : imageName.equals(entry.getImageName());
-                if (match) {
-                    Platform.runLater(() -> {
-                        try {
-                            qupath.openImageEntry(entry);
-                            // Navigate after image loads
-                            Platform.runLater(() -> centerAndSelectDetection(x, y));
-                        } catch (Exception e) {
-                            logger.warn("Failed to open image: {}", e.getMessage());
-                        }
-                    });
-                    return;
-                }
-            }
-            logger.warn("Could not find image '{}' in project", imageName);
-        } else {
-            Platform.runLater(() -> centerAndSelectDetection(x, y));
-        }
-    }
-
-    /** Center the viewer on coordinates and select the nearest detection. */
-    private void centerAndSelectDetection(double x, double y) {
-        var viewer = qupath.getViewer();
-        if (viewer == null) return;
-
-        viewer.setCenterPixelLocation(x, y);
-
-        var imageData = viewer.getImageData();
-        if (imageData == null) return;
-
-        // Find nearest detection to the coordinates
-        PathObject nearest = null;
-        double bestDist = Double.MAX_VALUE;
-        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            double dx = det.getROI().getCentroidX() - x;
-            double dy = det.getROI().getCentroidY() - y;
-            double dist = dx * dx + dy * dy;
-            if (dist < bestDist) {
-                bestDist = dist;
-                nearest = det;
-            }
-        }
-
-        if (nearest != null) {
-            imageData.getHierarchy().getSelectionModel().setSelectedObject(nearest);
-        }
+        ViewerNavigator.navigateToCell(qupath, imageId, imageName, x, y);
     }
 
     // ==================== Save / Load Model ====================
