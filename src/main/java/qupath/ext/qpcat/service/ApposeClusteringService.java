@@ -150,15 +150,18 @@ public class ApposeClusteringService {
                     report(statusCallback, "Building pixi environment (this may take several minutes)...");
                 }
 
-                // Install strictly from the bundled lockfile: pixi installs the
-                // exact pinned versions and never re-resolves against current
-                // conda-forge/PyPI. Appose writes the manifest + passes the
-                // flags to `pixi install`.
+                // Reproducibility comes from the bundled lock staged by
+                // syncManifest above: Appose's build() runs `pixi install`,
+                // which installs from an up-to-date pixi.lock WITHOUT
+                // re-resolving against current conda-forge/PyPI. We do NOT pass
+                // .flags("--frozen") here -- Appose injects builder flags as
+                // GLOBAL pixi args (`pixi --frozen install ...`), which pixi
+                // rejects ("unexpected argument '--frozen'"). The staged
+                // consistent lock already pins every version.
                 var builder = Appose.pixi()
                         .content(pixiToml)
                         .scheme("pixi.toml")
                         .name(ENV_NAME)
-                        .flags(java.util.List.of("--frozen"))
                         .logDebug()
                         .subscribeOutput(msg -> logger.info("[pixi] {}", msg))
                         .subscribeError(msg -> logger.warn("[pixi] {}", msg));
@@ -333,7 +336,6 @@ public class ApposeClusteringService {
             + " running under your user.\n"
             + "  3. In PowerShell:\n"
             + "       Remove-Item -Recurse -Force \"$env:USERPROFILE\\.local\\share\\appose\\qupath-qpcat\\.pixi\"\n"
-            + "       Remove-Item -Force \"$env:USERPROFILE\\.local\\share\\appose\\qupath-qpcat\\pixi.lock\"\n"
             + "  4. (If step 3 fails: reboot Windows -- guaranteed to release every file handle.)\n"
             + "  5. (Optional) Add an antivirus exclusion for the appose folder to prevent"
             + " repeat occurrences:\n"
