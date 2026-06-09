@@ -9,10 +9,13 @@ cuda = "12"
 [dependencies]
 python = "3.11.*"
 # setuptools provides pkg_resources, which xarray_schema (transitive dep of
-# spatialdata -> squidpy) still imports at module load. Modern Pixi envs
-# do not preinstall setuptools, so squidpy import fails with
+# spatialdata -> squidpy) still imports at module load. Modern Pixi envs do
+# not preinstall setuptools, so squidpy import fails with
 # ModuleNotFoundError: No module named 'pkg_resources' unless we pin it here.
-setuptools = ">=65"
+# Cap < 81: setuptools 81 REMOVED the deprecated pkg_resources module, so a
+# loose ">=65" now resolves to 81+ and reintroduces the exact import error we
+# pinned this to fix. Keep on the 80.x line, which still ships pkg_resources.
+setuptools = ">=65,<81"
 appose = ">=0.7.2"
 numpy = ">=1.24.0,<2.0"
 pandas = ">=2.0"
