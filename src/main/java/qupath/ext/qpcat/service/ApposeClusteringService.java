@@ -34,6 +34,12 @@ public class ApposeClusteringService {
 
     private static final String RESOURCE_BASE = "qupath/ext/qpcat/";
     private static final String PIXI_TOML_RESOURCE = RESOURCE_BASE + "pixi.toml";
+    // Bundled lockfile pinning the FULL transitive dependency tree (all 4
+    // platforms). Installed with --frozen so users get the exact, tested
+    // versions on every update -- no re-resolution against current
+    // conda-forge/PyPI, which is what let setuptools drift to a pkg_resources-
+    // less 81.x. Regenerate via tools/regen-pixi-lock.sh when pixi.toml changes.
+    private static final String PIXI_LOCK_RESOURCE = RESOURCE_BASE + "pixi.lock";
     private static final String SCRIPTS_BASE = RESOURCE_BASE + "scripts/";
     private static final String ENV_NAME = "qupath-qpcat";
 
@@ -128,25 +134,31 @@ public class ApposeClusteringService {
             logger.info("Initializing QPCAT Appose environment...");
 
             String pixiToml = loadResource(PIXI_TOML_RESOURCE);
+            String pixiLock = loadResource(PIXI_LOCK_RESOURCE);
 
             // TCCL must be set for all Appose operations
             ClassLoader original = Thread.currentThread().getContextClassLoader();
             Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
 
             try {
-                boolean rebuilding = syncPixiToml(pixiToml);
+                boolean rebuilding = syncManifest(pixiToml, pixiLock);
                 if (rebuilding) {
                     report(statusCallback,
                             "Dependencies changed -- rebuilding environment (this may take several minutes)...");
-                    logger.info("Environment rebuild triggered by pixi.toml change");
+                    logger.info("Environment rebuild triggered by pixi manifest/lock change");
                 } else {
                     report(statusCallback, "Building pixi environment (this may take several minutes)...");
                 }
 
+                // Install strictly from the bundled lockfile: pixi installs the
+                // exact pinned versions and never re-resolves against current
+                // conda-forge/PyPI. Appose writes the manifest + passes the
+                // flags to `pixi install`.
                 var builder = Appose.pixi()
                         .content(pixiToml)
                         .scheme("pixi.toml")
                         .name(ENV_NAME)
+                        .flags(java.util.List.of("--frozen"))
                         .logDebug()
                         .subscribeOutput(msg -> logger.info("[pixi] {}", msg))
                         .subscribeError(msg -> logger.warn("[pixi] {}", msg));
@@ -527,12 +539,6 @@ public class ApposeClusteringService {
         if (callback != null) callback.accept(message);
     }
 
-    /**
-     * Syncs the on-disk pixi.toml with the JAR-bundled version.
-     * If they differ, deletes .pixi and pixi.lock to force a rebuild.
-     *
-     * @return true if the environment was wiped for rebuild
-     */
     /** True when the init exception message carries a well-known signature
      *  that means the Pixi env is structurally OK on disk but missing a
      *  package the verify import needed -- usually setuptools / pkg_resources
@@ -591,27 +597,62 @@ public class ApposeClusteringService {
         }
     }
 
-    private boolean syncPixiToml(String expectedContent) {
+    /**
+     * Sync the on-disk pixi.toml AND pixi.lock with the JAR-bundled versions.
+     * The lock is the source of truth for the installed versions (we build with
+     * --frozen), so it must be staged into the env dir before the build:
+     *
+     * <ul>
+     *   <li>First run (no manifest on disk): create the env dir and stage the
+     *       lock so the very first --frozen install has it. Appose writes the
+     *       manifest itself.</li>
+     *   <li>Either file changed vs the bundle: rewrite both and delete .pixi/
+     *       so pixi reinstalls cleanly from the new lock.</li>
+     *   <li>Unchanged: ensure the lock is present (re-stage if a prior wipe
+     *       removed it), then no-op.</li>
+     * </ul>
+     *
+     * @return true if the environment was wiped for a rebuild
+     */
+    private boolean syncManifest(String expectedToml, String expectedLock) {
         try {
             Path envDir = getEnvironmentPath();
-            Path pixiTomlFile = envDir.resolve("pixi.toml");
-            if (!Files.exists(pixiTomlFile)) return false;
+            Path tomlFile = envDir.resolve("pixi.toml");
+            Path lockFile = envDir.resolve("pixi.lock");
 
-            String existing = Files.readString(pixiTomlFile, StandardCharsets.UTF_8);
-            String normalizedExisting = existing.replace("\r\n", "\n").strip();
-            String normalizedExpected = expectedContent.replace("\r\n", "\n").strip();
-            if (normalizedExisting.equals(normalizedExpected)) return false;
+            if (!Files.exists(tomlFile)) {
+                // First build: stage the lock; Appose writes the manifest.
+                Files.createDirectories(envDir);
+                Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
+                return false;
+            }
 
-            logger.info("pixi.toml changed - forcing environment rebuild");
-            Files.writeString(pixiTomlFile, expectedContent, StandardCharsets.UTF_8);
-            Files.deleteIfExists(envDir.resolve("pixi.lock"));
+            String onToml = Files.readString(tomlFile, StandardCharsets.UTF_8)
+                    .replace("\r\n", "\n").strip();
+            String exToml = expectedToml.replace("\r\n", "\n").strip();
+            String onLock = Files.exists(lockFile)
+                    ? Files.readString(lockFile, StandardCharsets.UTF_8).replace("\r\n", "\n").strip()
+                    : "";
+            String exLock = expectedLock.replace("\r\n", "\n").strip();
+
+            if (onToml.equals(exToml) && onLock.equals(exLock)) {
+                // Unchanged -- but make sure the lock is on disk for --frozen.
+                if (!Files.exists(lockFile)) {
+                    Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
+                }
+                return false;
+            }
+
+            logger.info("pixi manifest/lock changed - forcing environment rebuild");
+            Files.writeString(tomlFile, expectedToml, StandardCharsets.UTF_8);
+            Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
             Path pixiDir = envDir.resolve(".pixi");
             if (Files.isDirectory(pixiDir)) {
                 deleteDirectoryRecursively(pixiDir);
             }
             return true;
         } catch (IOException e) {
-            logger.warn("Failed to sync pixi.toml: {}", e.getMessage());
+            logger.warn("Failed to sync pixi manifest/lock: {}", e.getMessage());
             return false;
         }
     }
