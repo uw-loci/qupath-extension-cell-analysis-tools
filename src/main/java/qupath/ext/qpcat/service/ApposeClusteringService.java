@@ -266,6 +266,11 @@ public class ApposeClusteringService {
             }
 
         } catch (Exception e) {
+            // Match failure signatures against the FULL cause chain -- pixi's
+            // BuildException only says "pixi build failed" at the top; the
+            // actionable "failed to link ... os error 32" / "No module named"
+            // text lives in a nested cause.
+            String fullMsg = collectCauseMessages(e);
             initError = e.getMessage();
             initialized = false;
             logger.error("Failed to initialize QPCAT Appose: {}", e.getMessage(), e);
@@ -276,7 +281,7 @@ public class ApposeClusteringService {
             // transitively via the xarray_schema -> spatialdata -> squidpy
             // import chain). Auto-wipe .pixi/ + pixi.lock so the next launch
             // forces a clean Pixi sync.
-            if (looksLikeStaleEnv(e.getMessage())) {
+            if (looksLikeStaleEnv(fullMsg)) {
                 if (wipeEnvForRebuild()) {
                     String advice = "QP-CAT detected a stale Pixi environment and cleaned "
                             + "it up automatically. Restart QuPath to rebuild "
@@ -292,7 +297,7 @@ public class ApposeClusteringService {
                         // -- the log + status callback already told the user.
                     }
                 }
-            } else if (looksLikeWindowsFileLock(e.getMessage())) {
+            } else if (looksLikeWindowsFileLock(fullMsg)) {
                 // v0.3.4: Windows file-lock during pixi link step. Do NOT auto-wipe
                 // -- another process is actively holding a file in .pixi/envs/, so
                 // a wipe risks corruption. Show the user the recovery steps.
@@ -537,6 +542,22 @@ public class ApposeClusteringService {
 
     private static void report(Consumer<String> callback, String message) {
         if (callback != null) callback.accept(message);
+    }
+
+    /** Concatenate the message of a throwable and its entire cause chain.
+     *  Failure signatures we match on (Windows file lock, missing module) are
+     *  often nested: e.g. PixiBuilder throws BuildException("pixi build failed")
+     *  whose cause carries the real "failed to link ... os error 32" text. The
+     *  detectors below must see the whole chain, not just the top message. */
+    private static String collectCauseMessages(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        int guard = 0;
+        for (Throwable c = t; c != null && guard < 20; c = c.getCause(), guard++) {
+            if (c.getMessage() != null) {
+                sb.append(c.getMessage()).append('\n');
+            }
+        }
+        return sb.toString();
     }
 
     /** True when the init exception message carries a well-known signature
