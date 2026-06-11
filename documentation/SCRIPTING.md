@@ -9,7 +9,7 @@ Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export
 
 ## Invocation pattern
 
-QP-CAT scripting follows QuPath's standard pattern: import the static facade, call it from a Groovy script (typically inside **Automate > Script editor** or as part of a recorded workflow). The reference precedent is `qupath.ext.gatedobjclassifier.scripting.GatedObjectClassifierScripts` -- single options-map argument, static methods, no UI dependency.
+QP-CAT scripting follows QuPath's standard pattern: import the static facade, call it from a Groovy script (typically inside **Automate > Script editor** or as part of a recorded workflow). The reference precedent is `qupath.ext.classifyobjectsubset.scripting.ClassifySubsetScripts` -- single options-map argument, static methods, no UI dependency.
 
 ```groovy
 import qupath.ext.qpcat.scripting.SpatialGraphScripts

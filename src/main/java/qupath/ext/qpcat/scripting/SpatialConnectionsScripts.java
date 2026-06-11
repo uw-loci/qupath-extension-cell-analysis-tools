@@ -234,7 +234,7 @@ public final class SpatialConnectionsScripts {
         int nEdges = countEdges(group);
         boolean legacyBundle = nEdges == 0;
 
-        // Workflow-step recording follows the GatedObjectClassifier
+        // Workflow-step recording follows the ClassifyObjectSubset
         // pattern: imperative Groovy that calls back into this facade.
         try {
             String script = buildPushWorkflowScript(resultName);

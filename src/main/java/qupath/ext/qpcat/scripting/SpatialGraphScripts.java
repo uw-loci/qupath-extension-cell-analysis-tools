@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * Public, FX-free, Groovy-callable facade for QP-CAT's v1 spatial graph
  * constructor. Mirrors the pattern set by
- * {@code GatedObjectClassifierScripts} -- static methods, single
+ * {@code ClassifySubsetScripts} -- static methods, single
  * options-map argument, no UI dependency.
  *
  * <p>Recognised option keys (all optional; the facade uses literal
