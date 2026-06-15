@@ -4,6 +4,19 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.5] -- 2026-06-15
+
+Patch release. Makes the Appose Python environment reproducible so an extension update installs the exact tested package versions instead of re-resolving against whatever conda-forge / PyPI published that day. This permanently closes the `pkg_resources` / `setuptools` failure family that recurred whenever the resolver floated `setuptools` to a `pkg_resources`-less 81+.
+
+### Fixed
+
+- **Environment no longer re-resolves on update (root cause of the recurring `No module named 'pkg_resources'`).** The env was rebuilt from scratch whenever `pixi.toml` changed (which an update does), so loose `>=` bounds let the resolver pull the day's latest. `setuptools` (a transitive dep, not one we list) drifted past 81, which removed `pkg_resources`, breaking the `squidpy -> spatialdata -> xarray_schema` import. v0.3.5 bundles a committed `pixi.lock` pinning the full transitive tree and installs the env with `pixi install --frozen`, so it installs the locked versions and never re-resolves. `setuptools` is also explicitly capped `>=65,<81` as a belt-and-suspenders bound.
+- **`syncManifest` now stages the lockfile alongside the manifest** (it no longer deletes the lock to force a re-resolve), and the cause-chain detector that surfaces the Windows `os error 32` file-lock recovery steps now walks the full exception cause chain instead of only the top-level `pixi build failed` message, so it actually fires.
+
+### Notes
+
+Editing the on-disk `pixi.toml` by hand does not persist: the extension re-stages both `pixi.toml` and `pixi.lock` from the bundled jar resources on every launch (this is by design -- the bundled manifest is the source of truth). The fix is to run this version, not to edit the staged file. On first run after updating, delete the partially-built env (`~/.local/share/appose/qupath-qpcat/`, especially its `.pixi/` folder) so the new locked env builds clean.
+
 ## [0.3.4] -- 2026-05-31
 
 Patch release. Closes the D1 known-limitation from v0.3.0 (project-clustering produced cross-image phantom neighbour counts in per-cell measurements) and adds a Windows file-lock detector that gives the user actionable recovery steps instead of a raw `pixi build failed` stack trace.
