@@ -371,7 +371,9 @@ public final class BatchFigureExporter {
             // DPI metadata is best-effort; ignore failures
             try {
                 setStandardDpi(meta, 300);
-            } catch (Exception ignore) {}
+            } catch (Exception e) {
+                logger.trace("Could not set TIFF DPI metadata (best-effort): {}", e.getMessage());
+            }
             writer.write(null, new IIOImage(img, null, meta), param);
             return true;
         } finally {

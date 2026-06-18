@@ -308,6 +308,15 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
 
+        // Manage Saved Results (checkbox multi-delete + folder size)
+        MenuItem manageResultsItem = new MenuItem("Manage Saved Results...");
+        manageResultsItem.setOnAction(e -> ClusteringDialog.showManageResultsDialog(qupath));
+        manageResultsItem.visibleProperty().bind(environmentReady);
+        manageResultsItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getProject() == null,
+                        qupath.projectProperty()));
+
         // Manage Clusters
         MenuItem manageClustersItem = new MenuItem(res.getString("menu.manageClusters"));
         manageClustersItem.setOnAction(e -> {
@@ -393,6 +402,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 sep3,
                 manageClustersItem,
                 viewResultsItem,
+                manageResultsItem,
                 exportAnnDataItem,
                 exportFiguresItem,
                 utilitiesMenu,

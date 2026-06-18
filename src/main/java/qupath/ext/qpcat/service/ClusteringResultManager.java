@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -88,13 +90,36 @@ public class ClusteringResultManager {
     }
 
     /**
-     * Save a clustering result to the project.
+     * Save a clustering result to the project (user-named, no scope metadata).
      * Copies plot images into the project directory so they persist.
+     *
+     * @return the sanitized base name actually used on disk
      */
-    public static void saveResult(Project<?> project, String name,
-                                   ClusteringResult result,
-                                   String algorithm, String normalization,
-                                   String embeddingMethod) throws IOException {
+    public static String saveResult(Project<?> project, String name,
+                                     ClusteringResult result,
+                                     String algorithm, String normalization,
+                                     String embeddingMethod) throws IOException {
+        return saveResult(project, name, result, algorithm, normalization, embeddingMethod,
+                null, null, false);
+    }
+
+    /**
+     * Save a clustering result to the project, recording its scope and origin.
+     * Copies plot images into the project directory so they persist.
+     *
+     * @param scopeKey   source image id for single-image runs, or
+     *                   {@link SavedClusteringResult#PROJECT_SCOPE_KEY} for
+     *                   project-wide runs (may be null on older callers)
+     * @param scopeLabel human-readable scope (image name or "Entire project")
+     * @param autoSaved  true when persisted automatically at end of run
+     * @return the sanitized base name actually used on disk
+     */
+    public static String saveResult(Project<?> project, String name,
+                                     ClusteringResult result,
+                                     String algorithm, String normalization,
+                                     String embeddingMethod,
+                                     String scopeKey, String scopeLabel,
+                                     boolean autoSaved) throws IOException {
         if (name == null || name.trim().isEmpty()) {
             throw new IOException("Result name cannot be empty");
         }
@@ -132,12 +157,151 @@ public class ClusteringResultManager {
             saved.setPlotPaths(persistedPlots);
         }
 
+        // Scope + origin
+        saved.setScopeKey(scopeKey);
+        saved.setScopeLabel(scopeLabel);
+        saved.setAutoSaved(autoSaved);
+
         // Write JSON
         Path file = resultsDir.resolve(safeName + JSON_EXT);
         String json = GSON.toJson(saved);
         Files.writeString(file, json);
-        logger.info("Saved clustering result '{}' to {} ({} clusters, {} cells)",
-                name, file, result.getNClusters(), result.getNCells());
+        logger.info("Saved clustering result '{}' to {} ({} clusters, {} cells, {})",
+                name, file, result.getNClusters(), result.getNCells(),
+                autoSaved ? "auto" : "named");
+        return safeName;
+    }
+
+    private static final DateTimeFormatter AUTO_NAME_FMT =
+            DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+
+    /**
+     * Auto-save a freshly computed result with a generated, scope-tagged name
+     * (e.g. {@code auto_20260617_193235_leiden}). Called at the end of every
+     * clustering / embedding run so results are always reloadable via
+     * "View Past Results" without the user clicking Save.
+     *
+     * @param scopeKey   source image id, or
+     *                   {@link SavedClusteringResult#PROJECT_SCOPE_KEY}
+     * @param scopeLabel human-readable scope
+     * @return the sanitized base name actually used on disk
+     */
+    public static String saveResultAuto(Project<?> project, ClusteringResult result,
+                                        String algorithm, String normalization,
+                                        String embeddingMethod,
+                                        String scopeKey, String scopeLabel) throws IOException {
+        String algoTag = algorithm == null ? "result"
+                : algorithm.toLowerCase().replaceAll("[^a-z0-9]+", "");
+        if (algoTag.isEmpty()) algoTag = "result";
+        String name = "auto_" + LocalDateTime.now().format(AUTO_NAME_FMT) + "_" + algoTag;
+        return saveResult(project, name, result, algorithm, normalization, embeddingMethod,
+                scopeKey, scopeLabel, true);
+    }
+
+    /**
+     * Count saved results whose scopeKey matches (null-safe). Used to warn the
+     * user when a single image / the project accumulates more than a handful.
+     */
+    public static int countResultsForScope(Project<?> project, String scopeKey)
+            throws IOException {
+        int count = 0;
+        for (String name : listResults(project)) {
+            try {
+                SavedClusteringResult saved = loadSavedResult(project, name);
+                if (Objects.equals(scopeKey, saved.getScopeKey())) count++;
+            } catch (Exception e) {
+                // ignore unreadable entries for counting
+            }
+        }
+        return count;
+    }
+
+    /**
+     * On-disk size in bytes of one saved result (its JSON plus its plots dir).
+     */
+    public static long resultSize(Project<?> project, String name) throws IOException {
+        Path resultsDir = getResultsDirectory(project);
+        long size = 0;
+        Path json = resultsDir.resolve(name + JSON_EXT);
+        if (Files.exists(json)) size += Files.size(json);
+        size += dirSize(resultsDir.resolve(name + PLOTS_SUFFIX));
+        return size;
+    }
+
+    /**
+     * Total on-disk size in bytes of the whole cluster_results directory.
+     */
+    public static long totalResultsSize(Project<?> project) throws IOException {
+        return dirSize(getResultsDirectory(project));
+    }
+
+    private static long dirSize(Path dir) {
+        if (dir == null || !Files.exists(dir)) return 0;
+        try (Stream<Path> walk = Files.walk(dir)) {
+            return walk.filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try { return Files.size(p); }
+                        catch (IOException e) { return 0; }
+                    }).sum();
+        } catch (IOException e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Human-readable byte size using ASCII units (B, KB, MB, GB).
+     */
+    public static String formatBytes(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        double kb = bytes / 1024.0;
+        if (kb < 1024) return String.format("%.1f KB", kb);
+        double mb = kb / 1024.0;
+        if (mb < 1024) return String.format("%.1f MB", mb);
+        return String.format("%.2f GB", mb / 1024.0);
+    }
+
+    /**
+     * Lightweight listing of every saved result for the Manage dialog:
+     * name, timestamp, summary, scope label, origin, and on-disk size.
+     * Ordered most-recent first (same order as {@link #listResults}).
+     */
+    public static List<ResultEntry> listResultEntries(Project<?> project) throws IOException {
+        List<ResultEntry> entries = new ArrayList<>();
+        for (String name : listResults(project)) {
+            ResultEntry e = new ResultEntry();
+            e.name = name;
+            try {
+                SavedClusteringResult saved = loadSavedResult(project, name);
+                e.timestamp = saved.getTimestamp() != null
+                        ? saved.getTimestamp().substring(0,
+                                Math.min(16, saved.getTimestamp().length()))
+                        : "";
+                e.summary = saved.getSummary();
+                e.scopeLabel = saved.getScopeLabel();
+                e.autoSaved = saved.isAutoSaved();
+            } catch (Exception ex) {
+                e.summary = "(failed to read)";
+            }
+            try {
+                e.sizeBytes = resultSize(project, name);
+            } catch (Exception ex) {
+                e.sizeBytes = 0;
+            }
+            entries.add(e);
+        }
+        return entries;
+    }
+
+    /**
+     * Lightweight row for the Manage Saved Results dialog.
+     */
+    public static class ResultEntry {
+        public String name;
+        public String timestamp = "";
+        public String summary = "";
+        public String scopeLabel;
+        public boolean autoSaved;
+        public long sizeBytes;
     }
 
     /**

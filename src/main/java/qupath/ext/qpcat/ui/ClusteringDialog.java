@@ -1506,11 +1506,11 @@ public class ClusteringDialog {
                     Dialogs.showInfoNotification("QPCAT",
                             "Clustering complete: " + result.getNClusters() + " clusters found.");
 
-                    if (result.hasPlots() || result.hasMarkerRankings()
-                            || result.hasSpatialAutocorr()
-                            || result.hasAnySpatialStats()) {
-                        showResultsDialog(result);
-                    }
+                    // Always open the results interface so the run is
+                    // inspectable -- even a bare clustering (no plots / spatial
+                    // stats) now opens, since the result was auto-saved and is
+                    // reloadable via "View Past Results".
+                    showResultsDialog(result);
                 });
             } catch (Exception e) {
                 logger.error("Clustering failed", e);
@@ -1816,20 +1816,68 @@ public class ClusteringDialog {
             }
         }
 
-        // Save/Delete buttons at bottom
+        // Safety: a bare run (no plots / spatial stats and only one cluster)
+        // could leave the tab pane empty. Always give the user something so the
+        // dialog -- and the save-location footer below -- is never blank.
+        if (tabPane.getTabs().isEmpty()) {
+            Label summary = new Label("Clustering complete: " + result.getNClusters()
+                    + " clusters, " + result.getNCells()
+                    + " cells.\n\nNo plots or spatial statistics were generated for this "
+                    + "run. The cluster labels were applied to the objects and the result "
+                    + "was saved; enable analysis plots or spatial analysis to populate "
+                    + "the richer tabs.");
+            summary.setWrapText(true);
+            summary.setPadding(new Insets(12));
+            Tab tab = new Tab("Summary", summary);
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        // Save/manage controls at bottom
         final QuPathGUI qp = qupath;
         final String algo = algorithm;
         final String norm = normalization;
         final String emb = embName;
 
+        // Save-location footer: always point the user at where the data lives
+        // and how big this run is. Read-only + selectable so the path is
+        // copyable. Falls back to the loaded-result path when viewing a past
+        // result.
+        String infoText = null;
+        if (result.getSavedPath() != null) {
+            infoText = "Auto-saved to: " + result.getSavedPath()
+                    + "   (" + ClusteringResultManager.formatBytes(result.getSavedSizeBytes())
+                    + ")";
+        } else if (loadedResultName != null && qp != null && qp.getProject() != null) {
+            try {
+                java.nio.file.Path p = ClusteringResultManager.getResultsDirectory(qp.getProject())
+                        .resolve(loadedResultName + ".json");
+                long sz = ClusteringResultManager.resultSize(qp.getProject(), loadedResultName);
+                infoText = "Loaded from: " + p + "   ("
+                        + ClusteringResultManager.formatBytes(sz) + ")";
+            } catch (Exception ignore) {
+                // leave infoText null
+            }
+        }
+        TextField locationField = null;
+        if (infoText != null) {
+            locationField = new TextField(infoText);
+            locationField.setEditable(false);
+            locationField.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;");
+            locationField.setTooltip(new Tooltip(
+                    "Where this result is stored on disk, and its size.\n"
+                    + "Reopen any time via Extensions > QPCAT > View Past Results."));
+            HBox.setHgrow(locationField, javafx.scene.layout.Priority.ALWAYS);
+        }
+
         HBox buttonBar = new HBox(10);
         buttonBar.setAlignment(Pos.CENTER_LEFT);
         buttonBar.setPadding(new Insets(5, 0, 0, 0));
 
-        Button saveBtn = new Button("Save Results...");
+        Button saveBtn = new Button("Save a named copy...");
         saveBtn.setTooltip(new Tooltip(
-                "Save these results to the project so they can be\n"
-                + "reopened later via Extensions > QPCAT > View Past Results."));
+                "This result was already auto-saved with a timestamped name.\n"
+                + "Use this to save an additional, user-named copy."));
         saveBtn.setOnAction(e -> {
             if (qp == null || qp.getProject() == null) {
                 Dialogs.showWarningNotification("QPCAT",
@@ -1839,7 +1887,7 @@ public class ClusteringDialog {
             TextInputDialog nameDialog = new TextInputDialog(
                     algo != null ? algo.toLowerCase() + "-result" : "result");
             nameDialog.setTitle("Save Clustering Results");
-            nameDialog.setHeaderText("Enter a name for these results:");
+            nameDialog.setHeaderText("Enter a name for this copy:");
             var nameResult = nameDialog.showAndWait();
             if (nameResult.isEmpty() || nameResult.get().trim().isEmpty()) return;
 
@@ -1858,15 +1906,25 @@ public class ClusteringDialog {
                         "Failed to save results: " + ex.getMessage());
             }
         });
-        buttonBar.getChildren().add(saveBtn);
 
-        // Disable save if no project
+        Button manageBtn = new Button("Manage saved results...");
+        manageBtn.setTooltip(new Tooltip(
+                "View, select, and delete saved clustering results.\n"
+                + "Shows the results folder location and total size on disk."));
+        manageBtn.setOnAction(e -> showManageResultsDialog(qp));
+
+        buttonBar.getChildren().addAll(saveBtn, manageBtn);
+
+        // Disable save/manage if no project
         if (qp == null || qp.getProject() == null) {
             saveBtn.setDisable(true);
             saveBtn.setTooltip(new Tooltip("A project must be open to save results."));
+            manageBtn.setDisable(true);
         }
 
-        VBox mainContent = new VBox(tabPane, buttonBar);
+        VBox mainContent = (locationField != null)
+                ? new VBox(8, tabPane, locationField, buttonBar)
+                : new VBox(8, tabPane, buttonBar);
         VBox.setVgrow(tabPane, javafx.scene.layout.Priority.ALWAYS);
 
         dialog.getDialogPane().setContent(mainContent);
@@ -1874,6 +1932,24 @@ public class ClusteringDialog {
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
         dialog.show();
+
+        // Over-5 warning: too many saved results for this scope. Fired after the
+        // dialog opens so the notification does not race the window.
+        int scopeCount = result.getSavedScopeCount();
+        if (scopeCount > 5) {
+            final QuPathGUI qpFinal = qp;
+            String scopeLbl = result.getSavedScopeLabel() != null
+                    ? result.getSavedScopeLabel() : "this scope";
+            Platform.runLater(() -> {
+                Dialogs.showWarningNotification("QPCAT",
+                        scopeCount + " saved clustering results now exist for "
+                        + scopeLbl + ". Use 'Manage saved results...' to remove old ones.");
+                if (qpFinal != null && qpFinal.getProject() != null) {
+                    OperationLogger.getInstance().logEvent("RESULTS OVER LIMIT",
+                            scopeCount + " saved results for scope '" + scopeLbl + "'");
+                }
+            });
+        }
     }
 
     /**
@@ -1931,6 +2007,105 @@ public class ClusteringDialog {
             logger.error("Failed to load past results", e);
             Dialogs.showErrorNotification("QPCAT",
                     "Failed to load results: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Show a checkbox list of all saved clustering results so the user can
+     * select and delete several at once. The header shows the results folder
+     * location and its total on-disk size; each row shows the per-result size.
+     */
+    public static void showManageResultsDialog(QuPathGUI qupath) {
+        Project<?> project = qupath != null ? qupath.getProject() : null;
+        if (project == null) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "A project must be open to manage saved results.");
+            return;
+        }
+
+        try {
+            List<ClusteringResultManager.ResultEntry> entries =
+                    ClusteringResultManager.listResultEntries(project);
+            if (entries.isEmpty()) {
+                Dialogs.showWarningNotification("QPCAT",
+                        "No saved results found in this project.");
+                return;
+            }
+
+            java.nio.file.Path dir = ClusteringResultManager.getResultsDirectory(project);
+            long totalSize = ClusteringResultManager.totalResultsSize(project);
+
+            Dialog<ButtonType> dialog = new Dialog<>();
+            dialog.initOwner(qupath.getStage());
+            dialog.setTitle("QPCAT - Manage Saved Results");
+            dialog.setHeaderText("Check results to remove, then click Delete selected.\n"
+                    + "Folder: " + dir + "\n"
+                    + "Total size: " + ClusteringResultManager.formatBytes(totalSize)
+                    + "   (" + entries.size() + " result(s))");
+            dialog.setResizable(true);
+
+            VBox rows = new VBox(4);
+            rows.setPadding(new Insets(8));
+            List<CheckBox> checks = new ArrayList<>();
+            for (ClusteringResultManager.ResultEntry entry : entries) {
+                String scope = entry.scopeLabel != null ? entry.scopeLabel : "(unscoped)";
+                String label = entry.name
+                        + "   --   " + (entry.timestamp.isEmpty() ? "" : entry.timestamp + "  ")
+                        + entry.summary
+                        + "   [" + scope + (entry.autoSaved ? ", auto" : "") + "]"
+                        + "   (" + ClusteringResultManager.formatBytes(entry.sizeBytes) + ")";
+                CheckBox cb = new CheckBox(label);
+                cb.setUserData(entry.name);
+                checks.add(cb);
+                rows.getChildren().add(cb);
+            }
+
+            ScrollPane scroll = new ScrollPane(rows);
+            scroll.setFitToWidth(true);
+            scroll.setPrefSize(720, 420);
+
+            dialog.getDialogPane().setContent(scroll);
+            ButtonType deleteType = new ButtonType("Delete selected", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(deleteType, ButtonType.CANCEL);
+
+            var choice = dialog.showAndWait();
+            if (choice.isEmpty() || choice.get() != deleteType) return;
+
+            List<String> toDelete = new ArrayList<>();
+            for (CheckBox cb : checks) {
+                if (cb.isSelected()) toDelete.add((String) cb.getUserData());
+            }
+            if (toDelete.isEmpty()) {
+                Dialogs.showInfoNotification("QPCAT", "Nothing selected; no results removed.");
+                return;
+            }
+
+            boolean confirm = Dialogs.showConfirmDialog("QPCAT - Confirm delete",
+                    "Permanently delete " + toDelete.size()
+                    + " saved result(s)? This cannot be undone.");
+            if (!confirm) return;
+
+            int deleted = 0;
+            for (String name : toDelete) {
+                try {
+                    ClusteringResultManager.deleteResult(project, name);
+                    deleted++;
+                } catch (Exception ex) {
+                    logger.warn("Failed to delete result '{}': {}", name, ex.getMessage());
+                }
+            }
+            long remaining = ClusteringResultManager.totalResultsSize(project);
+            Dialogs.showInfoNotification("QPCAT",
+                    "Deleted " + deleted + " result(s). Folder now "
+                    + ClusteringResultManager.formatBytes(remaining) + ".");
+            OperationLogger.getInstance().logEvent("RESULTS DELETED",
+                    "Removed " + deleted + " saved result(s); folder now "
+                    + ClusteringResultManager.formatBytes(remaining));
+
+        } catch (Exception e) {
+            logger.error("Failed to manage saved results", e);
+            Dialogs.showErrorNotification("QPCAT",
+                    "Failed to manage saved results: " + e.getMessage());
         }
     }
 

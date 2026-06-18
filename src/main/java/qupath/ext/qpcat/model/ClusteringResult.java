@@ -35,6 +35,16 @@ public class ClusteringResult {
     private String representativesJson;
     private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
+    // Auto-save bookkeeping (transient; set by ClusteringWorkflow after the
+    // result is persisted to <project>/qpcat/cluster_results/). Lets the
+    // results dialog show where the data landed, its on-disk size, and how
+    // many saved results now exist for this scope (for the over-5 warning).
+    private transient String savedName;
+    private transient String savedPath;
+    private transient long savedSizeBytes = -1;
+    private transient int savedScopeCount = -1;
+    private transient String savedScopeLabel;
+
     public ClusteringResult(int[] clusterLabels, int nClusters, double[][] embedding,
                             double[][] clusterStats, String[] markerNames) {
         this.clusterLabels = clusterLabels;
@@ -70,6 +80,22 @@ public class ClusteringResult {
     public CellRef[] getCellRefs() { return cellRefs; }
     public void setCellRefs(CellRef[] refs) { this.cellRefs = refs; }
     public boolean hasCellRefs() { return cellRefs != null && cellRefs.length > 0; }
+
+    // --- Auto-save bookkeeping ---
+    public String getSavedName() { return savedName; }
+    public void setSavedName(String savedName) { this.savedName = savedName; }
+
+    public String getSavedPath() { return savedPath; }
+    public void setSavedPath(String savedPath) { this.savedPath = savedPath; }
+
+    public long getSavedSizeBytes() { return savedSizeBytes; }
+    public void setSavedSizeBytes(long savedSizeBytes) { this.savedSizeBytes = savedSizeBytes; }
+
+    public int getSavedScopeCount() { return savedScopeCount; }
+    public void setSavedScopeCount(int savedScopeCount) { this.savedScopeCount = savedScopeCount; }
+
+    public String getSavedScopeLabel() { return savedScopeLabel; }
+    public void setSavedScopeLabel(String savedScopeLabel) { this.savedScopeLabel = savedScopeLabel; }
 
     // --- Representative cells ---
     public String getRepresentativesJson() { return representativesJson; }

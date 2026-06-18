@@ -4,6 +4,23 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.6] -- 2026-06-17
+
+Minor release. Clustering results are now always reloadable and every run is recorded, closing a gap where a bare clustering run (no analysis plots / no spatial statistics) silently left nothing on disk: the cluster labels were applied to the objects, but the rich results interface could not be reopened because the results dialog -- the only place with a "Save Results" button -- never appeared, so `qpcat/cluster_results/` stayed empty and "View Past Results" reported no saved data.
+
+### Added
+
+- **Auto-save every clustering / embedding run.** On a successful run the result is now persisted automatically to `<project>/qpcat/cluster_results/` with a timestamped, scope-tagged name (e.g. `auto_20260617_193235_leiden`), so it is always reopenable via Extensions > QPCAT > View Past Results -- no button click required. The previous manual "Save Results..." button remains as "Save a named copy..." for saving an additional, user-named copy.
+- **Results dialog now always opens** after a run, even when no plots or spatial statistics were generated (previously gated on `hasPlots() || hasMarkerRankings() || hasSpatialAutocorr() || hasAnySpatialStats()`). Bare runs get a Summary tab plus the save-location footer.
+- **Save-location footer** in the results dialog: a read-only, copyable field showing exactly where the result is stored on disk and this run's size (and, when viewing a past result, where it was loaded from + its size).
+- **Native QuPath Workflow step.** Each run appends a `DefaultScriptableWorkflowStep` to the open image's command-history Workflow (the Workflow tab, exportable as a script), recording the algorithm, parameters, normalization, embedding, cluster/cell counts, and how to reopen the saved result. The existing per-project audit log under `qpcat/logs/` is unchanged.
+- **Manage Saved Results dialog** (Extensions > QPCAT > Manage Saved Results...): a checkbox list of all saved results -- name, timestamp, summary, scope, origin (auto vs named), and per-result size -- with multi-select delete. The header shows the results folder path and its total on-disk size.
+- **Over-5 warning per scope.** When more than five saved results accumulate for the same scope (a single image, or "Entire project" for project-wide runs), a notification points the user to "Manage saved results..." to prune old ones. Auto-saves are never deleted automatically -- removal is always the user's explicit choice.
+
+### Notes
+
+This release does not recover results from runs made before 0.3.6: only the cluster labels were persisted on those objects (not the embedding coordinates or marker rankings), so the rich interface for an old run cannot be reconstructed. Re-running clustering on the same objects with the same parameters reproduces an equivalent result (graph-based methods are deterministic given a fixed seed), and from 0.3.6 onward it auto-saves.
+
 ## [0.3.5] -- 2026-06-15
 
 Patch release. Makes the Appose Python environment reproducible so an extension update installs the exact tested package versions instead of re-resolving against whatever conda-forge / PyPI published that day. This permanently closes the `pkg_resources` / `setuptools` failure family that recurred whenever the resolver floated `setuptools` to a `pkg_resources`-less 81+.

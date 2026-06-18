@@ -10,8 +10,10 @@ import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
@@ -21,6 +23,8 @@ import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
+import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
+import qupath.lib.projects.Project;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -257,6 +261,12 @@ public class ClusteringWorkflow {
                         config.isEnableBatchCorrection()),
                 completeMsg, elapsed);
 
+        // Auto-save so the result is always reloadable via "View Past Results",
+        // and record the run in QuPath's native command-history Workflow.
+        String scopeKey = (fbId != null) ? fbId : fbName;
+        autoSaveResult(result, config, scopeKey, fbName);
+        recordClusteringWorkflowStep(imageData, config, result, false);
+
         return result;
     }
 
@@ -474,7 +484,90 @@ public class ClusteringWorkflow {
                         config.isEnableBatchCorrection()),
                 completeMsg, elapsed);
 
+        // Auto-save (project scope) + record the run on the currently open
+        // image's command-history Workflow when one is available.
+        autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, "Entire project");
+        ImageData<BufferedImage> openImageData = qupath.getImageData();
+        if (openImageData != null) {
+            recordClusteringWorkflowStep(openImageData, config, result, true);
+        }
+
         return result;
+    }
+
+    /**
+     * Auto-save a freshly computed result to the project so it can always be
+     * reopened via "View Past Results", then stash the save location / size /
+     * scope count on the result for the dialog footer + over-5 warning.
+     * Best-effort: a save failure is logged but never fails the run.
+     */
+    private void autoSaveResult(ClusteringResult result, ClusteringConfig config,
+                                String scopeKey, String scopeLabel) {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            // No project: results live only on the objects + audit log. Nothing
+            // to auto-save into; the dialog still opens for live inspection.
+            return;
+        }
+        try {
+            String savedName = ClusteringResultManager.saveResultAuto(project, result,
+                    config.getAlgorithm().getDisplayName(),
+                    config.getNormalization().getId(),
+                    config.getEmbeddingMethod().getId(),
+                    scopeKey, scopeLabel);
+            Path resultsDir = ClusteringResultManager.getResultsDirectory(project);
+            long size = ClusteringResultManager.resultSize(project, savedName);
+            int scopeCount = ClusteringResultManager.countResultsForScope(project, scopeKey);
+
+            result.setSavedName(savedName);
+            result.setSavedPath(resultsDir.resolve(savedName + ".json").toString());
+            result.setSavedSizeBytes(size);
+            result.setSavedScopeCount(scopeCount);
+            result.setSavedScopeLabel(scopeLabel);
+
+            OperationLogger.getInstance().logEvent("RESULTS AUTO-SAVED",
+                    "Saved '" + savedName + "' (" + result.getNClusters() + " clusters, "
+                    + result.getNCells() + " cells) to " + resultsDir
+                    + "; " + scopeCount + " result(s) for scope '" + scopeLabel + "'");
+        } catch (Exception e) {
+            logger.warn("Auto-save of clustering result failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Record the clustering run as a step in QuPath's native command-history
+     * Workflow (the Workflow tab; exportable as a script). No clustering
+     * scripting facade exists, so the step body is an informational, ASCII-only
+     * comment that records the parameters and how to reopen the saved result.
+     * Best-effort: a failure here never fails the run.
+     */
+    private void recordClusteringWorkflowStep(ImageData<BufferedImage> imageData,
+                                              ClusteringConfig config,
+                                              ClusteringResult result,
+                                              boolean projectWide) {
+        if (imageData == null) return;
+        try {
+            String algo = config.getAlgorithm().getDisplayName();
+            Map<String, Object> algoParams = config.getAlgorithmParams();
+            String paramsStr = (algoParams != null) ? algoParams.toString() : "{}";
+            String scope = projectWide ? "entire project" : "current image";
+            String saved = (result.getSavedName() != null)
+                    ? result.getSavedName() : "(not saved - no project open)";
+            String script = String.join("\n",
+                    "// QP-CAT clustering (" + scope + ")",
+                    "// Algorithm: " + algo + "  params: " + paramsStr,
+                    "// Normalization: " + config.getNormalization().getId()
+                            + "  Embedding: " + config.getEmbeddingMethod().getId(),
+                    "// Result: " + result.getNClusters() + " clusters, "
+                            + result.getNCells() + " cells",
+                    "// Reopen: Extensions > QPCAT > View Past Results -> '" + saved + "'");
+            String stepName = "QP-CAT: clustering (" + algo + ", "
+                    + result.getNClusters() + " clusters)";
+            imageData.getHistoryWorkflow().addStep(
+                    new DefaultScriptableWorkflowStep(stepName, script));
+        } catch (Exception e) {
+            logger.warn("Failed to record clustering workflow step: {}", e.getMessage());
+        }
     }
 
     /**
@@ -3161,7 +3254,11 @@ public class ClusteringWorkflow {
             return payload;
         } finally {
             for (NDArray nd : opened) {
-                try { nd.close(); } catch (Exception ignored) { /* best-effort */ }
+                try {
+                    nd.close();
+                } catch (Exception e) {
+                    logger.trace("Failed to close NDArray (best-effort): {}", e.getMessage());
+                }
             }
         }
     }

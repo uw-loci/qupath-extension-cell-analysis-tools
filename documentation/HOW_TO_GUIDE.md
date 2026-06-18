@@ -950,9 +950,19 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 
 ## 20. Results dialog reference
 
-The Results dialog opens automatically after a clustering run completes (or via the Load button on the main clustering dialog). Each tab is one view of the same underlying clustering result. This chapter documents what each tab shows, when to use it, and how it relates to its neighbors.
+The Results dialog opens automatically after **every** clustering run completes (even a bare run with no plots or spatial statistics), and can be reopened later via Extensions > QPCAT > **View Past Results...**. Each tab is one view of the same underlying clustering result. This chapter documents what each tab shows, when to use it, and how it relates to its neighbors.
 
 The "Documentation" hyperlink in the guide bar of each tab points back to the relevant subsection below.
+
+### Saving, reopening, and managing results
+
+Every successful clustering / embedding run is **auto-saved** to `<project>/qpcat/cluster_results/` with a timestamped, scope-tagged name (e.g. `auto_20260617_193235_leiden`). You do not need to click anything -- the run is reopenable immediately via **View Past Results...**. The footer of the Results dialog shows exactly where the result was saved and its size on disk; the run is also recorded as a step in QuPath's native command-history **Workflow** (Workflow tab, exportable as a script) and in the per-project audit log under `<project>/qpcat/logs/`.
+
+The **Save a named copy...** button saves an additional, human-named copy (handy for marking a run you want to find by name later). **Manage saved results...** (also at Extensions > QPCAT > Manage Saved Results...) opens a checkbox list of every saved result -- name, timestamp, summary, scope, origin, and per-result size -- for multi-select deletion; its header shows the results folder location and total size on disk.
+
+When more than five results accumulate for one scope (a single image, or "Entire project" for project-wide runs), QP-CAT warns you and points at Manage saved results so you can prune old ones. Auto-saves are **never** deleted automatically -- removal is always your explicit choice.
+
+> A run made before v0.3.6 only persisted its cluster labels onto the objects, not the embedding / marker-ranking data, so its rich interface cannot be rebuilt. Re-run clustering with the same parameters to regenerate an equivalent result (it will auto-save).
 
 ### Heatmap vs Dotplot vs Matrix Plot
 

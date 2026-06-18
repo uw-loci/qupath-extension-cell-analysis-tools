@@ -57,6 +57,16 @@ public class SavedClusteringResult {
     private String extensionVersion;
     private String qupathVersion;
 
+    // Scope + origin (optional; null/false on older saves). scopeKey is the
+    // source image id for single-image runs, or "__project__" for project-wide
+    // runs; scopeLabel is the human-readable scope (image name or "Entire
+    // project"). autoSaved distinguishes runs persisted automatically at the
+    // end of clustering from results the user explicitly named.
+    public static final String PROJECT_SCOPE_KEY = "__project__";
+    private String scopeKey;
+    private String scopeLabel;
+    private boolean autoSaved;
+
     public SavedClusteringResult() {}
 
     // --- Metadata ---
@@ -158,6 +168,16 @@ public class SavedClusteringResult {
 
     public String getQupathVersion() { return qupathVersion; }
     public void setQupathVersion(String v) { this.qupathVersion = v; }
+
+    // --- Scope + origin ---
+    public String getScopeKey() { return scopeKey; }
+    public void setScopeKey(String scopeKey) { this.scopeKey = scopeKey; }
+
+    public String getScopeLabel() { return scopeLabel; }
+    public void setScopeLabel(String scopeLabel) { this.scopeLabel = scopeLabel; }
+
+    public boolean isAutoSaved() { return autoSaved; }
+    public void setAutoSaved(boolean autoSaved) { this.autoSaved = autoSaved; }
 
     /**
      * Populate from a ClusteringResult and config metadata.
