@@ -4,7 +4,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 
 **Prerequisites for all workflows:**
 - QuPath 0.6.0+ with QP-CAT installed
-- Python environment set up (Extensions > QP-CAT > Setup Clustering Environment)
+- Python environment set up (Extensions > QP-CAT > Set up analysis environment (first run)...)
 - An image open in QuPath with cell detections present
 
 ---
@@ -40,7 +40,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 **First-time only.** This downloads Python and all scientific packages (~1.5-2.5 GB).
 
 1. Open QuPath
-2. Go to **Extensions > QP-CAT > Setup Clustering Environment**
+2. Go to **Extensions > QP-CAT > Set up analysis environment (first run)...**
 3. Click **Setup Environment**
 4. Wait for the download and build to complete (5-10 minutes depending on internet speed)
 5. When "Environment setup complete!" appears, close the dialog
@@ -61,7 +61,7 @@ Full clustering with all configuration options.
 ### Step-by-step:
 
 1. Open an image with cell detections
-2. **Extensions > QP-CAT > Run Clustering...**
+2. **Extensions > QP-CAT > Find cell populations (clustering)...**
 3. **Scope** -- Choose "Current image" or "All project images"
 4. **Measurements** -- Select the markers to cluster on
    - Click **Select 'Mean' only** for a good default (mean intensity per marker)
@@ -109,7 +109,7 @@ This makes **any** algorithm spatially-aware (not just BANKSY). Adjust the smoot
 One-click clustering with sensible defaults. Good for initial exploration.
 
 1. Open an image with cell detections
-2. **Extensions > QP-CAT > Quick Cluster** and pick one:
+2. **Extensions > QP-CAT > Find cell populations (quick presets)** and pick one:
    - **Quick Leiden (auto)** -- Leiden with n_neighbors=50, resolution=1.0, Z-score normalization, UMAP embedding
    - **Quick KMeans (k=10)** -- KMeans with 10 clusters
    - **Quick HDBSCAN (auto)** -- HDBSCAN with min_cluster_size=15
@@ -125,7 +125,7 @@ Quick Cluster automatically selects all "Mean" measurements and uses Z-score nor
 Cluster all images in a project together for globally consistent assignments.
 
 1. Open a QuPath project with multiple images (each must have cell detections)
-2. **Extensions > QP-CAT > Run Clustering...**
+2. **Extensions > QP-CAT > Find cell populations (clustering)...**
 3. Select **All project images** scope
 4. Configure measurements, normalization, algorithm as usual
 5. Optionally enable **Batch correction (Harmony)** to account for per-image technical variation
@@ -141,7 +141,7 @@ All detections across all images are combined into a single dataset, clustered t
 
 Add UMAP/PCA/t-SNE coordinates to detections without changing existing classifications.
 
-1. **Extensions > QP-CAT > Compute Embedding Only...**
+1. **Extensions > QP-CAT > Map cells in 2D (UMAP / PCA / t-SNE)...**
 2. Select measurements and normalization
 3. Choose embedding method (UMAP recommended)
 
@@ -181,7 +181,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 
 ### Step-by-step:
 
-1. **Extensions > QP-CAT > Run Phenotyping...**
+1. **Extensions > QP-CAT > Label cells by marker rules (phenotyping)...**
 2. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** then deselect irrelevant markers
@@ -241,7 +241,7 @@ Extract morphological embeddings from pre-trained vision foundation models and s
 ### Step-by-step:
 
 1. Open an image with cell detections
-2. **Extensions > QP-CAT > Extract Foundation Model Features...**
+2. **Extensions > QP-CAT > Add AI appearance features to cells...**
 3. **Select a model** from the dropdown:
    - **H-optimus-0** (Bioptimus, 1536-dim) -- gated, requires HuggingFace token
    - **Virchow** (Paige AI, 2560-dim) -- gated, requires HuggingFace token
@@ -261,7 +261,7 @@ Extract morphological embeddings from pre-trained vision foundation models and s
 
 ### Using foundation model features for clustering:
 
-1. After extraction, open **Run Clustering...**
+1. After extraction, open **Find cell populations (clustering)...**
 2. In the measurement selection panel, select the `FM_*` measurements (you can use them alone or combined with channel intensity measurements)
 3. Proceed with clustering as usual
 
@@ -284,7 +284,7 @@ Requires cell detections.
 ### Step-by-step:
 
 1. Open an image with cell detections
-2. **Extensions > QP-CAT > Zero-Shot Phenotyping (BiomedCLIP)...**
+2. **Extensions > QP-CAT > Label cells from a text description (AI / zero-shot)...**
 3. Fill in the prompt table -- one row per phenotype, each with a **Phenotype Name** (the
    label written onto cells) and a **Text Prompt** (the description scored against each cell).
    Use **+** / **-** to add and remove rows. The table is pre-filled with examples:
@@ -345,7 +345,7 @@ OpenAI is **not** supported in v1.
 
 ### Quick Start
 
-1. Open an image (or project), run **Run Clustering...** to completion
+1. Open an image (or project), run **Find cell populations (clustering)...** to completion
 2. In the results dialog, open the **Cluster Explainer (LLM) [Beta]** tab
 3. In the tab itself, select a provider, model, and (for Anthropic) paste your API key
 4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model
@@ -479,7 +479,7 @@ Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets` in 
 
 Organize cluster assignments after clustering.
 
-1. **Extensions > QP-CAT > Manage Clusters...**
+1. **Extensions > QP-CAT > Rename or merge cell populations...**
 2. The dialog shows all classifications with cell counts
 3. **To rename:** Select one cluster, click **Rename...**, enter the new name
    - Example: "Cluster 3" -> "CD8+ T Cells"
@@ -504,7 +504,7 @@ Train a VAE-based classifier on labeled cells, then apply across the project. Th
    - **Locked annotations** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
    - **Point annotations** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels. Precise for single-cell labeling.
    - **Detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
-2. **Extensions > QP-CAT > [TEST] Autoencoder Classifier...**
+2. **Extensions > QP-CAT > Classify cells by appearance (deep learning)...**
 3. **Select training images**: Choose one or more project images. Multi-image training produces more robust classifiers. The current image is pre-selected.
 4. **Choose input mode:**
    - **Measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
@@ -572,7 +572,7 @@ All dialog settings (input mode, tile size, hyperparameters, label sources, augm
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 
-1. **Extensions > QP-CAT > Export AnnData (.h5ad)...**
+1. **Extensions > QP-CAT > Export cells for Python / scanpy (AnnData)...**
 2. Choose a save location and filename
 3. The export includes:
    - Expression matrix (all measurements)
@@ -698,7 +698,7 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
 ### Step-by-step
 
 1. Open an image (or project) with cell detections
-2. **Extensions > QP-CAT > Run Clustering...**
+2. **Extensions > QP-CAT > Find cell populations (clustering)...**
 3. Configure measurements, normalization, algorithm as usual
 4. In the **Analysis options** group:
    - Optionally check **Neighborhood enrichment + Moran's I** (the v0 cheap checkbox)
@@ -757,7 +757,7 @@ QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot,
 ### Quick Start
 
 1. **Run clustering** on at least one image (and save the result if you haven't already)
-2. **Extensions > QP-CAT > Export Figures...**
+2. **Extensions > QP-CAT > Export figures (batch)...**
 3. Pick **Output directory**, check the images and plots you want, pick a format and DPI
 4. Click **Export Figures**
 5. Watch the progress bar; when it finishes, browse the output folder to inspect the files
@@ -770,7 +770,7 @@ The dialog's **Images to export** section has three radio choices:
 - **All images in project** -- export figures from every image in the project.
 - **Subset (pick from list below)** -- check specific images in the list. Filter by name with the **Filter** field; **Select All** / **Deselect All** operate on the filtered view.
 
-The selector is intentionally mandatory in v1 -- batch export across a 50+ image project can produce 500+ files and your output directory deserves to be the size you intend. For each image in the list, the dialog reports which plot kinds are available (saved with the clustering result on disk). Rows showing "(no result)" do not have a saved clustering result -- run **Run Clustering...** on that image first if you want it in the export.
+The selector is intentionally mandatory in v1 -- batch export across a 50+ image project can produce 500+ files and your output directory deserves to be the size you intend. For each image in the list, the dialog reports which plot kinds are available (saved with the clustering result on disk). Rows showing "(no result)" do not have a saved clustering result -- run **Find cell populations (clustering)...** on that image first if you want it in the export.
 
 ### Plot-availability explanation
 
@@ -854,7 +854,7 @@ Rule of thumb: **if the analysis appears in a paper, commit a YAML batch config 
 
 ### Prerequisites
 
-1. Run **Extensions > QP-CAT > Setup Clustering Environment** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
+1. Run **Extensions > QP-CAT > Set up analysis environment (first run)...** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
 2. Confirm the QuPath launcher's `script` subcommand is reachable:
 
    ```bash
@@ -1125,7 +1125,7 @@ By default the menu is off (QuPath core default `OverlayOptions.showConnections 
 
 ### The Spatial Statistics "Viewer overlay" group (`viewer-overlay-group`)
 
-A new sub-section at the bottom of the Spatial Statistics section of the **Run Clustering...** dialog. The controls:
+A new sub-section at the bottom of the Spatial Statistics section of the **Find cell populations (clustering)...** dialog. The controls:
 
 - **Push graph edges to viewer** (default on) -- top-level toggle. When on, the graph is materialised as `PathObjectConnections` after every Spatial Statistics run.
 - **Prompt above N edges** (default 250000) -- when the graph has more than this many undirected edges, QP-CAT prompts before pushing.

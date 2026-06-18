@@ -72,7 +72,7 @@ The YAML parses but doesn't match the schema -- a value is wrong-typed, an enum 
 
 ```
 [qpcat-batch] 2026-05-13 14:23:05 ERROR Appose environment not found.
-                                       Run Extensions > QP-CAT > Setup Clustering Environment from the GUI once before headless runs.
+                                       Run Extensions > QP-CAT > Set up analysis environment (first run) from the GUI once before headless runs.
 ```
 
 **What it means:**
@@ -82,7 +82,7 @@ The headless batch will not build the Appose env on its own. The env build is a 
 **What to do:**
 
 1. Launch QuPath in GUI mode.
-2. **Extensions > QP-CAT > Setup Clustering Environment**.
+2. **Extensions > QP-CAT > Set up analysis environment (first run)**.
 3. Click **Setup Environment** and wait for completion.
 4. Quit QuPath. The env directory at `~/.local/share/appose/qupath-qpcat/` (Linux/macOS) or `%LOCALAPPDATA%\appose\qupath-qpcat\` (Windows) now exists.
 5. Re-run the headless batch.

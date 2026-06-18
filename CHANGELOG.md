@@ -4,6 +4,28 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.8] -- 2026-06-18
+
+Minor release. Goal-first renaming and regrouping of the QP-CAT menu so each command says *why you'd use it* (the outcome), not which algorithm it is. Biologists/pathologists were skipping items like "Autoencoder Classifier" because the name described the technique, not the task.
+
+### Changed
+
+- **Menu items renamed to lead with the goal**, technique kept in parentheses:
+  - Setup Clustering Environment -> **Set up analysis environment (first run)...** (it powers every tool, not just clustering)
+  - Run Clustering... -> **Find cell populations (clustering)...**
+  - Quick Cluster -> **Find cell populations (quick presets)**
+  - Compute Embedding Only... -> **Map cells in 2D (UMAP / PCA / t-SNE)...**
+  - Run Phenotyping... -> **Label cells by marker rules (phenotyping)...**
+  - Zero-Shot Phenotyping (BiomedCLIP)... -> **Label cells from a text description (AI / zero-shot)...**
+  - Extract Foundation Model Features... -> **Add AI appearance features to cells...**
+  - Autoencoder Classifier... -> **Classify cells by appearance (deep learning)...**
+  - Manage Clusters... -> **Rename or merge cell populations...**
+  - Export AnnData (.h5ad)... -> **Export cells for Python / scanpy (AnnData)...**
+  - Export Figures... -> **Export figures (batch)...**
+  - Rebuild Clustering Environment -> **Rebuild analysis environment**
+- **Menu regrouped by intent** with separators: explore (clustering / quick presets / 2D map) -> label (marker rules / text-AI) -> appearance (AI features / deep-learning classifier) -> manage & results -> export -> utilities & help. Previously phenotyping was separated from clustering by the quick-cluster submenu and the two AI tools sat mid-list.
+- HOW_TO_GUIDE and YAML-batch troubleshooting updated to the new menu paths (section titles / anchors and in-dialog button names are unchanged).
+
 ## [0.3.7] -- 2026-06-17
 
 Minor release. Phenotyping-dialog clarity fixes, plus per-tool documentation links and explicit image-type support across the phenotyping tools.

@@ -382,6 +382,12 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         SeparatorMenuItem sep3 = new SeparatorMenuItem();
         sep3.visibleProperty().bind(environmentReady);
 
+        SeparatorMenuItem sep4 = new SeparatorMenuItem();
+        sep4.visibleProperty().bind(environmentReady);
+
+        SeparatorMenuItem sep5 = new SeparatorMenuItem();
+        sep5.visibleProperty().bind(environmentReady);
+
         // Report a Bug (always available -- files a GitHub issue via the shared
         // Cloudflare Worker; no GitHub account needed from the user)
         MenuItem reportBugItem = new MenuItem("Report a Bug...");
@@ -390,21 +396,29 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         extensionMenu.getItems().addAll(
                 setupItem,
                 setupSeparator,
+                // -- Find / explore populations --
                 runClusteringItem,
+                quickClusterMenu,
                 computeEmbeddingItem,
+                sep1,
+                // -- Label cells as types --
                 runPhenotypingItem,
                 zeroShotItem,
-                sep1,
-                quickClusterMenu,
                 sep2,
+                // -- Appearance / deep learning --
                 featureExtractionItem,
                 autoencoderItem,
                 sep3,
+                // -- Manage & results --
                 manageClustersItem,
                 viewResultsItem,
                 manageResultsItem,
+                sep4,
+                // -- Export --
                 exportAnnDataItem,
                 exportFiguresItem,
+                sep5,
+                // -- Utilities & help --
                 utilitiesMenu,
                 new SeparatorMenuItem(),
                 reportBugItem
