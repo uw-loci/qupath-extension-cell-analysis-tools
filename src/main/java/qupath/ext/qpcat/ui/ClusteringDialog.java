@@ -41,16 +41,13 @@ public class ClusteringDialog {
     private static final Logger logger = LoggerFactory.getLogger(ClusteringDialog.class);
 
     /** Base URL for the HOW_TO_GUIDE; each Results-dialog tab appends a fragment
-     *  to point at its dedicated subsection in Chapter 20. */
-    private static final String DOCS_BASE =
-            "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
-            + "blob/main/documentation/HOW_TO_GUIDE.md";
+     *  to point at its dedicated subsection in Chapter 20. Shared with the other
+     *  QP-CAT dialogs via {@link QpcatDocLinks}. */
+    private static final String DOCS_BASE = QpcatDocLinks.HOW_TO_GUIDE;
 
     /** Base URL for BEST_PRACTICES.md; the clustering "Learn more" links append
      *  a per-method anchor (e.g. #caution-gmm) defined in that doc. */
-    private static final String BEST_PRACTICES_BASE =
-            "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
-            + "blob/main/documentation/BEST_PRACTICES.md";
+    private static final String BEST_PRACTICES_BASE = QpcatDocLinks.BEST_PRACTICES;
 
     private final QuPathGUI qupath;
     private final Stage owner;

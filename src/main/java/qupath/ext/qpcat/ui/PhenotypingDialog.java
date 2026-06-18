@@ -110,6 +110,7 @@ public class PhenotypingDialog {
         content.setPrefWidth(750);
 
         content.getChildren().addAll(
+                createHeaderBanner(),
                 createMeasurementSection(),
                 new Separator(),
                 createSettingsSection(),
@@ -142,6 +143,36 @@ public class PhenotypingDialog {
         populateMeasurements();
 
         dialog.show();
+    }
+
+    /**
+     * Top-of-dialog banner: what this tool does, which image types it supports,
+     * and a link to the documentation. Rule-based phenotyping reads per-cell
+     * MEASUREMENTS (not pixels), so it is modality-independent.
+     */
+    private HBox createHeaderBanner() {
+        Label info = new Label(
+                "Assigns each cell a phenotype from gating rules on its marker measurements "
+                + "(pos = value >= the marker's gate, neg = below). Reads existing per-cell "
+                + "measurements, not pixels.\n"
+                + "Supported images: any with per-cell intensity measurements -- multiplex IF, "
+                + "fluorescence, brightfield/IHC, and H&E (after stain separation). Run cell "
+                + "detection first.");
+        info.setWrapText(true);
+        info.setStyle("-fx-font-size: 11px; -fx-text-fill: #444;");
+        info.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(info, Priority.ALWAYS);
+
+        VBox links = new VBox(2,
+                QpcatDocLinks.howToGuide("Documentation", "6-rule-based-phenotyping"),
+                QpcatDocLinks.howToGuide("Auto-thresholding", "7-using-auto-thresholding"));
+        links.setAlignment(Pos.TOP_RIGHT);
+
+        HBox bar = new HBox(8, info, links);
+        bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
+                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        bar.setAlignment(Pos.TOP_LEFT);
+        return bar;
     }
 
     private TitledPane createMeasurementSection() {
@@ -195,8 +226,12 @@ public class PhenotypingDialog {
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(Normalization.values()));
         normalizationCombo.setValue(Normalization.MINMAX);
         normalizationCombo.setOnAction(e -> {
+            applyNormalizationBounds();
             updateGateInfo();
             invalidateHistogramCache();
+            // Re-create marker columns so each per-marker gate spinner picks up
+            // the new valid range (e.g. [0,1] -> [-3,3] when switching to Z-score).
+            rebuildTableColumns();
         });
         normalizationCombo.setTooltip(new Tooltip(
                 "How to scale marker values before applying gates:\n"
@@ -205,21 +240,27 @@ public class PhenotypingDialog {
                 + "  Percentile - robust [0,1] scaling, gate at 0.5\n"
                 + "  None - raw values, set gates in original units"));
 
-        defaultGateSpinner = new Spinner<>(0.0, 5.0, 0.5, 0.05);
+        double[] b = gateBounds(Normalization.MINMAX);
+        defaultGateSpinner = new Spinner<>(b[0], b[1], b[2], b[3]);
         defaultGateSpinner.setEditable(true);
         defaultGateSpinner.setPrefWidth(80);
         defaultGateSpinner.setTooltip(new Tooltip(
-                "Default gate threshold for new marker columns.\n"
-                + "Range: 0.0-5.0. Default: 0.5.\n"
-                + "Typical values: 0.3-0.7 for Min-Max/Percentile,\n"
-                + "~0.0 for Z-score, varies for raw data.\n"
-                + "Individual per-marker gates can be adjusted\n"
-                + "in each column header of the rules table,\n"
-                + "or via auto-thresholding (Triangle/GMM/Gamma)."));
+                "Default gate threshold applied to each new marker column.\n"
+                + "The valid RANGE depends on the Normalization (shown below):\n"
+                + "  Min-Max / Percentile: 0.0-1.0 (0.5 = midpoint)\n"
+                + "  Z-score: -3.0 to 3.0 (0 = mean)\n"
+                + "  None: raw measurement units\n"
+                + "Per-marker gates can be adjusted in each column header, or set\n"
+                + "from the data with Compute Thresholds + Apply to All Markers."));
 
+        // Prominent (not faint) range/units banner -- this is the answer to
+        // "what value does pos/neg compare against, and what range is valid?"
         gateInfoLabel = new Label();
-        gateInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        gateInfoLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #1a4d2e; "
+                + "-fx-background-color: #eaf4ec; -fx-border-color: #b6d8c0; "
+                + "-fx-border-radius: 3; -fx-background-radius: 3; -fx-padding: 6 8 6 8;");
         gateInfoLabel.setWrapText(true);
+        gateInfoLabel.setMaxWidth(Double.MAX_VALUE);
         updateGateInfo();
 
         HBox row = new HBox(15,
@@ -230,22 +271,60 @@ public class PhenotypingDialog {
         return new VBox(5, row, gateInfoLabel);
     }
 
+    /**
+     * Gate-spinner bounds for a normalization mode, as {min, max, default, step}.
+     * Min-Max / Percentile scale to [0,1]; Z-score is centered at 0 (allows
+     * negative gates); None keeps raw measurement units (wide, coarse step).
+     */
+    private static double[] gateBounds(Normalization norm) {
+        return switch (norm) {
+            case MINMAX, PERCENTILE -> new double[]{0.0, 1.0, 0.5, 0.05};
+            case ZSCORE -> new double[]{-3.0, 3.0, 0.0, 0.1};
+            case NONE -> new double[]{-1.0e9, 1.0e9, 0.0, 1.0};
+        };
+    }
+
+    /**
+     * Reconfigure the default-gate spinner's range/step/default to match the
+     * currently selected normalization. Per-marker spinners are refreshed
+     * separately by {@link #rebuildTableColumns()}.
+     */
+    private void applyNormalizationBounds() {
+        double[] b = gateBounds(normalizationCombo.getValue());
+        defaultGateSpinner.setValueFactory(
+                new SpinnerValueFactory.DoubleSpinnerValueFactory(b[0], b[1], b[2], b[3]));
+    }
+
+    /** Human-readable valid-range string; collapses the wide "None" bounds. */
+    private static String formatRange(double min, double max) {
+        if (min <= -1.0e8 || max >= 1.0e8) return "raw measurement units";
+        return String.format("%.1f to %.1f", min, max);
+    }
+
     private void updateGateInfo() {
         Normalization norm = normalizationCombo.getValue();
         String info = switch (norm) {
-            case MINMAX -> "Min-Max: values in [0,1]. Per-marker gates default to 0.5 (midpoint).";
-            case ZSCORE -> "Z-score: values centered at 0. Consider gate 0 (mean) or 0.5 (0.5 SD above).";
-            case PERCENTILE -> "Percentile: values in [0,1] after clipping to p1-p99. Gates default to 0.5.";
-            case NONE -> "Raw values: gate thresholds are in original measurement units.";
+            case MINMAX -> "Min-Max scaling: values in [0, 1]. Valid gate range 0.0-1.0; "
+                    + "0.5 = midpoint. A cell is 'pos' when its scaled value >= the gate.";
+            case ZSCORE -> "Z-score: values centered at 0 (units = SD). Valid gate range -3.0 to 3.0; "
+                    + "0 = mean. A cell is 'pos' when its z-score >= the gate.";
+            case PERCENTILE -> "Percentile scaling: values in [0, 1] after p1-p99 clipping. "
+                    + "Valid gate range 0.0-1.0; 0.5 = midpoint. 'pos' when scaled value >= the gate.";
+            case NONE -> "Raw values: gates are in the ORIGINAL measurement units (no scaling). "
+                    + "Set gates from the data with Compute Thresholds. 'pos' when value >= the gate.";
         };
         gateInfoLabel.setText(info);
     }
 
     private TitledPane createRulesSection() {
         Label infoLabel = new Label(
-                "Rules are evaluated in order (first match wins). "
-                + "Each cell is assigned the first phenotype whose conditions it satisfies. "
-                + "Unmatched cells are labeled 'Unknown'.");
+                "Each column is one selected measurement (channel + statistic, e.g. \"PCNA Mean\"); "
+                + "hover or click the header to see the full name / histogram. In a cell pick "
+                + "pos (value >= the marker's gate), neg (value < gate), or -- (ignore). "
+                + "The gate is the spinner beneath each marker name; its valid range depends on "
+                + "the normalization (see the banner above).\n"
+                + "Rules are evaluated top-to-bottom (first match wins); unmatched cells are "
+                + "labeled 'Unknown'.");
         infoLabel.setWrapText(true);
         infoLabel.setStyle("-fx-text-fill: #444;");
 
@@ -368,7 +447,10 @@ public class PhenotypingDialog {
 
         rulesTable.getColumns().addAll(priorityCol, cellTypeCol);
 
-        double defaultGate = defaultGateSpinner.getValue();
+        double[] bounds = gateBounds(normalizationCombo.getValue());
+        // Clamp the configured default into the valid range for this mode.
+        double defaultGate = Math.max(bounds[0], Math.min(bounds[1], defaultGateSpinner.getValue()));
+        String rangeText = formatRange(bounds[0], bounds[1]);
 
         // One column per marker with embedded gate spinner in header
         for (String marker : currentMarkers) {
@@ -377,29 +459,33 @@ public class PhenotypingDialog {
             col.setCellValueFactory(data ->
                     new ReadOnlyStringWrapper(data.getValue().getCondition(marker)));
             col.setCellFactory(column -> new ConditionComboCell(marker));
-            col.setPrefWidth(90);
-            col.setMinWidth(75);
+            col.setPrefWidth(110);
+            col.setMinWidth(85);
             col.setSortable(false);
 
-            // Header with label + gate spinner
+            // Header with full channel + statistic (so PCNA Mean vs PCNA Median
+            // are distinguishable), plus the gate spinner.
             Label header = new Label(shortName);
-            header.setTooltip(new Tooltip(marker));
+            header.setTooltip(new Tooltip(marker
+                    + "\n(click to view this marker's histogram)"));
             header.setMaxWidth(Double.MAX_VALUE);
+            header.setWrapText(true);
 
             // Make header clickable to show histogram
             header.setOnMouseClicked(e -> showHistogramForMarker(marker));
-            header.setStyle("-fx-cursor: hand;");
+            header.setStyle("-fx-cursor: hand; -fx-font-size: 10px;");
 
-            Spinner<Double> gateSpinner = new Spinner<>(0.0, 5.0, defaultGate, 0.05);
+            Spinner<Double> gateSpinner = new Spinner<>(bounds[0], bounds[1], defaultGate, bounds[3]);
             gateSpinner.setEditable(true);
-            gateSpinner.setPrefWidth(75);
-            gateSpinner.setMaxWidth(75);
+            gateSpinner.setPrefWidth(85);
+            gateSpinner.setMaxWidth(85);
             gateSpinner.setStyle("-fx-font-size: 10px;");
             gateSpinner.setTooltip(new Tooltip(
                     "Gate threshold for " + shortName + ".\n"
-                    + "Range: 0.0-5.0. Cells >= gate are 'pos', below are 'neg'.\n"
+                    + "Valid range for " + normalizationCombo.getValue() + ": " + rangeText + ".\n"
+                    + "Cells with value >= gate are 'pos', below are 'neg'.\n"
                     + "Click the marker name to view its histogram.\n"
-                    + "Use Compute Thresholds for auto-suggested values."));
+                    + "Use Compute Thresholds for data-driven values."));
             markerGateSpinners.put(marker, gateSpinner);
 
             VBox headerBox = new VBox(2, header, gateSpinner);
@@ -1134,14 +1220,26 @@ public class PhenotypingDialog {
      * E.g., "Cell: CD3: Mean" -> "CD3"
      */
     static String shortenMarkerName(String fullName) {
+        if (fullName == null) return "";
         String[] parts = fullName.split(":\\s*");
-        if (parts.length >= 3) {
-            return parts[1].trim();
+        if (parts.length <= 1) return fullName.trim();
+        // Drop only a leading GENERIC compartment ("Cell"/"Detection"); keep
+        // meaningful compartments (Nucleus/Cytoplasm/Membrane) and ALWAYS keep
+        // the trailing statistic (Mean/Median/Max/...). Otherwise every
+        // statistic of one channel collapses to an identical header
+        // (e.g. "Cell: PCNA: Mean" and "Cell: PCNA: Median" both -> "PCNA").
+        int start = 0;
+        String first = parts[0].trim();
+        if (parts.length >= 3
+                && (first.equalsIgnoreCase("Cell") || first.equalsIgnoreCase("Detection"))) {
+            start = 1;
         }
-        if (parts.length == 2) {
-            return parts[0].trim();
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < parts.length; i++) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(parts[i].trim());
         }
-        return fullName;
+        return sb.toString();
     }
 
     /** Creates a Label that shares the tooltip of its associated control. */

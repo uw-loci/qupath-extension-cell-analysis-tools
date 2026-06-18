@@ -4,6 +4,25 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.7] -- 2026-06-17
+
+Minor release. Phenotyping-dialog clarity fixes, plus per-tool documentation links and explicit image-type support across the phenotyping tools.
+
+### Fixed
+
+- **Marker columns in Run Phenotyping were indistinguishable.** `shortenMarkerName` returned only the channel segment, so selecting several statistics of one channel (e.g. `Cell: PCNA: Mean` and `Cell: PCNA: Median`) produced multiple identical `PCNA` column headers and the only way to tell them apart was the hover tooltip. Headers now show **channel + statistic** (e.g. `PCNA Mean`, `PCNA Median`, `Nucleus PCNA Max`); only a generic leading `Cell`/`Detection` compartment is dropped. The full QuPath name remains in the header tooltip.
+- **Gate spinner range did not match the normalization.** The threshold spinners were hardcoded to `0.0-5.0` regardless of scaling -- so Min-Max/Percentile (which produce `[0, 1]`) let you type an out-of-range `5`, and Z-score (centered at 0) could not take a negative gate. Ranges are now normalization-aware: Min-Max / Percentile `0.0-1.0`, Z-score `-3.0 to 3.0`, None = raw units. Both the default-gate and per-marker spinners (and their bounds) update when you change normalization.
+
+### Added
+
+- **Prominent gate range/units banner + pos/neg legend.** The previously faint gray `[0,1]` hint is now a highlighted box that states, for the selected normalization, the valid gate range and that a cell is `pos` when its value is `>= the gate`. The rules section explains the columns (channel + statistic), the `pos` / `neg` / `--` choices, and where the gate spinner lives, and points to **Compute Thresholds** for data-driven gates.
+- **Per-tool documentation links.** A new shared `QpcatDocLinks` helper adds a "Documentation" link (and, for phenotyping, an "Auto-thresholding" link) opening the relevant HOW_TO_GUIDE chapter. Wired into the Run Phenotyping and Zero-Shot Phenotyping dialogs; the clustering results dialog now shares the same base URL.
+- **Explicit "supported image types" guidance in each dialog.** Rule-Based Phenotyping states it works on any image with per-cell intensity measurements (multiplex IF, fluorescence, brightfield/IHC, H&E after stain separation) because it reads measurements, not pixels. Zero-Shot Phenotyping states it scores RGB tile crops with BiomedCLIP -- best for brightfield H&E / IHC, with fluorescence/multiplex flagged as experimental (false-color RGB rendering is out-of-distribution).
+
+### Docs
+
+- HOW_TO_GUIDE chapters 6 and 9 gain "Supported image types" notes and the normalization-dependent gate-range explanation; chapter 9 now documents the actual prompt **table** (name + prompt columns) and settings, replacing the stale "text area, one per line" description.
+
 ## [0.3.6] -- 2026-06-17
 
 Minor release. Clustering results are now always reloadable and every run is recorded, closing a gap where a bare clustering run (no analysis plots / no spatial statistics) silently left nothing on disk: the cluster labels were applied to the objects, but the rich results interface could not be reopened because the results dialog -- the only place with a "Save Results" button -- never appeared, so `qpcat/cluster_results/` stayed empty and "View Past Results" reported no saved data.

@@ -95,15 +95,17 @@ public class ZeroShotPhenotypingDialog {
         dialog.initModality(Modality.NONE);
         dialog.setTitle("QP-CAT - Zero-Shot Phenotyping");
         dialog.setHeaderText(
-                "Assign cell phenotypes using text-image similarity (BiomedCLIP, MIT License)");
+                "Label cells by how well an RGB image crop around each cell matches a text\n"
+                + "description -- no marker gates or training. Uses BiomedCLIP (MIT License).");
         dialog.setResizable(true);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(15));
-        content.setPrefWidth(600);
-        content.setPrefHeight(550);
+        content.setPrefWidth(620);
+        content.setPrefHeight(560);
 
         content.getChildren().addAll(
+                createHeaderBanner(),
                 createPromptSection(),
                 new Separator(),
                 createSettingsSection(),
@@ -123,6 +125,38 @@ public class ZeroShotPhenotypingDialog {
         content.getChildren().add(buttonBox);
 
         dialog.show();
+    }
+
+    /**
+     * Top-of-dialog banner: how zero-shot works, which image types it suits, and
+     * a documentation link. BiomedCLIP scores an RGB tile crop against text, so
+     * it is aimed at brightfield / H&E / IHC histology; fluorescence and
+     * multiplex are rendered to false-color RGB and results are unreliable.
+     */
+    private HBox createHeaderBanner() {
+        Label info = new Label(
+                "For each cell, a square RGB crop around its centroid is scored against every "
+                + "text prompt below (cosine similarity, BiomedCLIP). The cell gets the "
+                + "highest-scoring phenotype, or 'Unknown' if no score clears the minimum "
+                + "similarity.\n"
+                + "Best for brightfield histology -- H&E and IHC/DAB (RGB) images. Fluorescence "
+                + "and multiplex images are rendered to false-color RGB before scoring, which is "
+                + "out-of-distribution for BiomedCLIP, so treat those results as experimental and "
+                + "verify them. For multiplex/fluorescence, prefer Rule-Based Phenotyping or "
+                + "Clustering. Requires cell detections.");
+        info.setWrapText(true);
+        info.setStyle("-fx-font-size: 11px; -fx-text-fill: #444;");
+        info.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(info, Priority.ALWAYS);
+
+        VBox links = new VBox(2, QpcatDocLinks.howToGuide("Documentation", "9-zero-shot-phenotyping"));
+        links.setAlignment(Pos.TOP_RIGHT);
+
+        HBox bar = new HBox(8, info, links);
+        bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
+                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        bar.setAlignment(Pos.TOP_LEFT);
+        return bar;
     }
 
     @SuppressWarnings("unchecked")

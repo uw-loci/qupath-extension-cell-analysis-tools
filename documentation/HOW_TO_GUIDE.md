@@ -161,6 +161,24 @@ Existing cluster or phenotype classifications are preserved.
 
 Classify cells into biological types based on marker expression thresholds.
 
+**Supported image types:** any image where cells already carry per-channel intensity
+measurements -- multiplex IF, conventional fluorescence, brightfield/IHC (e.g. DAB), and
+H&E (after stain separation). This tool reads **measurements, not pixels**, so it is
+modality-independent; run cell detection first so the measurements exist.
+
+**Reading the marker columns:** each column is one selected measurement, labelled with its
+channel **and statistic** (e.g. `PCNA Mean` vs `PCNA Median`) so measurements of the same
+channel are distinguishable -- hover or click a header for the full QuPath name and its
+histogram. A cell is **pos** for a marker when its (normalized) value is `>=` that marker's
+gate and **neg** when below; `--` ignores the marker. The gate is the spinner beneath each
+marker name.
+
+**Gate range depends on normalization:** Min-Max / Percentile scale values to `[0, 1]` (gate
+0.0-1.0, 0.5 = midpoint); Z-score centers at 0 in SD units (gate -3.0 to 3.0, 0 = mean);
+None keeps raw measurement units. The banner above the gate spinner always states the active
+range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary value. Use
+**Compute Thresholds** + **Apply to All Markers** to set data-driven gates instead.
+
 ### Step-by-step:
 
 1. **Extensions > QP-CAT > Run Phenotyping...**
@@ -255,19 +273,34 @@ Extract morphological embeddings from pre-trained vision foundation models and s
 
 Assign cell phenotypes using natural language text prompts and the BiomedCLIP vision-language model -- no marker gating rules or training data required.
 
+**Supported image types:** for each cell, a square **RGB** crop around its centroid is scored
+against your prompts, so this tool is aimed at **brightfield histology -- H&E and IHC/DAB**
+(naturally RGB) images. Fluorescence and multiplex images are rendered to false-color RGB
+before scoring, which is out-of-distribution for BiomedCLIP; results on those are
+**experimental** and should be verified -- for multiplex/fluorescence, prefer
+[Rule-Based Phenotyping](#6-rule-based-phenotyping) or [Clustering](#2-running-clustering).
+Requires cell detections.
+
 ### Step-by-step:
 
 1. Open an image with cell detections
 2. **Extensions > QP-CAT > Zero-Shot Phenotyping (BiomedCLIP)...**
-3. Enter phenotype text prompts in the text area, **one per line**. Examples:
-   - `lymphocyte`
-   - `tumor cell`
-   - `stromal cell`
-   - `macrophage`
-   - `necrotic tissue`
-4. Click **Run**
-5. BiomedCLIP is downloaded on first use and cached locally (MIT License, Microsoft)
-6. Wait for the model to process each cell's image tile against all prompts
+3. Fill in the prompt table -- one row per phenotype, each with a **Phenotype Name** (the
+   label written onto cells) and a **Text Prompt** (the description scored against each cell).
+   Use **+** / **-** to add and remove rows. The table is pre-filled with examples:
+
+   | Phenotype Name | Text Prompt |
+   |----------------|-------------|
+   | Lymphocyte | lymphocyte |
+   | Tumor Cell | tumor cell |
+   | Stromal Cell | stromal cell |
+   | Macrophage | macrophage |
+
+4. Set the **Min. similarity** (cells below it become `Unknown`), assignment **Mode**
+   (hard label, or also store all per-prompt scores), **Tile size**, and **Batch size**.
+5. Click **Run Zero-Shot Phenotyping**
+6. BiomedCLIP is downloaded on first use and cached locally (MIT License, Microsoft)
+7. Wait for the model to process each cell's image tile against all prompts
 
 ### What happens to your data:
 
