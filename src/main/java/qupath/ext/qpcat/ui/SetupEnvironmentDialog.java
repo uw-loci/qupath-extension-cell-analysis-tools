@@ -60,7 +60,9 @@ public class SetupEnvironmentDialog {
         HBox buttonBox = new HBox(10, setupButton, closeButton);
         buttonBox.setAlignment(Pos.CENTER);
 
-        VBox root = new VBox(15, statusLabel, progressBar, buttonBox);
+        VBox root = new VBox(15,
+                QpcatDocLinks.linkBar("1-setting-up-the-environment"),
+                statusLabel, progressBar, buttonBox);
         root.setPadding(new Insets(20));
         root.setPrefWidth(500);
 

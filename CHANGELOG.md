@@ -4,6 +4,14 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.3.9] -- 2026-06-19
+
+Minor release. Every tool dialog now carries a "Help: Documentation" link to the HOW_TO_GUIDE chapter that describes it, so the docs are one click away from inside each tool.
+
+### Added
+
+- **Per-tool documentation links.** A shared `QpcatDocLinks.linkBar(anchor)` adds a compact, right-aligned "Help: Documentation" row at the top of each dialog, opening the relevant HOW_TO_GUIDE chapter in the browser. Wired into: Find cell populations (clustering), Map cells in 2D (embedding), Add AI appearance features (feature extraction), Classify cells by appearance (autoencoder), Rename or merge cell populations (cluster management), Export figures, and Set up analysis environment. The Rule-Based and Zero-Shot phenotyping dialogs (links added in 0.3.7) and the clustering results dialog (per-tab links) already had them, so every QP-CAT tool now links to its docs.
+
 ## [0.3.8] -- 2026-06-18
 
 Minor release. Goal-first renaming and regrouping of the QP-CAT menu so each command says *why you'd use it* (the outcome), not which algorithm it is. Biologists/pathologists were skipping items like "Autoencoder Classifier" because the name described the technique, not the task.

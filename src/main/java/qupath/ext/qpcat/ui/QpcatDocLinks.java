@@ -1,6 +1,10 @@
 package qupath.ext.qpcat.ui;
 
+import javafx.geometry.Pos;
 import javafx.scene.control.Hyperlink;
+import javafx.scene.control.Label;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import qupath.lib.gui.QuPathGUI;
 
 /**
@@ -50,5 +54,22 @@ public final class QpcatDocLinks {
         link.setStyle("-fx-font-size: 11px;");
         link.setBorder(null);
         return link;
+    }
+
+    /**
+     * A compact, right-aligned "Help: Documentation" row to drop at the top of a
+     * tool dialog so every tool links to the chapter that describes it. The
+     * {@code "Help:"} label is pushed left and the link sits at the right edge.
+     *
+     * @param anchor the HOW_TO_GUIDE anchor for this tool (no leading '#')
+     */
+    public static HBox linkBar(String anchor) {
+        Label spacer = new Label();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Label help = new Label("Help:");
+        help.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        HBox bar = new HBox(4, spacer, help, howToGuide("Documentation", anchor));
+        bar.setAlignment(Pos.CENTER_RIGHT);
+        return bar;
     }
 }

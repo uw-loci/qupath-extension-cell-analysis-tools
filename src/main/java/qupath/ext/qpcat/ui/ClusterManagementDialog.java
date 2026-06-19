@@ -93,7 +93,9 @@ public class ClusterManagementDialog {
         infoLabel.setWrapText(true);
         infoLabel.setStyle("-fx-text-fill: #555;");
 
-        VBox content = new VBox(8, infoLabel, clusterListView, buttonBar);
+        VBox content = new VBox(8,
+                QpcatDocLinks.linkBar("11-managing-clusters-renamemerge"),
+                infoLabel, clusterListView, buttonBar);
         content.setPadding(new Insets(10));
 
         dialog.getDialogPane().setContent(content);

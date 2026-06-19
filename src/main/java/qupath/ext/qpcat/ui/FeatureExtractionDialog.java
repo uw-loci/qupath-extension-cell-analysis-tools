@@ -80,6 +80,7 @@ public class FeatureExtractionDialog {
         content.setPadding(new Insets(15));
         content.setPrefWidth(550);
 
+        content.getChildren().add(QpcatDocLinks.linkBar("8-extracting-foundation-model-features"));
         content.getChildren().addAll(
                 createModelSection(),
                 new Separator(),

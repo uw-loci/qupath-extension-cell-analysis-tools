@@ -61,6 +61,7 @@ public class EmbeddingDialog {
         content.setPadding(new Insets(10));
         content.setPrefWidth(500);
 
+        content.getChildren().add(QpcatDocLinks.linkBar("5-computing-embeddings-only"));
         content.getChildren().addAll(
                 createMeasurementSection(),
                 new Separator(),

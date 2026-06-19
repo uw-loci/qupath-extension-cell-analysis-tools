@@ -121,6 +121,7 @@ public class ClusteringDialog {
         content.setPadding(new Insets(10));
         content.setPrefWidth(550);
 
+        content.getChildren().add(QpcatDocLinks.linkBar("2-running-clustering"));
         content.getChildren().addAll(
                 createScopeSection(),
                 new Separator(),
