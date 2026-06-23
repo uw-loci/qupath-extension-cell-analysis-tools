@@ -9,6 +9,7 @@ import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
@@ -98,6 +99,16 @@ public class RepresentativeGalleryPanel extends VBox {
             }
         });
 
+        // Crops are rendered with the image's display settings (brightness /
+        // contrast / channels). For the open image that's the LIVE viewer
+        // display, so this button re-reads the crops after the user adjusts the
+        // viewer -- otherwise multichannel/fluorescence crops look raw.
+        Button refreshBtn = new Button("Update from viewer");
+        refreshBtn.setTooltip(new Tooltip(
+                "Re-render the crops using the current viewer brightness, contrast,\n"
+                + "and channel settings. Adjust the image in the viewer, then click this."));
+        refreshBtn.setOnAction(e -> rebuild());
+
         Button saveBtn = new Button("Save montages");
         saveBtn.setOnAction(e -> saveMontages());
 
@@ -107,7 +118,7 @@ public class RepresentativeGalleryPanel extends VBox {
         HBox controls = new HBox(8,
                 new Label("Center:"), spaceChoice,
                 new Label("Crop x bbox:"), scaleSpinner,
-                spacer, saveBtn);
+                spacer, refreshBtn, saveBtn);
         controls.setAlignment(Pos.CENTER_LEFT);
 
         // --- Cluster rows ---

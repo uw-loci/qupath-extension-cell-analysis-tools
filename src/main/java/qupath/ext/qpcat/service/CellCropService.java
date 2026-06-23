@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
@@ -44,6 +45,9 @@ public class CellCropService implements AutoCloseable {
     private final QuPathGUI qupath;
     // Cache of servers we built ourselves (NOT the open viewer's server).
     private final Map<String, ImageServer<BufferedImage>> builtServers = new ConcurrentHashMap<>();
+    // Cache of default displays for non-current images (the current image uses
+    // the live viewer display so edits show up on refresh).
+    private final Map<String, ImageDisplay> displays = new ConcurrentHashMap<>();
 
     public CellCropService(QuPathGUI qupath) {
         this.qupath = qupath;
@@ -72,7 +76,7 @@ public class CellCropService implements AutoCloseable {
         try {
             RegionRequest request = RegionRequest.createInstance(
                     server.getPath(), w.downsample, w.x, w.y, w.side, w.side);
-            return server.readRegion(request);
+            return applyDisplay(ref, server, server.readRegion(request));
         } catch (Exception e) {
             logger.warn("Crop read failed at ({}, {}) side={} ds={}: {}",
                     w.x, w.y, w.side, w.downsample, e.getMessage());
@@ -116,6 +120,58 @@ public class CellCropService implements AutoCloseable {
     /** Convenience overload using {@link #DEFAULT_CROP_SCALE}. */
     public BufferedImage readCrop(CellRef ref) {
         return readCrop(ref, DEFAULT_CROP_SCALE);
+    }
+
+    /**
+     * Colorize a raw region with the image's display settings (brightness /
+     * contrast / channel selection + colors) so multichannel / fluorescence
+     * crops match what the user sees in the viewer, instead of a raw, washed-out
+     * pixel dump. For the open viewer image this uses the LIVE viewer display,
+     * so the gallery's "Update from viewer" button picks up any brightness /
+     * contrast / channel changes. Returns the raw image unchanged if no display
+     * is available or the transform fails.
+     */
+    private BufferedImage applyDisplay(CellRef ref, ImageServer<BufferedImage> server,
+                                       BufferedImage raw) {
+        if (raw == null) {
+            return null;
+        }
+        ImageDisplay display = resolveDisplay(ref, server);
+        if (display == null) {
+            return raw;
+        }
+        try {
+            return ImageDisplay.applyTransforms(raw, null,
+                    display.selectedChannels(), display.displayMode().getValue());
+        } catch (Exception e) {
+            logger.warn("Display transform failed; using raw crop: {}", e.getMessage());
+            return raw;
+        }
+    }
+
+    private ImageDisplay resolveDisplay(CellRef ref, ImageServer<BufferedImage> server) {
+        // Current viewer image -> the LIVE viewer display, so brightness/contrast/
+        // channel edits are reflected when the gallery is refreshed.
+        var viewer = qupath.getViewer();
+        ImageData<BufferedImage> currentData = qupath.getImageData();
+        if (viewer != null && currentData != null
+                && currentData.getServer() == server
+                && viewer.getImageDisplay() != null) {
+            return viewer.getImageDisplay();
+        }
+        // Other images -> a cached default display (channel colors + auto contrast).
+        if (ref.getImageId() == null) {
+            return null;
+        }
+        return displays.computeIfAbsent(ref.getImageId(), id -> {
+            try {
+                return ImageDisplay.create(new ImageData<>(server));
+            } catch (Exception e) {
+                logger.warn("Could not build display for '{}': {}",
+                        ref.getImageName(), e.getMessage());
+                return null;
+            }
+        });
     }
 
     /**
@@ -171,5 +227,6 @@ public class CellCropService implements AutoCloseable {
             }
         }
         builtServers.clear();
+        displays.clear();
     }
 }
