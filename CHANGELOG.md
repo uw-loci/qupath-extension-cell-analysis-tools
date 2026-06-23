@@ -17,6 +17,7 @@ Follow-up to 0.4.0 from a large BANKSY + spatial-statistics run (13k cells x 72 
 
 ### Changed
 
+- **Clearer phenotyping rule semantics (docs + dialog).** Clarified, in both the rules dialog and the How-To guide, that matching is **first-match-wins** (a cell matching several rules takes the topmost -- it is *not* marked Unknown for matching more than one) and that a rule is an **AND** of its conditions. The common surprise is spelled out: setting the other markers to `neg` makes a rule *exclusive*, so a cell positive for two markers matches neither single-marker rule and becomes "Unknown"; to label every cell positive for a marker, set only that marker to `pos` and leave the rest as `--`. No behavior change -- the matching logic was already correct (addresses issue #6, which was a rule-authoring/expectations mismatch).
 - **Clustering now shows real, determinate progress.** Instead of a perpetually bouncing bar with a single static "Running spatial analysis..." label, the progress bar advances through the actual phases (normalize -> embed -> cluster -> marker ranking -> spatial graph -> neighborhood enrichment -> Moran's I -> Ripley -> Geary -> co-occurrence -> packaging), and the status text names the current step with cell/permutation counts -- e.g. "Computing Ripley K and L (1000 permutations on 13286 cells) -- this can take several minutes...". This makes long permutation-test phases (which are genuinely slow on large datasets) read as *working*, not hung.
 
 ## [0.4.0] -- 2026-06-22

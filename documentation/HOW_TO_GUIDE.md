@@ -194,7 +194,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 5. **Define rules** -- each row is a phenotype:
    - **Cell Type**: name for this phenotype (e.g., "CD8+ T Cell")
    - **Marker columns**: set to "pos" or "neg" for each marker that defines this type
-   - Leave markers blank if they are irrelevant for that type
+   - Leave markers as `--` (ignore) if they are irrelevant for that type
    - Example: CD8+ T Cell = CD3: pos, CD8: pos, CD20: neg
 6. **Rule order matters** -- rules are evaluated top-to-bottom, first match wins
    - Use the up/down arrows to reorder
@@ -202,14 +202,33 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 7. Click **Run Phenotyping**
 8. Results dialog shows phenotype counts and distributions
 
+### How matching works (read this before writing rules)
+
+- **First match wins.** Rules are checked top-to-bottom; each cell takes the **first**
+  rule it satisfies. A cell that would satisfy several rules is assigned the **topmost**
+  one -- it is **not** marked "Unknown" for matching more than one rule.
+- **A rule is an AND of its conditions.** Every `pos`/`neg` you set in a row must hold
+  *simultaneously* for a cell to match that row. Markers left as `--` are ignored.
+- **"neg" on the other markers makes a rule exclusive.** This is the most common
+  surprise. If `markerA+` is defined as `A: pos, B: neg, C: neg`, then a cell that is
+  positive for **both** A and B matches **neither** `markerA+` (B is not neg) **nor**
+  `markerB+` (A is not neg) -- so it becomes **"Unknown"**. With co-expressing cells and
+  many markers, this can send the majority of cells to Unknown.
+- **To label every cell positive for a marker** as that phenotype, set **only** that
+  marker to `pos` and leave the rest as `--` (then rely on rule order for priority). Add
+  `neg` conditions only when you specifically want to *exclude* co-expressing cells.
+
 ### Example rule set for immune panel:
 
 | Cell Type | CD3 | CD8 | CD4 | CD20 | PanCK |
 |-----------|-----|-----|-----|------|-------|
-| CD8+ T Cell | pos | pos | | neg | neg |
+| CD8+ T Cell | pos | pos | -- | neg | neg |
 | CD4+ T Cell | pos | neg | pos | neg | neg |
-| B Cell | neg | | | pos | neg |
-| Tumor | neg | | | neg | pos |
+| B Cell | neg | -- | -- | pos | neg |
+| Tumor | neg | -- | -- | neg | pos |
+
+Here the `neg` columns are deliberate: a CD8+ T cell is required to be CD20-negative and
+PanCK-negative. If instead you just want "any CD3+CD8+ cell," drop those `neg`s to `--`.
 
 ---
 

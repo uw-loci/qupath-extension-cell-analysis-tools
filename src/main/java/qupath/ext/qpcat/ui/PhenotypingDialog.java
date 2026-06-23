@@ -330,8 +330,14 @@ public class PhenotypingDialog {
                 + "pos (value >= the marker's gate), neg (value < gate), or -- (ignore). "
                 + "The gate is the spinner beneath each marker name; its valid range depends on "
                 + "the normalization (see the banner above).\n"
-                + "Rules are evaluated top-to-bottom (first match wins); unmatched cells are "
-                + "labeled 'Unknown'.");
+                + "Rules are evaluated top-to-bottom and the FIRST matching rule wins -- a cell "
+                + "matching several rules takes the topmost one, it is NOT marked Unknown for "
+                + "matching more than one. WITHIN a single rule, ALL conditions must hold at once "
+                + "(logical AND). So marking the other markers 'neg' makes the rule EXCLUSIVE: a "
+                + "cell positive for two markers matches neither single-marker rule and becomes "
+                + "'Unknown'. To label every cell positive for a marker as that phenotype, set "
+                + "ONLY that marker to pos and leave the others as '--'. Cells matching no rule "
+                + "are labeled 'Unknown'.");
         infoLabel.setWrapText(true);
         infoLabel.setStyle("-fx-text-fill: #444;");
 
