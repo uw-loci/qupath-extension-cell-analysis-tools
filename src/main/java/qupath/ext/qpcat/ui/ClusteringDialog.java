@@ -1553,6 +1553,11 @@ public class ClusteringDialog {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
+                // Determinate progress: drive the bar from the Python phase
+                // fractions so it advances through the run instead of bouncing
+                // indefinitely. The first fraction flips it from indeterminate.
+                workflow.setProgressFractionCallback(frac ->
+                        Platform.runLater(() -> progressBar.setProgress(frac)));
                 ClusteringResult result;
 
                 if (config.isClusterEntireProject()) {

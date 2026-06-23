@@ -4,6 +4,19 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.4.1] -- 2026-06-23
+
+Follow-up to 0.4.0 from a large BANKSY + spatial-statistics run (13k cells x 72 markers).
+
+### Fixed
+
+- **BANKSY no longer floods the Appose channel / risks stalling.** BANKSY prints a large volume of diagnostics via `print()`, which lands in Appose's stdout *protocol* channel (the `[SERVICE-0] <INVALID>` lines) and on a full pipe can stall the worker. The BANKSY pipeline calls are now wrapped in `redirect_stdout`, so the noise is suppressed while progress messages (sent outside the redirect) still get through.
+- **Cluster marker log fold-changes are valid again.** Marker ranking runs on normalized data; under signed normalization (z-score / percentile) scanpy computed `log2` of negative means, producing `NaN` (the repeated `invalid value encountered in log2` warnings) so the logFC column was garbage. We now compute interpretable log2 fold-changes of mean **raw** intensity (cluster vs rest); the Wilcoxon scores and p-values (which drive the ranking) are unchanged. The noisy warning is also silenced.
+
+### Changed
+
+- **Clustering now shows real, determinate progress.** Instead of a perpetually bouncing bar with a single static "Running spatial analysis..." label, the progress bar advances through the actual phases (normalize -> embed -> cluster -> marker ranking -> spatial graph -> neighborhood enrichment -> Moran's I -> Ripley -> Geary -> co-occurrence -> packaging), and the status text names the current step with cell/permutation counts -- e.g. "Computing Ripley K and L (1000 permutations on 13286 cells) -- this can take several minutes...". This makes long permutation-test phases (which are genuinely slow on large datasets) read as *working*, not hung.
+
 ## [0.4.0] -- 2026-06-22
 
 Bug-fix release closing two user-reported issues (phenotyping thresholds #5, BANKSY #4) plus a systemic JavaFX spinner fix that affects every dialog.

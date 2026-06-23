@@ -44,9 +44,26 @@ import logging
 
 logger = logging.getLogger("qpcat.clustering")
 
+import contextlib
+import warnings
+
 import numpy as np
 import pandas as pd
 from appose import NDArray as PyNDArray
+
+
+def _progress(frac, message):
+    """Emit a determinate progress update (fraction in 0..1) with a message.
+    The Java side maps current/maximum onto the dialog's progress bar so it
+    advances through the real phases instead of a perpetually bouncing
+    indeterminate bar with one static label. Fractions are phase-start markers
+    and monotonic; a skipped phase just jumps the bar forward."""
+    try:
+        f = max(0.0, min(1.0, float(frac)))
+    except (TypeError, ValueError):
+        f = 0.0
+    task.update(message, current=int(f * 1000), maximum=1000)
+
 
 # 1. Reshape input NDArray to numpy and release shared memory
 data = measurements.ndarray().copy()
@@ -182,7 +199,8 @@ except NameError:
     pref_spatial_persist_plots = True
 
 # 2. Normalize
-task.update("Normalizing measurements...", current=0, maximum=6)
+_progress(0.05, "Normalizing measurements (%d cells x %d markers)..."
+          % (n_cells, n_markers))
 
 if normalization == "zscore":
     std = df.std()
@@ -316,7 +334,8 @@ if do_batch and batch_labels_list is not None:
         logger.info("Skipping batch correction (only 1 batch)")
 
 # 3. Dimensionality reduction
-task.update("Computing embedding...", current=1, maximum=6)
+_progress(0.15, "Computing %s embedding (%d cells) -- this can take a while..."
+          % (str(embedding_method).upper(), n_cells))
 
 embedding_result = None
 if embedding_method == "umap":
@@ -354,7 +373,7 @@ elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)
 
 # 4. Clustering
-task.update("Running clustering algorithm...", current=2, maximum=6)
+_progress(0.45, "Running %s clustering (%d cells)..." % (str(algorithm), n_cells))
 
 labels = None
 
@@ -457,36 +476,45 @@ elif algorithm == "banksy":
     adata_banksy.obs['y'] = spatial_data[:, 1]
     coord_keys = ('x', 'y', 'spatial')
 
-    task.update("BANKSY: initializing spatial neighbor graph...")
-    banksy_dict = initialize_banksy(
-        adata_banksy,
-        coord_keys,
-        num_neighbours=k_geom,
-        nbr_weight_decay='scaled_gaussian',
-        max_m=1,
-        plt_edge_hist=False,
-        plt_nbr_weights=False,
-        plt_agf_angles=False,
-        plt_theta=False,
-    )
+    # BANKSY prints a large volume of diagnostics via print() -> sys.stdout,
+    # which is ALSO Appose's protocol channel. Those lines surface as
+    # "[SERVICE-0] <INVALID>" and, on a full pipe, can stall the worker. Silence
+    # stdout for the duration of each BANKSY call. task.update() stays OUTSIDE
+    # the redirect so progress messages still reach the protocol channel.
+    _progress(0.46, "BANKSY: initializing spatial neighbor graph (%d cells)..."
+              % n_cells)
+    with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
+        banksy_dict = initialize_banksy(
+            adata_banksy,
+            coord_keys,
+            num_neighbours=k_geom,
+            nbr_weight_decay='scaled_gaussian',
+            max_m=1,
+            plt_edge_hist=False,
+            plt_nbr_weights=False,
+            plt_agf_angles=False,
+            plt_theta=False,
+        )
 
-    task.update("BANKSY: building spatial feature matrix...")
-    banksy_dict, _banksy_matrix = generate_banksy_matrix(
-        adata_banksy, banksy_dict, [lambda_param], 1, verbose=False)
-    pca_umap(banksy_dict, pca_dims=[pca_dims], add_umap=False,
-             plt_remaining_var=False)
+    _progress(0.49, "BANKSY: building spatially-augmented feature matrix...")
+    with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
+        banksy_dict, _banksy_matrix = generate_banksy_matrix(
+            adata_banksy, banksy_dict, [lambda_param], 1, verbose=False)
+        pca_umap(banksy_dict, pca_dims=[pca_dims], add_umap=False,
+                 plt_remaining_var=False)
 
-    task.update("BANKSY: Leiden clustering on spatially-augmented features...")
-    results_df, _max_num_labels = run_Leiden_partition(
-        banksy_dict,
-        [resolution],
-        num_nn=50,
-        num_iterations=-1,
-        partition_seed=1234,
-        match_labels=False,
-        annotations=None,
-        max_labels=None,
-    )
+    _progress(0.55, "BANKSY: Leiden clustering on spatial features...")
+    with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
+        results_df, _max_num_labels = run_Leiden_partition(
+            banksy_dict,
+            [resolution],
+            num_nn=50,
+            num_iterations=-1,
+            partition_seed=1234,
+            match_labels=False,
+            annotations=None,
+            max_labels=None,
+        )
 
     # Labels live in the returned dataframe (a Label object with a .dense array),
     # NOT in adata.obs.
@@ -571,7 +599,7 @@ task.outputs["representatives"] = _json_rep.dumps(representatives)
 logger.info("Representative cells computed: top %d per cluster", rep_k)
 
 # 6. Post-clustering analysis (marker ranking + PAGA)
-task.update("Analyzing clusters...", current=4, maximum=6)
+_progress(0.66, "Ranking cluster markers (%d clusters)..." % n_clusters_found)
 
 import scanpy as sc
 import anndata as ad
@@ -629,7 +657,36 @@ if can_analyze:
         top_n = 5
 
     try:
-        sc.tl.rank_genes_groups(adata, groupby='cluster', method='wilcoxon')
+        # Wilcoxon ranking is rank-based, so scores/pvals are valid on the
+        # normalized matrix. But scanpy computes log fold-changes assuming
+        # non-negative (log1p-style) expression; on signed data (z-score /
+        # percentile) it does log2 of negative means -> NaN ("invalid value
+        # encountered in log2"). Suppress that noise and compute interpretable
+        # fold-changes ourselves from the RAW intensities below.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sc.tl.rank_genes_groups(adata, groupby='cluster', method='wilcoxon')
+
+        # Per-cluster log2 fold-change of MEAN RAW intensity (cluster vs rest).
+        # df holds the raw (NaN-imputed) intensities, row-aligned with
+        # labels_shifted. Clip negatives (rare, e.g. background-subtracted) so
+        # the ratio is well-defined; a small epsilon guards zero-mean markers.
+        _raw = np.clip(df.to_numpy(dtype=float), 0.0, None)
+        _eps = 1e-9
+        _labels_arr = np.asarray(labels_shifted)
+        _logfc_by_cluster = {}
+        for _cid in adata.obs['cluster'].cat.categories:
+            _in = _labels_arr == int(_cid)
+            if _in.sum() == 0 or (~_in).sum() == 0:
+                _logfc_by_cluster[str(_cid)] = {}
+                continue
+            _mean_in = _raw[_in].mean(axis=0)
+            _mean_rest = _raw[~_in].mean(axis=0)
+            _lfc = np.log2((_mean_in + _eps) / (_mean_rest + _eps))
+            _logfc_by_cluster[str(_cid)] = {
+                str(marker_names[j]): float(_lfc[j])
+                for j in range(len(marker_names))
+            }
 
         marker_result = {}
         result_data = adata.uns['rank_genes_groups']
@@ -637,13 +694,13 @@ if can_analyze:
             markers_list = []
             names = result_data['names'][cid][:top_n]
             scores = result_data['scores'][cid][:top_n]
-            logfcs = result_data['logfoldchanges'][cid][:top_n]
             pvals = result_data['pvals_adj'][cid][:top_n]
+            _cluster_lfc = _logfc_by_cluster.get(str(cid), {})
             for i in range(len(names)):
                 markers_list.append({
                     'name': str(names[i]),
                     'score': float(scores[i]),
-                    'logfoldchange': float(logfcs[i]),
+                    'logfoldchange': _cluster_lfc.get(str(names[i]), float('nan')),
                     'pval_adj': float(pvals[i])
                 })
             marker_result[str(cid)] = markers_list
@@ -684,7 +741,7 @@ any_v1_stats = (
 )
 
 if has_spatial and n_clusters_found > 1:
-    task.update("Running spatial analysis...")
+    _progress(0.73, "Building spatial neighbor graph (%d cells)..." % n_cells)
     import squidpy as sq
 
     # The v1 spatial-stats helpers live in spatial_stats, registered as an
@@ -749,6 +806,7 @@ if has_spatial and n_clusters_found > 1:
 if has_spatial and n_clusters_found > 1:
     # Neighborhood enrichment (z-score matrix)
     try:
+        _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
         sq.gr.nhood_enrichment(adata, cluster_key='cluster')
         nhood_data = adata.uns['cluster_nhood_enrichment']
         zscore = nhood_data['zscore']
@@ -765,6 +823,7 @@ if has_spatial and n_clusters_found > 1:
 
     # Spatial autocorrelation (Moran's I per marker)
     try:
+        _progress(0.82, "Computing Moran's I spatial autocorrelation...")
         df_autocorr = sq.gr.spatial_autocorr(adata, mode='moran')
         autocorr_results = {}
         for marker in marker_names:
@@ -806,7 +865,8 @@ if has_spatial and n_clusters_found > 1:
     plot_paths = {}
 
     if pref_enable_ripley:
-        task.update("Computing Ripley K and L...")
+        _progress(0.86, "Computing Ripley K and L (%d permutations on %d cells) "
+                  "-- this can take several minutes..." % (n_perms, n_cells))
         _qpcat_spatial.run_ripley(
             adata, task, cluster_key='cluster', n_permutations=n_perms,
             graph_type=pref_spatial_graph_type,
@@ -823,7 +883,8 @@ if has_spatial and n_clusters_found > 1:
                 plot_paths['ripley_l'] = _ripley_path
 
     if pref_enable_geary:
-        task.update("Computing Geary's C...")
+        _progress(0.90, "Computing Geary's C (%d permutations on %d cells)..."
+                  % (n_perms, n_cells))
         _qpcat_spatial.run_geary_c(
             adata, task, n_permutations=n_perms,
             measurements=list(marker_names),
@@ -837,7 +898,8 @@ if has_spatial and n_clusters_found > 1:
                 plot_paths['geary_c'] = _geary_path
 
     if pref_enable_co_occurrence_pairwise:
-        task.update("Computing co-occurrence (pairwise)...")
+        _progress(0.94, "Computing co-occurrence, pairwise (%d cells) "
+                  "-- this can be slow..." % n_cells)
         _qpcat_spatial.run_co_occurrence(
             adata, task, cluster_key='cluster', mode='pairwise',
             n_permutations=n_perms, spatial_data=spatial_data,
@@ -851,7 +913,8 @@ if has_spatial and n_clusters_found > 1:
                 plot_paths['cooc_pairwise'] = _cooc_p_path
 
     if pref_enable_co_occurrence_one_vs_rest:
-        task.update("Computing co-occurrence (one-vs-rest)...")
+        _progress(0.97, "Computing co-occurrence, one-vs-rest (%d cells)..."
+                  % n_cells)
         _qpcat_spatial.run_co_occurrence(
             adata, task, cluster_key='cluster', mode='oneVsRest',
             n_permutations=n_perms, spatial_data=spatial_data,
@@ -880,7 +943,7 @@ except NameError:
     plot_dir = None
 
 if do_plots and plot_dir and can_analyze:
-    task.update("Generating plots...", current=5, maximum=6)
+    _progress(0.98, "Generating plots...")
     import matplotlib.pyplot as plt
 
     os.makedirs(plot_dir, exist_ok=True)
@@ -1008,7 +1071,7 @@ else:
         pass
 
 # 8. Package core outputs
-task.update("Packaging results...", current=6, maximum=6)
+_progress(1.0, "Packaging results...")
 
 # Cluster labels
 labels_nd = PyNDArray(dtype="int32", shape=[n_cells])

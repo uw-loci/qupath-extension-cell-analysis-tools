@@ -103,6 +103,19 @@ public class ClusteringWorkflow {
     private final QuPathGUI qupath;
 
     /**
+     * Optional callback receiving a determinate progress fraction (0..1) for the
+     * clustering task, derived from the Python side's task.update(current,
+     * maximum). Lets a dialog show a real progress bar instead of a perpetually
+     * indeterminate one. Null when not set (headless / no UI).
+     */
+    private java.util.function.DoubleConsumer progressFractionCallback;
+
+    /** Set the determinate-progress callback (0..1). Pass null to clear. */
+    public void setProgressFractionCallback(java.util.function.DoubleConsumer cb) {
+        this.progressFractionCallback = cb;
+    }
+
+    /**
      * Construct a workflow bound to a live QuPathGUI. The GUI is required
      * for the single-image entry points ({@link #runClustering},
      * {@link #runPhenotyping}, {@link #computeThresholds},
@@ -965,8 +978,17 @@ public class ClusteringWorkflow {
             // Run the task with progress updates
             ApposeClusteringService service = ApposeClusteringService.getInstance();
             Task task = service.runTaskWithListener("run_clustering", inputs, event -> {
-                if (event.responseType == ResponseType.UPDATE && event.message != null) {
-                    report(progressCallback, event.message);
+                if (event.responseType == ResponseType.UPDATE) {
+                    if (event.message != null) {
+                        report(progressCallback, event.message);
+                    }
+                    // Determinate progress: the Python side sends current/maximum
+                    // at each phase. maximum == 0 means "no numeric progress"
+                    // (leave the bar where it is) so it never reverts to bouncing.
+                    if (event.maximum > 0 && progressFractionCallback != null) {
+                        double frac = (double) event.current / event.maximum;
+                        progressFractionCallback.accept(Math.max(0.0, Math.min(1.0, frac)));
+                    }
                 }
             });
 
