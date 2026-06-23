@@ -191,11 +191,17 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 4. **Set per-marker gates** -- each marker column header has a spinner
    - Values represent the positive/negative threshold for that marker
    - You can drag the red threshold line on the histogram (see [Auto-Thresholding](#7-using-auto-thresholding))
-5. **Define rules** -- each row is a phenotype:
+5. **Define rules** -- each row is a phenotype. Every marker column has four states:
    - **Cell Type**: name for this phenotype (e.g., "CD8+ T Cell")
-   - **Marker columns**: set to "pos" or "neg" for each marker that defines this type
-   - Leave markers as `--` (ignore) if they are irrelevant for that type
-   - Example: CD8+ T Cell = CD3: pos, CD8: pos, CD20: neg
+   - **`pos`** -- the cell must be at/above this marker's gate
+   - **`neg`** -- the cell must be below this marker's gate (this is what makes a rule
+     *exclusive* -- see "How matching works" below)
+   - **`ignore`** -- this marker is deliberately not used in the rule
+   - **`--`** -- *unselected* (the default). Behaves like `ignore`, but because it may
+     just mean "not decided yet", Run Phenotyping will prompt you to confirm any columns
+     still left as `--`. Set them to `ignore` to make the choice explicit (and silence the
+     prompt).
+   - Example: CD8+ T Cell = CD3: `pos`, CD8: `pos`, CD20: `neg`, everything else `ignore`
 6. **Rule order matters** -- rules are evaluated top-to-bottom, first match wins
    - Use the up/down arrows to reorder
    - Place more specific rules above more general ones

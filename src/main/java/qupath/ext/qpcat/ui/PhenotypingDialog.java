@@ -561,7 +561,12 @@ public class PhenotypingDialog {
 
         ConditionComboCell(String marker) {
             this.marker = marker;
-            this.comboBox = new ComboBox<>(FXCollections.observableArrayList("--", "pos", "neg"));
+            // "--" = unselected (survey-style placeholder); "ignore" = the user
+            // deliberately leaves this marker out of the rule. Both mean the
+            // marker is not used in matching, but only "--" triggers the
+            // "did you mean to ignore these?" prompt at Run time.
+            this.comboBox = new ComboBox<>(
+                    FXCollections.observableArrayList("--", "pos", "neg", "ignore"));
             comboBox.setMaxWidth(Double.MAX_VALUE);
             comboBox.setOnAction(e -> {
                 if (getTableRow() != null && getTableRow().getItem() != null) {
@@ -668,7 +673,9 @@ public class PhenotypingDialog {
             ruleMap.put("cellType", rule.getCellType());
             for (String marker : currentMarkers) {
                 String cond = rule.getCondition(marker);
-                if (cond != null && !cond.isEmpty()) {
+                // Only pos/neg are gating conditions; "" (unselected) and
+                // "ignore" both leave the marker out of the rule.
+                if ("pos".equals(cond) || "neg".equals(cond)) {
                     ruleMap.put(marker, cond);
                 }
             }
@@ -711,12 +718,32 @@ public class PhenotypingDialog {
             boolean hasCondition = currentMarkers.stream()
                     .anyMatch(m -> {
                         String c = rule.getCondition(m);
-                        return c != null && !c.isEmpty();
+                        return "pos".equals(c) || "neg".equals(c);
                     });
             if (!hasCondition) {
                 Dialogs.showWarningNotification("QPCAT",
                         "Rule '" + name + "' has no marker conditions. "
                         + "Each rule needs at least one pos/neg marker.");
+                return;
+            }
+        }
+
+        // Survey-style prompt: markers left as "--" are UNSELECTED. They will be
+        // ignored (not used in matching), but make sure that was intended rather
+        // than forgotten. Choosing "ignore" on a column is the deliberate, silent
+        // alternative and does not count here.
+        long unselected = rulesList.stream()
+                .flatMap(r -> currentMarkers.stream().map(r::getCondition))
+                .filter(c -> c == null || c.isEmpty())
+                .count();
+        if (unselected > 0) {
+            boolean proceed = Dialogs.showConfirmDialog("QPCAT - Unselected markers",
+                    unselected + " marker cell(s) across your rules are left as '--' "
+                    + "(unselected).\n\nUnselected markers are IGNORED -- they are not used "
+                    + "in matching. If that is what you want, continue. To use a marker set it "
+                    + "to pos/neg; to deliberately leave it out (and silence this prompt) set it "
+                    + "to 'ignore'.\n\nRun phenotyping with these markers ignored?");
+            if (!proceed) {
                 return;
             }
         }
