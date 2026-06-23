@@ -501,6 +501,17 @@ public class PhenotypingDialog {
 
             rulesTable.getColumns().add(col);
         }
+
+        // Ensure the table has at least one row while configuring. The per-marker
+        // gate spinners live in the column HEADERS, but a JavaFX TableView with
+        // zero rows never shows its horizontal scrollbar (the body's virtual flow
+        // has no content), so the headers/gates for off-screen markers are
+        // unreachable until a row exists. Seed a starter rule so every marker
+        // column -- and its gate -- is scrollable from the moment markers are
+        // selected.
+        if (rulesList.isEmpty()) {
+            rulesList.add(new PhenotypeRule("Phenotype 1"));
+        }
     }
 
     /**
