@@ -224,6 +224,7 @@ public class ZeroShotPhenotypingDialog {
 
         thresholdSpinner = new Spinner<>(0.0, 1.0, QpcatPreferences.getZsMinSimilarity(), 0.05);
         thresholdSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(thresholdSpinner);
         thresholdSpinner.setPrefWidth(80);
         thresholdSpinner.setTooltip(new Tooltip(
                 "Minimum cosine similarity for phenotype assignment.\n"
@@ -245,6 +246,7 @@ public class ZeroShotPhenotypingDialog {
 
         tileSizeSpinner = new Spinner<>(64, 512, QpcatPreferences.getZsTileSize(), 32);
         tileSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tileSizeSpinner);
         tileSizeSpinner.setPrefWidth(80);
         tileSizeSpinner.setTooltip(new Tooltip(
                 "Size of the square tile extracted around each cell centroid (pixels).\n"
@@ -254,6 +256,7 @@ public class ZeroShotPhenotypingDialog {
 
         batchSizeSpinner = new Spinner<>(1, 128, QpcatPreferences.getZsBatchSize());
         batchSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(batchSizeSpinner);
         batchSizeSpinner.setPrefWidth(80);
         batchSizeSpinner.setTooltip(new Tooltip(
                 "Number of tiles processed per GPU batch.\n"

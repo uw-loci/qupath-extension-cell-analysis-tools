@@ -55,6 +55,20 @@ logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=marker_names)
 
+# Guard against non-finite measurements. UMAP, KMeans, and Leiden/BANKSY all
+# reject NaN/Inf, and a marker can legitimately be NaN for some cells when
+# QuPath could not compute it (this is what made BANKSY fail with
+# "Input contains NaN"). Impute per-column with the column median so every cell
+# is kept and stays row-aligned with its spatial coordinates (BANKSY indexes
+# cells by row, so dropping rows would misalign the spatial graph).
+n_nonfinite = int(np.count_nonzero(~np.isfinite(df.to_numpy(dtype=float))))
+if n_nonfinite > 0:
+    df = df.replace([np.inf, -np.inf], np.nan)
+    col_median = df.median(numeric_only=True).fillna(0.0)
+    df = df.fillna(col_median).fillna(0.0)
+    logger.warning("Imputed %d non-finite measurement value(s) with per-column "
+                   "median (NaN/Inf are not valid clustering input)", n_nonfinite)
+
 # Read optional spatial coordinates early (needed by BANKSY and spatial analysis)
 try:
     spatial_data = spatial_coords.ndarray().copy()
@@ -407,52 +421,84 @@ elif algorithm == "banksy":
     if not has_spatial_coords:
         raise ValueError("BANKSY requires spatial coordinates (cell centroids)")
 
-    from banksy.initialize_banksy import initialize_banksy
-    from banksy.run_banksy import run_banksy_search
+    # pybanksy 1.3.4 exposes a low-level API (initialize -> build matrix -> PCA
+    # -> Leiden); there is no single run_banksy_search entry point (the older
+    # name our code used does not exist in the published package, which is what
+    # caused the ImportError). We drive the documented pipeline directly, which
+    # also avoids run_banksy_multiparam's mandatory matplotlib plotting.
     import anndata as ad
+    from banksy.initialize_banksy import initialize_banksy
+    from banksy.embed_banksy import generate_banksy_matrix
+    from banksy_utils.umap_pca import pca_umap
+    from banksy.cluster_methods import run_Leiden_partition
 
     lambda_param = algorithm_params.get("lambda_param", 0.2)
     k_geom = algorithm_params.get("k_geom", 15)
     resolution = algorithm_params.get("resolution", 0.7)
     pca_dims = algorithm_params.get("pca_dims", pref_banksy_pca_dims)
+
+    # Cap parameters to what the dataset supports (BANKSY errors otherwise on
+    # small cell counts or few markers). The BANKSY matrix has (max_m+1) blocks
+    # of n_markers columns (max_m=1 here), so PCA dims cannot exceed ~2*n_markers.
+    k_geom = max(2, min(int(k_geom), n_cells - 1))
+    capped_pca = max(2, min(int(pca_dims), n_cells - 1, 2 * n_markers))
+    if capped_pca != pca_dims:
+        logger.warning("BANKSY pca_dims reduced from %d to %d for this dataset",
+                       pca_dims, capped_pca)
+    pca_dims = capped_pca
     logger.info("BANKSY: lambda=%.2f, k_geom=%d, resolution=%.2f, pca_dims=%d",
                 lambda_param, k_geom, resolution, pca_dims)
 
-    # Build AnnData with expression and spatial coordinates
-    adata_banksy = ad.AnnData(X=df_norm.values)
+    # Build AnnData with expression and spatial coordinates. BANKSY's coord_keys
+    # is (x_obs_col, y_obs_col, spatial_obsm_key); initialize_banksy reads the
+    # coordinates from adata.obsm[coord_keys[2]].
+    adata_banksy = ad.AnnData(X=df_norm.values.astype(np.float32))
     adata_banksy.var_names = pd.Index(list(marker_names))
     adata_banksy.obsm['spatial'] = spatial_data
+    adata_banksy.obs['x'] = spatial_data[:, 0]
+    adata_banksy.obs['y'] = spatial_data[:, 1]
+    coord_keys = ('x', 'y', 'spatial')
 
-    # Initialize BANKSY (compute spatial neighbor weights)
+    task.update("BANKSY: initializing spatial neighbor graph...")
     banksy_dict = initialize_banksy(
         adata_banksy,
-        coord_keys=None,  # uses adata.obsm['spatial']
-        k_geom=k_geom,
+        coord_keys,
+        num_neighbours=k_geom,
+        nbr_weight_decay='scaled_gaussian',
         max_m=1,
         plt_edge_hist=False,
         plt_nbr_weights=False,
+        plt_agf_angles=False,
+        plt_theta=False,
     )
 
-    # Run BANKSY clustering (Leiden on spatially-augmented features)
-    results_df = run_banksy_search(
-        adata_banksy,
+    task.update("BANKSY: building spatial feature matrix...")
+    banksy_dict, _banksy_matrix = generate_banksy_matrix(
+        adata_banksy, banksy_dict, [lambda_param], 1, verbose=False)
+    pca_umap(banksy_dict, pca_dims=[pca_dims], add_umap=False,
+             plt_remaining_var=False)
+
+    task.update("BANKSY: Leiden clustering on spatially-augmented features...")
+    results_df, _max_num_labels = run_Leiden_partition(
         banksy_dict,
-        lambda_list=[lambda_param],
-        resolutions=[resolution],
-        max_m=1,
-        pca_dims=[pca_dims],
-        key='qpcat',
-        cluster_algorithm='leiden',
-        savefig=False,
-        add_nonspatial=False,
+        [resolution],
+        num_nn=50,
+        num_iterations=-1,
+        partition_seed=1234,
+        match_labels=False,
+        annotations=None,
+        max_labels=None,
     )
 
-    # Extract cluster labels from adata_banksy.obs
-    label_cols = [c for c in adata_banksy.obs.columns if c.startswith('labels_')]
-    if not label_cols:
+    # Labels live in the returned dataframe (a Label object with a .dense array),
+    # NOT in adata.obs.
+    if results_df is None or len(results_df.index) == 0:
         raise ValueError("BANKSY did not produce cluster labels")
-    labels = adata_banksy.obs[label_cols[-1]].astype(int).values
-    logger.info("BANKSY clustering complete: used label column '%s'", label_cols[-1])
+    label_obj = results_df.loc[results_df.index[0], 'labels']
+    labels = label_obj.dense if hasattr(label_obj, 'dense') else np.asarray(label_obj)
+    labels = np.asarray(labels).astype(int)
+    logger.info("BANKSY clustering complete: %d clusters for %d cells",
+                len(set(labels.tolist())), len(labels))
 
 elif algorithm == "none":
     # Embedding only -- assign all cells to cluster 0 (no real clustering)

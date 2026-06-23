@@ -370,6 +370,7 @@ public class BatchFigureExportDialog {
         vectorNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
 
         dpiSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(dpiSpinner);
         dpiSpinner.setAccessibleText("DPI for raster output");
         dpiSpinner.setTooltip(tip(
                 "Pixel density for raster formats. 300 is the publication standard. "

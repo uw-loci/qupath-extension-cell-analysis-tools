@@ -298,6 +298,7 @@ public class ClusterExplainerPanel {
         topMarkersSpinner = new Spinner<>(new SpinnerValueFactory
                 .IntegerSpinnerValueFactory(1, maxTop, defaultTop, 1));
         topMarkersSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(topMarkersSpinner);
         topMarkersSpinner.setPrefWidth(80);
         topMarkersSpinner.setTooltip(new Tooltip(
                 "How many top-ranked markers per cluster to include in the "

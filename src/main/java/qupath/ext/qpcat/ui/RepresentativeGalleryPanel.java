@@ -89,6 +89,7 @@ public class RepresentativeGalleryPanel extends VBox {
 
         scaleSpinner = new Spinner<>(1.0, 10.0, cropScale, 0.5);
         scaleSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(scaleSpinner);
         scaleSpinner.setPrefWidth(80);
         scaleSpinner.valueProperty().addListener((obs, o, n) -> {
             if (n != null) {

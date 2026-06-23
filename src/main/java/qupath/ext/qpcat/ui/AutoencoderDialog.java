@@ -507,6 +507,7 @@ public class AutoencoderDialog {
 
         tileSizeSpinner = new Spinner<>(16, 256, suggestedTileSize, 8);
         tileSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tileSizeSpinner);
         tileSizeSpinner.setPrefWidth(80);
         tileSizeSpinner.setDisable(true);
         tileSizeSpinner.setTooltip(new Tooltip(
@@ -586,11 +587,13 @@ public class AutoencoderDialog {
 
         latentDimSpinner = new Spinner<>(2, 128, QpcatPreferences.getAeLatentDim());
         latentDimSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(latentDimSpinner);
         latentDimSpinner.setPrefWidth(80);
         latentDimSpinner.setTooltip(new Tooltip("Latent space dimensions (default: 16)."));
 
         epochsSpinner = new Spinner<>(10, 1000, QpcatPreferences.getAeEpochs(), 10);
         epochsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(epochsSpinner);
         epochsSpinner.setPrefWidth(80);
         epochsSpinner.setTooltip(new Tooltip("Max training epochs (default: 100). Early stopping may stop sooner."));
 
@@ -605,26 +608,31 @@ public class AutoencoderDialog {
         learningRateSpinner = new Spinner<>();
         learningRateSpinner.setValueFactory(lrFactory);
         learningRateSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(learningRateSpinner);
         learningRateSpinner.setPrefWidth(100);
         learningRateSpinner.setTooltip(new Tooltip("AdamW learning rate (default: 0.001). OneCycleLR adjusts automatically."));
 
         batchSizeSpinner = new Spinner<>(16, 1024, QpcatPreferences.getAeBatchSize(), 32);
         batchSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(batchSizeSpinner);
         batchSizeSpinner.setPrefWidth(80);
         batchSizeSpinner.setTooltip(new Tooltip("Training batch size (default: 128)."));
 
         supervisionWeightSpinner = new Spinner<>(0.0, 10.0, QpcatPreferences.getAeSupervisionWeight(), 0.1);
         supervisionWeightSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(supervisionWeightSpinner);
         supervisionWeightSpinner.setPrefWidth(80);
         supervisionWeightSpinner.setTooltip(new Tooltip("Classification loss weight (default: 1.0). Set to 0 for unsupervised."));
 
         valSplitSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeValSplit(), 0.05);
         valSplitSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(valSplitSpinner);
         valSplitSpinner.setPrefWidth(80);
         valSplitSpinner.setTooltip(new Tooltip("Validation holdout fraction (default: 0.2). Set to 0 to disable."));
 
         earlyStopSpinner = new Spinner<>(0, 100, QpcatPreferences.getAeEarlyStopPatience());
         earlyStopSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(earlyStopSpinner);
         earlyStopSpinner.setPrefWidth(80);
         earlyStopSpinner.setTooltip(new Tooltip("Early stopping patience (default: 15). Set to 0 to disable."));
 
@@ -664,6 +672,7 @@ public class AutoencoderDialog {
 
         Spinner<Double> noiseSpinner = new Spinner<>(0.0, 0.2, QpcatPreferences.getAeAugNoise(), 0.005);
         noiseSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(noiseSpinner);
         noiseSpinner.setPrefWidth(80);
         noiseSpinner.setTooltip(new Tooltip(
                 "Gaussian noise standard deviation (default: 0.02).\n"
@@ -672,6 +681,7 @@ public class AutoencoderDialog {
 
         Spinner<Double> scaleSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeAugScale(), 0.05);
         scaleSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(scaleSpinner);
         scaleSpinner.setPrefWidth(80);
         scaleSpinner.setTooltip(new Tooltip(
                 "Per-feature random scaling range +/- (default: 0.1 = +/-10%).\n"
@@ -679,6 +689,7 @@ public class AutoencoderDialog {
 
         Spinner<Double> dropoutSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeAugDropout(), 0.05);
         dropoutSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(dropoutSpinner);
         dropoutSpinner.setPrefWidth(80);
         dropoutSpinner.setTooltip(new Tooltip(
                 "Probability of zeroing each feature (default: 0.1).\n"
@@ -720,6 +731,7 @@ public class AutoencoderDialog {
         Spinner<Double> elasticAlphaSpinner = new Spinner<>(10.0, 500.0,
                 QpcatPreferences.getAeAugElasticAlpha(), 10.0);
         elasticAlphaSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(elasticAlphaSpinner);
         elasticAlphaSpinner.setPrefWidth(80);
         elasticAlphaSpinner.setTooltip(new Tooltip(
                 "Elastic deformation intensity (default: 120).\n"
@@ -750,6 +762,7 @@ public class AutoencoderDialog {
         Spinner<Double> intensityAmountSpinner = new Spinner<>(0.0, 1.0,
                 QpcatPreferences.getAeAugIntensityAmount(), 0.05);
         intensityAmountSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(intensityAmountSpinner);
         intensityAmountSpinner.setPrefWidth(80);
         intensityAmountSpinner.setTooltip(new Tooltip(
                 "Intensity jitter amount (default: 0.2).\n"
@@ -759,6 +772,7 @@ public class AutoencoderDialog {
         Spinner<Double> gaussNoiseSpinner = new Spinner<>(0.0, 0.5,
                 QpcatPreferences.getAeAugGaussNoise(), 0.01);
         gaussNoiseSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(gaussNoiseSpinner);
         gaussNoiseSpinner.setPrefWidth(80);
         gaussNoiseSpinner.setTooltip(new Tooltip(
                 "Gaussian noise std for tile pixel values (default: 0.05).\n"
@@ -1106,6 +1120,7 @@ public class AutoencoderDialog {
 
             Spinner<Double> weightSpinner = new Spinner<>(0.1, 20.0, 1.0, 0.1);
             weightSpinner.setEditable(true);
+            SpinnerUtils.commitOnFocusLoss(weightSpinner);
             weightSpinner.setPrefWidth(80);
             weightSpinner.setTooltip(new Tooltip(
                     "Weight for class '" + className + "' (default: 1.0).\n"

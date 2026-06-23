@@ -243,6 +243,7 @@ public class PhenotypingDialog {
         double[] b = gateBounds(Normalization.MINMAX);
         defaultGateSpinner = new Spinner<>(b[0], b[1], b[2], b[3]);
         defaultGateSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(defaultGateSpinner);
         defaultGateSpinner.setPrefWidth(80);
         defaultGateSpinner.setTooltip(new Tooltip(
                 "Default gate threshold applied to each new marker column.\n"
@@ -291,8 +292,13 @@ public class PhenotypingDialog {
      */
     private void applyNormalizationBounds() {
         double[] b = gateBounds(normalizationCombo.getValue());
+        // Preserve the user's typed default gate rather than snapping back to the
+        // per-mode default every time the normalization changes; only clamp it
+        // into the new valid range. (Switching modes used to silently overwrite
+        // the user's value with the mode default -- see issue #5.)
+        double preserved = Math.max(b[0], Math.min(b[1], defaultGateSpinner.getValue()));
         defaultGateSpinner.setValueFactory(
-                new SpinnerValueFactory.DoubleSpinnerValueFactory(b[0], b[1], b[2], b[3]));
+                new SpinnerValueFactory.DoubleSpinnerValueFactory(b[0], b[1], preserved, b[3]));
     }
 
     /** Human-readable valid-range string; collapses the wide "None" bounds. */
@@ -477,6 +483,7 @@ public class PhenotypingDialog {
 
             Spinner<Double> gateSpinner = new Spinner<>(bounds[0], bounds[1], defaultGate, bounds[3]);
             gateSpinner.setEditable(true);
+            SpinnerUtils.commitOnFocusLoss(gateSpinner);
             gateSpinner.setPrefWidth(85);
             gateSpinner.setMaxWidth(85);
             gateSpinner.setStyle("-fx-font-size: 10px;");
@@ -1133,22 +1140,15 @@ public class PhenotypingDialog {
             return;
         }
 
-        // Determine which method to use from the histogram panel's combo
-        // We look at the selected method's key
-        String selectedMethod = null;
-        if (histogramPanel.getAutoThresholds() != null) {
-            // Use whatever method key is available, prefer the one currently set
-            // Try to get from the panel's current selection
-            Map<String, Double> thresholds = histogramPanel.getAutoThresholds();
-            // Default to first available
-            if (!thresholds.isEmpty()) {
-                selectedMethod = thresholds.keySet().iterator().next();
-            }
-        }
-
+        // Use the method actually selected in the histogram panel -- NOT the
+        // first key of the thresholds map (which is always "triangle" because of
+        // the order the Python builds them). "Manual" has no value to broadcast.
+        String selectedMethod = histogramPanel.getSelectedMethodKey();
         if (selectedMethod == null) {
             Dialogs.showWarningNotification("QPCAT",
-                    "No auto-threshold method available.");
+                    "Select an auto-threshold method (Triangle, GMM, or Gamma) in the "
+                    + "Histogram & Auto-Thresholding panel, then Apply to All. "
+                    + "'Manual' has no computed value to apply.");
             return;
         }
 

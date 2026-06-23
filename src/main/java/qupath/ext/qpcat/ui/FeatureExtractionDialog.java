@@ -141,6 +141,7 @@ public class FeatureExtractionDialog {
 
         tileSizeSpinner = new Spinner<>(64, 512, QpcatPreferences.getFmTileSize(), 32);
         tileSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tileSizeSpinner);
         tileSizeSpinner.setPrefWidth(80);
         tileSizeSpinner.setTooltip(new Tooltip(
                 "Size of the square tile extracted around each cell centroid (pixels).\n"
@@ -149,6 +150,7 @@ public class FeatureExtractionDialog {
 
         batchSizeSpinner = new Spinner<>(1, 128, QpcatPreferences.getFmBatchSize());
         batchSizeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(batchSizeSpinner);
         batchSizeSpinner.setPrefWidth(80);
         batchSizeSpinner.setTooltip(new Tooltip(
                 "Number of tiles processed per batch.\n"

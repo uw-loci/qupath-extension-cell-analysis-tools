@@ -41,6 +41,10 @@ public class HistogramPanel extends VBox {
     private Map<String, Double> autoThresholds;
     private double currentThreshold = 0.5;
     private boolean dragging = false;
+    // True while we are programmatically loading a marker's data, so the
+    // threshold-spinner listener does not fire the change callback and write a
+    // (possibly clamped) value back into the table just from browsing markers.
+    private boolean updating = false;
 
     public HistogramPanel() {
         setSpacing(5);
@@ -68,18 +72,22 @@ public class HistogramPanel extends VBox {
                 + "    (inspired by GammaGateR, Conroy et al. 2024, Bioinformatics)\n"
                 + "See documentation/REFERENCES.md for full citations."));
 
-        thresholdSpinner = new Spinner<>(0.0, 5.0, 0.5, 0.01);
+        // Wide initial range; the real range/step is set per marker from the
+        // histogram's data extent in setMarkerData (so raw "None" intensities or
+        // negative Z-scores are not clamped to a fixed [0,5] window).
+        thresholdSpinner = new Spinner<>(-1.0e9, 1.0e9, 0.5, 0.01);
         thresholdSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(thresholdSpinner);
         thresholdSpinner.setPrefWidth(90);
         thresholdSpinner.setTooltip(new Tooltip(
                 "Current gate threshold value for this marker.\n"
-                + "Range depends on normalization method:\n"
+                + "The range adapts to the marker's data (and the normalization):\n"
                 + "  Min-Max/Percentile: 0.0-1.0 (typical gate: 0.3-0.7)\n"
                 + "  Z-score: approx -3.0 to 3.0 (typical gate: ~0.0)\n"
                 + "  None: raw intensity units\n"
                 + "You can also drag the red line on the histogram."));
         thresholdSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
-            if (newVal != null && !dragging) {
+            if (newVal != null && !dragging && !updating) {
                 currentThreshold = newVal;
                 redraw();
                 fireThresholdChanged();
@@ -111,17 +119,76 @@ public class HistogramPanel extends VBox {
      */
     public void setMarkerData(String marker, int[] counts, double[] binEdges,
                               Map<String, Double> autoThresholds, double currentGate) {
-        this.currentMarker = marker;
-        this.counts = counts;
-        this.binEdges = binEdges;
-        this.autoThresholds = autoThresholds;
-        this.currentThreshold = currentGate;
+        updating = true;
+        try {
+            this.currentMarker = marker;
+            this.counts = counts;
+            this.binEdges = binEdges;
+            this.autoThresholds = autoThresholds;
 
-        markerLabel.setText(PhenotypingDialog.shortenMarkerName(marker));
-        thresholdSpinner.getValueFactory().setValue(currentGate);
-        methodCombo.setValue("Manual");
+            // Keep the user's chosen method when stepping between markers. If a
+            // non-Manual method is selected and this marker has that auto value,
+            // display it; otherwise show the marker's current gate. This is
+            // display-only -- browsing markers must not overwrite their gates
+            // (use Apply to All, or actively change the method/drag, to write).
+            double display = currentGate;
+            String methodKey = methodKey(methodCombo.getValue());
+            if (methodKey != null && autoThresholds != null
+                    && autoThresholds.containsKey(methodKey)) {
+                display = autoThresholds.get(methodKey);
+            }
+            this.currentThreshold = display;
 
-        redraw();
+            double dataMin = (binEdges != null && binEdges.length > 0) ? binEdges[0] : 0.0;
+            double dataMax = (binEdges != null && binEdges.length > 0)
+                    ? binEdges[binEdges.length - 1] : 1.0;
+            configureThresholdSpinnerRange(dataMin, dataMax, display);
+
+            markerLabel.setText(PhenotypingDialog.shortenMarkerName(marker));
+            redraw();
+        } finally {
+            updating = false;
+        }
+    }
+
+    /**
+     * Reconfigure the threshold spinner's range/step to the marker's data extent
+     * so values in any normalization (raw "None" intensities, negative Z-scores,
+     * [0,1] scaled) can be entered and shown without being clamped to a fixed
+     * window. The supplied value is clamped into the data range for display.
+     */
+    private void configureThresholdSpinnerRange(double min, double max, double value) {
+        if (!(max > min)) {
+            max = min + 1.0;
+        }
+        double step = (max - min) / 100.0;
+        if (!(step > 0)) {
+            step = 0.01;
+        }
+        double clamped = Math.max(min, Math.min(max, value));
+        thresholdSpinner.setValueFactory(
+                new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, clamped, step));
+    }
+
+    /** Map a method display name to its JSON key, or null for "Manual"/unknown. */
+    private static String methodKey(String method) {
+        if (method == null) {
+            return null;
+        }
+        return switch (method) {
+            case "Triangle" -> "triangle";
+            case "GMM (Gaussian)" -> "gmm";
+            case "Gamma" -> "gamma";
+            default -> null;
+        };
+    }
+
+    /**
+     * JSON key of the currently selected auto-threshold method, or null when
+     * "Manual" is selected (nothing to apply automatically).
+     */
+    public String getSelectedMethodKey() {
+        return methodKey(methodCombo.getValue());
     }
 
     /**
@@ -170,15 +237,7 @@ public class HistogramPanel extends VBox {
 
     private void applySelectedMethod() {
         if (autoThresholds == null) return;
-        String method = methodCombo.getValue();
-        if (method == null || "Manual".equals(method)) return;
-
-        String key = switch (method) {
-            case "Triangle" -> "triangle";
-            case "GMM (Gaussian)" -> "gmm";
-            case "Gamma" -> "gamma";
-            default -> null;
-        };
+        String key = methodKey(methodCombo.getValue());
         if (key != null && autoThresholds.containsKey(key)) {
             currentThreshold = autoThresholds.get(key);
             thresholdSpinner.getValueFactory().setValue(currentThreshold);

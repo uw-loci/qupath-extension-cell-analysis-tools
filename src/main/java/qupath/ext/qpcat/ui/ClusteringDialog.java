@@ -254,6 +254,7 @@ public class ClusteringDialog {
 
         umapNeighborsSpinner = new Spinner<>(2, 200, 15);
         umapNeighborsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(umapNeighborsSpinner);
         umapNeighborsSpinner.setPrefWidth(80);
         umapNeighborsSpinner.setTooltip(new Tooltip(
                 "Number of nearest neighbors for UMAP.\n"
@@ -264,6 +265,7 @@ public class ClusteringDialog {
 
         umapMinDistSpinner = new Spinner<>(0.0, 1.0, 0.1, 0.05);
         umapMinDistSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(umapMinDistSpinner);
         umapMinDistSpinner.setPrefWidth(80);
         umapMinDistSpinner.setTooltip(new Tooltip(
                 "Minimum distance between points in UMAP output.\n"
@@ -314,6 +316,7 @@ public class ClusteringDialog {
         // Create algorithm-specific parameter controls
         leidenNeighborsSpinner = new Spinner<>(2, 500, 50);
         leidenNeighborsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(leidenNeighborsSpinner);
         leidenNeighborsSpinner.setPrefWidth(80);
         leidenNeighborsSpinner.setTooltip(new Tooltip(
                 "Number of nearest neighbors for the k-NN graph.\n"
@@ -323,6 +326,7 @@ public class ClusteringDialog {
 
         leidenResolutionSpinner = new Spinner<>(0.01, 10.0, 1.0, 0.1);
         leidenResolutionSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(leidenResolutionSpinner);
         leidenResolutionSpinner.setPrefWidth(80);
         leidenResolutionSpinner.setTooltip(new Tooltip(
                 "Controls cluster granularity for Leiden.\n"
@@ -333,6 +337,7 @@ public class ClusteringDialog {
 
         kmeansClusterSpinner = new Spinner<>(2, 200, 10);
         kmeansClusterSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(kmeansClusterSpinner);
         kmeansClusterSpinner.setPrefWidth(80);
         kmeansClusterSpinner.setTooltip(new Tooltip(
                 "Number of clusters (k) to create.\n"
@@ -342,6 +347,7 @@ public class ClusteringDialog {
 
         hdbscanMinClusterSpinner = new Spinner<>(2, 500, 15);
         hdbscanMinClusterSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(hdbscanMinClusterSpinner);
         hdbscanMinClusterSpinner.setPrefWidth(80);
         hdbscanMinClusterSpinner.setTooltip(new Tooltip(
                 "Minimum number of cells to form a cluster.\n"
@@ -352,6 +358,7 @@ public class ClusteringDialog {
 
         aggClusterSpinner = new Spinner<>(2, 200, 10);
         aggClusterSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(aggClusterSpinner);
         aggClusterSpinner.setPrefWidth(80);
         aggClusterSpinner.setTooltip(new Tooltip(
                 "Number of clusters for agglomerative (hierarchical) clustering.\n"
@@ -369,6 +376,7 @@ public class ClusteringDialog {
 
         banksyLambdaSpinner = new Spinner<>(0.0, 1.0, 0.2, 0.05);
         banksyLambdaSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(banksyLambdaSpinner);
         banksyLambdaSpinner.setPrefWidth(80);
         banksyLambdaSpinner.setTooltip(new Tooltip(
                 "Weight of spatial vs. expression information.\n"
@@ -379,6 +387,7 @@ public class ClusteringDialog {
 
         banksyKGeomSpinner = new Spinner<>(2, 200, 15);
         banksyKGeomSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(banksyKGeomSpinner);
         banksyKGeomSpinner.setPrefWidth(80);
         banksyKGeomSpinner.setTooltip(new Tooltip(
                 "Number of spatial nearest neighbors for BANKSY.\n"
@@ -389,6 +398,7 @@ public class ClusteringDialog {
 
         banksyResolutionSpinner = new Spinner<>(0.01, 10.0, 0.7, 0.1);
         banksyResolutionSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(banksyResolutionSpinner);
         banksyResolutionSpinner.setPrefWidth(80);
         banksyResolutionSpinner.setTooltip(new Tooltip(
                 "Leiden resolution for the final BANKSY clustering step.\n"
@@ -471,6 +481,7 @@ public class ClusteringDialog {
 
         smoothingIterationsSpinner = new Spinner<>(1, 5, 1);
         smoothingIterationsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(smoothingIterationsSpinner);
         smoothingIterationsSpinner.setPrefWidth(60);
         smoothingIterationsSpinner.setDisable(true);
         smoothingIterationsSpinner.setTooltip(new Tooltip(
@@ -555,6 +566,7 @@ public class ClusteringDialog {
         spatialGraphKSpinner = new Spinner<>(2, 200,
                 QpcatPreferences.getSpatialGraphK());
         spatialGraphKSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(spatialGraphKSpinner);
         spatialGraphKSpinner.setPrefWidth(80);
         spatialGraphKSpinner.setTooltip(new Tooltip(
                 "Number of nearest neighbors per cell (kNN graph only).\n"
@@ -567,6 +579,7 @@ public class ClusteringDialog {
                 QpcatPreferences.getSpatialGraphRadius(),
                 5.0);
         spatialGraphRadiusSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(spatialGraphRadiusSpinner);
         spatialGraphRadiusSpinner.setPrefWidth(100);
         spatialGraphRadiusSpinner.setTooltip(new Tooltip(
                 "Maximum distance for two cells to be neighbors (Radius graph only).\n"
@@ -579,6 +592,7 @@ public class ClusteringDialog {
                 QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
                 5.0);
         spatialGraphDelaunayMaxEdgeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeSpinner);
         spatialGraphDelaunayMaxEdgeSpinner.setPrefWidth(100);
         spatialGraphDelaunayMaxEdgeSpinner.setTooltip(new Tooltip(
                 "Maximum allowed edge length after Delaunay triangulation;\n"
@@ -708,6 +722,7 @@ public class ClusteringDialog {
                 QpcatPreferences.getSpatialConnectionsPromptThreshold(),
                 10_000);
         connectionsPromptThresholdSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(connectionsPromptThresholdSpinner);
         connectionsPromptThresholdSpinner.setPrefWidth(110);
         connectionsPromptThresholdSpinner.setTooltip(new Tooltip(
                 "Above this edge count, QP-CAT asks for confirmation before "
@@ -728,6 +743,7 @@ public class ClusteringDialog {
                 QpcatPreferences.getSpatialDelaunayMaxEdgeUm(),
                 1.0);
         spatialGraphDelaunayMaxEdgeUmSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeUmSpinner);
         spatialGraphDelaunayMaxEdgeUmSpinner.setPrefWidth(100);
         spatialGraphDelaunayMaxEdgeUmSpinner.setTooltip(new Tooltip(
                 "Maximum allowed edge length after Delaunay triangulation, "
@@ -1512,6 +1528,19 @@ public class ClusteringDialog {
                 });
             } catch (Exception e) {
                 logger.error("Clustering failed", e);
+                // Best-effort input count for the audit log: the current image's
+                // detection count (the common single-image case). Previously this
+                // was hardcoded to 0, which read as "no data" and obscured
+                // diagnosis of failures on real inputs.
+                int inputCells = 0;
+                try {
+                    var failImageData = qupath.getImageData();
+                    if (failImageData != null) {
+                        inputCells = failImageData.getHierarchy().getDetectionObjects().size();
+                    }
+                } catch (Exception ignored) {
+                    // leave inputCells = 0 if the count cannot be read
+                }
                 OperationLogger.getInstance().logFailure("CLUSTERING",
                         OperationLogger.clusteringParams(
                                 config.getAlgorithm().getDisplayName(),
@@ -1519,7 +1548,7 @@ public class ClusteringDialog {
                                 config.getNormalization().getId(),
                                 config.getEmbeddingMethod().getId(),
                                 config.getSelectedMeasurements().size(),
-                                0, config.isEnableSpatialAnalysis(),
+                                inputCells, config.isEnableSpatialAnalysis(),
                                 config.isEnableBatchCorrection()),
                         e.getMessage(), -1);
                 Platform.runLater(() -> {

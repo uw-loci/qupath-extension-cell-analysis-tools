@@ -4,6 +4,22 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.4.0] -- 2026-06-22
+
+Bug-fix release closing two user-reported issues (phenotyping thresholds #5, BANKSY #4) plus a systemic JavaFX spinner fix that affects every dialog.
+
+### Fixed
+
+- **Phenotyping auto-thresholding now respects user input (#5).** Four related bugs, all surfacing most clearly under `Normalization: None (raw values)`:
+  - The histogram threshold spinner was hardcoded to a `[0, 5]` range, so any raw-intensity (or negative Z-score) threshold was silently clamped -- e.g. it parked at `5` and every auto-threshold method looked identical. The spinner range/step now adapt to each marker's actual data extent.
+  - **Apply to All Markers** always applied the Triangle method regardless of the dropdown, because it read the first key of the thresholds map (always `triangle`) instead of the selected method. It now uses the method actually selected in the histogram panel.
+  - Switching `Normalization` no longer overwrites the user's **Default gate** with the per-mode default; the value is preserved and only clamped into the new valid range.
+  - The selected auto-threshold method is kept (and shown per-marker) when stepping between marker columns instead of resetting to `Manual`.
+- **Editable spinners now commit typed values on focus loss (project-wide).** A long-standing JavaFX behaviour (JDK-8150946) means an editable `Spinner` only commits typed text when Enter is pressed; clicking a button (Run / Apply / Compute) moves focus away without committing, so the code read the previous value and the typed input was ignored. A new `SpinnerUtils.commitOnFocusLoss` helper is wired into all ~40 editable spinners across the clustering, autoencoder, feature-extraction, phenotyping, embedding, and figure-export dialogs.
+- **BANKSY clustering works again (#4).** The code imported `run_banksy_search` from `banksy.run_banksy`, which does not exist in the published pybanksy 1.3.4 (`ImportError`). The BANKSY branch now drives pybanksy's documented low-level pipeline (`initialize_banksy` -> `generate_banksy_matrix` -> `pca_umap` -> `run_Leiden_partition`), validated against the real package. `k_geom`/`pca_dims` are capped to what the dataset supports.
+- **Non-finite measurements no longer abort clustering (#4).** NaN/Inf values (e.g. a marker QuPath could not compute for some cells) caused `ValueError: Input contains NaN` in UMAP. Measurements are now imputed per-column with the column median before normalization, keeping every cell row-aligned with its spatial coordinates.
+- **Honest input-cell count in the failure audit log.** A failed clustering run logged `Input: 0 cells` (a hardcoded placeholder) instead of the real count; it now reports the current image's detection count.
+
 ## [0.3.9] -- 2026-06-19
 
 Minor release. Every tool dialog now carries a "Help: Documentation" link to the HOW_TO_GUIDE chapter that describes it, so the docs are one click away from inside each tool.

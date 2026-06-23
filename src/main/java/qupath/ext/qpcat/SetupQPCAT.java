@@ -29,6 +29,7 @@ import qupath.ext.qpcat.ui.FeatureExtractionDialog;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
 import qupath.ext.qpcat.ui.SetupEnvironmentDialog;
+import qupath.ext.qpcat.ui.SpinnerUtils;
 import qupath.ext.qpcat.ui.ZeroShotPhenotypingDialog;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.GeneralTools;
@@ -575,6 +576,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         Spinner<Double> maxEdgeSpinner = new Spinner<>(-1.0, 1_000_000.0, prefValue, 1.0);
         maxEdgeSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(maxEdgeSpinner);
         maxEdgeSpinner.setPrefWidth(110);
         Tooltip maxEdgeTip = new Tooltip(
                 "Maximum Delaunay edge length in " + unit + "; longer edges are pruned.\n"

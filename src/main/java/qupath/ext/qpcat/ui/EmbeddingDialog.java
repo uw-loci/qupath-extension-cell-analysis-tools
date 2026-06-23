@@ -157,6 +157,7 @@ public class EmbeddingDialog {
 
         umapNeighborsSpinner = new Spinner<>(2, 200, 15);
         umapNeighborsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(umapNeighborsSpinner);
         umapNeighborsSpinner.setPrefWidth(80);
         umapNeighborsSpinner.setTooltip(new Tooltip(
                 "Number of nearest neighbors for UMAP.\n"
@@ -167,6 +168,7 @@ public class EmbeddingDialog {
 
         umapMinDistSpinner = new Spinner<>(0.0, 1.0, 0.1, 0.05);
         umapMinDistSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(umapMinDistSpinner);
         umapMinDistSpinner.setPrefWidth(80);
         umapMinDistSpinner.setTooltip(new Tooltip(
                 "Minimum distance between points in UMAP output.\n"
