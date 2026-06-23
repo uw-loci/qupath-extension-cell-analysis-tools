@@ -100,6 +100,9 @@ public class ClusteringDialog {
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
+    private Button cancelButton;
+    // The workflow for the in-flight run, so the Cancel button can abort it.
+    private volatile ClusteringWorkflow activeWorkflow;
 
     // Algorithm-specific parameter controls
     private Spinner<Integer> leidenNeighborsSpinner;
@@ -1101,10 +1104,39 @@ public class ClusteringDialog {
     private VBox createStatusSection() {
         statusLabel = new Label("Ready");
         progressBar = new ProgressBar(0);
-        progressBar.setPrefWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
+        HBox.setHgrow(progressBar, Priority.ALWAYS);
+        progressBar.setMaxWidth(Double.MAX_VALUE);
 
-        return new VBox(5, progressBar, statusLabel);
+        // Cancel aborts the in-flight run. Because results are only written to
+        // objects AFTER the Python task returns, cancelling leaves the project
+        // untouched -- no partial measurements.
+        cancelButton = new Button("Cancel");
+        cancelButton.setVisible(false);
+        cancelButton.setManaged(false);
+        cancelButton.setTooltip(new Tooltip(
+                "Stop the running clustering / spatial analysis.\n"
+                + "No measurements are written if you cancel."));
+        cancelButton.setOnAction(e -> {
+            ClusteringWorkflow wf = activeWorkflow;
+            if (wf != null) {
+                cancelButton.setDisable(true);
+                statusLabel.setText("Cancelling...");
+                wf.requestCancel();
+            }
+        });
+
+        HBox progressRow = new HBox(8, progressBar, cancelButton);
+        progressRow.setAlignment(Pos.CENTER_LEFT);
+        return new VBox(5, progressRow, statusLabel);
+    }
+
+    private void setRunActive(boolean active) {
+        progressBar.setVisible(active);
+        cancelButton.setVisible(active);
+        cancelButton.setManaged(active);
+        cancelButton.setDisable(false);
+        runButton.setDisable(active);
     }
 
     private void updateAlgorithmParams() {
@@ -1544,20 +1576,23 @@ public class ClusteringDialog {
         QpcatPreferences.setSpatialGraphDelaunayMaxEdge(
                 config.getSpatialGraphDelaunayMaxEdge());
 
-        // Disable UI during run
-        runButton.setDisable(true);
-        progressBar.setVisible(true);
+        // Disable UI during run; show progress + Cancel.
+        setRunActive(true);
         progressBar.setProgress(-1);  // Indeterminate
 
         Thread clusterThread = new Thread(() -> {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
+                activeWorkflow = workflow;
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
                 // Determinate progress: drive the bar from the Python phase
                 // fractions so it advances through the run instead of bouncing
                 // indefinitely. The first fraction flips it from indeterminate.
                 workflow.setProgressFractionCallback(frac ->
                         Platform.runLater(() -> progressBar.setProgress(frac)));
+                // Spatial-stats time estimate + skip/cancel prompt (single-image
+                // path). Runs the probe, then asks the user what to do.
+                workflow.setSpatialEstimateDecider(est -> askSpatialEstimate(est));
                 ClusteringResult result;
 
                 if (config.isClusterEntireProject()) {
@@ -1577,7 +1612,8 @@ public class ClusteringDialog {
                     progressBar.setProgress(1.0);
                     statusLabel.setText("Complete: " + result.getNClusters()
                             + " clusters, " + result.getNCells() + " cells");
-                    runButton.setDisable(false);
+                    setRunActive(false);
+                    activeWorkflow = null;
                     Dialogs.showInfoNotification("QPCAT",
                             "Clustering complete: " + result.getNClusters() + " clusters found.");
 
@@ -1588,6 +1624,19 @@ public class ClusteringDialog {
                     showResultsDialog(result);
                 });
             } catch (Exception e) {
+                // Cancellation is not a failure: nothing was written to objects.
+                ClusteringWorkflow wf = activeWorkflow;
+                if (wf != null && wf.wasCancelled()) {
+                    logger.info("Clustering cancelled by user; no measurements applied.");
+                    Platform.runLater(() -> {
+                        setRunActive(false);
+                        activeWorkflow = null;
+                        statusLabel.setText("Cancelled -- no measurements were applied.");
+                        Dialogs.showInfoNotification("QPCAT",
+                                "Clustering cancelled. No measurements were added to the objects.");
+                    });
+                    return;
+                }
                 logger.error("Clustering failed", e);
                 // Best-effort input count for the audit log: the current image's
                 // detection count (the common single-image case). Previously this
@@ -1614,9 +1663,9 @@ public class ClusteringDialog {
                         e.getMessage(), -1);
                 Platform.runLater(() -> {
                     progressBar.setProgress(0);
-                    progressBar.setVisible(false);
+                    setRunActive(false);
+                    activeWorkflow = null;
                     statusLabel.setText("Error: " + e.getMessage());
-                    runButton.setDisable(false);
                     Dialogs.showErrorNotification("QPCAT",
                             "Clustering failed: " + e.getMessage());
                 });
@@ -1624,6 +1673,64 @@ public class ClusteringDialog {
         }, "QPCAT-Run");
         clusterThread.setDaemon(true);
         clusterThread.start();
+    }
+
+    /**
+     * Show the spatial-stats time estimate and ask whether to run them, skip
+     * them, or cancel the whole run. Called from the workflow's background
+     * thread; shows a modal dialog on the FX thread and blocks for the choice.
+     */
+    private ClusteringWorkflow.SpatialDecision askSpatialEstimate(Double estimateSeconds) {
+        java.util.concurrent.CompletableFuture<ClusteringWorkflow.SpatialDecision> fut =
+                new java.util.concurrent.CompletableFuture<>();
+        Platform.runLater(() -> {
+            try {
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+                alert.initOwner(owner);
+                alert.setTitle("Spatial statistics");
+                alert.setHeaderText("Spatial statistics can be slow on large datasets");
+                alert.setContentText(
+                        "Estimated time for the spatial statistics on this dataset: "
+                        + formatDuration(estimateSeconds) + ".\n\n"
+                        + "These permutation-based statistics scale poorly to very large cell "
+                        + "counts. You can run them, skip them (clustering still completes), or "
+                        + "cancel the whole run.\n\n"
+                        + "You can also press Cancel at any time while it runs -- no measurements "
+                        + "are written unless the run finishes.");
+                ButtonType run = new ButtonType("Run spatial stats", ButtonBar.ButtonData.OK_DONE);
+                ButtonType skip = new ButtonType("Skip spatial stats", ButtonBar.ButtonData.OTHER);
+                ButtonType cancel = new ButtonType("Cancel run", ButtonBar.ButtonData.CANCEL_CLOSE);
+                alert.getButtonTypes().setAll(run, skip, cancel);
+                var choice = alert.showAndWait();
+                if (choice.isPresent() && choice.get() == run) {
+                    fut.complete(ClusteringWorkflow.SpatialDecision.CONTINUE);
+                } else if (choice.isPresent() && choice.get() == skip) {
+                    fut.complete(ClusteringWorkflow.SpatialDecision.SKIP_SPATIAL);
+                } else {
+                    fut.complete(ClusteringWorkflow.SpatialDecision.CANCEL);
+                }
+            } catch (Exception ex) {
+                fut.complete(ClusteringWorkflow.SpatialDecision.CANCEL);
+            }
+        });
+        try {
+            return fut.get();
+        } catch (Exception e) {
+            return ClusteringWorkflow.SpatialDecision.CANCEL;
+        }
+    }
+
+    /** Human-readable duration for the estimate prompt. */
+    private static String formatDuration(Double seconds) {
+        if (seconds == null || seconds.isNaN() || seconds < 0) {
+            return "unknown (could not be estimated)";
+        }
+        double s = seconds;
+        if (s < 1) return "under a second";
+        if (s < 90) return Math.round(s) + " seconds";
+        double mins = s / 60.0;
+        if (mins < 90) return Math.round(mins) + " minutes";
+        return String.format("%.1f hours", mins / 60.0);
     }
 
     private void showResultsDialog(ClusteringResult result) {

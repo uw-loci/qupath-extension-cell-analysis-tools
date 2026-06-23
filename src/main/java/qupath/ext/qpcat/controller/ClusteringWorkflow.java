@@ -115,6 +115,61 @@ public class ClusteringWorkflow {
         this.progressFractionCallback = cb;
     }
 
+    /** What to do after the spatial-stats time estimate is shown to the user. */
+    public enum SpatialDecision { CONTINUE, SKIP_SPATIAL, CANCEL }
+
+    /**
+     * Optional decider invoked (on the calling/background thread) with the
+     * estimated spatial-stats runtime in SECONDS -- null if it could not be
+     * estimated -- BEFORE the main clustering runs, when any spatial statistic
+     * is enabled. It returns whether to run the spatial stats, skip them (run
+     * clustering only), or cancel the whole run. Null = run without prompting.
+     */
+    private java.util.function.Function<Double, SpatialDecision> spatialEstimateDecider;
+
+    public void setSpatialEstimateDecider(
+            java.util.function.Function<Double, SpatialDecision> decider) {
+        this.spatialEstimateDecider = decider;
+    }
+
+    private volatile Task currentTask;
+    private volatile boolean cancelled;
+
+    /**
+     * Request cancellation of the in-flight task (estimate probe or clustering).
+     * Safe to call from any thread. After a cancel, the run returns WITHOUT
+     * applying any labels/measurements to objects, so the project is never left
+     * half-written.
+     */
+    public void requestCancel() {
+        cancelled = true;
+        Task t = currentTask;
+        if (t != null) {
+            try {
+                t.cancel();
+            } catch (Exception ignored) {
+                // best-effort
+            }
+        }
+    }
+
+    public boolean wasCancelled() {
+        return cancelled;
+    }
+
+    private boolean spatialStatsEnabled(ClusteringConfig config) {
+        return config.isEnableSpatialAnalysis() || config.isAnySpatialStatEnabled();
+    }
+
+    /** Turn off every spatial statistic on the config (used when the user picks "skip"). */
+    private void disableSpatialStats(ClusteringConfig config) {
+        config.setEnableSpatialAnalysis(false);
+        config.setEnableRipley(false);
+        config.setEnableGeary(false);
+        config.setEnableCoOccurrencePairwise(false);
+        config.setEnableCoOccurrenceOneVsRest(false);
+    }
+
     /**
      * Construct a workflow bound to a live QuPathGUI. The GUI is required
      * for the single-image entry points ({@link #runClustering},
@@ -192,6 +247,34 @@ public class ClusteringWorkflow {
 
         logger.info("Extracted {} cells x {} measurements",
                 extraction.getNCells(), extraction.getNMeasurements());
+
+        // Spatial-stats time estimate + skip/cancel prompt. The heavy permutation
+        // stats can take a long time at scale, so probe a few subsample sizes,
+        // extrapolate to the full count, and let the user decide BEFORE anything
+        // is computed in full or written to objects.
+        if (spatialStatsEnabled(config) && spatialEstimateDecider != null) {
+            Double estSeconds = null;
+            try {
+                final MeasurementExtractor.ExtractionResult ex = extraction;
+                final ClusteringConfig cfg = config;
+                estSeconds = ApposeClusteringService.withExtensionClassLoader(() ->
+                        estimateSpatialSeconds(ex, cfg, progressCallback));
+            } catch (Exception e) {
+                logger.warn("Spatial-time estimate failed (continuing without it): {}",
+                        e.getMessage());
+            }
+            if (cancelled) {
+                throw new IOException("Clustering cancelled before results were applied.");
+            }
+            SpatialDecision decision = spatialEstimateDecider.apply(estSeconds);
+            if (decision == SpatialDecision.CANCEL) {
+                cancelled = true;
+                throw new IOException("Clustering cancelled before results were applied.");
+            } else if (decision == SpatialDecision.SKIP_SPATIAL) {
+                disableSpatialStats(config);
+                report(progressCallback, "Skipping spatial statistics.");
+            }
+        }
 
         // Convert to NDArray for Appose transfer
         report(progressCallback, "Sending data to Python (" + extraction.getNCells()
@@ -846,6 +929,75 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Probe how long the enabled spatial statistics will take on the full
+     * dataset: runs them on small subsamples (100/1000/2000 cells) and
+     * extrapolates. Returns the estimated seconds, or null if it could not be
+     * estimated. Must be called with the extension class loader set (Appose).
+     */
+    private Double estimateSpatialSeconds(MeasurementExtractor.ExtractionResult extraction,
+                                          ClusteringConfig config,
+                                          Consumer<String> progressCallback) throws IOException {
+        int nCells = extraction.getNCells();
+        int nMeasurements = extraction.getNMeasurements();
+        double[][] data = extraction.getData();
+
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+        var mbuf = measurementsNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            mbuf.put(data[i]);
+        }
+
+        double[][] centroids = MeasurementExtractor.extractCentroids(extraction.getDetections());
+        NDArray.Shape spatialShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
+        NDArray spatialNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
+        var sbuf = spatialNd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            sbuf.put(centroids[i]);
+        }
+
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("spatial_coords", spatialNd);
+        inputs.put("normalization", config.getNormalization().getId());
+        inputs.put("enable_spatial_analysis", config.isEnableSpatialAnalysis());
+        inputs.put("enable_ripley", config.isEnableRipley());
+        inputs.put("enable_geary", config.isEnableGeary());
+        inputs.put("enable_co_occurrence_pairwise", config.isEnableCoOccurrencePairwise());
+        inputs.put("enable_co_occurrence_one_vs_rest", config.isEnableCoOccurrenceOneVsRest());
+        inputs.put("spatial_graph_type", config.getSpatialGraphType());
+        inputs.put("spatial_graph_k", config.getSpatialGraphK());
+        inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
+        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdgePixels(config));
+        inputs.put("spatial_permutations", config.getSpatialPermutations());
+
+        Task task = ApposeClusteringService.getInstance().runTaskWithListener(
+                "estimate_spatial_time", inputs,
+                event -> {
+                    if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                        report(progressCallback, event.message);
+                    }
+                },
+                t -> currentTask = t);
+
+        Object est = task.outputs.get("estimate_seconds");
+        if (est == null) {
+            return null;
+        }
+        // Python emits json.dumps(estimate_seconds): a number string or "null".
+        String s = String.valueOf(est).trim();
+        if (s.isEmpty() || "null".equalsIgnoreCase(s)) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(s);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
      * Executes the clustering task via Appose. Must be called with TCCL set.
      */
     private ClusteringResult executeClusteringTask(
@@ -998,7 +1150,13 @@ public class ClusteringWorkflow {
                         progressFractionCallback.accept(Math.max(0.0, Math.min(1.0, frac)));
                     }
                 }
-            });
+            }, t -> currentTask = t);
+
+            // If the user cancelled (button -> requestCancel), do NOT parse or
+            // apply any results -- bail before anything touches the objects.
+            if (cancelled) {
+                throw new IOException("Clustering cancelled before results were applied.");
+            }
 
             // Parse core outputs
             labelsNd = (NDArray) task.outputs.get("cluster_labels");

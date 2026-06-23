@@ -436,6 +436,18 @@ public class ApposeClusteringService {
     public Task runTaskWithListener(String scriptName, Map<String, Object> inputs,
                                     Consumer<org.apposed.appose.TaskEvent> eventListener)
             throws IOException {
+        return runTaskWithListener(scriptName, inputs, eventListener, null);
+    }
+
+    /**
+     * As above, but invokes {@code onTaskCreated} with the live {@link Task}
+     * immediately after it is created (before the blocking wait), so the caller
+     * can hold a reference to cancel it mid-run. Fires once per retry attempt.
+     */
+    public Task runTaskWithListener(String scriptName, Map<String, Object> inputs,
+                                    Consumer<org.apposed.appose.TaskEvent> eventListener,
+                                    Consumer<Task> onTaskCreated)
+            throws IOException {
         ensureInitialized();
 
         String script;
@@ -457,6 +469,9 @@ public class ApposeClusteringService {
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
                     Task task = pythonService.task(script, inputs);
+                    if (onTaskCreated != null) {
+                        onTaskCreated.accept(task);
+                    }
                     task.listen(eventListener::accept);
                     task.waitFor();
                     return task;
