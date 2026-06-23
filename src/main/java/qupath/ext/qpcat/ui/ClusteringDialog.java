@@ -1,7 +1,12 @@
 package qupath.ext.qpcat.ui;
 
 import javafx.application.Platform;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
+import javafx.collections.transformation.FilteredList;
+import javafx.scene.control.cell.CheckBoxListCell;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -55,7 +60,10 @@ public class ClusteringDialog {
     // UI components
     private RadioButton scopeCurrentImage;
     private RadioButton scopeAllImages;
-    private ListView<String> measurementList;
+    private ListView<MeasurementItem> measurementList;
+    private final ObservableList<MeasurementItem> measurementItems = FXCollections.observableArrayList();
+    private FilteredList<MeasurementItem> filteredMeasurements;
+    private TextField measurementFilter;
     private ComboBox<Normalization> normalizationCombo;
     private ComboBox<EmbeddingMethod> embeddingCombo;
     private Spinner<Integer> umapNeighborsSpinner;
@@ -189,37 +197,81 @@ public class ClusteringDialog {
         return box;
     }
 
+    /**
+     * One selectable measurement with an independent checked state. The checked
+     * state lives on the item (not in a ListView selection model), so it
+     * survives text filtering -- filtering only hides rows, it never unchecks.
+     */
+    private static final class MeasurementItem {
+        final String name;
+        private final BooleanProperty selected = new SimpleBooleanProperty(false);
+        MeasurementItem(String name) { this.name = name; }
+        BooleanProperty selectedProperty() { return selected; }
+        boolean isSelected() { return selected.get(); }
+        void setSelected(boolean v) { selected.set(v); }
+    }
+
+    /** Check or uncheck every item currently visible in the (possibly filtered) view. */
+    private static void setChecked(List<MeasurementItem> items, boolean checked) {
+        for (MeasurementItem m : items) {
+            m.setSelected(checked);
+        }
+    }
+
     private TitledPane createMeasurementSection() {
         measurementList = new ListView<>();
-        measurementList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         measurementList.setPrefHeight(150);
+
+        // Checkbox per row. Toggling a checkbox changes ONLY that item -- a plain
+        // click no longer wipes out every other selection (the old multi-select
+        // ListView behaviour that this replaces).
+        filteredMeasurements = new FilteredList<>(measurementItems, m -> true);
+        measurementList.setItems(filteredMeasurements);
+        measurementList.setCellFactory(CheckBoxListCell.forListView(
+                MeasurementItem::selectedProperty,
+                new javafx.util.StringConverter<MeasurementItem>() {
+                    @Override public String toString(MeasurementItem m) {
+                        return m == null ? "" : m.name;
+                    }
+                    @Override public MeasurementItem fromString(String s) { return null; }
+                }));
+
+        // Simple case-insensitive text filter. Hidden rows keep their checks.
+        measurementFilter = new TextField();
+        measurementFilter.setPromptText("Filter measurements...");
+        measurementFilter.textProperty().addListener((obs, oldVal, newVal) -> {
+            String q = (newVal == null) ? "" : newVal.trim().toLowerCase();
+            filteredMeasurements.setPredicate(q.isEmpty()
+                    ? m -> true
+                    : m -> m.name.toLowerCase().contains(q));
+        });
+        measurementFilter.setTooltip(new Tooltip(
+                "Type to show only matching measurements. Checkboxes stay checked\n"
+                + "even when filtered out, so you can narrow, check, clear filter, repeat."));
 
         HBox buttonBar = new HBox(5);
         Button selectAll = new Button("Select All");
-        selectAll.setOnAction(e -> measurementList.getSelectionModel().selectAll());
-        selectAll.setTooltip(new Tooltip("Select all available measurements for clustering."));
+        selectAll.setOnAction(e -> setChecked(filteredMeasurements, true));
+        selectAll.setTooltip(new Tooltip("Check all currently shown measurements."));
         Button selectNone = new Button("Select None");
-        selectNone.setOnAction(e -> measurementList.getSelectionModel().clearSelection());
-        selectNone.setTooltip(new Tooltip("Clear the measurement selection."));
+        selectNone.setOnAction(e -> setChecked(filteredMeasurements, false));
+        selectNone.setTooltip(new Tooltip("Uncheck all currently shown measurements."));
         Button selectMean = new Button("Select 'Mean' only");
         selectMean.setOnAction(e -> {
-            measurementList.getSelectionModel().clearSelection();
-            for (int i = 0; i < measurementList.getItems().size(); i++) {
-                if (measurementList.getItems().get(i).contains("Mean")) {
-                    measurementList.getSelectionModel().select(i);
-                }
+            for (MeasurementItem m : measurementItems) {
+                m.setSelected(m.name.contains("Mean"));
             }
         });
         selectMean.setTooltip(new Tooltip(
-                "Select only mean intensity measurements.\n"
+                "Check only mean intensity measurements (across all, not just shown).\n"
                 + "Typically the best choice for marker-based clustering."));
         buttonBar.getChildren().addAll(selectAll, selectNone, selectMean);
 
         measurementList.setTooltip(new Tooltip(
-                "Select the measurements to use for clustering.\n"
-                + "Hold Ctrl/Cmd to select multiple. Shift-click for ranges."));
+                "Tick the measurements to use for clustering. Use the filter above to\n"
+                + "narrow the list; checked items stay checked when filtered out."));
 
-        VBox box = new VBox(5, measurementList, buttonBar);
+        VBox box = new VBox(5, measurementFilter, measurementList, buttonBar);
         TitledPane pane = new TitledPane("Measurements", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -1166,13 +1218,15 @@ public class ClusteringDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        measurementList.setItems(FXCollections.observableArrayList(allMeasurements));
-
-        // Auto-select "Mean" measurements by default
-        for (int i = 0; i < allMeasurements.size(); i++) {
-            if (allMeasurements.get(i).contains("Mean")) {
-                measurementList.getSelectionModel().select(i);
-            }
+        // Rebuild the checkbox model; auto-check "Mean" measurements by default.
+        measurementItems.clear();
+        for (String name : allMeasurements) {
+            MeasurementItem m = new MeasurementItem(name);
+            m.setSelected(name.contains("Mean"));
+            measurementItems.add(m);
+        }
+        if (measurementFilter != null) {
+            measurementFilter.clear();
         }
     }
 
@@ -1220,8 +1274,13 @@ public class ClusteringDialog {
                 writeComponentMeasurementsCheck.isSelected());
         config.setLimitEdgesBySameClass(limitEdgesBySameClassCheck.isSelected());
 
-        // Selected measurements
-        List<String> selected = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
+        // Selected measurements (checked items, in list order)
+        List<String> selected = new ArrayList<>();
+        for (MeasurementItem m : measurementItems) {
+            if (m.isSelected()) {
+                selected.add(m.name);
+            }
+        }
         if (selected.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
             return null;
@@ -1463,11 +1522,8 @@ public class ClusteringDialog {
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();
         if (configMeasurements != null && !configMeasurements.isEmpty()) {
-            measurementList.getSelectionModel().clearSelection();
-            for (int i = 0; i < measurementList.getItems().size(); i++) {
-                if (configMeasurements.contains(measurementList.getItems().get(i))) {
-                    measurementList.getSelectionModel().select(i);
-                }
+            for (MeasurementItem m : measurementItems) {
+                m.setSelected(configMeasurements.contains(m.name));
             }
         }
     }

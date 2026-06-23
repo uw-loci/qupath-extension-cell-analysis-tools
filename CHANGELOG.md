@@ -23,6 +23,10 @@ Bug-fix release closing two user-reported issues (phenotyping thresholds #5, BAN
 - **Spatial analysis no longer crashes with `No module named 'spatial_stats'`.** Task scripts run via `exec("<string>")`, so they have no `__file__` and the bundled sibling scripts are not on `sys.path`; `import spatial_stats` (spatial smoothing + spatial statistics) failed, and the old `__file__`-based fallback raised `NameError: name '__file__' is not defined`. `spatial_stats` is now registered as an importable module in the persistent Appose worker at init. No environment rebuild needed. This also reaches the headless / YAML-batch clustering path, which shares the same service.
 - **Honest input-cell count in the failure audit log.** A failed clustering run logged `Input: 0 cells` (a hardcoded placeholder) instead of the real count; it now reports the current image's detection count.
 
+### Changed
+
+- **Find cell populations (clustering): the Measurements list now uses checkboxes plus a text filter.** Previously it was a multi-select list where a single plain click silently cleared every other selection. Each measurement now has its own checkbox (toggling one never affects the others), and a filter box above the list narrows it case-insensitively as you type. Checked items stay checked even while filtered out, so you can narrow, check, clear the filter, and repeat. "Select All"/"Select None" act on the currently shown rows; "Select 'Mean' only" still applies across all measurements.
+
 ## [0.3.9] -- 2026-06-19
 
 Minor release. Every tool dialog now carries a "Help: Documentation" link to the HOW_TO_GUIDE chapter that describes it, so the docs are one click away from inside each tool.
