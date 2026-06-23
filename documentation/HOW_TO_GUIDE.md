@@ -217,6 +217,11 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 - **To label every cell positive for a marker** as that phenotype, set **only** that
   marker to `pos` and leave the rest as `--` (then rely on rule order for priority). Add
   `neg` conditions only when you specifically want to *exclude* co-expressing cells.
+- **Diagnosing Unknowns.** After a run, the results summary breaks the Unknown bucket
+  into *negative for all rule markers*, *positive for exactly one marker*, and *positive
+  for >= 2 markers*. A large "positive for >= 2 markers" count is the signature of
+  over-strict rules: your `neg` conditions are rejecting co-expressing cells. If you see
+  this, relax the `neg` conditions to `--`.
 
 ### Example rule set for immune panel:
 

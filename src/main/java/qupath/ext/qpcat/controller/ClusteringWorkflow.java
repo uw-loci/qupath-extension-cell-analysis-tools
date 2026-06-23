@@ -834,6 +834,9 @@ public class ClusteringWorkflow {
             result.put("phenotype_names", namesList.toArray(new String[0]));
             result.put("n_phenotypes", nPhenotypes);
             result.put("phenotype_counts", phenotypeCountsJson);
+            if (task.outputs.containsKey("unknown_breakdown")) {
+                result.put("unknown_breakdown", task.outputs.get("unknown_breakdown"));
+            }
 
             return result;
         } finally {

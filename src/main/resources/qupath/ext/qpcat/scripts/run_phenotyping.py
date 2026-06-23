@@ -132,6 +132,36 @@ for rule_idx, rule in enumerate(rules):
     else:
         logger.warning("  %s: no valid criteria, skipping", cell_type)
 
+# Diagnostic: explain WHY cells ended up Unknown. The most common cause is rules
+# that require the OTHER markers to be 'neg' (exclusive single-positive rules):
+# a cell positive for >= 2 markers then matches no rule and falls through. Break
+# the Unknown bucket down by how many rule markers each Unknown cell is positive
+# for, so a too-strict rule set is obvious at a glance (e.g. "most of my Unknowns
+# are multi-positive"). Computed while Unknown cells are still labelled -1.
+unknown_mask = labels == -1
+rule_markers = sorted({m for r in rules for m, c in r.items()
+                       if m != 'cellType' and c and m in marker_idx})
+unknown_breakdown = {}
+if bool(np.any(unknown_mask)) and rule_markers:
+    pos_count = np.zeros(n_cells, dtype=np.int32)
+    for m in rule_markers:
+        g = gates.get(m, default_gate)
+        pos_count += (norm_data[:, marker_idx[m]] >= g).astype(np.int32)
+    u_pos = pos_count[unknown_mask]
+    unknown_breakdown = {
+        "total": int(unknown_mask.sum()),
+        "negative_for_all_rule_markers": int(np.sum(u_pos == 0)),
+        "positive_for_one_marker": int(np.sum(u_pos == 1)),
+        "positive_for_multiple_markers": int(np.sum(u_pos >= 2)),
+    }
+    logger.info("Unknown breakdown: %d total | %d negative for all rule markers | "
+                "%d positive for exactly one | %d positive for >=2 markers "
+                "(failed an exclusivity 'neg' condition)",
+                unknown_breakdown["total"],
+                unknown_breakdown["negative_for_all_rule_markers"],
+                unknown_breakdown["positive_for_one_marker"],
+                unknown_breakdown["positive_for_multiple_markers"])
+
 # Unassigned cells get "Unknown"
 unknown_idx = len(rules)
 n_unknown = int(np.sum(labels == -1))
@@ -160,5 +190,6 @@ task.outputs['phenotype_labels'] = labels_nd
 task.outputs['phenotype_names'] = json.dumps(phenotype_names)
 task.outputs['n_phenotypes'] = n_phenotypes
 task.outputs['phenotype_counts'] = json.dumps(counts)
+task.outputs['unknown_breakdown'] = json.dumps(unknown_breakdown)
 
 logger.info("Phenotyping results packaged")

@@ -765,7 +765,8 @@ public class PhenotypingDialog {
                     setBusy(false, null, null);
                     Dialogs.showInfoNotification("QPCAT",
                             "Phenotyping complete: " + nPhenotypes + " phenotypes assigned.");
-                    showResultsSummary((String) result.get("phenotype_counts"));
+                    showResultsSummary((String) result.get("phenotype_counts"),
+                            (String) result.get("unknown_breakdown"));
                 });
             } catch (Exception e) {
                 logger.error("Phenotyping failed", e);
@@ -1225,7 +1226,7 @@ public class PhenotypingDialog {
 
     // ========== Results Display ==========
 
-    private void showResultsSummary(String phenotypeCountsJson) {
+    private void showResultsSummary(String phenotypeCountsJson, String unknownBreakdownJson) {
         if (phenotypeCountsJson == null) return;
 
         try {
@@ -1246,6 +1247,8 @@ public class PhenotypingDialog {
             sb.append("-".repeat(42)).append("\n");
             sb.append(String.format("%-30s %10d%n", "Total", total));
 
+            appendUnknownBreakdown(sb, unknownBreakdownJson, gson);
+
             Dialog<ButtonType> resultsDialog = new Dialog<>();
             resultsDialog.initOwner(owner);
             resultsDialog.initModality(Modality.NONE);
@@ -1264,6 +1267,42 @@ public class PhenotypingDialog {
             resultsDialog.show();
         } catch (Exception e) {
             logger.warn("Failed to show phenotyping results: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Append a breakdown of the "Unknown" bucket: how many unmatched cells were
+     * negative for all rule markers vs positive for one vs positive for >= 2.
+     * The last group is the tell-tale of over-strict (mutually exclusive) rules:
+     * a cell positive for >= 2 markers fails every single-marker rule's 'neg'
+     * conditions and falls through to Unknown. Helps users diagnose
+     * "why is everything Unknown?".
+     */
+    private void appendUnknownBreakdown(StringBuilder sb, String unknownBreakdownJson, Gson gson) {
+        if (unknownBreakdownJson == null) return;
+        try {
+            Map<String, Number> b = gson.fromJson(unknownBreakdownJson,
+                    new TypeToken<Map<String, Number>>(){}.getType());
+            if (b == null || b.isEmpty()) return;
+            int total = b.getOrDefault("total", 0).intValue();
+            if (total <= 0) return;
+            int negAll = b.getOrDefault("negative_for_all_rule_markers", 0).intValue();
+            int one = b.getOrDefault("positive_for_one_marker", 0).intValue();
+            int multi = b.getOrDefault("positive_for_multiple_markers", 0).intValue();
+            sb.append("\n");
+            sb.append("Unknown breakdown (").append(total).append(" cells):\n");
+            sb.append(String.format("  %-34s %8d%n", "negative for all rule markers", negAll));
+            sb.append(String.format("  %-34s %8d%n", "positive for exactly one marker", one));
+            sb.append(String.format("  %-34s %8d%n", "positive for >=2 markers", multi));
+            if (multi > 0) {
+                sb.append("\nNote: ").append(multi).append(" Unknown cell(s) are positive for 2+ "
+                        + "markers.\nRules that set the other markers to 'neg' are exclusive, so a "
+                        + "cell\npositive for two markers matches no single-marker rule. To label\n"
+                        + "every cell positive for a marker, set only that marker to pos and\n"
+                        + "leave the rest as '--'.\n");
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to render Unknown breakdown: {}", e.getMessage());
         }
     }
 
