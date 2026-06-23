@@ -2,6 +2,8 @@
 
 Python-powered cell analysis for highly multiplexed imaging data in [QuPath](https://qupath.github.io/).
 
+Warning: This is a continuation of my work with [CytoMap](https://forum.image.sc/t/there-and-back-again-qupath-cytomap-cluster-analysis/43352) and [QuBaLab](https://github.com/saramcardle/FS2K/blob/main/Clustering%20using%20Python.ipynb), trying to make clustering and analysis more accessible on the QuPath side, but many of the features are lightly tested or entirely untested! 
+
 QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based and zero-shot phenotyping, autoencoder-based cell classification, foundation model feature extraction, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
 ![QP-CAT clustering: the Run Clustering dialog, a multiplexed tissue image, and the resulting UMAP scatter plot colored by cluster](documentation/images/clustering-overview.png)
