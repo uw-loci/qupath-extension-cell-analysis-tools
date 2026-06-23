@@ -17,6 +17,13 @@ Follow-up to 0.4.0 from a large BANKSY + spatial-statistics run (13k cells x 72 
 
 ### Added
 
+- **Phenotyping now has a project-wide scope.** The phenotyping dialog gained the
+  same **Scope** control as clustering: **Current image** (default) or
+  **All project images**. With the project scope the same rules and gates are
+  applied to every image, all cells are normalized together (global gating, so a
+  `pos` threshold means the same thing across the project), labels are written
+  back, and each image is saved. Markers and gates are read from the current
+  image (consistent-panel assumption, as in multi-image clustering).
 - **Find cellular neighborhoods (spatial niches).** A new command --
   `Extensions > QP-CAT > Find cellular neighborhoods (spatial niches)...` --
   groups cells by the *cell-type composition of their local window* rather than

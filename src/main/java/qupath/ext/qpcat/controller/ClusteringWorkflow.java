@@ -768,6 +768,153 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Runs phenotyping across all detections in the given project images, using
+     * the same rules and gates for every image. Cells from every image are
+     * combined and normalized together (global gating -- a "pos" threshold means
+     * the same thing project-wide, matching multi-image clustering), then labels
+     * are written back and saved per image.
+     *
+     * <p>Mirrors {@link #runProjectClustering} for the project scope, but for the
+     * rule-based phenotyping task. Must be called from a background thread.</p>
+     *
+     * @param imageEntries         project image entries to phenotype
+     * @param selectedMeasurements marker measurements to use
+     * @param normalization        normalization method id
+     * @param phenotypeRulesJson   JSON string of phenotype rules
+     * @param gatesJson            JSON string of per-marker gate thresholds
+     * @param progressCallback     optional callback for progress messages
+     * @return same result map as {@link #runPhenotyping}
+     * @throws IOException if phenotyping fails or no detections are found
+     */
+    public Map<String, Object> runPhenotypingProject(
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            List<String> selectedMeasurements,
+            String normalization,
+            String phenotypeRulesJson,
+            String gatesJson,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+
+        if (imageEntries == null || imageEntries.isEmpty()) {
+            throw new IOException("No project images selected for phenotyping.");
+        }
+
+        report(progressCallback, "Loading detections from " + imageEntries.size() + " images...");
+
+        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        for (int idx = 0; idx < imageEntries.size(); idx++) {
+            ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
+            report(progressCallback, "Loading image " + (idx + 1) + "/" + imageEntries.size()
+                    + ": " + entry.getImageName());
+
+            ImageData<BufferedImage> imageData;
+            try {
+                imageData = entry.readImageData();
+            } catch (Exception e) {
+                logger.warn("Failed to read image data for {}: {}",
+                        entry.getImageName(), e.getMessage());
+                continue;
+            }
+
+            Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
+            if (detections.isEmpty()) {
+                logger.info("Skipping {} - no detections", entry.getImageName());
+                continue;
+            }
+            groups.add(new MeasurementExtractor.ImageDetectionGroup(entry, imageData, detections));
+            logger.info("Loaded {} detections from {}", detections.size(), entry.getImageName());
+        }
+
+        if (groups.isEmpty()) {
+            throw new IOException("No detection objects found in any selected images. "
+                    + "Run cell detection first.");
+        }
+
+        report(progressCallback, "Extracting measurements...");
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extractMultiImage(groups, selectedMeasurements);
+
+        logger.info("Combined extraction: {} cells x {} measurements across {} images",
+                extraction.getNCells(), extraction.getNMeasurements(),
+                extraction.getImageSegments().size());
+
+        report(progressCallback, "Sending data to Python (" + extraction.getNCells()
+                + " cells x " + extraction.getNMeasurements() + " markers from "
+                + extraction.getImageSegments().size() + " images)...");
+
+        Map<String, Object> resultMap;
+        try {
+            resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
+                    executePhenotypingTask(extraction, normalization,
+                            phenotypeRulesJson, gatesJson, progressCallback));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Phenotyping failed: " + e.getMessage(), e);
+        }
+
+        report(progressCallback, "Applying phenotype labels to project images...");
+        int[] labels = (int[]) resultMap.get("labels");
+        String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
+        ResultApplier applier = new ResultApplier();
+
+        for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
+            int start = segment.getStartIndex();
+            int end = segment.getEndIndex();
+
+            List<PathObject> segmentDetections = extraction.getDetections().subList(start, end);
+            int[] segmentLabels = new int[end - start];
+            System.arraycopy(labels, start, segmentLabels, 0, end - start);
+            applier.applyPhenotypeLabels(segmentDetections, segmentLabels, phenotypeNames);
+
+            @SuppressWarnings("unchecked")
+            ProjectImageEntry<BufferedImage> entry =
+                    (ProjectImageEntry<BufferedImage>) segment.getImageEntry();
+            @SuppressWarnings("unchecked")
+            ImageData<BufferedImage> imageData =
+                    (ImageData<BufferedImage>) segment.getImageData();
+            try {
+                entry.saveImageData(imageData);
+                logger.info("Saved phenotyping results for {} ({} detections)",
+                        entry.getImageName(), segment.getCount());
+            } catch (Exception e) {
+                logger.error("Failed to save image data for {}: {}",
+                        entry.getImageName(), e.getMessage());
+            }
+            report(progressCallback, "Saved results for " + entry.getImageName());
+        }
+
+        // Fire hierarchy update for the currently open image (if it was phenotyped).
+        Platform.runLater(() -> {
+            ImageData<BufferedImage> currentImageData = qupath.getImageData();
+            if (currentImageData != null) {
+                currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+            }
+        });
+
+        String completeMsg = "Project phenotyping complete: " + resultMap.get("n_phenotypes")
+                + " phenotypes assigned to " + extraction.getNCells() + " cells across "
+                + extraction.getImageSegments().size() + " images.";
+        report(progressCallback, completeMsg);
+
+        int ruleCount = 0;
+        try {
+            List<?> ruleList = new Gson().fromJson(phenotypeRulesJson, List.class);
+            ruleCount = ruleList != null ? ruleList.size() : 0;
+        } catch (Exception ignored) {}
+        long elapsed = System.currentTimeMillis() - startTime;
+        OperationLogger.getInstance().logOperation("PHENOTYPING (project)",
+                OperationLogger.phenotypingParams(
+                        normalization, selectedMeasurements.size(), ruleCount,
+                        extraction.getNCells(), selectedMeasurements),
+                completeMsg, elapsed);
+
+        return resultMap;
+    }
+
+    /**
      * Computes per-marker histograms and auto-thresholds.
      * This method should be called from a background thread.
      *

@@ -183,7 +183,14 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 ### Step-by-step:
 
 1. **Extensions > QP-CAT > Label cells by marker rules (phenotyping)...**
-2. **Select markers** from the measurement list
+2. **Choose the scope** at the top -- **Current image** (the default) or
+   **All project images**. With **All project images** the same rules and gates
+   are applied to every image; cells from all images are normalized together
+   (global gating, so a `pos` threshold means the same thing across the project),
+   labels are written back, and each image is saved. Markers and gates are read
+   from the current image, so the panel must be consistent across images. This
+   mirrors the **Scope** control in clustering ([chapter 4](#4-multi-image-project-clustering)).
+3. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** then deselect irrelevant markers
 3. **Set normalization** -- determines how marker values are scaled before gating

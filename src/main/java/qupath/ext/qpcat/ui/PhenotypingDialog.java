@@ -25,6 +25,8 @@ import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.PhenotypeRuleSetManager;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.projects.Project;
+import qupath.lib.projects.ProjectImageEntry;
 
 import java.awt.image.BufferedImage;
 import java.util.*;
@@ -58,6 +60,8 @@ public class PhenotypingDialog {
     private ProgressBar progressBar;
     private Button runButton;
     private Button computeBtn;
+    private RadioButton scopeCurrentImage;
+    private RadioButton scopeAllImages;
     private List<String> currentMarkers = new ArrayList<>();
 
     // Per-marker gate spinners (marker full name -> spinner)
@@ -112,6 +116,7 @@ public class PhenotypingDialog {
 
         content.getChildren().addAll(
                 createHeaderBanner(),
+                createScopeSection(),
                 createMeasurementSection(),
                 new Separator(),
                 createSettingsSection(),
@@ -684,6 +689,39 @@ public class PhenotypingDialog {
         return new Gson().toJson(rules);
     }
 
+    /**
+     * Scope selector mirroring the clustering dialog: phenotype just the open
+     * image, or every image in the project. Markers, rules, and gates are taken
+     * from the current image and applied to all (panels are assumed consistent);
+     * for the project scope all cells are normalized together so a "pos"
+     * threshold means the same thing across images.
+     */
+    private VBox createScopeSection() {
+        ToggleGroup scopeGroup = new ToggleGroup();
+        scopeCurrentImage = new RadioButton("Current image");
+        scopeCurrentImage.setToggleGroup(scopeGroup);
+        scopeCurrentImage.setSelected(true);
+
+        scopeAllImages = new RadioButton("All project images");
+        scopeAllImages.setToggleGroup(scopeGroup);
+
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null || project.getImageList().size() <= 1) {
+            scopeAllImages.setDisable(true);
+            scopeAllImages.setText("All project images (requires project with multiple images)");
+        } else {
+            scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
+        }
+        scopeAllImages.setTooltip(new Tooltip(
+                "Apply these rules to every image in the project. Cells from all images are\n"
+                + "normalized together (global gating) and results are saved back to each image.\n"
+                + "Markers and gates come from the current image -- panels must be consistent."));
+
+        HBox row = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return new VBox(4, row);
+    }
+
     private void runPhenotyping() {
         // Validate inputs
         if (currentMarkers.isEmpty()) {
@@ -748,18 +786,34 @@ public class PhenotypingDialog {
             }
         }
 
-        // Warn if existing classifications will be overwritten
-        var imageData = qupath.getImageData();
-        if (imageData != null) {
-            long classified = imageData.getHierarchy().getDetectionObjects().stream()
-                    .filter(d -> d.getPathClass() != null)
-                    .count();
-            if (classified > 0) {
-                boolean proceed = Dialogs.showConfirmDialog("QPCAT",
-                        classified + " of " + imageData.getHierarchy().getDetectionObjects().size()
-                        + " detections already have classifications.\n"
-                        + "Running phenotyping will overwrite them. Continue?");
-                if (!proceed) return;
+        // Scope: current image vs all project images.
+        final boolean projectScope = scopeAllImages != null && scopeAllImages.isSelected();
+
+        if (projectScope) {
+            Project<BufferedImage> project = qupath.getProject();
+            if (project == null || project.getImageList().isEmpty()) {
+                Dialogs.showWarningNotification("QPCAT", "No project images to phenotype.");
+                return;
+            }
+            boolean proceed = Dialogs.showConfirmDialog("QPCAT",
+                    "Phenotype all " + project.getImageList().size() + " project images?\n"
+                    + "Existing classifications in every image will be overwritten and the "
+                    + "results saved back to each image. This cannot be undone.");
+            if (!proceed) return;
+        } else {
+            // Warn if existing classifications on the current image will be overwritten
+            var imageData = qupath.getImageData();
+            if (imageData != null) {
+                long classified = imageData.getHierarchy().getDetectionObjects().stream()
+                        .filter(d -> d.getPathClass() != null)
+                        .count();
+                if (classified > 0) {
+                    boolean proceed = Dialogs.showConfirmDialog("QPCAT",
+                            classified + " of " + imageData.getHierarchy().getDetectionObjects().size()
+                            + " detections already have classifications.\n"
+                            + "Running phenotyping will overwrite them. Continue?");
+                    if (!proceed) return;
+                }
             }
         }
 
@@ -777,12 +831,23 @@ public class PhenotypingDialog {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
 
-                Map<String, Object> result = workflow.runPhenotyping(
-                        new ArrayList<>(currentMarkers),
-                        normalizationCombo.getValue().getId(),
-                        rulesJson,
-                        gatesJson,
-                        progress);
+                Map<String, Object> result;
+                if (projectScope) {
+                    result = workflow.runPhenotypingProject(
+                            qupath.getProject().getImageList(),
+                            new ArrayList<>(currentMarkers),
+                            normalizationCombo.getValue().getId(),
+                            rulesJson,
+                            gatesJson,
+                            progress);
+                } else {
+                    result = workflow.runPhenotyping(
+                            new ArrayList<>(currentMarkers),
+                            normalizationCombo.getValue().getId(),
+                            rulesJson,
+                            gatesJson,
+                            progress);
+                }
 
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
