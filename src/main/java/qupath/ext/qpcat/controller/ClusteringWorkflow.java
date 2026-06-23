@@ -953,6 +953,11 @@ public class ClusteringWorkflow {
         // Multi-Figure Batch Export dialog (Feature B) can pick them up.
         inputs.put("spatial_persist_plots",
                 QpcatPreferences.isSpatialPersistPlots());
+        // Gate neighborhood-enrichment + Moran's I on the explicit spatial-
+        // analysis choice. Without this they run whenever spatial coordinates
+        // are present -- which is ALWAYS true for BANKSY -- so a BANKSY run would
+        // trigger them (and the nhood permutation test) uninvited.
+        inputs.put("enable_spatial_analysis", config.isEnableSpatialAnalysis());
         inputs.put("enable_ripley", config.isEnableRipley());
         inputs.put("enable_geary", config.isEnableGeary());
         inputs.put("enable_co_occurrence_pairwise",

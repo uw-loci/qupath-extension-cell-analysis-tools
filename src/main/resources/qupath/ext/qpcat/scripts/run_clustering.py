@@ -65,6 +65,20 @@ def _progress(frac, message):
     task.update(message, current=int(f * 1000), maximum=1000)
 
 
+def _supported_kwargs(fn, **kw):
+    """Filter kwargs to those `fn` actually accepts, so we can pass
+    single-threading hints (numba_parallel / n_jobs / show_progress_bar / seed)
+    to squidpy without a TypeError when a given version renamed or dropped one."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return kw
+    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+        return kw
+    return {k: v for k, v in kw.items() if k in params}
+
+
 # 1. Reshape input NDArray to numpy and release shared memory
 data = measurements.ndarray().copy()
 n_cells, n_markers = data.shape
@@ -146,6 +160,15 @@ try:
     pref_use_squidpy_smoothing = use_squidpy_graph_for_smoothing
 except NameError:
     pref_use_squidpy_smoothing = False
+# Neighborhood enrichment + Moran's I are gated on the explicit "spatial
+# analysis" choice. Previously they ran whenever spatial COORDS were present,
+# which is always true for BANKSY -- so every BANKSY run triggered them
+# uninvited (and nhood_enrichment is the step that deadlocked on Windows).
+# Default True only matters if an older caller omits the flag.
+try:
+    pref_enable_spatial_analysis = enable_spatial_analysis
+except NameError:
+    pref_enable_spatial_analysis = True
 try:
     pref_enable_ripley = enable_ripley
 except NameError:
@@ -804,41 +827,64 @@ if has_spatial and n_clusters_found > 1:
         has_spatial = False
 
 if has_spatial and n_clusters_found > 1:
-    # Neighborhood enrichment (z-score matrix)
+    # Serialize numba for the spatial permutation stats ONLY. squidpy's
+    # nhood_enrichment / co-occurrence / autocorr use numba parallel loops that
+    # DEADLOCK inside the Appose worker subprocess on Windows -- this is what
+    # hung at nhood_enrichment. They are small-data/ROI tools, so serial costs
+    # little (threads give an N-cores constant factor, not better scaling);
+    # clustering / UMAP / BANKSY above already ran with full parallelism and are
+    # NOT affected. Saved and restored after the section so the next run in this
+    # worker keeps its threads.
+    _numba_threads_saved = None
     try:
-        _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
-        sq.gr.nhood_enrichment(adata, cluster_key='cluster')
-        nhood_data = adata.uns['cluster_nhood_enrichment']
-        zscore = nhood_data['zscore']
+        import numba as _numba_mod
+        _numba_threads_saved = _numba_mod.get_num_threads()
+        _numba_mod.set_num_threads(1)
+    except Exception:
+        pass
 
-        nhood_nd = PyNDArray(dtype="float64", shape=list(zscore.shape))
-        np.copyto(nhood_nd.ndarray(), zscore.astype(np.float64))
-        task.outputs['nhood_enrichment'] = nhood_nd
-        task.outputs['nhood_cluster_names'] = json.dumps(
-            list(adata.obs['cluster'].cat.categories))
-        logger.info("Neighborhood enrichment computed (%d x %d)",
-                    zscore.shape[0], zscore.shape[1])
-    except Exception as e:
-        logger.warning("Neighborhood enrichment failed: %s", e)
+    # Neighborhood enrichment + Moran's I, gated on the explicit spatial-analysis
+    # choice so a BANKSY run (which always supplies coordinates) does not trigger
+    # these uninvited.
+    if pref_enable_spatial_analysis:
+        # Neighborhood enrichment (z-score matrix)
+        try:
+            _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
+            sq.gr.nhood_enrichment(adata, cluster_key='cluster', **_supported_kwargs(
+                sq.gr.nhood_enrichment, numba_parallel=False, n_jobs=1,
+                show_progress_bar=False, seed=0))
+            nhood_data = adata.uns['cluster_nhood_enrichment']
+            zscore = nhood_data['zscore']
 
-    # Spatial autocorrelation (Moran's I per marker)
-    try:
-        _progress(0.82, "Computing Moran's I spatial autocorrelation...")
-        df_autocorr = sq.gr.spatial_autocorr(adata, mode='moran')
-        autocorr_results = {}
-        for marker in marker_names:
-            if marker in df_autocorr.index:
-                row = df_autocorr.loc[marker]
-                autocorr_results[marker] = {
-                    'I': float(row['I']),
-                    'pval': float(row.get('pval_norm', row.get('pval_z_sim',
-                                         float('nan'))))
-                }
-        task.outputs['spatial_autocorr'] = json.dumps(_sanitize_json_tree(autocorr_results))
-        logger.info("Spatial autocorrelation (Moran's I) computed for %d markers",
-                    len(autocorr_results))
-    except Exception as e:
-        logger.warning("Spatial autocorrelation failed: %s", e)
+            nhood_nd = PyNDArray(dtype="float64", shape=list(zscore.shape))
+            np.copyto(nhood_nd.ndarray(), zscore.astype(np.float64))
+            task.outputs['nhood_enrichment'] = nhood_nd
+            task.outputs['nhood_cluster_names'] = json.dumps(
+                list(adata.obs['cluster'].cat.categories))
+            logger.info("Neighborhood enrichment computed (%d x %d)",
+                        zscore.shape[0], zscore.shape[1])
+        except Exception as e:
+            logger.warning("Neighborhood enrichment failed: %s", e)
+
+        # Spatial autocorrelation (Moran's I per marker)
+        try:
+            _progress(0.82, "Computing Moran's I spatial autocorrelation...")
+            df_autocorr = sq.gr.spatial_autocorr(adata, mode='moran', **_supported_kwargs(
+                sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0))
+            autocorr_results = {}
+            for marker in marker_names:
+                if marker in df_autocorr.index:
+                    row = df_autocorr.loc[marker]
+                    autocorr_results[marker] = {
+                        'I': float(row['I']),
+                        'pval': float(row.get('pval_norm', row.get('pval_z_sim',
+                                             float('nan'))))
+                    }
+            task.outputs['spatial_autocorr'] = json.dumps(_sanitize_json_tree(autocorr_results))
+            logger.info("Spatial autocorrelation (Moran's I) computed for %d markers",
+                        len(autocorr_results))
+        except Exception as e:
+            logger.warning("Spatial autocorrelation failed: %s", e)
 
     # ---- v1 spatial stats expansion ----
     # Each new statistic wraps in its own try/except via the helper module
@@ -931,6 +977,14 @@ if has_spatial and n_clusters_found > 1:
         # Surface the resolved adaptive count to the Java side so the
         # audit log row can report the value actually used.
         task.outputs["spatial_n_permutations"] = int(n_perms)
+
+    # Restore numba's thread count for any subsequent task in this worker.
+    if _numba_threads_saved is not None:
+        try:
+            import numba as _numba_mod
+            _numba_mod.set_num_threads(_numba_threads_saved)
+        except Exception:
+            pass
 
 # 7. Generate plots (optional)
 try:

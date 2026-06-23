@@ -45,6 +45,22 @@ import numpy as np
 logger = logging.getLogger("qpcat.spatial_stats")
 
 
+def _safe_kwargs(fn, **kw):
+    """Keep only kwargs that `fn` accepts. Used to pass single-threading hints
+    (n_jobs=1 / show_progress_bar=False / seed) to squidpy without a TypeError
+    when a given squidpy version renamed or dropped one. The caller forces
+    serial execution to avoid the numba/joblib deadlock seen inside the Appose
+    worker subprocess on Windows."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return kw
+    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+        return kw
+    return {k: v for k, v in kw.items() if k in params}
+
+
 # Phase 5: Public filename contract consumed by Feature B's PlotKind enum.
 # Keep these stable; downstream FigureExportScripts.exportFigures references
 # the exact strings. Bumping a name is a breaking change for the export API.
@@ -178,6 +194,10 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
             kwargs["max_dist"] = float(max_radius)
         if n_steps is not None and n_steps > 0:
             kwargs["n_steps"] = int(n_steps)
+
+        # Force serial execution (avoids the numba/joblib deadlock on Windows).
+        kwargs.update(_safe_kwargs(sq.gr.ripley, seed=0, n_jobs=1,
+                                   show_progress_bar=False))
 
         # Compute K and L separately - squidpy's mode='K' / mode='L' branches
         # share underlying state via adata.uns['<cluster_key>_ripley_K'] etc.
@@ -369,6 +389,9 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
         kwargs = {"mode": "geary", "n_perms": int(n_permutations)}
         if measurements:
             kwargs["genes"] = list(measurements)
+        # Force serial execution (avoids the numba/joblib deadlock on Windows).
+        kwargs.update(_safe_kwargs(sq.gr.spatial_autocorr, n_jobs=1,
+                                   show_progress_bar=False, seed=0))
         df = sq.gr.spatial_autocorr(adata, **kwargs, copy=True)
 
         marker_stats = {}
@@ -480,6 +503,9 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
             r_min = max(1.0, diag * 0.001)
             kwargs["interval"] = np.linspace(r_min, r_max, int(n_intervals))
 
+        # Force serial execution (avoids the numba/joblib deadlock on Windows).
+        kwargs.update(_safe_kwargs(sq.gr.co_occurrence, n_jobs=1,
+                                   show_progress_bar=False))
         sq.gr.co_occurrence(adata, **kwargs)
         cooc = adata.uns.get("%s_co_occurrence" % cluster_key, {})
 
