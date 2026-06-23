@@ -32,6 +32,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 19. [YAML Headless Batch](#19-yaml-headless-batch)
 20. [Results dialog reference](#20-results-dialog-reference)
 21. [Spatial graph overlay](#21-spatial-graph-overlay)
+22. [Finding Cellular Neighborhoods (Spatial Niches)](#22-finding-cellular-neighborhoods-spatial-niches)
 
 ---
 
@@ -690,6 +691,8 @@ Log files are plain text and can be opened in any text editor. A new file is cre
 
 Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the rest of squidpy's standard spatial-statistics catalog: Ripley's K and L, Geary's C, and co-occurrence (pairwise + one-vs-rest). Each is driven by a single graph constructor you pick once at the top of the dialog; the same graph backs spatial feature smoothing (when the preference is enabled) so the parameters are visible and consistent across the run. QP-CAT's v1 catalog closes the gap with [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats surface while keeping the squidpy backend the extension already ships with -- no new dependencies.
 
+> These statistics use permutation testing and can be slow on large slides (the dialog estimates the time and lets you skip or cancel). For a fast, scalable way to map recurring tissue micro-environments instead, see [chapter 22 -- Finding Cellular Neighborhoods](#22-finding-cellular-neighborhoods-spatial-niches).
+
 ### When to use each statistic
 
 - **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" Cheap, no permutation cost.
@@ -1260,3 +1263,76 @@ SpatialConnectionsScripts.clearConnections(getCurrentImageData())
 ```
 
 Returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch scripting. Records a workflow step so the operation is replayable from the image's history, and writes a `SPATIAL OVERLAY CLEAR` row to the project's operation audit log.
+
+---
+
+## 22. Finding Cellular Neighborhoods (Spatial Niches)
+
+`Extensions > QP-CAT > Find cellular neighborhoods (spatial niches)...`
+
+A **cellular neighborhood (CN)** groups cells by the *cell-type mixture around
+them* rather than by their own measurements. Two T cells get different CN labels
+if one sits in a dense tumor nest and the other in a lymphoid aggregate. CNs
+surface recurring micro-environments -- tumor-immune boundaries, stroma,
+follicles -- as a layer of structure on top of cell typing.
+
+This is QP-CAT's fast, scalable spatial-niche analysis. It is O(n*k) (a
+nearest-neighbor tree plus a small k-means) and runs single-process, so it works
+on very large slides where the permutation-based spatial statistics in
+[chapter 17](#17-spatial-statistics-ripley-geary-co-occurrence) become slow.
+
+### Prerequisite: an existing cell-type column
+
+CN needs each cell to already carry a categorical label -- a **cluster** (from
+[chapter 2](#2-running-clustering)) or a **phenotype** (from
+[chapter 6](#6-rule-based-phenotyping)). The dialog reads the current detection
+classifications, reports how many classes it found, and refuses to run on fewer
+than two. Cells with no classification are counted as a single `Unclassified`
+type so every window is complete.
+
+### Step-by-step
+
+1. Run clustering or phenotyping first so cells are classified.
+2. Open **Find cellular neighborhoods**. Confirm the "Found N cell-type classes"
+   line lists the types you expect. If you just (re)classified, click
+   **Refresh** to re-scan.
+3. **Neighbors per window (k)** -- how many nearest cells form each window
+   (the cell plus its neighbors). Larger k captures broader context but blurs
+   fine boundaries. 20-30 is a common start; Schurch et al. used ~10.
+4. **Number of neighborhoods** -- how many CNs to group the windows into
+   (k-means). Try a few values; 6-12 is typical.
+5. **Render enrichment heatmap** (on by default) writes a CN x cell-type heatmap.
+6. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
+   runs; **Cancel** stops it -- if you cancel before it finishes, **no labels
+   are applied**.
+
+### What happens to your data
+
+- Each detection is classified `QPCAT CN: <id>` (0-based). Color and select CNs
+  in QuPath's Annotations/Classes panel like any other classification.
+- Re-running **overwrites** the `QPCAT CN:` classes (and any other current
+  classification, since CN sets the detection class). Re-run clustering or
+  phenotyping to restore the cell-type column.
+- The run is recorded as a step in the image's **Workflow** history (with the
+  `run_id` and `params_hash`) and as a `CELLULAR NEIGHBORHOODS` row in the
+  operation audit log.
+
+### Reading the enrichment heatmap
+
+Rows are neighborhoods, columns are cell types. Each cell is the **log2 fold
+enrichment** of that cell type in the neighborhood versus its overall frequency
+across the slide (red = enriched, blue = depleted). Read each row across to name
+the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). The heatmap
+is written to a temporary folder; the dialog offers to open it when the run
+finishes.
+
+### How this differs from BANKSY
+
+BANKSY ([chapter 2](#2-running-clustering), as a clustering algorithm) mixes each
+cell's *expression* with a neighborhood-averaged kernel **before** clustering, so
+it produces cell types/domains that are spatially smoothed. CN clusters the
+*composition of already-assigned types* in a window, so it produces a higher-order
+map of tissue micro-environments. Use BANKSY to type cells with spatial context;
+use CN to find niches once cells are typed. Sources: Goltsev et al. (Cell 2018),
+Schurch et al. (Cell 2020), Windhager et al. (Nat Protoc 2023) -- see
+[REFERENCES.md](REFERENCES.md).

@@ -18,6 +18,7 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.ui.BugReportDialog;
+import qupath.ext.qpcat.ui.CellularNeighborhoodDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
@@ -199,6 +200,22 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             new ZeroShotPhenotypingDialog(qupath).show();
         });
         zeroShotItem.visibleProperty().bind(environmentReady);
+
+        // Find Cellular Neighborhoods (spatial niches over an existing cell-type column)
+        MenuItem cellularNeighborhoodsItem = new MenuItem(res.getString("menu.cellularNeighborhoods"));
+        cellularNeighborhoodsItem.setOnAction(e -> {
+            if (qupath.getImageData() == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+                return;
+            }
+            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
+                Dialogs.showWarningNotification(EXTENSION_NAME,
+                        "No detections found. Run cell detection first.");
+                return;
+            }
+            new CellularNeighborhoodDialog(qupath).show();
+        });
+        cellularNeighborhoodsItem.visibleProperty().bind(environmentReady);
 
         // Feature Extraction (Foundation Models)
         MenuItem featureExtractionItem = new MenuItem(res.getString("menu.featureExtraction"));
@@ -405,6 +422,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 // -- Label cells as types --
                 runPhenotypingItem,
                 zeroShotItem,
+                cellularNeighborhoodsItem,
                 sep2,
                 // -- Appearance / deep learning --
                 featureExtractionItem,

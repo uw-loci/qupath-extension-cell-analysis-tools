@@ -115,6 +115,28 @@ BANKSY (Building Aggregates with a Neighborhood Kernel and Spatial Yardstick) au
 
 ---
 
+### Cellular Neighborhoods -- Windowed Composition
+
+A cellular neighborhood (CN) groups cells by the cell-type COMPOSITION of their local spatial window, not by their own expression. For every cell, a window of its k nearest neighbors is summarized as the fraction of each (already-assigned) cell type present, and those composition vectors are clustered (k-means) into N neighborhoods. CNs capture recurring tissue micro-environments -- tumor-immune boundaries, lymphoid aggregates, stroma -- as higher-order structure on top of cell typing.
+
+QP-CAT implements this directly (`scikit-learn` `NearestNeighbors` + `KMeans`); the search tree plus a small k-means is O(n*k) in practice and runs single-process, so it scales to very large slides where the permutation-based spatial statistics above do not.
+
+**Original neighborhood method (CODEX):**
+> Goltsev Y, Samusik N, Kennedy-Darling J, et al. "Deep Profiling of Mouse Splenic Architecture with CODEX Multiplexed Imaging." *Cell* 174(4), 968-981 (2018).
+> https://doi.org/10.1016/j.cell.2018.07.010
+
+**Cellular neighborhoods at the tumor invasive front (the windowed-composition + k-means recipe QP-CAT follows):**
+> Schurch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
+> https://doi.org/10.1016/j.cell.2020.07.005
+
+**Windowed-neighborhood workflow for IMC (imcRtools `aggregateNeighbors` / `buildSpatialGraph`):**
+> Windhager J, Zanotelli VRT, Schulz D, et al. "An end-to-end workflow for multiplexed image processing and analysis." *Nature Protocols* 18, 3565-3613 (2023).
+> https://doi.org/10.1038/s41596-023-00881-0
+
+**Used in:** Find Cellular Neighborhoods (`cellular_neighborhoods.py`; window k-NN -> per-type composition -> k-means; CN x cell-type log2 enrichment heatmap). Distinct from BANKSY above, which augments each cell's EXPRESSION vector with a neighborhood-averaged kernel before clustering; here we cluster the COMPOSITION of pre-assigned cell types.
+
+---
+
 ## Dimensionality Reduction
 
 ### UMAP

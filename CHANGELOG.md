@@ -17,6 +17,23 @@ Follow-up to 0.4.0 from a large BANKSY + spatial-statistics run (13k cells x 72 
 
 ### Added
 
+- **Find cellular neighborhoods (spatial niches).** A new command --
+  `Extensions > QP-CAT > Find cellular neighborhoods (spatial niches)...` --
+  groups cells by the *cell-type composition of their local window* rather than
+  by their own measurements, surfacing recurring micro-environments (tumor-immune
+  boundaries, stroma, lymphoid aggregates) on top of an existing cluster or
+  phenotype column. For each cell it builds a window of the k nearest neighbors,
+  turns it into a per-type fraction vector, and k-means-clusters the vectors into
+  N neighborhoods; cells are classified `QPCAT CN: <id>`. This is the *scalable*
+  spatial-niche path -- a nearest-neighbor tree plus a small k-means, O(n*k),
+  single-process -- so it works on very large slides where the permutation-based
+  spatial statistics do not. Optional CN x cell-type log2-enrichment heatmap; a
+  busy indicator and a **Cancel** that applies no labels if cancelled before it
+  finishes; provenance `run_id` / `params_hash` recorded in the Workflow history
+  and audit log. Mirrors the neighborhood method of Goltsev et al. (Cell 2018)
+  and Schurch et al. (Cell 2020) and the windowed-composition workflow of
+  Windhager et al. (Nat Protoc 2023); distinct from BANKSY (expression-space
+  kernel). See REFERENCES.md and How-To chapter 22.
 - **Spatial-statistics time estimate + skip/cancel.** When spatial statistics are enabled, clustering first probes their cost on small subsamples (100 / 1000 / 2000 cells, shown as "Testing estimated time..."), extrapolates to the full cell count, and prompts with the estimate and three choices: **Run spatial stats**, **Skip spatial stats** (clustering still completes), or **Cancel run**. A **Cancel** button is also available throughout the run. Because results are only written to objects after the task finishes, cancelling -- before or during -- leaves the project untouched (no partial measurements). The clustering progress bar is now determinate (see below) so a long run reads as progress, not a hang.
 
 ### Changed
