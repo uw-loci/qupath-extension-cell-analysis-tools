@@ -205,6 +205,41 @@ public class ApposeClusteringService {
                         + loadScript("model_utils.py");
                 pythonService.init(initScript);
 
+                // Register spatial_stats.py as an importable module in the
+                // persistent worker. Task scripts run via exec(compile(..., "<string>"))
+                // so they have NO __file__ and the bundled sibling scripts are not on
+                // sys.path -- so `import spatial_stats` (spatial smoothing + spatial
+                // statistics in run_clustering.py) would fail, and the old
+                // __file__-based fallback raised "name '__file__' is not defined".
+                // Passing the source as an Appose INPUT (not a Java string literal)
+                // avoids escaping issues, and registering in sys.modules persists for
+                // every subsequent task in this worker process.
+                try {
+                    String regScript =
+                            "import sys as _sys, types as _types\n" +
+                            "_mod = _types.ModuleType(module_name)\n" +
+                            "exec(compile(module_source, module_name + '.py', 'exec'), _mod.__dict__)\n" +
+                            "_sys.modules[module_name] = _mod\n" +
+                            "task.outputs['registered'] = module_name\n";
+                    Task regTask = pythonService.task(regScript, Map.of(
+                            "module_name", "spatial_stats",
+                            "module_source", loadScript("spatial_stats.py")));
+                    regTask.listen(event -> {
+                        if (event.responseType == ResponseType.FAILURE
+                                || event.responseType == ResponseType.CRASH) {
+                            logger.error("spatial_stats module registration failed: {}",
+                                    regTask.error);
+                        }
+                    });
+                    regTask.waitFor();
+                    logger.info("Registered spatial_stats as an importable module");
+                } catch (Exception regEx) {
+                    // Non-fatal: only spatial smoothing / spatial statistics need it.
+                    // run_clustering.py raises a clear error if it is still missing.
+                    logger.warn("Could not register spatial_stats module; spatial "
+                            + "analysis features may be unavailable: {}", regEx.getMessage());
+                }
+
                 // Verify packages are importable
                 report(statusCallback, "Verifying installed packages...");
                 logger.info("Running environment verification...");

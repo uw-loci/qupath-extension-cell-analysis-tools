@@ -231,20 +231,18 @@ if do_spatial_smoothing and has_spatial_coords:
         # subtly different cluster labels at boundaries vs the legacy
         # (A + I) path. Gated behind qpcat.spatial.useSquidpyGraphForSmoothing
         # so existing projects retain bit-for-bit reproducibility.
+        # spatial_stats is registered as an importable module by
+        # ApposeClusteringService at init (task scripts run via exec("<string>"),
+        # so there is no __file__ and the bundled sibling scripts are not on
+        # sys.path -- a file-based fallback cannot work here).
         try:
             from spatial_stats import build_smoothing_adjacency_squidpy
-        except ImportError:
-            # Inline import path for Appose script bundle (scripts dir is
-            # copied verbatim from JAR resources at task dispatch time)
-            import importlib.util
-            import os as _os
-            _spec = importlib.util.spec_from_file_location(
-                "spatial_stats",
-                _os.path.join(_os.path.dirname(__file__), "spatial_stats.py"))
-            _spatial_stats = importlib.util.module_from_spec(_spec)
-            _spec.loader.exec_module(_spatial_stats)
-            build_smoothing_adjacency_squidpy = \
-                _spatial_stats.build_smoothing_adjacency_squidpy
+        except ImportError as _e:
+            raise RuntimeError(
+                "spatial_stats module is not available -- the QP-CAT analysis "
+                "environment was not initialized with it. Rebuild the analysis "
+                "environment (Utilities > Rebuild) and try again."
+            ) from _e
         adj_norm = build_smoothing_adjacency_squidpy(
             spatial_data,
             graph_type=pref_spatial_graph_type,
@@ -689,17 +687,18 @@ if has_spatial and n_clusters_found > 1:
     task.update("Running spatial analysis...")
     import squidpy as sq
 
-    # Lazy-import the v1 spatial-stats helpers from the bundled module.
+    # The v1 spatial-stats helpers live in spatial_stats, registered as an
+    # importable module by ApposeClusteringService at init. There is no usable
+    # file-based fallback here -- task scripts run via exec("<string>") with no
+    # __file__ and the sibling scripts are not on sys.path.
     try:
         import spatial_stats as _qpcat_spatial
-    except ImportError:
-        import importlib.util as _ilu
-        import os as _os
-        _spec = _ilu.spec_from_file_location(
-            "spatial_stats",
-            _os.path.join(_os.path.dirname(__file__), "spatial_stats.py"))
-        _qpcat_spatial = _ilu.module_from_spec(_spec)
-        _spec.loader.exec_module(_qpcat_spatial)
+    except ImportError as _e:
+        raise RuntimeError(
+            "spatial_stats module is not available -- the QP-CAT analysis "
+            "environment was not initialized with it. Rebuild the analysis "
+            "environment (Utilities > Rebuild) and try again."
+        ) from _e
 
     adata.obsm['spatial'] = spatial_data
     adata.obsm['X_spatial'] = spatial_data  # for scanpy plotting (basis='spatial')
