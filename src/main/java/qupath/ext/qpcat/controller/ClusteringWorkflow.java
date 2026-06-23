@@ -136,6 +136,13 @@ public class ClusteringWorkflow {
     private volatile boolean cancelled;
 
     /**
+     * Average connections-per-cell (graph degree) above which the viewer overlay
+     * is warned about: denser than this and the edges render as an unhelpful
+     * white mass (kNN at k>4 or Delaunay, ~6, always exceed it).
+     */
+    private static final double OVERLAY_DENSITY_WARN = 4.0;
+
+    /**
      * Request cancellation of the in-flight task (estimate probe or clustering).
      * Safe to call from any thread. After a cancel, the run returns WITHOUT
      * applying any labels/measurements to objects, so the project is never left
@@ -3509,16 +3516,24 @@ public class ClusteringWorkflow {
         if (config.isPushConnectionsToViewer() && payload.hasEdgeCoo()) {
             int nEdges = payload.getEdgeRow().length;
             int threshold = config.getConnectionsPromptThreshold();
+            // Average connections per cell = degree (each undirected edge touches
+            // two cells). Above ~4 the overlay tends to render as an unhelpful
+            // white mass -- the edges fill the screen and we cannot yet
+            // colour-code edges or nodes to make it readable.
+            double avgDegree = n > 0 ? (2.0 * nEdges) / n : 0.0;
+            boolean dense = avgDegree > OVERLAY_DENSITY_WARN;
+            boolean large = threshold > 0 && nEdges > threshold;
             boolean proceed = true;
-            if (threshold > 0 && nEdges > threshold) {
+            if (dense || large) {
                 // F2: prompt the user instead of silently skipping. Workflow
                 // runs on a background thread; use the CountDownLatch +
                 // Platform.runLater pattern documented in
                 // claude-reports/2025-01-30_dialog-fixes-session.md.
-                proceed = confirmLargeOverlayPush(nEdges, threshold);
+                proceed = confirmOverlayPush(nEdges, threshold, avgDegree, dense, large);
                 if (!proceed) {
                     logger.info("Spatial graph viewer push declined by user"
-                                    + " (edges={}, threshold={})", nEdges, threshold);
+                                    + " (edges={}, avgDegree={}, threshold={})",
+                            nEdges, String.format("%.1f", avgDegree), threshold);
                 }
             }
             if (proceed) {
@@ -3538,16 +3553,17 @@ public class ClusteringWorkflow {
      * tests) the prompt defaults to false (skip), matching the
      * intake-specified "default to safer" behaviour.
      */
-    private boolean confirmLargeOverlayPush(int nEdges, int threshold) {
+    private boolean confirmOverlayPush(int nEdges, int threshold, double avgDegree,
+                                       boolean dense, boolean large) {
         if (Platform.isFxApplicationThread()) {
-            return showLargeOverlayPushDialog(nEdges, threshold);
+            return showOverlayPushDialog(nEdges, threshold, avgDegree, dense, large);
         }
         final CountDownLatch latch = new CountDownLatch(1);
         final AtomicBoolean answer = new AtomicBoolean(false);
         try {
             Platform.runLater(() -> {
                 try {
-                    answer.set(showLargeOverlayPushDialog(nEdges, threshold));
+                    answer.set(showOverlayPushDialog(nEdges, threshold, avgDegree, dense, large));
                 } finally {
                     latch.countDown();
                 }
@@ -3556,9 +3572,9 @@ public class ClusteringWorkflow {
             return answer.get();
         } catch (IllegalStateException e) {
             // FX toolkit not initialised (e.g. headless test run).
-            logger.warn("Cannot prompt for large-overlay push (FX not running);"
-                            + " defaulting to skip (edges={}, threshold={})",
-                    nEdges, threshold);
+            logger.warn("Cannot prompt for overlay push (FX not running);"
+                            + " defaulting to skip (edges={}, avgDegree={})",
+                    nEdges, String.format("%.1f", avgDegree));
             return false;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -3566,17 +3582,26 @@ public class ClusteringWorkflow {
         }
     }
 
-    private boolean showLargeOverlayPushDialog(int nEdges, int threshold) {
-        String body = String.format(
-                "The spatial graph has %d edges (threshold: %d).%n%n"
-                        + "Push %d edges to the viewer? Large graphs may slow"
-                        + " viewer pan and zoom.",
-                nEdges, threshold, nEdges);
+    private boolean showOverlayPushDialog(int nEdges, int threshold, double avgDegree,
+                                          boolean dense, boolean large) {
+        StringBuilder body = new StringBuilder();
+        if (dense) {
+            body.append(String.format(
+                    "This spatial graph averages %.1f connections per cell (%d edges).%n%n"
+                            + "At this density the overlay usually renders as a solid white "
+                            + "mass that fills the viewer and is not informative -- QP-CAT "
+                            + "cannot yet colour-code edges or nodes to make it readable.%n%n",
+                    avgDegree, nEdges));
+        } else {
+            body.append(String.format(
+                    "The spatial graph has %d edges (threshold: %d).%n%n", nEdges, threshold));
+        }
+        body.append("Push it to the viewer anyway? ")
+            .append("(The graph and its measurements are still computed and saved either way; "
+                    + "this only controls the on-screen overlay. Large graphs can also slow "
+                    + "pan and zoom.)");
         // Dialogs.showYesNoDialog returns true for Yes, false for No.
-        // Default focus follows QuPath's standard, but the body wording
-        // and the safer-default expectation are documented in the dialog
-        // copy itself ("safer for cautious users on slow hardware").
-        return Dialogs.showYesNoDialog("QP-CAT - large spatial graph", body);
+        return Dialogs.showYesNoDialog("QP-CAT - spatial graph overlay", body.toString());
     }
 
     private void writeNodeMeasurements(List<PathObject> detections,
