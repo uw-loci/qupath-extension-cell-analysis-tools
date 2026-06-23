@@ -57,6 +57,7 @@ public class PhenotypingDialog {
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
+    private Button computeBtn;
     private List<String> currentMarkers = new ArrayList<>();
 
     // Per-marker gate spinners (marker full name -> spinner)
@@ -390,7 +391,7 @@ public class PhenotypingDialog {
             }
         });
 
-        Button computeBtn = new Button("Compute Thresholds");
+        computeBtn = new Button("Compute Thresholds");
         computeBtn.setOnAction(e -> computeThresholds());
         computeBtn.setTooltip(new Tooltip(
                 "Send measurement data to Python and compute\n"
@@ -734,6 +735,7 @@ public class PhenotypingDialog {
 
         // Disable UI during run
         runButton.setDisable(true);
+        setBusy(true, null, null);
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
 
@@ -754,6 +756,7 @@ public class PhenotypingDialog {
                     int nPhenotypes = (Integer) result.get("n_phenotypes");
                     statusLabel.setText("Complete: " + nPhenotypes + " phenotypes assigned");
                     runButton.setDisable(false);
+                    setBusy(false, null, null);
                     Dialogs.showInfoNotification("QPCAT",
                             "Phenotyping complete: " + nPhenotypes + " phenotypes assigned.");
                     showResultsSummary((String) result.get("phenotype_counts"));
@@ -773,6 +776,7 @@ public class PhenotypingDialog {
                     progressBar.setVisible(false);
                     statusLabel.setText("Error: " + e.getMessage());
                     runButton.setDisable(false);
+                    setBusy(false, null, null);
                     Dialogs.showErrorNotification("QPCAT",
                             "Phenotyping failed: " + e.getMessage());
                 });
@@ -964,6 +968,7 @@ public class PhenotypingDialog {
         }
 
         statusLabel.setText("Validating channels across project images...");
+        setBusy(true, null, null);
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
 
@@ -976,6 +981,7 @@ public class PhenotypingDialog {
 
                 Platform.runLater(() -> {
                     progressBar.setVisible(false);
+                    setBusy(false, null, null);
                     if (result.allConsistent()) {
                         statusLabel.setText("All " + result.imagesChecked()
                                 + " images have consistent measurements ("
@@ -993,6 +999,7 @@ public class PhenotypingDialog {
                 logger.error("Channel validation failed", e);
                 Platform.runLater(() -> {
                     progressBar.setVisible(false);
+                    setBusy(false, null, null);
                     statusLabel.setText("Validation error: " + e.getMessage());
                     Dialogs.showErrorNotification("QPCAT",
                             "Channel validation failed: " + e.getMessage());
@@ -1052,6 +1059,12 @@ public class PhenotypingDialog {
             return;
         }
 
+        // Make the running state obvious at the point of interaction: the
+        // status bar/progress bar live at the bottom of a long scrolling dialog
+        // and are easy to miss, so also busy the cursor and turn the button
+        // itself into a disabled "Computing..." (computing + plotting can take a
+        // few seconds and otherwise looks like nothing is happening).
+        setBusy(true, computeBtn, "Computing...");
         statusLabel.setText("Computing thresholds...");
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
@@ -1084,6 +1097,7 @@ public class PhenotypingDialog {
                     if (!currentMarkers.isEmpty()) {
                         showHistogramForMarker(currentMarkers.get(0));
                     }
+                    setBusy(false, computeBtn, "Compute Thresholds");
                 });
             } catch (Exception e) {
                 logger.error("Threshold computation failed", e);
@@ -1091,6 +1105,7 @@ public class PhenotypingDialog {
                     progressBar.setProgress(0);
                     progressBar.setVisible(false);
                     statusLabel.setText("Threshold error: " + e.getMessage());
+                    setBusy(false, computeBtn, "Compute Thresholds");
                     Dialogs.showErrorNotification("QPCAT",
                             "Threshold computation failed: " + e.getMessage());
                 });
@@ -1098,6 +1113,26 @@ public class PhenotypingDialog {
         }, "QPCAT-Thresholds");
         threshThread.setDaemon(true);
         threshThread.start();
+    }
+
+    /**
+     * Toggle a "busy" state for a background operation: sets the wait cursor on
+     * the dialog (visible wherever the pointer is, unlike the bottom status bar)
+     * and disables the triggering button, optionally swapping its label so the
+     * feedback is right where the user clicked. Pass {@code button == null} to
+     * only change the cursor. Must be called on the FX thread.
+     */
+    private void setBusy(boolean busy, Button button, String label) {
+        var scene = (statusLabel != null) ? statusLabel.getScene() : null;
+        if (scene != null) {
+            scene.setCursor(busy ? javafx.scene.Cursor.WAIT : javafx.scene.Cursor.DEFAULT);
+        }
+        if (button != null) {
+            button.setDisable(busy);
+            if (label != null) {
+                button.setText(label);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
