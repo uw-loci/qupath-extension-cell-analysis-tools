@@ -835,36 +835,8 @@ public class ClusteringWorkflow {
             throw new IOException("No project images selected for phenotyping.");
         }
 
-        report(progressCallback, "Loading detections from " + imageEntries.size() + " images...");
-
-        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
-        for (int idx = 0; idx < imageEntries.size(); idx++) {
-            ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
-            report(progressCallback, "Loading image " + (idx + 1) + "/" + imageEntries.size()
-                    + ": " + entry.getImageName());
-
-            ImageData<BufferedImage> imageData;
-            try {
-                imageData = entry.readImageData();
-            } catch (Exception e) {
-                logger.warn("Failed to read image data for {}: {}",
-                        entry.getImageName(), e.getMessage());
-                continue;
-            }
-
-            Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
-            if (detections.isEmpty()) {
-                logger.info("Skipping {} - no detections", entry.getImageName());
-                continue;
-            }
-            groups.add(new MeasurementExtractor.ImageDetectionGroup(entry, imageData, detections));
-            logger.info("Loaded {} detections from {}", detections.size(), entry.getImageName());
-        }
-
-        if (groups.isEmpty()) {
-            throw new IOException("No detection objects found in any selected images. "
-                    + "Run cell detection first.");
-        }
+        List<MeasurementExtractor.ImageDetectionGroup> groups =
+                loadProjectDetectionGroups(imageEntries, progressCallback);
 
         report(progressCallback, "Extracting measurements...");
         MeasurementExtractor extractor = new MeasurementExtractor();
@@ -947,6 +919,87 @@ public class ClusteringWorkflow {
                 completeMsg, elapsed);
 
         return resultMap;
+    }
+
+    /**
+     * Read detections from each project image into combined-extraction groups,
+     * skipping images that fail to load or have no detections. Shared by the
+     * project-scope phenotyping and threshold paths so they pool the SAME cells.
+     *
+     * @throws IOException if no image yielded any detections
+     */
+    private List<MeasurementExtractor.ImageDetectionGroup> loadProjectDetectionGroups(
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            Consumer<String> progressCallback) throws IOException {
+        report(progressCallback, "Loading detections from " + imageEntries.size() + " images...");
+        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        for (int idx = 0; idx < imageEntries.size(); idx++) {
+            ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
+            report(progressCallback, "Loading image " + (idx + 1) + "/" + imageEntries.size()
+                    + ": " + entry.getImageName());
+            ImageData<BufferedImage> imageData;
+            try {
+                imageData = entry.readImageData();
+            } catch (Exception e) {
+                logger.warn("Failed to read image data for {}: {}",
+                        entry.getImageName(), e.getMessage());
+                continue;
+            }
+            Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
+            if (detections.isEmpty()) {
+                logger.info("Skipping {} - no detections", entry.getImageName());
+                continue;
+            }
+            groups.add(new MeasurementExtractor.ImageDetectionGroup(entry, imageData, detections));
+            logger.info("Loaded {} detections from {}", detections.size(), entry.getImageName());
+        }
+        if (groups.isEmpty()) {
+            throw new IOException("No detection objects found in any selected images. "
+                    + "Run cell detection first.");
+        }
+        return groups;
+    }
+
+    /**
+     * Compute per-marker histograms and auto-thresholds across MULTIPLE project
+     * images, pooling and normalizing their cells together exactly as
+     * {@link #runPhenotypingProject} does -- so the gates you set match the
+     * distribution the run actually gates on. Falls back to the single-image
+     * {@link #computeThresholds} when the entry list is null/empty.
+     */
+    public String computeThresholdsProject(
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            List<String> selectedMeasurements,
+            String normalization,
+            Consumer<String> progressCallback) throws IOException {
+        if (imageEntries == null || imageEntries.isEmpty()) {
+            return computeThresholds(selectedMeasurements, normalization, progressCallback);
+        }
+        long startTime = System.currentTimeMillis();
+        List<MeasurementExtractor.ImageDetectionGroup> groups =
+                loadProjectDetectionGroups(imageEntries, progressCallback);
+        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor.ExtractionResult extraction =
+                extractor.extractMultiImage(groups, selectedMeasurements);
+        report(progressCallback, "Computing thresholds (" + extraction.getNCells()
+                + " cells x " + extraction.getNMeasurements() + " markers across "
+                + extraction.getImageSegments().size() + " images)...");
+        try {
+            String result = ApposeClusteringService.withExtensionClassLoader(() ->
+                    executeThresholdTask(extraction, normalization, progressCallback));
+            long elapsed = System.currentTimeMillis() - startTime;
+            OperationLogger.getInstance().logOperation("COMPUTE THRESHOLDS (project)",
+                    OperationLogger.thresholdParams(normalization,
+                            extraction.getNMeasurements(), extraction.getNCells()),
+                    "Thresholds computed for " + extraction.getNMeasurements()
+                            + " markers across " + extraction.getImageSegments().size() + " images",
+                    elapsed);
+            return result;
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Threshold computation failed: " + e.getMessage(), e);
+        }
     }
 
     /**

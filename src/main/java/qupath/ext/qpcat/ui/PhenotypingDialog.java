@@ -1209,11 +1209,41 @@ public class PhenotypingDialog {
         }
     }
 
+    /**
+     * The project images implied by the current Scope, or null for the
+     * single (current-image) scope. Used so Compute Thresholds pools the SAME
+     * cells the run will gate on.
+     */
+    private List<ProjectImageEntry<BufferedImage>> currentScopeEntries() {
+        if (scopeSpecificImages != null && scopeSpecificImages.isSelected()) {
+            return selectedSubset.isEmpty() ? null : new ArrayList<>(selectedSubset);
+        }
+        if (scopeAllImages != null && scopeAllImages.isSelected()) {
+            Project<BufferedImage> p = qupath.getProject();
+            return (p == null || p.getImageList().isEmpty())
+                    ? null : new ArrayList<>(p.getImageList());
+        }
+        return null;
+    }
+
     private void computeThresholds() {
         if (currentMarkers.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT", "No markers selected.");
             return;
         }
+
+        // Pool thresholds across the SAME images the run will use, so the gates
+        // match the distribution that phenotyping actually gates on. Null =
+        // current image only. If "Specific images" is chosen but none picked,
+        // fall back to the current image with a heads-up.
+        List<ProjectImageEntry<BufferedImage>> scopeEntries = currentScopeEntries();
+        if (scopeEntries == null && scopeSpecificImages != null
+                && scopeSpecificImages.isSelected() && selectedSubset.isEmpty()) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "No images chosen for the 'Specific images' scope -- computing thresholds "
+                    + "on the current image only. Click \"Choose images...\" to pool across a subset.");
+        }
+        final List<ProjectImageEntry<BufferedImage>> threshEntries = scopeEntries;
 
         // Make the running state obvious at the point of interaction: the
         // status bar/progress bar live at the bottom of a long scrolling dialog
@@ -1232,8 +1262,11 @@ public class PhenotypingDialog {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
 
-                String histogramsJson = workflow.computeThresholds(
-                        new ArrayList<>(currentMarkers), normId, progress);
+                String histogramsJson = (threshEntries != null)
+                        ? workflow.computeThresholdsProject(
+                                threshEntries, new ArrayList<>(currentMarkers), normId, progress)
+                        : workflow.computeThresholds(
+                                new ArrayList<>(currentMarkers), normId, progress);
 
                 // Parse the JSON
                 Gson gson = new Gson();

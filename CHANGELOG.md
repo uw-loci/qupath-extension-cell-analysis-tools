@@ -4,6 +4,29 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.5.1] -- unreleased
+
+### Fixed
+
+- **Compute Thresholds now pools across the selected Scope (phenotyping).** With
+  an "All project images" or "Specific images" scope, **Compute Thresholds**
+  previously built its histograms and auto-gates from the **open image only**,
+  even though the run normalizes and gates across all scope images together --
+  so the gates you set could mismatch what the run actually applied. It now pools
+  the cells of the chosen scope (all / subset), exactly like the run, so the
+  thresholds match. Single-image scope is unchanged. (New
+  `ClusteringWorkflow.computeThresholdsProject`, sharing one image-loading helper
+  with `runPhenotypingProject` so both pool the same cells.)
+
+### Audited (no change needed)
+
+- Checked every QP-CAT tool for the same "preview computed on the current image
+  only" mismatch. Clustering already pools across scope in-run; the autoencoder
+  computes normalization across its training set and bakes it into the model
+  checkpoint (reused on apply); zero-shot phenotyping, feature extraction, embedding,
+  and cellular neighborhoods are single-image by design (no multi-image gating
+  step). Phenotyping's Compute Thresholds (above) was the only gap.
+
 ## [0.5.0] -- 2026-06-24
 
 ### Added

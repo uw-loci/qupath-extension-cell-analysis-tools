@@ -196,9 +196,11 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
    [chapter 4](#4-multi-image-project-clustering)). Across multiple images the
    same rules and gates are applied to all of them; cells from the chosen images
    are normalized together (global gating, so a `pos` threshold means the same
-   thing across them), labels are written back, and each image is saved. Markers
-   and gates are read from the current image, so the panel must be consistent
-   across images.
+   thing across them), labels are written back, and each image is saved. The
+   panel must be consistent across images. **Compute Thresholds** also pools the
+   cells of the chosen scope (all / subset), so the histograms and auto-gates you
+   see are computed on the same distribution the run will gate on -- not just the
+   open image.
 3. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** then deselect irrelevant markers
