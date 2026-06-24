@@ -531,8 +531,9 @@ public class ClusteringDialog {
     private VBox createClusteringWarningBanner() {
         Label warn = new Label(
                 "A cluster label is a hypothesis, not a measured cell type. Every method here "
-                + "assigns each cell to exactly one cluster, which hides gradients (e.g. EMT). "
-                + "QP-CAT does not export soft/continuous membership, so to probe gradients and "
+                + "assigns each cell to exactly one cluster, which hides gradients (e.g. an "
+                + "epithelial-mesenchymal transition, EMT). QP-CAT does not export soft/continuous "
+                + "membership, so to probe gradients and "
                 + "trust a result: re-run with different seeds and parameters, confirm boundary "
                 + "cells stay put, and read the marker heatmap rather than a single labeling.");
         warn.setWrapText(true);
@@ -567,7 +568,8 @@ public class ClusteringDialog {
         generatePlotsCheck.setSelected(true);
         generatePlotsCheck.setTooltip(new Tooltip(
                 "Generate static PNG plots for marker rankings (Wilcoxon rank-sum),\n"
-                + "PAGA trajectory graph, dotplot, and stacked violin plots."));
+                + "a PAGA (partition-based graph abstraction) trajectory graph, dotplot,\n"
+                + "and stacked violin plots."));
 
         spatialAnalysisCheck = new CheckBox("Neighborhood enrichment + Moran's I");
         spatialAnalysisCheck.setSelected(false);
