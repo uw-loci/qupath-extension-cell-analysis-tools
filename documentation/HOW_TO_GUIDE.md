@@ -123,16 +123,22 @@ Quick Cluster automatically selects all "Mean" measurements and uses Z-score nor
 
 ## 4. Multi-Image Project Clustering
 
-Cluster all images in a project together for globally consistent assignments.
+Cluster several images in a project together for globally consistent assignments.
 
 1. Open a QuPath project with multiple images (each must have cell detections)
 2. **Extensions > QP-CAT > Find cell populations (clustering)...**
-3. Select **All project images** scope
+3. Choose the **Scope**:
+   - **All project images** -- every image in the project.
+   - **Specific images...** -- click **Choose images...** to pick a subset. The
+     picker has a **name filter**, a **metadata** key/value filter, per-image
+     **checkboxes**, and **Select all / Select none** (which act on whatever the
+     filters currently show). Useful to cluster just two images while testing, or
+     one cohort/condition at a time. The dialog shows how many images are chosen.
 4. Configure measurements, normalization, algorithm as usual
 5. Optionally enable **Batch correction (Harmony)** to account for per-image technical variation
 6. Click **Run Clustering**
 
-All detections across all images are combined into a single dataset, clustered together, and results are saved back to each image. This ensures "Cluster 3" in Image A is the same as "Cluster 3" in Image B.
+All detections across the chosen images are combined into a single dataset, clustered together, and results are saved back to each image. This ensures "Cluster 3" in Image A is the same as "Cluster 3" in Image B.
 
 **Note:** This loads all detection data into memory. For very large projects (>500,000 total cells), consider using MiniBatch KMeans.
 
@@ -183,13 +189,15 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 ### Step-by-step:
 
 1. **Extensions > QP-CAT > Label cells by marker rules (phenotyping)...**
-2. **Choose the scope** at the top -- **Current image** (the default) or
-   **All project images**. With **All project images** the same rules and gates
-   are applied to every image; cells from all images are normalized together
-   (global gating, so a `pos` threshold means the same thing across the project),
-   labels are written back, and each image is saved. Markers and gates are read
-   from the current image, so the panel must be consistent across images. This
-   mirrors the **Scope** control in clustering ([chapter 4](#4-multi-image-project-clustering)).
+2. **Choose the scope** at the top -- **Current image** (the default),
+   **All project images**, or **Specific images...** (click **Choose images...**
+   for the subset picker with name + metadata filters and checkboxes; see
+   [chapter 4](#4-multi-image-project-clustering)). Across multiple images the
+   same rules and gates are applied to all of them; cells from the chosen images
+   are normalized together (global gating, so a `pos` threshold means the same
+   thing across them), labels are written back, and each image is saved. Markers
+   and gates are read from the current image, so the panel must be consistent
+   across images.
 3. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** then deselect irrelevant markers

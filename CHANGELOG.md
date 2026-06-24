@@ -4,6 +4,32 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.5.0] -- unreleased
+
+### Added
+
+- **Run clustering and phenotyping on a chosen subset of project images.** The
+  **Scope** control now offers a third option, **Specific images...**, alongside
+  *Current image* and *All project images*. Picking it opens a reusable image
+  picker: a checkbox list of every project image with a **name filter**, a
+  **metadata key/value filter**, and **Select all / Select none** (which act on
+  whatever the filters currently show). Choose two images to test quickly, or one
+  cohort/condition at a time, instead of being forced to run the whole project.
+  The chosen images go through the existing multi-image path (cells combined +
+  normalized together, results saved back per image).
+- **Reusable `ProjectImageSelector` component.** The picker above is a
+  self-contained, dependency-light JavaFX class (QuPath core + JavaFX only, no
+  QP-CAT-specific imports) so it can be copied verbatim into any QuPath extension
+  that needs a "run on a subset of the project" selector. Embed it as a node or
+  pop it modally via `ProjectImageSelector.showDialog(...)`. Generalized from the
+  image-selection pane in the QuIET export toolkit.
+
+### Noted (still to come this line)
+
+- A re-runnable clustering **Workflow** step (reproduce a run from the history
+  tab) and a Groovy **scripting API** for headless subset runs are planned as the
+  next part of this work.
+
 ## [0.4.1] -- 2026-06-23
 
 Follow-up to 0.4.0 from a large BANKSY + spatial-statistics run (13k cells x 72 markers).

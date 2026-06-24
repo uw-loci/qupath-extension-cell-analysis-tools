@@ -62,6 +62,10 @@ public class PhenotypingDialog {
     private Button computeBtn;
     private RadioButton scopeCurrentImage;
     private RadioButton scopeAllImages;
+    private RadioButton scopeSpecificImages;
+    private Button chooseImagesButton;
+    private Label specificImagesLabel;
+    private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
     private List<String> currentMarkers = new ArrayList<>();
 
     // Per-marker gate spinners (marker full name -> spinner)
@@ -705,21 +709,61 @@ public class PhenotypingDialog {
         scopeAllImages = new RadioButton("All project images");
         scopeAllImages.setToggleGroup(scopeGroup);
 
+        scopeSpecificImages = new RadioButton("Specific images...");
+        scopeSpecificImages.setToggleGroup(scopeGroup);
+
+        chooseImagesButton = new Button("Choose images...");
+        chooseImagesButton.setOnAction(e -> openImageChooser());
+        chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
+        specificImagesLabel = new Label("(none chosen)");
+        specificImagesLabel.setStyle("-fx-text-fill: #666;");
+
         Project<BufferedImage> project = qupath.getProject();
-        if (project == null || project.getImageList().size() <= 1) {
+        boolean multiImage = project != null && project.getImageList().size() > 1;
+        if (!multiImage) {
+            String hint = " (requires project with multiple images)";
             scopeAllImages.setDisable(true);
-            scopeAllImages.setText("All project images (requires project with multiple images)");
+            scopeSpecificImages.setDisable(true);
+            scopeAllImages.setText("All project images" + hint);
+            scopeSpecificImages.setText("Specific images..." + hint);
         } else {
             scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
         }
-        scopeAllImages.setTooltip(new Tooltip(
-                "Apply these rules to every image in the project. Cells from all images are\n"
+        String scopeTip =
+                "Apply these rules across multiple images. Cells from all chosen images are\n"
                 + "normalized together (global gating) and results are saved back to each image.\n"
-                + "Markers and gates come from the current image -- panels must be consistent."));
+                + "Markers and gates come from the current image -- panels must be consistent.";
+        scopeAllImages.setTooltip(new Tooltip(scopeTip));
+        scopeSpecificImages.setTooltip(new Tooltip(scopeTip));
 
-        HBox row = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages);
-        row.setAlignment(Pos.CENTER_LEFT);
-        return new VBox(4, row);
+        scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
+            if (now && selectedSubset.isEmpty()) openImageChooser();
+        });
+
+        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
+                scopeSpecificImages);
+        radios.setAlignment(Pos.CENTER_LEFT);
+        HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
+        chooseRow.setAlignment(Pos.CENTER_LEFT);
+        chooseRow.setPadding(new Insets(0, 0, 0, 55));
+        return new VBox(6, radios, chooseRow);
+    }
+
+    private void openImageChooser() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("QPCAT", "No project is open.");
+            return;
+        }
+        ProjectImageSelector.showDialog(owner, project, "QPCAT - Select images to phenotype",
+                selectedSubset.isEmpty() ? null : selectedSubset)
+            .ifPresent(chosen -> {
+                selectedSubset.clear();
+                selectedSubset.addAll(chosen);
+                int n = selectedSubset.size();
+                specificImagesLabel.setText(n == 0 ? "(none chosen)"
+                        : n + " image" + (n == 1 ? "" : "s") + " chosen");
+            });
     }
 
     private void runPhenotyping() {
@@ -786,8 +830,10 @@ public class PhenotypingDialog {
             }
         }
 
-        // Scope: current image vs all project images.
-        final boolean projectScope = scopeAllImages != null && scopeAllImages.isSelected();
+        // Scope: current image, all project images, or a chosen subset.
+        final boolean projectScope = (scopeAllImages != null && scopeAllImages.isSelected())
+                || (scopeSpecificImages != null && scopeSpecificImages.isSelected());
+        final List<ProjectImageEntry<BufferedImage>> scopeEntries;
 
         if (projectScope) {
             Project<BufferedImage> project = qupath.getProject();
@@ -795,12 +841,23 @@ public class PhenotypingDialog {
                 Dialogs.showWarningNotification("QPCAT", "No project images to phenotype.");
                 return;
             }
+            if (scopeSpecificImages.isSelected()) {
+                if (selectedSubset.isEmpty()) {
+                    Dialogs.showWarningNotification("QPCAT",
+                            "No images chosen. Click \"Choose images...\" to pick a subset.");
+                    return;
+                }
+                scopeEntries = new ArrayList<>(selectedSubset);
+            } else {
+                scopeEntries = new ArrayList<>(project.getImageList());
+            }
             boolean proceed = Dialogs.showConfirmDialog("QPCAT",
-                    "Phenotype all " + project.getImageList().size() + " project images?\n"
-                    + "Existing classifications in every image will be overwritten and the "
+                    "Phenotype " + scopeEntries.size() + " project image(s)?\n"
+                    + "Existing classifications in each image will be overwritten and the "
                     + "results saved back to each image. This cannot be undone.");
             if (!proceed) return;
         } else {
+            scopeEntries = null;
             // Warn if existing classifications on the current image will be overwritten
             var imageData = qupath.getImageData();
             if (imageData != null) {
@@ -834,7 +891,7 @@ public class PhenotypingDialog {
                 Map<String, Object> result;
                 if (projectScope) {
                     result = workflow.runPhenotypingProject(
-                            qupath.getProject().getImageList(),
+                            scopeEntries,
                             new ArrayList<>(currentMarkers),
                             normalizationCombo.getValue().getId(),
                             rulesJson,
