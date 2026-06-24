@@ -47,13 +47,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   Config from file now warns if the config came from a cross-image run: the image
   set is not stored, so you must set the Scope deliberately rather than
   accidentally re-running on the current image alone.
-
-### Noted (still to come this line)
-
-- **Joint multi-image clustering in the headless YAML batch.** The YAML batch
-  runs headless on Linux servers today, but clusters **each image independently**
-  -- it does not yet offer a joint "cluster across all selected images at once"
-  mode matching the GUI's project scope. That is the planned headless follow-up.
+- **Joint multi-image clustering in the headless YAML batch (Linux servers).**
+  The YAML batch gained `clustering.joint: true`, which clusters all of a
+  project's resolved images **together** in one run -- globally consistent cluster
+  IDs across images, the headless equivalent of the GUI's project scope -- instead
+  of clustering each image independently (still the default). The image set comes
+  from `scope.images`, so `images: all` clusters the whole project jointly and an
+  explicit list/regex clusters a chosen **subset** jointly. The combined result is
+  saved once under `result_name` (default `yaml_joint`) and labels + scope-aware
+  Workflow records are written back to each image. Dispatched once per project;
+  per-image steps (figure export) follow. See YAML_SCHEMA.md (`clustering.joint`).
 
 ## [0.4.1] -- 2026-06-23
 

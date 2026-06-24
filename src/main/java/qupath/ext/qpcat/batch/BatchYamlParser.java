@@ -56,7 +56,7 @@ public final class BatchYamlParser {
             "tsne_perplexity", "random_seed", "result_name",
             "measurements", "spatial_smoothing", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
-            "banksy_lambda", "banksy_k_geom"));
+            "banksy_lambda", "banksy_k_geom", "joint"));
 
     private static final Set<String> KNOWN_PHENOTYPING = new HashSet<>(Arrays.asList(
             "enabled", "rules", "llm_explainer"));
@@ -262,6 +262,7 @@ public final class BatchYamlParser {
                 case "linkage" -> c.setLinkage(asString(value));
                 case "banksy_lambda" -> c.setBanksyLambda(asDoubleObj(value));
                 case "banksy_k_geom" -> c.setBanksyKGeom(asIntObj(value));
+                case "joint" -> c.setJoint(asBool(value, false));
                 default -> {}
             }
         }

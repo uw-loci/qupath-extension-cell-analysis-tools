@@ -203,9 +203,36 @@ public final class YamlBatchOrchestrator {
         int retryN = parseRetry(onErrorMode);
         boolean stopOnError = "stop".equals(onErrorMode);
 
+        // Joint clustering: cluster all of a project's resolved images at once
+        // (globally consistent labels, like the GUI project scope) instead of
+        // per-image. Only meaningful for a real clustering run.
+        boolean jointClustering = isRealClusteringRun(schema)
+                && schema.getClustering().isJoint();
+
         for (ScopeResolver.ResolvedProject rp : resolved.getProjects()) {
             // Bind logger to this project so per-image audit rows land in its log
             OperationLogger.getInstance().setProject(rp.getProject());
+
+            // One joint clustering run per project, before the per-image steps.
+            if (jointClustering) {
+                if (options.isDryRun()) {
+                    emitter.emit(ProgressEmitter.Level.INFO, "WOULD-RUN joint clustering across "
+                            + rp.getImages().size() + " image(s) of project "
+                            + rp.getProjectPath());
+                } else {
+                    boolean ok = runJointClustering(schema, rp, emitter, outcome);
+                    if (!ok) {
+                        // Failures were recorded per image inside runJointClustering.
+                        if (stopOnError) {
+                            stopRequested = true;
+                            break;
+                        }
+                        // continue mode: skip this project's per-image steps,
+                        // which all depend on the clustering result.
+                        continue;
+                    }
+                }
+            }
 
             for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
                 processed++;
@@ -222,7 +249,7 @@ public final class YamlBatchOrchestrator {
                     attempt++;
                     try {
                         runOneImage(schema, options, rp, entry, processed, totalImages,
-                                emitter, outcome, out);
+                                emitter, outcome, out, jointClustering);
                         done = true;
                     } catch (Exception e) {
                         String msg = BatchYamlParser.asciiSafe(e.getMessage());
@@ -291,15 +318,19 @@ public final class YamlBatchOrchestrator {
                                      int index, int total,
                                      ProgressEmitter emitter,
                                      BatchOutcome outcome,
-                                     ImageOutcome out) throws IOException {
+                                     ImageOutcome out,
+                                     boolean skipClustering) throws IOException {
         if (options.isDryRun()) {
-            emitDryRunDescription(schema, entry, index, total, emitter);
+            emitDryRunDescription(schema, entry, index, total, emitter, skipClustering);
             return;
         }
         ClusteringResult clustering = null;
 
         // ---- Clustering ----
-        if (schema.getClustering() != null) {
+        // Skipped per-image when the run clustered all images jointly already
+        // (clustering.joint: true) -- that joint run is dispatched once per
+        // project in the main loop.
+        if (!skipClustering && schema.getClustering() != null) {
             BatchYamlSchema.ClusteringBlock cc = schema.getClustering();
             boolean reuseSaved = "reuse_saved".equalsIgnoreCase(cc.getMode())
                     || "skip".equalsIgnoreCase(cc.getType());
@@ -425,14 +456,66 @@ public final class YamlBatchOrchestrator {
         }
     }
 
+    /** True when the schema asks for an actual clustering run (not reuse_saved / skip). */
+    private static boolean isRealClusteringRun(BatchYamlSchema schema) {
+        if (schema.getClustering() == null) return false;
+        BatchYamlSchema.ClusteringBlock cc = schema.getClustering();
+        boolean reuseSaved = "reuse_saved".equalsIgnoreCase(cc.getMode())
+                || "skip".equalsIgnoreCase(cc.getType());
+        return !reuseSaved;
+    }
+
+    /**
+     * Run ONE joint clustering pass across all of a project's resolved images
+     * (clustering.joint: true). Delegates to the same project-clustering path the
+     * GUI uses, so labels are globally consistent and each image is saved with a
+     * scope-aware Workflow record. Saves the combined result under the configured
+     * {@code result_name} so figure_export can pick it up. Returns true on success;
+     * on failure marks every image of the project as a clustering failure.
+     */
+    private static boolean runJointClustering(BatchYamlSchema schema,
+                                              ScopeResolver.ResolvedProject rp,
+                                              ProgressEmitter emitter,
+                                              BatchOutcome outcome) {
+        BatchYamlSchema.ClusteringBlock cc = schema.getClustering();
+        int n = rp.getImages().size();
+        emitter.emit(ProgressEmitter.Level.INFO, "Joint clustering across " + n
+                + " image(s): " + (cc.getType() == null ? "leiden" : cc.getType()));
+        try {
+            ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats());
+            config.setClusterEntireProject(true);
+            HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
+            ClusteringResult clustering = hw.runClustering(rp.getImages(), config, null);
+            String resultName = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
+            ClusteringResultManager.saveResult(rp.getProject(), resultName, clustering,
+                    config.getAlgorithm().getId(),
+                    config.getNormalization().getId(),
+                    config.getEmbeddingMethod().getId());
+            emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
+                    + clustering.getNClusters() + " clusters, " + clustering.getNCells()
+                    + " cells across " + n + " image(s); saved as '" + resultName + "'");
+            return true;
+        } catch (Exception e) {
+            String msg = BatchYamlParser.asciiSafe(e.getMessage());
+            emitter.emit(ProgressEmitter.Level.ERROR, "Joint clustering failed: " + msg);
+            for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
+                ImageOutcome o = new ImageOutcome(entry.getImageName());
+                o.markFailure("clustering", msg);
+                outcome.getImages().add(o);
+            }
+            return false;
+        }
+    }
+
     private static void emitDryRunDescription(BatchYamlSchema schema,
                                                ProjectImageEntry<BufferedImage> entry,
                                                int index, int total,
-                                               ProgressEmitter emitter) {
+                                               ProgressEmitter emitter,
+                                               boolean skipClustering) {
         emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
                 ProgressEmitter.fields("image", entry.getImageName()),
                 "WOULD-RUN");
-        if (schema.getClustering() != null) {
+        if (!skipClustering && schema.getClustering() != null) {
             BatchYamlSchema.ClusteringBlock c = schema.getClustering();
             emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
                     ProgressEmitter.fields("step", "clustering",

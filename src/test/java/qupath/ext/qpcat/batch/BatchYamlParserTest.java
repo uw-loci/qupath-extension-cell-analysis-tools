@@ -41,6 +41,25 @@ class BatchYamlParserTest {
     }
 
     @Test
+    void parses_clustering_joint_flag() {
+        BatchYamlParser.ParseOutcome on = BatchYamlParser.parseString(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "clustering:\n  type: leiden\n  joint: true\n");
+        assertThat(on.getSchema().getClustering().isJoint()).isTrue();
+        assertThat(on.getIssues().stream()
+                .anyMatch(i -> i.getSeverity() == ValidationIssue.Severity.ERROR))
+                .isFalse();
+
+        // Default is per-image (false) when the flag is absent.
+        BatchYamlParser.ParseOutcome off = BatchYamlParser.parseString(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "clustering:\n  type: leiden\n");
+        assertThat(off.getSchema().getClustering().isJoint()).isFalse();
+    }
+
+    @Test
     void parses_per_image_overrides() {
         BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(
                 "version: '1.0'\n"

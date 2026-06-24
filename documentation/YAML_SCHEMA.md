@@ -113,8 +113,19 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. |
+| `joint` | boolean | `false` | Cluster all of a project's resolved images **jointly** in one run (globally consistent cluster IDs across images), like the GUI "All / Specific images" scope. `false` = cluster each image **independently**. |
 
 > **Note:** `clustering.mode: reuse_saved` skips re-clustering -- recommended for figure regeneration after paper revisions when cluster IDs must stay stable.
+
+> **`joint` -- per-image vs cross-image clustering.** By default the batch clusters
+> **each image on its own** (cluster "3" in image A is unrelated to "3" in image B).
+> Set `joint: true` to cluster all resolved images **together** so a cluster ID
+> means the same cell population across every image -- the headless equivalent of
+> the GUI's project scope. The image set comes from `scope.images`: use
+> `images: all` to cluster the whole project jointly, or an explicit list / regex
+> to cluster a chosen **subset** jointly. With `joint: true` the combined result is
+> saved once under `result_name` (default `yaml_joint`) and labels are written back
+> to each image; `joint` is ignored for `mode: reuse_saved`.
 
 ## `phenotyping` (optional, object)
 
@@ -225,6 +236,26 @@ scope:
 clustering: { type: leiden }
 ```
 
+### Joint clustering across a subset (globally consistent cluster IDs)
+
+```yaml
+version: "1.0"
+scope:
+  projects: [/data/experiments/cohort_2025_q2/project.qpproj]
+  images: [Patient01_ROI1, Patient02_ROI1]   # or 'images: all' for the whole project
+clustering:
+  type: leiden
+  resolution: 0.8
+  normalization: zscore
+  embedding: umap
+  joint: true                                 # cluster the listed images TOGETHER
+  result_name: cohort_q2_joint
+```
+
+The two listed images are clustered in one pass, so a cluster ID means the same
+population in both, and labels are written back to each. Drop `joint` (or set it
+`false`) to cluster each image independently instead.
+
 ### Typical multi-image clustering + rule-based phenotyping
 
 ```yaml
@@ -241,6 +272,7 @@ clustering:
   resolution: 0.8
   normalization: zscore
   embedding: umap
+  joint: true
   spatial_smoothing: true
   random_seed: 42
 phenotyping:

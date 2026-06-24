@@ -139,6 +139,13 @@ public final class BatchYamlSchema {
         private String linkage;              // agglomerative
         private Double banksyLambda;
         private Integer banksyKGeom;
+        // When true, cluster all resolved images of a project JOINTLY in one run
+        // (globally consistent labels, like the GUI "All / Specific images"
+        // scope), instead of clustering each image independently. Default false.
+        private boolean joint = false;
+
+        public boolean isJoint() { return joint; }
+        public void setJoint(boolean joint) { this.joint = joint; }
 
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }

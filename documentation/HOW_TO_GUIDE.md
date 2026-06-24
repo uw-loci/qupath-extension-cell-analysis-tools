@@ -1413,7 +1413,10 @@ comment), not a runnable command**:
   of what was run, with the parameters, scope, and result name, so you can always
   see how that image's labels were produced and reproduce them via routes 1-4.
 
-For genuinely scripted / server clustering, use route 4 (the YAML batch). Note
-the YAML batch currently clusters **each image independently**; a joint
-multi-image headless mode (matching the GUI's project scope) is not yet
-available -- track this if you need cross-image clustering on a server.
+For genuinely scripted / server clustering, use route 4 (the YAML batch). It can
+cluster **each image independently** (default) or, with `clustering.joint: true`,
+cluster a project's images **jointly** for globally consistent cluster IDs --
+matching the GUI's project scope. The image set comes from `scope.images`
+(`all`, or an explicit list/regex for a subset). See
+[YAML_SCHEMA.md](YAML_SCHEMA.md) (`clustering.joint`) and
+[section 19](#19-yaml-headless-batch).
