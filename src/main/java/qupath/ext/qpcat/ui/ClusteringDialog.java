@@ -1487,6 +1487,18 @@ public class ClusteringDialog {
             Dialogs.showInfoNotification("QPCAT", "Config loaded from " + file.getName());
             OperationLogger.getInstance().logEvent("CONFIG LOADED",
                     "Loaded clustering config from file '" + file.getName() + "'");
+            // Scope safety: a config from a multi-image run does NOT record which
+            // images were used. Warn so the user does not accidentally re-run it on
+            // the current image alone -- that clusters only this image's cells and
+            // yields labels that will not match the original cross-image run.
+            if (config.isClusterEntireProject()) {
+                Dialogs.showWarningNotification("QPCAT - check the scope",
+                        "This config came from a run across MULTIPLE images. The image set "
+                        + "is not stored in the config -- the Scope was left unchanged. Before "
+                        + "running, set the Scope deliberately (All / Specific images). Running "
+                        + "on the current image alone will cluster only its cells and will NOT "
+                        + "reproduce the original cross-image labels.");
+            }
         } catch (Exception e) {
             logger.error("Failed to load config from file", e);
             Dialogs.showErrorNotification("QPCAT",

@@ -369,7 +369,7 @@ public class ClusteringWorkflow {
         // and record the run in QuPath's native command-history Workflow.
         String scopeKey = (fbId != null) ? fbId : fbName;
         autoSaveResult(result, config, scopeKey, fbName);
-        recordClusteringWorkflowStep(imageData, config, result, false);
+        recordClusteringWorkflowStep(imageData, config, result, 1);
 
         return result;
     }
@@ -507,6 +507,7 @@ public class ClusteringWorkflow {
                     + " stay global-graph values.");
         }
 
+        final int nImages = extraction.getImageSegments().size();
         for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
             int start = segment.getStartIndex();
             int end = segment.getEndIndex();
@@ -543,6 +544,13 @@ public class ClusteringWorkflow {
                 applySpatialGraphPayload(imageData,
                         new ArrayList<>(segmentDetections), config, sliced);
             }
+
+            // Record the run in EVERY processed image's command-history Workflow,
+            // so each image carries an audit trail of how its cluster labels were
+            // produced -- including the explicit note that they came from a joint,
+            // cross-image run (see recordClusteringWorkflowStep). Added before
+            // saveImageData so it persists with the result.
+            recordClusteringWorkflowStep(imageData, config, result, nImages);
 
             try {
                 entry.saveImageData(imageData);
@@ -588,12 +596,17 @@ public class ClusteringWorkflow {
                         config.isEnableBatchCorrection()),
                 completeMsg, elapsed);
 
-        // Auto-save (project scope) + record the run on the currently open
-        // image's command-history Workflow when one is available.
-        autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, "Entire project");
-        ImageData<BufferedImage> openImageData = qupath.getImageData();
-        if (openImageData != null) {
-            recordClusteringWorkflowStep(openImageData, config, result, true);
+        // Auto-save (project scope). The per-image Workflow records were written
+        // inside the save loop above (so every processed image carries one). Also
+        // record on the currently open LIVE image instance so the Workflow tab
+        // updates immediately without a reload.
+        String projectScopeLabel = nImages + " project image" + (nImages == 1 ? "" : "s");
+        autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, projectScopeLabel);
+        if (qupath != null) {
+            ImageData<BufferedImage> openImageData = qupath.getImageData();
+            if (openImageData != null) {
+                recordClusteringWorkflowStep(openImageData, config, result, nImages);
+            }
         }
 
         return result;
@@ -652,32 +665,44 @@ public class ClusteringWorkflow {
     private void recordClusteringWorkflowStep(ImageData<BufferedImage> imageData,
                                               ClusteringConfig config,
                                               ClusteringResult result,
-                                              boolean projectWide) {
+                                              int nImages) {
         if (imageData == null) return;
         try {
             String algo = config.getAlgorithm().getDisplayName();
             Map<String, Object> algoParams = config.getAlgorithmParams();
             String paramsStr = (algoParams != null) ? algoParams.toString() : "{}";
-            String scope = projectWide ? "entire project" : "current image";
+            boolean crossImage = nImages > 1;
+            String scope = crossImage
+                    ? ("joint run across " + nImages + " images")
+                    : "current image only";
             String saved = (result.getSavedName() != null)
                     ? result.getSavedName() : "(not saved - no project open)";
-            String script = String.join("\n",
-                    "// QP-CAT clustering (" + scope + ")",
-                    "// This Workflow step is currently a RECORD (comment), because QP-CAT",
-                    "//   does not yet expose a clustering scripting API for the step to call.",
-                    "//   (A runnable step is planned -- cf. InstanSeg's runnable step.)",
-                    "// Algorithm: " + algo + "  params: " + paramsStr,
-                    "// Normalization: " + config.getNormalization().getId()
-                            + "  Embedding: " + config.getEmbeddingMethod().getId(),
-                    "// Result: " + result.getNClusters() + " clusters, "
-                            + result.getNCells() + " cells",
-                    "// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',",
-                    "//   or Load Config from file -> '" + saved + "_config.json' in the result",
-                    "//   folder, or the headless YAML batch (see YAML_SCHEMA.md).");
+
+            List<String> lines = new ArrayList<>();
+            lines.add("// QP-CAT clustering -- " + scope);
+            lines.add("// This Workflow step is an informational RECORD (a comment), by design.");
+            lines.add("//   It is not a runnable command. Reproduce via the routes below.");
+            if (crossImage) {
+                lines.add("// IMPORTANT: the cluster labels on THIS image were computed JOINTLY");
+                lines.add("//   with " + (nImages - 1) + " other image(s) (" + result.getNCells()
+                        + " cells total). Re-clustering this image on its own will produce");
+                lines.add("//   DIFFERENT labels -- to reproduce, run across the same image set.");
+            }
+            lines.add("// Algorithm: " + algo + "  params: " + paramsStr);
+            lines.add("// Normalization: " + config.getNormalization().getId()
+                    + "  Embedding: " + config.getEmbeddingMethod().getId());
+            lines.add("// Result: " + result.getNClusters() + " clusters, "
+                    + result.getNCells() + " cells"
+                    + (crossImage ? " across " + nImages + " images" : ""));
+            lines.add("// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',");
+            lines.add("//   or Load Config from file -> '" + saved + "_config.json' (then set the");
+            lines.add("//   SAME scope), or the headless YAML batch (see YAML_SCHEMA.md).");
+
             String stepName = "QP-CAT: clustering (" + algo + ", "
-                    + result.getNClusters() + " clusters)";
+                    + result.getNClusters() + " clusters"
+                    + (crossImage ? ", " + nImages + " images" : "") + ")";
             imageData.getHistoryWorkflow().addStep(
-                    new DefaultScriptableWorkflowStep(stepName, script));
+                    new DefaultScriptableWorkflowStep(stepName, String.join("\n", lines)));
         } catch (Exception e) {
             logger.warn("Failed to record clustering workflow step: {}", e.getMessage());
         }

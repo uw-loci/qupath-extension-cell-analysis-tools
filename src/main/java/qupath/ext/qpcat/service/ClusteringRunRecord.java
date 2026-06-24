@@ -134,13 +134,13 @@ public final class ClusteringRunRecord {
 
         sb.append("Note on the QuPath 'Workflow' tab\n");
         sb.append("---------------------------------\n");
-        sb.append("The QP-CAT step recorded in the Workflow tab is currently a human-readable\n");
-        sb.append("record (a comment), because QP-CAT does not yet expose a clustering\n");
-        sb.append("scripting API for the step to call. An extension CAN add a runnable step\n");
-        sb.append("(e.g. InstanSeg embeds 'InstanSeg.builder()...detectObjects()'); a runnable\n");
-        sb.append("QP-CAT step is planned. Separately, no extension can make double-clicking a\n");
-        sb.append("step re-open its dialog pre-filled -- that GUI replay is built-in commands\n");
-        sb.append("only. For now use routes 1-3 above to reproduce.\n");
+        sb.append("The QP-CAT step in the Workflow tab is an informational RECORD (a comment),\n");
+        sb.append("by design -- it is recorded on EVERY image processed by the run, including a\n");
+        sb.append("note when the labels came from a joint, cross-image run. It is deliberately\n");
+        sb.append("not a one-click re-run: an extension could embed a runnable command (e.g.\n");
+        sb.append("InstanSeg does), but a naive re-run would silently re-cluster a single image\n");
+        sb.append("when the original was multi-image, producing different labels. Reproduce\n");
+        sb.append("deliberately via routes 1-3 above; for servers use route 3 (YAML batch).\n");
         return sb.toString();
     }
 

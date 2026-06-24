@@ -1391,28 +1391,29 @@ folder. Four ways to get back to it, from "just look again" to "re-run headless"
 ### What the QuPath "Workflow" tab can and cannot do here
 
 QuPath records each command you run in the **Workflow** tab (the command
-history, exportable as a Groovy script). QP-CAT adds a step there for every
-clustering run. Two separate things are often conflated here:
+history). QP-CAT records a clustering step on **every image processed by a run**
+-- including, for a multi-image run, a clear note that the labels were computed
+*jointly* across N images. By design this step is an informational **record (a
+comment), not a runnable command**:
 
-- **A runnable, exportable workflow step IS possible for an extension** -- *if*
-  the extension exposes a scripting API for the step body to call. For example
-  InstanSeg embeds a real command in its step:
-  `qupath.ext.instanseg.core.InstanSeg.builder()...build().detectObjects()`,
-  so running the workflow (or exporting it) re-executes detection. **QP-CAT's
-  clustering step is currently just a comment** because QP-CAT does not yet
-  expose a clustering scripting API for the step to call -- that is a gap we plan
-  to close, not a platform limit. (Today's supported scripting/headless route is
-  the YAML batch, route 4.)
+- **It is deliberately not a one-click re-run.** An extension *can* embed a
+  runnable command in a workflow step (for example InstanSeg embeds
+  `qupath.ext.instanseg.core.InstanSeg.builder()...detectObjects()`), so this is
+  a design choice, not a platform limit. We keep QP-CAT's step informational on
+  purpose: a naive "re-run this step" would silently re-cluster whichever single
+  image is open, even when the original was a joint multi-image run -- producing
+  different labels that look valid. The Workflow record instead documents the
+  scope so that footgun is visible. Reproduce deliberately via routes 1-4.
 - **Double-clicking the step does NOT re-open the dialog with the values filled
   in.** That "edit-and-rerun in the GUI dialog" replay is for QuPath's *own
-  built-in* commands only (they register a parameter map the history replays into
-  their dialog); there is no public API for a third-party dialog to be
-  re-hydrated from a workflow step. This part *is* a QuPath platform limit. Note a
-  runnable step (like InstanSeg's) does not reopen a dialog either -- running it
-  re-executes the command headlessly with the recorded parameters.
-- **What it is good for today:** an at-a-glance audit trail of what was run, in
-  order, with the parameters and the result name -- so you can find the run and
-  then reproduce it via routes 1-4 above.
+  built-in* commands only; there is no public API for a third-party dialog to be
+  re-hydrated from a workflow step. (This part genuinely is a QuPath platform
+  limit, but it is moot here since the step is informational anyway.)
+- **What it is good for:** a per-image audit trail -- on each clustered image --
+  of what was run, with the parameters, scope, and result name, so you can always
+  see how that image's labels were produced and reproduce them via routes 1-4.
 
-Until QP-CAT adds a clustering scripting API + runnable step, use route 4 (the
-YAML batch) for genuinely re-runnable, scripted clustering.
+For genuinely scripted / server clustering, use route 4 (the YAML batch). Note
+the YAML batch currently clusters **each image independently**; a joint
+multi-image headless mode (matching the GUI's project scope) is not yet
+available -- track this if you need cross-image clustering on a server.

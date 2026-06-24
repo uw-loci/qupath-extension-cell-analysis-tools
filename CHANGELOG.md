@@ -32,21 +32,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   **Load Config from file...** button (reload any `<name>_config.json` to repeat a
   run -- pick the Scope, click Run), and a note by the Run button points at all
   this. A new How-To section 23 documents the four reproduction routes.
-- **Clearer (and corrected) note on the QuPath Workflow tab.** The clustering
-  step is currently a record (comment) because QP-CAT has no clustering scripting
-  API yet for a runnable step to call -- *not* because runnable extension steps
-  are impossible. They are not: InstanSeg, for instance, embeds a real
-  `InstanSeg.builder()...detectObjects()` command in its step. Section 23 now
-  distinguishes (a) a runnable/exportable step, which IS possible once we add a
-  scripting API, from (b) re-opening the dialog pre-filled, which genuinely is
-  built-in-commands-only. Today's supported scripting/headless route remains the
-  YAML batch.
+- **Workflow record now lands on every processed image, with explicit scope.**
+  A multi-image (project / subset) clustering run previously recorded a Workflow
+  step only on the open image; now **every** image it processed gets one. Each
+  step states the scope, and for a joint run adds an explicit warning that the
+  labels were computed *across N images* and that re-clustering this image alone
+  would produce different labels. The step is an informational **record by
+  design**, not a runnable command (an extension *could* embed a runnable command
+  -- InstanSeg does -- but a naive re-run would silently re-cluster a single image
+  when the original was multi-image; the record documents the scope instead). The
+  multi-image scope label is also now accurate ("N project images" rather than
+  always "Entire project").
+- **Scope-safety warning when loading a config from a multi-image run.** Load
+  Config from file now warns if the config came from a cross-image run: the image
+  set is not stored, so you must set the Scope deliberately rather than
+  accidentally re-running on the current image alone.
 
 ### Noted (still to come this line)
 
-- A Groovy **clustering scripting API** plus a **runnable Workflow step** that
-  calls it (the InstanSeg pattern) remain planned -- this would make the Workflow
-  step re-execute the run, beyond today's YAML headless batch.
+- **Joint multi-image clustering in the headless YAML batch.** The YAML batch
+  runs headless on Linux servers today, but clusters **each image independently**
+  -- it does not yet offer a joint "cluster across all selected images at once"
+  mode matching the GUI's project scope. That is the planned headless follow-up.
 
 ## [0.4.1] -- 2026-06-23
 
