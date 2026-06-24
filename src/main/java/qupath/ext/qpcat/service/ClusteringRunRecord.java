@@ -134,10 +134,13 @@ public final class ClusteringRunRecord {
 
         sb.append("Note on the QuPath 'Workflow' tab\n");
         sb.append("---------------------------------\n");
-        sb.append("The QP-CAT step recorded in the Workflow tab is a human-readable record,\n");
-        sb.append("NOT a runnable command -- double-clicking it does not re-open this dialog\n");
-        sb.append("with the values filled in (QuPath only does that for its own built-in\n");
-        sb.append("commands, not extension dialogs). Use routes 1-3 above to reproduce.\n");
+        sb.append("The QP-CAT step recorded in the Workflow tab is currently a human-readable\n");
+        sb.append("record (a comment), because QP-CAT does not yet expose a clustering\n");
+        sb.append("scripting API for the step to call. An extension CAN add a runnable step\n");
+        sb.append("(e.g. InstanSeg embeds 'InstanSeg.builder()...detectObjects()'); a runnable\n");
+        sb.append("QP-CAT step is planned. Separately, no extension can make double-clicking a\n");
+        sb.append("step re-open its dialog pre-filled -- that GUI replay is built-in commands\n");
+        sb.append("only. For now use routes 1-3 above to reproduce.\n");
         return sb.toString();
     }
 

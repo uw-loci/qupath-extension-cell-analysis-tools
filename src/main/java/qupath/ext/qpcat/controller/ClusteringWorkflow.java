@@ -663,9 +663,9 @@ public class ClusteringWorkflow {
                     ? result.getSavedName() : "(not saved - no project open)";
             String script = String.join("\n",
                     "// QP-CAT clustering (" + scope + ")",
-                    "// NOTE: this Workflow step is a RECORD, not a runnable command --",
-                    "//   double-clicking it does not re-open the dialog pre-filled (QuPath",
-                    "//   only does that for its own built-in commands, not extensions).",
+                    "// This Workflow step is currently a RECORD (comment), because QP-CAT",
+                    "//   does not yet expose a clustering scripting API for the step to call.",
+                    "//   (A runnable step is planned -- cf. InstanSeg's runnable step.)",
                     "// Algorithm: " + algo + "  params: " + paramsStr,
                     "// Normalization: " + config.getNormalization().getId()
                             + "  Embedding: " + config.getEmbeddingMethod().getId(),

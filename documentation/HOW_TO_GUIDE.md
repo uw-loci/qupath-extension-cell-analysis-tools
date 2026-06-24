@@ -1392,22 +1392,27 @@ folder. Four ways to get back to it, from "just look again" to "re-run headless"
 
 QuPath records each command you run in the **Workflow** tab (the command
 history, exportable as a Groovy script). QP-CAT adds a step there for every
-clustering run, **but it is a human-readable record, not a runnable command**:
+clustering run. Two separate things are often conflated here:
 
-- **Double-clicking the QP-CAT step does not re-open the dialog with the values
-  filled in.** QuPath only does that "edit-and-rerun from history" trick for its
-  *own built-in* commands, which register a parameter map the history can replay
-  into their dialog. There is no public API for a third-party extension dialog to
-  be re-hydrated from a workflow step, so this is a **QuPath platform limit, not
-  a QP-CAT bug**.
-- **Exporting the workflow as a script does not yield a runnable clustering
-  script.** The QP-CAT step body is an ASCII comment block (parameters + how to
-  reproduce), so it appears as comments in the exported `.groovy`, not as a
-  callable command.
-- **What it is good for:** an at-a-glance audit trail of what was run, in order,
-  with the parameters and the result name -- so you can find the run and then
-  reproduce it via routes 1-4 above.
+- **A runnable, exportable workflow step IS possible for an extension** -- *if*
+  the extension exposes a scripting API for the step body to call. For example
+  InstanSeg embeds a real command in its step:
+  `qupath.ext.instanseg.core.InstanSeg.builder()...build().detectObjects()`,
+  so running the workflow (or exporting it) re-executes detection. **QP-CAT's
+  clustering step is currently just a comment** because QP-CAT does not yet
+  expose a clustering scripting API for the step to call -- that is a gap we plan
+  to close, not a platform limit. (Today's supported scripting/headless route is
+  the YAML batch, route 4.)
+- **Double-clicking the step does NOT re-open the dialog with the values filled
+  in.** That "edit-and-rerun in the GUI dialog" replay is for QuPath's *own
+  built-in* commands only (they register a parameter map the history replays into
+  their dialog); there is no public API for a third-party dialog to be
+  re-hydrated from a workflow step. This part *is* a QuPath platform limit. Note a
+  runnable step (like InstanSeg's) does not reopen a dialog either -- running it
+  re-executes the command headlessly with the recorded parameters.
+- **What it is good for today:** an at-a-glance audit trail of what was run, in
+  order, with the parameters and the result name -- so you can find the run and
+  then reproduce it via routes 1-4 above.
 
-For a genuinely re-runnable, scripted clustering, use route 4 (the YAML batch).
-A future QP-CAT version may add a Groovy scripting API and a runnable workflow
-step that calls it; until then the YAML batch is the supported scripting path.
+Until QP-CAT adds a clustering scripting API + runnable step, use route 4 (the
+YAML batch) for genuinely re-runnable, scripted clustering.

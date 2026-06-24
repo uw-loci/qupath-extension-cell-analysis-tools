@@ -32,18 +32,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   **Load Config from file...** button (reload any `<name>_config.json` to repeat a
   run -- pick the Scope, click Run), and a note by the Run button points at all
   this. A new How-To section 23 documents the four reproduction routes.
-- **Honest about the QuPath Workflow tab.** The clustering step recorded in the
-  Workflow tab is now clearly labelled a *record, not a runnable command*:
-  double-clicking it does not re-open the dialog pre-filled (QuPath only does
-  that for its own built-in commands, not extension dialogs), and exporting the
-  workflow yields comments, not a callable clustering command. Section 23 spells
-  out exactly what the Workflow tab can and cannot do, and points at the existing
-  YAML headless batch as the supported scripting/headless route.
+- **Clearer (and corrected) note on the QuPath Workflow tab.** The clustering
+  step is currently a record (comment) because QP-CAT has no clustering scripting
+  API yet for a runnable step to call -- *not* because runnable extension steps
+  are impossible. They are not: InstanSeg, for instance, embeds a real
+  `InstanSeg.builder()...detectObjects()` command in its step. Section 23 now
+  distinguishes (a) a runnable/exportable step, which IS possible once we add a
+  scripting API, from (b) re-opening the dialog pre-filled, which genuinely is
+  built-in-commands-only. Today's supported scripting/headless route remains the
+  YAML batch.
 
 ### Noted (still to come this line)
 
-- A Groovy **scripting API** and a genuinely *runnable* clustering Workflow step
-  (beyond today's YAML headless batch) remain planned for a later version.
+- A Groovy **clustering scripting API** plus a **runnable Workflow step** that
+  calls it (the InstanSeg pattern) remain planned -- this would make the Workflow
+  step re-execute the run, beyond today's YAML headless batch.
 
 ## [0.4.1] -- 2026-06-23
 
