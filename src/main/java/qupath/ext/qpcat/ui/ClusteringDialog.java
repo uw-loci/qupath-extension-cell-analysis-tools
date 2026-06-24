@@ -1182,16 +1182,24 @@ public class ClusteringDialog {
         HBox progressRow = new HBox(8, progressBar, cancelButton);
         progressRow.setAlignment(Pos.CENTER_LEFT);
 
-        // Reproducibility note: make it explicit that a run is saved + repeatable.
+        // Reproducibility note: make it explicit that a run is saved + repeatable,
+        // with a direct link to the How-To chapter that explains the routes.
         Label reproNote = new Label(
                 "Every run is auto-saved. After it finishes, use \"Open results folder\" "
                 + "in the results window for the parameters, plots, and a reproducible "
-                + "config (reload via \"Load Config from file...\"). For headless / scripted "
-                + "runs see the YAML batch (How-To section 19).");
+                + "config (reload via \"Load Config from file...\"). Headless / scripted "
+                + "runs use the YAML batch.");
         reproNote.setWrapText(true);
         reproNote.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
 
-        return new VBox(5, progressRow, statusLabel, reproNote);
+        HBox reproLinks = new HBox(12,
+                QpcatDocLinks.howToGuide("How-To: Reproducing a run",
+                        "23-reproducing-a-clustering-run"),
+                QpcatDocLinks.howToGuide("How-To: Headless YAML batch",
+                        "19-yaml-headless-batch"));
+        reproLinks.setAlignment(Pos.CENTER_LEFT);
+
+        return new VBox(5, progressRow, statusLabel, reproNote, reproLinks);
     }
 
     private void setRunActive(boolean active) {
