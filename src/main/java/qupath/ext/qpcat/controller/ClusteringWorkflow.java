@@ -14,6 +14,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
@@ -628,6 +629,10 @@ public class ClusteringWorkflow {
             result.setSavedScopeCount(scopeCount);
             result.setSavedScopeLabel(scopeLabel);
 
+            // Reproducibility artifacts: the exact config (re-loadable in the
+            // dialog) + a human-readable run record next to the result.
+            ClusteringRunRecord.write(resultsDir, savedName, config, result, scopeLabel);
+
             OperationLogger.getInstance().logEvent("RESULTS AUTO-SAVED",
                     "Saved '" + savedName + "' (" + result.getNClusters() + " clusters, "
                     + result.getNCells() + " cells) to " + resultsDir
@@ -658,12 +663,17 @@ public class ClusteringWorkflow {
                     ? result.getSavedName() : "(not saved - no project open)";
             String script = String.join("\n",
                     "// QP-CAT clustering (" + scope + ")",
+                    "// NOTE: this Workflow step is a RECORD, not a runnable command --",
+                    "//   double-clicking it does not re-open the dialog pre-filled (QuPath",
+                    "//   only does that for its own built-in commands, not extensions).",
                     "// Algorithm: " + algo + "  params: " + paramsStr,
                     "// Normalization: " + config.getNormalization().getId()
                             + "  Embedding: " + config.getEmbeddingMethod().getId(),
                     "// Result: " + result.getNClusters() + " clusters, "
                             + result.getNCells() + " cells",
-                    "// Reopen: Extensions > QPCAT > View Past Results -> '" + saved + "'");
+                    "// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',",
+                    "//   or Load Config from file -> '" + saved + "_config.json' in the result",
+                    "//   folder, or the headless YAML batch (see YAML_SCHEMA.md).");
             String stepName = "QP-CAT: clustering (" + algo + ", "
                     + result.getNClusters() + " clusters)";
             imageData.getHistoryWorkflow().addStep(

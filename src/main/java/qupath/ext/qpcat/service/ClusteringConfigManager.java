@@ -99,6 +99,25 @@ public class ClusteringConfigManager {
     }
 
     /**
+     * Load a clustering config from an arbitrary JSON file (e.g. the
+     * {@code <name>_config.json} written next to an auto-saved result), rather
+     * than from the project's configs directory. Lets a run be reproduced from
+     * its result folder without first importing the config into the project.
+     */
+    public static ClusteringConfig loadConfigFromFile(Path file) throws IOException {
+        if (file == null || !Files.exists(file)) {
+            throw new IOException("Config file not found: " + file);
+        }
+        String json = Files.readString(file);
+        ClusteringConfig config = GSON.fromJson(json, ClusteringConfig.class);
+        if (config == null) {
+            throw new IOException("Config file did not contain a valid clustering config: " + file);
+        }
+        logger.info("Loaded clustering config from file {}", file);
+        return config;
+    }
+
+    /**
      * Delete a config by name from the project.
      */
     public static void deleteConfig(Project<?> project, String name) throws IOException {

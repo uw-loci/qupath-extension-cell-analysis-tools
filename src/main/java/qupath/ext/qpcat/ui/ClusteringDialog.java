@@ -1181,7 +1181,17 @@ public class ClusteringDialog {
 
         HBox progressRow = new HBox(8, progressBar, cancelButton);
         progressRow.setAlignment(Pos.CENTER_LEFT);
-        return new VBox(5, progressRow, statusLabel);
+
+        // Reproducibility note: make it explicit that a run is saved + repeatable.
+        Label reproNote = new Label(
+                "Every run is auto-saved. After it finishes, use \"Open results folder\" "
+                + "in the results window for the parameters, plots, and a reproducible "
+                + "config (reload via \"Load Config from file...\"). For headless / scripted "
+                + "runs see the YAML batch (How-To section 19).");
+        reproNote.setWrapText(true);
+        reproNote.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+
+        return new VBox(5, progressRow, statusLabel, reproNote);
     }
 
     private void setRunActive(boolean active) {
@@ -1434,9 +1444,46 @@ public class ClusteringDialog {
                 "Load a previously saved clustering configuration\n"
                 + "and restore all settings in this dialog."));
 
-        HBox box = new HBox(10, saveBtn, loadBtn);
+        Button loadFileBtn = new Button("Load Config from file...");
+        loadFileBtn.setOnAction(e -> loadConfigFromFile());
+        loadFileBtn.setTooltip(new Tooltip(
+                "Load a config from any JSON file -- e.g. the '<name>_config.json'\n"
+                + "saved next to a result, to reproduce that exact run. Restores all\n"
+                + "settings here; then pick the Scope and click Run Clustering."));
+
+        HBox box = new HBox(10, saveBtn, loadBtn, loadFileBtn);
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
+    }
+
+    private void loadConfigFromFile() {
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Load clustering config from file");
+        chooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter("Config JSON", "*.json"));
+        // Default to the project's results folder where *_config.json files live.
+        try {
+            if (qupath.getProject() != null) {
+                java.io.File dir = ClusteringResultManager
+                        .getResultsDirectory(qupath.getProject()).toFile();
+                if (dir.isDirectory()) chooser.setInitialDirectory(dir);
+            }
+        } catch (Exception ignore) {
+            // no initial dir
+        }
+        java.io.File file = chooser.showOpenDialog(owner);
+        if (file == null) return;
+        try {
+            ClusteringConfig config = ClusteringConfigManager.loadConfigFromFile(file.toPath());
+            applyConfig(config);
+            Dialogs.showInfoNotification("QPCAT", "Config loaded from " + file.getName());
+            OperationLogger.getInstance().logEvent("CONFIG LOADED",
+                    "Loaded clustering config from file '" + file.getName() + "'");
+        } catch (Exception e) {
+            logger.error("Failed to load config from file", e);
+            Dialogs.showErrorNotification("QPCAT",
+                    "Failed to load config from file: " + e.getMessage());
+        }
     }
 
     private void saveConfig() {
@@ -2180,7 +2227,18 @@ public class ClusteringDialog {
                 + "Shows the results folder location and total size on disk."));
         manageBtn.setOnAction(e -> showManageResultsDialog(qp));
 
-        buttonBar.getChildren().addAll(saveBtn, manageBtn);
+        // "Open results folder": the folder holds this run's result JSON, plots,
+        // and the reproducibility files (<name>_config.json, <name>_RUN_INFO.txt).
+        Button openFolderBtn = new Button("Open results folder");
+        openFolderBtn.setTooltip(new Tooltip(
+                "Open the folder on disk holding this result, its plots, and the\n"
+                + "reproducibility files (<name>_config.json -- reload via Load Config\n"
+                + "from file -- and <name>_RUN_INFO.txt, a record of every parameter)."));
+        final java.io.File resultsFolder = resolveResultsFolder(result, qp, loadedResultName);
+        openFolderBtn.setDisable(resultsFolder == null);
+        openFolderBtn.setOnAction(e -> openFolder(resultsFolder));
+
+        buttonBar.getChildren().addAll(openFolderBtn, saveBtn, manageBtn);
 
         // Disable save/manage if no project
         if (qp == null || qp.getProject() == null) {
@@ -2217,6 +2275,47 @@ public class ClusteringDialog {
                 }
             });
         }
+    }
+
+    /**
+     * Resolve the on-disk folder that holds a result (its JSON, plots, and the
+     * reproducibility files). Uses the saved path for a fresh run, or the
+     * project results directory for a loaded past result. Null if unknown.
+     */
+    private static java.io.File resolveResultsFolder(ClusteringResult result,
+                                                     QuPathGUI qp, String loadedResultName) {
+        try {
+            if (result != null && result.getSavedPath() != null) {
+                java.io.File parent = new java.io.File(result.getSavedPath()).getParentFile();
+                if (parent != null && parent.isDirectory()) return parent;
+            }
+            if (qp != null && qp.getProject() != null) {
+                java.io.File dir = ClusteringResultManager.getResultsDirectory(qp.getProject()).toFile();
+                if (dir.isDirectory()) return dir;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not resolve results folder: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /** Open a folder in the OS file browser, off the FX thread (Desktop blocks). */
+    private static void openFolder(java.io.File folder) {
+        if (folder == null || !folder.isDirectory()) {
+            Dialogs.showWarningNotification("QPCAT", "Results folder is not available.");
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                if (java.awt.Desktop.isDesktopSupported()) {
+                    java.awt.Desktop.getDesktop().open(folder);
+                }
+            } catch (Exception e) {
+                logger.warn("Could not open results folder: {}", e.getMessage());
+            }
+        }, "QPCAT-OpenResultsFolder");
+        t.setDaemon(true);
+        t.start();
     }
 
     /**

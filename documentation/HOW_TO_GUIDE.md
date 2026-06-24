@@ -33,6 +33,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 20. [Results dialog reference](#20-results-dialog-reference)
 21. [Spatial graph overlay](#21-spatial-graph-overlay)
 22. [Finding Cellular Neighborhoods (Spatial Niches)](#22-finding-cellular-neighborhoods-spatial-niches)
+23. [Reproducing a clustering run](#23-reproducing-a-clustering-run)
 
 ---
 
@@ -1351,3 +1352,62 @@ map of tissue micro-environments. Use BANKSY to type cells with spatial context;
 use CN to find niches once cells are typed. Sources: Goltsev et al. (Cell 2018),
 Schurch et al. (Cell 2020), Windhager et al. (Nat Protoc 2023) -- see
 [REFERENCES.md](REFERENCES.md).
+
+---
+
+## 23. Reproducing a clustering run
+
+Every clustering run is **auto-saved** to the project's `clustering_results/`
+folder. Four ways to get back to it, from "just look again" to "re-run headless":
+
+1. **View the result again (no recompute).**
+   **Extensions > QP-CAT > View Past Results...** -> pick the run. Reloads the
+   labels, plots, and spatial stats exactly as computed. Nothing is recomputed.
+
+2. **Re-run in the GUI with the same settings (turnkey).**
+   In the results window click **Open results folder**. Alongside the result
+   you'll find:
+   - `<name>_config.json` -- the exact configuration that produced the run.
+   - `<name>_RUN_INFO.txt` -- a human-readable record of every parameter and
+     these reproduction steps.
+   Open **Find cell populations (clustering)...**, click **Load Config from
+   file...**, choose that `<name>_config.json`, pick the **Scope**, and **Run
+   Clustering**. (The config captures the algorithm, parameters, measurements,
+   normalization, embedding, and spatial settings; it does not pin the *image
+   set*, so set the Scope yourself -- e.g. the same two images.)
+
+3. **Save a config by hand for reuse.**
+   **Save Config... / Load Config...** in the dialog store named configs in the
+   project (`clustering_configs/`). Use this to keep a canonical recipe.
+
+4. **Re-run headless / in a script (no dialog).**
+   QP-CAT ships a YAML headless batch runner, `qpcat_batch.groovy`, driven by a
+   batch YAML (scope + clustering block + optional spatial stats + figures). Run
+   it from QuPath's **script** launcher or CI. Translate the parameters in
+   `RUN_INFO.txt` into a batch YAML using [section 19](#19-yaml-headless-batch)
+   and [YAML_SCHEMA.md](YAML_SCHEMA.md). This is the route for "run the exact
+   workflow on a server / over many projects".
+
+### What the QuPath "Workflow" tab can and cannot do here
+
+QuPath records each command you run in the **Workflow** tab (the command
+history, exportable as a Groovy script). QP-CAT adds a step there for every
+clustering run, **but it is a human-readable record, not a runnable command**:
+
+- **Double-clicking the QP-CAT step does not re-open the dialog with the values
+  filled in.** QuPath only does that "edit-and-rerun from history" trick for its
+  *own built-in* commands, which register a parameter map the history can replay
+  into their dialog. There is no public API for a third-party extension dialog to
+  be re-hydrated from a workflow step, so this is a **QuPath platform limit, not
+  a QP-CAT bug**.
+- **Exporting the workflow as a script does not yield a runnable clustering
+  script.** The QP-CAT step body is an ASCII comment block (parameters + how to
+  reproduce), so it appears as comments in the exported `.groovy`, not as a
+  callable command.
+- **What it is good for:** an at-a-glance audit trail of what was run, in order,
+  with the parameters and the result name -- so you can find the run and then
+  reproduce it via routes 1-4 above.
+
+For a genuinely re-runnable, scripted clustering, use route 4 (the YAML batch).
+A future QP-CAT version may add a Groovy scripting API and a runnable workflow
+step that calls it; until then the YAML batch is the supported scripting path.

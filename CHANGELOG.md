@@ -24,11 +24,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   pop it modally via `ProjectImageSelector.showDialog(...)`. Generalized from the
   image-selection pane in the QuIET export toolkit.
 
+- **Reproducibility is now explicit and self-contained per run.** Every
+  clustering run writes two files next to its auto-saved result:
+  `<name>_config.json` (the exact configuration) and `<name>_RUN_INFO.txt` (a
+  human-readable record of all parameters + how to reproduce). The results window
+  gained an **Open results folder** button, the Run Clustering dialog gained a
+  **Load Config from file...** button (reload any `<name>_config.json` to repeat a
+  run -- pick the Scope, click Run), and a note by the Run button points at all
+  this. A new How-To section 23 documents the four reproduction routes.
+- **Honest about the QuPath Workflow tab.** The clustering step recorded in the
+  Workflow tab is now clearly labelled a *record, not a runnable command*:
+  double-clicking it does not re-open the dialog pre-filled (QuPath only does
+  that for its own built-in commands, not extension dialogs), and exporting the
+  workflow yields comments, not a callable clustering command. Section 23 spells
+  out exactly what the Workflow tab can and cannot do, and points at the existing
+  YAML headless batch as the supported scripting/headless route.
+
 ### Noted (still to come this line)
 
-- A re-runnable clustering **Workflow** step (reproduce a run from the history
-  tab) and a Groovy **scripting API** for headless subset runs are planned as the
-  next part of this work.
+- A Groovy **scripting API** and a genuinely *runnable* clustering Workflow step
+  (beyond today's YAML headless batch) remain planned for a later version.
 
 ## [0.4.1] -- 2026-06-23
 
