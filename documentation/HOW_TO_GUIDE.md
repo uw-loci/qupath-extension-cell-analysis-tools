@@ -1308,19 +1308,49 @@ classifications, reports how many classes it found, and refuses to run on fewer
 than two. Cells with no classification are counted as a single `Unclassified`
 type so every window is complete.
 
+### Scope: one image, or the whole cohort (joint runs)
+
+Most experiments have many images, and the question is usually *how does
+neighborhood composition change with the biology/treatment, or what fraction of
+each sample is a given neighborhood*. That only works if a `QPCAT CN: <id>` label
+means the **same** cell-type mixture in every image. The dialog's **Scope** does
+exactly this:
+
+- **Current image** -- the single-slide run described below.
+- **All project images** / **Specific images...** -- a **joint** run. Spatial
+  windows are still built *within* each image (cells in different slides are
+  never neighbors), but the windows from all images are **pooled and clustered
+  once** so the neighborhoods are defined across the whole cohort. Labels are
+  written back and saved to every image, and a **per-sample proportion** table is
+  produced. **Specific images...** opens the shared image picker (filter by name
+  or metadata, select-all/none).
+
+> **Run clustering or phenotyping across the same images first.** The cell-type
+> column must be consistent across the cohort -- the same class names meaning the
+> same thing -- or the composition vectors are not comparable. If some images
+> carry classes others lack, the run still proceeds (the union of classes keeps
+> the vectors aligned) but the results dialog flags the divergent panel.
+
+**Group images by** (joint runs only) groups the images by an image-**metadata**
+key -- e.g. `treatment` or `condition` -- and additionally reports the mean
+neighborhood proportions per group, for comparing composition across conditions.
+Leave it at *(no grouping)* to skip.
+
 ### Step-by-step
 
-1. Run clustering or phenotyping first so cells are classified.
-2. Open **Find cellular neighborhoods**. Confirm the "Found N cell-type classes"
-   line lists the types you expect. If you just (re)classified, click
-   **Refresh** to re-scan.
-3. **Neighbors per window (k)** -- how many nearest cells form each window
+1. Run clustering or phenotyping first so cells are classified -- across **all**
+   the images you intend to analyze jointly, so their labels are consistent.
+2. Open **Find cellular neighborhoods**. Confirm the "cell-type classes" line
+   lists the types you expect. If you just (re)classified, click **Refresh**.
+3. Pick the **Scope** (Current image / All project images / Specific images).
+   For a cohort, optionally set **Group images by** a metadata key.
+4. **Neighbors per window (k)** -- how many nearest cells form each window
    (the cell plus its neighbors). Larger k captures broader context but blurs
    fine boundaries. 20-30 is a common start; Schurch et al. used ~10.
-4. **Number of neighborhoods** -- how many CNs to group the windows into
+5. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
-5. **Render enrichment heatmap** (on by default) writes a CN x cell-type heatmap.
-6. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
+6. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
+7. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
    runs; **Cancel** stops it -- if you cancel before it finishes, **no labels
    are applied**.
 
@@ -1333,16 +1363,43 @@ type so every window is complete.
   phenotyping to restore the cell-type column.
 - The run is recorded as a step in the image's **Workflow** history (with the
   `run_id` and `params_hash`) and as a `CELLULAR NEIGHBORHOODS` row in the
-  operation audit log.
+  operation audit log. For **joint** runs the step is recorded on **every**
+  processed image and says explicitly that the neighborhoods were defined jointly
+  across N images -- re-running on one image alone would produce *different*
+  labels. (This Workflow step is informational, not a runnable command; to
+  reproduce, re-run with the same image scope.)
+- For **joint** runs, labels are written back and **saved to every selected
+  image**, and the cohort tables + heatmaps are written to a results folder under
+  the project (`qpcat-cellular-neighborhoods/<run-id>/`).
 
 ### Reading the enrichment heatmap
 
 Rows are neighborhoods, columns are cell types. Each cell is the **log2 fold
 enrichment** of that cell type in the neighborhood versus its overall frequency
 across the slide (red = enriched, blue = depleted). Read each row across to name
-the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). The heatmap
-is written to a temporary folder; the dialog offers to open it when the run
-finishes.
+the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). For a
+single-image run the heatmap is written to a temporary folder and the dialog
+offers to open it; for a joint run it lands in the results folder.
+
+### Reading the cohort outputs (joint runs)
+
+When the joint run finishes, a results dialog shows:
+
+- **Per-sample neighborhood proportions** -- a table (and `cn_per_sample_proportions.csv`)
+  giving, for each image, the fraction of its cells in each CN. This is the table
+  you compare across samples: "CN 2 is 8% of the control but 31% of the treated
+  slide." A `cn_per_sample_proportions.png` heatmap (image x CN) visualizes it.
+- **Per-group neighborhood proportions** (only when you set **Group images by**) --
+  the same proportions pooled per metadata group, plus `cn_per_group_proportions.csv`
+  and a `cn_per_group_proportions.png` heatmap (group x CN), for a direct
+  condition-vs-condition comparison.
+- **Open results folder** opens the folder containing those CSVs, the heatmap
+  PNGs, and `cn_RUN_INFO.txt` (parameters + the note that neighborhoods were
+  defined jointly).
+
+To inspect *which* cells make up a neighborhood in a particular sample, open that
+image -- the `QPCAT CN:` classes are saved there -- and color/select by class in
+QuPath's Annotations panel as usual.
 
 ### How this differs from BANKSY
 

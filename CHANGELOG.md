@@ -4,6 +4,45 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.6.0] -- 2026-06-25
+
+### Added
+
+- **Joint cellular neighborhoods across a project (cohort analysis).** "Find
+  cellular neighborhoods" gained a **Scope** (Current image / All project images /
+  Specific images), reusing the shared image picker. A joint run builds spatial
+  windows *within* each image (cells in different slides are never neighbors) but
+  **pools the composition vectors and runs one k-means**, so a `QPCAT CN: <id>`
+  means the same cell-type mixture in every image -- the prerequisite for
+  comparing neighborhoods across samples (Goltsev 2018 / Schurch 2020 /
+  imcRtools). Labels are written back and **saved to every selected image**, and
+  each image gets a scope-explicit Workflow record noting the labels came from a
+  joint run (informational, not runnable -- a single-image re-run would produce
+  different labels).
+- **Per-sample neighborhood proportions.** Joint runs produce a per-image
+  CN-proportion table (`cn_per_sample_proportions.csv` + an image x CN heatmap)
+  shown in a results dialog -- the table you compare across samples.
+- **Group-by-condition comparison.** A **Group images by** image-metadata key
+  (e.g. `treatment`) adds per-group mean proportions (`cn_per_group_proportions.csv`
+  + a group x CN heatmap) for direct condition-vs-condition comparison.
+- **Cell-type panel divergence check.** When scope images do not share the same
+  cell-type classes, the run proceeds on the union of classes (keeping vectors
+  comparable) but the results dialog flags which images have a divergent panel.
+- Joint results land in `qpcat-cellular-neighborhoods/<run-id>/` under the
+  project (CSVs, heatmap PNGs, `cn_RUN_INFO.txt`); an **Open results folder**
+  button and a How-To link are in the results dialog.
+
+### Changed
+
+- The cellular-neighborhood Python task (`cellular_neighborhoods.py`) now accepts
+  optional `image_ids`/`image_names` (per-image windowing + per-sample
+  proportions) and `group_labels`/`group_names` (per-group proportions). With
+  none supplied it behaves exactly as before (single-image, global window).
+- Corrected the prior framing that cellular neighborhoods are "single-image by
+  design": only the spatial **window** is within-image; neighborhoods are now
+  definable jointly across the cohort, which is the standard CODEX/imcRtools
+  workflow.
+
 ## [0.5.1] -- 2026-06-24
 
 ### Fixed

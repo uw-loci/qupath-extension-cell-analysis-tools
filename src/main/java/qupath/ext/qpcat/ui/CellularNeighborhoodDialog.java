@@ -7,13 +7,16 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -28,11 +31,18 @@ import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
+import qupath.lib.projects.Project;
+import qupath.lib.projects.ProjectImageEntry;
 
 import java.awt.Desktop;
+import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 
 /**
@@ -52,6 +62,9 @@ public class CellularNeighborhoodDialog {
     private final QuPathGUI qupath;
     private final Stage owner;
 
+    /** "(no grouping)" sentinel for the group-by metadata-key combo. */
+    private static final String NO_GROUPING = "(no grouping)";
+
     private Label classSummaryLabel;
     private Label statusLabel;
     private ProgressBar progressBar;
@@ -60,6 +73,15 @@ public class CellularNeighborhoodDialog {
     private Spinner<Integer> kSpinner;
     private Spinner<Integer> nNeighborhoodsSpinner;
     private CheckBox heatmapCheck;
+
+    // Scope (Current / All / Specific images) + group-by metadata key (cohort).
+    private RadioButton scopeCurrentImage;
+    private RadioButton scopeAllImages;
+    private RadioButton scopeSpecificImages;
+    private Button chooseImagesButton;
+    private Label specificImagesLabel;
+    private ComboBox<String> groupByCombo;
+    private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
 
     private volatile CellularNeighborhoodWorkflow activeWorkflow;
 
@@ -81,7 +103,10 @@ public class CellularNeighborhoodDialog {
         content.setPrefWidth(620);
         content.getChildren().addAll(
                 createIntroBanner(),
+                QpcatDocLinks.linkBar("22-cellular-neighborhoods"),
                 createCellTypeSection(),
+                new Separator(),
+                createScopeSection(),
                 new Separator(),
                 createSettingsSection(),
                 new Separator(),
@@ -136,6 +161,137 @@ public class CellularNeighborhoodDialog {
         HBox row = new HBox(8, classSummaryLabel, refresh);
         row.setAlignment(Pos.CENTER_LEFT);
         return new VBox(4, header, row);
+    }
+
+    /**
+     * Scope (Current image / All project images / Specific images) plus the
+     * optional "group images by" metadata key for cohort comparison. The two
+     * multi-image options reuse {@link ProjectImageSelector} and run JOINT
+     * cellular neighborhoods (windows within each image, one shared k-means).
+     */
+    private VBox createScopeSection() {
+        Label header = new Label("Scope");
+        header.setStyle("-fx-font-weight: bold;");
+        Label explain = new Label(
+                "Run on the current image only, or jointly across several images. A joint run "
+                + "windows cells within each image but defines the neighborhoods once over all "
+                + "images together, so a 'QPCAT CN' id means the same cell-type mixture in every "
+                + "image -- the only way per-sample proportions are comparable. (Run "
+                + "clustering or phenotyping across the same images first so the cell-type "
+                + "labels are consistent.)");
+        explain.setWrapText(true);
+        explain.setStyle("-fx-text-fill: #555;");
+
+        ToggleGroup scopeGroup = new ToggleGroup();
+        scopeCurrentImage = new RadioButton("Current image");
+        scopeCurrentImage.setToggleGroup(scopeGroup);
+        scopeCurrentImage.setSelected(true);
+        scopeAllImages = new RadioButton("All project images");
+        scopeAllImages.setToggleGroup(scopeGroup);
+        scopeSpecificImages = new RadioButton("Specific images...");
+        scopeSpecificImages.setToggleGroup(scopeGroup);
+
+        chooseImagesButton = new Button("Choose images...");
+        chooseImagesButton.setOnAction(e -> openImageChooser());
+        specificImagesLabel = new Label("(none chosen)");
+        specificImagesLabel.setStyle("-fx-text-fill: #666;");
+
+        Project<BufferedImage> project = qupath.getProject();
+        boolean multiImage = project != null && project.getImageList().size() > 1;
+        if (!multiImage) {
+            scopeAllImages.setDisable(true);
+            scopeSpecificImages.setDisable(true);
+            String hint = " (requires project with multiple images)";
+            scopeAllImages.setText("All project images" + hint);
+            scopeSpecificImages.setText("Specific images..." + hint);
+        } else {
+            scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
+        }
+
+        chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
+        scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
+            if (now && selectedSubset.isEmpty()) {
+                openImageChooser();
+            }
+        });
+        // Re-evaluate the Run button whenever the scope changes (a project scope
+        // does not depend on the current image's class count).
+        scopeGroup.selectedToggleProperty().addListener((obs, was, now) -> updateRunEnabled());
+
+        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
+                scopeSpecificImages);
+        radios.setAlignment(Pos.CENTER_LEFT);
+        HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
+        chooseRow.setAlignment(Pos.CENTER_LEFT);
+        chooseRow.setPadding(new Insets(0, 0, 0, 55));
+
+        // Group-by metadata key (cohort comparison; work "B"). Only meaningful
+        // for joint runs -- ignored under "Current image".
+        groupByCombo = new ComboBox<>();
+        groupByCombo.getItems().add(NO_GROUPING);
+        Set<String> metaKeys = new TreeSet<>();
+        if (project != null) {
+            for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
+                try {
+                    Map<String, String> m = entry.getMetadata();
+                    if (m != null) metaKeys.addAll(m.keySet());
+                } catch (Exception ignored) {
+                    // metadata is best-effort
+                }
+            }
+        }
+        groupByCombo.getItems().addAll(metaKeys);
+        groupByCombo.getSelectionModel().selectFirst();
+        groupByCombo.setDisable(!multiImage || metaKeys.isEmpty());
+        groupByCombo.setTooltip(new Tooltip(
+                "For joint runs, also report neighborhood proportions per group of images,\n"
+                + "grouped by this image-metadata key (e.g. treatment or condition) -- so you\n"
+                + "can compare how neighborhood composition shifts with the biology."));
+        HBox groupRow = new HBox(8, new Label("Group images by:"), groupByCombo);
+        groupRow.setAlignment(Pos.CENTER_LEFT);
+        if (metaKeys.isEmpty()) {
+            Label none = new Label("(no image metadata keys in this project)");
+            none.setStyle("-fx-text-fill: #888;");
+            groupRow.getChildren().add(none);
+        }
+
+        return new VBox(6, header, explain, radios, chooseRow, groupRow);
+    }
+
+    /** Open the reusable subset picker and store the chosen entries. */
+    private void openImageChooser() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) {
+            Dialogs.showWarningNotification("QPCAT", "No project is open.");
+            return;
+        }
+        ProjectImageSelector.showDialog(owner, project,
+                "QPCAT - Select images for cellular neighborhoods",
+                selectedSubset.isEmpty() ? null : selectedSubset)
+            .ifPresent(chosen -> {
+                selectedSubset.clear();
+                selectedSubset.addAll(chosen);
+                updateSpecificImagesLabel();
+            });
+    }
+
+    private void updateSpecificImagesLabel() {
+        int n = selectedSubset.size();
+        specificImagesLabel.setText(n == 0 ? "(none chosen)"
+                : n + " image" + (n == 1 ? "" : "s") + " chosen");
+    }
+
+    /** Resolve the project images for the chosen scope, or null for current-image. */
+    private List<ProjectImageEntry<BufferedImage>> resolveScopeEntries() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null) return null;
+        if (scopeAllImages != null && scopeAllImages.isSelected()) {
+            return new ArrayList<>(project.getImageList());
+        }
+        if (scopeSpecificImages != null && scopeSpecificImages.isSelected()) {
+            return new ArrayList<>(selectedSubset);
+        }
+        return null;
     }
 
     private GridPane createSettingsSection() {
@@ -203,8 +359,9 @@ public class CellularNeighborhoodDialog {
     private void refreshClassSummary() {
         var imageData = qupath.getImageData();
         if (imageData == null) {
-            classSummaryLabel.setText("No image open.");
-            if (runButton != null) runButton.setDisable(true);
+            classSummaryLabel.setText("No image open. (For a project scope the cell-type "
+                    + "classes are read from each selected image.)");
+            updateRunEnabled();
             return;
         }
         Set<String> classes = new LinkedHashSet<>();
@@ -219,36 +376,70 @@ public class CellularNeighborhoodDialog {
         }
         int n = classes.size();
         if (n < 2) {
-            classSummaryLabel.setText("Found " + n + " cell-type class"
+            classSummaryLabel.setText("Current image: found " + n + " cell-type class"
                     + (n == 1 ? "" : "es") + ". Run clustering or phenotyping first "
                     + "(at least 2 classes are needed).");
-            if (runButton != null) runButton.setDisable(true);
         } else {
             String preview = String.join(", ", classes.stream().limit(8).toList());
             if (n > 8) preview += ", ...";
-            classSummaryLabel.setText("Found " + n + " cell-type classes: " + preview
+            classSummaryLabel.setText("Current image: " + n + " cell-type classes: " + preview
                     + (unclassified > 0 ? "  (" + unclassified
-                            + " unclassified cells will count as 'Unclassified')" : ""));
-            if (runButton != null) runButton.setDisable(false);
+                            + " unclassified cells count as 'Unclassified')" : ""));
         }
+        updateRunEnabled();
+    }
+
+    /** Distinct real cell-type classes on the current image (0 if none open). */
+    private int currentImageClassCount() {
+        var imageData = qupath.getImageData();
+        if (imageData == null) return 0;
+        Set<String> classes = new LinkedHashSet<>();
+        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
+            PathClass pc = det.getPathClass();
+            if (pc != null && pc != PathClass.getNullClass()) classes.add(pc.toString());
+        }
+        return classes.size();
+    }
+
+    /**
+     * Enable Run when the chosen scope can yield a run: a project scope is
+     * validated by the workflow itself, so allow it; current-image scope needs
+     * at least two cell-type classes on the open image.
+     */
+    private void updateRunEnabled() {
+        if (runButton == null) return;
+        boolean projectScope = (scopeAllImages != null && scopeAllImages.isSelected())
+                || (scopeSpecificImages != null && scopeSpecificImages.isSelected());
+        runButton.setDisable(!projectScope && currentImageClassCount() < 2);
     }
 
     private void runAnalysis() {
-        var imageData = qupath.getImageData();
-        if (imageData == null) {
-            Dialogs.showWarningNotification("QPCAT", "No image is open.");
-            return;
-        }
-
         int k = kSpinner.getValue();
         int nCn = nNeighborhoodsSpinner.getValue();
         boolean heatmap = heatmapCheck.isSelected();
 
-        setRunActive(true);
+        List<ProjectImageEntry<BufferedImage>> scopeEntries = resolveScopeEntries();
+        if (scopeEntries != null) {
+            // Project (joint) scope.
+            if (scopeSpecificImages.isSelected() && scopeEntries.isEmpty()) {
+                Dialogs.showWarningNotification("QPCAT",
+                        "No images chosen. Click 'Choose images...' first.");
+                return;
+            }
+            String groupKey = groupByCombo == null ? null : groupByCombo.getValue();
+            if (NO_GROUPING.equals(groupKey)) groupKey = null;
+            runProjectAnalysis(scopeEntries, k, nCn, heatmap, groupKey);
+            return;
+        }
 
+        // Current-image scope.
+        if (qupath.getImageData() == null) {
+            Dialogs.showWarningNotification("QPCAT", "No image is open.");
+            return;
+        }
+        setRunActive(true);
         final CellularNeighborhoodWorkflow workflow = new CellularNeighborhoodWorkflow(qupath);
         activeWorkflow = workflow;
-
         Thread thread = new Thread(() -> {
             try {
                 Consumer<String> progress = msg ->
@@ -287,12 +478,65 @@ public class CellularNeighborhoodDialog {
         thread.start();
     }
 
+    /** Run the JOINT multi-image path and surface the cohort results. */
+    private void runProjectAnalysis(List<ProjectImageEntry<BufferedImage>> entries,
+                                    int k, int nCn, boolean heatmap, String groupKey) {
+        setRunActive(true);
+        final CellularNeighborhoodWorkflow workflow = new CellularNeighborhoodWorkflow(qupath);
+        activeWorkflow = workflow;
+        Thread thread = new Thread(() -> {
+            try {
+                Consumer<String> progress = msg ->
+                        Platform.runLater(() -> statusLabel.setText(msg));
+                CellularNeighborhoodWorkflow.CnProjectResult result =
+                        workflow.runProject(entries, k, nCn, 0, heatmap, groupKey, progress);
+
+                Platform.runLater(() -> {
+                    setRunActive(false);
+                    if (!result.isApplied()) {
+                        statusLabel.setText("Cancelled -- no labels were applied.");
+                        return;
+                    }
+                    statusLabel.setText("Done: " + result.getNNeighborhoods()
+                            + " neighborhoods over " + result.getTotalCells() + " cells across "
+                            + result.getNImages() + " images.");
+                    Dialogs.showInfoNotification("QPCAT",
+                            "Joint cellular neighborhoods complete: " + result.getNNeighborhoods()
+                            + " neighborhoods across " + result.getNImages() + " images.");
+                    showCohortResults(result);
+                });
+            } catch (Exception e) {
+                logger.error("Joint cellular-neighborhood analysis failed", e);
+                OperationLogger.getInstance().logFailure("CELLULAR NEIGHBORHOODS (project)",
+                        java.util.Map.of("k_neighbors", String.valueOf(k),
+                                "n_neighborhoods", String.valueOf(nCn)),
+                        e.getMessage(), -1);
+                Platform.runLater(() -> {
+                    setRunActive(false);
+                    statusLabel.setText("Error: " + e.getMessage());
+                    Dialogs.showErrorNotification("QPCAT",
+                            "Joint cellular-neighborhood analysis failed: " + e.getMessage());
+                });
+            }
+        }, "QPCAT-CellularNeighborhoods-Project");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
     private void setRunActive(boolean active) {
         if (runButton != null) runButton.setDisable(active);
         if (cancelButton != null) cancelButton.setDisable(!active);
         kSpinner.setDisable(active);
         nNeighborhoodsSpinner.setDisable(active);
         heatmapCheck.setDisable(active);
+        if (scopeCurrentImage != null) scopeCurrentImage.setDisable(active);
+        if (scopeAllImages != null) {
+            scopeAllImages.setDisable(active || scopeAllImages.getText().contains("requires"));
+        }
+        if (scopeSpecificImages != null) {
+            scopeSpecificImages.setDisable(active || scopeSpecificImages.getText().contains("requires"));
+        }
+        if (groupByCombo != null) groupByCombo.setDisable(active || groupByCombo.getItems().size() <= 1);
         progressBar.setVisible(active);
         progressBar.setProgress(active ? ProgressBar.INDETERMINATE_PROGRESS : 0);
         var scene = (statusLabel != null) ? statusLabel.getScene() : null;
@@ -301,7 +545,119 @@ public class CellularNeighborhoodDialog {
         }
         if (!active) {
             activeWorkflow = null;
+            updateRunEnabled();
         }
+    }
+
+    /**
+     * Cohort results dialog: a summary, the per-sample (and per-group) proportion
+     * tables as text, any divergence warning, and an "Open results folder" button
+     * pointing at the CSVs + heatmaps written under the project.
+     */
+    private void showCohortResults(CellularNeighborhoodWorkflow.CnProjectResult result) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.initOwner(owner);
+        dialog.setTitle("QPCAT - Cellular neighborhood results");
+        dialog.setHeaderText("Joint run: " + result.getNNeighborhoods() + " neighborhoods, "
+                + result.getTotalCells() + " cells, " + result.getNImages() + " images");
+        dialog.setResizable(true);
+
+        VBox box = new VBox(10);
+        box.setPadding(new Insets(10));
+        box.setPrefWidth(640);
+
+        if (result.getDivergenceWarning() != null) {
+            Label warn = new Label("Heads up: " + result.getDivergenceWarning());
+            warn.setWrapText(true);
+            warn.setStyle("-fx-text-fill: #a05000;");
+            box.getChildren().add(warn);
+        }
+
+        Label perSampleHdr = new Label("Per-sample neighborhood proportions "
+                + "(fraction of each image's cells in each CN):");
+        perSampleHdr.setStyle("-fx-font-weight: bold;");
+        TextArea perSample = new TextArea(formatProportions(result.getPerSampleJson(), "image_names"));
+        perSample.setEditable(false);
+        perSample.setPrefRowCount(8);
+        perSample.setStyle("-fx-font-family: monospace;");
+        box.getChildren().addAll(perSampleHdr, perSample);
+
+        String groupText = formatProportions(result.getGroupJson(), "group_names");
+        if (groupText != null && !groupText.isBlank()) {
+            Label groupHdr = new Label("Per-group neighborhood proportions:");
+            groupHdr.setStyle("-fx-font-weight: bold;");
+            TextArea group = new TextArea(groupText);
+            group.setEditable(false);
+            group.setPrefRowCount(5);
+            group.setStyle("-fx-font-family: monospace;");
+            box.getChildren().addAll(groupHdr, group);
+        }
+
+        Button openFolder = new Button("Open results folder");
+        openFolder.setTooltip(new Tooltip("Open the folder with the CSV tables and heatmap PNGs."));
+        final File folder = result.getResultsDir() == null ? null : new File(result.getResultsDir());
+        openFolder.setDisable(folder == null || !folder.isDirectory());
+        openFolder.setOnAction(e -> openFile(folder));
+        HBox actions = new HBox(8, openFolder,
+                QpcatDocLinks.howToGuide("How-To: Cellular neighborhoods", "22-cellular-neighborhoods"));
+        actions.setAlignment(Pos.CENTER_LEFT);
+        box.getChildren().add(actions);
+
+        ScrollPane scroll = new ScrollPane(box);
+        scroll.setFitToWidth(true);
+        dialog.getDialogPane().setContent(scroll);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.show();
+    }
+
+    /**
+     * Render a {row x CN} proportions JSON payload as a small aligned text table.
+     * Returns null/empty for empty input.
+     */
+    private static String formatProportions(String json, String labelsKey) {
+        if (json == null || json.isBlank()) return "";
+        try {
+            com.google.gson.JsonObject obj =
+                    com.google.gson.JsonParser.parseString(json).getAsJsonObject();
+            com.google.gson.JsonArray labels = obj.getAsJsonArray(labelsKey);
+            com.google.gson.JsonArray props = obj.getAsJsonArray("proportions");
+            if (labels == null || props == null || props.size() == 0) return "";
+            int nCn = props.get(0).getAsJsonArray().size();
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("%-28s", ""));
+            for (int cn = 0; cn < nCn; cn++) sb.append(String.format("%8s", "CN" + cn));
+            sb.append('\n');
+            for (int r = 0; r < props.size(); r++) {
+                String label = r < labels.size() ? labels.get(r).getAsString() : ("row " + r);
+                if (label.length() > 27) label = label.substring(0, 24) + "...";
+                sb.append(String.format("%-28s", label));
+                com.google.gson.JsonArray row = props.get(r).getAsJsonArray();
+                for (int cn = 0; cn < row.size(); cn++) {
+                    sb.append(String.format("%8.3f", row.get(cn).getAsDouble()));
+                }
+                sb.append('\n');
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            logger.warn("Could not format proportions table: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /** Open a file or folder with the desktop handler, off the FX thread. */
+    private void openFile(File f) {
+        if (f == null || !f.exists()) return;
+        Thread t = new Thread(() -> {
+            try {
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().open(f);
+                }
+            } catch (Exception e) {
+                logger.warn("Could not open {}: {}", f, e.getMessage());
+            }
+        }, "QPCAT-OpenFile");
+        t.setDaemon(true);
+        t.start();
     }
 
     /** Offer to open the enrichment heatmap PNG if one was written. */

@@ -20,6 +20,17 @@ Windhager et al. (Nat Protoc 2023). It is conceptually distinct from BANKSY
 with a neighborhood-averaged kernel before clustering; here we cluster the
 neighborhood COMPOSITION of pre-assigned types, not expression.
 
+MULTI-IMAGE (joint cohort) mode
+-------------------------------
+When image_ids is supplied, spatial windows are built INDEPENDENTLY per image
+(cells in different slides are never neighbors), then ALL composition vectors
+are pooled and clustered with ONE k-means so a neighborhood id means the same
+cell-type mixture in every image -- the only way per-sample CN proportions are
+comparable across the cohort (Goltsev 2018 / Schurch 2020 / imcRtools fit CNs
+across the whole dataset, then compare CN frequencies between groups). The
+script then reports per-sample CN proportions and, when group_labels is given,
+per-group mean proportions for condition/treatment comparisons.
+
 Inputs (injected by Appose 0.10.0):
   spatial_coords: NDArray (N_cells x 2, float64) -- centroid X, Y in pixels
   cell_type_labels: list[int] -- categorical index per cell (>=0; -1 allowed
@@ -29,7 +40,13 @@ Inputs (injected by Appose 0.10.0):
   n_neighborhoods: int -- number of CN clusters for k-means
   seed: int (optional) -- random seed for k-means reproducibility (default 0)
   generate_heatmap: bool (optional) -- render a CN x cell-type enrichment heatmap
-  output_dir: str (optional) -- directory to write the heatmap PNG into
+  output_dir: str (optional) -- directory to write the PNG(s) into
+  image_ids: list[int] (optional) -- per-cell source-image index (0..n_images-1);
+             enables per-image windowing + per-sample proportion outputs
+  image_names: list[str] (optional) -- display name per image index
+  group_labels: list[int] (optional) -- per-IMAGE group index (0..n_groups-1)
+             for condition/treatment comparison (work "B")
+  group_names: list[str] (optional) -- display name per group index
 
 Outputs (via task.outputs):
   neighborhood_labels: NDArray (N_cells,) int32 -- CN id per cell (0..N-1)
@@ -37,7 +54,12 @@ Outputs (via task.outputs):
   neighborhood_counts: str (JSON) -- {cn_id: n_cells}
   composition_json: str (JSON) -- {class_names, mean_composition[CN][class]}
   enrichment_json: str (JSON) -- {class_names, log2_enrichment[CN][class]}
-  heatmap_path: str -- path to the enrichment heatmap PNG, or "" if none
+  heatmap_path: str -- path to the CN x cell-type enrichment heatmap PNG, or ""
+  per_sample_proportions_json: str (JSON) -- {image_names, n_neighborhoods,
+                    proportions[image][cn], counts[image][cn]} or "" if single-image
+  per_sample_heatmap_path: str -- image x CN proportion heatmap PNG, or ""
+  group_proportions_json: str (JSON) -- {group_names, proportions[group][cn]} or ""
+  group_heatmap_path: str -- group x CN proportion heatmap PNG, or ""
 """
 import logging
 import json
@@ -102,32 +124,81 @@ try:
 except NameError:
     out_dir = None
 
-# k cannot exceed the number of cells; n_cn cannot exceed the number of cells.
-k = max(1, min(k, n_cells))
-n_cn = max(1, min(n_cn, n_cells))
-logger.info("k_neighbors=%d, n_neighborhoods=%d, n_classes=%d", k, n_cn, n_classes)
+# Optional multi-image (joint cohort) inputs.
+try:
+    image_ids_arr = np.asarray(image_ids, dtype=np.int64)
+    if image_ids_arr.shape[0] != n_cells:
+        logger.warning("image_ids length (%d) != n_cells (%d); ignoring",
+                       image_ids_arr.shape[0], n_cells)
+        image_ids_arr = None
+except NameError:
+    image_ids_arr = None
+try:
+    img_names = list(image_names)
+except NameError:
+    img_names = None
+try:
+    group_labels_arr = np.asarray(group_labels, dtype=np.int64)
+except NameError:
+    group_labels_arr = None
+try:
+    grp_names = list(group_names)
+except NameError:
+    grp_names = None
 
-# 2. Build the spatial windows (k nearest neighbors, including self).
-#    n_jobs=1 keeps this single-process: Appose runs the task in a worker
-#    subprocess where joblib/loky fan-out has deadlocked before, and the tree
-#    query is already fast enough that parallelism buys little.
-_update("Building spatial windows (k=%d nearest neighbors)..." % k)
+# n_cn cannot exceed the number of cells; k handled per-image below.
+n_cn = max(1, min(n_cn, n_cells))
+
+# Distinct source images (joint mode requires >1 to mean anything).
+if image_ids_arr is not None:
+    unique_images = np.unique(image_ids_arr)
+    multi_image = unique_images.shape[0] > 1
+else:
+    unique_images = np.array([0])
+    multi_image = False
+logger.info("k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_images=%d, multi_image=%s",
+            k, n_cn, n_classes, unique_images.shape[0], multi_image)
+
 from sklearn.neighbors import NearestNeighbors
 
-nn = NearestNeighbors(n_neighbors=k, algorithm="auto", n_jobs=1)
-nn.fit(coords)
-_, nbr_idx = nn.kneighbors(coords)  # (n_cells, k), includes the cell itself
 
-# 3. Composition vector per window: fraction of each cell type among the k
-#    neighbors. Vectorized over cells and neighbors; the only loop is over the
-#    (small) number of classes.
-_update("Computing neighborhood composition...")
-neighbor_labels = labels_arr[nbr_idx]  # (n_cells, k)
+def _composition_for_block(block_coords, block_labels, k_req):
+    """Per-cell cell-type composition over the k nearest neighbors within a
+    single image block. n_jobs=1 keeps this single-process: Appose runs the
+    task in a worker subprocess where joblib/loky fan-out has deadlocked, and
+    the tree query is already fast enough that parallelism buys little."""
+    n_block = block_coords.shape[0]
+    k_local = max(1, min(k_req, n_block))
+    nn = NearestNeighbors(n_neighbors=k_local, algorithm="auto", n_jobs=1)
+    nn.fit(block_coords)
+    _, nbr_idx = nn.kneighbors(block_coords)  # (n_block, k_local), includes self
+    neighbor_labels = block_labels[nbr_idx]   # (n_block, k_local)
+    comp = np.zeros((n_block, n_classes), dtype=np.float64)
+    for c in range(n_classes):
+        comp[:, c] = np.count_nonzero(neighbor_labels == c, axis=1) / float(k_local)
+    return comp
+
+
+# 2 + 3. Build spatial windows and per-cell composition vectors. In joint mode
+# we window WITHIN each image (cells in different slides are not neighbors);
+# in single-image mode this is one block over all cells.
 composition = np.zeros((n_cells, n_classes), dtype=np.float64)
-for c in range(n_classes):
-    composition[:, c] = np.count_nonzero(neighbor_labels == c, axis=1) / float(k)
+if multi_image:
+    _update("Building per-image spatial windows (k=%d) across %d images..."
+            % (k, unique_images.shape[0]))
+    for img in unique_images:
+        sel = np.flatnonzero(image_ids_arr == img)
+        if sel.size == 0:
+            continue
+        composition[sel, :] = _composition_for_block(
+            coords[sel, :], labels_arr[sel], k)
+else:
+    _update("Building spatial windows (k=%d nearest neighbors)..." % k)
+    composition[:, :] = _composition_for_block(coords, labels_arr, k)
 
-# 4. Cluster the composition vectors into N cellular neighborhoods.
+# 4. Cluster the POOLED composition vectors into N cellular neighborhoods.
+#    One global k-means is what makes a CN id mean the same mixture in every
+#    image, so per-sample proportions are comparable.
 _update("Clustering windows into %d neighborhoods..." % n_cn)
 from sklearn.cluster import KMeans
 
@@ -151,42 +222,131 @@ global_freq = global_freq / max(1.0, global_freq.sum())
 eps = 1e-6
 enrichment = np.log2((mean_comp + eps) / (global_freq[None, :] + eps))
 
-# 6. Optional enrichment heatmap (rows = neighborhoods, cols = cell types).
-heatmap_path = ""
-if want_heatmap and out_dir:
-    _update("Rendering enrichment heatmap...")
+
+def _save_heatmap(matrix, row_labels, col_labels, title, cbar_label,
+                  cmap, vmin, vmax, fname):
+    """Write a labelled heatmap PNG; returns the path or "" on failure."""
     try:
         os.makedirs(out_dir, exist_ok=True)
         import matplotlib
         matplotlib.use("Agg")  # belt-and-braces; init already sets this
         import matplotlib.pyplot as plt
 
-        vmax = float(np.nanmax(np.abs(enrichment))) if enrichment.size else 1.0
-        if not np.isfinite(vmax) or vmax <= 0:
-            vmax = 1.0
-        fig_w = max(6.0, 0.6 * n_classes + 2.0)
-        fig_h = max(4.0, 0.5 * n_cn + 1.5)
+        n_rows = matrix.shape[0]
+        n_cols = matrix.shape[1]
+        fig_w = max(6.0, 0.6 * n_cols + 2.0)
+        fig_h = max(4.0, 0.5 * n_rows + 1.5)
         fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-        im = ax.imshow(enrichment, aspect="auto", cmap="RdBu_r",
-                       vmin=-vmax, vmax=vmax)
-        ax.set_xticks(range(n_classes))
-        ax.set_xticklabels(names, rotation=45, ha="right", fontsize=8)
-        ax.set_yticks(range(n_cn))
-        ax.set_yticklabels(["CN %d (n=%d)" % (cn, counts[str(cn)])
-                            for cn in range(n_cn)], fontsize=8)
-        ax.set_title("Cellular-neighborhood enrichment (log2 vs overall)")
+        im = ax.imshow(matrix, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.set_xticks(range(n_cols))
+        ax.set_xticklabels(col_labels, rotation=45, ha="right", fontsize=8)
+        ax.set_yticks(range(n_rows))
+        ax.set_yticklabels(row_labels, fontsize=8)
+        ax.set_title(title)
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label("log2 fold enrichment")
+        cbar.set_label(cbar_label)
         fig.tight_layout()
-        heatmap_path = os.path.join(out_dir, "cn_enrichment.png")
-        fig.savefig(heatmap_path, dpi=150, bbox_inches="tight")
+        path = os.path.join(out_dir, fname)
+        fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close("all")
-        logger.info("Saved CN enrichment heatmap: %s", heatmap_path)
+        logger.info("Saved heatmap: %s", path)
+        return path
     except Exception as e:
-        logger.warning("Failed to render CN heatmap: %s", e)
-        heatmap_path = ""
+        logger.warning("Failed to render heatmap %s: %s", fname, e)
+        return ""
 
-# 7. Package outputs.
+
+# 6. CN x cell-type enrichment heatmap (rows = neighborhoods, cols = cell types).
+heatmap_path = ""
+if want_heatmap and out_dir:
+    _update("Rendering enrichment heatmap...")
+    vmax = float(np.nanmax(np.abs(enrichment))) if enrichment.size else 1.0
+    if not np.isfinite(vmax) or vmax <= 0:
+        vmax = 1.0
+    cn_row_labels = ["CN %d (n=%d)" % (cn, counts[str(cn)]) for cn in range(n_cn)]
+    heatmap_path = _save_heatmap(
+        enrichment, cn_row_labels, names,
+        "Cellular-neighborhood enrichment (log2 vs overall)",
+        "log2 fold enrichment", "RdBu_r", -vmax, vmax, "cn_enrichment.png")
+
+# 7. Multi-image (cohort) summaries: per-sample CN proportions + per-group means.
+per_sample_json = ""
+per_sample_heatmap_path = ""
+group_json = ""
+group_heatmap_path = ""
+if multi_image:
+    _update("Summarizing per-sample neighborhood proportions...")
+    n_images = unique_images.shape[0]
+    # Map the (possibly sparse) image ids to 0..n_images-1 row order.
+    img_order = list(unique_images)
+    sample_counts = np.zeros((n_images, n_cn), dtype=np.int64)
+    for r, img in enumerate(img_order):
+        sel = image_ids_arr == img
+        cn_for_img = cn_labels[sel]
+        for cn in range(n_cn):
+            sample_counts[r, cn] = int(np.count_nonzero(cn_for_img == cn))
+    row_totals = sample_counts.sum(axis=1, keepdims=True).astype(np.float64)
+    row_totals[row_totals == 0] = 1.0
+    sample_props = sample_counts / row_totals
+
+    if img_names is not None and len(img_names) >= int(max(img_order)) + 1:
+        sample_labels = [str(img_names[int(i)]) for i in img_order]
+    else:
+        sample_labels = ["image %d" % int(i) for i in img_order]
+
+    per_sample_json = json.dumps({
+        "image_names": sample_labels,
+        "n_neighborhoods": n_cn,
+        "proportions": sample_props.tolist(),
+        "counts": sample_counts.tolist(),
+    })
+
+    if want_heatmap and out_dir:
+        per_sample_heatmap_path = _save_heatmap(
+            sample_props, sample_labels,
+            ["CN %d" % cn for cn in range(n_cn)],
+            "Per-sample neighborhood proportions",
+            "fraction of image's cells", "viridis", 0.0,
+            float(sample_props.max()) if sample_props.size else 1.0,
+            "cn_per_sample_proportions.png")
+
+    # Work "B": per-group mean proportions for condition/treatment comparison.
+    if group_labels_arr is not None and group_labels_arr.shape[0] >= n_images:
+        _update("Summarizing per-group neighborhood proportions...")
+        # group_labels is per IMAGE index, aligned to img_order rows.
+        grp_for_row = np.array([int(group_labels_arr[int(i)]) for i in img_order],
+                               dtype=np.int64)
+        unique_groups = np.unique(grp_for_row[grp_for_row >= 0])
+        if unique_groups.size >= 1:
+            grp_props = np.zeros((unique_groups.shape[0], n_cn), dtype=np.float64)
+            grp_labels_out = []
+            for gi, g in enumerate(unique_groups):
+                member_rows = np.flatnonzero(grp_for_row == g)
+                # Pool cells across the group's images (weights large samples
+                # more, matching how cohort CN frequencies are usually compared).
+                pooled = sample_counts[member_rows, :].sum(axis=0).astype(np.float64)
+                tot = max(1.0, pooled.sum())
+                grp_props[gi, :] = pooled / tot
+                if grp_names is not None and int(g) < len(grp_names):
+                    grp_labels_out.append("%s (n=%d)" % (str(grp_names[int(g)]),
+                                                          member_rows.size))
+                else:
+                    grp_labels_out.append("group %d (n=%d)" % (int(g), member_rows.size))
+            group_json = json.dumps({
+                "group_names": grp_labels_out,
+                "n_neighborhoods": n_cn,
+                "proportions": grp_props.tolist(),
+            })
+            if want_heatmap and out_dir:
+                group_heatmap_path = _save_heatmap(
+                    grp_props, grp_labels_out,
+                    ["CN %d" % cn for cn in range(n_cn)],
+                    "Per-group neighborhood proportions",
+                    "fraction of group's cells", "viridis", 0.0,
+                    float(grp_props.max()) if grp_props.size else 1.0,
+                    "cn_per_group_proportions.png")
+
+# 8. Package outputs.
 _update("Packaging results...")
 labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), cn_labels)
@@ -198,5 +358,9 @@ task.outputs["composition_json"] = json.dumps(
 task.outputs["enrichment_json"] = json.dumps(
     {"class_names": names, "log2_enrichment": enrichment.tolist()})
 task.outputs["heatmap_path"] = heatmap_path
+task.outputs["per_sample_proportions_json"] = per_sample_json
+task.outputs["per_sample_heatmap_path"] = per_sample_heatmap_path
+task.outputs["group_proportions_json"] = group_json
+task.outputs["group_heatmap_path"] = group_heatmap_path
 
 logger.info("Cellular-neighborhood results packaged")
