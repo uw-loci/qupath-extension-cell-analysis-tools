@@ -155,7 +155,15 @@ Uniform Manifold Approximation and Projection for dimensionality reduction. Pres
 > Becht E, McInnes L, Healy J, et al. "Dimensionality reduction for visualizing single-cell data using UMAP." *Nature Biotechnology* 37, 38-44 (2019).
 > https://doi.org/10.1038/nbt.4314
 
-**Used in:** Clustering Dialog (UMAP embedding), Embedding Dialog
+**On clustering the embedding (the basis for the recipe caveat):**
+> UMAP documentation, "Using UMAP for Clustering." Notes that UMAP "does not
+> completely preserve density" and "can also create false tears in clusters,
+> resulting in a finer clustering than is necessarily present in the data," and
+> that clustering on the embedding "is somewhat controversial, and should be
+> attempted with care."
+> https://umap-learn.readthedocs.io/en/latest/clustering.html
+
+**Used in:** Clustering Dialog (UMAP embedding), Embedding Dialog, How-To section 24 (recipe)
 
 ---
 
