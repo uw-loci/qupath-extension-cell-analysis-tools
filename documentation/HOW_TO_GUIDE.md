@@ -1027,10 +1027,33 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 
 ### UMAP
 
+The Dimensionality Reduction section shows only the controls for the **currently
+selected** method. n_neighbors and min_dist sit beside the Method dropdown;
+`metric` and the random seed are under the section's **Advanced** expander.
+
 | Parameter | Range | Default | Description |
 |-----------|-------|---------|-------------|
 | n_neighbors | 2-200 | 15 | Local neighborhood size. Smaller = more local detail, larger = more global structure. |
 | min_dist | 0.0-1.0 | 0.1 | Minimum distance between embedded points. Smaller = tighter clusters. |
+| metric | euclidean / manhattan / cosine / correlation / chebyshev | euclidean | Distance used to find neighbors. cosine / correlation compare profile shape, not magnitude. *(Advanced)* |
+| random seed | int | 42 | Seed for the embedding; fix for reproducible layouts. *(Advanced)* |
+
+### t-SNE
+
+Selecting **t-SNE** shows the perplexity control beside the Method dropdown; the
+other knobs are under **Advanced**. (Ranges below are typical starting points.)
+
+| Parameter | Typical | Default | Description |
+|-----------|---------|---------|-------------|
+| perplexity | 5-50 | 30 (from Preferences) | Effective number of nearest neighbors per point; scale up slightly for larger datasets. Must be smaller than the number of cells (clamped automatically if not). |
+| learning_rate | 100-1000 | 200 | Gradient-descent step size. Too low (<10) bunches clusters centrally; too high disperses points randomly. *(Advanced)* |
+| iterations | 1,000-5,000 | 1000 | Max optimization steps; runs often converge and stop earlier. *(Advanced)* |
+| early_exaggeration | 4-12 | 12 | How tightly groups pack during the initial phase. Higher pushes well-separated clusters apart; lower preserves more accurate embeddings. *(Advanced)* |
+| random seed | int | 42 | Seed for the embedding; fix for reproducible layouts. *(Advanced)* |
+
+> The t-SNE perplexity **default** comes from Preferences > QP-CAT > t-SNE
+> Perplexity; the per-run spinner overrides it for that run. PCA exposes no
+> parameters here (the embedding is always 2-D).
 
 ## 20. Results dialog reference
 

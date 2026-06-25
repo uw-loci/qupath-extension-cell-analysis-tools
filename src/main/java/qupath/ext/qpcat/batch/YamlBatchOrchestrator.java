@@ -582,8 +582,15 @@ public final class YamlBatchOrchestrator {
         Map<String, Object> embParams = new LinkedHashMap<>();
         if (cc.getUmapNNeighbors() != null) embParams.put("n_neighbors", cc.getUmapNNeighbors());
         if (cc.getUmapMinDist() != null) embParams.put("min_dist", cc.getUmapMinDist());
+        if (cc.getUmapMetric() != null) embParams.put("metric", cc.getUmapMetric());
         if (cc.getPcaNComponents() != null) embParams.put("n_components", cc.getPcaNComponents());
         if (cc.getTsnePerplexity() != null) embParams.put("perplexity", cc.getTsnePerplexity());
+        if (cc.getTsneLearningRate() != null) embParams.put("learning_rate", cc.getTsneLearningRate());
+        if (cc.getTsneIterations() != null) embParams.put("n_iter", cc.getTsneIterations());
+        if (cc.getTsneEarlyExaggeration() != null) {
+            embParams.put("early_exaggeration", cc.getTsneEarlyExaggeration());
+        }
+        if (cc.getEmbeddingSeed() != null) embParams.put("random_state", cc.getEmbeddingSeed());
         config.setEmbeddingParams(embParams);
 
         // Measurements

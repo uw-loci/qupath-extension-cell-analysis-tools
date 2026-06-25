@@ -74,6 +74,12 @@ public class ClusteringDialog {
     private ComboBox<EmbeddingMethod> embeddingCombo;
     private Spinner<Integer> umapNeighborsSpinner;
     private Spinner<Double> umapMinDistSpinner;
+    private ComboBox<String> umapMetricCombo;
+    private Spinner<Double> tsnePerplexitySpinner;
+    private Spinner<Double> tsneLearningRateSpinner;
+    private Spinner<Integer> tsneIterationsSpinner;
+    private Spinner<Double> tsneEarlyExaggerationSpinner;
+    private Spinner<Integer> embeddingSeedSpinner;
     private ComboBox<Algorithm> algorithmCombo;
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
@@ -382,26 +388,125 @@ public class ClusteringDialog {
                 + "larger values spread points more evenly.\n"
                 + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
+        // t-SNE basic param: perplexity (defaults to the QP-CAT preference so the
+        // dialog matches headless / past runs unless the user overrides it here).
+        double prefPerplexity = QpcatPreferences.getClusterTsnePerplexity();
+        tsnePerplexitySpinner = new Spinner<>(2.0, 500.0,
+                prefPerplexity > 0 ? prefPerplexity : 30.0, 1.0);
+        tsnePerplexitySpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tsnePerplexitySpinner);
+        tsnePerplexitySpinner.setPrefWidth(90);
+        tsnePerplexitySpinner.setTooltip(new Tooltip(
+                "Perplexity (typical: 5-50). The effective number of nearest neighbors\n"
+                + "for each point. Scale up slightly for larger datasets; it must always\n"
+                + "be smaller than the number of cells (it is clamped automatically if not).\n"
+                + "Default comes from Preferences > QP-CAT > t-SNE Perplexity."));
+
+        // t-SNE advanced params.
+        tsneLearningRateSpinner = new Spinner<>(1.0, 5000.0, 200.0, 10.0);
+        tsneLearningRateSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tsneLearningRateSpinner);
+        tsneLearningRateSpinner.setPrefWidth(90);
+        tsneLearningRateSpinner.setTooltip(new Tooltip(
+                "Learning rate (typical: 100-1000). The gradient-descent step size.\n"
+                + "Too low (<10) bunches clusters in the center; too high disperses points\n"
+                + "randomly. scikit-learn's classic default is 200."));
+
+        tsneIterationsSpinner = new Spinner<>(250, 10000, 1000, 250);
+        tsneIterationsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tsneIterationsSpinner);
+        tsneIterationsSpinner.setPrefWidth(90);
+        tsneIterationsSpinner.setTooltip(new Tooltip(
+                "Iterations (typical: 1,000-5,000). The maximum number of optimization\n"
+                + "steps. Many runs converge and stop improving before this cap."));
+
+        tsneEarlyExaggerationSpinner = new Spinner<>(1.0, 50.0, 12.0, 1.0);
+        tsneEarlyExaggerationSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(tsneEarlyExaggerationSpinner);
+        tsneEarlyExaggerationSpinner.setPrefWidth(90);
+        tsneEarlyExaggerationSpinner.setTooltip(new Tooltip(
+                "Early exaggeration (typical: 4-12). How tightly groups are packed during\n"
+                + "the initial optimization phase. Higher values push well-separated clusters\n"
+                + "further apart; lower values tend to preserve more accurate embeddings."));
+
+        // UMAP advanced param: distance metric.
+        umapMetricCombo = new ComboBox<>(FXCollections.observableArrayList(
+                "euclidean", "manhattan", "cosine", "correlation", "chebyshev"));
+        umapMetricCombo.setValue("euclidean");
+        umapMetricCombo.setTooltip(new Tooltip(
+                "Distance metric UMAP uses to find neighbors. 'euclidean' is the default;\n"
+                + "'cosine' / 'correlation' compare profile shape rather than magnitude."));
+
+        // Shared advanced param: random seed (was hardcoded to 42).
+        embeddingSeedSpinner = new Spinner<>(0, Integer.MAX_VALUE, 42, 1);
+        embeddingSeedSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(embeddingSeedSpinner);
+        embeddingSeedSpinner.setPrefWidth(110);
+        embeddingSeedSpinner.setTooltip(new Tooltip(
+                "Random seed for the embedding (UMAP / t-SNE / PCA). Keep it fixed for\n"
+                + "reproducible layouts; change it to check a layout is stable. Default 42."));
+
         HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo);
         embRow.setAlignment(Pos.CENTER_LEFT);
 
-        HBox paramsRow = new HBox(10,
+        // Basic per-method rows (one shown at a time).
+        HBox umapRow = new HBox(10,
                 tipLabel("n_neighbors:", umapNeighborsSpinner), umapNeighborsSpinner,
                 tipLabel("min_dist:", umapMinDistSpinner), umapMinDistSpinner);
-        paramsRow.setAlignment(Pos.CENTER_LEFT);
+        umapRow.setAlignment(Pos.CENTER_LEFT);
+        HBox tsneRow = new HBox(10,
+                tipLabel("perplexity:", tsnePerplexitySpinner), tsnePerplexitySpinner);
+        tsneRow.setAlignment(Pos.CENTER_LEFT);
 
-        // Show/hide UMAP params based on selection
-        embeddingCombo.setOnAction(e -> {
-            boolean isUmap = embeddingCombo.getValue() == EmbeddingMethod.UMAP;
-            paramsRow.setVisible(isUmap);
-            paramsRow.setManaged(isUmap);
-        });
+        // Advanced expander: method-specific deep knobs + the shared seed.
+        HBox umapAdvRow = new HBox(10, tipLabel("metric:", umapMetricCombo), umapMetricCombo);
+        umapAdvRow.setAlignment(Pos.CENTER_LEFT);
+        HBox tsneAdvRow = new HBox(10,
+                tipLabel("learning_rate:", tsneLearningRateSpinner), tsneLearningRateSpinner,
+                tipLabel("iterations:", tsneIterationsSpinner), tsneIterationsSpinner,
+                tipLabel("early_exag:", tsneEarlyExaggerationSpinner), tsneEarlyExaggerationSpinner);
+        tsneAdvRow.setAlignment(Pos.CENTER_LEFT);
+        HBox seedRow = new HBox(10, tipLabel("random seed:", embeddingSeedSpinner), embeddingSeedSpinner);
+        seedRow.setAlignment(Pos.CENTER_LEFT);
+        Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
+                + "accepts; they apply to GUI and headless (YAML) runs alike.");
+        advNote.setWrapText(true);
+        advNote.setStyle("-fx-text-fill: #666; -fx-font-size: 10.5px;");
+        VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, advNote);
+        TitledPane advancedPane = new TitledPane("Advanced", advBox);
+        advancedPane.setExpanded(false);
+        advancedPane.setCollapsible(true);
 
-        VBox box = new VBox(5, embRow, paramsRow);
+        // Show only the rows relevant to the chosen method.
+        Runnable updateVisibility = () -> {
+            EmbeddingMethod m = embeddingCombo.getValue();
+            boolean isUmap = m == EmbeddingMethod.UMAP;
+            boolean isTsne = m == EmbeddingMethod.TSNE;
+            boolean hasSeed = m != EmbeddingMethod.NONE;
+            setRowShown(umapRow, isUmap);
+            setRowShown(tsneRow, isTsne);
+            setRowShown(umapAdvRow, isUmap);
+            setRowShown(tsneAdvRow, isTsne);
+            setRowShown(seedRow, hasSeed);
+            // Hide the Advanced pane entirely when there is nothing to configure.
+            boolean anyAdvanced = isUmap || isTsne || hasSeed;
+            advancedPane.setVisible(anyAdvanced);
+            advancedPane.setManaged(anyAdvanced);
+        };
+        embeddingCombo.setOnAction(e -> updateVisibility.run());
+        updateVisibility.run();
+
+        VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane);
         TitledPane pane = new TitledPane("Dimensionality Reduction", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
         return pane;
+    }
+
+    /** Toggle both visible and managed so a hidden row reclaims its layout space. */
+    private static void setRowShown(javafx.scene.Node node, boolean shown) {
+        node.setVisible(shown);
+        node.setManaged(shown);
     }
 
     private TitledPane createAlgorithmSection() {
@@ -1399,11 +1504,21 @@ public class ClusteringDialog {
         config.setNormalization(normalizationCombo.getValue());
 
         // Embedding
-        config.setEmbeddingMethod(embeddingCombo.getValue());
+        EmbeddingMethod embMethod = embeddingCombo.getValue();
+        config.setEmbeddingMethod(embMethod);
         Map<String, Object> embeddingParams = new HashMap<>();
-        if (embeddingCombo.getValue() == EmbeddingMethod.UMAP) {
+        if (embMethod != EmbeddingMethod.NONE) {
+            embeddingParams.put("random_state", embeddingSeedSpinner.getValue());
+        }
+        if (embMethod == EmbeddingMethod.UMAP) {
             embeddingParams.put("n_neighbors", umapNeighborsSpinner.getValue());
             embeddingParams.put("min_dist", umapMinDistSpinner.getValue());
+            embeddingParams.put("metric", umapMetricCombo.getValue());
+        } else if (embMethod == EmbeddingMethod.TSNE) {
+            embeddingParams.put("perplexity", tsnePerplexitySpinner.getValue());
+            embeddingParams.put("learning_rate", tsneLearningRateSpinner.getValue());
+            embeddingParams.put("n_iter", tsneIterationsSpinner.getValue());
+            embeddingParams.put("early_exaggeration", tsneEarlyExaggerationSpinner.getValue());
         }
         config.setEmbeddingParams(embeddingParams);
 
@@ -1607,6 +1722,31 @@ public class ClusteringDialog {
             if (embParams.containsKey("min_dist")) {
                 umapMinDistSpinner.getValueFactory().setValue(
                         ((Number) embParams.get("min_dist")).doubleValue());
+            }
+            if (embParams.get("metric") != null) {
+                umapMetricCombo.setValue(String.valueOf(embParams.get("metric")));
+            }
+            if (embParams.containsKey("perplexity")) {
+                tsnePerplexitySpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("perplexity")).doubleValue());
+            }
+            if (embParams.containsKey("learning_rate")) {
+                tsneLearningRateSpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("learning_rate")).doubleValue());
+            }
+            // t-SNE iterations may arrive under either key (sklearn renamed it).
+            Object iters = embParams.containsKey("n_iter")
+                    ? embParams.get("n_iter") : embParams.get("max_iter");
+            if (iters instanceof Number) {
+                tsneIterationsSpinner.getValueFactory().setValue(((Number) iters).intValue());
+            }
+            if (embParams.containsKey("early_exaggeration")) {
+                tsneEarlyExaggerationSpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("early_exaggeration")).doubleValue());
+            }
+            if (embParams.containsKey("random_state")) {
+                embeddingSeedSpinner.getValueFactory().setValue(
+                        ((Number) embParams.get("random_state")).intValue());
             }
         }
 

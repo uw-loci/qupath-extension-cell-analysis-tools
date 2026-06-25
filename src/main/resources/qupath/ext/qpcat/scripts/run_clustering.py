@@ -8,7 +8,15 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   algorithm_params: dict (algorithm-specific parameters)
   normalization: str ("zscore", "minmax", "percentile", "none")
   embedding_method: str ("umap", "pca", "tsne", "none")
-  embedding_params: dict (method-specific parameters)
+  embedding_params: dict (method-specific parameters; all optional)
+    shared:  random_state (int, default 42)
+    umap:    n_neighbors (int, default 15), min_dist (float, default 0.1),
+             metric (str, default "euclidean")
+    tsne:    perplexity (float, default = tsne_perplexity_default pref),
+             learning_rate (float|str, default 200.0),
+             n_iter / max_iter (int, default 1000),
+             early_exaggeration (float, default 12.0)
+    pca:     n_components (int, default 2)
 
 Optional inputs:
   generate_plots: bool (default False)
@@ -360,37 +368,68 @@ if do_batch and batch_labels_list is not None:
 _progress(0.15, "Computing %s embedding (%d cells) -- this can take a while..."
           % (str(embedding_method).upper(), n_cells))
 
+# Random seed for the embedding (exposed in the GUI "Advanced" panel; defaults
+# to 42 so prior runs reproduce). Shared by UMAP / t-SNE / PCA.
+embedding_seed = int(embedding_params.get("random_state", 42))
+
 embedding_result = None
 if embedding_method == "umap":
     import umap
     n_neighbors = embedding_params.get("n_neighbors", 15)
     min_dist = embedding_params.get("min_dist", 0.1)
     metric = embedding_params.get("metric", "euclidean")
-    logger.info("UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s",
-                n_neighbors, min_dist, metric)
+    logger.info("UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, seed=%d",
+                n_neighbors, min_dist, metric, embedding_seed)
     reducer = umap.UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         metric=metric,
         n_components=2,
-        random_state=42
+        random_state=embedding_seed
     )
     embedding_result = reducer.fit_transform(df_norm.values)
 
 elif embedding_method == "pca":
     from sklearn.decomposition import PCA
     n_components = embedding_params.get("n_components", 2)
-    pca = PCA(n_components=n_components, random_state=42)
+    pca = PCA(n_components=n_components, random_state=embedding_seed)
     embedding_result = pca.fit_transform(df_norm.values)
     logger.info("PCA: explained variance = %s",
                 [round(v, 4) for v in pca.explained_variance_ratio_])
 
 elif embedding_method == "tsne":
+    import inspect
     from sklearn.manifold import TSNE
-    perplexity = embedding_params.get("perplexity", pref_tsne_perplexity)
-    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+    perplexity = float(embedding_params.get("perplexity", pref_tsne_perplexity))
+    # sklearn requires perplexity < n_samples; clamp so a too-large value (or a
+    # tiny dataset) never errors the run.
+    max_perp = max(1.0, float(n_cells) - 1.0)
+    if perplexity > max_perp:
+        logger.warning("t-SNE perplexity %.1f >= n_cells; clamping to %.1f",
+                       perplexity, max_perp)
+        perplexity = max_perp
+    learning_rate = embedding_params.get("learning_rate", 200.0)
+    early_exaggeration = float(embedding_params.get("early_exaggeration", 12.0))
+    n_iter = int(embedding_params.get("n_iter",
+                                      embedding_params.get("max_iter", 1000)))
+    tsne_kwargs = dict(
+        n_components=2,
+        perplexity=perplexity,
+        learning_rate=learning_rate,
+        early_exaggeration=early_exaggeration,
+        random_state=embedding_seed,
+    )
+    # sklearn renamed n_iter -> max_iter in 1.5; pick whichever this build takes.
+    tsne_params = inspect.signature(TSNE.__init__).parameters
+    if "max_iter" in tsne_params:
+        tsne_kwargs["max_iter"] = n_iter
+    else:
+        tsne_kwargs["n_iter"] = n_iter
+    tsne = TSNE(**tsne_kwargs)
     embedding_result = tsne.fit_transform(df_norm.values)
-    logger.info("t-SNE: perplexity=%.1f", perplexity)
+    logger.info("t-SNE: perplexity=%.1f, learning_rate=%s, iterations=%d, "
+                "early_exaggeration=%.1f, seed=%d", perplexity, str(learning_rate),
+                n_iter, early_exaggeration, embedding_seed)
 
 elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)

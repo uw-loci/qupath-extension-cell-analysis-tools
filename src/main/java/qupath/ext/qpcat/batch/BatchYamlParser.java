@@ -53,7 +53,9 @@ public final class BatchYamlParser {
             "type", "algorithm", "mode", "saved_result_name",
             "resolution", "k", "normalization", "embedding",
             "pca_n_components", "umap_n_neighbors", "umap_min_dist",
-            "tsne_perplexity", "random_seed", "result_name",
+            "umap_metric", "tsne_perplexity", "tsne_learning_rate",
+            "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
+            "random_seed", "result_name",
             "measurements", "spatial_smoothing", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
             "banksy_lambda", "banksy_k_geom", "joint"));
@@ -251,7 +253,12 @@ public final class BatchYamlParser {
                 case "pca_n_components" -> c.setPcaNComponents(asIntObj(value));
                 case "umap_n_neighbors" -> c.setUmapNNeighbors(asIntObj(value));
                 case "umap_min_dist" -> c.setUmapMinDist(asDoubleObj(value));
+                case "umap_metric" -> c.setUmapMetric(asString(value));
                 case "tsne_perplexity" -> c.setTsnePerplexity(asIntObj(value));
+                case "tsne_learning_rate" -> c.setTsneLearningRate(asDoubleObj(value));
+                case "tsne_iterations" -> c.setTsneIterations(asIntObj(value));
+                case "tsne_early_exaggeration" -> c.setTsneEarlyExaggeration(asDoubleObj(value));
+                case "embedding_seed" -> c.setEmbeddingSeed(asIntObj(value));
                 case "random_seed" -> c.setRandomSeed(asIntObj(value));
                 case "result_name" -> c.setResultName(asString(value));
                 case "measurements" -> c.setMeasurements(asStringList(value));

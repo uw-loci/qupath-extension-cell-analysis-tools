@@ -106,9 +106,14 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
 | `umap_min_dist` | double | `0.1` | UMAP only. |
+| `umap_metric` | string | `euclidean` | UMAP only. `euclidean`, `manhattan`, `cosine`, `correlation`, `chebyshev`. |
 | `pca_n_components` | int | `50` | PCA only. Minimum 2. |
-| `tsne_perplexity` | double | `30.0` | t-SNE only. |
-| `random_seed` | int | `42` | Reproducibility seed. -1 = nondeterministic. |
+| `tsne_perplexity` | double | `30.0` | t-SNE only. Must be < number of cells (clamped if not). |
+| `tsne_learning_rate` | double | `200.0` | t-SNE only. Typical 100-1000. |
+| `tsne_iterations` | int | `1000` | t-SNE only. Max optimization steps (typical 1,000-5,000). |
+| `tsne_early_exaggeration` | double | `12.0` | t-SNE only. Typical 4-12. |
+| `embedding_seed` | int | `42` | Random seed for the embedding (UMAP / t-SNE / PCA). Mirrors the GUI Advanced "random seed". |
+| `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
 | `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per-image. |
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |

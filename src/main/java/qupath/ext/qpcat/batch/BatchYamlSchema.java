@@ -128,7 +128,12 @@ public final class BatchYamlSchema {
         private Integer pcaNComponents;
         private Integer umapNNeighbors;
         private Double umapMinDist;
+        private String umapMetric;
         private Integer tsnePerplexity;
+        private Double tsneLearningRate;
+        private Integer tsneIterations;
+        private Double tsneEarlyExaggeration;
+        private Integer embeddingSeed;
         private Integer randomSeed;
         private String resultName;
         private List<String> measurements;
@@ -183,9 +188,32 @@ public final class BatchYamlSchema {
         public Double getUmapMinDist() { return umapMinDist; }
         public void setUmapMinDist(Double umapMinDist) { this.umapMinDist = umapMinDist; }
 
+        public String getUmapMetric() { return umapMetric; }
+        public void setUmapMetric(String umapMetric) { this.umapMetric = umapMetric; }
+
         public Integer getTsnePerplexity() { return tsnePerplexity; }
         public void setTsnePerplexity(Integer tsnePerplexity) {
             this.tsnePerplexity = tsnePerplexity;
+        }
+
+        public Double getTsneLearningRate() { return tsneLearningRate; }
+        public void setTsneLearningRate(Double tsneLearningRate) {
+            this.tsneLearningRate = tsneLearningRate;
+        }
+
+        public Integer getTsneIterations() { return tsneIterations; }
+        public void setTsneIterations(Integer tsneIterations) {
+            this.tsneIterations = tsneIterations;
+        }
+
+        public Double getTsneEarlyExaggeration() { return tsneEarlyExaggeration; }
+        public void setTsneEarlyExaggeration(Double tsneEarlyExaggeration) {
+            this.tsneEarlyExaggeration = tsneEarlyExaggeration;
+        }
+
+        public Integer getEmbeddingSeed() { return embeddingSeed; }
+        public void setEmbeddingSeed(Integer embeddingSeed) {
+            this.embeddingSeed = embeddingSeed;
         }
 
         public Integer getRandomSeed() { return randomSeed; }

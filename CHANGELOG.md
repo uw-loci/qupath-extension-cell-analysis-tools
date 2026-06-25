@@ -31,6 +31,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - Joint results land in `qpcat-cellular-neighborhoods/<run-id>/` under the
   project (CSVs, heatmap PNGs, `cn_RUN_INFO.txt`); an **Open results folder**
   button and a How-To link are in the results dialog.
+- **Advanced embedding settings (t-SNE / UMAP) in the clustering dialog.** The
+  Dimensionality Reduction section now exposes, per **currently selected** method,
+  the parameters the backend already accepted but the GUI hid: **t-SNE**
+  perplexity (beside the dropdown) plus learning_rate, iterations, and
+  early_exaggeration under an **Advanced** expander; **UMAP** metric under
+  Advanced; and a shared embedding **random seed** (was hardcoded to 42).
+  Perplexity defaults to the existing Preferences value. These persist in the
+  saved config (round-trip via **Load Config from file...**) and have YAML
+  headless parity (`umap_metric`, `tsne_learning_rate`, `tsne_iterations`,
+  `tsne_early_exaggeration`, `embedding_seed`). t-SNE perplexity is clamped below
+  the cell count automatically. PCA still exposes nothing (the embedding is 2-D).
 
 ### Changed
 

@@ -60,6 +60,30 @@ class BatchYamlParserTest {
     }
 
     @Test
+    void parses_embedding_advanced_params() {
+        BatchYamlParser.ParseOutcome on = BatchYamlParser.parseString(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "clustering:\n  type: leiden\n  embedding: tsne\n"
+                        + "  umap_metric: cosine\n"
+                        + "  tsne_perplexity: 25\n"
+                        + "  tsne_learning_rate: 350.0\n"
+                        + "  tsne_iterations: 2000\n"
+                        + "  tsne_early_exaggeration: 8.0\n"
+                        + "  embedding_seed: 7\n");
+        var c = on.getSchema().getClustering();
+        assertThat(c.getUmapMetric()).isEqualTo("cosine");
+        assertThat(c.getTsnePerplexity()).isEqualTo(25);
+        assertThat(c.getTsneLearningRate()).isEqualTo(350.0);
+        assertThat(c.getTsneIterations()).isEqualTo(2000);
+        assertThat(c.getTsneEarlyExaggeration()).isEqualTo(8.0);
+        assertThat(c.getEmbeddingSeed()).isEqualTo(7);
+        assertThat(on.getIssues().stream()
+                .anyMatch(i -> i.getSeverity() == ValidationIssue.Severity.ERROR))
+                .isFalse();
+    }
+
+    @Test
     void parses_per_image_overrides() {
         BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(
                 "version: '1.0'\n"
