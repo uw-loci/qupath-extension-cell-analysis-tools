@@ -2118,12 +2118,19 @@ public class ClusteringDialog {
             if (cropService != null) {
                 scatter.setNavigation(result.getCellRefs(), qupath, cropService);
             }
-            Tab tab = new Tab(embName, wrapWithGuide(scatter,
+            // Wrap with the polygon-gating action bar (gate -> select / classify
+            // cells across images) when we have references + a GUI to write back.
+            javafx.scene.Node scatterNode = (qupath != null && result.getCellRefs() != null)
+                    ? GateActionBar.wrap(scatter, result.getCellRefs(), qupath)
+                    : scatter;
+            Tab tab = new Tab(embName, wrapWithGuide(scatterNode,
                     "Each point is one cell, colored by cluster assignment. "
                     + "Cells close together have similar marker expression profiles.\n"
                     + "Well-separated groups indicate distinct cell populations. "
                     + "Scroll to zoom, middle-drag to pan, hover for details; click a point "
                     + "to preview its cell, double-click to open the image and center on it.\n"
+                    + "Use Gate to lasso a region of the plot and select or classify the "
+                    + "enclosed cells across their images.\n"
                     + "Note: distances within a group are meaningful, but absolute "
                     + "distances between groups should be interpreted cautiously.",
                     "embedding-tab-interactive"));

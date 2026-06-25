@@ -4,6 +4,51 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.7.0] -- 2026-06-25
+
+Closes the main gaps surfaced by reviewing the 2020 QuPath<->CytoMAP image.sc
+guides against QP-CAT (gating on the embedding; physical-radius neighborhoods;
+regions as QuPath objects; region connectivity). See REFERENCES.md (CytoMAP,
+Stoltzfus et al. 2020).
+
+### Added
+
+- **Polygon gating on the embedding scatter -> select / classify cells.** The
+  clustering Results "Embedding" tab gained a **Gate** tool: click to draw a
+  polygon, double-click (or right-click) to close, Esc to cancel. Gated cells can
+  be **selected in the open image** or **assigned a persistent classification**
+  (e.g. "Gate 1") across **all** of their source images (saved per image, colors
+  everywhere, survives reload). New `EmbeddingScatterPanel` gate mode +
+  `GateApplier` (resolves cells by centroid, mirrors the project write-back loop)
+  + shared `GateActionBar`.
+- **New tool: "Plot & gate cells (2D)"** (Extensions > QP-CAT, after "Map cells in
+  2D"). Plots cells across an image **scope** (Current / All / Specific, via the
+  reusable picker) on either an existing 2D embedding (UMAP/t-SNE/PCA) or any two
+  marker measurements (**biaxial**), colored by current classification, with the
+  same gate/select/classify actions. Reads existing coordinates; for embeddings,
+  run "Map cells in 2D" first. New `PlotAndGateDialog` + reusable `ScopeSection`.
+- **Radius (micron) neighborhood windows** for cellular neighborhoods, alongside
+  kNN. "Window by: Nearest neighbors (k) / Radius (um)" -- the radius window is
+  the CytoMAP-style fixed physical neighborhood (density-aware, more
+  interpretable). Microns are converted to pixels per image via pixel
+  calibration (treated as pixels if uncalibrated).
+- **Region annotations** from cellular neighborhoods (opt-in checkbox): each
+  spatially-contiguous patch of a neighborhood becomes a convex-hull QuPath
+  annotation classed **`QPCAT Region: <id>`** (distinct from the per-cell
+  `QPCAT CN: <id>`), so regions are selectable/measurable objects -- the region
+  map CytoMAP could not push back into QuPath. New `RegionAnnotationBuilder`
+  (grid union-find + JTS convex hull).
+- **Region adjacency / connectivity** output for joint runs: a row-normalized
+  CN x CN matrix of how often neighborhoods border each other
+  (`cn_region_adjacency.csv` + heatmap, shown in the cohort results dialog).
+
+### Notes
+
+- The gate writes a classification, so gating across a multi-image plot persists
+  on every image -- arguably more useful than CytoMAP's transient selection.
+- "Plot & gate" does not compute embeddings (use "Map cells in 2D" / clustering);
+  it plots existing coordinates so it never needs the Python backend.
+
 ## [0.6.0] -- 2026-06-25
 
 ### Added

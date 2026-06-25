@@ -9,6 +9,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
@@ -23,6 +24,9 @@ import qupath.ext.qpcat.service.ViewerNavigator;
 import qupath.lib.gui.QuPathGUI;
 
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Interactive JavaFX scatter plot of embedding coordinates colored by cluster.
@@ -73,6 +77,8 @@ public class EmbeddingScatterPanel extends VBox {
     private int nClusters;
     private int nCells;
     private String embeddingName = "Embedding";
+    private String axisLabelX;   // optional explicit axis labels (e.g. biaxial markers)
+    private String axisLabelY;
 
     // Optional navigation wiring (null = plot stays display-only, as before).
     private CellRef[] cellRefs;
@@ -89,6 +95,16 @@ public class EmbeddingScatterPanel extends VBox {
     private double dragStartX, dragStartY;
     private double dragViewMinX, dragViewMinY;
     private boolean dragging = false;
+
+    // Polygon gating. In gate mode, left-clicks add polygon vertices (canvas
+    // pixels); double-click / right-click closes it and computes the enclosed
+    // cells. Pan (middle-drag) and zoom still work while gating.
+    private boolean gateMode = false;
+    private final List<double[]> gatePolygon = new ArrayList<>();  // screen-space vertices
+    private boolean gateClosed = false;
+    private boolean[] gatedMask;                                    // per-cell, nCells
+    private int gatedCount = 0;
+    private Consumer<int[]> onGate;
 
     public EmbeddingScatterPanel() {
         setSpacing(5);
@@ -112,6 +128,16 @@ public class EmbeddingScatterPanel extends VBox {
         canvas.setOnMouseReleased(this::onMouseReleased);
         canvas.setOnMouseMoved(this::onMouseMoved);
         canvas.setOnMouseClicked(this::onMouseClicked);
+        // ESC cancels an in-progress gate polygon (canvas must hold focus).
+        canvas.setFocusTraversable(true);
+        canvas.setOnKeyPressed(ke -> {
+            if (gateMode && ke.getCode() == KeyCode.ESCAPE) {
+                gatePolygon.clear();
+                gateClosed = false;
+                redraw();
+                ke.consume();
+            }
+        });
 
         helpLabel = new Label("Scroll to zoom, drag to pan");
         helpLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #999;");
@@ -153,6 +179,13 @@ public class EmbeddingScatterPanel extends VBox {
     /** Crop window size as a multiple of each cell's bounding box. */
     public void setCropScale(double cropScale) {
         this.cropScale = cropScale;
+    }
+
+    /** Override the axis titles (e.g. marker names for a biaxial plot). Pass
+     *  null/null to fall back to "{embeddingName} 1" / "{embeddingName} 2". */
+    public void setAxisLabels(String x, String y) {
+        this.axisLabelX = x;
+        this.axisLabelY = y;
     }
 
     /**
@@ -219,7 +252,9 @@ public class EmbeddingScatterPanel extends VBox {
         if (rangeX == 0) rangeX = 1;
         if (rangeY == 0) rangeY = 1;
 
-        // Draw points (randomize order for fair overlap)
+        // Draw points. When a gate is active, dim cells outside it and emphasize
+        // the gated ones so the selection reads clearly.
+        boolean haveGate = gatedMask != null && gatedCount > 0;
         double r = POINT_RADIUS;
         for (int i = 0; i < nCells; i++) {
             double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
@@ -233,8 +268,11 @@ public class EmbeddingScatterPanel extends VBox {
 
             int cluster = labels[i];
             Color c = clusterColor(cluster);
-            gc.setFill(Color.color(c.getRed(), c.getGreen(), c.getBlue(), 0.6));
-            gc.fillOval(px - r, py - r, r * 2, r * 2);
+            boolean gated = haveGate && gatedMask[i];
+            double alpha = haveGate ? (gated ? 0.95 : 0.12) : 0.6;
+            double pr = gated ? r + 0.7 : r;
+            gc.setFill(Color.color(c.getRed(), c.getGreen(), c.getBlue(), alpha));
+            gc.fillOval(px - pr, py - pr, pr * 2, pr * 2);
         }
 
         // Selection ring around the clicked point
@@ -245,6 +283,35 @@ public class EmbeddingScatterPanel extends VBox {
                 gc.setStroke(Color.BLACK);
                 gc.setLineWidth(2);
                 gc.strokeOval(sx - 6, sy - 6, 12, 12);
+            }
+        }
+
+        // Gate polygon (in-progress or closed)
+        if (!gatePolygon.isEmpty()) {
+            gc.setStroke(Color.rgb(20, 20, 20, 0.9));
+            gc.setLineWidth(1.5);
+            int n = gatePolygon.size();
+            for (int i = 0; i < n - 1; i++) {
+                double[] a = gatePolygon.get(i);
+                double[] b = gatePolygon.get(i + 1);
+                gc.strokeLine(a[0], a[1], b[0], b[1]);
+            }
+            if (gateClosed && n >= 3) {
+                double[] first = gatePolygon.get(0);
+                double[] last = gatePolygon.get(n - 1);
+                gc.strokeLine(last[0], last[1], first[0], first[1]);
+                gc.setFill(Color.rgb(30, 90, 200, 0.10));
+                double[] xs = new double[n];
+                double[] ys = new double[n];
+                for (int i = 0; i < n; i++) {
+                    xs[i] = gatePolygon.get(i)[0];
+                    ys[i] = gatePolygon.get(i)[1];
+                }
+                gc.fillPolygon(xs, ys, n);
+            }
+            gc.setFill(Color.rgb(20, 20, 20, 0.9));
+            for (double[] v : gatePolygon) {
+                gc.fillOval(v[0] - 2.5, v[1] - 2.5, 5, 5);
             }
         }
 
@@ -260,7 +327,7 @@ public class EmbeddingScatterPanel extends VBox {
         gc.setTextAlign(TextAlignment.CENTER);
         gc.fillText(String.format("%.1f", viewMinX), MARGIN, CANVAS_H - MARGIN + 15);
         gc.fillText(String.format("%.1f", viewMaxX), CANVAS_W - MARGIN, CANVAS_H - MARGIN + 15);
-        gc.fillText(embeddingName + " 1", CANVAS_W / 2, CANVAS_H - 5);
+        gc.fillText(axisLabelX != null ? axisLabelX : (embeddingName + " 1"), CANVAS_W / 2, CANVAS_H - 5);
 
         // Y axis labels
         gc.setTextAlign(TextAlignment.RIGHT);
@@ -271,7 +338,7 @@ public class EmbeddingScatterPanel extends VBox {
         gc.translate(12, CANVAS_H / 2);
         gc.rotate(-90);
         gc.setTextAlign(TextAlignment.CENTER);
-        gc.fillText(embeddingName + " 2", 0, 0);
+        gc.fillText(axisLabelY != null ? axisLabelY : (embeddingName + " 2"), 0, 0);
         gc.restore();
 
         // Legend (compact, right side)
@@ -345,6 +412,11 @@ public class EmbeddingScatterPanel extends VBox {
     // Pan -- middle button when navigation is wired (left button stays free for
     // selection); any button when display-only, preserving the original behavior.
     private void onMousePressed(MouseEvent e) {
+        // In gate mode the left button draws the polygon; only middle-drag pans.
+        if (gateMode && e.getButton() != MouseButton.MIDDLE) {
+            dragging = false;
+            return;
+        }
         boolean navWired = cellRefs != null && qupath != null;
         if (navWired && e.getButton() != MouseButton.MIDDLE) {
             dragging = false;
@@ -424,6 +496,29 @@ public class EmbeddingScatterPanel extends VBox {
     // Click: single = select + preview, double = navigate. Only active when
     // navigation has been wired via setNavigation().
     private void onMouseClicked(MouseEvent e) {
+        // Gate mode intercepts clicks: left adds a vertex, double-click or
+        // right-click closes the polygon and computes the enclosed cells.
+        if (gateMode) {
+            canvas.requestFocus();  // so ESC reaches the key handler
+            if (e.getButton() == MouseButton.SECONDARY) {
+                finalizeGate();
+                return;
+            }
+            if (e.getButton() == MouseButton.PRIMARY) {
+                if (gateClosed) {            // start a fresh polygon after a finalize
+                    gatePolygon.clear();
+                    gateClosed = false;
+                }
+                gatePolygon.add(new double[]{e.getX(), e.getY()});
+                if (e.getClickCount() >= 2) {
+                    finalizeGate();          // the pair's first click added the closing vertex
+                } else {
+                    redraw();
+                }
+            }
+            return;
+        }
+
         if (e.getButton() != MouseButton.PRIMARY) return;
         if (cellRefs == null || qupath == null) return;
 
@@ -477,5 +572,106 @@ public class EmbeddingScatterPanel extends VBox {
         }, "qpcat-scatter-crop");
         t.setDaemon(true);
         t.start();
+    }
+
+    // ==================== Polygon gating ====================
+
+    /**
+     * Turn polygon gate mode on/off. In gate mode the left button adds polygon
+     * vertices instead of selecting/panning; pan stays on middle-drag. Turning
+     * gate mode off leaves any existing gate highlight in place (clear it with
+     * {@link #clearGate()}).
+     */
+    public void setGateMode(boolean on) {
+        this.gateMode = on;
+        if (on) {
+            gatePolygon.clear();
+            gateClosed = false;
+            canvas.requestFocus();
+        }
+        helpLabel.setText(on
+                ? "Gate: click to add points, double-click (or right-click) to close, Esc to cancel"
+                : (cellRefs != null && qupath != null
+                    ? "Scroll zoom, middle-drag pan, click to preview, double-click to go to cell"
+                    : "Scroll to zoom, drag to pan"));
+        redraw();
+    }
+
+    public boolean isGateMode() {
+        return gateMode;
+    }
+
+    /** Register a callback fired when a gate polygon is closed; receives the
+     *  indices of the enclosed cells (index-aligned with the embedding data). */
+    public void setOnGate(Consumer<int[]> onGate) {
+        this.onGate = onGate;
+    }
+
+    /** Indices of the currently gated cells (empty if no active gate). */
+    public int[] getGatedIndices() {
+        if (gatedMask == null) return new int[0];
+        int[] out = new int[gatedCount];
+        int k = 0;
+        for (int i = 0; i < gatedMask.length; i++) {
+            if (gatedMask[i]) out[k++] = i;
+        }
+        return out;
+    }
+
+    public int getGatedCount() {
+        return gatedCount;
+    }
+
+    /** Clear the gate polygon and highlight. */
+    public void clearGate() {
+        gatePolygon.clear();
+        gateClosed = false;
+        gatedMask = null;
+        gatedCount = 0;
+        redraw();
+    }
+
+    /** Close the in-progress polygon, compute enclosed cells, fire the callback. */
+    private void finalizeGate() {
+        if (gatePolygon.size() < 3 || embedding == null) {
+            return;
+        }
+        gateClosed = true;
+        double plotW = CANVAS_W - 2 * MARGIN;
+        double plotH = CANVAS_H - 2 * MARGIN;
+        double rangeX = viewMaxX - viewMinX;
+        double rangeY = viewMaxY - viewMinY;
+        if (rangeX == 0) rangeX = 1;
+        if (rangeY == 0) rangeY = 1;
+
+        gatedMask = new boolean[nCells];
+        gatedCount = 0;
+        // Test each cell's on-screen position against the screen-space polygon.
+        for (int i = 0; i < nCells; i++) {
+            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
+            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
+            if (pointInPolygon(px, py)) {
+                gatedMask[i] = true;
+                gatedCount++;
+            }
+        }
+        redraw();
+        if (onGate != null) {
+            onGate.accept(getGatedIndices());
+        }
+    }
+
+    /** Ray-casting point-in-polygon test against {@link #gatePolygon} (screen space). */
+    private boolean pointInPolygon(double x, double y) {
+        boolean inside = false;
+        int n = gatePolygon.size();
+        for (int i = 0, j = n - 1; i < n; j = i++) {
+            double xi = gatePolygon.get(i)[0], yi = gatePolygon.get(i)[1];
+            double xj = gatePolygon.get(j)[0], yj = gatePolygon.get(j)[1];
+            boolean intersect = ((yi > y) != (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
     }
 }

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.RegionAnnotationBuilder;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -128,8 +129,10 @@ public class CellularNeighborhoodWorkflow {
         private final String enrichmentHeatmapPath;
         private final String perSampleHeatmapPath;
         private final String groupHeatmapPath;
+        private final String regionAdjacencyHeatmapPath;
         private final String perSampleJson;
         private final String groupJson;
+        private final String regionAdjacencyJson;
         private final String divergenceWarning;
         private final String runId;
         private final String paramsHash;
@@ -137,8 +140,9 @@ public class CellularNeighborhoodWorkflow {
         CnProjectResult(boolean applied, int nNeighborhoods, int totalCells, int nImages,
                         String resultsDir, String enrichmentHeatmapPath,
                         String perSampleHeatmapPath, String groupHeatmapPath,
-                        String perSampleJson, String groupJson, String divergenceWarning,
-                        String runId, String paramsHash) {
+                        String regionAdjacencyHeatmapPath,
+                        String perSampleJson, String groupJson, String regionAdjacencyJson,
+                        String divergenceWarning, String runId, String paramsHash) {
             this.applied = applied;
             this.nNeighborhoods = nNeighborhoods;
             this.totalCells = totalCells;
@@ -147,8 +151,10 @@ public class CellularNeighborhoodWorkflow {
             this.enrichmentHeatmapPath = enrichmentHeatmapPath;
             this.perSampleHeatmapPath = perSampleHeatmapPath;
             this.groupHeatmapPath = groupHeatmapPath;
+            this.regionAdjacencyHeatmapPath = regionAdjacencyHeatmapPath;
             this.perSampleJson = perSampleJson;
             this.groupJson = groupJson;
+            this.regionAdjacencyJson = regionAdjacencyJson;
             this.divergenceWarning = divergenceWarning;
             this.runId = runId;
             this.paramsHash = paramsHash;
@@ -162,8 +168,10 @@ public class CellularNeighborhoodWorkflow {
         public String getEnrichmentHeatmapPath() { return enrichmentHeatmapPath; }
         public String getPerSampleHeatmapPath() { return perSampleHeatmapPath; }
         public String getGroupHeatmapPath() { return groupHeatmapPath; }
+        public String getRegionAdjacencyHeatmapPath() { return regionAdjacencyHeatmapPath; }
         public String getPerSampleJson() { return perSampleJson; }
         public String getGroupJson() { return groupJson; }
+        public String getRegionAdjacencyJson() { return regionAdjacencyJson; }
         /** Non-null when scope images do not share the same cell-type class set. */
         public String getDivergenceWarning() { return divergenceWarning; }
         public String getRunId() { return runId; }
@@ -182,7 +190,8 @@ public class CellularNeighborhoodWorkflow {
      * @throws IOException on extraction / Python failure
      */
     public CnResult run(int kNeighbors, int nNeighborhoods, int seed,
-                        boolean generateHeatmap, Consumer<String> progress) throws IOException {
+                        boolean generateHeatmap, boolean radiusMode, double radiusMicrons,
+                        boolean createRegions, Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
 
@@ -210,13 +219,15 @@ public class CellularNeighborhoodWorkflow {
         }
 
         int nCells = detections.size();
+        double pxUm = pixelSizeMicrons(imageData);
         logger.info("Cellular neighborhoods: {} cells, {} cell-type classes",
                 nCells, classNames.size());
 
         // Provenance.
         String runId = UUID.randomUUID().toString();
         String paramsHash = Integer.toHexString(
-                java.util.Objects.hash(kNeighbors, nNeighborhoods, seed, classNames));
+                java.util.Objects.hash(kNeighbors, nNeighborhoods, seed, classNames,
+                        radiusMode, radiusMicrons));
 
         if (cancelled) {
             return new CnResult(false, 0, nCells, "{}", "", runId, paramsHash);
@@ -238,7 +249,8 @@ public class CellularNeighborhoodWorkflow {
         try {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     executeTask(detections, typeLabels, classNames, kNeighbors,
-                            nNeighborhoods, seed, generateHeatmap, heatmapDirFinal, progress));
+                            nNeighborhoods, seed, generateHeatmap, heatmapDirFinal,
+                            radiusMode, radiusMicrons, new double[]{pxUm}, progress));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -263,6 +275,14 @@ public class CellularNeighborhoodWorkflow {
             cnNames[i] = CN_PREFIX + i;
         }
         new ResultApplier().applyPhenotypeLabels(detections, cnLabels, cnNames);
+
+        if (createRegions) {
+            report(progress, "Creating region annotations...");
+            double linkUm = radiusMode ? radiusMicrons : 0;  // 0 -> auto from median NN
+            int nRegions = RegionAnnotationBuilder.build(imageData, detections, cnLabels,
+                    actualCn, linkUm, pxUm);
+            logger.info("Created {} region annotations", nRegions);
+        }
 
         Platform.runLater(() -> {
             ImageData<BufferedImage> current = qupath.getImageData();
@@ -332,6 +352,8 @@ public class CellularNeighborhoodWorkflow {
     public CnProjectResult runProject(List<ProjectImageEntry<BufferedImage>> imageEntries,
                                       int kNeighbors, int nNeighborhoods, int seed,
                                       boolean generateHeatmap, String groupMetadataKey,
+                                      boolean radiusMode, double radiusMicrons,
+                                      boolean createRegions,
                                       Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
@@ -397,10 +419,12 @@ public class CellularNeighborhoodWorkflow {
         int[] typeLabels = new int[totalCells];
         int[] imageIds = new int[totalCells];
         List<String> imageNames = new ArrayList<>(loaded.size());
+        double[] pixelSizes = new double[loaded.size()];
         int pos = 0;
         for (int imgIdx = 0; imgIdx < loaded.size(); imgIdx++) {
             LoadedImage li = loaded.get(imgIdx);
             imageNames.add(li.entry.getImageName());
+            pixelSizes[imgIdx] = pixelSizeMicrons(li.imageData);
             for (PathObject det : li.detections) {
                 var roi = det.getROI();
                 coords[pos][0] = roi.getCentroidX();
@@ -430,11 +454,12 @@ public class CellularNeighborhoodWorkflow {
 
         String runId = UUID.randomUUID().toString();
         String paramsHash = Integer.toHexString(java.util.Objects.hash(
-                kNeighbors, nNeighborhoods, seed, classNames, imageNames, groupMetadataKey));
+                kNeighbors, nNeighborhoods, seed, classNames, imageNames, groupMetadataKey,
+                radiusMode, radiusMicrons));
 
         if (cancelled) {
             return new CnProjectResult(false, 0, totalCells, loaded.size(), null,
-                    "", "", "", "", "", divergenceWarning, runId, paramsHash);
+                    "", "", "", "", "", "", "", divergenceWarning, runId, paramsHash);
         }
 
         // 5. Results folder under the project (heatmaps + tables land here).
@@ -450,7 +475,8 @@ public class CellularNeighborhoodWorkflow {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     runCnTask(coords, typeLabels, classNames, kNeighbors, nNeighborhoods,
                             seed, generateHeatmap, resultsDir, imageIds, imageNames,
-                            groupLabelsF, groupNamesF, progress));
+                            groupLabelsF, groupNamesF, radiusMode, radiusMicrons, pixelSizes,
+                            progress));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -464,11 +490,14 @@ public class CellularNeighborhoodWorkflow {
         String groupHeatmap = (String) resultMap.getOrDefault("group_heatmap_path", "");
         String perSampleJson = (String) resultMap.getOrDefault("per_sample_json", "");
         String groupJson = (String) resultMap.getOrDefault("group_json", "");
+        String adjacencyJson = (String) resultMap.getOrDefault("region_adjacency_json", "");
+        String adjacencyHeatmap = (String) resultMap.getOrDefault("region_adjacency_heatmap_path", "");
 
         if (cancelled) {
             report(progress, "Cancelled -- no labels were applied.");
             return new CnProjectResult(false, actualCn, totalCells, loaded.size(),
-                    safePath(resultsDir), "", "", "", "", "", divergenceWarning, runId, paramsHash);
+                    safePath(resultsDir), "", "", "", "", "", "", "", divergenceWarning,
+                    runId, paramsHash);
         }
 
         // 7. Apply labels back per image + save + record a Workflow step.
@@ -479,14 +508,21 @@ public class CellularNeighborhoodWorkflow {
         }
         ResultApplier applier = new ResultApplier();
         int start = 0;
+        int imgIdx2 = 0;
         for (LoadedImage li : loaded) {
             int end = start + li.detections.size();
             int[] segLabels = new int[end - start];
             System.arraycopy(cnLabels, start, segLabels, 0, end - start);
             applier.applyPhenotypeLabels(li.detections, segLabels, cnNames);
+            if (createRegions) {
+                double linkUm = radiusMode ? radiusMicrons : 0;
+                RegionAnnotationBuilder.build(li.imageData, li.detections, segLabels,
+                        actualCn, linkUm, pixelSizes[imgIdx2]);
+            }
             recordProjectWorkflowStep(li.imageData, kNeighbors, nNeighborhoods, actualCn,
                     li.detections.size(), totalCells, loaded.size(), classNames.size(),
                     runId, paramsHash);
+            imgIdx2++;
             try {
                 li.entry.saveImageData(li.imageData);
                 logger.info("Saved CN labels for {} ({} cells)",
@@ -508,7 +544,7 @@ public class CellularNeighborhoodWorkflow {
         });
 
         // 8. Write the cohort tables + a run-info file next to the heatmaps.
-        writeCohortTables(resultsDir, perSampleJson, groupJson, runId, paramsHash,
+        writeCohortTables(resultsDir, perSampleJson, groupJson, adjacencyJson, runId, paramsHash,
                 kNeighbors, nNeighborhoods, actualCn, totalCells, loaded.size(),
                 classNames, groupMetadataKey, divergenceWarning);
 
@@ -530,7 +566,8 @@ public class CellularNeighborhoodWorkflow {
 
         return new CnProjectResult(true, actualCn, totalCells, loaded.size(),
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
-                perSampleJson, groupJson, divergenceWarning, runId, paramsHash);
+                adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
+                divergenceWarning, runId, paramsHash);
     }
 
     /** Build a human-readable warning if images do not share the same class set. */
@@ -616,10 +653,23 @@ public class CellularNeighborhoodWorkflow {
                                             int[] typeLabels, List<String> classNames,
                                             int kNeighbors, int nNeighborhoods, int seed,
                                             boolean generateHeatmap, Path heatmapDir,
+                                            boolean radiusMode, double radiusMicrons,
+                                            double[] pixelSizesUm,
                                             Consumer<String> progress) throws IOException {
         double[][] centroids = MeasurementExtractor.extractCentroids(detections);
         return runCnTask(centroids, typeLabels, classNames, kNeighbors, nNeighborhoods,
-                seed, generateHeatmap, heatmapDir, null, null, null, null, progress);
+                seed, generateHeatmap, heatmapDir, null, null, null, null,
+                radiusMode, radiusMicrons, pixelSizesUm, progress);
+    }
+
+    /** Averaged pixel size in microns, or 1.0 if the image is uncalibrated. */
+    private static double pixelSizeMicrons(ImageData<BufferedImage> imageData) {
+        try {
+            double um = imageData.getServer().getPixelCalibration().getAveragedPixelSizeMicrons();
+            return (um > 0 && !Double.isNaN(um)) ? um : 1.0;
+        } catch (Exception e) {
+            return 1.0;
+        }
     }
 
     /**
@@ -642,6 +692,8 @@ public class CellularNeighborhoodWorkflow {
                                           int nNeighborhoods, int seed, boolean generateHeatmap,
                                           Path outputDir, int[] imageIds, List<String> imageNames,
                                           int[] groupLabels, List<String> groupNames,
+                                          boolean radiusMode, double radiusMicrons,
+                                          double[] pixelSizesUm,
                                           Consumer<String> progress) throws IOException {
         int nCells = coords.length;
 
@@ -682,6 +734,17 @@ public class CellularNeighborhoodWorkflow {
         if (groupNames != null) {
             inputs.put("group_names", groupNames);
         }
+        // Window definition: kNN (default) or physical radius in microns. The
+        // per-image pixel sizes let Python convert microns -> pixels per block.
+        inputs.put("window_mode", radiusMode ? "radius" : "knn");
+        if (radiusMode) {
+            inputs.put("radius_microns", radiusMicrons);
+        }
+        if (pixelSizesUm != null) {
+            List<Double> px = new ArrayList<>(pixelSizesUm.length);
+            for (double v : pixelSizesUm) px.add(v);
+            inputs.put("pixel_sizes_um", px);
+        }
 
         NDArray labelsNd = null;
         try {
@@ -707,6 +770,8 @@ public class CellularNeighborhoodWorkflow {
             result.put("per_sample_heatmap_path", String.valueOf(task.outputs.getOrDefault("per_sample_heatmap_path", "")));
             result.put("group_json", String.valueOf(task.outputs.getOrDefault("group_proportions_json", "")));
             result.put("group_heatmap_path", String.valueOf(task.outputs.getOrDefault("group_heatmap_path", "")));
+            result.put("region_adjacency_json", String.valueOf(task.outputs.getOrDefault("region_adjacency_json", "")));
+            result.put("region_adjacency_heatmap_path", String.valueOf(task.outputs.getOrDefault("region_adjacency_heatmap_path", "")));
             return result;
         } finally {
             spatialNd.close();
@@ -779,9 +844,9 @@ public class CellularNeighborhoodWorkflow {
      * is logged but never fails the run.
      */
     private void writeCohortTables(Path resultsDir, String perSampleJson, String groupJson,
-                                   String runId, String paramsHash, int kNeighbors,
-                                   int nNeighborhoods, int actualCn, int totalCells,
-                                   int nImages, List<String> classNames,
+                                   String adjacencyJson, String runId, String paramsHash,
+                                   int kNeighbors, int nNeighborhoods, int actualCn,
+                                   int totalCells, int nImages, List<String> classNames,
                                    String groupMetadataKey, String divergenceWarning) {
         if (resultsDir == null) return;
         try {
@@ -794,6 +859,11 @@ public class CellularNeighborhoodWorkflow {
             if (groupCsv != null) {
                 Files.writeString(resultsDir.resolve("cn_per_group_proportions.csv"),
                         groupCsv, StandardCharsets.UTF_8);
+            }
+            String adjCsv = adjacencyJsonToCsv(adjacencyJson);
+            if (adjCsv != null) {
+                Files.writeString(resultsDir.resolve("cn_region_adjacency.csv"),
+                        adjCsv, StandardCharsets.UTF_8);
             }
             StringBuilder info = new StringBuilder();
             info.append("QP-CAT joint cellular-neighborhood run\n");
@@ -853,6 +923,37 @@ public class CellularNeighborhoodWorkflow {
             return sb.toString();
         } catch (Exception e) {
             logger.warn("Could not convert proportions JSON to CSV: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Convert a region-adjacency JSON payload ({@code {n_cn, matrix[CN][CN]}})
+     * into a CN x CN CSV. Returns null on empty input.
+     */
+    private static String adjacencyJsonToCsv(String json) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            JsonArray matrix = obj.getAsJsonArray("matrix");
+            if (matrix == null || matrix.size() == 0) return null;
+            int n = matrix.size();
+            StringBuilder sb = new StringBuilder();
+            sb.append("CN");
+            for (int j = 0; j < n; j++) sb.append(",CN_").append(j);
+            sb.append('\n');
+            for (int i = 0; i < n; i++) {
+                sb.append("CN_").append(i);
+                JsonArray row = matrix.get(i).getAsJsonArray();
+                for (int j = 0; j < row.size(); j++) {
+                    sb.append(',').append(String.format(java.util.Locale.US, "%.6f",
+                            row.get(j).getAsDouble()));
+                }
+                sb.append('\n');
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            logger.warn("Could not convert adjacency JSON to CSV: {}", e.getMessage());
             return null;
         }
     }

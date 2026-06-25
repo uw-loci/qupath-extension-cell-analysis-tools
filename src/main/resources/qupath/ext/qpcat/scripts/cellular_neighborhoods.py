@@ -47,6 +47,9 @@ Inputs (injected by Appose 0.10.0):
   group_labels: list[int] (optional) -- per-IMAGE group index (0..n_groups-1)
              for condition/treatment comparison (work "B")
   group_names: list[str] (optional) -- display name per group index
+  window_mode: str (optional) -- "knn" (default) or "radius"
+  radius_microns: float (optional) -- window radius in microns (radius mode)
+  pixel_sizes_um: list[float] (optional) -- per-image um/px for radius->pixels
 
 Outputs (via task.outputs):
   neighborhood_labels: NDArray (N_cells,) int32 -- CN id per cell (0..N-1)
@@ -60,6 +63,8 @@ Outputs (via task.outputs):
   per_sample_heatmap_path: str -- image x CN proportion heatmap PNG, or ""
   group_proportions_json: str (JSON) -- {group_names, proportions[group][cn]} or ""
   group_heatmap_path: str -- group x CN proportion heatmap PNG, or ""
+  region_adjacency_json: str (JSON) -- {n_cn, matrix[CN][CN]} row-normalized
+  region_adjacency_heatmap_path: str -- CN x CN adjacency heatmap PNG, or ""
 """
 import logging
 import json
@@ -146,6 +151,33 @@ try:
 except NameError:
     grp_names = None
 
+# Window definition: "knn" (default) or "radius" (physical microns). For radius
+# mode, pixel_sizes_um gives the per-image um/px so the radius converts to pixels
+# per block (pixel size may differ across images).
+try:
+    win_mode = str(window_mode)
+except NameError:
+    win_mode = "knn"
+try:
+    radius_um = float(radius_microns)
+except NameError:
+    radius_um = 0.0
+try:
+    pixel_sizes = [float(v) for v in pixel_sizes_um]
+except NameError:
+    pixel_sizes = None
+
+
+def _radius_px_for(image_index):
+    """Convert the radius (microns) to pixels for one image; falls back to
+    treating the radius as pixels when the image is uncalibrated."""
+    ps = 1.0
+    if pixel_sizes is not None and 0 <= image_index < len(pixel_sizes):
+        ps = pixel_sizes[image_index]
+    if ps is None or ps <= 0:
+        ps = 1.0
+    return radius_um / ps
+
 # n_cn cannot exceed the number of cells; k handled per-image below.
 n_cn = max(1, min(n_cn, n_cells))
 
@@ -162,18 +194,32 @@ logger.info("k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_images=%d, mult
 from sklearn.neighbors import NearestNeighbors
 
 
-def _composition_for_block(block_coords, block_labels, k_req):
-    """Per-cell cell-type composition over the k nearest neighbors within a
-    single image block. n_jobs=1 keeps this single-process: Appose runs the
-    task in a worker subprocess where joblib/loky fan-out has deadlocked, and
-    the tree query is already fast enough that parallelism buys little."""
+def _composition_for_block(block_coords, block_labels, k_req, radius_px=None):
+    """Per-cell cell-type composition within a single image block. With
+    radius_px set, the window is every cell within that radius (CytoMAP-style
+    physical neighborhood); otherwise it is the k nearest neighbors. n_jobs=1
+    keeps this single-process: Appose runs the task in a worker subprocess where
+    joblib/loky fan-out has deadlocked, and the tree query is fast enough that
+    parallelism buys little."""
     n_block = block_coords.shape[0]
+    comp = np.zeros((n_block, n_classes), dtype=np.float64)
+    if radius_px is not None and radius_px > 0:
+        nn = NearestNeighbors(radius=radius_px, algorithm="auto", n_jobs=1)
+        nn.fit(block_coords)
+        neigh = nn.radius_neighbors(block_coords, return_distance=False)
+        for i in range(n_block):
+            idxs = neigh[i]
+            if idxs.size == 0:
+                comp[i, block_labels[i]] = 1.0   # isolated cell -> self-only window
+                continue
+            cc = np.bincount(block_labels[idxs], minlength=n_classes).astype(np.float64)
+            comp[i, :] = cc / float(idxs.size)
+        return comp
     k_local = max(1, min(k_req, n_block))
     nn = NearestNeighbors(n_neighbors=k_local, algorithm="auto", n_jobs=1)
     nn.fit(block_coords)
     _, nbr_idx = nn.kneighbors(block_coords)  # (n_block, k_local), includes self
     neighbor_labels = block_labels[nbr_idx]   # (n_block, k_local)
-    comp = np.zeros((n_block, n_classes), dtype=np.float64)
     for c in range(n_classes):
         comp[:, c] = np.count_nonzero(neighbor_labels == c, axis=1) / float(k_local)
     return comp
@@ -182,19 +228,27 @@ def _composition_for_block(block_coords, block_labels, k_req):
 # 2 + 3. Build spatial windows and per-cell composition vectors. In joint mode
 # we window WITHIN each image (cells in different slides are not neighbors);
 # in single-image mode this is one block over all cells.
+radius_mode = (win_mode == "radius") and radius_um > 0
 composition = np.zeros((n_cells, n_classes), dtype=np.float64)
 if multi_image:
-    _update("Building per-image spatial windows (k=%d) across %d images..."
-            % (k, unique_images.shape[0]))
+    _update("Building per-image spatial windows (%s) across %d images..."
+            % (("radius=%.1fum" % radius_um) if radius_mode else ("k=%d" % k),
+               unique_images.shape[0]))
     for img in unique_images:
         sel = np.flatnonzero(image_ids_arr == img)
         if sel.size == 0:
             continue
+        r_px = _radius_px_for(int(img)) if radius_mode else None
         composition[sel, :] = _composition_for_block(
-            coords[sel, :], labels_arr[sel], k)
+            coords[sel, :], labels_arr[sel], k, radius_px=r_px)
 else:
-    _update("Building spatial windows (k=%d nearest neighbors)..." % k)
-    composition[:, :] = _composition_for_block(coords, labels_arr, k)
+    if radius_mode:
+        _update("Building spatial windows (radius=%.1f um)..." % radius_um)
+        r_px = _radius_px_for(0)
+    else:
+        _update("Building spatial windows (k=%d nearest neighbors)..." % k)
+        r_px = None
+    composition[:, :] = _composition_for_block(coords, labels_arr, k, radius_px=r_px)
 
 # 4. Cluster the POOLED composition vectors into N cellular neighborhoods.
 #    One global k-means is what makes a CN id mean the same mixture in every
@@ -346,6 +400,70 @@ if multi_image:
                     float(grp_props.max()) if grp_props.size else 1.0,
                     "cn_per_group_proportions.png")
 
+# 7b. Region adjacency: how often neighborhoods border each other. For each
+# within-image spatial edge whose endpoints sit in different neighborhoods, tally
+# the CN-CN pair; sum across images; row-normalize so row a is the distribution
+# of region a's neighboring regions (diagonal = within-region edges).
+region_adjacency_json = ""
+region_adjacency_heatmap_path = ""
+
+
+def _region_adjacency():
+    adj = np.zeros((n_cn, n_cn), dtype=np.float64)
+    imgs = unique_images if multi_image else np.array([0])
+    for img in imgs:
+        sel = (np.flatnonzero(image_ids_arr == img) if multi_image
+               else np.arange(n_cells))
+        if sel.size < 2:
+            continue
+        c = coords[sel]
+        lab = cn_labels[sel]
+        if radius_mode:
+            r_px = _radius_px_for(int(img))
+            nn = NearestNeighbors(radius=r_px, n_jobs=1)
+            nn.fit(c)
+            neigh = nn.radius_neighbors(c, return_distance=False)
+            for i in range(sel.size):
+                for j in neigh[i]:
+                    if j <= i:
+                        continue
+                    a, b = int(lab[i]), int(lab[j])
+                    adj[a, b] += 1.0
+                    adj[b, a] += 1.0
+        else:
+            k_local = max(2, min(k + 1, sel.size))
+            nn = NearestNeighbors(n_neighbors=k_local, n_jobs=1)
+            nn.fit(c)
+            _, idx = nn.kneighbors(c)
+            for i in range(sel.size):
+                for jj in range(1, idx.shape[1]):
+                    j = int(idx[i, jj])
+                    if j <= i:
+                        continue
+                    a, b = int(lab[i]), int(lab[j])
+                    adj[a, b] += 1.0
+                    adj[b, a] += 1.0
+    return adj
+
+
+try:
+    _update("Computing region adjacency...")
+    adj = _region_adjacency()
+    row_sums = adj.sum(axis=1, keepdims=True)
+    row_sums[row_sums == 0] = 1.0
+    adj_norm = adj / row_sums
+    region_adjacency_json = json.dumps({"n_cn": n_cn, "matrix": adj_norm.tolist()})
+    if want_heatmap and out_dir:
+        region_adjacency_heatmap_path = _save_heatmap(
+            adj_norm, ["CN %d" % cn for cn in range(n_cn)],
+            ["CN %d" % cn for cn in range(n_cn)],
+            "Region adjacency (fraction of a region's neighbors)",
+            "fraction of neighboring edges", "magma", 0.0,
+            float(adj_norm.max()) if adj_norm.size else 1.0,
+            "cn_region_adjacency.png")
+except Exception as e:
+    logger.warning("Region adjacency failed: %s", e)
+
 # 8. Package outputs.
 _update("Packaging results...")
 labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
@@ -362,5 +480,7 @@ task.outputs["per_sample_proportions_json"] = per_sample_json
 task.outputs["per_sample_heatmap_path"] = per_sample_heatmap_path
 task.outputs["group_proportions_json"] = group_json
 task.outputs["group_heatmap_path"] = group_heatmap_path
+task.outputs["region_adjacency_json"] = region_adjacency_json
+task.outputs["region_adjacency_heatmap_path"] = region_adjacency_heatmap_path
 
 logger.info("Cellular-neighborhood results packaged")

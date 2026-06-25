@@ -35,6 +35,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 22. [Finding Cellular Neighborhoods (Spatial Niches)](#22-finding-cellular-neighborhoods-spatial-niches)
 23. [Reproducing a clustering run](#23-reproducing-a-clustering-run)
 24. [Recipes (worked examples)](#24-recipes-worked-examples)
+25. [Gating cells on a 2D plot](#25-gating-cells-on-a-2d-plot)
 
 ---
 
@@ -1373,13 +1374,19 @@ Leave it at *(no grouping)* to skip.
    lists the types you expect. If you just (re)classified, click **Refresh**.
 3. Pick the **Scope** (Current image / All project images / Specific images).
    For a cohort, optionally set **Group images by** a metadata key.
-4. **Neighbors per window (k)** -- how many nearest cells form each window
-   (the cell plus its neighbors). Larger k captures broader context but blurs
-   fine boundaries. 20-30 is a common start; Schurch et al. used ~10.
+4. **Window by** -- how each cell's window is defined:
+   - **Nearest neighbors (k)**: the k nearest cells. Density-adaptive (the window
+     shrinks in dense tissue). 20-30 is a common start; Schurch et al. used ~10.
+   - **Radius (um)**: every cell within a fixed physical radius (the CytoMAP-style
+     neighborhood -- more interpretable and density-aware). 50 um is a common
+     start. Needs image pixel calibration; an uncalibrated image treats the radius
+     as pixels (converted per image, so differing pixel sizes are handled).
 5. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
 6. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
-7. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
+7. **Create region annotations** (optional) -- also outline each contiguous patch
+   of a neighborhood as a QuPath annotation (see "Regions and connectivity").
+8. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
    runs; **Cancel** stops it -- if you cancel before it finishes, **no labels
    are applied**.
 
@@ -1422,6 +1429,10 @@ When the joint run finishes, a results dialog shows:
   the same proportions pooled per metadata group, plus `cn_per_group_proportions.csv`
   and a `cn_per_group_proportions.png` heatmap (group x CN), for a direct
   condition-vs-condition comparison.
+- **Region adjacency** -- a CN x CN table (and `cn_region_adjacency.csv` + heatmap)
+  giving, for each neighborhood, the fraction of its bordering cells that lie in
+  each neighborhood (the diagonal is within-region). Reads which micro-environments
+  sit next to each other ("CN 1 tumor mostly borders CN 3 tumor-edge").
 - **Open results folder** opens the folder containing those CSVs, the heatmap
   PNGs, and `cn_RUN_INFO.txt` (parameters + the note that neighborhoods were
   defined jointly).
@@ -1429,6 +1440,21 @@ When the joint run finishes, a results dialog shows:
 To inspect *which* cells make up a neighborhood in a particular sample, open that
 image -- the `QPCAT CN:` classes are saved there -- and color/select by class in
 QuPath's Annotations panel as usual.
+
+### Regions and connectivity
+
+With **Create region annotations** ticked, each spatially-contiguous patch of a
+neighborhood is outlined as a QuPath **annotation** classed `QPCAT Region: <id>`
+(kept separate from the per-cell `QPCAT CN: <id>` classification). Unlike the
+per-cell labels, these are real objects you can select, measure, and use as
+parents -- the region map that, in the CytoMAP round-trip, could not be brought
+back into QuPath. Contiguity uses the radius (in radius mode) or an
+auto-estimated cell spacing (in kNN mode); tiny patches (< 3 cells) are skipped,
+and each patch is a convex hull of its cells.
+
+> Region annotations are added to (and saved in) **every** processed image. To
+> remove them, select the `QPCAT Region:` classes in the Annotations panel and
+> delete, or re-run without the option (it does not auto-clear a prior run).
 
 ### How this differs from BANKSY
 
@@ -1560,3 +1586,59 @@ plots), so to cluster *on the embedding* you run it in two steps.
   space. Treat the cluster count as a starting point, validate the clusters, and
   cross-check against a full-space run when it matters. See
   [REFERENCES.md](REFERENCES.md) (UMAP).
+
+---
+
+## 25. Gating cells on a 2D plot
+
+Draw a polygon ("gate") around a group of points on a 2D scatter and act on the
+cells inside -- select them in the image, or assign them a classification across
+every image. This is the QuPath-native version of the flow-cytometry / CytoMAP
+"lasso a population off the t-SNE" workflow, with the difference that the gate can
+write a **persistent class**, so the population stays colored in every image and
+survives reload.
+
+### Two places to gate
+
+- **In the clustering Results dialog -- the "Embedding" tab.** After any run with
+  an embedding, the scatter has a **Gate** toggle. This gates on the run's own
+  UMAP/t-SNE/PCA, colored by cluster. Works on reopened past results too.
+- **The standalone tool: Extensions > QP-CAT > Plot & gate cells (2D)...** Pick a
+  **scope** (Current / All / Specific images) and an axis source:
+  - **2D embedding** -- plots existing `UMAP1/UMAP2` (or `tSNE1/2`, `PCA1/2`)
+    coordinates. Run **Map cells in 2D** ([chapter 5](#5-computing-embeddings-only))
+    or clustering first to create them.
+  - **Two markers (biaxial)** -- plots any two measurements against each other
+    (classic biaxial gating). No precomputation needed.
+  Points are colored by their current classification so you can see existing
+  populations while gating.
+
+### How to gate
+
+1. Click **Gate**. The cursor now draws instead of panning (pan stays on
+   middle-drag, zoom on scroll).
+2. **Click** to drop polygon vertices around the points you want.
+3. **Double-click** (or **right-click**) to close the polygon; **Esc** cancels an
+   in-progress gate. The enclosed cells highlight and the count updates
+   ("N cells gated").
+4. Act on them:
+   - **Select in open image** -- selects the gated cells that belong to the image
+     currently open in the viewer (no write, like CytoMAP's selection).
+   - **Assign class...** -- type a name (default "Gate 1") and it is applied to
+     **all** gated cells across **every** image they came from, saving each. The
+     cells take that classification (coloring them in QuPath) and it persists.
+5. **Clear** removes the gate to start another.
+
+> Assigning a class **overwrites** the gated cells' current classification (a
+> detection has one class). Gate on a copy or note the original classes first if
+> you need them back; re-running clustering/phenotyping restores the cell-type
+> column.
+
+### Notes
+
+- Gating across a multi-image plot resolves each point back to its detection by
+  centroid, so "Assign class" correctly writes to the right cells in each image.
+- "Select in open image" only touches the open image; "Assign class" touches all
+  images in the plot. Choose by whether you want a transient look or a saved
+  population.
+- The standalone tool reads existing coordinates only -- it never runs Python.

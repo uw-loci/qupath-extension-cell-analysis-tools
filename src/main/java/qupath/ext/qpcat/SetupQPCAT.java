@@ -28,6 +28,7 @@ import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.BatchFigureExportDialog;
 import qupath.ext.qpcat.ui.FeatureExtractionDialog;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
+import qupath.ext.qpcat.ui.PlotAndGateDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
 import qupath.ext.qpcat.ui.SetupEnvironmentDialog;
 import qupath.ext.qpcat.ui.SpinnerUtils;
@@ -262,6 +263,17 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         });
         computeEmbeddingItem.visibleProperty().bind(environmentReady);
 
+        MenuItem plotAndGateItem = new MenuItem(res.getString("menu.plotAndGate"));
+        plotAndGateItem.setOnAction(e -> {
+            if (qupath.getImageData() == null && qupath.getProject() == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME,
+                        "Open an image or a project first.");
+                return;
+            }
+            new PlotAndGateDialog(qupath).show();
+        });
+        plotAndGateItem.visibleProperty().bind(environmentReady);
+
         // Quick Cluster submenu
         Menu quickClusterMenu = new Menu(res.getString("menu.quickCluster"));
         quickClusterMenu.visibleProperty().bind(environmentReady);
@@ -418,6 +430,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 runClusteringItem,
                 quickClusterMenu,
                 computeEmbeddingItem,
+                plotAndGateItem,
                 sep1,
                 // -- Label cells as types --
                 runPhenotypingItem,
