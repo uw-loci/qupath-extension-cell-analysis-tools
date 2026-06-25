@@ -43,6 +43,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   `tsne_early_exaggeration`, `embedding_seed`). t-SNE perplexity is clamped below
   the cell count automatically. PCA still exposes nothing (the embedding is 2-D).
 
+### Documentation
+
+- New **Recipes (worked examples)** chapter in the How-To guide. First recipe:
+  cluster *on* a UMAP / t-SNE embedding ("UMAP + HDBSCAN on UMAP1/UMAP2") via the
+  existing two-step path (compute embedding, then cluster with only UMAP1/UMAP2
+  selected, HDBSCAN, normalization None), with the seed/repro and over-splitting
+  caveats. Cross-linked from "Computing Embeddings Only".
+
 ### Changed
 
 - The cellular-neighborhood Python task (`cellular_neighborhoods.py`) now accepts

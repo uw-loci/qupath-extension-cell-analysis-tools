@@ -34,6 +34,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 21. [Spatial graph overlay](#21-spatial-graph-overlay)
 22. [Finding Cellular Neighborhoods (Spatial Niches)](#22-finding-cellular-neighborhoods-spatial-niches)
 23. [Reproducing a clustering run](#23-reproducing-a-clustering-run)
+24. [Recipes (worked examples)](#24-recipes-worked-examples)
 
 ---
 
@@ -162,6 +163,11 @@ Add UMAP/PCA/t-SNE coordinates to detections without changing existing classific
 6. Measurements UMAP1/UMAP2 (or PCA1/PCA2, tSNE1/tSNE2) are added to each detection
 
 Existing cluster or phenotype classifications are preserved.
+
+> **Tip -- cluster *on* the embedding (UMAP + HDBSCAN on UMAP1/UMAP2).** By
+> default clustering runs in full marker space, not on these 2-D coordinates. To
+> cluster on the embedding instead, see
+> [section 24 -- Recipes](#24-recipes-worked-examples).
 
 ---
 
@@ -1502,3 +1508,49 @@ matching the GUI's project scope. The image set comes from `scope.images`
 (`all`, or an explicit list/regex for a subset). See
 [YAML_SCHEMA.md](YAML_SCHEMA.md) (`clustering.joint`) and
 [section 19](#19-yaml-headless-batch).
+
+---
+
+## 24. Recipes (worked examples)
+
+Short, copy-the-steps recipes that combine the chapters above to do something
+useful that isn't a single menu item.
+
+### Recipe: cluster *on* a UMAP / t-SNE embedding (UMAP + HDBSCAN on UMAP1/UMAP2)
+
+**What it is.** Reduce to 2-D first, then cluster on those two coordinates --
+the popular "UMAP + DBSCAN on UMAP1-UMAP2" approach. QP-CAT's clustering normally
+fits in **full marker space** (the embedding is computed only for the scatter and
+plots), so to cluster *on the embedding* you run it in two steps.
+
+**Steps.**
+
+1. **Compute the embedding.** Run **Extensions > QP-CAT > Map cells in 2D
+   (UMAP / PCA / t-SNE)...** ([section 5](#5-computing-embeddings-only)) with UMAP.
+   This writes `UMAP1` and `UMAP2` measurements onto every detection. (A normal
+   clustering run with UMAP embedding writes them too.)
+2. **Cluster on those two columns.** Open **Find cell populations
+   (clustering)...** ([section 2](#2-running-clustering)) and:
+   - In the measurement picker, select **only `UMAP1` and `UMAP2`** (use the
+     filter box to find them, Select none, then check just those two).
+   - **Algorithm: HDBSCAN.**
+   - **Normalization: None** (the coordinates are already on a comparable scale;
+     normalizing them again distorts the layout).
+   - Run. The cluster step now fits on the UMAP coordinates rather than the
+     markers.
+
+**Notes.**
+
+- **HDBSCAN is the DBSCAN to use here.** QP-CAT ships **HDBSCAN** (not plain
+  DBSCAN); it is the strict upgrade -- no global `eps` to guess, it handles
+  variable density, and it labels low-density points as a noise cluster (shown as
+  its own class, which you can ignore or reclassify). See the HDBSCAN parameters
+  in [section 17 / the algorithm reference](#umap).
+- **Scale of the work / reproducibility.** Because UMAP itself is stochastic, fix
+  the **random seed** (Dimensionality Reduction > Advanced) in step 1 so the same
+  embedding -- and therefore the same HDBSCAN result -- reproduces.
+- **Caveat.** Clustering on a 2-D UMAP "works" and is widely used, but UMAP
+  distorts densities and inter-cluster distances, so it can over- or under-split
+  compared with graph clustering (Leiden) on the full marker space. Treat the
+  number of clusters it finds as a starting point, not ground truth, and
+  cross-check against a full-space run when it matters.
