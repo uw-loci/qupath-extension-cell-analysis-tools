@@ -86,8 +86,11 @@ synthetic data before adoption); no change to results or reproducibility.
   (max abs diff ~1e-15); large speedups at high cell counts.
 - **Foundation-model / autoencoder tile reads parallelized** (`ClusteringWorkflow`).
   Per-cell `readRegion` calls now run on a small bounded pool (disjoint output
-  offsets, no locking; read-only). Falls back to sequential for small jobs. *Pending
-  rig validation that the in-use server type is concurrent-read safe.*
+  offsets, no locking). Falls back to sequential for small jobs. Concurrent reads
+  are safe for the common large-image readers (verified against QuPath 0.7 source):
+  BioFormats hands each call its own pooled reader under `synchronized(reader)`;
+  OpenSlide relies on the native library's single-handle thread-safety; and
+  `AbstractTileableImageServer` coalesces tiles through a concurrent cache.
 - **Internal de-duplication:** the `tipLabel` helper (copy-pasted in 6 dialogs) is now
   one shared `UiLabels.tipLabel`; the inline image-scope block in the clustering and
   phenotyping dialogs now uses the shared `ScopeSection` control (behavior preserved,

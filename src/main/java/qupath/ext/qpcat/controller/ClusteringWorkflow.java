@@ -2113,11 +2113,21 @@ public class ClusteringWorkflow {
     /**
      * Runs a per-cell tile-read task over {@code [0, nCells)}, in parallel when
      * the job is large enough to be worth it. Each task writes to disjoint output
-     * offsets (index-derived), so no locking is needed; {@code readRegion} is
-     * read-only. A small bounded pool avoids thrashing tiled/pyramidal readers,
-     * and progress is reported via an atomic counter (tasks finish out of order).
-     * Per-cell exceptions must be handled inside {@code body} (zero-fill), exactly
-     * as the sequential path did.
+     * offsets (index-derived), so no locking is needed.
+     * <p>
+     * Concurrent {@code readRegion} is safe for the common large-image readers
+     * (verified against QuPath 0.7 source): BioFormats hands each call its own
+     * reader from a pooled {@code ReaderPool} and reads inside
+     * {@code synchronized(reader)}; OpenSlide relies on the native library's
+     * documented thread-safety on a single handle; and
+     * {@code AbstractTileableImageServer} coalesces tile requests through a
+     * concurrent cache. (QuPath's own viewer/tile-prefetch read concurrently.)
+     * <p>
+     * The pool is capped small (a few threads) to bound the number of extra
+     * BioFormats readers created and to avoid thrashing tiled readers. Progress
+     * is reported via an atomic counter (tasks finish out of order). Per-cell
+     * exceptions are handled inside {@code body} (zero-fill), as the sequential
+     * path did.
      */
     private void forEachTile(int nCells, Consumer<String> progressCallback,
             java.util.function.IntConsumer body) {
