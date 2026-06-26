@@ -1956,7 +1956,7 @@ public class ClusteringWorkflow {
         int halfTile = tileSize / 2;
         byte[] tileData = new byte[nCells * tileSize * tileSize * 3];
 
-        for (int i = 0; i < nCells; i++) {
+        forEachTile(nCells, progressCallback, i -> {
             PathObject det = detections.get(i);
             double cx = det.getROI().getCentroidX();
             double cy = det.getROI().getCentroidY();
@@ -1994,11 +1994,7 @@ public class ClusteringWorkflow {
             } catch (Exception e) {
                 logger.warn("Failed to read tile for detection {}: {}", i, e.getMessage());
             }
-
-            if ((i + 1) % 500 == 0) {
-                report(progressCallback, "Read " + (i + 1) + "/" + nCells + " tiles...");
-            }
-        }
+        });
 
         return tileData;
     }
@@ -2054,7 +2050,8 @@ public class ClusteringWorkflow {
         }
         float[] tileData = new float[(int) tileArraySize];
 
-        for (int i = 0; i < nCells; i++) {
+        final int outSz = outSize;  // effectively-final copy for the parallel body
+        forEachTile(nCells, progressCallback, i -> {
             PathObject det = detections.get(i);
             double cx = det.getROI().getCentroidX();
             double cy = det.getROI().getCentroidY();
@@ -2075,16 +2072,16 @@ public class ClusteringWorkflow {
                 BufferedImage tile = server.readRegion(request);
                 var raster = tile.getRaster();
 
-                int tileW = Math.min(outSize, tile.getWidth());
-                int tileH = Math.min(outSize, tile.getHeight());
+                int tileW = Math.min(outSz, tile.getWidth());
+                int tileH = Math.min(outSz, tile.getHeight());
 
                 // Pack image channels as NCHW: [cell_idx][channel][y][x]
-                int cellOffset = i * totalChannels * outSize * outSize;
+                int cellOffset = i * totalChannels * outSz * outSz;
                 for (int c = 0; c < imageChannels; c++) {
-                    int channelOffset = cellOffset + c * outSize * outSize;
+                    int channelOffset = cellOffset + c * outSz * outSz;
                     for (int ty = 0; ty < tileH; ty++) {
                         for (int tx = 0; tx < tileW; tx++) {
-                            tileData[channelOffset + ty * outSize + tx] =
+                            tileData[channelOffset + ty * outSz + tx] =
                                     raster.getSampleFloat(tx, ty, c);
                         }
                     }
@@ -2093,14 +2090,14 @@ public class ClusteringWorkflow {
                 // Add binary cell mask channel (last channel)
                 if (includeMask) {
                     java.awt.Shape roiShape = det.getROI().getShape();
-                    int maskOffset = cellOffset + imageChannels * outSize * outSize;
-                    for (int ty = 0; ty < outSize; ty++) {
-                        for (int tx = 0; tx < outSize; tx++) {
+                    int maskOffset = cellOffset + imageChannels * outSz * outSz;
+                    for (int ty = 0; ty < outSz; ty++) {
+                        for (int tx = 0; tx < outSz; tx++) {
                             // Convert downsampled pixel coords to full-resolution image coords
                             double imgX = x + tx * downsample;
                             double imgY = y + ty * downsample;
                             if (roiShape.contains(imgX, imgY)) {
-                                tileData[maskOffset + ty * outSize + tx] = 1.0f;
+                                tileData[maskOffset + ty * outSz + tx] = 1.0f;
                             }
                         }
                     }
@@ -2108,13 +2105,53 @@ public class ClusteringWorkflow {
             } catch (Exception e) {
                 logger.warn("Failed to read tile for detection {}: {}", i, e.getMessage());
             }
-
-            if ((i + 1) % 500 == 0) {
-                report(progressCallback, "Read " + (i + 1) + "/" + nCells + " tiles...");
-            }
-        }
+        });
 
         return tileData;
+    }
+
+    /**
+     * Runs a per-cell tile-read task over {@code [0, nCells)}, in parallel when
+     * the job is large enough to be worth it. Each task writes to disjoint output
+     * offsets (index-derived), so no locking is needed; {@code readRegion} is
+     * read-only. A small bounded pool avoids thrashing tiled/pyramidal readers,
+     * and progress is reported via an atomic counter (tasks finish out of order).
+     * Per-cell exceptions must be handled inside {@code body} (zero-fill), exactly
+     * as the sequential path did.
+     */
+    private void forEachTile(int nCells, Consumer<String> progressCallback,
+            java.util.function.IntConsumer body) {
+        int nThreads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 1));
+        if (nThreads <= 1 || nCells < 256) {
+            for (int i = 0; i < nCells; i++) {
+                body.accept(i);
+                if ((i + 1) % 500 == 0) {
+                    report(progressCallback, "Read " + (i + 1) + "/" + nCells + " tiles...");
+                }
+            }
+            return;
+        }
+        java.util.concurrent.atomic.AtomicInteger done =
+                new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.ForkJoinPool pool = new java.util.concurrent.ForkJoinPool(nThreads);
+        try {
+            pool.submit(() -> java.util.stream.IntStream.range(0, nCells).parallel().forEach(i -> {
+                body.accept(i);
+                int c = done.incrementAndGet();
+                if (c % 500 == 0) {
+                    report(progressCallback, "Read " + c + "/" + nCells + " tiles...");
+                }
+            })).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Tile reading interrupted", e);
+        } catch (java.util.concurrent.ExecutionException e) {
+            Throwable cause = e.getCause();
+            throw new RuntimeException("Tile reading failed: "
+                    + (cause == null ? e.getMessage() : cause.getMessage()), cause);
+        } finally {
+            pool.shutdown();
+        }
     }
 
     // ==================== Feature Extraction (Foundation Models) ====================

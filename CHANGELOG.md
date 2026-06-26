@@ -65,6 +65,34 @@ Stoltzfus et al. 2020).
   on-demand model download. The backend code is retained but unwired and can be
   reinstated on request; see HOW_TO_GUIDE "Removed features".
 
+### Performance / internal
+
+All output-preserving (verified numerically equivalent against the prior code on
+synthetic data before adoption); no change to results or reproducibility.
+
+- **Cellular-neighborhood region adjacency vectorized** (`cellular_neighborhoods.py`).
+  The CN-CN border tally was a pure-Python double loop over every cell's neighbors;
+  it is now a memory-bounded chunked `np.bincount` (numerically identical, incl. the
+  diagonal and edge cases; ~10-20x faster on the tally). Chunked rather than a single
+  bincount so cohorts of millions of cells do not materialize a giant edge array.
+- **CN neighbor graph fit once per image and reused** between the windowing and
+  region-adjacency passes (one `NearestNeighbors` fit per image instead of two;
+  ~2-3x less NN work). Identical for sub-pixel float centroids; could differ only for
+  exactly-tied integer coordinates.
+- **Spatial-statistics per-cell loops vectorized** (`spatial_stats.py`): neighbor
+  counts via `np.diff(indptr)`, CSR distance aggregates (mean/median/max/min) via
+  segment-grouped `reduceat` + a lexsort median, and Delaunay per-vertex area
+  aggregation via `np.add.at` / `np.maximum.at`. Exact match to the old loops
+  (max abs diff ~1e-15); large speedups at high cell counts.
+- **Foundation-model / autoencoder tile reads parallelized** (`ClusteringWorkflow`).
+  Per-cell `readRegion` calls now run on a small bounded pool (disjoint output
+  offsets, no locking; read-only). Falls back to sequential for small jobs. *Pending
+  rig validation that the in-use server type is concurrent-read safe.*
+- **Internal de-duplication:** the `tipLabel` helper (copy-pasted in 6 dialogs) is now
+  one shared `UiLabels.tipLabel`; the inline image-scope block in the clustering and
+  phenotyping dialogs now uses the shared `ScopeSection` control (behavior preserved,
+  incl. the phenotyping scope tooltips and the batch-correction "all images" gating).
+
 ### Notes
 
 - The gate writes a classification, so gating across a multi-image plot persists

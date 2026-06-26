@@ -6,6 +6,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ToggleGroup;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import qupath.fx.dialogs.Dialogs;
@@ -109,6 +110,27 @@ public final class ScopeSection extends VBox {
     /** True when the "Current image" scope is selected. */
     public boolean isCurrentImage() {
         return scopeCurrentImage.isSelected();
+    }
+
+    /** True when the "All project images" scope is selected. */
+    public boolean isAllImages() {
+        return scopeAllImages.isSelected();
+    }
+
+    /** True when the "Specific images..." scope is selected. */
+    public boolean isSpecificImages() {
+        return scopeSpecificImages.isSelected();
+    }
+
+    /**
+     * Sets an explanatory tooltip on the multi-image scope options ("All project
+     * images" and "Specific images..."), e.g. to describe how cross-image runs
+     * pool and write back.
+     */
+    public void setScopeTooltip(String text) {
+        Tooltip tip = new Tooltip(text);
+        scopeAllImages.setTooltip(tip);
+        scopeSpecificImages.setTooltip(tip);
     }
 
     /** True when "Specific images..." is selected but nothing has been chosen. */

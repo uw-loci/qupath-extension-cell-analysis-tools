@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.ui;
 
+import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
+
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import javafx.application.Platform;
@@ -60,12 +62,8 @@ public class PhenotypingDialog {
     private ProgressBar progressBar;
     private Button runButton;
     private Button computeBtn;
-    private RadioButton scopeCurrentImage;
-    private RadioButton scopeAllImages;
-    private RadioButton scopeSpecificImages;
-    private Button chooseImagesButton;
-    private Label specificImagesLabel;
-    private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
+    // Reusable 3-way image-scope control (current / all / specific subset).
+    private ScopeSection scopeSection;
     private List<String> currentMarkers = new ArrayList<>();
 
     // Per-marker gate spinners (marker full name -> spinner)
@@ -700,70 +698,13 @@ public class PhenotypingDialog {
      * for the project scope all cells are normalized together so a "pos"
      * threshold means the same thing across images.
      */
-    private VBox createScopeSection() {
-        ToggleGroup scopeGroup = new ToggleGroup();
-        scopeCurrentImage = new RadioButton("Current image");
-        scopeCurrentImage.setToggleGroup(scopeGroup);
-        scopeCurrentImage.setSelected(true);
-
-        scopeAllImages = new RadioButton("All project images");
-        scopeAllImages.setToggleGroup(scopeGroup);
-
-        scopeSpecificImages = new RadioButton("Specific images...");
-        scopeSpecificImages.setToggleGroup(scopeGroup);
-
-        chooseImagesButton = new Button("Choose images...");
-        chooseImagesButton.setOnAction(e -> openImageChooser());
-        chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
-        specificImagesLabel = new Label("(none chosen)");
-        specificImagesLabel.setStyle("-fx-text-fill: #666;");
-
-        Project<BufferedImage> project = qupath.getProject();
-        boolean multiImage = project != null && project.getImageList().size() > 1;
-        if (!multiImage) {
-            String hint = " (requires project with multiple images)";
-            scopeAllImages.setDisable(true);
-            scopeSpecificImages.setDisable(true);
-            scopeAllImages.setText("All project images" + hint);
-            scopeSpecificImages.setText("Specific images..." + hint);
-        } else {
-            scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
-        }
-        String scopeTip =
+    private ScopeSection createScopeSection() {
+        scopeSection = new ScopeSection(qupath, "QPCAT - Select images to phenotype");
+        scopeSection.setScopeTooltip(
                 "Apply these rules across multiple images. Cells from all chosen images are\n"
                 + "normalized together (global gating) and results are saved back to each image.\n"
-                + "Markers and gates come from the current image -- panels must be consistent.";
-        scopeAllImages.setTooltip(new Tooltip(scopeTip));
-        scopeSpecificImages.setTooltip(new Tooltip(scopeTip));
-
-        scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
-            if (now && selectedSubset.isEmpty()) openImageChooser();
-        });
-
-        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
-                scopeSpecificImages);
-        radios.setAlignment(Pos.CENTER_LEFT);
-        HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
-        chooseRow.setAlignment(Pos.CENTER_LEFT);
-        chooseRow.setPadding(new Insets(0, 0, 0, 55));
-        return new VBox(6, radios, chooseRow);
-    }
-
-    private void openImageChooser() {
-        Project<BufferedImage> project = qupath.getProject();
-        if (project == null) {
-            Dialogs.showWarningNotification("QPCAT", "No project is open.");
-            return;
-        }
-        ProjectImageSelector.showDialog(owner, project, "QPCAT - Select images to phenotype",
-                selectedSubset.isEmpty() ? null : selectedSubset)
-            .ifPresent(chosen -> {
-                selectedSubset.clear();
-                selectedSubset.addAll(chosen);
-                int n = selectedSubset.size();
-                specificImagesLabel.setText(n == 0 ? "(none chosen)"
-                        : n + " image" + (n == 1 ? "" : "s") + " chosen");
-            });
+                + "Markers and gates come from the current image -- panels must be consistent.");
+        return scopeSection;
     }
 
     private void runPhenotyping() {
@@ -831,8 +772,7 @@ public class PhenotypingDialog {
         }
 
         // Scope: current image, all project images, or a chosen subset.
-        final boolean projectScope = (scopeAllImages != null && scopeAllImages.isSelected())
-                || (scopeSpecificImages != null && scopeSpecificImages.isSelected());
+        final boolean projectScope = scopeSection != null && !scopeSection.isCurrentImage();
         final List<ProjectImageEntry<BufferedImage>> scopeEntries;
 
         if (projectScope) {
@@ -841,13 +781,13 @@ public class PhenotypingDialog {
                 Dialogs.showWarningNotification("QPCAT", "No project images to phenotype.");
                 return;
             }
-            if (scopeSpecificImages.isSelected()) {
-                if (selectedSubset.isEmpty()) {
+            if (scopeSection.isSpecificImages()) {
+                if (scopeSection.isSpecificButEmpty()) {
                     Dialogs.showWarningNotification("QPCAT",
                             "No images chosen. Click \"Choose images...\" to pick a subset.");
                     return;
                 }
-                scopeEntries = new ArrayList<>(selectedSubset);
+                scopeEntries = scopeSection.resolveEntries();
             } else {
                 scopeEntries = new ArrayList<>(project.getImageList());
             }
@@ -1215,10 +1155,10 @@ public class PhenotypingDialog {
      * cells the run will gate on.
      */
     private List<ProjectImageEntry<BufferedImage>> currentScopeEntries() {
-        if (scopeSpecificImages != null && scopeSpecificImages.isSelected()) {
-            return selectedSubset.isEmpty() ? null : new ArrayList<>(selectedSubset);
+        if (scopeSection != null && scopeSection.isSpecificImages()) {
+            return scopeSection.isSpecificButEmpty() ? null : scopeSection.resolveEntries();
         }
-        if (scopeAllImages != null && scopeAllImages.isSelected()) {
+        if (scopeSection != null && scopeSection.isAllImages()) {
             Project<BufferedImage> p = qupath.getProject();
             return (p == null || p.getImageList().isEmpty())
                     ? null : new ArrayList<>(p.getImageList());
@@ -1237,8 +1177,8 @@ public class PhenotypingDialog {
         // current image only. If "Specific images" is chosen but none picked,
         // fall back to the current image with a heads-up.
         List<ProjectImageEntry<BufferedImage>> scopeEntries = currentScopeEntries();
-        if (scopeEntries == null && scopeSpecificImages != null
-                && scopeSpecificImages.isSelected() && selectedSubset.isEmpty()) {
+        if (scopeEntries == null && scopeSection != null
+                && scopeSection.isSpecificButEmpty()) {
             Dialogs.showWarningNotification("QPCAT",
                     "No images chosen for the 'Specific images' scope -- computing thresholds "
                     + "on the current image only. Click \"Choose images...\" to pool across a subset.");
@@ -1513,14 +1453,5 @@ public class PhenotypingDialog {
             sb.append(parts[i].trim());
         }
         return sb.toString();
-    }
-
-    /** Creates a Label that shares the tooltip of its associated control. */
-    private static Label tipLabel(String text, javafx.scene.control.Control control) {
-        Label label = new Label(text);
-        if (control.getTooltip() != null) {
-            label.setTooltip(control.getTooltip());
-        }
-        return label;
     }
 }

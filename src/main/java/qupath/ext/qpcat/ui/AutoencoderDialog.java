@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.ui;
 
+import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
+
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
@@ -1936,14 +1938,6 @@ public class AutoencoderDialog {
     }
 
     // Simple JSON helpers (avoid adding a JSON library dependency)
-    /** Creates a Label that shares the tooltip of its associated control. */
-    private static Label tipLabel(String text, javafx.scene.control.Control control) {
-        Label label = new Label(text);
-        if (control.getTooltip() != null) {
-            label.setTooltip(control.getTooltip());
-        }
-        return label;
-    }
 
     private static String parseJsonString(String json, String key, String defaultVal) {
         String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";

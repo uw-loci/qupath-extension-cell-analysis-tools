@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.ui;
 
+import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
+
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -59,14 +61,8 @@ public class ClusteringDialog {
     private final Stage owner;
 
     // UI components
-    private RadioButton scopeCurrentImage;
-    private RadioButton scopeAllImages;
-    private RadioButton scopeSpecificImages;
-    private Button chooseImagesButton;
-    private Label specificImagesLabel;
-    // Subset chosen via the "Choose images..." picker (used only when
-    // scopeSpecificImages is selected). Empty until the user picks.
-    private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
+    // Reusable 3-way image-scope control (current / all / specific subset).
+    private ScopeSection scopeSection;
     private ListView<MeasurementItem> measurementList;
     private final ObservableList<MeasurementItem> measurementItems = FXCollections.observableArrayList();
     private FilteredList<MeasurementItem> filteredMeasurements;
@@ -191,74 +187,9 @@ public class ClusteringDialog {
         dialog.show();
     }
 
-    private VBox createScopeSection() {
-        ToggleGroup scopeGroup = new ToggleGroup();
-        scopeCurrentImage = new RadioButton("Current image");
-        scopeCurrentImage.setToggleGroup(scopeGroup);
-        scopeCurrentImage.setSelected(true);
-
-        scopeAllImages = new RadioButton("All project images");
-        scopeAllImages.setToggleGroup(scopeGroup);
-
-        scopeSpecificImages = new RadioButton("Specific images...");
-        scopeSpecificImages.setToggleGroup(scopeGroup);
-
-        chooseImagesButton = new Button("Choose images...");
-        chooseImagesButton.setOnAction(e -> openImageChooser());
-        specificImagesLabel = new Label("(none chosen)");
-        specificImagesLabel.setStyle("-fx-text-fill: #666;");
-
-        // The two multi-image options require a project with more than one image.
-        Project<BufferedImage> project = qupath.getProject();
-        boolean multiImage = project != null && project.getImageList().size() > 1;
-        if (!multiImage) {
-            scopeAllImages.setDisable(true);
-            scopeSpecificImages.setDisable(true);
-            String hint = " (requires project with multiple images)";
-            scopeAllImages.setText("All project images" + hint);
-            scopeSpecificImages.setText("Specific images..." + hint);
-        } else {
-            scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
-        }
-
-        // "Choose images..." + count label are only active under the
-        // specific-images scope.
-        chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
-        scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
-            if (now && selectedSubset.isEmpty()) {
-                openImageChooser();  // prompt immediately when first chosen
-            }
-        });
-
-        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
-                scopeSpecificImages);
-        radios.setAlignment(Pos.CENTER_LEFT);
-        HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
-        chooseRow.setAlignment(Pos.CENTER_LEFT);
-        chooseRow.setPadding(new javafx.geometry.Insets(0, 0, 0, 55));
-        return new VBox(6, radios, chooseRow);
-    }
-
-    /** Open the reusable subset picker and store the chosen entries. */
-    private void openImageChooser() {
-        Project<BufferedImage> project = qupath.getProject();
-        if (project == null) {
-            Dialogs.showWarningNotification("QPCAT", "No project is open.");
-            return;
-        }
-        ProjectImageSelector.showDialog(owner, project, "QPCAT - Select images to cluster",
-                selectedSubset.isEmpty() ? null : selectedSubset)
-            .ifPresent(chosen -> {
-                selectedSubset.clear();
-                selectedSubset.addAll(chosen);
-                updateSpecificImagesLabel();
-            });
-    }
-
-    private void updateSpecificImagesLabel() {
-        int n = selectedSubset.size();
-        specificImagesLabel.setText(n == 0 ? "(none chosen)"
-                : n + " image" + (n == 1 ? "" : "s") + " chosen");
+    private ScopeSection createScopeSection() {
+        scopeSection = new ScopeSection(qupath, "QPCAT - Select images to cluster");
+        return scopeSection;
     }
 
     /**
@@ -764,9 +695,10 @@ public class ClusteringDialog {
         // If harmonypy is missing we keep the checkbox visibly disabled
         // even when scope changes, so the user can see the feature exists
         // but understands it is currently unusable.
-        scopeAllImages.selectedProperty().addListener((obs, oldVal, newVal) -> {
-            batchCorrectionCheck.setDisable(!newVal || !harmonypyAvailable);
-            if (!newVal) batchCorrectionCheck.setSelected(false);
+        scopeSection.addScopeChangeListener(() -> {
+            boolean all = scopeSection.isAllImages();
+            batchCorrectionCheck.setDisable(!all || !harmonypyAvailable);
+            if (!all) batchCorrectionCheck.setSelected(false);
         });
 
         // ---- Spatial statistics expansion (v1) ----
@@ -1469,8 +1401,7 @@ public class ClusteringDialog {
         // Scope -- both the "all" and "specific images" options use the
         // multi-image (project) clustering path; runClustering() picks which
         // entries to pass.
-        config.setClusterEntireProject(
-                scopeAllImages.isSelected() || scopeSpecificImages.isSelected());
+        config.setClusterEntireProject(!scopeSection.isCurrentImage());
 
         // Analysis options
         config.setGeneratePlots(generatePlotsCheck.isSelected());
@@ -1871,13 +1802,13 @@ public class ClusteringDialog {
         // Resolve the image set for the "Specific images..." scope up front so
         // we can validate before kicking off the background run.
         final List<ProjectImageEntry<BufferedImage>> subsetEntries;
-        if (scopeSpecificImages.isSelected()) {
-            if (selectedSubset.isEmpty()) {
+        if (scopeSection.isSpecificImages()) {
+            if (scopeSection.isSpecificButEmpty()) {
                 Dialogs.showWarningNotification("QPCAT",
                         "No images chosen. Click \"Choose images...\" to pick a subset.");
                 return;
             }
-            subsetEntries = new ArrayList<>(selectedSubset);
+            subsetEntries = scopeSection.resolveEntries();
         } else {
             subsetEntries = null;
         }
@@ -3223,14 +3154,5 @@ public class ClusteringDialog {
         double d = ((Number) value).doubleValue();
         if (Double.isNaN(d) || Double.isInfinite(d)) return "n/a";
         return String.format(fmt, d);
-    }
-
-    /** Creates a Label that shares the tooltip of its associated control. */
-    private static Label tipLabel(String text, javafx.scene.control.Control control) {
-        Label label = new Label(text);
-        if (control.getTooltip() != null) {
-            label.setTooltip(control.getTooltip());
-        }
-        return label;
     }
 }

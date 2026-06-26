@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.ui;
 
+import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
+
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -368,14 +370,5 @@ public class ZeroShotPhenotypingDialog {
         }, "QPCAT-ZeroShotPhenotyping");
         thread.setDaemon(true);
         thread.start();
-    }
-
-    /** Creates a Label that shares the tooltip of its associated control. */
-    private static Label tipLabel(String text, javafx.scene.control.Control control) {
-        Label label = new Label(text);
-        if (control.getTooltip() != null) {
-            label.setTooltip(control.getTooltip());
-        }
-        return label;
     }
 }

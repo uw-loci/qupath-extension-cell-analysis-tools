@@ -678,7 +678,6 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
 
     # Per-cell aggregates from the distances CSR.
     dist_csr = spatial_distances.tocsr() if spatial_distances is not None else None
-    num_neighbors = np.zeros(n_cells, dtype=np.int32)
     mean_distance = np.full(n_cells, np.nan, dtype=np.float64)
     median_distance = np.full(n_cells, np.nan, dtype=np.float64)
     max_distance = np.full(n_cells, np.nan, dtype=np.float64)
@@ -688,27 +687,41 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
     # the legacy plugin which counts every connection regardless of
     # whether it carries a distance.
     conn_indptr = conn_csr.indptr
-    for i in range(n_cells):
-        num_neighbors[i] = int(conn_indptr[i + 1] - conn_indptr[i])
+    num_neighbors = np.diff(conn_indptr).astype(np.int32)
 
     if dist_csr is not None:
         d_indptr = dist_csr.indptr
         d_data = dist_csr.data
-        for i in range(n_cells):
-            row_start = d_indptr[i]
-            row_end = d_indptr[i + 1]
-            if row_end <= row_start:
-                continue
-            row_vals = d_data[row_start:row_end]
-            # Squidpy populates explicit-zero entries on the diagonal;
-            # filter them so the aggregates are over real edges.
-            row_vals = row_vals[row_vals > 0]
-            if row_vals.size == 0:
-                continue
-            mean_distance[i] = float(np.mean(row_vals)) * scale
-            median_distance[i] = float(np.median(row_vals)) * scale
-            max_distance[i] = float(np.max(row_vals)) * scale
-            min_distance[i] = float(np.min(row_vals)) * scale
+        # Squidpy populates explicit-zero entries on the diagonal; filter them so
+        # the aggregates are over real edges only. Vectorized over the CSR data:
+        # reduceat groups by each NON-EMPTY row's start offset (empty/all-zero
+        # rows are excluded from the boundary list so they never steal a value
+        # from the preceding row -- the trap a naive indptr-clamp falls into).
+        pos_mask = d_data > 0
+        data_pos = d_data[pos_mask]
+        if data_pos.size > 0:
+            orig_counts = np.diff(d_indptr)
+            row_id = np.repeat(np.arange(n_cells), orig_counts)
+            row_id_pos = row_id[pos_mask]
+            surv = np.bincount(row_id_pos, minlength=n_cells)   # survivors / row
+            new_indptr = np.zeros(n_cells + 1, dtype=np.int64)
+            np.cumsum(surv, out=new_indptr[1:])
+            nonempty = np.flatnonzero(surv > 0)
+            seg_starts = new_indptr[nonempty]
+            cnts = surv[nonempty]
+            mean_distance[nonempty] = (
+                np.add.reduceat(data_pos, seg_starts) / cnts) * scale
+            max_distance[nonempty] = np.maximum.reduceat(data_pos, seg_starts) * scale
+            min_distance[nonempty] = np.minimum.reduceat(data_pos, seg_starts) * scale
+            # Median has no ragged reducer: sort values within each row via a
+            # stable lexsort (row primary, value secondary), then pick the
+            # midpoint(s) by segment offset.
+            order = np.lexsort((data_pos, row_id_pos))
+            data_sorted = data_pos[order]
+            lo = seg_starts + (cnts - 1) // 2
+            hi = seg_starts + cnts // 2
+            median_distance[nonempty] = (
+                0.5 * (data_sorted[lo] + data_sorted[hi])) * scale
 
     # Delaunay-only triangle areas via a fresh scipy Delaunay (squidpy
     # only ships edges, not faces, so we rebuild the triangulation from
@@ -728,21 +741,21 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             areas = 0.5 * np.abs(
                 (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1])
                 - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1]))
-            # Aggregate areas per vertex (mean and max).
+            # Aggregate areas per vertex (mean and max) via scatter-add: every
+            # vertex appears in multiple triangles. max is seeded with -inf then
+            # restored to NaN for never-touched vertices, matching the prior loop.
+            flat_vids = simplices.ravel()
+            flat_areas = np.repeat(areas, 3)
             sum_areas = np.zeros(n_cells, dtype=np.float64)
             count_areas = np.zeros(n_cells, dtype=np.int32)
-            max_areas = np.full(n_cells, np.nan, dtype=np.float64)
-            for t in range(simplices.shape[0]):
-                area = float(areas[t])
-                for vid in simplices[t]:
-                    sum_areas[vid] += area
-                    count_areas[vid] += 1
-                    cur_max = max_areas[vid]
-                    if np.isnan(cur_max) or area > cur_max:
-                        max_areas[vid] = area
+            np.add.at(sum_areas, flat_vids, flat_areas)
+            np.add.at(count_areas, flat_vids, 1)
+            max_areas = np.full(n_cells, -np.inf, dtype=np.float64)
+            np.maximum.at(max_areas, flat_vids, flat_areas)
             mean_areas = np.full(n_cells, np.nan, dtype=np.float64)
             nonzero = count_areas > 0
             mean_areas[nonzero] = sum_areas[nonzero] / count_areas[nonzero]
+            max_areas[~nonzero] = np.nan
             # Triangle areas scale by pixel_size_um ** 2; NaN entries
             # propagate through the multiply unchanged.
             area_scale = scale * scale
