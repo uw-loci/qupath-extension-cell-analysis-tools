@@ -445,94 +445,20 @@ Open-source platform for bioimage analysis, with emphasis on digital pathology a
 
 ---
 
-## Foundation Model Feature Extraction
+## Foundation Model Feature Extraction (removed in v0.7.0)
 
-### LazySlide
-
-Accessible and interoperable framework for whole-slide image analysis with foundation models. Used by QP-CAT for feature extraction.
-
-**Original paper:**
-> Zheng Y, et al. "LazySlide: accessible and interoperable whole-slide image analysis." *Nature Methods* (2026).
-> https://doi.org/10.1038/s41592-026-03044-7
-
-**Used in:** Foundation model feature extraction pipeline
-
----
-
-### H-optimus-0
-
-Vision transformer foundation model for pathology, pre-trained on large-scale histopathology data.
-
-**Model card:**
-> Bioptimus. "H-optimus-0." HuggingFace.
-> https://huggingface.co/bioptimus/H-optimus-0
-
-**License:** Apache 2.0 (gated -- requires HuggingFace token)
-
-**Used in:** Foundation model feature extraction (1536-dim embeddings)
-
----
-
-### Virchow
-
-Pathology foundation model pre-trained on diverse histopathology data.
-
-**Model card:**
-> Paige AI. "Virchow." HuggingFace.
-> https://huggingface.co/paige-ai/Virchow
-
-**License:** Apache 2.0 (gated -- requires HuggingFace token)
-
-**Used in:** Foundation model feature extraction (2560-dim embeddings)
-
----
-
-### Hibou
-
-Pathology foundation models available in base (B) and large (L) variants.
-
-**Model cards:**
-> HistAI. "Hibou-B." HuggingFace.
-> https://huggingface.co/histai/hibou-B
-
-> HistAI. "Hibou-L." HuggingFace.
-> https://huggingface.co/histai/hibou-L
-
-**License:** Apache 2.0 (gated -- requires HuggingFace token)
-
-**Used in:** Foundation model feature extraction (768-dim / 1024-dim embeddings)
-
----
-
-### Midnight
-
-Pathology foundation model from kaiko.ai.
-
-**Model card:**
-> kaiko.ai. "Midnight." HuggingFace.
-> https://huggingface.co/kaiko-ai/midnight
-
-**License:** Apache 2.0
-
-**Used in:** Foundation model feature extraction (768-dim embeddings)
-
----
-
-### DINOv2
-
-Self-supervised vision transformer producing robust general-purpose visual features.
-
-**Original paper:**
-> Oquab M, Darcet T, Moutakanni T, et al. "DINOv2: Learning Robust Visual Features without Supervision." *Transactions on Machine Learning Research* (2024).
-> https://doi.org/10.48550/arXiv.2304.07193
-
-**Model card (Large variant):**
-> Meta AI. "DINOv2-Large." HuggingFace.
-> https://huggingface.co/facebook/dinov2-large
-
-**License:** Apache 2.0
-
-**Used in:** Foundation model feature extraction (1024-dim embeddings)
+The foundation-model feature-extraction command was removed from the menu in
+v0.7.0 (see HOW_TO_GUIDE "Removed features"); the backend is retained but unwired.
+For attribution, the models/frameworks it used were: LazySlide
+([Zheng et al., *Nature Methods* 2026](https://doi.org/10.1038/s41592-026-03044-7));
+H-optimus-0 ([Bioptimus](https://huggingface.co/bioptimus/H-optimus-0)); Virchow
+([Paige AI](https://huggingface.co/paige-ai/Virchow)); Hibou-B/L
+([HistAI](https://huggingface.co/histai/hibou-B)); Midnight
+([kaiko.ai](https://huggingface.co/kaiko-ai/midnight)); and DINOv2
+([Oquab et al., TMLR 2024](https://doi.org/10.48550/arXiv.2304.07193);
+[Meta AI](https://huggingface.co/facebook/dinov2-large)). All Apache-2.0;
+downloaded on demand, not bundled. These references stand if the feature is
+reinstated.
 
 ---
 

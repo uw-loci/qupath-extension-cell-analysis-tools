@@ -42,6 +42,29 @@ Stoltzfus et al. 2020).
   CN x CN matrix of how often neighborhoods border each other
   (`cn_region_adjacency.csv` + heatmap, shown in the cohort results dialog).
 
+- **Multiple gates / manual annotation.** After assigning a class, the gate stays
+  on the plot as a labelled outline (stored in data coords, so it tracks zoom/pan)
+  and resets for the next selection -- so you can hand-annotate many populations in
+  turn without losing track of earlier gates. "Clear" drops the active gate;
+  "Clear all" removes the outlines.
+- **Click-to-center.** Clicking a point on any embedding scatter now centers the
+  viewer on that cell (opening its image if needed) and selects it, not just
+  selects-if-already-open.
+- **Custom embedding names + overwrite warning.** Embeddings are written as
+  `NAME1`/`NAME2` (default the method name). Compute/clustering dialogs now expose
+  a **Name** field, so two runs (e.g. different settings) can coexist as
+  `UMAP_k15_*` and `UMAP_k50_*` instead of silently overwriting; reusing a name
+  prompts a confirm. "Plot & gate" lists **any** `*1/*2` coordinate pair present
+  (including renamed ones) instead of a fixed UMAP/t-SNE/PCA list, and reports how
+  many cells were skipped for missing coordinates.
+
+### Removed
+
+- **"Add AI appearance features to cells..." (foundation-model feature
+  extraction)** removed from the menu -- it saw little use and pulled in a heavy
+  on-demand model download. The backend code is retained but unwired and can be
+  reinstated on request; see HOW_TO_GUIDE "Removed features".
+
 ### Notes
 
 - The gate writes a classification, so gating across a multi-image plot persists

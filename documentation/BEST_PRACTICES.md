@@ -13,7 +13,7 @@ Recommendations for getting the best results from cell clustering and phenotypin
    - [A cluster label is a hypothesis](#cluster-labels-are-hypotheses)
 5. [Spatial Feature Smoothing](#spatial-feature-smoothing)
 6. [Cluster Evaluation](#cluster-evaluation)
-7. [Foundation Model Features vs Channel Measurements](#foundation-model-features-vs-channel-measurements)
+7. [Foundation Model Features vs Channel Measurements (removed in v0.7.0)](#foundation-model-features-vs-channel-measurements)
 8. [Phenotyping Strategy](#phenotyping-strategy)
 9. [Zero-Shot vs Rule-Based Phenotyping](#zero-shot-vs-rule-based-phenotyping)
 10. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
@@ -324,39 +324,10 @@ Clustering is rarely perfect on the first try. A typical workflow:
 
 ## Foundation Model Features vs Channel Measurements
 
-### When to Use Foundation Model Features
-
-Foundation model embeddings capture morphological and textural information from the image tile surrounding each cell. They are useful when:
-
-- Your image has **few marker channels** (e.g., H&E, single-stain IHC) and you want to cluster by cell morphology rather than marker intensity
-- You want to discover **morphological subtypes** that are not evident from marker expression alone
-- You want to combine morphological features with marker expression for **richer clustering input**
-- You are working with **histopathology images** where tissue architecture matters more than individual marker values
-
-### When to Use Channel Measurements
-
-Traditional mean intensity measurements remain the best choice when:
-
-- You have a **well-characterized multiplexed panel** with known biological markers
-- Your analysis goal is specifically about **marker co-expression patterns** (e.g., which cells are CD3+CD8+ vs CD3+CD4+)
-- You need results that are **directly interpretable** in terms of protein expression
-- You want to define phenotypes using **gating rules** (rule-based phenotyping requires intensity measurements)
-
-### Combining Both
-
-Foundation model features (`FM_*` measurements) and channel measurements can be selected together in the clustering dialog. This can be powerful but keep in mind:
-
-- Foundation model features are high-dimensional (768-2560 dimensions depending on the model) and will dominate over a smaller number of channel measurements
-- Consider clustering on foundation model features **separately** first to understand what morphological groups exist, then correlate with marker expression
-- PCA or UMAP on foundation model features alone can reveal tissue architecture patterns
-
-### Model Selection Guidance
-
-- **H-optimus-0**: Large pathology-specialized model (1536-dim). Good general-purpose choice for histopathology.
-- **Virchow**: Pathology-specialized (2560-dim). Highest dimensionality; may capture more nuance but is more computationally intensive.
-- **Hibou-B / Hibou-L**: Pathology-specialized, smaller (768/1024-dim). Good balance of quality and speed.
-- **Midnight**: Pathology-specialized (768-dim). Open access, no token required.
-- **DINOv2-Large**: General-purpose vision model (1024-dim). Not pathology-specific but very robust. Good baseline for comparison. No token required.
+> **Removed in v0.7.0.** Foundation-model feature extraction (`FM_*` morphological
+> embeddings) is no longer in the menu. See HOW_TO_GUIDE
+> "[Removed features](HOW_TO_GUIDE.md#8-removed-features)" for what it did and how
+> to request its return. The guidance that lived here is retired with the feature.
 
 ---
 
@@ -650,7 +621,7 @@ Before you ship a paper:
 - [ ] The YAML file is committed alongside the data + paper draft.
 - [ ] The audit log from the analysis run is committed.
 - [ ] The QP-CAT version is recorded.
-- [ ] Every model used (foundation model, BiomedCLIP version, LLM model + `prompt_template_version`) is recorded.
+- [ ] Every model used (BiomedCLIP version, LLM model + `prompt_template_version`) is recorded.
 - [ ] `random_seed` is explicitly set (not just defaulted).
 - [ ] The figure-export `output_dir` is named after the revision, not overwritten across revisions.
 

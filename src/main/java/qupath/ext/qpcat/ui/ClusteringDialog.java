@@ -22,6 +22,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
+import qupath.ext.qpcat.service.ResultApplier;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.MeasurementExtractor;
@@ -75,6 +76,7 @@ public class ClusteringDialog {
     private Spinner<Integer> umapNeighborsSpinner;
     private Spinner<Double> umapMinDistSpinner;
     private ComboBox<String> umapMetricCombo;
+    private TextField embeddingNameField;
     private Spinner<Double> tsnePerplexitySpinner;
     private Spinner<Double> tsneLearningRateSpinner;
     private Spinner<Integer> tsneIterationsSpinner;
@@ -446,7 +448,19 @@ public class ClusteringDialog {
                 "Random seed for the embedding (UMAP / t-SNE / PCA). Keep it fixed for\n"
                 + "reproducible layouts; change it to check a layout is stable. Default 42."));
 
-        HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo);
+        // Measurement name (prefix NAME1/NAME2). Defaults to the method; change
+        // it to keep two embeddings side by side instead of overwriting.
+        embeddingNameField = new TextField(
+                ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+        embeddingNameField.setPrefWidth(130);
+        embeddingNameField.setTooltip(new Tooltip(
+                "Prefix for the coordinate measurements (NAME1 / NAME2). Reusing a name\n"
+                + "OVERWRITES those columns; give a unique name to keep two embeddings."));
+        boolean[] embNameEdited = {false};
+        embeddingNameField.textProperty().addListener((o, a, b) -> embNameEdited[0] = true);
+
+        HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo,
+                tipLabel("Name:", embeddingNameField), embeddingNameField);
         embRow.setAlignment(Pos.CENTER_LEFT);
 
         // Basic per-method rows (one shown at a time).
@@ -493,7 +507,16 @@ public class ClusteringDialog {
             advancedPane.setVisible(anyAdvanced);
             advancedPane.setManaged(anyAdvanced);
         };
-        embeddingCombo.setOnAction(e -> updateVisibility.run());
+        embeddingCombo.setOnAction(e -> {
+            updateVisibility.run();
+            // Track the method name until the user customizes it.
+            if (!embNameEdited[0] && embeddingCombo.getValue() != null
+                    && embeddingCombo.getValue() != EmbeddingMethod.NONE) {
+                embeddingNameField.setText(
+                        ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+                embNameEdited[0] = false;
+            }
+        });
         updateVisibility.run();
 
         VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane);
@@ -1509,6 +1532,10 @@ public class ClusteringDialog {
         Map<String, Object> embeddingParams = new HashMap<>();
         if (embMethod != EmbeddingMethod.NONE) {
             embeddingParams.put("random_state", embeddingSeedSpinner.getValue());
+            String embName = embeddingNameField.getText();
+            if (embName != null && !embName.isBlank()) {
+                embeddingParams.put("name", embName.trim());
+            }
         }
         if (embMethod == EmbeddingMethod.UMAP) {
             embeddingParams.put("n_neighbors", umapNeighborsSpinner.getValue());
@@ -1726,6 +1753,9 @@ public class ClusteringDialog {
             if (embParams.get("metric") != null) {
                 umapMetricCombo.setValue(String.valueOf(embParams.get("metric")));
             }
+            if (embParams.get("name") != null) {
+                embeddingNameField.setText(String.valueOf(embParams.get("name")));
+            }
             if (embParams.containsKey("perplexity")) {
                 tsnePerplexitySpinner.getValueFactory().setValue(
                         ((Number) embParams.get("perplexity")).doubleValue());
@@ -1825,6 +1855,15 @@ public class ClusteringDialog {
         }
     }
 
+    /** True if {@code prefix}1 already exists on the current image's detections. */
+    private boolean embeddingColumnsExistOnCurrentImage(String prefix) {
+        var imageData = qupath.getImageData();
+        if (imageData == null) return false;
+        var dets = imageData.getHierarchy().getDetectionObjects();
+        if (dets.isEmpty()) return false;
+        return MeasurementExtractor.getAllMeasurements(dets).contains(prefix + "1");
+    }
+
     private void runClustering() {
         ClusteringConfig config = buildConfig();
         if (config == null) return;
@@ -1841,6 +1880,21 @@ public class ClusteringDialog {
             subsetEntries = new ArrayList<>(selectedSubset);
         } else {
             subsetEntries = null;
+        }
+
+        // Warn before overwriting existing embedding coordinate columns.
+        if (config.getEmbeddingMethod() != EmbeddingMethod.NONE) {
+            String embName = config.getEmbeddingParams() == null ? null
+                    : (String) config.getEmbeddingParams().get("name");
+            String prefix = ResultApplier.getEmbeddingPrefix(
+                    config.getEmbeddingMethod().getId(), embName);
+            if (embeddingColumnsExistOnCurrentImage(prefix)) {
+                boolean ok = Dialogs.showConfirmDialog("QPCAT - overwrite coordinates?",
+                        prefix + "1 / " + prefix + "2 already exist on these cells and will be "
+                        + "overwritten. Continue?\n\nTo keep both, cancel and set a different "
+                        + "embedding Name.");
+                if (!ok) return;
+            }
         }
 
         // Persist spatial graph parameters so the dialog round-trips with

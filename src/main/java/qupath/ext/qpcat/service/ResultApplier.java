@@ -151,4 +151,23 @@ public class ResultApplier {
             default -> embeddingMethod.toUpperCase();
         };
     }
+
+    /**
+     * Embedding measurement prefix honoring an optional user-supplied name. When
+     * {@code customName} is non-blank it is used (sanitized to measurement-safe
+     * characters) so two runs of the same method can coexist (e.g. "UMAP_k15" ->
+     * "UMAP_k151"/"UMAP_k152"); otherwise the method default is used.
+     */
+    public static String getEmbeddingPrefix(String embeddingMethod, String customName) {
+        if (customName != null && !customName.isBlank()) {
+            return sanitizePrefix(customName);
+        }
+        return getEmbeddingPrefix(embeddingMethod);
+    }
+
+    /** Keep only measurement-safe characters in a user-supplied embedding name. */
+    public static String sanitizePrefix(String name) {
+        String s = name.trim().replaceAll("[^A-Za-z0-9_-]", "_");
+        return s.isBlank() ? "EMB" : s;
+    }
 }

@@ -322,7 +322,7 @@ public class ClusteringWorkflow {
 
         if (result.hasEmbedding()) {
             String prefix = ResultApplier.getEmbeddingPrefix(
-                    config.getEmbeddingMethod().getId());
+                    config.getEmbeddingMethod().getId(), embeddingName(config));
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
         }
 
@@ -521,7 +521,7 @@ public class ClusteringWorkflow {
 
             if (result.hasEmbedding()) {
                 String prefix = ResultApplier.getEmbeddingPrefix(
-                        config.getEmbeddingMethod().getId());
+                        config.getEmbeddingMethod().getId(), embeddingName(config));
                 double[][] segmentEmbedding = new double[end - start][2];
                 for (int i = 0; i < end - start; i++) {
                     segmentEmbedding[i] = result.getEmbedding()[start + i];
@@ -1705,7 +1705,7 @@ public class ClusteringWorkflow {
 
         if (result.hasEmbedding()) {
             String prefix = ResultApplier.getEmbeddingPrefix(
-                    config.getEmbeddingMethod().getId());
+                    config.getEmbeddingMethod().getId(), embeddingName(config));
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
         }
 
@@ -4113,5 +4113,12 @@ public class ClusteringWorkflow {
                 imageData.getHierarchy().fireHierarchyChangedEvent(ClusteringWorkflow.class);
             }
         });
+    }
+
+    /** Optional user-supplied embedding measurement name from the config params. */
+    private static String embeddingName(ClusteringConfig config) {
+        Map<String, Object> p = config.getEmbeddingParams();
+        Object name = (p == null) ? null : p.get("name");
+        return name == null ? null : name.toString();
     }
 }

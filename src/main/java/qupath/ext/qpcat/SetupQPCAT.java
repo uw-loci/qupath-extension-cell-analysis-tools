@@ -26,7 +26,6 @@ import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.BatchFigureExportDialog;
-import qupath.ext.qpcat.ui.FeatureExtractionDialog;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PlotAndGateDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
@@ -217,22 +216,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             new CellularNeighborhoodDialog(qupath).show();
         });
         cellularNeighborhoodsItem.visibleProperty().bind(environmentReady);
-
-        // Feature Extraction (Foundation Models)
-        MenuItem featureExtractionItem = new MenuItem(res.getString("menu.featureExtraction"));
-        featureExtractionItem.setOnAction(e -> {
-            if (qupath.getImageData() == null) {
-                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
-                return;
-            }
-            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
-                Dialogs.showWarningNotification(EXTENSION_NAME,
-                        "No detections found. Run cell detection first.");
-                return;
-            }
-            new FeatureExtractionDialog(qupath).show();
-        });
-        featureExtractionItem.visibleProperty().bind(environmentReady);
+        // NOTE: "Add AI appearance features to cells..." (foundation-model feature
+        // extraction, FeatureExtractionDialog) was removed from the menu in v0.7.0
+        // -- it was not pulling its weight. The dialog/backend code is retained but
+        // unwired; re-add the menu item here if there is demand. See HOW_TO_GUIDE
+        // "Removed features".
 
         // Autoencoder Classifier
         MenuItem autoencoderItem = new MenuItem(res.getString("menu.autoencoderClassifier"));
@@ -438,7 +426,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 cellularNeighborhoodsItem,
                 sep2,
                 // -- Appearance / deep learning --
-                featureExtractionItem,
                 autoencoderItem,
                 sep3,
                 // -- Manage & results --

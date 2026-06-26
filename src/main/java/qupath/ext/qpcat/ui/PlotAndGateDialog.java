@@ -120,14 +120,39 @@ public class PlotAndGateDialog {
         axisBiaxial = new RadioButton("Two markers (biaxial)");
         axisBiaxial.setToggleGroup(g);
 
-        methodCombo = new ComboBox<>();
-        methodCombo.getItems().addAll("UMAP", "t-SNE", "PCA");
-        methodCombo.getSelectionModel().selectFirst();
-        methodCombo.setTooltip(new Tooltip(
-                "Which existing embedding coordinates to plot. They must already be on the\n"
-                + "cells (run 'Map cells in 2D' or clustering with this method first)."));
-
         List<String> measurements = currentMeasurementNames();
+
+        // Offer ONLY the embeddings whose coordinate pair actually exists on the
+        // current image -- this tool plots existing coordinates, it does not
+        // compute them (and has no parameters to tune; that lives in "Map cells
+        // in 2D" / clustering, where perplexity, n_neighbors, etc. are set).
+        methodCombo = new ComboBox<>();
+        methodCombo.setTooltip(new Tooltip(
+                "Which existing embedding coordinates to plot. Only methods already on the\n"
+                + "current image's cells are listed. To create or tune an embedding\n"
+                + "(perplexity, n_neighbors, ...), use 'Map cells in 2D' or clustering."));
+        Label embHint = new Label();
+        embHint.setWrapText(true);
+        embHint.setStyle("-fx-text-fill: #888; -fx-font-size: 10.5px;");
+        List<String> availableEmb = availableEmbeddingMethods(measurements);
+        if (!availableEmb.isEmpty()) {
+            methodCombo.getItems().addAll(availableEmb);
+            methodCombo.getSelectionModel().selectFirst();
+        } else if (!measurements.isEmpty()) {
+            // Image open with detections, but no embedding coordinates present.
+            axisEmbedding.setDisable(true);
+            axisBiaxial.setSelected(true);
+            embHint.setText("No UMAP/t-SNE/PCA coordinates on the current image. "
+                    + "Run 'Map cells in 2D' (or clustering) first, or use Two markers.");
+        } else {
+            // No open image / no detections to inspect -- offer the standard
+            // prefixes; the plot step reports how many cells actually have them.
+            methodCombo.getItems().addAll("UMAP", "tSNE", "PCA");
+            methodCombo.getSelectionModel().selectFirst();
+            embHint.setText("List reflects the open image; the chosen method's "
+                    + "coordinates must already exist on the cells.");
+        }
+
         xMeasCombo = new ComboBox<>();
         xMeasCombo.getItems().addAll(measurements);
         yMeasCombo = new ComboBox<>();
@@ -135,8 +160,12 @@ public class PlotAndGateDialog {
         if (measurements.size() >= 1) xMeasCombo.getSelectionModel().select(0);
         if (measurements.size() >= 2) yMeasCombo.getSelectionModel().select(1);
 
-        HBox embRow = new HBox(8, new Label("Embedding:"), methodCombo);
-        embRow.setAlignment(Pos.CENTER_LEFT);
+        HBox embTop = new HBox(8, new Label("Embedding:"), methodCombo);
+        embTop.setAlignment(Pos.CENTER_LEFT);
+        VBox embRow = new VBox(2, embTop);
+        if (embHint.getText() != null && !embHint.getText().isEmpty()) {
+            embRow.getChildren().add(embHint);
+        }
         HBox biRow = new HBox(8, new Label("X:"), xMeasCombo, new Label("Y:"), yMeasCombo);
         biRow.setAlignment(Pos.CENTER_LEFT);
 
@@ -171,6 +200,26 @@ public class PlotAndGateDialog {
         return MeasurementExtractor.getAllMeasurements(data.getHierarchy().getDetectionObjects());
     }
 
+    /** Embedding coordinate prefixes actually present on the cells: any base P
+     *  with both {@code P1} and {@code P2} measurements. The conventional
+     *  UMAP/tSNE/PCA are listed first; custom-named embeddings (e.g. "UMAP_k15")
+     *  follow, so renamed runs are plottable too. The returned value IS the
+     *  prefix used to read the columns. */
+    private static List<String> availableEmbeddingMethods(List<String> measurements) {
+        java.util.Set<String> set = new java.util.HashSet<>(measurements);
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        for (String p : new String[]{"UMAP", "tSNE", "PCA"}) {
+            if (set.contains(p + "1") && set.contains(p + "2")) out.add(p);
+        }
+        for (String m : measurements) {
+            if (m.length() > 1 && m.endsWith("1")) {
+                String base = m.substring(0, m.length() - 1);
+                if (set.contains(base + "2")) out.add(base);
+            }
+        }
+        return new ArrayList<>(out);
+    }
+
     private void doPlot() {
         if (scope.isSpecificButEmpty()) {
             Dialogs.showWarningNotification("QPCAT",
@@ -184,14 +233,18 @@ public class PlotAndGateDialog {
         final String labelX;
         final String labelY;
         if (emb) {
-            String prefix = switch (methodCombo.getValue()) {
-                case "PCA" -> "PCA";
-                case "t-SNE" -> "tSNE";
-                default -> "UMAP";
-            };
+            // The combo value IS the coordinate prefix (UMAP / tSNE / PCA, or a
+            // custom embedding name), so use it directly.
+            String prefix = methodCombo.getValue();
+            if (prefix == null) {
+                Dialogs.showWarningNotification("QPCAT",
+                        "No embedding coordinates are available on this image. "
+                        + "Run 'Map cells in 2D' first, or use Two markers.");
+                return;
+            }
             colX = prefix + "1";
             colY = prefix + "2";
-            axisName = methodCombo.getValue();
+            axisName = prefix;
             labelX = colX;
             labelY = colY;
         } else {
@@ -214,11 +267,17 @@ public class PlotAndGateDialog {
             try {
                 PlotData pd = pool(entries, colX, colY);
                 Platform.runLater(() -> {
+                    int skipped = Math.max(0, pd.examined - pd.count);
                     if (pd.count == 0) {
-                        statusLabel.setText("No cells with '" + colX + "' and '" + colY
-                                + "' found." + (emb
-                                ? " Run 'Map cells in 2D' (or clustering) with this method first."
-                                : ""));
+                        String msg = "No cells have both '" + colX + "' and '" + colY + "'.";
+                        if (pd.examined > 0) {
+                            msg += " Scanned " + pd.examined + " cell(s); none carried these "
+                                    + (emb ? "embedding coordinates." : "measurements.");
+                        }
+                        if (emb) {
+                            msg += " Run 'Map cells in 2D' (or clustering) with this method first.";
+                        }
+                        statusLabel.setText(msg);
                         return;
                     }
                     EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
@@ -226,9 +285,14 @@ public class PlotAndGateDialog {
                     scatter.setAxisLabels(labelX, labelY);
                     scatter.setNavigation(pd.refs, qupath, null);  // no crop preview here
                     plotArea.getChildren().setAll(GateActionBar.wrap(scatter, pd.refs, qupath));
-                    statusLabel.setText("Plotted " + pd.count + " cells across "
-                            + pd.imagesUsed + " image(s), " + pd.nClasses
-                            + " classification(s). Click Gate to lasso a region.");
+                    String msg = "Plotted " + pd.count + " cells across " + pd.imagesUsed
+                            + " image(s), " + pd.nClasses + " classification(s).";
+                    if (skipped > 0) {
+                        msg += " " + skipped + " cell(s) skipped (missing "
+                                + (emb ? "embedding coordinates" : "measurements") + ").";
+                    }
+                    msg += " Click Gate to lasso a region.";
+                    statusLabel.setText(msg);
                 });
             } catch (Exception ex) {
                 logger.error("Plot & gate failed", ex);
@@ -245,7 +309,8 @@ public class PlotAndGateDialog {
         int[] labels;
         int nClasses;
         CellRef[] refs;
-        int count;
+        int count;       // cells plotted (had both coordinates)
+        int examined;    // detections scanned across all images
         int imagesUsed;
     }
 
@@ -255,6 +320,7 @@ public class PlotAndGateDialog {
         List<CellRef> refs = new ArrayList<>();
         List<String> classOf = new ArrayList<>();
         int imagesUsed;
+        int examined = 0;
 
         Project<BufferedImage> project = qupath.getProject();
         ImageData<BufferedImage> openData = qupath.getImageData();
@@ -266,7 +332,7 @@ public class PlotAndGateDialog {
             if (openData == null) return emptyData();
             String id = openEntry != null ? openEntry.getID() : null;
             String name = openData.getServer().getMetadata().getName();
-            collect(openData, id, name, colX, colY, xy, refs, classOf);
+            examined += collect(openData, id, name, colX, colY, xy, refs, classOf);
             imagesUsed = 1;
         } else {
             imagesUsed = 0;
@@ -285,7 +351,7 @@ public class PlotAndGateDialog {
                     }
                 }
                 int before = xy.size();
-                collect(data, entry.getID(), entry.getImageName(), colX, colY, xy, refs, classOf);
+                examined += collect(data, entry.getID(), entry.getImageName(), colX, colY, xy, refs, classOf);
                 if (xy.size() > before) imagesUsed++;
             }
         }
@@ -299,6 +365,7 @@ public class PlotAndGateDialog {
 
         PlotData pd = new PlotData();
         pd.count = xy.size();
+        pd.examined = examined;
         pd.embedding = xy.toArray(new double[0][]);
         pd.labels = labels;
         pd.nClasses = Math.max(1, classToIdx.size());
@@ -307,10 +374,14 @@ public class PlotAndGateDialog {
         return pd;
     }
 
-    private static void collect(ImageData<BufferedImage> data, String imageId, String imageName,
-                                String colX, String colY, List<double[]> xy,
-                                List<CellRef> refs, List<String> classOf) {
+    /** Append cells that have both coordinate columns; returns how many
+     *  detections were scanned (so callers can report how many were skipped). */
+    private static int collect(ImageData<BufferedImage> data, String imageId, String imageName,
+                               String colX, String colY, List<double[]> xy,
+                               List<CellRef> refs, List<String> classOf) {
+        int examined = 0;
         for (PathObject det : data.getHierarchy().getDetectionObjects()) {
+            examined++;
             var ml = det.getMeasurements();
             Number vx = ml.get(colX);
             Number vy = ml.get(colY);
@@ -326,6 +397,7 @@ public class PlotAndGateDialog {
             PathClass pc = det.getPathClass();
             classOf.add((pc == null || pc == PathClass.getNullClass()) ? "Unclassified" : pc.toString());
         }
+        return examined;
     }
 
     private static PlotData emptyData() {

@@ -18,7 +18,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 5. [Computing Embeddings Only](#5-computing-embeddings-only)
 6. [Rule-Based Phenotyping](#6-rule-based-phenotyping)
 7. [Using Auto-Thresholding](#7-using-auto-thresholding)
-8. [Extracting Foundation Model Features](#8-extracting-foundation-model-features)
+8. [Removed features](#8-removed-features)
 9. [Zero-Shot Phenotyping](#9-zero-shot-phenotyping)
 10. [Explaining Clusters with an LLM (Beta)](#10-explaining-clusters-with-an-llm-beta)
 11. [Managing Clusters (Rename/Merge)](#11-managing-clusters-renamemerge)
@@ -290,38 +290,24 @@ Automatically compute marker gate thresholds instead of setting them manually.
 
 ---
 
-## 8. Extracting Foundation Model Features
+## 8. Removed features
 
-Extract morphological embeddings from pre-trained vision foundation models and store them as per-detection measurements.
+Capabilities that shipped in earlier versions but were removed to keep the tool
+focused. The code generally remains in the repository (just unwired), so any of
+these can be **re-added if there is enough interest** -- open an issue or use
+**Report a Bug** to ask.
 
-### Step-by-step:
+### Foundation-model feature extraction (removed in v0.7.0)
 
-1. Open an image with cell detections
-2. **Extensions > QP-CAT > Add AI appearance features to cells...**
-3. **Select a model** from the dropdown:
-   - **H-optimus-0** (Bioptimus, 1536-dim) -- gated, requires HuggingFace token
-   - **Virchow** (Paige AI, 2560-dim) -- gated, requires HuggingFace token
-   - **Hibou-B** (HistAI, 768-dim) / **Hibou-L** (1024-dim) -- gated, requires HuggingFace token
-   - **Midnight** (kaiko.ai, 768-dim) -- open access
-   - **DINOv2-Large** (Meta AI, 1024-dim) -- open access
-4. **For gated models:** Enter your HuggingFace auth token (obtain one at https://huggingface.co/settings/tokens after accepting the model's license on its HuggingFace page)
-5. Click **Extract Features**
-6. The model is downloaded on first use and cached locally for future runs
-7. Wait for extraction to complete (progress shown in status bar)
-
-### What happens to your data:
-
-- Each detection receives measurements named `FM_0`, `FM_1`, ..., `FM_N` (where N depends on the model's embedding dimension)
-- These measurements can be selected in the clustering dialog just like channel intensity measurements
-- Foundation model features capture morphological and textural information from the image tile around each cell
-
-### Using foundation model features for clustering:
-
-1. After extraction, open **Find cell populations (clustering)...**
-2. In the measurement selection panel, select the `FM_*` measurements (you can use them alone or combined with channel intensity measurements)
-3. Proceed with clustering as usual
-
-**Note:** All included models use commercially permissive licenses (Apache 2.0). Models are not bundled with the extension -- they are downloaded on-demand from HuggingFace.
+Earlier versions had **"Add AI appearance features to cells..."**, which extracted
+morphological embeddings from pretrained pathology vision foundation models
+(H-optimus-0, Virchow, Hibou-B/L, Midnight, DINOv2-Large) and stored them as
+per-cell `FM_*` measurements; those could then be selected in the clustering
+dialog like channel intensities to cluster cells by appearance rather than marker
+expression. It was removed from the menu in v0.7.0 because it saw little use and
+added a heavy model-download dependency. The backend (`FeatureExtractionDialog`
+and its Python) is retained but unwired; the menu command can be reinstated on
+request.
 
 ---
 

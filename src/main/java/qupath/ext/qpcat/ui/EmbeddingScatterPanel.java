@@ -105,6 +105,15 @@ public class EmbeddingScatterPanel extends VBox {
     private boolean[] gatedMask;                                    // per-cell, nCells
     private int gatedCount = 0;
     private Consumer<int[]> onGate;
+    // Committed gates: previously drawn-and-labelled polygons kept visible on the
+    // plot (in DATA coords so they survive zoom/pan) so you can annotate many
+    // populations without losing track of where earlier gates were.
+    private final List<double[][]> committedPolys = new ArrayList<>();
+    private final List<String> committedLabels = new ArrayList<>();
+    private static final Color[] COMMITTED_COLORS = {
+            Color.rgb(200, 30, 30), Color.rgb(30, 120, 200), Color.rgb(30, 150, 70),
+            Color.rgb(170, 90, 200), Color.rgb(210, 130, 20), Color.rgb(20, 160, 160),
+    };
 
     public EmbeddingScatterPanel() {
         setSpacing(5);
@@ -146,11 +155,13 @@ public class EmbeddingScatterPanel extends VBox {
         previewLabel = new Label();
         previewLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
         previewLabel.setVisible(false);
+        previewLabel.setManaged(false);   // don't reserve layout space when hidden
         previewView = new ImageView();
         previewView.setPreserveRatio(true);
         previewView.setFitWidth(160);
         previewView.setFitHeight(160);
         previewView.setVisible(false);
+        previewView.setManaged(false);    // (else it leaves a ~160px gap below the plot)
 
         getChildren().addAll(titleLabel, canvas, statsLabel, helpLabel, previewLabel, previewView);
     }
@@ -172,7 +183,7 @@ public class EmbeddingScatterPanel extends VBox {
         this.cropService = cropService;
         boolean enabled = cellRefs != null && qupath != null;
         helpLabel.setText(enabled
-                ? "Scroll zoom, middle-drag pan, click to preview, double-click to go to cell"
+                ? "Scroll zoom, middle-drag pan, click a point to center + select its cell"
                 : "Scroll to zoom, drag to pan");
     }
 
@@ -313,6 +324,34 @@ public class EmbeddingScatterPanel extends VBox {
             for (double[] v : gatePolygon) {
                 gc.fillOval(v[0] - 2.5, v[1] - 2.5, 5, 5);
             }
+        }
+
+        // Committed gates -- prior labelled selections, reprojected from data
+        // space so they track zoom/pan. Drawn as thin colored outlines + label.
+        for (int gi = 0; gi < committedPolys.size(); gi++) {
+            double[][] dp = committedPolys.get(gi);
+            int m = dp.length;
+            if (m < 2) continue;
+            Color col = COMMITTED_COLORS[gi % COMMITTED_COLORS.length];
+            gc.setStroke(col);
+            gc.setLineWidth(1.5);
+            double[] sx = new double[m];
+            double[] sy = new double[m];
+            double cx = 0, cy = 0;
+            for (int i = 0; i < m; i++) {
+                sx[i] = MARGIN + ((dp[i][0] - viewMinX) / rangeX) * plotW;
+                sy[i] = MARGIN + ((dp[i][1] - viewMinY) / rangeY) * plotH;
+                cx += sx[i];
+                cy += sy[i];
+            }
+            for (int i = 0; i < m; i++) {
+                int j = (i + 1) % m;
+                gc.strokeLine(sx[i], sy[i], sx[j], sy[j]);
+            }
+            gc.setFill(col);
+            gc.setFont(Font.font("System", 10));
+            gc.setTextAlign(TextAlignment.CENTER);
+            gc.fillText(committedLabels.get(gi), cx / m, cy / m);
         }
 
         // Axes
@@ -527,32 +566,27 @@ public class EmbeddingScatterPanel extends VBox {
         CellRef ref = cellRefs[idx];
         if (ref == null) return;
 
-        if (e.getClickCount() >= 2) {
-            // Double-click: open the image and center the FoV on the cell.
-            ViewerNavigator.navigateToCell(qupath, ref.getImageId(), ref.getImageName(),
-                    ref.getX(), ref.getY());
-            return;
-        }
-
-        // Single-click: ring the point, select in hierarchy if image is open,
-        // and load a crop preview asynchronously.
+        // Click (single or double): ring the point, then open the cell's image if
+        // needed, center the field of view on it, and select it -- plus load a
+        // crop preview. Centering may switch the open image (that's intended).
         selectedIndex = idx;
         redraw();
-        ViewerNavigator.selectIfImageOpen(qupath, ref);
+        ViewerNavigator.navigateToCell(qupath, ref.getImageId(), ref.getImageName(),
+                ref.getX(), ref.getY());
         loadPreview(ref);
     }
 
     /** Read the cell's crop off the FX thread and show it when ready. */
     private void loadPreview(CellRef ref) {
         if (cropService == null) {
-            previewView.setVisible(false);
-            previewLabel.setVisible(false);
+            setShown(previewView, false);
+            setShown(previewLabel, false);
             return;
         }
         final long token = ++previewToken;
         previewLabel.setText("Loading crop...");
-        previewLabel.setVisible(true);
-        previewView.setVisible(false);
+        setShown(previewLabel, true);
+        setShown(previewView, false);
 
         Thread t = new Thread(() -> {
             BufferedImage crop = cropService.readCrop(ref, cropScale);
@@ -561,11 +595,11 @@ public class EmbeddingScatterPanel extends VBox {
                 if (token != previewToken) return;  // superseded by a newer click
                 if (fx != null) {
                     previewView.setImage(fx);
-                    previewView.setVisible(true);
+                    setShown(previewView, true);
                     previewLabel.setText(String.format("Cell %d (cluster %d)",
                             selectedIndex, labels[selectedIndex]));
                 } else {
-                    previewView.setVisible(false);
+                    setShown(previewView, false);
                     previewLabel.setText("Crop unavailable");
                 }
             });
@@ -592,7 +626,7 @@ public class EmbeddingScatterPanel extends VBox {
         helpLabel.setText(on
                 ? "Gate: click to add points, double-click (or right-click) to close, Esc to cancel"
                 : (cellRefs != null && qupath != null
-                    ? "Scroll zoom, middle-drag pan, click to preview, double-click to go to cell"
+                    ? "Scroll zoom, middle-drag pan, click a point to center + select its cell"
                     : "Scroll to zoom, drag to pan"));
         redraw();
     }
@@ -622,13 +656,61 @@ public class EmbeddingScatterPanel extends VBox {
         return gatedCount;
     }
 
-    /** Clear the gate polygon and highlight. */
+    /** Clear the active gate polygon and highlight (committed gates remain). */
     public void clearGate() {
         gatePolygon.clear();
         gateClosed = false;
         gatedMask = null;
         gatedCount = 0;
         redraw();
+    }
+
+    /**
+     * Commit the active gate as a persistent, labelled outline (kept in data
+     * coordinates so it tracks zoom/pan) and reset the active gate so the next
+     * one can be drawn. Used to annotate many populations in turn without losing
+     * track of earlier gates. No-op if no closed gate is active.
+     */
+    public void commitCurrentGate(String label) {
+        if (gatePolygon.size() < 3) return;
+        double plotW = CANVAS_W - 2 * MARGIN;
+        double plotH = CANVAS_H - 2 * MARGIN;
+        double rangeX = viewMaxX - viewMinX;
+        double rangeY = viewMaxY - viewMinY;
+        if (rangeX == 0) rangeX = 1;
+        if (rangeY == 0) rangeY = 1;
+        double[][] data = new double[gatePolygon.size()][2];
+        for (int i = 0; i < gatePolygon.size(); i++) {
+            double[] s = gatePolygon.get(i);
+            data[i][0] = viewMinX + (s[0] - MARGIN) / plotW * rangeX;
+            data[i][1] = viewMinY + (s[1] - MARGIN) / plotH * rangeY;
+        }
+        committedPolys.add(data);
+        committedLabels.add(label == null ? ("gate " + committedPolys.size()) : label);
+        // Reset the active gate (stay in gate mode for the next selection).
+        gatePolygon.clear();
+        gateClosed = false;
+        gatedMask = null;
+        gatedCount = 0;
+        redraw();
+    }
+
+    /** Number of committed (labelled) gates currently shown. */
+    public int getCommittedGateCount() {
+        return committedPolys.size();
+    }
+
+    /** Remove all committed gate outlines and the active gate. */
+    public void clearAllGates() {
+        committedPolys.clear();
+        committedLabels.clear();
+        clearGate();
+    }
+
+    /** Toggle visible + managed together so hidden nodes reclaim layout space. */
+    private static void setShown(javafx.scene.Node node, boolean shown) {
+        node.setVisible(shown);
+        node.setManaged(shown);
     }
 
     /** Close the in-progress polygon, compute enclosed cells, fire the callback. */

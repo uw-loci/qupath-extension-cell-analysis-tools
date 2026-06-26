@@ -51,6 +51,10 @@ public final class GateActionBar {
                 + "double-click (or right-click) to close, Esc to cancel."));
         Button clearBtn = new Button("Clear");
         clearBtn.setDisable(true);
+        clearBtn.setTooltip(new Tooltip("Discard the gate currently being drawn."));
+        Button clearAllBtn = new Button("Clear all");
+        clearAllBtn.setDisable(true);
+        clearAllBtn.setTooltip(new Tooltip("Remove all gate outlines drawn on the plot."));
         Label countLabel = new Label("0 cells gated");
         countLabel.setStyle("-fx-text-fill: #555;");
         Button selectBtn = new Button("Select in open image");
@@ -70,7 +74,7 @@ public final class GateActionBar {
             scatter.setGateMode(gateToggle.isSelected());
             if (gateToggle.isSelected()) {
                 scatter.clearGate();
-                countLabel.setText("0 cells gated");
+                countLabel.setText(gateCountText(scatter, 0));
                 selectBtn.setDisable(true);
                 assignBtn.setDisable(true);
                 clearBtn.setDisable(false);
@@ -79,14 +83,22 @@ public final class GateActionBar {
 
         clearBtn.setOnAction(e -> {
             scatter.clearGate();
-            countLabel.setText("0 cells gated");
+            countLabel.setText(gateCountText(scatter, 0));
             selectBtn.setDisable(true);
             assignBtn.setDisable(true);
         });
 
+        clearAllBtn.setOnAction(e -> {
+            scatter.clearAllGates();
+            countLabel.setText("0 cells gated");
+            selectBtn.setDisable(true);
+            assignBtn.setDisable(true);
+            clearAllBtn.setDisable(true);
+        });
+
         scatter.setOnGate(indices -> {
             int n = indices.length;
-            countLabel.setText(n + " cells gated");
+            countLabel.setText(gateCountText(scatter, n));
             selectBtn.setDisable(n == 0);
             assignBtn.setDisable(n == 0);
             clearBtn.setDisable(false);
@@ -121,11 +133,17 @@ public final class GateActionBar {
                 GateApplier.Result r = GateApplier.assignClass(qupath, refs, gated, className);
                 Platform.runLater(() -> {
                     nextGate[0]++;
-                    countLabel.setText(gated.length + " cells gated");
-                    selectBtn.setDisable(false);
-                    assignBtn.setDisable(false);
+                    // Keep the just-gated region visible as a labelled outline and
+                    // reset for the next selection, so many classes can be drawn in
+                    // turn without losing track of earlier gates.
+                    scatter.commitCurrentGate(className);
+                    clearAllBtn.setDisable(scatter.getCommittedGateCount() == 0);
+                    countLabel.setText(gateCountText(scatter, 0));
+                    selectBtn.setDisable(true);
+                    assignBtn.setDisable(true);
                     String msg = "Assigned '" + className + "' to " + r.cellsClassified
-                            + " cell(s) across " + r.imagesTouched + " image(s).";
+                            + " cell(s) across " + r.imagesTouched + " image(s)."
+                            + " Draw the next gate, or Clear all to remove the outlines.";
                     if (r.unmatched > 0) msg += " (" + r.unmatched + " could not be matched.)";
                     Dialogs.showInfoNotification("QPCAT", msg);
                 });
@@ -134,9 +152,17 @@ public final class GateActionBar {
             t.start();
         });
 
-        HBox bar = new HBox(8, gateToggle, clearBtn, countLabel, selectBtn, assignBtn);
+        HBox bar = new HBox(8, gateToggle, clearBtn, clearAllBtn, countLabel, selectBtn, assignBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         box.getChildren().addAll(scatter, bar);
         return box;
+    }
+
+    /** Count label that also surfaces how many committed gates are on the plot. */
+    private static String gateCountText(EmbeddingScatterPanel scatter, int active) {
+        int committed = scatter.getCommittedGateCount();
+        String s = active + " cells gated";
+        if (committed > 0) s += "  (" + committed + " gate" + (committed == 1 ? "" : "s") + " drawn)";
+        return s;
     }
 }

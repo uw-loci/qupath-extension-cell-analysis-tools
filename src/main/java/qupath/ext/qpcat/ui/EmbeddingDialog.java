@@ -38,6 +38,7 @@ public class EmbeddingDialog {
     private ListView<String> measurementList;
     private ComboBox<Normalization> normalizationCombo;
     private ComboBox<EmbeddingMethod> embeddingCombo;
+    private TextField embeddingNameField;
     private Spinner<Integer> umapNeighborsSpinner;
     private Spinner<Double> umapMinDistSpinner;
     private Label statusLabel;
@@ -177,7 +178,20 @@ public class EmbeddingDialog {
                 + "larger values spread points more evenly.\n"
                 + "Ref: McInnes et al. (2018) arXiv:1802.03426"));
 
-        HBox methodRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo);
+        // Measurement name -- the prefix written to each cell (NAME1/NAME2).
+        // Defaults to the method name; change it to keep two runs side by side
+        // (e.g. "UMAP_k15" -> UMAP_k151/UMAP_k152) instead of overwriting.
+        embeddingNameField = new TextField("UMAP");
+        embeddingNameField.setPrefWidth(140);
+        embeddingNameField.setTooltip(new Tooltip(
+                "Prefix for the coordinate measurements (NAME1 / NAME2).\n"
+                + "Reusing a name OVERWRITES those columns; give a unique name to keep\n"
+                + "two embeddings (e.g. different settings) side by side."));
+        boolean[] nameEdited = {false};
+        embeddingNameField.textProperty().addListener((o, a, b) -> nameEdited[0] = true);
+
+        HBox methodRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo,
+                tipLabel("Name:", embeddingNameField), embeddingNameField);
         methodRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox paramsRow = new HBox(10,
@@ -189,11 +203,18 @@ public class EmbeddingDialog {
             boolean isUmap = embeddingCombo.getValue() == EmbeddingMethod.UMAP;
             paramsRow.setVisible(isUmap);
             paramsRow.setManaged(isUmap);
+            // Keep the name in step with the method until the user customizes it.
+            if (!nameEdited[0]) {
+                embeddingNameField.setText(
+                        ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+                nameEdited[0] = false;
+            }
         });
 
         Label infoLabel = new Label(
-                "Embedding coordinates (e.g. UMAP1, UMAP2) will be added as "
-                + "measurements to each detection. Existing classifications are preserved.");
+                "Embedding coordinates (NAME1, NAME2) are added as measurements to each "
+                + "detection. Existing classifications are preserved. Reusing a name "
+                + "overwrites those columns.");
         infoLabel.setWrapText(true);
         infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
 
@@ -230,6 +251,15 @@ public class EmbeddingDialog {
         }
     }
 
+    /** True if {@code prefix}1 already exists on the current image's detections. */
+    private boolean embeddingColumnsExist(String prefix) {
+        var imageData = qupath.getImageData();
+        if (imageData == null) return false;
+        var dets = imageData.getHierarchy().getDetectionObjects();
+        if (dets.isEmpty()) return false;
+        return MeasurementExtractor.getAllMeasurements(dets).contains(prefix + "1");
+    }
+
     private void runEmbedding() {
         List<String> selected = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
         if (selected.isEmpty()) {
@@ -249,7 +279,22 @@ public class EmbeddingDialog {
             embeddingParams.put("n_neighbors", umapNeighborsSpinner.getValue());
             embeddingParams.put("min_dist", umapMinDistSpinner.getValue());
         }
+        String nameVal = embeddingNameField.getText();
+        if (nameVal != null && !nameVal.isBlank()) {
+            embeddingParams.put("name", nameVal.trim());
+        }
         config.setEmbeddingParams(embeddingParams);
+
+        // Resolve the measurement prefix and warn before overwriting existing columns.
+        final String prefix = ResultApplier.getEmbeddingPrefix(
+                embeddingCombo.getValue().getId(), (String) embeddingParams.get("name"));
+        if (embeddingColumnsExist(prefix)) {
+            boolean ok = Dialogs.showConfirmDialog("QPCAT - overwrite coordinates?",
+                    prefix + "1 / " + prefix + "2 already exist on these cells and will be "
+                    + "overwritten. Continue?\n\nTo keep both, cancel and give this run a "
+                    + "different Name.");
+            if (!ok) return;
+        }
 
         runButton.setDisable(true);
         progressBar.setVisible(true);
@@ -261,8 +306,6 @@ public class EmbeddingDialog {
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
                 ClusteringResult result = workflow.runClustering(config, progress);
 
-                String prefix = ResultApplier.getEmbeddingPrefix(
-                        embeddingCombo.getValue().getId());
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
                     statusLabel.setText("Embedding computed: " + prefix + "1/" + prefix
