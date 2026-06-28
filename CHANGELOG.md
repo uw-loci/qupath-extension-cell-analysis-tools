@@ -60,6 +60,21 @@ Stoltzfus et al. 2020).
   (including renamed ones) instead of a fixed UMAP/t-SNE/PCA list, and reports how
   many cells were skipped for missing coordinates.
 
+### Changed (clustering UX)
+
+- **Phase checklist instead of a single progress bar.** The clustering run now
+  shows the phases it will actually execute (Load / Extract / Normalize /
+  Compute embedding / Cluster / Spatial statistics / Generate plots / Apply --
+  omitting any the config skips) and fills each in as it completes. Phase
+  durations are very uneven, so "on phase: Cluster" reads far better than a bar
+  that sits still then lurches. Driven by a phase token derived from the Python
+  progress fractions (new `PhaseProgressPane`; phase channel kept separate from
+  the status message so "Map cells in 2D" and the YAML batch are unaffected).
+- **Settings lock during a run** so parameters can't be changed mid-run (Cancel
+  stays live).
+- **BANKSY note clarified** -- BANKSY is runnable from the Algorithm dropdown
+  ("BANKSY (spatially-aware)"); the spatial-section note now points there.
+
 ### Fixed (cellular neighborhoods)
 
 - **Live viewer now updates after a run.** A project-scope (joint) run was applied

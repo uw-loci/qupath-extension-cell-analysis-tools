@@ -60,17 +60,36 @@ import pandas as pd
 from appose import NDArray as PyNDArray
 
 
-def _progress(frac, message):
+def _phase_for_fraction(f):
+    """Map a monotonic progress fraction to a stable phase token. The fractions
+    in the _progress calls below are the phase-start markers; this keeps the
+    token <-> fraction mapping in one place next to them. The Java side renders a
+    phase checklist from these tokens (and ignores any it did not expect)."""
+    if f < 0.15:
+        return "normalize"
+    if f < 0.45:
+        return "embed"
+    if f < 0.73:
+        return "cluster"
+    if f < 0.98:
+        return "spatial"
+    if f < 1.0:
+        return "plots"
+    return "apply"
+
+
+def _progress(frac, message, phase=None):
     """Emit a determinate progress update (fraction in 0..1) with a message.
-    The Java side maps current/maximum onto the dialog's progress bar so it
-    advances through the real phases instead of a perpetually bouncing
-    indeterminate bar with one static label. Fractions are phase-start markers
-    and monotonic; a skipped phase just jumps the bar forward."""
+    The message is prefixed "phase|" with a stable phase token (derived from the
+    fraction unless given) so the Java side can advance a phase checklist; it
+    strips the token before display. Fractions are phase-start markers and
+    monotonic; a skipped phase just jumps forward."""
     try:
         f = max(0.0, min(1.0, float(frac)))
     except (TypeError, ValueError):
         f = 0.0
-    task.update(message, current=int(f * 1000), maximum=1000)
+    token = phase if phase else _phase_for_fraction(f)
+    task.update(token + "|" + message, current=int(f * 1000), maximum=1000)
 
 
 def _supported_kwargs(fn, **kw):

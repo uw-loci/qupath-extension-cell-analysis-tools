@@ -113,6 +113,8 @@ public class ClusteringDialog {
     private Button cancelButton;
     // All settings controls, grouped so they can be disabled during a run.
     private VBox settingsBox;
+    // Phase checklist shown during a run (only the phases the config will run).
+    private PhaseProgressPane phasePane;
     // The workflow for the in-flight run, so the Cancel button can abort it.
     private volatile ClusteringWorkflow activeWorkflow;
 
@@ -1268,7 +1270,32 @@ public class ClusteringDialog {
                         "19-yaml-headless-batch"));
         reproLinks.setAlignment(Pos.CENTER_LEFT);
 
-        return new VBox(5, progressRow, statusLabel, reproNote, reproLinks);
+        phasePane = new PhaseProgressPane();
+        phasePane.setVisible(false);
+        phasePane.setManaged(false);
+
+        return new VBox(5, progressRow, phasePane, statusLabel, reproNote, reproLinks);
+    }
+
+    /**
+     * The phases a run with this config will actually execute, in order -- so the
+     * checklist omits steps that won't run (no embedding, no spatial stats, etc.).
+     */
+    private static List<PhaseProgressPane.Phase> expectedPhases(ClusteringConfig config) {
+        boolean project = config.isClusterEntireProject();
+        boolean embed = config.getEmbeddingMethod() != ClusteringConfig.EmbeddingMethod.NONE;
+        boolean spatial = config.isEnableSpatialAnalysis();
+        boolean plots = config.isGeneratePlots();
+        List<PhaseProgressPane.Phase> phases = new ArrayList<>();
+        if (project) phases.add(new PhaseProgressPane.Phase("load", "Load images"));
+        phases.add(new PhaseProgressPane.Phase("extract", "Extract measurements"));
+        phases.add(new PhaseProgressPane.Phase("normalize", "Normalize"));
+        if (embed) phases.add(new PhaseProgressPane.Phase("embed", "Compute embedding"));
+        phases.add(new PhaseProgressPane.Phase("cluster", "Cluster"));
+        if (spatial) phases.add(new PhaseProgressPane.Phase("spatial", "Spatial statistics"));
+        if (plots) phases.add(new PhaseProgressPane.Phase("plots", "Generate plots"));
+        phases.add(new PhaseProgressPane.Phase("apply", "Apply results"));
+        return phases;
     }
 
     private void setRunActive(boolean active) {
@@ -1279,6 +1306,10 @@ public class ClusteringDialog {
         runButton.setDisable(active);
         // Lock the settings during a run so nothing can be changed mid-run.
         if (settingsBox != null) settingsBox.setDisable(active);
+        if (phasePane != null) {
+            phasePane.setVisible(active);
+            phasePane.setManaged(active);
+        }
     }
 
     private void updateAlgorithmParams() {
@@ -1849,15 +1880,21 @@ public class ClusteringDialog {
         QpcatPreferences.setSpatialGraphDelaunayMaxEdge(
                 config.getSpatialGraphDelaunayMaxEdge());
 
-        // Disable UI during run; show progress + Cancel.
+        // Disable UI during run; show the phase checklist + Cancel.
         setRunActive(true);
-        progressBar.setProgress(-1);  // Indeterminate
+        progressBar.setProgress(-1);  // Indeterminate overall hint
+        phasePane.configure(expectedPhases(config));
 
         Thread clusterThread = new Thread(() -> {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
                 activeWorkflow = workflow;
                 Consumer<String> progress = msg -> Platform.runLater(() -> statusLabel.setText(msg));
+                // Phase tokens advance the checklist on a channel separate from the
+                // status text, so the user-facing message stays clean for every
+                // consumer (this dialog, "Map cells in 2D", the YAML batch).
+                workflow.setPhaseCallback(token ->
+                        Platform.runLater(() -> phasePane.advanceTo(token)));
                 // Determinate progress: drive the bar from the Python phase
                 // fractions so it advances through the run instead of bouncing
                 // indefinitely. The first fraction flips it from indeterminate.
@@ -1885,6 +1922,7 @@ public class ClusteringDialog {
 
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
+                    phasePane.complete();
                     statusLabel.setText("Complete: " + result.getNClusters()
                             + " clusters, " + result.getNCells() + " cells");
                     setRunActive(false);

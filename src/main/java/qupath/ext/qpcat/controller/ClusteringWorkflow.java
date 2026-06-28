@@ -116,6 +116,18 @@ public class ClusteringWorkflow {
         this.progressFractionCallback = cb;
     }
 
+    /**
+     * Phase-token callback for a phase checklist (e.g. "normalize", "cluster").
+     * Separate from the status-message callback so the user-facing message stays
+     * clean for every consumer. Null when not set.
+     */
+    private Consumer<String> phaseCallback;
+
+    /** Set the phase-token callback. Pass null to clear. */
+    public void setPhaseCallback(Consumer<String> cb) {
+        this.phaseCallback = cb;
+    }
+
     /** What to do after the spatial-stats time estimate is shown to the user. */
     public enum SpatialDecision { CONTINUE, SKIP_SPATIAL, CANCEL }
 
@@ -206,7 +218,7 @@ public class ClusteringWorkflow {
     public ClusteringResult runClustering(ClusteringConfig config,
                                            Consumer<String> progressCallback) throws IOException {
         long startTime = System.currentTimeMillis();
-        report(progressCallback, "Extracting measurements...");
+        reportPhase(progressCallback, "extract", "Extracting measurements...");
 
         // Get detections from the current image
         ImageData<BufferedImage> imageData = qupath.getImageData();
@@ -311,7 +323,7 @@ public class ClusteringWorkflow {
         result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
 
         // Apply results back to QuPath
-        report(progressCallback, "Applying results to QuPath...");
+        reportPhase(progressCallback, "apply", "Applying results to QuPath...");
 
         ResultApplier applier = new ResultApplier();
 
@@ -427,7 +439,8 @@ public class ClusteringWorkflow {
             throw new IOException("No project images selected for clustering.");
         }
 
-        report(progressCallback, "Loading detections from " + imageEntries.size() + " images...");
+        reportPhase(progressCallback, "load",
+                "Loading detections from " + imageEntries.size() + " images...");
 
         // Build detection groups from each image
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
@@ -460,7 +473,7 @@ public class ClusteringWorkflow {
         }
 
         // Extract measurements across all images
-        report(progressCallback, "Extracting measurements...");
+        reportPhase(progressCallback, "extract", "Extracting measurements...");
         MeasurementExtractor extractor = new MeasurementExtractor();
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extractMultiImage(groups, config.getSelectedMeasurements());
@@ -489,7 +502,7 @@ public class ClusteringWorkflow {
         result.setCellRefs(buildCellRefs(extraction, null, null));
 
         // Apply results back per-image and save
-        report(progressCallback, "Applying results to project images...");
+        reportPhase(progressCallback, "apply", "Applying results to project images...");
         ResultApplier applier = new ResultApplier();
 
         // D1 note (v0.3.4): the project path builds a single global spatial
@@ -1382,7 +1395,16 @@ public class ClusteringWorkflow {
             Task task = service.runTaskWithListener("run_clustering", inputs, event -> {
                 if (event.responseType == ResponseType.UPDATE) {
                     if (event.message != null) {
-                        report(progressCallback, event.message);
+                        // Python prefixes "token|text" so we can advance the phase
+                        // checklist; strip it so the status message stays clean.
+                        String m = event.message;
+                        int bar = m.indexOf('|');
+                        if (bar > 0) {
+                            if (phaseCallback != null) phaseCallback.accept(m.substring(0, bar));
+                            report(progressCallback, m.substring(bar + 1));
+                        } else {
+                            report(progressCallback, m);
+                        }
                     }
                     // Determinate progress: the Python side sends current/maximum
                     // at each phase. maximum == 0 means "no numeric progress"
@@ -3438,6 +3460,17 @@ public class ClusteringWorkflow {
     }
 
     private static void report(Consumer<String> callback, String message) {
+        if (callback != null) callback.accept(message);
+    }
+
+    /**
+     * Report a phase boundary: the message is prefixed "{@code token|}" so a
+     * dialog can advance a phase checklist (it strips the token before display).
+     * Used only on the clustering paths, whose dialog parses the token; other
+     * workflows keep plain messages.
+     */
+    private void reportPhase(Consumer<String> callback, String token, String message) {
+        if (phaseCallback != null) phaseCallback.accept(token);
         if (callback != null) callback.accept(message);
     }
 
