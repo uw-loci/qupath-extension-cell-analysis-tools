@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
-import qupath.ext.qpcat.service.RegionAnnotationBuilder;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -42,8 +41,9 @@ import java.util.function.Consumer;
  * local spatial window rather than by their own measurements. For each cell it
  * takes the existing categorical label (a cluster or phenotype), builds a window
  * of the k nearest neighbors, turns the window into a cell-type fraction vector,
- * and k-means-clusters those vectors into N neighborhoods. Each cell is then
- * classified as {@code "QPCAT CN: <id>"}.
+ * and k-means-clusters those vectors into N neighborhoods. Each cell's
+ * neighborhood id is written as the measurement {@code "QPCAT CN"}, leaving the
+ * cell-type classification (the analysis input) intact.
  *
  * <p>This is the scalable "default-A" spatial niche analysis -- O(n*k) with a
  * KD/Ball-tree neighbor search plus a small k-means, single-process, no
@@ -59,8 +59,6 @@ public class CellularNeighborhoodWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(CellularNeighborhoodWorkflow.class);
 
-    /** Classification prefix for cellular-neighborhood labels. */
-    public static final String CN_PREFIX = "QPCAT CN: ";
 
     private final QuPathGUI qupath;
 
@@ -191,7 +189,7 @@ public class CellularNeighborhoodWorkflow {
      */
     public CnResult run(int kNeighbors, int nNeighborhoods, int seed,
                         boolean generateHeatmap, boolean radiusMode, double radiusMicrons,
-                        boolean createRegions, Consumer<String> progress) throws IOException {
+                        Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
 
@@ -268,21 +266,12 @@ public class CellularNeighborhoodWorkflow {
             return new CnResult(false, actualCn, nCells, countsJson, "", runId, paramsHash);
         }
 
-        // Apply "QPCAT CN: <id>" classifications.
-        report(progress, "Applying neighborhood labels...");
-        String[] cnNames = new String[Math.max(actualCn, maxLabel(cnLabels) + 1)];
-        for (int i = 0; i < cnNames.length; i++) {
-            cnNames[i] = CN_PREFIX + i;
-        }
-        new ResultApplier().applyPhenotypeLabels(detections, cnLabels, cnNames);
-
-        if (createRegions) {
-            report(progress, "Creating region annotations...");
-            double linkUm = radiusMode ? radiusMicrons : 0;  // 0 -> auto from median NN
-            int nRegions = RegionAnnotationBuilder.build(imageData, detections, cnLabels,
-                    actualCn, linkUm, pxUm);
-            logger.info("Created {} region annotations", nRegions);
-        }
+        // Store the neighborhood id as a MEASUREMENT, leaving each cell's
+        // classification (the cell-type input to the analysis) intact. Color by
+        // neighborhood with QuPath's measurement maps ("QPCAT CN").
+        report(progress, "Applying neighborhood measurement...");
+        new ResultApplier().applyNeighborhoodMeasurement(detections, cnLabels,
+                ResultApplier.NEIGHBORHOOD_MEASUREMENT);
 
         Platform.runLater(() -> {
             ImageData<BufferedImage> current = qupath.getImageData();
@@ -328,7 +317,7 @@ public class CellularNeighborhoodWorkflow {
      *
      * <p>Spatial windows are built independently within each image (cells in
      * different slides are never neighbors), the composition vectors are pooled,
-     * and ONE k-means defines the neighborhoods so a {@code QPCAT CN: <id>} label
+     * and ONE k-means defines the neighborhoods so a {@code QPCAT CN} measurement value
      * means the same cell-type mixture in every image -- the prerequisite for
      * comparing per-sample CN proportions across the cohort (Goltsev 2018 /
      * Schurch 2020 / imcRtools). Labels are written back and saved per image, a
@@ -353,7 +342,6 @@ public class CellularNeighborhoodWorkflow {
                                       int kNeighbors, int nNeighborhoods, int seed,
                                       boolean generateHeatmap, String groupMetadataKey,
                                       boolean radiusMode, double radiusMicrons,
-                                      boolean createRegions,
                                       Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
@@ -365,13 +353,22 @@ public class CellularNeighborhoodWorkflow {
         // 1. Load detections per image; skip images that fail or have none.
         report(progress, "Loading detections from " + imageEntries.size() + " images...");
         List<LoadedImage> loaded = new ArrayList<>();
+        // Reuse the LIVE ImageData for the currently-open image so applied CN
+        // labels and region annotations appear in the viewer immediately. A
+        // detached readImageData() copy is written to disk only, which forces the
+        // user to "Reload data" to see anything (the bug this guards against).
+        ImageData<BufferedImage> openData = qupath.getImageData();
+        ProjectImageEntry<BufferedImage> openEntry =
+                (qupath.getProject() != null && openData != null)
+                        ? qupath.getProject().getEntry(openData) : null;
         for (int idx = 0; idx < imageEntries.size(); idx++) {
             ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
             report(progress, "Loading image " + (idx + 1) + "/" + imageEntries.size()
                     + ": " + entry.getImageName());
+            boolean isOpenImage = openEntry != null && openEntry.equals(entry);
             ImageData<BufferedImage> imageData;
             try {
-                imageData = entry.readImageData();
+                imageData = isOpenImage ? openData : entry.readImageData();
             } catch (Exception e) {
                 logger.warn("Failed to read image data for {}: {}",
                         entry.getImageName(), e.getMessage());
@@ -500,29 +497,20 @@ public class CellularNeighborhoodWorkflow {
                     runId, paramsHash);
         }
 
-        // 7. Apply labels back per image + save + record a Workflow step.
-        report(progress, "Applying neighborhood labels to " + loaded.size() + " images...");
-        String[] cnNames = new String[Math.max(actualCn, maxLabel(cnLabels) + 1)];
-        for (int i = 0; i < cnNames.length; i++) {
-            cnNames[i] = CN_PREFIX + i;
-        }
+        // 7. Store the neighborhood id as a MEASUREMENT per image (leaving the
+        //    cell-type classification intact), save, and record a Workflow step.
+        report(progress, "Applying neighborhood measurement to " + loaded.size() + " images...");
         ResultApplier applier = new ResultApplier();
         int start = 0;
-        int imgIdx2 = 0;
         for (LoadedImage li : loaded) {
             int end = start + li.detections.size();
             int[] segLabels = new int[end - start];
             System.arraycopy(cnLabels, start, segLabels, 0, end - start);
-            applier.applyPhenotypeLabels(li.detections, segLabels, cnNames);
-            if (createRegions) {
-                double linkUm = radiusMode ? radiusMicrons : 0;
-                RegionAnnotationBuilder.build(li.imageData, li.detections, segLabels,
-                        actualCn, linkUm, pixelSizes[imgIdx2]);
-            }
+            applier.applyNeighborhoodMeasurement(li.detections, segLabels,
+                    ResultApplier.NEIGHBORHOOD_MEASUREMENT);
             recordProjectWorkflowStep(li.imageData, kNeighbors, nNeighborhoods, actualCn,
                     li.detections.size(), totalCells, loaded.size(), classNames.size(),
                     runId, paramsHash);
-            imgIdx2++;
             try {
                 li.entry.saveImageData(li.imageData);
                 logger.info("Saved CN labels for {} ({} cells)",
@@ -791,7 +779,7 @@ public class CellularNeighborhoodWorkflow {
                             + nNeighborhoods + " neighborhoods (" + actualCn + " produced)",
                     "// Cell-type classes used: " + nClasses,
                     "// Result: " + actualCn + " neighborhoods over " + nCells + " cells",
-                    "// Labels written as detection class 'QPCAT CN: <id>'",
+                    "// Neighborhood id written as measurement 'QPCAT CN'",
                     "// run_id: " + runId + "  params_hash: " + paramsHash);
             String stepName = "QP-CAT: cellular neighborhoods (" + actualCn
                     + " neighborhoods, k=" + kNeighbors + ")";
@@ -822,7 +810,7 @@ public class CellularNeighborhoodWorkflow {
                     "// Cell-type classes (union across images): " + nClasses,
                     "// This image contributed " + imageCells + " of " + totalCells
                             + " cells to the joint run.",
-                    "// Labels written as detection class 'QPCAT CN: <id>'.",
+                    "// Neighborhood id written as measurement 'QPCAT CN'.",
                     "// WARNING: neighborhoods were defined jointly across " + nImages
                             + " images; re-running cellular neighborhoods on this image",
                     "//   alone would produce DIFFERENT labels (a CN id would no longer mean",
@@ -862,7 +850,7 @@ public class CellularNeighborhoodWorkflow {
             }
             String adjCsv = adjacencyJsonToCsv(adjacencyJson);
             if (adjCsv != null) {
-                Files.writeString(resultsDir.resolve("cn_region_adjacency.csv"),
+                Files.writeString(resultsDir.resolve("cn_neighborhood_adjacency.csv"),
                         adjCsv, StandardCharsets.UTF_8);
             }
             StringBuilder info = new StringBuilder();
@@ -884,7 +872,7 @@ public class CellularNeighborhoodWorkflow {
             }
             info.append("\nNeighborhoods were defined JOINTLY across all images (windows are\n");
             info.append("within-image; one k-means over the pooled composition vectors), so a\n");
-            info.append("'QPCAT CN: <id>' label means the same cell-type mixture in every image\n");
+            info.append("'QPCAT CN' measurement value means the same cell-type mixture in every image\n");
             info.append("and the per-sample / per-group proportions are directly comparable.\n");
             Files.writeString(resultsDir.resolve("cn_RUN_INFO.txt"),
                     info.toString(), StandardCharsets.UTF_8);
@@ -946,8 +934,9 @@ public class CellularNeighborhoodWorkflow {
                 sb.append("CN_").append(i);
                 JsonArray row = matrix.get(i).getAsJsonArray();
                 for (int j = 0; j < row.size(); j++) {
-                    sb.append(',').append(String.format(java.util.Locale.US, "%.6f",
-                            row.get(j).getAsDouble()));
+                    var cell = row.get(j);
+                    sb.append(',').append(cell.isJsonNull() ? ""
+                            : String.format(java.util.Locale.US, "%.6f", cell.getAsDouble()));
                 }
                 sb.append('\n');
             }

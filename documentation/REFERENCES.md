@@ -133,12 +133,12 @@ QP-CAT implements this directly (`scikit-learn` `NearestNeighbors` + `KMeans`); 
 > Windhager J, Zanotelli VRT, Schulz D, et al. "An end-to-end workflow for multiplexed image processing and analysis." *Nature Protocols* 18, 3565-3613 (2023).
 > https://doi.org/10.1038/s41596-023-00881-0
 
-**CytoMAP -- raster-scanned (physical-radius) neighborhoods, region clustering, and the QuPath round-trip that inspired QP-CAT's radius windows, region objects, region adjacency, and embedding gating:**
+**CytoMAP -- raster-scanned (physical-radius) neighborhoods, region clustering, and the QuPath round-trip that inspired QP-CAT's radius windows, neighborhood adjacency, and embedding gating:**
 > Stoltzfus CR, Filipek J, Gern BH, et al. "CytoMAP: A Spatial Analysis Toolbox Reveals Features of Myeloid Cell Organization in Lymphoid Tissues." *Cell Reports* 31(3), 107523 (2020).
 > https://doi.org/10.1016/j.celrep.2020.107523
 > Workflow guides: image.sc "There and back again, QuPath<==>CytoMAP cluster analysis" (t/43352) and "Won't you be my neighbor? CytoMAP for multiplex tissue microenvironment analysis" (t/46260).
 
-**Used in:** Find Cellular Neighborhoods (`cellular_neighborhoods.py`; window k-NN OR physical radius -> per-type composition -> joint k-means; CN x cell-type log2 enrichment, per-sample / per-group proportions, region adjacency), region annotations (`RegionAnnotationBuilder`), and embedding gating (`EmbeddingScatterPanel` / `GateApplier` / `PlotAndGateDialog`). Distinct from BANKSY above, which augments each cell's EXPRESSION vector with a neighborhood-averaged kernel before clustering; here we cluster the COMPOSITION of pre-assigned cell types.
+**Used in:** Find Cellular Neighborhoods (`cellular_neighborhoods.py`; window k-NN OR physical radius -> per-type composition -> joint k-means; neighborhood id written as the `QPCAT CN` measurement; CN x cell-type log2 enrichment, per-sample / per-group proportions, and CN x CN neighborhood-adjacency enrichment as log2 observed/expected from the cell neighbor graph), and embedding gating (`EmbeddingScatterPanel` / `GateApplier` / `PlotAndGateDialog`). Distinct from BANKSY above, which augments each cell's EXPRESSION vector with a neighborhood-averaged kernel before clustering; here we cluster the COMPOSITION of pre-assigned cell types.
 
 ---
 

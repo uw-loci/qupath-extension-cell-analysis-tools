@@ -1328,7 +1328,7 @@ type so every window is complete.
 
 Most experiments have many images, and the question is usually *how does
 neighborhood composition change with the biology/treatment, or what fraction of
-each sample is a given neighborhood*. That only works if a `QPCAT CN: <id>` label
+each sample is a given neighborhood*. That only works if a `QPCAT CN` value
 means the **same** cell-type mixture in every image. The dialog's **Scope** does
 exactly this:
 
@@ -1370,19 +1370,18 @@ Leave it at *(no grouping)* to skip.
 5. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
 6. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
-7. **Create region annotations** (optional) -- also outline each contiguous patch
-   of a neighborhood as a QuPath annotation (see "Regions and connectivity").
-8. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
-   runs; **Cancel** stops it -- if you cancel before it finishes, **no labels
-   are applied**.
+7. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
+   runs; **Cancel** stops it -- if you cancel before it finishes, **nothing
+   is written**.
 
 ### What happens to your data
 
-- Each detection is classified `QPCAT CN: <id>` (0-based). Color and select CNs
-  in QuPath's Annotations/Classes panel like any other classification.
-- Re-running **overwrites** the `QPCAT CN:` classes (and any other current
-  classification, since CN sets the detection class). Re-run clustering or
-  phenotyping to restore the cell-type column.
+- Each detection gets a numeric **measurement** `QPCAT CN` (0-based neighborhood
+  id). Your cell-type **classification is preserved** -- it is the input to the
+  analysis. Color cells by neighborhood with **Measure > Show measurement maps**
+  and pick `QPCAT CN`.
+- Re-running just overwrites the `QPCAT CN` measurement; it never touches the
+  cell-type classification.
 - The run is recorded as a step in the image's **Workflow** history (with the
   `run_id` and `params_hash`) and as a `CELLULAR NEIGHBORHOODS` row in the
   operation audit log. For **joint** runs the step is recorded on **every**
@@ -1415,32 +1414,34 @@ When the joint run finishes, a results dialog shows:
   the same proportions pooled per metadata group, plus `cn_per_group_proportions.csv`
   and a `cn_per_group_proportions.png` heatmap (group x CN), for a direct
   condition-vs-condition comparison.
-- **Region adjacency** -- a CN x CN table (and `cn_region_adjacency.csv` + heatmap)
-  giving, for each neighborhood, the fraction of its bordering cells that lie in
-  each neighborhood (the diagonal is within-region). Reads which micro-environments
-  sit next to each other ("CN 1 tumor mostly borders CN 3 tumor-edge").
+- **Neighborhood adjacency enrichment** -- a CN x CN table (and
+  `cn_neighborhood_adjacency.csv` + heatmap) of how often neighborhoods border
+  each other, as **log2(observed/expected)** computed from the cell
+  spatial-neighbor graph (not from any drawn object). The observed/expected form
+  divides out neighborhood frequency (so a common CN does not look adjacent to
+  everything just because it is everywhere) and centers at 0 (>0 = more contact
+  than expected from frequency, <0 = avoided). The heatmap hides the diagonal
+  (within-CN contact always dominates) and uses a diverging colormap. Reads which
+  micro-environments abut each other more than chance ("CN 1 tumor is enriched for
+  contact with CN 3 tumor-edge").
 - **Open results folder** opens the folder containing those CSVs, the heatmap
   PNGs, and `cn_RUN_INFO.txt` (parameters + the note that neighborhoods were
   defined jointly).
 
 To inspect *which* cells make up a neighborhood in a particular sample, open that
-image -- the `QPCAT CN:` classes are saved there -- and color/select by class in
-QuPath's Annotations panel as usual.
+image -- the `QPCAT CN` measurement is saved there -- and color by it via
+**Measure > Show measurement maps**.
 
-### Regions and connectivity
+### Visualizing neighborhoods
 
-With **Create region annotations** ticked, each spatially-contiguous patch of a
-neighborhood is outlined as a QuPath **annotation** classed `QPCAT Region: <id>`
-(kept separate from the per-cell `QPCAT CN: <id>` classification). Unlike the
-per-cell labels, these are real objects you can select, measure, and use as
-parents -- the region map that, in the CytoMAP round-trip, could not be brought
-back into QuPath. Contiguity uses the radius (in radius mode) or an
-auto-estimated cell spacing (in kNN mode); tiny patches (< 3 cells) are skipped,
-and each patch is a convex hull of its cells.
-
-> Region annotations are added to (and saved in) **every** processed image. To
-> remove them, select the `QPCAT Region:` classes in the Annotations panel and
-> delete, or re-run without the option (it does not auto-clear a prior run).
+Neighborhoods are shown by **coloring the cells** (the `QPCAT CN` measurement) --
+which is how CytoMAP-style neighborhood maps read: open **Measure > Show
+measurement maps** and pick `QPCAT CN`. (An earlier pre-release build also drew
+convex-hull "region" polygons per neighborhood; these were dropped because a
+spatially pervasive neighborhood's contiguous patch connects across the whole
+tissue, producing giant overlapping hulls with poor correspondence to the cells.
+The neighborhood-adjacency enrichment above captures which neighborhoods abut each
+other -- from the actual cells -- without needing polygons.)
 
 ### How this differs from BANKSY
 

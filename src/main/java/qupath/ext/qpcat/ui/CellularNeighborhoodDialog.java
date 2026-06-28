@@ -76,7 +76,6 @@ public class CellularNeighborhoodDialog {
     private RadioButton windowKnn;
     private RadioButton windowRadius;
     private Spinner<Double> radiusSpinner;
-    private CheckBox createRegionsCheck;
 
     // Scope (Current / All / Specific images) + group-by metadata key (cohort).
     private RadioButton scopeCurrentImage;
@@ -155,16 +154,20 @@ public class CellularNeighborhoodDialog {
     private VBox createCellTypeSection() {
         Label header = new Label("Cell-type column");
         header.setStyle("-fx-font-weight: bold;");
-        classSummaryLabel = new Label();
-        classSummaryLabel.setWrapText(true);
         Button refresh = new Button("Refresh");
         refresh.setTooltip(new Tooltip(
                 "Re-scan the current detection classifications. Click this after you run\n"
                 + "clustering or phenotyping so the new cell types are picked up."));
         refresh.setOnAction(e -> refreshClassSummary());
-        HBox row = new HBox(8, classSummaryLabel, refresh);
-        row.setAlignment(Pos.CENTER_LEFT);
-        return new VBox(4, header, row);
+        HBox headerRow = new HBox(8, header, refresh);
+        headerRow.setAlignment(Pos.CENTER_LEFT);
+
+        // Summary on its own full-width line so a long class list wraps instead of
+        // overflowing horizontally (it rarely fits on one line).
+        classSummaryLabel = new Label();
+        classSummaryLabel.setWrapText(true);
+        classSummaryLabel.setMaxWidth(Double.MAX_VALUE);
+        return new VBox(4, headerRow, classSummaryLabel);
     }
 
     /**
@@ -359,13 +362,6 @@ public class CellularNeighborhoodDialog {
                 "Save a neighborhood x cell-type heatmap (log2 enrichment vs the overall\n"
                 + "cell-type frequencies) so you can read what each neighborhood is made of."));
 
-        createRegionsCheck = new CheckBox("Create region annotations (hull per contiguous patch)");
-        createRegionsCheck.setSelected(false);
-        createRegionsCheck.setTooltip(new Tooltip(
-                "Also add QuPath annotations outlining each contiguous patch of a\n"
-                + "neighborhood (classed 'QPCAT Region: <id>'), so regions become\n"
-                + "selectable, measurable objects -- not just per-cell labels."));
-
         HBox windowRow = new HBox(12, new Label("Window by:"), windowKnn, windowRadius);
         windowRow.setAlignment(Pos.CENTER_LEFT);
         grid.add(windowRow, 0, 0, 2, 1);
@@ -376,7 +372,6 @@ public class CellularNeighborhoodDialog {
         grid.add(new Label("Number of neighborhoods:"), 0, 2);
         grid.add(nNeighborhoodsSpinner, 1, 2);
         grid.add(heatmapCheck, 0, 3, 2, 1);
-        grid.add(createRegionsCheck, 0, 4, 2, 1);
         updWindow.run();
         return grid;
     }
@@ -470,7 +465,6 @@ public class CellularNeighborhoodDialog {
         boolean heatmap = heatmapCheck.isSelected();
         boolean radiusMode = windowRadius.isSelected();
         double radiusMicrons = radiusSpinner.getValue();
-        boolean createRegions = createRegionsCheck.isSelected();
 
         List<ProjectImageEntry<BufferedImage>> scopeEntries = resolveScopeEntries();
         if (scopeEntries != null) {
@@ -483,7 +477,7 @@ public class CellularNeighborhoodDialog {
             String groupKey = groupByCombo == null ? null : groupByCombo.getValue();
             if (NO_GROUPING.equals(groupKey)) groupKey = null;
             runProjectAnalysis(scopeEntries, k, nCn, heatmap, groupKey,
-                    radiusMode, radiusMicrons, createRegions);
+                    radiusMode, radiusMicrons);
             return;
         }
 
@@ -501,7 +495,7 @@ public class CellularNeighborhoodDialog {
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnResult result =
                         workflow.run(k, nCn, 0, heatmap, radiusMode, radiusMicrons,
-                                createRegions, progress);
+                                progress);
 
                 Platform.runLater(() -> {
                     setRunActive(false);
@@ -513,7 +507,9 @@ public class CellularNeighborhoodDialog {
                             + " neighborhoods over " + result.getNCells() + " cells.");
                     Dialogs.showInfoNotification("QPCAT",
                             "Cellular neighborhoods complete: " + result.getNNeighborhoods()
-                            + " neighborhoods.");
+                            + " neighborhoods.\nStored as the 'QPCAT CN' measurement on each cell "
+                            + "(cell-type classes preserved). Color by neighborhood with "
+                            + "Measure > Show measurement maps.");
                     maybeOfferHeatmap(result.getHeatmapPath());
                 });
             } catch (Exception e) {
@@ -537,8 +533,7 @@ public class CellularNeighborhoodDialog {
     /** Run the JOINT multi-image path and surface the cohort results. */
     private void runProjectAnalysis(List<ProjectImageEntry<BufferedImage>> entries,
                                     int k, int nCn, boolean heatmap, String groupKey,
-                                    boolean radiusMode, double radiusMicrons,
-                                    boolean createRegions) {
+                                    boolean radiusMode, double radiusMicrons) {
         setRunActive(true);
         final CellularNeighborhoodWorkflow workflow = new CellularNeighborhoodWorkflow(qupath);
         activeWorkflow = workflow;
@@ -548,7 +543,7 @@ public class CellularNeighborhoodDialog {
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnProjectResult result =
                         workflow.runProject(entries, k, nCn, 0, heatmap, groupKey,
-                                radiusMode, radiusMicrons, createRegions, progress);
+                                radiusMode, radiusMicrons, progress);
 
                 Platform.runLater(() -> {
                     setRunActive(false);
@@ -591,7 +586,6 @@ public class CellularNeighborhoodDialog {
         if (windowKnn != null) windowKnn.setDisable(active);
         if (windowRadius != null) windowRadius.setDisable(active);
         if (radiusSpinner != null) radiusSpinner.setDisable(active);
-        if (createRegionsCheck != null) createRegionsCheck.setDisable(active);
         if (scopeCurrentImage != null) scopeCurrentImage.setDisable(active);
         if (scopeAllImages != null) {
             scopeAllImages.setDisable(active || scopeAllImages.getText().contains("requires"));
@@ -620,6 +614,7 @@ public class CellularNeighborhoodDialog {
     private void showCohortResults(CellularNeighborhoodWorkflow.CnProjectResult result) {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
+        dialog.initModality(Modality.NONE);  // non-blocking: inspect the image while open
         dialog.setTitle("QPCAT - Cellular neighborhood results");
         dialog.setHeaderText("Joint run: " + result.getNNeighborhoods() + " neighborhoods, "
                 + result.getTotalCells() + " cells, " + result.getNImages() + " images");
@@ -628,6 +623,14 @@ public class CellularNeighborhoodDialog {
         VBox box = new VBox(10);
         box.setPadding(new Insets(10));
         box.setPrefWidth(640);
+
+        Label storeNote = new Label(
+                "Neighborhood id stored as the 'QPCAT CN' measurement on each cell "
+                + "(cell-type classifications are preserved). Color cells by neighborhood "
+                + "with Measure > Show measurement maps.");
+        storeNote.setWrapText(true);
+        storeNote.setStyle("-fx-text-fill: #444; -fx-font-size: 11px;");
+        box.getChildren().add(storeNote);
 
         if (result.getDivergenceWarning() != null) {
             Label warn = new Label("Heads up: " + result.getDivergenceWarning());
@@ -658,7 +661,8 @@ public class CellularNeighborhoodDialog {
 
         String adjText = formatAdjacency(result.getRegionAdjacencyJson());
         if (adjText != null && !adjText.isBlank()) {
-            Label adjHdr = new Label("Region adjacency (fraction of a region's neighbors):");
+            Label adjHdr = new Label(
+                    "Neighborhood adjacency enrichment (log2 observed/expected; diagonal hidden):");
             adjHdr.setStyle("-fx-font-weight: bold;");
             TextArea adj = new TextArea(adjText);
             adj.setEditable(false);
@@ -735,7 +739,9 @@ public class CellularNeighborhoodDialog {
                 sb.append(String.format("%-10s", "CN" + i));
                 com.google.gson.JsonArray row = matrix.get(i).getAsJsonArray();
                 for (int j = 0; j < row.size(); j++) {
-                    sb.append(String.format("%8.3f", row.get(j).getAsDouble()));
+                    var c = row.get(j);
+                    sb.append(c.isJsonNull() ? String.format("%8s", "-")
+                            : String.format("%8.3f", c.getAsDouble()));
                 }
                 sb.append('\n');
             }

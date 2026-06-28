@@ -498,22 +498,45 @@ def _region_adjacency():
 
 
 try:
-    _update("Computing region adjacency...")
-    adj = _region_adjacency()
-    row_sums = adj.sum(axis=1, keepdims=True)
-    row_sums[row_sums == 0] = 1.0
-    adj_norm = adj / row_sums
-    region_adjacency_json = json.dumps({"n_cn": n_cn, "matrix": adj_norm.tolist()})
+    _update("Computing neighborhood adjacency...")
+    adj = _region_adjacency()  # symmetric within/between-CN edge counts
+    # log2 observed/expected enrichment: A[a,b] * D / (deg_a * deg_b). This divides
+    # out neighborhood frequency (an abundant CN no longer looks adjacent to
+    # everything just because it is everywhere) and centers at 0: >0 = MORE contact
+    # than expected from frequency, <0 = avoided. deg = each CN's total edge count;
+    # D = grand total of all edges. Undefined cells (0 observed or 0 expected) -> NaN.
+    deg = adj.sum(axis=1)
+    total_deg = float(deg.sum())
+    enrich = np.full((n_cn, n_cn), np.nan, dtype=np.float64)
+    if total_deg > 0:
+        expected = np.outer(deg, deg) / total_deg
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = adj / expected
+            mask = np.isfinite(ratio) & (ratio > 0)
+            enrich[mask] = np.log2(ratio[mask])
+    region_adjacency_json = json.dumps({
+        "n_cn": n_cn,
+        "metric": "log2_observed_over_expected",
+        "matrix": [[None if not np.isfinite(v) else float(v) for v in row]
+                   for row in enrich],
+    })
     if want_heatmap and out_dir:
+        # Mask the diagonal (within-CN contact always dominates) so off-diagonal
+        # structure is visible; diverging colormap centered at 0.
+        disp = enrich.copy()
+        np.fill_diagonal(disp, np.nan)
+        finite = disp[np.isfinite(disp)]
+        amax = float(np.max(np.abs(finite))) if finite.size else 1.0
+        if not np.isfinite(amax) or amax <= 0:
+            amax = 1.0
         region_adjacency_heatmap_path = _save_heatmap(
-            adj_norm, ["CN %d" % cn for cn in range(n_cn)],
+            disp, ["CN %d" % cn for cn in range(n_cn)],
             ["CN %d" % cn for cn in range(n_cn)],
-            "Region adjacency (fraction of a region's neighbors)",
-            "fraction of neighboring edges", "magma", 0.0,
-            float(adj_norm.max()) if adj_norm.size else 1.0,
-            "cn_region_adjacency.png")
+            "Neighborhood adjacency enrichment (log2 obs/exp, diagonal hidden)",
+            "log2 observed / expected", "RdBu_r", -amax, amax,
+            "cn_neighborhood_adjacency.png")
 except Exception as e:
-    logger.warning("Region adjacency failed: %s", e)
+    logger.warning("Neighborhood adjacency failed: %s", e)
 
 # 8. Package outputs.
 _update("Packaging results...")

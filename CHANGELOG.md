@@ -32,15 +32,17 @@ Stoltzfus et al. 2020).
   the CytoMAP-style fixed physical neighborhood (density-aware, more
   interpretable). Microns are converted to pixels per image via pixel
   calibration (treated as pixels if uncalibrated).
-- **Region annotations** from cellular neighborhoods (opt-in checkbox): each
-  spatially-contiguous patch of a neighborhood becomes a convex-hull QuPath
-  annotation classed **`QPCAT Region: <id>`** (distinct from the per-cell
-  `QPCAT CN: <id>`), so regions are selectable/measurable objects -- the region
-  map CytoMAP could not push back into QuPath. New `RegionAnnotationBuilder`
-  (grid union-find + JTS convex hull).
-- **Region adjacency / connectivity** output for joint runs: a row-normalized
-  CN x CN matrix of how often neighborhoods border each other
-  (`cn_region_adjacency.csv` + heatmap, shown in the cohort results dialog).
+- **Neighborhood id stored as a measurement** (`QPCAT CN`), NOT a classification:
+  cellular neighborhoods no longer overwrite each cell's cell-type class (the
+  input to the analysis). Color cells by neighborhood with Measure > Show
+  measurement maps.
+- **Neighborhood adjacency enrichment** for joint runs: a CN x CN
+  **log2(observed/expected)** matrix of how often neighborhoods border each other,
+  computed from the cell spatial-neighbor graph (NOT from any annotation). The
+  observed/expected form divides out neighborhood frequency and centers at 0
+  (>0 = more contact than expected, <0 = avoided); the heatmap hides the diagonal
+  (within-CN contact always dominates) and uses a diverging colormap
+  (`cn_neighborhood_adjacency.csv` + heatmap in the cohort results dialog).
 
 - **Multiple gates / manual annotation.** After assigning a class, the gate stays
   on the plot as a labelled outline (stored in data coords, so it tracks zoom/pan)
@@ -58,8 +60,24 @@ Stoltzfus et al. 2020).
   (including renamed ones) instead of a fixed UMAP/t-SNE/PCA list, and reports how
   many cells were skipped for missing coordinates.
 
+### Fixed (cellular neighborhoods)
+
+- **Live viewer now updates after a run.** A project-scope (joint) run was applied
+  to detached `readImageData()` copies and saved to disk, so the open image showed
+  nothing until a manual "Reload data". It now reuses the open image's live data
+  (mirroring the clustering workflow), so neighborhood measurements appear at once.
+- **Results dialog is non-modal** -- you can inspect the image (and the new
+  measurement) while the cohort results are open.
+- **Cell-type summary wraps** instead of overflowing off the right edge.
+
 ### Removed
 
+- **Convex-hull region annotations dropped before release.** The opt-in "Create
+  region annotations" feature produced giant overlapping convex hulls (a
+  spatially pervasive neighborhood's "patch" connects across the whole tissue),
+  so it was removed along with `RegionAnnotationBuilder`. Neighborhoods are shown
+  by coloring cells (the `QPCAT CN` measurement); the cell-based adjacency output
+  is unaffected.
 - **"Add AI appearance features to cells..." (foundation-model feature
   extraction)** removed from the menu -- it saw little use and pulled in a heavy
   on-demand model download. The backend code is retained but unwired and can be

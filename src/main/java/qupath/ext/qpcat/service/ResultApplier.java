@@ -18,6 +18,9 @@ public class ResultApplier {
     /** Prefix for cluster classification names. */
     private static final String CLUSTER_PREFIX = "Cluster ";
 
+    /** Measurement name for the cellular-neighborhood id. */
+    public static final String NEIGHBORHOOD_MEASUREMENT = "QPCAT CN";
+
     /** Measurement names for embedding coordinates. */
     private static final String EMBED_1 = "UMAP1";
     private static final String EMBED_2 = "UMAP2";
@@ -109,6 +112,29 @@ public class ResultApplier {
         }
 
         logger.info("Applied phenotype labels to {} detections", detections.size());
+    }
+
+    /**
+     * Applies cellular-neighborhood ids to detections as a numeric measurement,
+     * leaving each cell's classification (the cell-type input to the analysis)
+     * intact. Color cells by neighborhood with QuPath's measurement maps.
+     *
+     * @param detections      ordered list of detections (same order as labels)
+     * @param labels          neighborhood id for each detection
+     * @param measurementName the measurement to write (e.g. "QPCAT CN")
+     */
+    public void applyNeighborhoodMeasurement(List<PathObject> detections, int[] labels,
+                                             String measurementName) {
+        if (detections.size() != labels.length) {
+            throw new IllegalArgumentException(
+                    "Detection count (" + detections.size()
+                    + ") does not match label count (" + labels.length + ")");
+        }
+        for (int i = 0; i < detections.size(); i++) {
+            detections.get(i).getMeasurements().put(measurementName, labels[i]);
+        }
+        logger.info("Applied neighborhood measurement '{}' to {} detections",
+                measurementName, detections.size());
     }
 
     /**
