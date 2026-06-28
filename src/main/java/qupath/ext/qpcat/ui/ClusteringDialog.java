@@ -111,6 +111,8 @@ public class ClusteringDialog {
     private ProgressBar progressBar;
     private Button runButton;
     private Button cancelButton;
+    // All settings controls, grouped so they can be disabled during a run.
+    private VBox settingsBox;
     // The workflow for the in-flight run, so the Cancel button can abort it.
     private volatile ClusteringWorkflow activeWorkflow;
 
@@ -138,12 +140,12 @@ public class ClusteringDialog {
         dialog.setHeaderText("Configure clustering parameters");
         dialog.setResizable(true);
 
-        VBox content = new VBox(10);
-        content.setPadding(new Insets(10));
-        content.setPrefWidth(550);
-
-        content.getChildren().add(QpcatDocLinks.linkBar("2-running-clustering"));
-        content.getChildren().addAll(
+        // Settings live in their own box so the whole group can be disabled
+        // during a run; the status row (with Cancel) stays interactive because
+        // it is a sibling, not a child, of this box.
+        settingsBox = new VBox(10);
+        settingsBox.getChildren().add(QpcatDocLinks.linkBar("2-running-clustering"));
+        settingsBox.getChildren().addAll(
                 createScopeSection(),
                 new Separator(),
                 createMeasurementSection(),
@@ -156,10 +158,13 @@ public class ClusteringDialog {
                 new Separator(),
                 createAnalysisSection(),
                 new Separator(),
-                createConfigSection(),
-                new Separator(),
-                createStatusSection()
+                createConfigSection()
         );
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+        content.setPrefWidth(550);
+        content.getChildren().addAll(settingsBox, new Separator(), createStatusSection());
 
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
@@ -853,8 +858,10 @@ public class ClusteringDialog {
         // BANKSY independence note (muted, ASCII only). No manual newline --
         // wrapText handles soft wrap at the dialog width.
         Label banksyNote = new Label(
-                "Note: BANKSY uses its own neighbor model; these graph "
-                + "controls drive spatial smoothing and the statistics above.");
+                "Note: to run BANKSY, choose 'BANKSY (spatially-aware)' in the "
+                + "Algorithm dropdown above. BANKSY uses its own spatial neighbor "
+                + "model, so these graph controls (which drive spatial smoothing and "
+                + "the statistics above) do not affect it.");
         banksyNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         banksyNote.setWrapText(true);
 
@@ -1270,6 +1277,8 @@ public class ClusteringDialog {
         cancelButton.setManaged(active);
         cancelButton.setDisable(false);
         runButton.setDisable(active);
+        // Lock the settings during a run so nothing can be changed mid-run.
+        if (settingsBox != null) settingsBox.setDisable(active);
     }
 
     private void updateAlgorithmParams() {
