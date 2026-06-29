@@ -1252,18 +1252,20 @@ public class AutoencoderDialog {
             if (!proceed) return;
         }
 
-        // Preflight: one-time-per-session reminder that VAE training is slow.
-        // The autoencoder is CPU-bound in QP-CAT v0.x; even modest cell counts
-        // can take 10s of minutes per epoch on commodity hardware. Set
-        // expectations before the user walks away wondering if it crashed.
+        // Preflight: one-time-per-session reminder to set time expectations. VAE
+        // training is heavier than QuPath's built-in classifiers; it uses the GPU
+        // when one is available (much faster) and is slow on CPU. The actual
+        // device chosen is reported in the status bar when the run starts.
         if (!slowTrainingWarningShown) {
             boolean acknowledge = Dialogs.showConfirmDialog(
-                    "QP-CAT - VAE training is slow",
-                    "VAE training is CPU-bound and is NOT comparable in speed to\n"
-                    + "QuPath's regular ML classifiers (Random Forest, ANN).\n\n"
-                    + "Typical run time on commodity hardware:\n"
-                    + "  - 10s of minutes for small projects (<50k labeled cells, <50 epochs).\n"
-                    + "  - Several hours for larger projects or 100+ epochs.\n\n"
+                    "QP-CAT - VAE training",
+                    "VAE training is more involved than QuPath's built-in ML classifiers\n"
+                    + "(Random Forest, ANN). It uses your GPU when one is available; the run\n"
+                    + "reports the device it picked when it starts (look for \"Training on ...\").\n\n"
+                    + "Typical run time:\n"
+                    + "  - On a GPU: minutes for small projects; longer for 100+ epochs.\n"
+                    + "  - On CPU (no GPU): 10s of minutes per epoch on commodity hardware,\n"
+                    + "    hours for larger projects -- much slower.\n\n"
                     + "Plan to leave QuPath running. Training can be left unattended;\n"
                     + "progress is reported in the status bar at the bottom of this dialog.\n\n"
                     + "Proceed?");
