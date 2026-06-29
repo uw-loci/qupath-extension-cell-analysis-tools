@@ -2323,7 +2323,12 @@ public class ClusteringDialog {
         // -- not here -- per user request) so we skip them in this loop.
         if (result.hasPlots()) {
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
-                if ("dotplot".equals(entry.getKey()) || "matrixplot".equals(entry.getKey())) {
+                String pk = entry.getKey();
+                // dotplot/matrixplot are surfaced earlier; ripley_k and ripley_l
+                // are the SAME PNG and are already covered by the interactive
+                // "Ripley K and L" chart tab above -- skip all four here.
+                if ("dotplot".equals(pk) || "matrixplot".equals(pk)
+                        || "ripley_k".equals(pk) || "ripley_l".equals(pk)) {
                     continue;
                 }
                 Tab tab = buildPlotTabFromPng(entry.getKey(), entry.getValue(), false);
@@ -2744,6 +2749,20 @@ public class ClusteringDialog {
      *  script. Returns null when the file cannot be loaded. When
      *  withCompareLink is true (Heatmap / Dotplot / Matrix Plot), the guide
      *  bar also exposes the "Compare expression views" hyperlink. */
+    /** Turn a raw plot key like "spatial_scatter" into a readable tab label
+     *  ("Spatial Scatter") as a fallback for any key without an explicit name. */
+    private static String prettifyKey(String key) {
+        if (key == null || key.isBlank()) return "Plot";
+        StringBuilder sb = new StringBuilder();
+        for (String p : key.split("[_\\s]+")) {
+            if (p.isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(Character.toUpperCase(p.charAt(0)));
+            if (p.length() > 1) sb.append(p.substring(1));
+        }
+        return sb.length() == 0 ? "Plot" : sb.toString();
+    }
+
     private static Tab buildPlotTabFromPng(String key, String filePath, boolean withCompareLink) {
         try {
             javafx.scene.image.Image img = new javafx.scene.image.Image(
@@ -2751,12 +2770,21 @@ public class ClusteringDialog {
             javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
             iv.setPreserveRatio(true);
             iv.setSmooth(true);
+            iv.setFitWidth(700);
+            iv.setFitHeight(500);
 
             ScrollPane sp = new ScrollPane(iv);
-            iv.setFitWidth(800);
+            // Fit the WHOLE plot inside the viewport regardless of aspect ratio.
+            // Binding BOTH fit dimensions with preserveRatio scales to the smaller
+            // one, so wide plots (heatmap/dotplot) fill the width while tall/narrow
+            // plots (Geary, co-occurrence) fill the height instead of overflowing
+            // it -- widening the dialog no longer stretches tall plots off the
+            // bottom. The ScrollPane keeps a scrollbar as a safety net on tiny
+            // windows.
             sp.viewportBoundsProperty().addListener((obs, oldV, newV) -> {
                 if (newV != null) {
-                    iv.setFitWidth(Math.max(800.0, newV.getWidth() - 20.0));
+                    iv.setFitWidth(Math.max(50.0, newV.getWidth() - 4.0));
+                    iv.setFitHeight(Math.max(50.0, newV.getHeight() - 4.0));
                 }
             });
 
@@ -2826,8 +2854,27 @@ public class ClusteringDialog {
                             + "different tissue regions.";
                     docAnchor = "spatial-scatter-tab";
                 }
+                case "geary_c" -> {
+                    tabName = "Geary's C (plot)";
+                    guide = "Geary's C local spatial autocorrelation per marker. C < 1 = nearby "
+                            + "cells have similar values; ~ 1 = random; > 1 = dissimilar.";
+                    docAnchor = "gearys-c-tab";
+                }
+                case "cooc_pairwise" -> {
+                    tabName = "Co-occurrence pairwise (plot)";
+                    guide = "Co-occurrence ratio for each cluster pair as a function of radius: "
+                            + "> 1 = enriched as neighbors at that distance, < 1 = depleted, "
+                            + "~ 1 = random.";
+                    docAnchor = "co-occurrence-tabs";
+                }
+                case "cooc_one_vs_rest" -> {
+                    tabName = "Co-occurrence one-vs-rest (plot)";
+                    guide = "Each cluster's neighborhood composition vs all other clusters "
+                            + "combined, as a function of radius. Same scale as the pairwise plot.";
+                    docAnchor = "co-occurrence-tabs";
+                }
                 default -> {
-                    tabName = key;
+                    tabName = prettifyKey(key);
                     guide = null;
                     docAnchor = null;
                 }
