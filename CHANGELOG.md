@@ -4,7 +4,7 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.7.0] -- 2026-06-25
+## [0.7.0] -- 2026-06-29
 
 Closes the main gaps surfaced by reviewing the 2020 QuPath<->CytoMAP image.sc
 guides against QP-CAT (gating on the embedding; physical-radius neighborhoods;
