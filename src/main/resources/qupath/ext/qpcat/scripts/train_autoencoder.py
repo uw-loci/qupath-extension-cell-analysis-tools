@@ -737,6 +737,16 @@ logger.info("Pre-training (unsupervised): %d epochs", pretrain_epochs)
 # 4. Train/validation split
 # detect_device() is available from model_utils loaded during init
 device = detect_device()
+# Surface the chosen device in the dialog so a silent CPU fallback is obvious.
+if device == "cuda":
+    try:
+        _dev_label = "GPU (%s)" % torch.cuda.get_device_name(0)
+    except Exception:
+        _dev_label = "GPU"
+else:
+    _dev_label = "CPU (no GPU detected -- training will be slow)" \
+        if device == "cpu" else device.upper()
+task.update("Training on %s" % _dev_label)
 
 if use_tiles:
     # Don't load all tiles into a tensor -- use a Dataset that reads from mmap
