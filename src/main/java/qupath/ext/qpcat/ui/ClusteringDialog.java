@@ -115,6 +115,8 @@ public class ClusteringDialog {
     private VBox settingsBox;
     // Phase checklist shown during a run (only the phases the config will run).
     private PhaseProgressPane phasePane;
+    // Live pre-flight caution near the Run button (risky-config heuristics).
+    private Label preflightLabel;
     // The workflow for the in-flight run, so the Cancel button can abort it.
     private volatile ClusteringWorkflow activeWorkflow;
 
@@ -473,7 +475,10 @@ public class ClusteringDialog {
     private TitledPane createAlgorithmSection() {
         algorithmCombo = new ComboBox<>(FXCollections.observableArrayList(Algorithm.values()));
         algorithmCombo.setValue(Algorithm.LEIDEN);
-        algorithmCombo.setOnAction(e -> updateAlgorithmParams());
+        algorithmCombo.setOnAction(e -> {
+            updateAlgorithmParams();
+            updatePreflight();
+        });
         algorithmCombo.setTooltip(new Tooltip(
                 "Clustering algorithm:\n"
                 + "  Leiden - graph-based, auto-detects k (Traag et al. 2019)\n"
@@ -668,6 +673,7 @@ public class ClusteringDialog {
 
         spatialSmoothingCheck.selectedProperty().addListener((obs, oldVal, newVal) -> {
             smoothingIterationsSpinner.setDisable(!newVal);
+            updatePreflight();
         });
 
         HBox smoothingRow = new HBox(8, spatialSmoothingCheck,
@@ -1274,7 +1280,96 @@ public class ClusteringDialog {
         phasePane.setVisible(false);
         phasePane.setManaged(false);
 
-        return new VBox(5, progressRow, phasePane, statusLabel, reproNote, reproLinks);
+        // Pre-flight caution: shown (amber) when the current config matches a
+        // known under-clustering pattern. Hidden when there is nothing to flag.
+        preflightLabel = new Label();
+        preflightLabel.setWrapText(true);
+        preflightLabel.setVisible(false);
+        preflightLabel.setManaged(false);
+        preflightLabel.setStyle("-fx-text-fill: #7a5c00; -fx-background-color: #fff8e1; "
+                + "-fx-padding: 6 8 6 8; -fx-border-color: #e0c060; "
+                + "-fx-border-radius: 4; -fx-background-radius: 4;");
+
+        return new VBox(5, preflightLabel, progressRow, phasePane, statusLabel,
+                reproNote, reproLinks);
+    }
+
+    /**
+     * Heuristic pre-flight check, surfaced as an amber caution near the Run
+     * button, for configurations that commonly under-cluster -- so the user is
+     * warned BEFORE a run that is likely to collapse to one giant cluster or a
+     * few clusters plus a large noise pile. Config-only (no data needed): driven
+     * by the algorithm, feature count + compartment redundancy, background
+     * channels, and spatial smoothing.
+     */
+    private void updatePreflight() {
+        if (preflightLabel == null) return;
+
+        List<String> selected = new ArrayList<>();
+        for (MeasurementItem m : measurementItems) {
+            if (m.isSelected()) selected.add(m.name);
+        }
+        int n = selected.size();
+        java.util.Set<String> compartments = new java.util.LinkedHashSet<>();
+        java.util.Set<String> markers = new java.util.LinkedHashSet<>();
+        boolean hasBackground = false;
+        for (String s : selected) {
+            String[] parts = s.split(":\\s*");
+            if (parts.length >= 1) compartments.add(parts[0].trim());
+            if (parts.length >= 2) {
+                String marker = parts[1].trim();
+                markers.add(marker);
+                String ml = marker.toLowerCase();
+                if (ml.startsWith("af_") || ml.equals("af") || ml.endsWith("_af")
+                        || ml.contains("autofluor") || ml.contains("background")
+                        || ml.startsWith("blank") || ml.startsWith("empty")) {
+                    hasBackground = true;
+                }
+            }
+        }
+
+        List<String> warns = new ArrayList<>();
+        Algorithm algo = algorithmCombo == null ? null : algorithmCombo.getValue();
+
+        if (algo == Algorithm.HDBSCAN && n > 12) {
+            warns.add("HDBSCAN clusters the full " + n + "-feature space; density-based "
+                    + "clustering degrades in high dimensions and tends to collapse to one giant "
+                    + "cluster (or a few clusters plus a large \"Unclassified\" noise pile). "
+                    + "Consider Leiden, or compute UMAP first and cluster on UMAP1/UMAP2.");
+        } else if ((algo == Algorithm.KMEANS || algo == Algorithm.GMM
+                || algo == Algorithm.AGGLOMERATIVE || algo == Algorithm.MINIBATCHKMEANS) && n > 40) {
+            warns.add(algo.getDisplayName() + " uses Euclidean distance on " + n + " features; "
+                    + "distances concentrate in high dimensions, weakening the clusters. Leiden "
+                    + "(graph-based) is more robust for large panels.");
+        }
+
+        if (compartments.size() >= 2 && n > markers.size()) {
+            warns.add("Selected " + n + " features = " + markers.size() + " markers x "
+                    + compartments.size() + " compartments (" + String.join(", ", compartments)
+                    + "). A marker's compartments are highly correlated -- one compartment is "
+                    + "usually cleaner and lower-dimensional.");
+        }
+
+        if (hasBackground) {
+            warns.add("Selection includes likely background / autofluorescence channels "
+                    + "(e.g. AF_*); these add noise -- consider removing them.");
+        }
+
+        if (spatialSmoothingCheck != null && spatialSmoothingCheck.isSelected()) {
+            warns.add("Spatial feature smoothing blends each cell's markers with its neighbors' -- "
+                    + "good for spatial domains, but it blurs cell-type boundaries and can merge "
+                    + "types into one cluster. Turn it off if you are after cell types.");
+        }
+
+        if (warns.isEmpty()) {
+            preflightLabel.setVisible(false);
+            preflightLabel.setManaged(false);
+        } else {
+            preflightLabel.setText("Heads up -- this configuration may under-cluster:\n- "
+                    + String.join("\n- ", warns));
+            preflightLabel.setVisible(true);
+            preflightLabel.setManaged(true);
+        }
     }
 
     /**
@@ -1428,8 +1523,10 @@ public class ClusteringDialog {
         for (String name : allMeasurements) {
             MeasurementItem m = new MeasurementItem(name);
             m.setSelected(name.contains("Mean"));
+            m.selectedProperty().addListener((o, a, b) -> updatePreflight());
             measurementItems.add(m);
         }
+        updatePreflight();
         if (measurementFilter != null) {
             measurementFilter.clear();
         }
@@ -1824,6 +1921,7 @@ public class ClusteringDialog {
                 m.setSelected(configMeasurements.contains(m.name));
             }
         }
+        updatePreflight();
     }
 
     /** True if {@code prefix}1 already exists on the current image's detections. */
