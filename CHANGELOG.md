@@ -4,6 +4,20 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.7.1] -- 2026-06-29
+
+### Fixed
+
+- **Autoencoder "training" pre-run dialog no longer claims VAE training is
+  CPU-bound.** That text predated GPU support; the env now ships the CUDA torch
+  build and training uses the GPU when present. The dialog now says training uses
+  the GPU when available (and is much slower on CPU) and points at the
+  "Training on ..." status line for the actual device.
+- **Clearer device logging** (`detect_device`): on a CPU fallback it distinguishes
+  a CPU-only torch build from a CUDA build that cannot see a usable GPU, and it
+  names the GPU + torch/CUDA versions when CUDA is used. The autoencoder reports
+  the chosen device up front so a silent CPU fallback is obvious.
+
 ## [0.7.0] -- 2026-06-29
 
 Closes the main gaps surfaced by reviewing the 2020 QuPath<->CytoMAP image.sc
