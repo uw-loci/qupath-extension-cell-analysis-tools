@@ -167,6 +167,13 @@ public final class QpcatPreferences {
     private static final IntegerProperty clusterPlotDpi = PathPrefs.createPersistentPreference(
             "qpcat.cluster.plotDpi", 150);
 
+    // When on, editing a cluster color in the Results dialog automatically
+    // regenerates the static matplotlib PNGs (embedding / spatial scatter, etc.)
+    // so they match the new colors. Default off: the interactive Java plots
+    // recolor instantly for free, and PNG regeneration costs a Python round-trip.
+    private static final BooleanProperty clusterAutoRegeneratePlots = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.autoRegeneratePlots", false);
+
     // ==================== Spatial Statistics Expansion (v1) ====================
     //
     // Graph constructor + per-statistic prefs. Used by spatial smoothing
@@ -435,6 +442,8 @@ public final class QpcatPreferences {
     public static int getClusterMiniBatchSize() { return clusterMiniBatchSize.get(); }
     public static int getClusterBanksyPcaDims() { return clusterBanksyPcaDims.get(); }
     public static int getClusterPlotDpi() { return clusterPlotDpi.get(); }
+    public static boolean isClusterAutoRegeneratePlots() { return clusterAutoRegeneratePlots.get(); }
+    public static void setClusterAutoRegeneratePlots(boolean v) { clusterAutoRegeneratePlots.set(v); }
 
     // Spatial Stats Expansion (v1) getters / setters
     public static String getSpatialGraphType() { return spatialGraphType.get(); }
@@ -668,6 +677,18 @@ public final class QpcatPreferences {
                 .category(CATEGORY_CLUSTERING)
                 .description("Resolution for saved clustering plots in DPI (default: 150). "
                         + "Higher = larger files but sharper images. Range: 72-300.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterAutoRegeneratePlots, Boolean.class)
+                .name("Auto-Regenerate Static Plots on Color Change")
+                .category(CATEGORY_CLUSTERING)
+                .description("When enabled, editing a cluster color in the Results window "
+                        + "automatically regenerates the static matplotlib PNGs (embedding "
+                        + "and spatial scatter) so they match the new colors; QP-CAT shows a "
+                        + "brief notice while it runs. Default off: the interactive plots "
+                        + "recolor instantly, and PNG regeneration costs a short Python "
+                        + "round-trip. You can always regenerate on demand with the "
+                        + "'Regenerate static plots' button.")
                 .build());
 
         // --- Spatial Statistics Expansion (v1) ---

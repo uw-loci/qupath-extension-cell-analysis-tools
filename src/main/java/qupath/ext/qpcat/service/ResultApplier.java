@@ -5,7 +5,9 @@ import org.slf4j.LoggerFactory;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Applies clustering results (cluster labels, embeddings) back to
@@ -42,6 +44,7 @@ public class ResultApplier {
         }
 
         int applied = 0;
+        Set<Integer> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
@@ -49,12 +52,38 @@ public class ResultApplier {
             if (label < 0) {
                 det.setPathClass(PathClass.getNullClass());
             } else {
-                det.setPathClass(PathClass.fromString(CLUSTER_PREFIX + label));
+                PathClass pc = PathClass.fromString(CLUSTER_PREFIX + label);
+                // Seed the canonical palette color once per distinct cluster so the
+                // viewer overlay and the QP-CAT plots start from the same colors.
+                // (A user edit later overrides this and is restored from the saved
+                // result; a fresh clustering run intentionally reverts to canonical.)
+                if (seeded.add(label)) {
+                    pc.setColor(ClusterPalette.rgbFor(label));
+                }
+                det.setPathClass(pc);
             }
             applied++;
         }
 
         logger.info("Applied cluster labels to {} detections", applied);
+    }
+
+    /**
+     * Restore a saved palette by setting each named cluster class's color. Used
+     * when reopening a saved result or re-applying it to detections, so a user's
+     * customized colors survive round-trips. Ignores null/empty input.
+     *
+     * @param clusterColors class-name -> packed 0xRRGGBB (as stored in the result)
+     */
+    public void applyClusterColors(java.util.Map<String, Integer> clusterColors) {
+        if (clusterColors == null || clusterColors.isEmpty()) return;
+        int n = 0;
+        for (var e : clusterColors.entrySet()) {
+            if (e.getKey() == null || e.getValue() == null) continue;
+            PathClass.fromString(e.getKey()).setColor(e.getValue());
+            n++;
+        }
+        logger.info("Restored {} saved cluster colors", n);
     }
 
     /**
@@ -103,12 +132,17 @@ public class ResultApplier {
                     + ") does not match label count (" + labels.length + ")");
         }
 
+        Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
             String name = (label >= 0 && label < phenotypeNames.length)
                     ? phenotypeNames[label] : "Unknown";
-            det.setPathClass(PathClass.fromString(name));
+            PathClass pc = PathClass.fromString(name);
+            if (label >= 0 && seeded.add(name)) {
+                pc.setColor(ClusterPalette.rgbFor(label));
+            }
+            det.setPathClass(pc);
         }
 
         logger.info("Applied phenotype labels to {} detections", detections.size());
@@ -155,11 +189,16 @@ public class ResultApplier {
                     + ") does not match label count (" + labels.length + ")");
         }
 
+        Set<Integer> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
             String subName = parentClusterName + "." + label;
-            det.setPathClass(PathClass.fromString(subName));
+            PathClass pc = PathClass.fromString(subName);
+            if (label >= 0 && seeded.add(label)) {
+                pc.setColor(ClusterPalette.rgbFor(label));
+            }
+            det.setPathClass(pc);
         }
 
         logger.info("Applied sub-cluster labels to {} detections (parent: {})",

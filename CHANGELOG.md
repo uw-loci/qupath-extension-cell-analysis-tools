@@ -4,6 +4,49 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.8.0] -- 2026-07-01
+
+Interactive spatial workflow additions from user testing feedback (Alex): manage
+cluster colors, run spatial statistics inside ROIs without re-clustering, and
+re-apply a saved result to detections. See REFERENCES.md (CytoMAP, Stoltzfus
+et al. 2020) for the ROI-window spatial-analysis lineage.
+
+### Added
+
+- **Cluster color management.** The QuPath "Cluster N" PathClass color is now the
+  single source of truth for cluster color. A collapsible "Cluster colors" panel
+  in the Results window lets you edit each cluster's color; the change updates the
+  image overlay and the interactive plots (embedding scatter, representative-cell
+  swatches) live, with no re-run. QP-CAT seeds the canonical tab20 palette on the
+  classes when it applies labels, and the palette is saved with the result and
+  restored when you reopen it. A "Regenerate static plots" button (and an
+  optional "Auto-regenerate static plots on color change" preference, with a
+  notice while it runs) rebuilds the color-dependent matplotlib PNGs (embedding /
+  spatial scatter) from cached data via a fast standalone task -- no re-cluster.
+- **Spatial statistics on existing clusters (post-hoc, ROI-scoped).** New menu
+  item "Spatial statistics on existing clusters...". Runs Ripley K/L,
+  co-occurrence (pairwise / one-vs-rest), neighborhood enrichment, Geary's C and
+  Moran's I over the current image's cells using their existing classification --
+  no clustering or embedding is recomputed. Cells can be restricted to selected
+  annotation ROIs (used as analysis windows only -- detections are not
+  reparented) and cells inside chosen annotation classes (e.g. Ignore / Necrosis)
+  can be excluded. Geary's C / Moran's I use the cells' measurements. Reuses the
+  same `spatial_stats` Python helpers as clustering, so the numbers match.
+- **Apply a saved result to detections.** New menu item "Apply saved result to
+  detections...". Writes a saved clustering result's labels back onto detections,
+  matching cells by source image id + centroid (robust to reordering; unmatched
+  cells are reported, never mislabeled). Pre-flight checks compare the saved vs.
+  live image id and cell counts and warn before applying. Applies to the current
+  image or to every image the result references, and fires a hierarchy-changed
+  event so labels appear without a manual "Reload data". Fixes the case where a
+  saved result held correct labels that were not visible on the open image.
+
+### Notes
+
+- Post-hoc spatial statistics operate on the currently open image; multi-image
+  aggregation is intentionally deferred (a single spatial graph must not bridge
+  cells from different images).
+
 ## [0.7.1] -- 2026-06-29
 
 ### Fixed

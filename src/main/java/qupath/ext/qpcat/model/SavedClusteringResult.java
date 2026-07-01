@@ -42,6 +42,11 @@ public class SavedClusteringResult {
     private double[] cellBboxHalf;
     private String representativesJson;
 
+    // Cluster palette snapshot (class-name -> packed 0xRRGGBB). Optional; null on
+    // older saves. Lets a reopened result restore the exact colors the user set
+    // on the "Cluster N" PathClasses (which are the single source of truth).
+    private Map<String, Integer> clusterColors;
+
     // Spatial analysis
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
@@ -135,6 +140,10 @@ public class SavedClusteringResult {
 
     public String getRepresentativesJson() { return representativesJson; }
     public void setRepresentativesJson(String json) { this.representativesJson = json; }
+
+    // --- Cluster palette ---
+    public Map<String, Integer> getClusterColors() { return clusterColors; }
+    public void setClusterColors(Map<String, Integer> m) { this.clusterColors = m; }
 
     // --- Spatial ---
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.lib.common.GeneralTools;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 
 import java.io.IOException;
@@ -162,6 +163,10 @@ public class ClusteringResultManager {
         saved.setScopeLabel(scopeLabel);
         saved.setAutoSaved(autoSaved);
 
+        // Snapshot the current cluster palette (the "Cluster N" PathClass colors,
+        // which are the source of truth) so reopening restores the user's colors.
+        saved.setClusterColors(snapshotClusterColors(result.getClusterLabels()));
+
         // Write JSON
         Path file = resultsDir.resolve(safeName + JSON_EXT);
         String json = GSON.toJson(saved);
@@ -170,6 +175,24 @@ public class ClusteringResultManager {
                 name, file, result.getNClusters(), result.getNCells(),
                 autoSaved ? "auto" : "named");
         return safeName;
+    }
+
+    /**
+     * Snapshot the color of each distinct cluster's "Cluster N" PathClass. Keyed
+     * by class name -> packed 0xRRGGBB. Returns null when there are no non-noise
+     * labels (e.g. embedding-only runs), so older-style saves are unchanged.
+     */
+    private static Map<String, Integer> snapshotClusterColors(int[] labels) {
+        if (labels == null) return null;
+        Map<String, Integer> colors = new LinkedHashMap<>();
+        Set<Integer> seen = new HashSet<>();
+        for (int lab : labels) {
+            if (lab < 0 || !seen.add(lab)) continue;
+            String name = "Cluster " + lab;
+            Integer rgb = PathClass.fromString(name).getColor();
+            if (rgb != null) colors.put(name, rgb);
+        }
+        return colors.isEmpty() ? null : colors;
     }
 
     private static final DateTimeFormatter AUTO_NAME_FMT =
@@ -325,6 +348,11 @@ public class ClusteringResultManager {
             }
             saved.setPlotPaths(absolutePaths);
         }
+
+        // Restore the saved cluster palette to the "Cluster N" PathClasses so the
+        // reopened result's plots and the viewer overlay show the colors the user
+        // had when it was saved (PathClass is the single source of truth).
+        new ResultApplier().applyClusterColors(saved.getClusterColors());
 
         return saved.toClusteringResult();
     }

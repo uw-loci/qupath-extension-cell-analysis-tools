@@ -24,6 +24,8 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
+import qupath.ext.qpcat.service.ClusterPalette;
+import qupath.ext.qpcat.service.PlotRegenerator;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -31,10 +33,16 @@ import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.fx.dialogs.Dialogs;
+import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
+
+import javafx.scene.Node;
+import javafx.scene.image.ImageView;
+import javafx.scene.paint.Color;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -2205,6 +2213,11 @@ public class ClusteringDialog {
 
         TabPane tabPane = new TabPane();
 
+        // Held so the Cluster-colors panel can live-refresh the interactive plot
+        // and reload the regenerated PNGs after a color edit (PathClass = truth).
+        final EmbeddingScatterPanel[] scatterHolder = {null};
+        final Map<String, ImageView> pngViews = new LinkedHashMap<>();
+
         // Interactive heatmap tab (cluster-marker means)
         if (result.getClusterStats() != null && result.getNClusters() > 1) {
             ClusterHeatmapPanel heatmap = new ClusterHeatmapPanel();
@@ -2244,6 +2257,7 @@ public class ClusteringDialog {
             EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
             scatter.setData(result.getEmbedding(), result.getClusterLabels(),
                     result.getNClusters(), embName);
+            scatterHolder[0] = scatter;
             // Wire plot-click navigation + crop preview when references exist.
             if (cropService != null) {
                 scatter.setNavigation(result.getCellRefs(), qupath, cropService);
@@ -2429,7 +2443,7 @@ public class ClusteringDialog {
                         || "ripley_k".equals(pk) || "ripley_l".equals(pk)) {
                     continue;
                 }
-                Tab tab = buildPlotTabFromPng(entry.getKey(), entry.getValue(), false);
+                Tab tab = buildPlotTabFromPng(entry.getKey(), entry.getValue(), false, pngViews);
                 if (tab != null) tabPane.getTabs().add(tab);
             }
         }
@@ -2551,9 +2565,17 @@ public class ClusteringDialog {
             manageBtn.setDisable(true);
         }
 
-        VBox mainContent = (locationField != null)
-                ? new VBox(8, tabPane, locationField, buttonBar)
-                : new VBox(8, tabPane, buttonBar);
+        // Cluster-colors panel: edit each cluster's color (the "Cluster N"
+        // PathClass color is the single source of truth), recolor the viewer +
+        // interactive plots live, and regenerate the static PNGs on demand.
+        Node colorPanel = buildClusterColorPanel(result, qupath, scatterHolder,
+                pngViews, embName, loadedResultName);
+
+        VBox mainContent = new VBox(8);
+        mainContent.getChildren().add(tabPane);
+        if (colorPanel != null) mainContent.getChildren().add(colorPanel);
+        if (locationField != null) mainContent.getChildren().add(locationField);
+        mainContent.getChildren().add(buttonBar);
         VBox.setVgrow(tabPane, javafx.scene.layout.Priority.ALWAYS);
 
         dialog.getDialogPane().setContent(mainContent);
@@ -2862,10 +2884,224 @@ public class ClusteringDialog {
     }
 
     private static Tab buildPlotTabFromPng(String key, String filePath, boolean withCompareLink) {
+        return buildPlotTabFromPng(key, filePath, withCompareLink, null);
+    }
+
+    /**
+     * Build the collapsible "Cluster colors" panel for the Results dialog. Each
+     * cluster gets a ColorPicker seeded from its "Cluster N" PathClass color (the
+     * single source of truth). Editing a color updates the class, repaints the
+     * viewer overlay, and live-recolors the interactive scatter; a "Regenerate
+     * static plots" button (and the auto-regenerate preference) rebuilds the
+     * color-dependent PNGs. Returns null when there are no non-noise clusters.
+     */
+    private static Node buildClusterColorPanel(ClusteringResult result, QuPathGUI qupath,
+            EmbeddingScatterPanel[] scatterHolder, Map<String, ImageView> pngViews,
+            String embName, String loadedResultName) {
+        int[] labels = result.getClusterLabels();
+        if (labels == null) return null;
+        java.util.TreeSet<Integer> ids = new java.util.TreeSet<>();
+        for (int v : labels) if (v >= 0) ids.add(v);
+        if (ids.isEmpty()) return null;
+
+        FlowPane swatches = new FlowPane(8, 6);
+        swatches.setPadding(new Insets(6));
+
+        // Manual + auto regenerate share one closure; regen[0] is filled below.
+        final Runnable[] regen = {null};
+
+        Button regenBtn = new Button("Regenerate static plots");
+        regenBtn.setTooltip(new Tooltip("Rebuild the static embedding / spatial PNGs "
+                + "using the current cluster colors. The interactive plots already "
+                + "recolor instantly; this refreshes the saved PNG images too."));
+
+        for (int id : ids) {
+            Integer rgb = PathClass.fromString("Cluster " + id).getColor();
+            Color init = rgb != null
+                    ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
+                    : EmbeddingScatterPanel.clusterColorFor(id);
+            ColorPicker picker = new ColorPicker(init);
+            picker.setStyle("-fx-color-label-visible: false;");
+            final int cid = id;
+            picker.setOnAction(e -> {
+                applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
+                // Auto-regenerate only when opted in AND no regeneration is already
+                // running (regenBtn is disabled while one is in flight -- a simple
+                // debounce for rapid successive color edits).
+                if (QpcatPreferences.isClusterAutoRegeneratePlots()
+                        && regen[0] != null && !regenBtn.isDisabled()) {
+                    regen[0].run();
+                }
+            });
+            HBox row = new HBox(4, picker, new Label("Cluster " + id));
+            row.setAlignment(Pos.CENTER_LEFT);
+            swatches.getChildren().add(row);
+        }
+
+        regen[0] = () -> regenerateStaticPlots(result, qupath, pngViews, embName,
+                loadedResultName, regenBtn, false);
+        regenBtn.setOnAction(e -> regenerateStaticPlots(result, qupath, pngViews, embName,
+                loadedResultName, regenBtn, true));
+
+        // Nothing to regenerate unless the color-dependent PNGs were saved.
+        boolean hasColorPngs = result.getPlotPaths() != null
+                && (result.getPlotPaths().containsKey("embedding")
+                    || result.getPlotPaths().containsKey("spatial_scatter"));
+        regenBtn.setDisable(!hasColorPngs);
+
+        Label hint = new Label("Colors are the QuPath \"Cluster N\" class colors -- editing "
+                + "here updates the image overlay and the plots. The palette is saved with "
+                + "this result and restored when you reopen it.");
+        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        hint.setWrapText(true);
+
+        ScrollPane swScroll = new ScrollPane(swatches);
+        swScroll.setFitToWidth(true);
+        swScroll.setPrefViewportHeight(70);
+        swScroll.setStyle("-fx-background-color: transparent;");
+
+        VBox body = new VBox(6, swScroll, new HBox(10, regenBtn), hint);
+        body.setPadding(new Insets(4));
+
+        TitledPane pane = new TitledPane("Cluster colors", body);
+        pane.setExpanded(false);
+        pane.setAnimated(false);
+        return pane;
+    }
+
+    /**
+     * Set a cluster's PathClass color (the source of truth), repaint the viewer
+     * overlay, and live-recolor the interactive scatter.
+     */
+    private static void applyClusterColor(int clusterId, Color c, QuPathGUI qupath,
+                                          EmbeddingScatterPanel[] scatterHolder) {
+        if (c == null) return;
+        int rgb = ColorTools.packRGB(
+                (int) Math.round(c.getRed() * 255),
+                (int) Math.round(c.getGreen() * 255),
+                (int) Math.round(c.getBlue() * 255));
+        PathClass.fromString("Cluster " + clusterId).setColor(rgb);
+        if (qupath != null) {
+            try {
+                var viewer = qupath.getViewer();
+                if (viewer != null) viewer.repaintEntireImage();
+            } catch (Exception ignore) { /* no open viewer */ }
+        }
+        if (scatterHolder[0] != null) scatterHolder[0].refreshColors();
+    }
+
+    /**
+     * Regenerate the color-dependent PNGs (embedding / spatial scatter) with the
+     * current palette, off the FX thread, then reload them in place. When
+     * {@code userInitiated} is false the call came from the auto-regenerate
+     * preference, so we first show an informational notice explaining why the
+     * plots are changing.
+     */
+    private static void regenerateStaticPlots(ClusteringResult result, QuPathGUI qupath,
+            Map<String, ImageView> pngViews, String embName, String loadedResultName,
+            Button regenBtn, boolean userInitiated) {
+        Map<String, String> plotPaths = result.getPlotPaths();
+        if (plotPaths == null) return;
+        boolean wantEmbedding = plotPaths.containsKey("embedding");
+        boolean wantSpatial = plotPaths.containsKey("spatial_scatter");
+        if (!wantEmbedding && !wantSpatial) return;
+        if (result.getEmbedding() == null || result.getClusterLabels() == null) return;
+
+        String anyPath = wantEmbedding ? plotPaths.get("embedding") : plotPaths.get("spatial_scatter");
+        java.io.File dir = new java.io.File(anyPath).getParentFile();
+        if (dir == null) return;
+
+        // Palette indexed by cluster id, from the source-of-truth PathClasses.
+        int maxId = 0;
+        for (int v : result.getClusterLabels()) if (v > maxId) maxId = v;
+        java.util.List<String> colors = new java.util.ArrayList<>();
+        for (int i = 0; i <= maxId; i++) {
+            Integer rgb = PathClass.fromString("Cluster " + i).getColor();
+            colors.add(rgb != null ? ClusterPalette.toHex(rgb) : ClusterPalette.hexFor(i));
+        }
+
+        // Spatial-scatter coordinates come from the per-cell references.
+        double[][] coords = null;
+        if (wantSpatial && result.getCellRefs() != null) {
+            var refs = result.getCellRefs();
+            coords = new double[refs.length][2];
+            for (int i = 0; i < refs.length; i++) {
+                coords[i][0] = refs[i] != null ? refs[i].getX() : 0;
+                coords[i][1] = refs[i] != null ? refs[i].getY() : 0;
+            }
+        }
+
+        if (!userInitiated) {
+            Dialogs.showInfoNotification("QPCAT",
+                    "Regenerating static plots to match the new cluster colors "
+                    + "(auto-regenerate preference is on).");
+        }
+
+        final double[][] fCoords = coords;
+        final java.util.List<String> fColors = colors;
+        final int dpi = QpcatPreferences.getClusterPlotDpi();
+        final String prevText = regenBtn.getText();
+        regenBtn.setDisable(true);
+        regenBtn.setText("Regenerating...");
+        if (regenBtn.getScene() != null) {
+            regenBtn.getScene().setCursor(javafx.scene.Cursor.WAIT);
+        }
+
+        Thread t = new Thread(() -> {
+            Map<String, String> newPaths;
+            try {
+                newPaths = PlotRegenerator.regenerate(result.getEmbedding(),
+                        result.getClusterLabels(), fCoords, fColors, embName, dpi,
+                        dir.toPath(), null);
+            } catch (Exception ex) {
+                logger.error("Plot regeneration failed", ex);
+                Platform.runLater(() -> {
+                    restoreRegenButton(regenBtn, prevText);
+                    Dialogs.showErrorNotification("QPCAT",
+                            "Could not regenerate plots: " + ex.getMessage());
+                });
+                return;
+            }
+            Platform.runLater(() -> {
+                for (var e : newPaths.entrySet()) {
+                    ImageView iv = pngViews.get(e.getKey());
+                    if (iv != null) {
+                        iv.setImage(new javafx.scene.image.Image(
+                                new java.io.File(e.getValue()).toURI().toString()));
+                    }
+                }
+                restoreRegenButton(regenBtn, prevText);
+                if (userInitiated) {
+                    Dialogs.showInfoNotification("QPCAT",
+                            "Static plots regenerated (" + newPaths.size() + ").");
+                }
+            });
+        }, "QPCAT-RegeneratePlots");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void restoreRegenButton(Button regenBtn, String text) {
+        regenBtn.setDisable(false);
+        regenBtn.setText(text);
+        if (regenBtn.getScene() != null) {
+            regenBtn.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
+        }
+    }
+
+    /**
+     * As {@link #buildPlotTabFromPng(String, String, boolean)} but, when
+     * {@code viewSink} is non-null, registers the created ImageView under
+     * {@code key} so the caller can reload the image in place after the PNG is
+     * regenerated with a new palette (see the "Regenerate static plots" action).
+     */
+    private static Tab buildPlotTabFromPng(String key, String filePath, boolean withCompareLink,
+                                           Map<String, ImageView> viewSink) {
         try {
             javafx.scene.image.Image img = new javafx.scene.image.Image(
                     new File(filePath).toURI().toString());
             javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
+            if (viewSink != null) viewSink.put(key, iv);
             iv.setPreserveRatio(true);
             iv.setSmooth(true);
             iv.setFitWidth(700);

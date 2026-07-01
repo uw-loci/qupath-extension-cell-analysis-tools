@@ -18,7 +18,9 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.ui.BugReportDialog;
+import qupath.ext.qpcat.ui.ApplySavedResultDialog;
 import qupath.ext.qpcat.ui.CellularNeighborhoodDialog;
+import qupath.ext.qpcat.ui.SpatialStatsDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
@@ -216,6 +218,22 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             new CellularNeighborhoodDialog(qupath).show();
         });
         cellularNeighborhoodsItem.visibleProperty().bind(environmentReady);
+
+        // Spatial statistics on existing clusters (post-hoc, ROI-scoped; no re-cluster)
+        MenuItem spatialStatsItem = new MenuItem(res.getString("menu.spatialStats"));
+        spatialStatsItem.setOnAction(e -> {
+            if (qupath.getImageData() == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+                return;
+            }
+            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
+                Dialogs.showWarningNotification(EXTENSION_NAME,
+                        "No detections found. Run cell detection first.");
+                return;
+            }
+            new SpatialStatsDialog(qupath).show();
+        });
+        spatialStatsItem.visibleProperty().bind(environmentReady);
         // NOTE: "Add AI appearance features to cells..." (foundation-model feature
         // extraction, FeatureExtractionDialog) was removed from the menu in v0.7.0
         // -- it was not pulling its weight. The dialog/backend code is retained but
@@ -335,6 +353,15 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
 
+        // Apply a saved result back onto detections (safety-checked write-back)
+        MenuItem applySavedResultItem = new MenuItem(res.getString("menu.applySavedResult"));
+        applySavedResultItem.setOnAction(e -> ApplySavedResultDialog.show(qupath));
+        applySavedResultItem.visibleProperty().bind(environmentReady);
+        applySavedResultItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getProject() == null,
+                        qupath.projectProperty()));
+
         // Manage Clusters
         MenuItem manageClustersItem = new MenuItem(res.getString("menu.manageClusters"));
         manageClustersItem.setOnAction(e -> {
@@ -424,6 +451,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 runPhenotypingItem,
                 zeroShotItem,
                 cellularNeighborhoodsItem,
+                spatialStatsItem,
                 sep2,
                 // -- Appearance / deep learning --
                 autoencoderItem,
@@ -432,6 +460,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 manageClustersItem,
                 viewResultsItem,
                 manageResultsItem,
+                applySavedResultItem,
                 sep4,
                 // -- Export --
                 exportAnnDataItem,

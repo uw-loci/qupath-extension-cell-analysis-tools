@@ -20,13 +20,17 @@ import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.service.CellCropService;
+import qupath.ext.qpcat.service.ClusterPalette;
 import qupath.ext.qpcat.service.ViewerNavigator;
+import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.objects.classes.PathClass;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.IntFunction;
 
 /**
  * Interactive JavaFX scatter plot of embedding coordinates colored by cluster.
@@ -40,29 +44,22 @@ public class EmbeddingScatterPanel extends VBox {
     private static final double MARGIN = 40;
     private static final double POINT_RADIUS = 1.5;
 
-    // Cluster color palette (up to 20 distinct colors)
-    private static final Color[] CLUSTER_COLORS = {
-            Color.rgb(31, 119, 180),   // tab blue
-            Color.rgb(255, 127, 14),   // tab orange
-            Color.rgb(44, 160, 44),    // tab green
-            Color.rgb(214, 39, 40),    // tab red
-            Color.rgb(148, 103, 189),  // tab purple
-            Color.rgb(140, 86, 75),    // tab brown
-            Color.rgb(227, 119, 194),  // tab pink
-            Color.rgb(127, 127, 127),  // tab gray
-            Color.rgb(188, 189, 34),   // tab olive
-            Color.rgb(23, 190, 207),   // tab cyan
-            Color.rgb(174, 199, 232),  // light blue
-            Color.rgb(255, 187, 120),  // light orange
-            Color.rgb(152, 223, 138),  // light green
-            Color.rgb(255, 152, 150),  // light red
-            Color.rgb(197, 176, 213),  // light purple
-            Color.rgb(196, 156, 148),  // light brown
-            Color.rgb(247, 182, 210),  // light pink
-            Color.rgb(199, 199, 199),  // light gray
-            Color.rgb(219, 219, 141),  // light olive
-            Color.rgb(158, 218, 229),  // light cyan
-    };
+    // Cluster color palette (up to 20 distinct colors), derived from the shared
+    // canonical palette in ClusterPalette so the plots, the seeded PathClass
+    // colors, and the Python PNGs all agree before any user customization.
+    private static final Color[] CLUSTER_COLORS = buildPalette();
+
+    private static Color[] buildPalette() {
+        Color[] out = new Color[ClusterPalette.size()];
+        for (int i = 0; i < out.length; i++) {
+            int rgb = ClusterPalette.rgbFor(i);
+            out[i] = Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb));
+        }
+        return out;
+    }
+
+    /** Default mapping from cluster id to the PathClass name QP-CAT assigns. */
+    public static final IntFunction<String> DEFAULT_CLUSTER_NAMES = c -> "Cluster " + c;
 
     private final Canvas canvas;
     private final Label titleLabel;
@@ -79,6 +76,10 @@ public class EmbeddingScatterPanel extends VBox {
     private String embeddingName = "Embedding";
     private String axisLabelX;   // optional explicit axis labels (e.g. biaxial markers)
     private String axisLabelY;
+
+    // Resolve a cluster id to the PathClass name whose live color the plot reads
+    // (default "Cluster N"). Null falls back to the fixed palette (gating previews).
+    private IntFunction<String> classNameResolver = DEFAULT_CLUSTER_NAMES;
 
     // Optional navigation wiring (null = plot stays display-only, as before).
     private CellRef[] cellRefs;
@@ -407,13 +408,59 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     private Color clusterColor(int cluster) {
-        return clusterColorFor(cluster);
+        return clusterColorFor(cluster, classNameResolver);
     }
 
-    /** Shared cluster color, matching the scatter palette (numeric-id order). */
+    /**
+     * Resolve a cluster id to the PathClass name whose live color the plot reads.
+     * Defaults to {@code "Cluster " + id}; pass null to fall back to the fixed
+     * palette (e.g. gating previews with no backing class). Call
+     * {@link #refreshColors()} afterwards to repaint.
+     */
+    public void setClassNameResolver(IntFunction<String> resolver) {
+        this.classNameResolver = resolver;
+    }
+
+    /** Re-read cluster colors from their PathClasses and repaint (no data change). */
+    public void refreshColors() {
+        redraw();
+    }
+
+    /**
+     * Shared cluster color. Reads the live QuPath PathClass color for
+     * {@code "Cluster " + id} when present -- so editing a class color updates the
+     * plot -- and falls back to the fixed tab20 palette otherwise.
+     */
     public static Color clusterColorFor(int cluster) {
+        return clusterColorFor(cluster, DEFAULT_CLUSTER_NAMES);
+    }
+
+    /**
+     * As {@link #clusterColorFor(int)} but resolving the class name via the given
+     * resolver. A null resolver (or a null/blank name, or a class with no color)
+     * falls back to the fixed tab20 palette.
+     */
+    public static Color clusterColorFor(int cluster, IntFunction<String> nameResolver) {
         if (cluster < 0) return Color.LIGHTGRAY;
-        return CLUSTER_COLORS[cluster % CLUSTER_COLORS.length];
+        if (nameResolver != null) {
+            String name = nameResolver.apply(cluster);
+            if (name != null && !name.isBlank()) {
+                Integer rgb = PathClass.fromString(name).getColor();
+                if (rgb != null) {
+                    return Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb));
+                }
+            }
+        }
+        return CLUSTER_COLORS[Math.floorMod(cluster, CLUSTER_COLORS.length)];
+    }
+
+    /**
+     * Packed RGB of the fixed default palette color for a cluster id -- used to
+     * seed PathClass colors so the viewer overlay and the plots start from the
+     * same canonical palette.
+     */
+    public static int defaultClusterRgb(int cluster) {
+        return ClusterPalette.rgbFor(cluster);
     }
 
     // Zoom

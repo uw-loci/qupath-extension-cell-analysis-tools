@@ -36,6 +36,9 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 23. [Reproducing a clustering run](#23-reproducing-a-clustering-run)
 24. [Recipes (worked examples)](#24-recipes-worked-examples)
 25. [Gating cells on a 2D plot](#25-gating-cells-on-a-2d-plot)
+26. [Managing cluster colors](#26-managing-cluster-colors)
+27. [Spatial statistics on existing clusters (ROI-scoped)](#27-spatial-statistics-on-existing-clusters-roi-scoped)
+28. [Applying a saved result to detections](#28-applying-a-saved-result-to-detections)
 
 ---
 
@@ -1629,3 +1632,105 @@ survives reload.
   images in the plot. Choose by whether you want a transient look or a saved
   population.
 - The standalone tool reads existing coordinates only -- it never runs Python.
+
+---
+
+## 26. Managing cluster colors
+
+Cluster color is driven by one thing: the QuPath **PathClass** color of each
+`Cluster N` class. That is the single source of truth -- the image overlay, the
+interactive embedding scatter, and the representative-cell swatches all read it.
+
+When clustering applies labels, QP-CAT seeds the canonical `tab20` palette on the
+`Cluster N` classes so the viewer and the plots start out matching.
+
+**Editing colors.** Open the Results window and expand the **"Cluster colors"**
+panel (below the tabs). Each cluster has a color picker; changing it:
+
+- updates that class's color everywhere (the image overlay repaints immediately),
+- live-recolors the interactive embedding scatter and the representative-cell
+  swatches -- no re-run.
+
+Because the class color IS the source of truth, "applying colors back to QuPath"
+is automatic: editing here already edits the class.
+
+**The static PNG plots.** The saved matplotlib PNGs (the "Embedding Plot" and
+"Spatial Scatter" tabs) bake their colors in and cannot recolor live. Click
+**"Regenerate static plots"** to rebuild the color-dependent PNGs from cached data
+using the current palette (a fast Python round-trip -- it does NOT re-cluster). To
+have this happen automatically after every color edit, turn on
+**Edit > Preferences > QP-CAT: Run Clustering > "Auto-Regenerate Static Plots on
+Color Change"** (default off); QP-CAT shows a brief notice while it runs.
+
+**Persistence.** The palette is saved inside the result JSON. Reopening the result
+via "View Past Results" restores the exact colors you set.
+
+Note: a fresh clustering run intentionally reverts the classes to the canonical
+palette. Edit colors after the run; those edits are saved with the result.
+
+---
+
+## 27. Spatial statistics on existing clusters (ROI-scoped)
+
+**Menu: Extensions > QP-CAT > "Spatial statistics on existing clusters..."**
+
+Run the spatial-statistics suite over cells that **already** carry a
+classification (from clustering, phenotyping, or any classifier) **without
+re-running clustering or embedding**. This is the tool for "I already have my cell
+types -- now test spatial hypotheses, optionally only inside a region."
+
+It operates on the **current image** and reads each cell's existing PathClass as
+the label.
+
+**Analysis windows (ROIs).** Check **"Restrict to selected annotation(s)"** and
+select one or more annotations first; only cells whose centroid falls inside a
+selected annotation are analyzed. The annotations are used as analysis windows
+**only** -- detections are not reparented, so a cell can belong to several windows
+across separate runs (tumor core, invasive front, stroma, ...).
+
+**Exclusions.** Under "Exclude cells inside annotation classes", tick classes
+(e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions. Common
+ignore/necrosis/exclude classes are pre-checked.
+
+**Graph + statistics.** Pick the neighbor graph (kNN / radius / Delaunay) and its
+parameter, the permutation count (0 = adaptive), and which statistics to compute:
+
+- **Ripley K / L**, **Co-occurrence** (pairwise / one-vs-rest), **Neighborhood
+  enrichment** -- computed from the cluster labels + positions.
+- **Geary's C**, **Moran's I** -- computed from the cells' measurements (skipped
+  with a warning if the cells have no numeric measurements).
+
+Results open in the standard Results window (spatial tabs only). Nothing is
+written to the object hierarchy -- this is a read-only analysis.
+
+Scope note: this runs on the open image. Multi-image aggregation is deferred on
+purpose, because one spatial graph must not connect cells from different images.
+To compare regions across images, run the tool per image.
+
+---
+
+## 28. Applying a saved result to detections
+
+**Menu: Extensions > QP-CAT > "Apply saved result to detections..."**
+
+Writes a previously saved clustering result's labels back onto detections. Use it
+when a saved result holds the correct labels but they are not showing on the open
+image (e.g. after reopening the project), or to re-label detections from an older
+run.
+
+**How it works.** Pick a saved result; QP-CAT shows a pre-flight summary -- the
+saved cluster/cell counts, how many cells the result has for the current image,
+and the live detection count. Cells are matched to detections by **source image id
++ centroid**, so matching is robust to detection reordering. Cells that cannot be
+matched (e.g. the detections were re-segmented since the run) are **reported, not
+mislabeled**.
+
+**Options.**
+
+- *Current image only* vs *All images referenced by the result*.
+- *Also write the saved embedding coordinates* (adds the UMAP/PCA/t-SNE
+  measurements back).
+
+Applying restores the saved color palette and fires a hierarchy-changed event, so
+labels appear immediately -- no manual "Reload data" needed. A summary reports how
+many cells were labelled per image and any that were unmatched.

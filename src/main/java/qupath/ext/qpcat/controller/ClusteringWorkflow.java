@@ -3491,7 +3491,7 @@ public class ClusteringWorkflow {
 
     // ==================== Spatial Stats Expansion (v1) parsers ====================
 
-    private static qupath.ext.qpcat.model.RipleyResult parseRipley(String json, Gson gson) {
+    static qupath.ext.qpcat.model.RipleyResult parseRipley(String json, Gson gson) {
         Map<String, Object> raw = gson.fromJson(json,
                 new TypeToken<Map<String, Object>>(){}.getType());
         qupath.ext.qpcat.model.RipleyResult out = new qupath.ext.qpcat.model.RipleyResult();
@@ -3517,7 +3517,7 @@ public class ClusteringWorkflow {
         return out;
     }
 
-    private static qupath.ext.qpcat.model.GearyCResult parseGeary(String json, Gson gson) {
+    static qupath.ext.qpcat.model.GearyCResult parseGeary(String json, Gson gson) {
         Map<String, Object> raw = gson.fromJson(json,
                 new TypeToken<Map<String, Object>>(){}.getType());
         qupath.ext.qpcat.model.GearyCResult out = new qupath.ext.qpcat.model.GearyCResult();
@@ -3539,7 +3539,7 @@ public class ClusteringWorkflow {
         return out;
     }
 
-    private static qupath.ext.qpcat.model.CoOccurrenceResult parseCoOccurrence(String json, Gson gson) {
+    static qupath.ext.qpcat.model.CoOccurrenceResult parseCoOccurrence(String json, Gson gson) {
         Map<String, Object> raw = gson.fromJson(json,
                 new TypeToken<Map<String, Object>>(){}.getType());
         qupath.ext.qpcat.model.CoOccurrenceResult out =
