@@ -35,6 +35,7 @@ public contract consumed by FigureExportScripts' PlotKind enum:
 ASCII-only logging and error messages per the QPSC encoding policy
 (Windows cp1252 production).
 """
+
 import json
 import logging
 import math
@@ -52,6 +53,7 @@ def _safe_kwargs(fn, **kw):
     serial execution to avoid the numba/joblib deadlock seen inside the Appose
     worker subprocess on Windows."""
     import inspect
+
     try:
         params = inspect.signature(fn).parameters
     except (TypeError, ValueError):
@@ -107,8 +109,9 @@ def adaptive_permutations(n_cells, override=0):
     return 50
 
 
-def build_spatial_graph(adata, graph_type="knn", k=15, radius=-1.0,
-                         delaunay_max_edge=-1.0):
+def build_spatial_graph(
+    adata, graph_type="knn", k=15, radius=-1.0, delaunay_max_edge=-1.0
+):
     """Build adata.obsp['spatial_connectivities'] via squidpy.
 
     graph_type is one of "knn", "radius", "delaunay".
@@ -124,14 +127,18 @@ def build_spatial_graph(adata, graph_type="knn", k=15, radius=-1.0,
     n_cells = adata.shape[0]
     if graph_type == "knn":
         sq.gr.spatial_neighbors(
-            adata, coord_type="generic", n_neighs=min(k, max(1, n_cells - 1)),
-            delaunay=False)
+            adata,
+            coord_type="generic",
+            n_neighs=min(k, max(1, n_cells - 1)),
+            delaunay=False,
+        )
         return ("knn", k)
     if graph_type == "radius":
         if radius is None or radius < 0:
             # Auto: median NN distance * 5. We need a one-shot kNN to derive it.
-            sq.gr.spatial_neighbors(adata, coord_type="generic", n_neighs=2,
-                                     delaunay=False)
+            sq.gr.spatial_neighbors(
+                adata, coord_type="generic", n_neighs=2, delaunay=False
+            )
             dists = adata.obsp["spatial_distances"]
             try:
                 # dists is sparse; the second-nearest distance per row is the
@@ -143,17 +150,19 @@ def build_spatial_graph(adata, graph_type="knn", k=15, radius=-1.0,
                     radius = float(np.median(per_row) * 5.0)
             except Exception:
                 radius = 50.0
-        sq.gr.spatial_neighbors(adata, coord_type="generic", radius=radius,
-                                 delaunay=False)
+        sq.gr.spatial_neighbors(
+            adata, coord_type="generic", radius=radius, delaunay=False
+        )
         return ("radius", radius)
     if graph_type == "delaunay":
         sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
         if delaunay_max_edge is not None and delaunay_max_edge > 0:
             # Prune long edges via the distances matrix
             import scipy.sparse as sp
+
             dists = adata.obsp["spatial_distances"]
             conn = adata.obsp["spatial_connectivities"]
-            mask = (dists > delaunay_max_edge)
+            mask = dists > delaunay_max_edge
             # Set masked entries to zero in both matrices then prune zeros
             dists = dists.tolil()
             conn = conn.tolil()
@@ -166,9 +175,18 @@ def build_spatial_graph(adata, graph_type="knn", k=15, radius=-1.0,
     raise ValueError("Unknown spatial graph type: %s" % graph_type)
 
 
-def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
-                max_radius=-1.0, n_steps=50, graph_type="knn",
-                plot_dir=None, plot_dpi=150, persist_plots=True):
+def run_ripley(
+    adata,
+    task,
+    cluster_key="cluster",
+    n_permutations=1000,
+    max_radius=-1.0,
+    n_steps=50,
+    graph_type="knn",
+    plot_dir=None,
+    plot_dpi=150,
+    persist_plots=True,
+):
     """Compute Ripley K and L per cluster.
 
     Writes task.outputs["ripley"] as a JSON blob shaped:
@@ -196,8 +214,9 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
             kwargs["n_steps"] = int(n_steps)
 
         # Force serial execution (avoids the numba/joblib deadlock on Windows).
-        kwargs.update(_safe_kwargs(sq.gr.ripley, seed=0, n_jobs=1,
-                                   show_progress_bar=False))
+        kwargs.update(
+            _safe_kwargs(sq.gr.ripley, seed=0, n_jobs=1, show_progress_bar=False)
+        )
 
         # Compute K and L separately - squidpy's mode='K' / mode='L' branches
         # share underlying state via adata.uns['<cluster_key>_ripley_K'] etc.
@@ -208,10 +227,15 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
         l_data = adata.uns.get("%s_ripley_L" % cluster_key, {})
 
         # squidpy returns dict-like with DataFrames; pull per-cluster curves
-        cluster_names = sorted(set(
-            [str(c) for c in adata.obs[cluster_key].cat.categories
-             if cluster_key in adata.obs.columns]
-        )) or [str(c) for c in adata.obs[cluster_key].unique()]
+        cluster_names = sorted(
+            set(
+                [
+                    str(c)
+                    for c in adata.obs[cluster_key].cat.categories
+                    if cluster_key in adata.obs.columns
+                ]
+            )
+        ) or [str(c) for c in adata.obs[cluster_key].unique()]
 
         radii = []
         k_curves = []
@@ -258,15 +282,22 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
         except Exception as e:
             logger.warning("Ripley K extraction failed: %s", e)
         if k_shape_matched:
-            logger.info("Ripley K shape matched: %s (squidpy=%s)",
-                        k_shape_matched, getattr(sq, "__version__", "?"))
+            logger.info(
+                "Ripley K shape matched: %s (squidpy=%s)",
+                k_shape_matched,
+                getattr(sq, "__version__", "?"),
+            )
         else:
-            logger.warning("Ripley K: no shape matched; curves will be zero-filled. "
-                           "Type=%s, keys=%s",
-                           type(k_data).__name__,
-                           list(k_data.keys()) if isinstance(k_data, dict)
-                           else (list(k_data.columns) if hasattr(k_data, "columns")
-                                 else "n/a"))
+            logger.warning(
+                "Ripley K: no shape matched; curves will be zero-filled. "
+                "Type=%s, keys=%s",
+                type(k_data).__name__,
+                (
+                    list(k_data.keys())
+                    if isinstance(k_data, dict)
+                    else (list(k_data.columns) if hasattr(k_data, "columns") else "n/a")
+                ),
+            )
 
         try:
             if hasattr(l_data, "columns"):
@@ -317,13 +348,18 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
             "graph_type": graph_type,
         }
         task.outputs["ripley"] = json.dumps(payload)
-        logger.info("Ripley K/L computed for %d clusters (%d radii, %d perms)",
-                    len(cluster_names), n_r, n_permutations)
+        logger.info(
+            "Ripley K/L computed for %d clusters (%d radii, %d perms)",
+            len(cluster_names),
+            n_r,
+            n_permutations,
+        )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).
         if _should_persist(plot_dir, persist_plots) and radii:
             try:
                 import matplotlib
+
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
 
@@ -335,17 +371,39 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
                 for idx, cname in enumerate(cluster_names):
                     color = cmap(idx)
                     if idx < len(k_curves):
-                        ax_k.plot(radii, k_curves[idx], color=color,
-                                   label=str(cname), linewidth=1.2)
+                        ax_k.plot(
+                            radii,
+                            k_curves[idx],
+                            color=color,
+                            label=str(cname),
+                            linewidth=1.2,
+                        )
                     if idx < len(l_curves):
-                        ax_l.plot(radii, l_curves[idx], color=color,
-                                   label=str(cname), linewidth=1.2)
+                        ax_l.plot(
+                            radii,
+                            l_curves[idx],
+                            color=color,
+                            label=str(cname),
+                            linewidth=1.2,
+                        )
 
                 # Poisson null overlays (dashed black for visibility)
-                ax_k.plot(radii, poisson_k, "--", color="black",
-                           label="Poisson null", linewidth=1.0)
-                ax_l.plot(radii, poisson_l, "--", color="black",
-                           label="Poisson null", linewidth=1.0)
+                ax_k.plot(
+                    radii,
+                    poisson_k,
+                    "--",
+                    color="black",
+                    label="Poisson null",
+                    linewidth=1.0,
+                )
+                ax_l.plot(
+                    radii,
+                    poisson_l,
+                    "--",
+                    color="black",
+                    label="Poisson null",
+                    linewidth=1.0,
+                )
 
                 ax_k.set_xlabel("Radius (px)")
                 ax_k.set_ylabel("K(r)")
@@ -359,8 +417,10 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
                 ax_l.legend(fontsize="small", loc="best")
                 ax_l.grid(True, alpha=0.3)
 
-                fig.suptitle("Ripley K and L (graph: %s, perms: %d)"
-                             % (graph_type, int(n_permutations)))
+                fig.suptitle(
+                    "Ripley K and L (graph: %s, perms: %d)"
+                    % (graph_type, int(n_permutations))
+                )
                 out_path = os.path.join(plot_dir, PLOT_FILE_RIPLEY)
                 fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
                 plt.close(fig)
@@ -371,9 +431,16 @@ def run_ripley(adata, task, cluster_key="cluster", n_permutations=1000,
         logger.warning("Ripley K/L failed: %s", e)
 
 
-def run_geary_c(adata, task, n_permutations=1000, measurements=None,
-                 graph_type="knn",
-                 plot_dir=None, plot_dpi=150, persist_plots=True):
+def run_geary_c(
+    adata,
+    task,
+    n_permutations=1000,
+    measurements=None,
+    graph_type="knn",
+    plot_dir=None,
+    plot_dpi=150,
+    persist_plots=True,
+):
     """Compute Geary's C per marker.
 
     Writes task.outputs["geary_c"] as a JSON blob shaped:
@@ -390,8 +457,11 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
         if measurements:
             kwargs["genes"] = list(measurements)
         # Force serial execution (avoids the numba/joblib deadlock on Windows).
-        kwargs.update(_safe_kwargs(sq.gr.spatial_autocorr, n_jobs=1,
-                                   show_progress_bar=False, seed=0))
+        kwargs.update(
+            _safe_kwargs(
+                sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0
+            )
+        )
         df = sq.gr.spatial_autocorr(adata, **kwargs, copy=True)
 
         marker_stats = {}
@@ -416,39 +486,48 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
             "graph_type": graph_type,
         }
         task.outputs["geary_c"] = json.dumps(payload)
-        logger.info("Geary's C computed for %d markers (%d perms)",
-                    len(marker_stats), n_permutations)
+        logger.info(
+            "Geary's C computed for %d markers (%d perms)",
+            len(marker_stats),
+            n_permutations,
+        )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).
         if _should_persist(plot_dir, persist_plots) and marker_stats:
             try:
                 import matplotlib
+
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
 
                 markers = list(marker_stats.keys())
-                c_vals = [marker_stats[m].get("c", float("nan"))
-                          for m in markers]
+                c_vals = [marker_stats[m].get("c", float("nan")) for m in markers]
                 # Replace NaNs with 0 for plotting; the bar still appears
                 # but at height 0 so the marker name remains visible.
-                c_plot = [0.0 if (v is None or math.isnan(v)) else float(v)
-                          for v in c_vals]
+                c_plot = [
+                    0.0 if (v is None or math.isnan(v)) else float(v) for v in c_vals
+                ]
 
                 n_markers = len(markers)
                 width = max(8.0, min(0.4 * n_markers + 2.0, 24.0))
                 fig, ax = plt.subplots(figsize=(width, 5))
                 xs = np.arange(n_markers)
-                ax.bar(xs, c_plot, color="steelblue", edgecolor="black",
-                        linewidth=0.4)
+                ax.bar(xs, c_plot, color="steelblue", edgecolor="black", linewidth=0.4)
                 # Null expectation for Geary's C is 1.0 (no autocorrelation).
-                ax.axhline(1.0, color="red", linestyle="--", linewidth=1.0,
-                            label="Null (C = 1)")
+                ax.axhline(
+                    1.0,
+                    color="red",
+                    linestyle="--",
+                    linewidth=1.0,
+                    label="Null (C = 1)",
+                )
                 ax.set_xticks(xs)
-                ax.set_xticklabels(markers, rotation=45, ha="right",
-                                    fontsize="small")
+                ax.set_xticklabels(markers, rotation=45, ha="right", fontsize="small")
                 ax.set_ylabel("Geary's C")
-                ax.set_title("Geary's C per marker (graph: %s, perms: %d)"
-                              % (graph_type, int(n_permutations)))
+                ax.set_title(
+                    "Geary's C per marker (graph: %s, perms: %d)"
+                    % (graph_type, int(n_permutations))
+                )
                 ax.legend(fontsize="small", loc="best")
                 ax.grid(True, axis="y", alpha=0.3)
 
@@ -462,11 +541,21 @@ def run_geary_c(adata, task, n_permutations=1000, measurements=None,
         logger.warning("Geary's C failed: %s", e)
 
 
-def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
-                       min_radius=-1.0, max_radius=-1.0, n_intervals=50,
-                       n_permutations=1000, spatial_data=None,
-                       graph_type="knn",
-                       plot_dir=None, plot_dpi=150, persist_plots=True):
+def run_co_occurrence(
+    adata,
+    task,
+    cluster_key="cluster",
+    mode="pairwise",
+    min_radius=-1.0,
+    max_radius=-1.0,
+    n_intervals=50,
+    n_permutations=1000,
+    spatial_data=None,
+    graph_type="knn",
+    plot_dir=None,
+    plot_dpi=150,
+    persist_plots=True,
+):
     """Compute co-occurrence as a function of radius.
 
     Mode controls the output shape:
@@ -488,10 +577,13 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
 
     try:
         kwargs = {"cluster_key": cluster_key, "n_splits": 1}
-        if min_radius is not None and min_radius > 0 \
-                and max_radius is not None and max_radius > 0:
-            kwargs["interval"] = np.linspace(min_radius, max_radius,
-                                              int(n_intervals))
+        if (
+            min_radius is not None
+            and min_radius > 0
+            and max_radius is not None
+            and max_radius > 0
+        ):
+            kwargs["interval"] = np.linspace(min_radius, max_radius, int(n_intervals))
         elif spatial_data is not None and n_intervals > 0:
             # Auto-derive interval from data extent
             coords = spatial_data
@@ -504,8 +596,9 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
             kwargs["interval"] = np.linspace(r_min, r_max, int(n_intervals))
 
         # Force serial execution (avoids the numba/joblib deadlock on Windows).
-        kwargs.update(_safe_kwargs(sq.gr.co_occurrence, n_jobs=1,
-                                   show_progress_bar=False))
+        kwargs.update(
+            _safe_kwargs(sq.gr.co_occurrence, n_jobs=1, show_progress_bar=False)
+        )
         sq.gr.co_occurrence(adata, **kwargs)
         cooc = adata.uns.get("%s_co_occurrence" % cluster_key, {})
 
@@ -524,8 +617,7 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
             # Collapse axis 1: for each cluster A, ratio at "rest" = mean
             # across all other clusters at each radius.
             n_clusters = ratio_np.shape[0]
-            collapsed = np.zeros((n_clusters, 1, ratio_np.shape[2]),
-                                  dtype=np.float64)
+            collapsed = np.zeros((n_clusters, 1, ratio_np.shape[2]), dtype=np.float64)
             for a in range(n_clusters):
                 others = [b for b in range(n_clusters) if b != a]
                 if others:
@@ -536,26 +628,37 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
             data_list = ratio_np.tolist()
             output_key = "co_occurrence_pairwise"
 
+        # NOTE: squidpy's co_occurrence is a DESCRIPTIVE conditional-probability
+        # ratio with no permutation / significance test. n_permutations is NOT
+        # passed to squidpy and no null model is computed, so it is deliberately
+        # omitted here (advertising it would imply a test that did not run).
         payload = {
             "mode": "oneVsRest" if mode == "oneVsRest" else "pairwise",
             "cluster_names": cluster_names,
             "intervals": intervals_list,
             "data": data_list,
-            "n_permutations": int(n_permutations),
             "graph_type": graph_type,
         }
         task.outputs[output_key] = json.dumps(payload)
-        logger.info("Co-occurrence (%s) computed: %d clusters, %d intervals",
-                    payload["mode"], len(cluster_names), len(intervals_list))
+        logger.info(
+            "Co-occurrence (%s) computed: %d clusters, %d intervals",
+            payload["mode"],
+            len(cluster_names),
+            len(intervals_list),
+        )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).
         # For "pairwise" mode we save a square heatmap averaged across radii;
         # for "oneVsRest" we save a per-cluster vs radius heatmap (which is
         # the natural 2-D view of that collapsed tensor).
-        if _should_persist(plot_dir, persist_plots) and cluster_names \
-                and intervals_list:
+        if (
+            _should_persist(plot_dir, persist_plots)
+            and cluster_names
+            and intervals_list
+        ):
             try:
                 import matplotlib
+
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
 
@@ -567,8 +670,7 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
                     if arr.ndim == 3 and arr.shape[1] == 1:
                         arr = arr[:, 0, :]
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    im = ax.imshow(arr, aspect="auto", cmap="viridis",
-                                    origin="lower")
+                    im = ax.imshow(arr, aspect="auto", cmap="viridis", origin="lower")
                     ax.set_yticks(np.arange(len(cluster_names)))
                     ax.set_yticklabels(cluster_names, fontsize="small")
                     # Sparse x ticks at evenly spaced intervals (max ~10)
@@ -576,15 +678,18 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
                     step = max(1, n_iv // 10)
                     x_ticks = np.arange(0, n_iv, step)
                     ax.set_xticks(x_ticks)
-                    ax.set_xticklabels(["%.1f" % intervals_list[i]
-                                         for i in x_ticks],
-                                        rotation=45, ha="right",
-                                        fontsize="small")
+                    ax.set_xticklabels(
+                        ["%.1f" % intervals_list[i] for i in x_ticks],
+                        rotation=45,
+                        ha="right",
+                        fontsize="small",
+                    )
                     ax.set_xlabel("Radius (px)")
                     ax.set_ylabel("Cluster")
-                    ax.set_title("Co-occurrence (one vs rest) - "
-                                 "graph: %s, perms: %d"
-                                 % (graph_type, int(n_permutations)))
+                    ax.set_title(
+                        "Co-occurrence (one vs rest, descriptive) - "
+                        "graph: %s" % graph_type
+                    )
                     fig.colorbar(im, ax=ax, label="Ratio")
                     out_name = PLOT_FILE_COOC_ONE_VS_REST
                 else:
@@ -598,34 +703,37 @@ def run_co_occurrence(adata, task, cluster_key="cluster", mode="pairwise",
                     else:
                         heat = arr
                     fig, ax = plt.subplots(figsize=(8, 7))
-                    im = ax.imshow(heat, aspect="equal", cmap="viridis",
-                                    origin="lower")
+                    im = ax.imshow(heat, aspect="equal", cmap="viridis", origin="lower")
                     ax.set_xticks(np.arange(len(cluster_names)))
                     ax.set_yticks(np.arange(len(cluster_names)))
-                    ax.set_xticklabels(cluster_names, rotation=45, ha="right",
-                                        fontsize="small")
+                    ax.set_xticklabels(
+                        cluster_names, rotation=45, ha="right", fontsize="small"
+                    )
                     ax.set_yticklabels(cluster_names, fontsize="small")
                     ax.set_xlabel("Cluster B")
                     ax.set_ylabel("Cluster A")
-                    ax.set_title("Co-occurrence (pairwise, mean over radius) - "
-                                 "graph: %s, perms: %d"
-                                 % (graph_type, int(n_permutations)))
+                    ax.set_title(
+                        "Co-occurrence (pairwise, mean over radius, descriptive) - "
+                        "graph: %s" % graph_type
+                    )
                     fig.colorbar(im, ax=ax, label="Mean ratio")
                     out_name = PLOT_FILE_COOC_PAIRWISE
 
                 out_path = os.path.join(plot_dir, out_name)
                 fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
                 plt.close(fig)
-                logger.info("Saved co-occurrence (%s) PNG: %s",
-                             payload["mode"], out_path)
+                logger.info(
+                    "Saved co-occurrence (%s) PNG: %s", payload["mode"], out_path
+                )
             except Exception as e:
                 logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
     except Exception as e:
         logger.warning("Co-occurrence (%s) failed: %s", mode, e)
 
 
-def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
-                                       coords, graph_type, pixel_size_um=1.0):
+def compute_spatial_node_measurements(
+    spatial_connectivities, spatial_distances, coords, graph_type, pixel_size_um=1.0
+):
     """Return a dict of per-cell measurement arrays + edge-COO triplet.
 
     Read by ClusteringWorkflow.java to:
@@ -703,14 +811,15 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             orig_counts = np.diff(d_indptr)
             row_id = np.repeat(np.arange(n_cells), orig_counts)
             row_id_pos = row_id[pos_mask]
-            surv = np.bincount(row_id_pos, minlength=n_cells)   # survivors / row
+            surv = np.bincount(row_id_pos, minlength=n_cells)  # survivors / row
             new_indptr = np.zeros(n_cells + 1, dtype=np.int64)
             np.cumsum(surv, out=new_indptr[1:])
             nonempty = np.flatnonzero(surv > 0)
             seg_starts = new_indptr[nonempty]
             cnts = surv[nonempty]
             mean_distance[nonempty] = (
-                np.add.reduceat(data_pos, seg_starts) / cnts) * scale
+                np.add.reduceat(data_pos, seg_starts) / cnts
+            ) * scale
             max_distance[nonempty] = np.maximum.reduceat(data_pos, seg_starts) * scale
             min_distance[nonempty] = np.minimum.reduceat(data_pos, seg_starts) * scale
             # Median has no ragged reducer: sort values within each row via a
@@ -721,7 +830,8 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             lo = seg_starts + (cnts - 1) // 2
             hi = seg_starts + cnts // 2
             median_distance[nonempty] = (
-                0.5 * (data_sorted[lo] + data_sorted[hi])) * scale
+                0.5 * (data_sorted[lo] + data_sorted[hi])
+            ) * scale
 
     # Delaunay-only triangle areas via a fresh scipy Delaunay (squidpy
     # only ships edges, not faces, so we rebuild the triangulation from
@@ -731,6 +841,7 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
     if graph_type == "delaunay" and coords is not None and n_cells >= 3:
         try:
             from scipy.spatial import Delaunay, qhull
+
             tri = Delaunay(np.asarray(coords, dtype=np.float64))
             simplices = tri.simplices  # shape (n_tri, 3)
             # Vectorised shoelace per triangle
@@ -740,7 +851,8 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             p2 = pts[simplices[:, 2]]
             areas = 0.5 * np.abs(
                 (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1])
-                - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1]))
+                - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1])
+            )
             # Aggregate areas per vertex (mean and max) via scatter-add: every
             # vertex appears in multiple triangles. max is seeded with -inf then
             # restored to NaN for never-touched vertices, matching the prior loop.
@@ -764,18 +876,18 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
             triangle_areas = np.column_stack([mean_areas, max_areas])
         except qhull.QhullError as e:
             logger.warning(
-                "spatial-stats Delaunay triangle areas skipped (QhullError): %s",
-                e)
+                "spatial-stats Delaunay triangle areas skipped (QhullError): %s", e
+            )
             triangle_areas = None
         except Exception as e:
-            logger.warning(
-                "spatial-stats Delaunay triangle areas failed: %s", e)
+            logger.warning("spatial-stats Delaunay triangle areas failed: %s", e)
             triangle_areas = None
 
     # Connected components on the undirected adjacency.
     try:
         n_components, component_labels = connected_components(
-            csgraph=conn_csr, directed=False, return_labels=True)
+            csgraph=conn_csr, directed=False, return_labels=True
+        )
         component_labels = component_labels.astype(np.int32, copy=False)
         logger.info("spatial-stats connected components: %d", n_components)
     except Exception as e:
@@ -795,9 +907,9 @@ def compute_spatial_node_measurements(spatial_connectivities, spatial_distances,
     }
 
 
-def emit_spatial_node_outputs(task, payload, graph_type,
-                                write_node_measurements,
-                                write_component_measurements):
+def emit_spatial_node_outputs(
+    task, payload, graph_type, write_node_measurements, write_component_measurements
+):
     """Push the payload from compute_spatial_node_measurements onto task.outputs.
 
     Edge COO is always emitted (overlay can be rebuilt without measurement
@@ -820,12 +932,16 @@ def emit_spatial_node_outputs(task, payload, graph_type,
         col_nd = PyNDArray(dtype="int64", shape=[int(col_arr.size)])
         np.copyto(col_nd.ndarray(), col_arr.astype(np.int64))
         task.outputs["spatial_graph_col"] = col_nd
-        logger.info("spatial-stats edge COO emitted: %d edges",
-                    int(row_arr.size))
+        logger.info("spatial-stats edge COO emitted: %d edges", int(row_arr.size))
 
     if write_node_measurements:
-        for key in ("num_neighbors", "mean_distance", "median_distance",
-                    "max_distance", "min_distance"):
+        for key in (
+            "num_neighbors",
+            "mean_distance",
+            "median_distance",
+            "max_distance",
+            "min_distance",
+        ):
             arr = payload.get(key)
             if arr is None:
                 continue
@@ -839,8 +955,7 @@ def emit_spatial_node_outputs(task, payload, graph_type,
             task.outputs[out_key] = nd
         triangle = payload.get("triangle_areas")
         if triangle is not None and graph_type == "delaunay":
-            t_nd = PyNDArray(dtype="float64",
-                              shape=[int(triangle.shape[0]), 2])
+            t_nd = PyNDArray(dtype="float64", shape=[int(triangle.shape[0]), 2])
             np.copyto(t_nd.ndarray(), triangle.astype(np.float64))
             task.outputs["spatial_triangle_areas"] = t_nd
             logger.info("spatial-stats triangle areas emitted")
@@ -854,8 +969,9 @@ def emit_spatial_node_outputs(task, payload, graph_type,
             logger.info("spatial-stats component labels emitted")
 
 
-def build_smoothing_adjacency_squidpy(spatial_data, graph_type="knn", k=15,
-                                       radius=-1.0, delaunay_max_edge=-1.0):
+def build_smoothing_adjacency_squidpy(
+    spatial_data, graph_type="knn", k=15, radius=-1.0, delaunay_max_edge=-1.0
+):
     """Hybrid-graph-reuse smoothing path (Phase 2 contract #2).
 
     Builds the smoothing adjacency via sq.gr.spatial_neighbors and returns
@@ -872,8 +988,13 @@ def build_smoothing_adjacency_squidpy(spatial_data, graph_type="knn", k=15,
 
     adata_tmp = ad.AnnData(X=np.zeros((len(spatial_data), 1)))
     adata_tmp.obsm["spatial"] = np.asarray(spatial_data)
-    build_spatial_graph(adata_tmp, graph_type=graph_type, k=k, radius=radius,
-                         delaunay_max_edge=delaunay_max_edge)
+    build_spatial_graph(
+        adata_tmp,
+        graph_type=graph_type,
+        k=k,
+        radius=radius,
+        delaunay_max_edge=delaunay_max_edge,
+    )
     conn = adata_tmp.obsp["spatial_connectivities"].astype(np.float64)
     row_sums = np.array(conn.sum(axis=1)).flatten()
     row_sums[row_sums == 0] = 1.0

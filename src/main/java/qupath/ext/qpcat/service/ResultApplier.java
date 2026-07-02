@@ -37,6 +37,18 @@ public class ResultApplier {
      * @param labels     cluster label for each detection
      */
     public void applyClusterLabels(List<PathObject> detections, int[] labels) {
+        applyClusterLabels(detections, labels, null);
+    }
+
+    /**
+     * As {@link #applyClusterLabels(List, int[])} but namespaces the class names by
+     * {@code namespace} (e.g. a saved-result name) so labels from different results
+     * can coexist on the same detections without colliding on a shared "Cluster N".
+     * When {@code namespace} is null/blank the classes are the bare "Cluster N".
+     *
+     * @param namespace class-name namespace, or null for bare "Cluster N"
+     */
+    public void applyClusterLabels(List<PathObject> detections, int[] labels, String namespace) {
         if (detections.size() != labels.length) {
             throw new IllegalArgumentException(
                     "Detection count (" + detections.size()
@@ -44,7 +56,7 @@ public class ResultApplier {
         }
 
         int applied = 0;
-        Set<Integer> seeded = new HashSet<>();
+        Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
@@ -52,12 +64,13 @@ public class ResultApplier {
             if (label < 0) {
                 det.setPathClass(PathClass.getNullClass());
             } else {
-                PathClass pc = PathClass.fromString(CLUSTER_PREFIX + label);
+                String name = clusterClassName(namespace, label);
+                PathClass pc = PathClass.fromString(name);
                 // Seed the canonical palette color once per distinct cluster so the
                 // viewer overlay and the QP-CAT plots start from the same colors.
                 // (A user edit later overrides this and is restored from the saved
                 // result; a fresh clustering run intentionally reverts to canonical.)
-                if (seeded.add(label)) {
+                if (seeded.add(name)) {
                     pc.setColor(ClusterPalette.rgbFor(label));
                 }
                 det.setPathClass(pc);
@@ -65,7 +78,21 @@ public class ResultApplier {
             applied++;
         }
 
-        logger.info("Applied cluster labels to {} detections", applied);
+        logger.info("Applied cluster labels to {} detections{}", applied,
+                (namespace != null && !namespace.isBlank()) ? " (namespace '" + namespace + "')" : "");
+    }
+
+    /**
+     * The PathClass name for a cluster label under an optional namespace. Bare
+     * "Cluster N" when the namespace is null/blank; otherwise "&lt;namespace&gt;: Cluster N"
+     * (a QuPath derived class). The namespace is stripped of the ": " delimiter so
+     * it round-trips through {@link PathClass#fromString(String)}.
+     */
+    public static String clusterClassName(String namespace, int label) {
+        if (namespace == null || namespace.isBlank()) {
+            return CLUSTER_PREFIX + label;
+        }
+        return namespace.replace(":", " ").trim() + ": " + CLUSTER_PREFIX + label;
     }
 
     /**
@@ -76,14 +103,27 @@ public class ResultApplier {
      * @param clusterColors class-name -> packed 0xRRGGBB (as stored in the result)
      */
     public void applyClusterColors(java.util.Map<String, Integer> clusterColors) {
+        applyClusterColors(clusterColors, null);
+    }
+
+    /**
+     * As {@link #applyClusterColors(java.util.Map)} but applies the palette to the
+     * namespaced classes ("&lt;namespace&gt;: Cluster N"). The palette keys are always the
+     * bare "Cluster N" (namespace-independent), so the same saved palette restores
+     * correctly whether the result was applied bare or under a namespace.
+     */
+    public void applyClusterColors(java.util.Map<String, Integer> clusterColors, String namespace) {
         if (clusterColors == null || clusterColors.isEmpty()) return;
+        String ns = (namespace == null || namespace.isBlank()) ? null : namespace.replace(":", " ").trim();
         int n = 0;
         for (var e : clusterColors.entrySet()) {
             if (e.getKey() == null || e.getValue() == null) continue;
-            PathClass.fromString(e.getKey()).setColor(e.getValue());
+            String name = ns == null ? e.getKey() : ns + ": " + e.getKey();
+            PathClass.fromString(name).setColor(e.getValue());
             n++;
         }
-        logger.info("Restored {} saved cluster colors", n);
+        logger.info("Restored {} saved cluster colors{}", n,
+                ns != null ? " (namespace '" + ns + "')" : "");
     }
 
     /**

@@ -123,6 +123,27 @@ try:
 except NameError:
     mnames = None
 
+# Drop zero-variance feature columns: Geary's C / Moran's I are undefined (0/0)
+# on a constant vector, which is common in small windows or when one class
+# dominates. Keep marker names aligned with the surviving columns.
+if feats is not None:
+    col_std = np.nanstd(feats, axis=0)
+    good = np.isfinite(col_std) & (col_std > 0)
+    if not np.all(good):
+        dropped = int((~good).sum())
+        logger.warning(
+            "Dropping %d zero-variance / non-finite feature column(s) before "
+            "spatial autocorrelation",
+            dropped,
+        )
+        feats = feats[:, good]
+        if mnames is not None:
+            mnames = [m for m, keep in zip(mnames, good) if keep]
+    if feats.shape[1] == 0:
+        logger.warning("No usable feature columns remain; Geary/Moran will be skipped.")
+        feats = None
+        mnames = None
+
 # Graph parameters.
 try:
     g_type = str(graph_type)

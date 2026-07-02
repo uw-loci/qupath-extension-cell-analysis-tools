@@ -81,9 +81,6 @@ public final class SavedResultApplier {
         }
 
         ResultApplier applier = new ResultApplier();
-        // Restore the saved palette to the "Cluster N" classes first so the
-        // reapplied labels display in the user's colors.
-        applier.applyClusterColors(saved.getClusterColors());
 
         ImageData<BufferedImage> openData = qupath.getImageData();
         String openId = null;
@@ -105,8 +102,13 @@ public final class SavedResultApplier {
         }
 
         double[][] embedding = applyEmbedding ? saved.getEmbedding() : null;
+        // Namespace the applied classes + embedding by the result name so labels
+        // from different results coexist without colliding on a shared "Cluster N".
+        String namespace = (saved.getName() != null && !saved.getName().isBlank())
+                ? saved.getName() : "result";
         String prefix = ResultApplier.getEmbeddingPrefix(
-                saved.getEmbeddingMethod() != null ? saved.getEmbeddingMethod() : "umap");
+                saved.getEmbeddingMethod() != null ? saved.getEmbeddingMethod() : "umap",
+                namespace);
 
         for (String eid : targetIds) {
             try {
@@ -151,7 +153,7 @@ public final class SavedResultApplier {
 
                 int[] lab = new int[matchedLab.size()];
                 for (int i = 0; i < lab.length; i++) lab[i] = matchedLab.get(i);
-                applier.applyClusterLabels(matchedDet, lab);
+                applier.applyClusterLabels(matchedDet, lab, namespace);
                 if (matchedEmb != null && matchedEmb.size() == matchedDet.size()) {
                     applier.applyEmbedding(matchedDet,
                             matchedEmb.toArray(new double[0][]), prefix);
@@ -178,6 +180,11 @@ public final class SavedResultApplier {
                 report.perImage.add(shortName(project, eid) + ": ERROR " + ex.getMessage());
             }
         }
+
+        // Restore the saved palette AFTER applying labels: applyClusterLabels seeds
+        // the canonical tab20 on each namespaced class, which would otherwise
+        // clobber the user's saved colors. Restoring last makes the saved palette win.
+        applier.applyClusterColors(saved.getClusterColors(), namespace);
         return report;
     }
 
@@ -188,6 +195,38 @@ public final class SavedResultApplier {
         int n = 0;
         for (String id : ids) if (imageId.equals(id)) n++;
         return n;
+    }
+
+    /**
+     * Dry run of the centroid match for the currently open image: returns
+     * {@code {matched, savedForImage}} so the pre-flight can show the ACTUAL
+     * predicted match rate (the count comparison alone is misleading because
+     * matching is by centroid, not by count).
+     */
+    @SuppressWarnings("unchecked")
+    public static int[] predictOpenImageMatch(QuPathGUI qupath, SavedClusteringResult saved) {
+        String eid = openImageId(qupath);
+        ImageData<BufferedImage> data = (ImageData<BufferedImage>) qupath.getImageData();
+        String[] ids = saved.getCellImageIds();
+        double[] cx = saved.getCellX();
+        double[] cy = saved.getCellY();
+        if (eid == null || data == null || ids == null || cx == null || cy == null) {
+            return new int[]{0, 0};
+        }
+        Map<Long, PathObject> byKey = new HashMap<>();
+        for (PathObject d : data.getHierarchy().getDetectionObjects()) {
+            ROI roi = d.getROI();
+            if (roi == null) continue;
+            byKey.putIfAbsent(centroidKey(roi.getCentroidX(), roi.getCentroidY()), d);
+        }
+        int total = 0;
+        int matched = 0;
+        for (int i = 0; i < ids.length; i++) {
+            if (!eid.equals(ids[i])) continue;
+            total++;
+            if (byKey.containsKey(centroidKey(cx[i], cy[i]))) matched++;
+        }
+        return new int[]{matched, total};
     }
 
     /** The entry id of the currently open image, or null. */
@@ -224,7 +263,9 @@ public final class SavedResultApplier {
 
     // Quantize a centroid to 0.5-px resolution and pack into a long key. The
     // saved per-cell X/Y are the detection centroids, so this hits exactly.
-    private static long centroidKey(double x, double y) {
+    // Public so other tools (e.g. post-hoc spatial stats using a saved result as
+    // the label source) match cells to saved cells identically.
+    public static long centroidKey(double x, double y) {
         long xi = Math.round(x * 2.0);
         long yi = Math.round(y * 2.0);
         return (xi << 32) ^ (yi & 0xffffffffL);
@@ -237,7 +278,8 @@ public final class SavedResultApplier {
             String script = String.join("\n",
                     "// QP-CAT: applied saved clustering result '" + saved.getName() + "'",
                     "// " + saved.getNClusters() + " clusters; " + applied
-                            + " detections labelled" + (unmatched > 0
+                            + " detections labelled as '" + saved.getName() + ": Cluster N'"
+                            + (unmatched > 0
                                 ? " (" + unmatched + " saved cells had no matching detection)" : ""),
                     "// Labels matched by source image id + centroid; no re-clustering.");
             data.getHistoryWorkflow().addStep(new DefaultScriptableWorkflowStep(

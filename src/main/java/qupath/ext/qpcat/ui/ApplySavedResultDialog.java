@@ -178,12 +178,20 @@ public final class ApplySavedResultDialog {
             if (savedForOpen == 0) {
                 sb.append("  NOTE: this result has no cells for the open image. Use "
                         + "'All images' if the labels belong to other images.\n");
-            } else if (savedForOpen != liveCount) {
-                sb.append("  NOTE: saved cell count differs from the live detection count; "
-                        + "cells are matched by centroid, and any that do not match are "
-                        + "reported (not mislabeled).\n");
+            } else {
+                int[] pm = SavedResultApplier.predictOpenImageMatch(qupath, saved);
+                sb.append("  predicted match (by centroid): ").append(pm[0])
+                        .append(" of ").append(pm[1]);
+                if (pm[1] > 0 && pm[0] < pm[1]) {
+                    sb.append("  <-- ").append(pm[1] - pm[0])
+                            .append(" saved cells will NOT match (detections differ)");
+                }
+                sb.append("\n");
             }
         }
+        sb.append("\nApplied classes will be named \"").append(
+                saved.getName() != null ? saved.getName() : "result").append(": Cluster N\" ")
+                .append("so this result's labels do not collide with other results.\n");
         int distinctImgs = distinctImages(saved.getCellImageIds());
         sb.append("\nResult references ").append(distinctImgs)
                 .append(distinctImgs == 1 ? " image." : " images.");

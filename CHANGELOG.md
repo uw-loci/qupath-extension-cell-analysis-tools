@@ -23,29 +23,47 @@ et al. 2020) for the ROI-window spatial-analysis lineage.
   optional "Auto-regenerate static plots on color change" preference, with a
   notice while it runs) rebuilds the color-dependent matplotlib PNGs (embedding /
   spatial scatter) from cached data via a fast standalone task -- no re-cluster.
-- **Spatial statistics on existing clusters (post-hoc, ROI-scoped).** New menu
-  item "Spatial statistics on existing clusters...". Runs Ripley K/L,
-  co-occurrence (pairwise / one-vs-rest), neighborhood enrichment, Geary's C and
-  Moran's I over the current image's cells using their existing classification --
-  no clustering or embedding is recomputed. Cells can be restricted to selected
-  annotation ROIs (used as analysis windows only -- detections are not
-  reparented) and cells inside chosen annotation classes (e.g. Ignore / Necrosis)
-  can be excluded. Geary's C / Moran's I use the cells' measurements. Reuses the
-  same `spatial_stats` Python helpers as clustering, so the numbers match.
+- **Spatial statistics on existing clusters (post-hoc, per image / per annotation
+  across a project).** New menu item "Spatial statistics on existing clusters...".
+  Runs Ripley K/L, co-occurrence, neighborhood enrichment, Geary's C and Moran's I
+  over cells that already carry a classification -- no clustering/embedding is
+  recomputed. Each analysis **window** (whole image, an annotation class, or a
+  single annotation) is computed **independently with its own spatial graph**, so
+  cells from different images/regions are never joined; results are compared
+  per-window across the scope (current / all / selected images). Label source is
+  the cells' current PathClass **or a saved QP-CAT result** (matched in memory by
+  image id + centroid, without writing PathClasses). Analysis annotations are
+  windows only (never reparent detections); Ignore/Necrosis-style classes can be
+  excluded per image. Many windows open a summary table with per-window drill-in;
+  every run auto-saves a long-format CSV + metadata JSON linked to the source
+  result and per-window ROI identity under `<project>/qpcat/spatial_stats/`.
+  Geary's C / Moran's I use the cells' marker measurements (coordinate / spatial /
+  embedding / cluster columns and zero-variance columns are filtered out).
 - **Apply a saved result to detections.** New menu item "Apply saved result to
-  detections...". Writes a saved clustering result's labels back onto detections,
-  matching cells by source image id + centroid (robust to reordering; unmatched
-  cells are reported, never mislabeled). Pre-flight checks compare the saved vs.
-  live image id and cell counts and warn before applying. Applies to the current
-  image or to every image the result references, and fires a hierarchy-changed
-  event so labels appear without a manual "Reload data". Fixes the case where a
-  saved result held correct labels that were not visible on the open image.
+  detections...". Writes a saved result's labels back onto detections, matching by
+  source image id + centroid (robust to reordering; unmatched cells reported, never
+  mislabeled). Applied classes are **namespaced by the result name** (`<result>:
+  Cluster N`) so labels from different results coexist without colliding on a shared
+  "Cluster N"; the saved palette and embedding are applied under that namespace. The
+  pre-flight shows a **dry-run predicted match count** for the open image. Applies
+  to the current image or every referenced image, and fires a hierarchy-changed
+  event so labels appear without a manual "Reload data".
 
-### Notes
+### Notes / limitations
 
-- Post-hoc spatial statistics operate on the currently open image; multi-image
-  aggregation is intentionally deferred (a single spatial graph must not bridge
-  cells from different images).
+- Each spatial-stats window uses its own graph (correct for multi-image); results
+  are per-window, not pooled across images.
+- Ripley K/L on an irregular annotation has no edge correction and uses a
+  bounding-box intensity + unbounded-plane null, and graph neighbors are truncated
+  at the ROI edge -- interpret K/L only at small radii relative to window size and
+  do not compare across windows of different size/shape (documented in the guide).
+- Co-occurrence is descriptive (squidpy runs no permutation/significance test); the
+  misleading "permutations" label was removed from its output + plots.
+- Spatial coordinates are in pixels; windows from images with different pixel
+  calibration are not directly comparable.
+- `Cluster N` remains a QuPath-wide shared class for the live clustering run; only
+  applied saved results are namespaced. Broader per-run identity (stamping run_id on
+  the clustering flow itself) is deferred.
 
 ## [0.7.1] -- 2026-06-29
 

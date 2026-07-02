@@ -5,12 +5,15 @@ import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.PostHocSpatialWorkflow;
+import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -51,13 +54,45 @@ public class SpatialStatsDialog {
             return;
         }
 
-        // --- scope / windows ---
-        CheckBox restrictToSelected = new CheckBox(
-                "Restrict to selected annotation(s) (analysis windows)");
-        restrictToSelected.setTooltip(new Tooltip(
-                "When checked, only cells whose centroid falls inside a currently "
-                + "selected annotation are analyzed. The annotations are used as "
-                + "analysis windows only -- detections are not reparented."));
+        // --- label source: current classifications, or a saved QP-CAT result ---
+        // A saved result is matched to cells in-memory (by image id + centroid) and
+        // never writes PathClasses, so the hierarchy is untouched.
+        final SavedClusteringResult[] savedLabels = {null};
+        ComboBox<String> labelSourceBox = new ComboBox<>();
+        final String LBL_CURRENT = "Current cell classifications";
+        final String LBL_SAVED = "Saved QP-CAT result...";
+        labelSourceBox.getItems().addAll(LBL_CURRENT, LBL_SAVED);
+        labelSourceBox.setValue(LBL_CURRENT);
+        Label labelSourceInfo = new Label("");
+        labelSourceInfo.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        labelSourceBox.valueProperty().addListener((o, a, b) -> {
+            if (!LBL_SAVED.equals(b)) { savedLabels[0] = null; labelSourceInfo.setText(""); return; }
+            SavedClusteringResult chosen = pickSavedResult(qupath);
+            if (chosen == null) {
+                labelSourceBox.setValue(LBL_CURRENT);
+            } else {
+                savedLabels[0] = chosen;
+                labelSourceInfo.setText("Using saved result: " + chosen.getName()
+                        + " (" + chosen.getNClusters() + " clusters); matched by centroid, "
+                        + "not written to the hierarchy.");
+            }
+        });
+        HBox labelSourceRow = new HBox(8, new Label("Label source:"), labelSourceBox);
+        labelSourceRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
+        // --- scope (which images) ---
+        ScopeSection scope = new ScopeSection(qupath, "Choose images for spatial statistics");
+        scope.setScopeTooltip("Each image is analyzed independently (its own spatial graph); "
+                + "results are collected per image / per annotation across the chosen images.");
+
+        // --- region / window definition ---
+        // "Selected annotations" only makes sense for the open image; the class-based
+        // options work uniformly across every image in the scope.
+        final String REGION_WHOLE = "Whole image";
+        final String REGION_SELECTED = "Selected annotations (current image)";
+        ComboBox<String> regionBox = new ComboBox<>();
+        regionBox.getItems().add(REGION_WHOLE);
+        regionBox.getItems().add(REGION_SELECTED);
 
         // Exclusion classes: annotation classes present in this image.
         Set<String> annoClasses = new LinkedHashSet<>();
@@ -84,6 +119,33 @@ public class SpatialStatsDialog {
         excludeTitled.setExpanded(!excludeBoxes.isEmpty()
                 && excludeBoxes.stream().anyMatch(CheckBox::isSelected));
         excludeTitled.setAnimated(false);
+
+        // Region options: whole image, selected annotations (current only), or one
+        // per annotation CLASS (works across every image in the scope by class name).
+        for (String cn : annoClasses) regionBox.getItems().add("Class: " + cn);
+        regionBox.setValue(REGION_WHOLE);
+
+        CheckBox eachAnnotation = new CheckBox("One result per annotation (else merge per image)");
+        eachAnnotation.setTooltip(new Tooltip(
+                "When a region other than 'Whole image' is chosen, analyze each annotation "
+                + "separately (a row per annotation) instead of merging all matching "
+                + "annotations in an image into one result."));
+
+        Runnable syncRegion = () -> {
+            boolean wholeImage = REGION_WHOLE.equals(regionBox.getValue());
+            eachAnnotation.setDisable(wholeImage);
+            // "Selected annotations" only applies to the current image.
+            boolean selected = REGION_SELECTED.equals(regionBox.getValue());
+            if (selected && !scope.isCurrentImage()) {
+                regionBox.setValue(REGION_WHOLE);
+            }
+        };
+        regionBox.valueProperty().addListener((o, a, b) -> syncRegion.run());
+        scope.addScopeChangeListener(syncRegion);
+        syncRegion.run();
+
+        HBox regionRow = new HBox(8, new Label("Analysis regions:"), regionBox);
+        regionRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         // --- graph ---
         ComboBox<String> graphType = new ComboBox<>();
@@ -146,9 +208,15 @@ public class SpatialStatsDialog {
         Button runBtn = new Button("Run spatial statistics");
 
         VBox content = new VBox(10,
-                new Label("Runs on the current image, over each cell's existing classification.\n"
-                        + "No clustering is recomputed and the object hierarchy is not changed."),
-                restrictToSelected,
+                new Label("Runs over each cell's existing classification -- no clustering is "
+                        + "recomputed and the object hierarchy is not changed.\nEach image (and "
+                        + "each annotation, if chosen) is analyzed independently with its own "
+                        + "spatial graph."),
+                labelSourceRow,
+                labelSourceInfo,
+                scope,
+                regionRow,
+                eachAnnotation,
                 excludeTitled,
                 new Separator(),
                 new Label("Spatial neighbor graph:"),
@@ -161,7 +229,7 @@ public class SpatialStatsDialog {
                 status,
                 runBtn);
         content.setPadding(new Insets(14));
-        content.setPrefWidth(460);
+        content.setPrefWidth(480);
 
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.setTitle("QP-CAT - Spatial statistics on existing clusters");
@@ -174,8 +242,21 @@ public class SpatialStatsDialog {
         dialog.getDialogPane().setContent(scroll);
 
         runBtn.setOnAction(e -> {
+            if (scope.isSpecificButEmpty()) {
+                Dialogs.showWarningNotification("QP-CAT",
+                        "Choose at least one image for the 'Specific images...' scope.");
+                return;
+            }
             PostHocSpatialWorkflow.Options opts = new PostHocSpatialWorkflow.Options();
-            opts.useSelectedAnnotations = restrictToSelected.isSelected();
+            opts.savedLabelSource = savedLabels[0];   // null = current classifications
+            opts.entries = scope.resolveEntries();   // null = current image only
+            String region = regionBox.getValue();
+            if (REGION_SELECTED.equals(region)) {
+                opts.useSelectedAnnotations = true;
+            } else if (region != null && region.startsWith("Class: ")) {
+                opts.windowClass = region.substring("Class: ".length());
+            }
+            opts.perAnnotation = eachAnnotation.isSelected() && !REGION_WHOLE.equals(region);
             for (CheckBox cb : excludeBoxes) if (cb.isSelected()) opts.excludeClasses.add(cb.getText());
             opts.graphType = graphType.getValue();
             opts.graphK = kSpin.getValue();
@@ -203,10 +284,12 @@ public class SpatialStatsDialog {
             PostHocSpatialWorkflow workflow = new PostHocSpatialWorkflow(qupath);
             Thread t = new Thread(() -> {
                 try {
-                    workflow.run(opts, msg -> Platform.runLater(() -> status.setText(msg)));
+                    java.util.List<PostHocSpatialWorkflow.WindowResult> results =
+                            workflow.runWindows(opts, msg -> Platform.runLater(() -> status.setText(msg)));
+                    String savedPath = workflow.getLastSavedPath();
                     Platform.runLater(() -> {
                         resetRun(runBtn, progressBar, content);
-                        status.setText("Done -- results opened in a new window.");
+                        presentResults(results, savedPath, status);
                     });
                 } catch (Exception ex) {
                     logger.error("Post-hoc spatial statistics failed", ex);
@@ -225,12 +308,67 @@ public class SpatialStatsDialog {
         dialog.show();
     }
 
+    /** Show one full result window for a single window, else the summary table. */
+    private void presentResults(java.util.List<PostHocSpatialWorkflow.WindowResult> results,
+                                String savedPath, Label status) {
+        String savedNote = savedPath != null ? "  Saved to " + savedPath : "";
+        long analyzed = results.stream().filter(r -> !r.isSkipped()).count();
+        if (analyzed == 0) {
+            StringBuilder reasons = new StringBuilder("No windows could be analyzed:\n");
+            int shown = 0;
+            for (PostHocSpatialWorkflow.WindowResult r : results) {
+                if (shown++ >= 6) break;
+                reasons.append(r.imageName).append(" / ").append(r.regionLabel)
+                        .append(": ").append(r.skipReason).append("\n");
+            }
+            Dialogs.showWarningNotification("QP-CAT", reasons.toString().trim());
+            status.setText("No windows analyzed.");
+            return;
+        }
+        if (results.size() == 1) {
+            PostHocSpatialWorkflow.WindowResult wr = results.get(0);
+            ClusteringDialog.showResultsDialog(wr.result, "Embedding",
+                    "Post-hoc spatial: " + wr.imageName + " / " + wr.regionLabel, null);
+            status.setText("Done -- results opened." + savedNote);
+            return;
+        }
+        SpatialStatsSummaryDialog.show(qupath, results);
+        status.setText("Done -- " + analyzed + " window(s) analyzed." + savedNote);
+    }
+
     private static void resetRun(Button runBtn, ProgressBar bar, VBox content) {
         runBtn.setDisable(false);
         runBtn.setText("Run spatial statistics");
         bar.setVisible(false);
         bar.setManaged(false);
         if (content.getScene() != null) content.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
+    }
+
+    /** Chooser for a saved clustering result to use as the label source; null if cancelled. */
+    private static SavedClusteringResult pickSavedResult(QuPathGUI qupath) {
+        if (qupath.getProject() == null) {
+            Dialogs.showWarningNotification("QP-CAT", "A project must be open to load a saved result.");
+            return null;
+        }
+        try {
+            java.util.Map<String, String> summaries =
+                    ClusteringResultManager.listResultSummaries(qupath.getProject());
+            if (summaries.isEmpty()) {
+                Dialogs.showWarningNotification("QP-CAT", "No saved clustering results in this project.");
+                return null;
+            }
+            ChoiceDialog<String> dlg = new ChoiceDialog<>(
+                    summaries.keySet().iterator().next(), summaries.keySet());
+            dlg.setTitle("QP-CAT - Label source");
+            dlg.setHeaderText("Choose a saved result to supply cluster labels:");
+            var chosen = dlg.showAndWait();
+            if (chosen.isEmpty()) return null;
+            return ClusteringResultManager.loadSavedResult(qupath.getProject(), chosen.get());
+        } catch (Exception e) {
+            logger.error("Could not load saved result", e);
+            Dialogs.showErrorNotification("QP-CAT", "Could not load saved result: " + e.getMessage());
+            return null;
+        }
     }
 
     private static String safeGraphType(String v) {

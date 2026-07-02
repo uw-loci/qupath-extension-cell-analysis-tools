@@ -2388,7 +2388,8 @@ public class ClusteringDialog {
                     "For each pair of clusters (A, B), the table reports the ratio\n"
                     + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
                     + "as a function of radius. Values > 1 mean A's neighborhood is enriched\n"
-                    + "for B at that radius; < 1 means depleted; ~ 1 means random.",
+                    + "for B at that radius; < 1 means depleted; ~ 1 means random.\n"
+                    + "This is a descriptive ratio -- there is no permutation / significance test.",
                     "co-occurrence-tabs"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -2404,7 +2405,8 @@ public class ClusteringDialog {
                     "For each cluster A, the table reports the ratio of A's neighborhood\n"
                     + "composition vs all-other-clusters combined, as a function of radius.\n"
                     + "Same scale interpretation as the pairwise table; smaller and easier\n"
-                    + "to scan when you only care about one cluster's spatial behavior.",
+                    + "to scan when you only care about one cluster's spatial behavior.\n"
+                    + "This is a descriptive ratio -- there is no permutation / significance test.",
                     "co-occurrence-tabs"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -2925,6 +2927,17 @@ public class ClusteringDialog {
             final int cid = id;
             picker.setOnAction(e -> {
                 applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
+                // If this is a reopened saved result, persist the edit into its JSON
+                // so the palette on disk stays consistent with the classes + PNGs.
+                if (loadedResultName != null && qupath != null && qupath.getProject() != null) {
+                    try {
+                        ClusteringResultManager.persistCurrentPalette(
+                                qupath.getProject(), loadedResultName, result.getClusterLabels());
+                    } catch (Exception ex) {
+                        logger.warn("Could not persist palette to result '{}': {}",
+                                loadedResultName, ex.getMessage());
+                    }
+                }
                 // Auto-regenerate only when opted in AND no regeneration is already
                 // running (regenBtn is disabled while one is in flight -- a simple
                 // debounce for rapid successive color edits).

@@ -1677,35 +1677,61 @@ palette. Edit colors after the run; those edits are saved with the result.
 Run the spatial-statistics suite over cells that **already** carry a
 classification (from clustering, phenotyping, or any classifier) **without
 re-running clustering or embedding**. This is the tool for "I already have my cell
-types -- now test spatial hypotheses, optionally only inside a region."
+types -- now test spatial hypotheses, per image and per region across the project."
 
-It operates on the **current image** and reads each cell's existing PathClass as
-the label.
+**Each analysis window is computed independently** -- with its own spatial graph.
+A window is a whole image, an annotation class merged per image, or a single
+annotation. Cells from different images or different regions are never joined into
+one graph (that would create false neighbors). This is why comparison is
+*per-window across the project*, not one pooled result.
 
-**Analysis windows (ROIs).** Check **"Restrict to selected annotation(s)"** and
-select one or more annotations first; only cells whose centroid falls inside a
-selected annotation are analyzed. The annotations are used as analysis windows
-**only** -- detections are not reparented, so a cell can belong to several windows
-across separate runs (tumor core, invasive front, stroma, ...).
+**Label source.** Choose *Current cell classifications* (reads each cell's
+PathClass) or *Saved QP-CAT result...* -- the latter matches the saved result's
+cluster labels to cells in memory (by image id + centroid) and **does not write
+PathClasses**, so you can analyze a saved result's labels without modifying the
+hierarchy.
+
+**Scope.** Current image / all project images / a chosen subset (via the standard
+scope control). Every image in the scope is analyzed independently.
+
+**Regions (analysis windows).**
+- *Whole image* -- all cells per image.
+- *Class: <name>* -- cells inside annotations of that class, in every image (by
+  class name). Turn on **"One result per annotation"** to analyze each annotation
+  separately (a row per annotation); leave it off to merge a class's annotations
+  per image.
+- *Selected annotations (current image)* -- ad hoc, for the open image only.
+Annotations are windows **only** -- detections are never reparented, so a cell can
+belong to several windows. Unclassified (null-class) cells are excluded.
 
 **Exclusions.** Under "Exclude cells inside annotation classes", tick classes
-(e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions. Common
-ignore/necrosis/exclude classes are pre-checked.
+(e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.
 
 **Graph + statistics.** Pick the neighbor graph (kNN / radius / Delaunay) and its
-parameter, the permutation count (0 = adaptive), and which statistics to compute:
-
+parameter, the permutation count (0 = adaptive), and which statistics to run:
 - **Ripley K / L**, **Co-occurrence** (pairwise / one-vs-rest), **Neighborhood
-  enrichment** -- computed from the cluster labels + positions.
-- **Geary's C**, **Moran's I** -- computed from the cells' measurements (skipped
-  with a warning if the cells have no numeric measurements).
+  enrichment** -- from the labels + positions.
+- **Geary's C**, **Moran's I** -- from the cells' marker measurements (coordinate /
+  spatial / embedding / cluster columns are filtered out; zero-variance columns are
+  dropped; skipped if no suitable measurements remain).
 
-Results open in the standard Results window (spatial tabs only). Nothing is
-written to the object hierarchy -- this is a read-only analysis.
+**Results.** A single window opens the standard Results window (spatial tabs). Many
+windows open a **summary table** -- one row per window, with an "Open" button to
+drill into each window's full result and a "Save combined CSV" export. Each run is
+also auto-saved (a long-format CSV + a metadata JSON linked to the source result +
+per-window ROI identity) under `<project>/qpcat/spatial_stats/`. Nothing is written
+to the object hierarchy -- this is read-only.
 
-Scope note: this runs on the open image. Multi-image aggregation is deferred on
-purpose, because one spatial graph must not connect cells from different images.
-To compare regions across images, run the tool per image.
+**Interpretation caveats (important):**
+- **Ripley K/L** on an irregular annotation uses a bounding-box intensity and an
+  unbounded-plane null with no edge correction, and graph neighbors are truncated
+  at the ROI edge. Treat K/L as valid only at radii small relative to the window,
+  and do **not** compare K/L across windows of different size/shape.
+- **Co-occurrence** is a descriptive ratio -- there is **no** significance test.
+- Coordinates are in **pixels**; windows from images with different pixel
+  calibration are not directly comparable. Use the same graph parameters across a
+  run, and prefer windows of similar size when comparing.
+- Very small windows / classes give unstable permutation statistics.
 
 ---
 
@@ -1719,18 +1745,28 @@ image (e.g. after reopening the project), or to re-label detections from an olde
 run.
 
 **How it works.** Pick a saved result; QP-CAT shows a pre-flight summary -- the
-saved cluster/cell counts, how many cells the result has for the current image,
-and the live detection count. Cells are matched to detections by **source image id
-+ centroid**, so matching is robust to detection reordering. Cells that cannot be
-matched (e.g. the detections were re-segmented since the run) are **reported, not
-mislabeled**.
+saved cluster/cell counts, and (for the open image) a **predicted match count**: a
+dry run of the centroid match so you know how many cells will actually be labelled
+before you commit (the raw count comparison alone is misleading, since matching is
+by centroid, not count). Cells are matched to detections by **source image id +
+centroid**, robust to detection reordering; cells that cannot be matched (e.g. the
+detections were re-segmented) are **reported, not mislabeled**.
+
+**Result-scoped class names.** Applied labels are namespaced by the result name --
+`<result>: Cluster N` -- so labels from different saved results coexist on the same
+detections without colliding on a shared "Cluster N". The saved palette is restored
+onto those namespaced classes, and any applied embedding measurements are likewise
+prefixed with the result name.
 
 **Options.**
 
 - *Current image only* vs *All images referenced by the result*.
-- *Also write the saved embedding coordinates* (adds the UMAP/PCA/t-SNE
-  measurements back).
+- *Also write the saved embedding coordinates* (adds `<result>1`/`<result>2`).
 
-Applying restores the saved color palette and fires a hierarchy-changed event, so
-labels appear immediately -- no manual "Reload data" needed. A summary reports how
-many cells were labelled per image and any that were unmatched.
+Applying fires a hierarchy-changed event, so labels appear immediately -- no manual
+"Reload data" needed. A summary reports how many cells were labelled per image and
+any that were unmatched.
+
+> Note: `Cluster N` (without a namespace) is a QuPath-wide shared class used by the
+> live clustering run. Applying saved results namespaces them so multiple results
+> don't fight over it; the working run still uses the bare `Cluster N`.

@@ -358,6 +358,25 @@ public class ClusteringResultManager {
     }
 
     /**
+     * Re-snapshot the current "Cluster N" palette (from the live PathClasses) and
+     * write it into an existing saved result's JSON, so color edits made while a
+     * result is open stick to that result file instead of only living on the
+     * PathClasses / regenerated PNGs. No-op if the result file or palette is absent.
+     */
+    public static void persistCurrentPalette(Project<?> project, String name, int[] labels)
+            throws IOException {
+        Map<String, Integer> colors = snapshotClusterColors(labels);
+        if (colors == null) return;
+        Path file = getResultsDirectory(project).resolve(name + JSON_EXT);
+        if (!Files.exists(file)) return;
+        SavedClusteringResult saved = GSON.fromJson(Files.readString(file),
+                SavedClusteringResult.class);
+        saved.setClusterColors(colors);
+        Files.writeString(file, GSON.toJson(saved));
+        logger.info("Updated saved palette for result '{}'", name);
+    }
+
+    /**
      * Load the raw saved result (with metadata) without path resolution.
      */
     public static SavedClusteringResult loadSavedResult(Project<?> project,
