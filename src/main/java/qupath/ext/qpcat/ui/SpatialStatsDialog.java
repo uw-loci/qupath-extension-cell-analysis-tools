@@ -159,8 +159,8 @@ public class SpatialStatsDialog {
         Spinner<Integer> permSpin = intSpinner(0, 100000, Math.max(0, QpcatPreferences.getSpatialPermutations()));
 
         Label kLbl = new Label("kNN neighbors (k):");
-        Label rLbl = new Label("Radius (px, -1 = auto):");
-        Label dLbl = new Label("Delaunay max edge (px, -1 = keep all):");
+        Label rLbl = new Label("Radius (um, -1 = auto):");
+        Label dLbl = new Label("Delaunay max edge (um, -1 = keep all):");
         Runnable syncGraph = () -> {
             String g = graphType.getValue();
             boolean knn = "knn".equals(g);
@@ -220,6 +220,7 @@ public class SpatialStatsDialog {
                 excludeTitled,
                 new Separator(),
                 new Label("Spatial neighbor graph:"),
+                unitNote(),
                 graph,
                 new Separator(),
                 new Label("Statistics to compute:"),
@@ -369,6 +370,14 @@ public class SpatialStatsDialog {
             Dialogs.showErrorNotification("QP-CAT", "Could not load saved result: " + e.getMessage());
             return null;
         }
+    }
+
+    private static Label unitNote() {
+        Label l = new Label("Distances are in microns for calibrated images (results and "
+                + "radii come out in um); images without a pixel size fall back to pixels.");
+        l.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        l.setWrapText(true);
+        return l;
     }
 
     private static String safeGraphType(String v) {

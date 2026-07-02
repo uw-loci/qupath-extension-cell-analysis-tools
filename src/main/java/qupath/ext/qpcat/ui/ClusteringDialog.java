@@ -2349,7 +2349,8 @@ public class ClusteringDialog {
         // and co-occurrence use a monospaced TextArea mirroring the
         // Moran's I rendering style.
         if (result.hasRipley()) {
-            javafx.scene.Node ripleyNode = buildRipleyChartPane(result.getRipley());
+            javafx.scene.Node ripleyNode = buildRipleyChartPane(result.getRipley(),
+                    result.getSpatialUnit());
             Tab tab = new Tab("Ripley K and L", wrapWithGuide(ripleyNode,
                     "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
                     + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
@@ -3314,17 +3315,18 @@ public class ClusteringDialog {
      * vertically below.
      */
     private static javafx.scene.Node buildRipleyChartPane(
-            qupath.ext.qpcat.model.RipleyResult ripley) {
+            qupath.ext.qpcat.model.RipleyResult ripley, String unit) {
         if (ripley == null || ripley.getRadii() == null
                 || ripley.getRadii().length == 0) {
             return new Label("No Ripley K/L data available.");
         }
+        String u = (unit == null || unit.isBlank()) ? "px" : unit;
 
         javafx.scene.chart.NumberAxis xAxisK = new javafx.scene.chart.NumberAxis();
         javafx.scene.chart.NumberAxis yAxisK = new javafx.scene.chart.NumberAxis();
-        xAxisK.setLabel("r (pixels)");
+        xAxisK.setLabel("r (" + u + ")");
         yAxisK.setLabel("K(r)");
-        xAxisK.setAccessibleText("Radius r in pixels");
+        xAxisK.setAccessibleText("Radius r in " + u);
         yAxisK.setAccessibleText("Ripley K of r");
         javafx.scene.chart.LineChart<Number, Number> kChart =
                 new javafx.scene.chart.LineChart<>(xAxisK, yAxisK);
@@ -3335,9 +3337,9 @@ public class ClusteringDialog {
 
         javafx.scene.chart.NumberAxis xAxisL = new javafx.scene.chart.NumberAxis();
         javafx.scene.chart.NumberAxis yAxisL = new javafx.scene.chart.NumberAxis();
-        xAxisL.setLabel("r (pixels)");
+        xAxisL.setLabel("r (" + u + ")");
         yAxisL.setLabel("L(r)");
-        xAxisL.setAccessibleText("Radius r in pixels");
+        xAxisL.setAccessibleText("Radius r in " + u);
         yAxisL.setAccessibleText("Ripley L of r");
         javafx.scene.chart.LineChart<Number, Number> lChart =
                 new javafx.scene.chart.LineChart<>(xAxisL, yAxisL);

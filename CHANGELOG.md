@@ -4,6 +4,20 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.8.2] -- 2026-07-02
+
+### Changed
+
+- **Post-hoc spatial statistics now report in microns for calibrated images.** Cell
+  coordinates are scaled by each image's pixel size (um/px) before analysis, so the
+  graph radius, Ripley radii, co-occurrence intervals, and distances all come out in
+  microns -- and are directly comparable across images (previously everything was in
+  pixels). The "Radius" and "Delaunay max edge" inputs are now in microns; results,
+  plot axes ("r (um)"), the summary table, the exported CSV, and the metadata JSON
+  carry a per-window unit. Uncalibrated images fall back to pixels and are labeled
+  as such. (The clustering flow's spatial graph is intentionally left in pixels --
+  it feeds cluster labels, so changing its units would alter reproducibility.)
+
 ## [0.8.1] -- 2026-07-02
 
 ### Added

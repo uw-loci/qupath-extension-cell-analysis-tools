@@ -165,6 +165,10 @@ try:
     perm_override = int(permutations)
 except NameError:
     perm_override = 0
+try:
+    coord_unit = str(coord_unit)
+except NameError:
+    coord_unit = "px"
 
 try:
     out_dir = output_dir
@@ -308,6 +312,7 @@ if want_ripley:
         cluster_key="cluster",
         n_permutations=n_perms,
         graph_type=g_type,
+        coord_unit=coord_unit,
         plot_dir=out_dir if persist else None,
         plot_dpi=dpi,
         persist_plots=persist,
@@ -330,6 +335,7 @@ if want_geary:
             n_permutations=n_perms,
             measurements=list(mnames),
             graph_type=g_type,
+            coord_unit=coord_unit,
             plot_dir=out_dir if persist else None,
             plot_dpi=dpi,
             persist_plots=persist,
@@ -350,6 +356,7 @@ if want_cooc_pair:
         n_permutations=n_perms,
         spatial_data=coords,
         graph_type=g_type,
+        coord_unit=coord_unit,
         plot_dir=out_dir if persist else None,
         plot_dpi=dpi,
         persist_plots=persist,
@@ -370,6 +377,7 @@ if want_cooc_ovr:
         n_permutations=n_perms,
         spatial_data=coords,
         graph_type=g_type,
+        coord_unit=coord_unit,
         plot_dir=out_dir if persist else None,
         plot_dpi=dpi,
         persist_plots=persist,

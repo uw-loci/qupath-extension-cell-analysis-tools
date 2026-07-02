@@ -1737,9 +1737,10 @@ to the object hierarchy -- this is read-only.
   at the ROI edge. Treat K/L as valid only at radii small relative to the window,
   and do **not** compare K/L across windows of different size/shape.
 - **Co-occurrence** is a descriptive ratio -- there is **no** significance test.
-- Coordinates are in **pixels**; windows from images with different pixel
-  calibration are not directly comparable. Use the same graph parameters across a
-  run, and prefer windows of similar size when comparing.
+- Distances are reported in **microns** for calibrated images (radius/Delaunay
+  inputs, Ripley radii, co-occurrence intervals, and distances are all in um), which
+  makes windows comparable across images. Uncalibrated images fall back to pixels
+  (shown in the summary table's Unit column).
 - Very small windows / classes give unstable permutation statistics.
 
 ---

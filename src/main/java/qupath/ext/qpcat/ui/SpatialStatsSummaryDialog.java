@@ -47,6 +47,9 @@ public final class SpatialStatsSummaryDialog {
         TableColumn<WindowResult, String> cClasses = new TableColumn<>("Classes");
         cClasses.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
                 String.valueOf(d.getValue().nClasses)));
+        TableColumn<WindowResult, String> cUnit = new TableColumn<>("Unit");
+        cUnit.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().unit));
         TableColumn<WindowResult, String> cStats = new TableColumn<>("Statistics");
         cStats.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
                 d.getValue().isSkipped() ? "skipped: " + d.getValue().skipReason
@@ -75,7 +78,7 @@ public final class SpatialStatsSummaryDialog {
             }
         });
 
-        table.getColumns().addAll(List.of(cImage, cRegion, cClass, cCells, cClasses, cStats, cOpen));
+        table.getColumns().addAll(List.of(cImage, cRegion, cClass, cCells, cClasses, cUnit, cStats, cOpen));
         table.getItems().addAll(results);
 
         long ran = results.stream().filter(r -> !r.isSkipped()).count();

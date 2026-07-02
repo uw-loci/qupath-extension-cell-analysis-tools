@@ -171,6 +171,7 @@ public class ClusteringResult {
     private CoOccurrenceResult coOccurrencePairwise;
     private CoOccurrenceResult coOccurrenceOneVsRest;
     private String spatialGraphType;       // "knn" | "radius" | "delaunay"
+    private String spatialUnit = "px";     // distance unit for spatial stats: "px" or "um"
 
     public RipleyResult getRipley() { return ripley; }
     public void setRipley(RipleyResult v) { this.ripley = v; }
@@ -190,6 +191,10 @@ public class ClusteringResult {
 
     public String getSpatialGraphType() { return spatialGraphType; }
     public void setSpatialGraphType(String v) { this.spatialGraphType = v; }
+
+    /** Distance unit for the spatial statistics ("px" or "um"). Default "px". */
+    public String getSpatialUnit() { return spatialUnit == null ? "px" : spatialUnit; }
+    public void setSpatialUnit(String v) { this.spatialUnit = v; }
 
     /**
      * True if at least one v1 spatial statistic is populated. Used by the

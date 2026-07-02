@@ -186,6 +186,7 @@ def run_ripley(
     plot_dir=None,
     plot_dpi=150,
     persist_plots=True,
+    coord_unit="px",
 ):
     """Compute Ripley K and L per cluster.
 
@@ -405,13 +406,13 @@ def run_ripley(
                     linewidth=1.0,
                 )
 
-                ax_k.set_xlabel("Radius (px)")
+                ax_k.set_xlabel("Radius (%s)" % coord_unit)
                 ax_k.set_ylabel("K(r)")
                 ax_k.set_title("Ripley K")
                 ax_k.legend(fontsize="small", loc="best")
                 ax_k.grid(True, alpha=0.3)
 
-                ax_l.set_xlabel("Radius (px)")
+                ax_l.set_xlabel("Radius (%s)" % coord_unit)
                 ax_l.set_ylabel("L(r)")
                 ax_l.set_title("Ripley L")
                 ax_l.legend(fontsize="small", loc="best")
@@ -440,6 +441,7 @@ def run_geary_c(
     plot_dir=None,
     plot_dpi=150,
     persist_plots=True,
+    coord_unit="px",
 ):
     """Compute Geary's C per marker.
 
@@ -555,6 +557,7 @@ def run_co_occurrence(
     plot_dir=None,
     plot_dpi=150,
     persist_plots=True,
+    coord_unit="px",
 ):
     """Compute co-occurrence as a function of radius.
 
@@ -684,7 +687,7 @@ def run_co_occurrence(
                         ha="right",
                         fontsize="small",
                     )
-                    ax.set_xlabel("Radius (px)")
+                    ax.set_xlabel("Radius (%s)" % coord_unit)
                     ax.set_ylabel("Cluster")
                     ax.set_title(
                         "Co-occurrence (one vs rest, descriptive) - "

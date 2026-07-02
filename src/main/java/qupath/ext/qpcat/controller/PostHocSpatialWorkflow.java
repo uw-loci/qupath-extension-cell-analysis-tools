@@ -114,14 +114,16 @@ public class PostHocSpatialWorkflow {
     private static final class Window {
         final String imageName;
         final String imageId;       // source image entry id (for saved-label matching), or null
+        final double pixelSizeUm;   // um per pixel for this image; NaN if uncalibrated
         final String regionLabel;   // "whole image" | annotation name | "class: X" | "selected annotations"
         final String className;     // annotation class, or null
         final List<PathObject> detections;
 
-        Window(String imageName, String imageId, String regionLabel, String className,
-               List<PathObject> detections) {
+        Window(String imageName, String imageId, double pixelSizeUm, String regionLabel,
+               String className, List<PathObject> detections) {
             this.imageName = imageName;
             this.imageId = imageId;
+            this.pixelSizeUm = pixelSizeUm;
             this.regionLabel = regionLabel;
             this.className = className;
             this.detections = detections;
@@ -135,6 +137,7 @@ public class PostHocSpatialWorkflow {
         public String className;
         public int nCells;
         public int nClasses;
+        public String unit = "px";          // distance unit for this window ("px" or "um")
         public String statsRun = "";
         public String skipReason;          // non-null when the window was skipped
         public ClusteringResult result;    // full result for drill-in (null when skipped)
@@ -230,6 +233,7 @@ public class PostHocSpatialWorkflow {
                 w.put("class", wr.className);
                 w.put("nCells", wr.nCells);
                 w.put("nClasses", wr.nClasses);
+                w.put("unit", wr.unit);
                 w.put("statsRun", wr.statsRun);
                 w.put("skipReason", wr.skipReason);
                 windows.add(w);
@@ -251,11 +255,11 @@ public class PostHocSpatialWorkflow {
      */
     public static String buildCsv(List<WindowResult> results) {
         StringBuilder sb = new StringBuilder();
-        sb.append("image,region,class,n_cells,n_classes,statistic,key,value,p_value\n");
+        sb.append("image,region,class,n_cells,n_classes,unit,statistic,key,value,p_value\n");
         for (WindowResult wr : results) {
             String base = csv(wr.imageName) + "," + csv(wr.regionLabel) + ","
                     + csv(wr.className == null ? "" : wr.className) + ","
-                    + wr.nCells + "," + wr.nClasses + ",";
+                    + wr.nCells + "," + wr.nClasses + "," + csv(wr.unit) + ",";
             if (wr.isSkipped()) {
                 sb.append(base).append("skipped,").append(csv(wr.skipReason)).append(",,\n");
                 continue;
@@ -383,6 +387,7 @@ public class PostHocSpatialWorkflow {
 
     private List<Window> buildWindows(Target t, Options opts) {
         PathObjectHierarchy hierarchy = t.imageData.getHierarchy();
+        double pxUm = pixelSizeMicrons(t.imageData);
 
         // Cells to drop: those inside annotations of an excluded class (per image).
         Set<PathObject> excluded = new LinkedHashSet<>();
@@ -412,7 +417,7 @@ public class PostHocSpatialWorkflow {
         if (sourceAnnos == null) {
             List<PathObject> cells = new ArrayList<>(hierarchy.getDetectionObjects());
             cells.removeAll(excluded);
-            windows.add(new Window(t.imageName, t.entryId, "whole image", null, cells));
+            windows.add(new Window(t.imageName, t.entryId, pxUm, "whole image", null, cells));
         } else if (opts.perAnnotation) {
             int n = 0;
             for (PathObject a : sourceAnnos) {
@@ -423,7 +428,7 @@ public class PostHocSpatialWorkflow {
                         ? a.getName()
                         : (a.getPathClass() != null ? a.getPathClass().toString() : "region") + " #" + n;
                 String cls = a.getPathClass() != null ? a.getPathClass().toString() : null;
-                windows.add(new Window(t.imageName, t.entryId, label, cls, cells));
+                windows.add(new Window(t.imageName, t.entryId, pxUm, label, cls, cells));
             }
         } else {
             LinkedHashSet<PathObject> cells = new LinkedHashSet<>();
@@ -433,7 +438,7 @@ public class PostHocSpatialWorkflow {
             cells.removeAll(excluded);
             String label = opts.useSelectedAnnotations ? "selected annotations"
                     : "class: " + opts.windowClass;
-            windows.add(new Window(t.imageName, t.entryId, label, opts.windowClass,
+            windows.add(new Window(t.imageName, t.entryId, pxUm, label, opts.windowClass,
                     new ArrayList<>(cells)));
         }
         return windows;
@@ -488,7 +493,20 @@ public class PostHocSpatialWorkflow {
             return wr;
         }
 
+        // Report distances in microns when the image is calibrated: scale the
+        // pixel centroids by um/px so the graph radius, Ripley radii, co-occurrence
+        // intervals and distance measurements all come out in microns -- and become
+        // comparable across images. Uncalibrated images stay in pixels.
         double[][] coords = MeasurementExtractor.extractCentroids(cells);
+        boolean microns = Double.isFinite(w.pixelSizeUm) && w.pixelSizeUm > 0;
+        if (microns) {
+            for (double[] c : coords) {
+                c[0] *= w.pixelSizeUm;
+                c[1] *= w.pixelSizeUm;
+            }
+        }
+        wr.unit = microns ? "um" : "px";
+
         double[][] featureMatrix = null;
         String[] markerNames = null;
         if (opts.needsFeatures()) {
@@ -511,9 +529,11 @@ public class PostHocSpatialWorkflow {
         final double[][] fFeat = featureMatrix;
         final String[] fMarkers = markerNames;
         try {
+            final String coordUnit = wr.unit;
             Map<String, Object> outputs = ApposeClusteringService.withExtensionClassLoader(() ->
-                    runTask(coords, labels, classNames, fFeat, fMarkers, opts, progress));
+                    runTask(coords, labels, classNames, fFeat, fMarkers, opts, coordUnit, progress));
             wr.result = buildResult(labels, classNames, outputs);
+            wr.result.setSpatialUnit(wr.unit);
             wr.statsRun = statsRunLabel(wr.result);
         } catch (Exception e) {
             logger.warn("Spatial stats failed for {} / {}: {}",
@@ -583,7 +603,7 @@ public class PostHocSpatialWorkflow {
 
     private Map<String, Object> runTask(double[][] coords, int[] labels, List<String> classNames,
                                         double[][] featureMatrix, String[] markerNames,
-                                        Options opts, Consumer<String> progress)
+                                        Options opts, String coordUnit, Consumer<String> progress)
             throws IOException {
         int nCells = coords.length;
 
@@ -619,6 +639,7 @@ public class PostHocSpatialWorkflow {
         inputs.put("enable_co_occurrence_one_vs_rest", opts.coocOneVsRest);
         inputs.put("enable_nhood_enrichment", opts.nhood);
         inputs.put("enable_moran", opts.moran);
+        inputs.put("coord_unit", coordUnit != null ? coordUnit : "px");
         if (featNd != null) {
             inputs.put("feature_matrix", featNd);
             inputs.put("marker_names", new ArrayList<>(List.of(markerNames)));
@@ -695,6 +716,20 @@ public class PostHocSpatialWorkflow {
             result.setSpatialAutocorrJson(String.valueOf(outputs.get("spatial_autocorr")));
         }
         return result;
+    }
+
+    /** Averaged pixel size in microns for an image, or NaN if uncalibrated. */
+    private static double pixelSizeMicrons(ImageData<BufferedImage> data) {
+        try {
+            var cal = data.getServer().getPixelCalibration();
+            if (cal != null && cal.hasPixelSizeMicrons()) {
+                double um = cal.getAveragedPixelSizeMicrons();
+                if (Double.isFinite(um) && um > 0) return um;
+            }
+        } catch (Exception e) {
+            logger.debug("Pixel calibration unavailable: {}", e.getMessage());
+        }
+        return Double.NaN;
     }
 
     private static String imageName(ImageData<BufferedImage> data) {
