@@ -65,8 +65,12 @@ public final class ClusterColorPaletteDialog {
         Label countLbl = new Label("");
         countLbl.setStyle("-fx-text-fill: #555;");
 
-        Runnable refresh = () -> {
-            int n = resolveClusterCount(qupath, targets.get(targetBox.getValue()));
+        // Cache the cluster count per target so changing only the palette does not
+        // re-read the saved-result file (the count depends on the target, not the palette).
+        int[] countCache = { resolveClusterCount(qupath, targets.get(targetBox.getValue())) };
+
+        Runnable renderPreview = () -> {
+            int n = countCache[0];
             int[] colors = NamedPalettes.colorsFor(paletteBox.getValue(), n);
             preview.getChildren().clear();
             int shown = Math.min(n, PREVIEW_CAP);
@@ -85,9 +89,12 @@ public final class ClusterColorPaletteDialog {
                     ? "No \"Cluster N\" classes found for this target."
                     : n + " cluster classes will be recolored.");
         };
-        targetBox.valueProperty().addListener((o, a, b) -> refresh.run());
-        paletteBox.valueProperty().addListener((o, a, b) -> refresh.run());
-        refresh.run();
+        targetBox.valueProperty().addListener((o, a, b) -> {
+            countCache[0] = resolveClusterCount(qupath, targets.get(targetBox.getValue()));
+            renderPreview.run();
+        });
+        paletteBox.valueProperty().addListener((o, a, b) -> renderPreview.run());
+        renderPreview.run();
 
         VBox content = new VBox(10,
                 new Label("Recolor the cluster classes in bulk from a palette. Colors are "
@@ -167,14 +174,22 @@ public final class ClusterColorPaletteDialog {
             logger.debug("Viewer repaint skipped: {}", e.getMessage());
         }
         // Persist into the saved result's JSON so reopening it restores this palette.
+        // The write is disk I/O -- do it off the FX thread and notify when done.
         if (savedName != null && !savedName.isEmpty() && qupath.getProject() != null) {
-            try {
-                int[] labels = new int[n];
-                for (int i = 0; i < n; i++) labels[i] = i;
-                ClusteringResultManager.persistCurrentPalette(qupath.getProject(), savedName, labels);
-            } catch (Exception e) {
-                logger.warn("Could not persist palette to result '{}': {}", savedName, e.getMessage());
-            }
+            final int nClusters = n;
+            Thread bg = new Thread(() -> {
+                try {
+                    int[] labels = new int[nClusters];
+                    for (int i = 0; i < nClusters; i++) labels[i] = i;
+                    ClusteringResultManager.persistCurrentPalette(
+                            qupath.getProject(), savedName, labels);
+                } catch (Exception e) {
+                    logger.warn("Could not persist palette to result '{}': {}",
+                            savedName, e.getMessage());
+                }
+            }, "QPCAT-PersistPalette");
+            bg.setDaemon(true);
+            bg.start();
         }
         Dialogs.showInfoNotification("QP-CAT",
                 "Applied '" + palette + "' to " + n + " cluster classes.");

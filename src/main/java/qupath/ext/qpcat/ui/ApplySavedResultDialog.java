@@ -81,19 +81,37 @@ public final class ApplySavedResultDialog {
         CheckBox applyEmbedding = new CheckBox("Also write the saved embedding coordinates");
         applyEmbedding.setSelected(false);
 
-        // Refresh the info panel + scope availability when the choice changes.
+        // Refresh the info panel + scope availability when the choice changes. The
+        // load + centroid pre-flight touch disk and iterate every detection, so run
+        // them off the FX thread and hop back to update the UI (with a stale-guard so
+        // rapid combo changes don't clobber each other).
         Runnable refresh = () -> {
             String name = chooser.getValue();
             if (name == null) { info.setText(""); return; }
-            try {
-                SavedClusteringResult saved = ClusteringResultManager.loadSavedResult(project, name);
-                info.setText(buildPreflight(qupath, saved));
-                boolean hasRefs = saved.getCellImageIds() != null;
-                currentOnly.setDisable(!hasRefs);
-                allImages.setDisable(!hasRefs);
-            } catch (Exception e) {
-                info.setText("Could not read this result: " + e.getMessage());
-            }
+            info.setText("Loading...");
+            Thread bg = new Thread(() -> {
+                String text;
+                boolean hasRefs;
+                try {
+                    SavedClusteringResult saved =
+                            ClusteringResultManager.loadSavedResult(project, name);
+                    text = buildPreflight(qupath, saved);
+                    hasRefs = saved.getCellImageIds() != null;
+                } catch (Exception e) {
+                    text = "Could not read this result: " + e.getMessage();
+                    hasRefs = false;
+                }
+                final String fText = text;
+                final boolean fHasRefs = hasRefs;
+                Platform.runLater(() -> {
+                    if (!name.equals(chooser.getValue())) return;  // selection changed
+                    info.setText(fText);
+                    currentOnly.setDisable(!fHasRefs);
+                    allImages.setDisable(!fHasRefs);
+                });
+            }, "QPCAT-ApplyPreflight");
+            bg.setDaemon(true);
+            bg.start();
         };
         chooser.valueProperty().addListener((obs, o, n) -> refresh.run());
         refresh.run();

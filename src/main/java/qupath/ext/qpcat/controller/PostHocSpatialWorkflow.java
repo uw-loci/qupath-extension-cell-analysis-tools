@@ -163,35 +163,52 @@ public class PostHocSpatialWorkflow {
         if (targets.isEmpty()) {
             throw new IOException("No images to analyze.");
         }
+        try {
+            List<Window> windows = new ArrayList<>();
+            for (Target t : targets) {
+                windows.addAll(buildWindows(t, opts));
+            }
+            if (windows.isEmpty()) {
+                throw new IOException("No analysis windows matched the chosen region settings "
+                        + "(no annotations of that class, or no cells inside them).");
+            }
 
-        List<Window> windows = new ArrayList<>();
+            List<WindowResult> results = new ArrayList<>();
+            int idx = 0;
+            for (Window w : windows) {
+                if (cancelled) break;
+                idx++;
+                report(progress, String.format("Window %d/%d: %s / %s (%d cells)...",
+                        idx, windows.size(), w.imageName, w.regionLabel, w.detections.size()));
+                results.add(runWindow(w, opts, progress));
+            }
+
+            // Persist the run linked to its source + per-window ROI identity (Alex's
+            // "save the results linked to the selected ROI and the clustering result").
+            lastSavedPath = persistToProject(opts, results);
+
+            OperationLogger.getInstance().logEvent("POST-HOC SPATIAL STATS",
+                    "Ran spatial stats on " + windows.size() + " window(s) across "
+                    + targets.size() + " image(s); graph=" + opts.graphType
+                    + (lastSavedPath != null ? "; saved to " + lastSavedPath : ""));
+            return results;
+        } finally {
+            // Close every ImageData we read ourselves; leave the live open image alone.
+            closeTargets(targets);
+        }
+    }
+
+    /** Close the native reader behind each Target we opened via readImageData(). */
+    private static void closeTargets(List<Target> targets) {
         for (Target t : targets) {
-            windows.addAll(buildWindows(t, opts));
+            if (t != null && t.owned && t.imageData != null) {
+                try {
+                    t.imageData.getServer().close();
+                } catch (Exception e) {
+                    logger.warn("Failed to close image reader for {}: {}", t.imageName, e.getMessage());
+                }
+            }
         }
-        if (windows.isEmpty()) {
-            throw new IOException("No analysis windows matched the chosen region settings "
-                    + "(no annotations of that class, or no cells inside them).");
-        }
-
-        List<WindowResult> results = new ArrayList<>();
-        int idx = 0;
-        for (Window w : windows) {
-            if (cancelled) break;
-            idx++;
-            report(progress, String.format("Window %d/%d: %s / %s (%d cells)...",
-                    idx, windows.size(), w.imageName, w.regionLabel, w.detections.size()));
-            results.add(runWindow(w, opts, progress));
-        }
-
-        // Persist the run linked to its source + per-window ROI identity (Alex's
-        // "save the results linked to the selected ROI and the clustering result").
-        lastSavedPath = persistToProject(opts, results);
-
-        OperationLogger.getInstance().logEvent("POST-HOC SPATIAL STATS",
-                "Ran spatial stats on " + windows.size() + " window(s) across "
-                + targets.size() + " image(s); graph=" + opts.graphType
-                + (lastSavedPath != null ? "; saved to " + lastSavedPath : ""));
-        return results;
     }
 
     /** Folder the last run's CSV + JSON were written to, or null. */
@@ -348,10 +365,14 @@ public class PostHocSpatialWorkflow {
         final String imageName;
         final String entryId;    // project entry id (for saved-label matching), or null
         final ImageData<BufferedImage> imageData;
-        Target(String imageName, String entryId, ImageData<BufferedImage> imageData) {
+        // true when we opened this ImageData via readImageData() (so we must close it);
+        // false for the live open image, which the GUI owns.
+        final boolean owned;
+        Target(String imageName, String entryId, ImageData<BufferedImage> imageData, boolean owned) {
             this.imageName = imageName;
             this.entryId = entryId;
             this.imageData = imageData;
+            this.owned = owned;
         }
     }
 
@@ -367,16 +388,16 @@ public class PostHocSpatialWorkflow {
         }
         if (opts.entries == null) {
             if (openData == null) throw new IOException("No image is open.");
-            targets.add(new Target(imageName(openData), openId, openData));
+            targets.add(new Target(imageName(openData), openId, openData, false));
             return targets;
         }
         for (ProjectImageEntry<BufferedImage> entry : opts.entries) {
             if (cancelled) break;
             try {
                 if (openId != null && openId.equals(entry.getID())) {
-                    targets.add(new Target(entry.getImageName(), entry.getID(), openData));
+                    targets.add(new Target(entry.getImageName(), entry.getID(), openData, false));
                 } else {
-                    targets.add(new Target(entry.getImageName(), entry.getID(), entry.readImageData()));
+                    targets.add(new Target(entry.getImageName(), entry.getID(), entry.readImageData(), true));
                 }
             } catch (Exception e) {
                 logger.warn("Could not read image {}: {}", entry.getImageName(), e.getMessage());
@@ -678,6 +699,9 @@ public class PostHocSpatialWorkflow {
                 result.setRipley(ClusteringWorkflow.parseRipley(
                         (String) outputs.get("ripley"), gson));
             } catch (Exception e) { logger.warn("Parse Ripley failed: {}", e.getMessage()); }
+        } else if (outputs.containsKey("ripley_error")) {
+            // Extraction failed; Python deliberately did not emit zero-filled curves.
+            logger.error("Ripley K/L failed: {}", String.valueOf(outputs.get("ripley_error")));
         }
         if (outputs.containsKey("geary_c")) {
             try {

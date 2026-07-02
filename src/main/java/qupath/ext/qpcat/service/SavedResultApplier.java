@@ -111,6 +111,8 @@ public final class SavedResultApplier {
                 namespace);
 
         for (String eid : targetIds) {
+            // A detached read we opened ourselves and must close; null for the live image.
+            ImageData<BufferedImage> toClose = null;
             try {
                 boolean isOpen = eid.equals(openId);
                 ImageData<BufferedImage> data = isOpen ? openData : readById(project, eid);
@@ -118,6 +120,7 @@ public final class SavedResultApplier {
                     report.perImage.add(shortName(project, eid) + ": image not found in project");
                     continue;
                 }
+                if (!isOpen) toClose = data;
                 PathObjectHierarchy hierarchy = data.getHierarchy();
 
                 Map<Long, PathObject> byKey = new HashMap<>();
@@ -178,6 +181,8 @@ public final class SavedResultApplier {
             } catch (Exception ex) {
                 logger.error("Failed to apply saved result to image {}", eid, ex);
                 report.perImage.add(shortName(project, eid) + ": ERROR " + ex.getMessage());
+            } finally {
+                ImageDataResources.closeQuietly(toClose);
             }
         }
 

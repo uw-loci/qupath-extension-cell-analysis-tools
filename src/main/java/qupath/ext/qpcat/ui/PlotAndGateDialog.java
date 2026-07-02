@@ -21,6 +21,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
@@ -353,6 +354,8 @@ public class PlotAndGateDialog {
                 int before = xy.size();
                 examined += collect(data, entry.getID(), entry.getImageName(), colX, colY, xy, refs, classOf);
                 if (xy.size() > before) imagesUsed++;
+                // Close the detached reader; leave the live open image alone.
+                if (!isOpen) ImageDataResources.closeQuietly(data);
             }
         }
 

@@ -17,6 +17,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -1030,6 +1031,12 @@ public class AutoencoderDialog {
                     classColors.putIfAbsent(e.getValue(), assignedColorMap.get(e.getKey()));
                     totalLabeled++;
                 }
+            }
+
+            // Close detached readers opened for the scan; leave the live open image alone.
+            ImageData<BufferedImage> liveScan = qupath.getImageData();
+            for (ImageData<BufferedImage> scanned : imagesToScan) {
+                ImageDataResources.closeUnless(scanned, liveScan);
             }
 
             // Update UI on FX thread

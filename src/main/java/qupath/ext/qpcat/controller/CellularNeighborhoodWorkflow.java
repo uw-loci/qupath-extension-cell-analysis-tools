@@ -304,11 +304,30 @@ public class CellularNeighborhoodWorkflow {
         final ProjectImageEntry<BufferedImage> entry;
         final ImageData<BufferedImage> imageData;
         final List<PathObject> detections;
+        // true when we opened this ImageData via readImageData() (must be closed);
+        // false for the live open image, which the GUI owns.
+        final boolean owned;
         LoadedImage(ProjectImageEntry<BufferedImage> entry,
-                    ImageData<BufferedImage> imageData, List<PathObject> detections) {
+                    ImageData<BufferedImage> imageData, List<PathObject> detections,
+                    boolean owned) {
             this.entry = entry;
             this.imageData = imageData;
             this.detections = detections;
+            this.owned = owned;
+        }
+    }
+
+    /** Close the native reader behind each LoadedImage we opened via readImageData(). */
+    private static void closeLoaded(List<LoadedImage> loaded) {
+        for (LoadedImage li : loaded) {
+            if (li != null && li.owned && li.imageData != null) {
+                try {
+                    li.imageData.getServer().close();
+                } catch (Exception e) {
+                    logger.warn("Failed to close image reader for {}: {}",
+                            li.entry.getImageName(), e.getMessage());
+                }
+            }
         }
     }
 
@@ -379,13 +398,14 @@ public class CellularNeighborhoodWorkflow {
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
-            loaded.add(new LoadedImage(entry, imageData, dets));
+            loaded.add(new LoadedImage(entry, imageData, dets, !isOpenImage));
             logger.info("Loaded {} detections from {}", dets.size(), entry.getImageName());
         }
         if (loaded.isEmpty()) {
             throw new IOException("No detection objects found in any selected image. "
                     + "Run cell detection (and clustering/phenotyping) first.");
         }
+        try {
 
         // 2. Union the cell-type class set across all images; flag divergence.
         report(progress, "Unifying cell-type classes across images...");
@@ -556,6 +576,10 @@ public class CellularNeighborhoodWorkflow {
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
                 adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
                 divergenceWarning, runId, paramsHash);
+        } finally {
+            // Close every ImageData we read ourselves; leave the live open image alone.
+            closeLoaded(loaded);
+        }
     }
 
     /** Build a human-readable warning if images do not share the same class set. */

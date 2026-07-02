@@ -173,6 +173,11 @@ public final class GateApplier {
             }
             logger.info("Gate: classified {} cells as '{}' in {}",
                     hitsThisImage, className, sample.getImageName());
+
+            // Close the detached reader we opened; leave the live open image alone.
+            if (!isOpen) {
+                ImageDataResources.closeQuietly(imageData);
+            }
         }
         return new Result(classified, images, unmatched);
     }

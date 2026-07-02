@@ -428,6 +428,43 @@ public class ClusteringWorkflow {
      * @return the clustering result
      * @throws IOException if clustering fails
      */
+    /**
+     * Close the native reader behind an {@link ImageData} we opened via
+     * {@code readImageData()}. Never call this on the live GUI ImageData -- only on
+     * detached copies we read ourselves. Quiet: logs and swallows any close failure so
+     * cleanup never masks the real result/exception.
+     */
+    static void closeReadImageData(Object imageData) {
+        if (imageData instanceof ImageData) {
+            try {
+                ((ImageData<?>) imageData).getServer().close();
+            } catch (Exception e) {
+                logger.warn("Failed to close image reader: {}", e.getMessage());
+            }
+        }
+    }
+
+    /** Close every detached ImageData held by a detection-group list. */
+    static void closeGroups(List<MeasurementExtractor.ImageDetectionGroup> groups) {
+        if (groups == null) return;
+        for (MeasurementExtractor.ImageDetectionGroup g : groups) {
+            if (g != null) closeReadImageData(g.imageData);
+        }
+    }
+
+    /**
+     * Close every ImageData in the list EXCEPT the live GUI one (identity match on
+     * {@code qupath.getImageData()}), which the GUI owns. Use for lists that mix the
+     * open image with detached copies read via {@code readImageData()}.
+     */
+    private void closeReadImageDatas(List<ImageData<BufferedImage>> imageDatas) {
+        if (imageDatas == null) return;
+        ImageData<BufferedImage> live = (qupath != null) ? qupath.getImageData() : null;
+        for (ImageData<BufferedImage> d : imageDatas) {
+            if (d != null && d != live) closeReadImageData(d);
+        }
+    }
+
     public ClusteringResult runProjectClustering(
             List<ProjectImageEntry<BufferedImage>> imageEntries,
             ClusteringConfig config,
@@ -471,6 +508,7 @@ public class ClusteringWorkflow {
         if (groups.isEmpty()) {
             throw new IOException("No detection objects found in any selected images. Run cell detection first.");
         }
+        try {
 
         // Extract measurements across all images
         reportPhase(progressCallback, "extract", "Extracting measurements...");
@@ -623,6 +661,10 @@ public class ClusteringWorkflow {
         }
 
         return result;
+        } finally {
+            // All groups here are detached copies read via readImageData(); close them.
+            closeGroups(groups);
+        }
     }
 
     /**
@@ -850,6 +892,7 @@ public class ClusteringWorkflow {
 
         List<MeasurementExtractor.ImageDetectionGroup> groups =
                 loadProjectDetectionGroups(imageEntries, progressCallback);
+        try {
 
         report(progressCallback, "Extracting measurements...");
         MeasurementExtractor extractor = new MeasurementExtractor();
@@ -932,6 +975,10 @@ public class ClusteringWorkflow {
                 completeMsg, elapsed);
 
         return resultMap;
+        } finally {
+            // Detection groups here are detached copies read by loadProjectDetectionGroups.
+            closeGroups(groups);
+        }
     }
 
     /**
@@ -991,13 +1038,13 @@ public class ClusteringWorkflow {
         long startTime = System.currentTimeMillis();
         List<MeasurementExtractor.ImageDetectionGroup> groups =
                 loadProjectDetectionGroups(imageEntries, progressCallback);
-        MeasurementExtractor extractor = new MeasurementExtractor();
-        MeasurementExtractor.ExtractionResult extraction =
-                extractor.extractMultiImage(groups, selectedMeasurements);
-        report(progressCallback, "Computing thresholds (" + extraction.getNCells()
-                + " cells x " + extraction.getNMeasurements() + " markers across "
-                + extraction.getImageSegments().size() + " images)...");
         try {
+            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor.ExtractionResult extraction =
+                    extractor.extractMultiImage(groups, selectedMeasurements);
+            report(progressCallback, "Computing thresholds (" + extraction.getNCells()
+                    + " cells x " + extraction.getNMeasurements() + " markers across "
+                    + extraction.getImageSegments().size() + " images)...");
             String result = ApposeClusteringService.withExtensionClassLoader(() ->
                     executeThresholdTask(extraction, normalization, progressCallback));
             long elapsed = System.currentTimeMillis() - startTime;
@@ -1012,6 +1059,9 @@ public class ClusteringWorkflow {
             throw e;
         } catch (Exception e) {
             throw new IOException("Threshold computation failed: " + e.getMessage(), e);
+        } finally {
+            // Detection groups here are detached copies read by loadProjectDetectionGroups.
+            closeGroups(groups);
         }
     }
 
@@ -1556,6 +1606,14 @@ public class ClusteringWorkflow {
                 } catch (Exception e) {
                     logger.warn("Failed to parse Ripley result: {}", e.getMessage());
                 }
+            } else if (task.outputs.containsKey("ripley_error")) {
+                // Ripley was requested but its extraction failed. The Python side
+                // deliberately did NOT emit zero-filled curves (which would look like a
+                // real null result), so surface the failure instead of silently
+                // dropping the panel.
+                String msg = String.valueOf(task.outputs.get("ripley_error"));
+                logger.error("Ripley K/L failed: {}", msg);
+                OperationLogger.getInstance().logEvent("SPATIAL STATS RIPLEY FAILED", msg);
             }
 
             if (task.outputs.containsKey("geary_c")) {
@@ -2678,6 +2736,7 @@ public class ClusteringWorkflow {
         }
 
         if (imageDatas.isEmpty()) throw new IOException("No images could be loaded.");
+        try {
 
         // Collect detections and labels from each image
         for (ImageData<BufferedImage> imageData : imageDatas) {
@@ -2973,6 +3032,10 @@ public class ClusteringWorkflow {
         deleteTempFile(tileTempFile);
 
         return resultMap;
+        } finally {
+            // imageDatas mixes the live open image with detached reads; close the reads.
+            closeReadImageDatas(imageDatas);
+        }
     }
 
     /**
@@ -3024,6 +3087,10 @@ public class ClusteringWorkflow {
                 logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
                 continue;
             }
+            // Close this image's reader at the end of the iteration unless it is the
+            // live open image (which the GUI owns).
+            ImageData<BufferedImage> iterImageData = imageData;
+            try {
 
             List<PathObject> detections = new ArrayList<>(
                     imageData.getHierarchy().getDetectionObjects());
@@ -3165,6 +3232,9 @@ public class ClusteringWorkflow {
                     row.merge(predictedClass, 1, Integer::sum);
                 }
             }
+            } finally {
+                if (iterImageData != qupath.getImageData()) closeReadImageData(iterImageData);
+            }
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -3229,6 +3299,10 @@ public class ClusteringWorkflow {
                 logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
                 continue;
             }
+            // This is always a detached read (even for the current image); close its
+            // reader when the iteration ends.
+            ImageData<BufferedImage> iterImageData = imageData;
+            try {
 
             List<PathObject> allDetections = new ArrayList<>(
                     imageData.getHierarchy().getDetectionObjects());
@@ -3403,6 +3477,9 @@ public class ClusteringWorkflow {
 
             // Clean up per-image tile temp file
             if (useTiles) deleteTempFile(inferTileFile);
+            } finally {
+                if (iterImageData != qupath.getImageData()) closeReadImageData(iterImageData);
+            }
         }
 
         long elapsed = System.currentTimeMillis() - startTime;

@@ -11,6 +11,7 @@ import qupath.lib.projects.Project;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -77,7 +78,15 @@ public class ClusteringConfigManager {
         Path file = configsDir.resolve(safeName + JSON_EXT);
 
         String json = GSON.toJson(config);
-        Files.writeString(file, json);
+        // Atomic write: a mid-write failure must not truncate an existing config.
+        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+        Files.writeString(tmp, json);
+        try {
+            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+        }
         logger.info("Saved clustering config '{}' to {}", name, file);
     }
 

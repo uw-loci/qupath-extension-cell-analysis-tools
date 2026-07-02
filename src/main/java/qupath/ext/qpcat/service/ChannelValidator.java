@@ -55,8 +55,9 @@ public class ChannelValidator {
                         + " (" + (imagesChecked + 1) + "/" + totalImages + ")...");
             }
 
+            ImageData<BufferedImage> imageData = null;
             try {
-                ImageData<BufferedImage> imageData = entry.readImageData();
+                imageData = entry.readImageData();
                 Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
 
                 if (detections.isEmpty()) {
@@ -79,6 +80,17 @@ public class ChannelValidator {
             } catch (Exception e) {
                 logger.warn("Failed to read image data for {}: {}",
                         entry.getImageName(), e.getMessage());
+            } finally {
+                // Always a detached read; close its reader so the validation sweep does
+                // not leak one native handle per image.
+                if (imageData != null) {
+                    try {
+                        imageData.getServer().close();
+                    } catch (Exception e) {
+                        logger.warn("Failed to close image reader for {}: {}",
+                                entry.getImageName(), e.getMessage());
+                    }
+                }
             }
         }
 

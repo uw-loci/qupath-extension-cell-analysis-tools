@@ -289,16 +289,30 @@ def run_ripley(
                 getattr(sq, "__version__", "?"),
             )
         else:
-            logger.warning(
-                "Ripley K: no shape matched; curves will be zero-filled. "
-                "Type=%s, keys=%s",
-                type(k_data).__name__,
-                (
-                    list(k_data.keys())
-                    if isinstance(k_data, dict)
-                    else (list(k_data.columns) if hasattr(k_data, "columns") else "n/a")
-                ),
+            # Extraction genuinely failed: squidpy's Ripley payload shape is
+            # unrecognized (its uns layout has changed across versions). Emitting
+            # zero-filled curves here would look exactly like a real "complete
+            # spatial randomness" result, so the caller could publish a wrong
+            # conclusion. Honor the documented contract instead: DO NOT set
+            # task.outputs["ripley"]; surface an error the Java side can show.
+            observed_keys = (
+                list(k_data.keys())
+                if isinstance(k_data, dict)
+                else (list(k_data.columns) if hasattr(k_data, "columns") else "n/a")
             )
+            msg = (
+                "Ripley K extraction failed: squidpy (%s) returned an unrecognized "
+                "payload (type=%s, keys=%s). No curves were produced -- this is an "
+                "error, not a null result."
+                % (
+                    getattr(sq, "__version__", "?"),
+                    type(k_data).__name__,
+                    observed_keys,
+                )
+            )
+            logger.error(msg)
+            task.outputs["ripley_error"] = msg
+            return
 
         try:
             if hasattr(l_data, "columns"):

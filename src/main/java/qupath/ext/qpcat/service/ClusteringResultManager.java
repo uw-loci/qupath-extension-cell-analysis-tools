@@ -11,6 +11,7 @@ import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -57,9 +58,11 @@ public class ClusteringResultManager {
         List<String> names = new ArrayList<>();
         try (Stream<Path> files = Files.list(resultsDir)) {
             files.filter(p -> p.toString().endsWith(JSON_EXT))
-                    .sorted(Comparator.comparing(p -> {
-                        try { return Files.getLastModifiedTime((Path) p); }
-                        catch (IOException e) { return null; }
+                    .sorted(Comparator.comparing((Path p) -> {
+                        // Sort key must never be null: a single unreadable file would
+                        // otherwise NPE the whole listing during comparison.
+                        try { return Files.getLastModifiedTime(p); }
+                        catch (IOException e) { return java.nio.file.attribute.FileTime.fromMillis(0); }
                     }).reversed())
                     .forEach(p -> {
                         String filename = p.getFileName().toString();
@@ -167,10 +170,10 @@ public class ClusteringResultManager {
         // which are the source of truth) so reopening restores the user's colors.
         saved.setClusterColors(snapshotClusterColors(result.getClusterLabels()));
 
-        // Write JSON
+        // Write JSON atomically so a mid-write failure cannot corrupt an existing result.
         Path file = resultsDir.resolve(safeName + JSON_EXT);
         String json = GSON.toJson(saved);
-        Files.writeString(file, json);
+        writeStringAtomic(file, json);
         logger.info("Saved clustering result '{}' to {} ({} clusters, {} cells, {})",
                 name, file, result.getNClusters(), result.getNCells(),
                 autoSaved ? "auto" : "named");
@@ -193,6 +196,31 @@ public class ClusteringResultManager {
             if (rgb != null) colors.put(name, rgb);
         }
         return colors.isEmpty() ? null : colors;
+    }
+
+    /**
+     * Write {@code content} to {@code file} atomically: write a sibling temp file, flush,
+     * then move it into place. A crash or exception mid-write leaves the previous good
+     * file intact instead of a truncated/empty JSON (a plain {@code Files.writeString}
+     * truncates first, so an interruption destroys the existing result). Falls back to a
+     * non-atomic replace only if the filesystem rejects ATOMIC_MOVE.
+     */
+    private static void writeStringAtomic(Path file, String content) throws IOException {
+        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
+        Files.writeString(tmp, content);
+        try {
+            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException ignored) {
+                // best-effort temp cleanup
+            }
+            throw e;
+        }
     }
 
     private static final DateTimeFormatter AUTO_NAME_FMT =
@@ -371,8 +399,13 @@ public class ClusteringResultManager {
         if (!Files.exists(file)) return;
         SavedClusteringResult saved = GSON.fromJson(Files.readString(file),
                 SavedClusteringResult.class);
+        if (saved == null) {
+            throw new IOException("Saved result '" + name + "' is empty or corrupt; "
+                    + "cannot update its palette.");
+        }
         saved.setClusterColors(colors);
-        Files.writeString(file, GSON.toJson(saved));
+        // Atomic: never truncate a good result file just to rewrite its palette.
+        writeStringAtomic(file, GSON.toJson(saved));
         logger.info("Updated saved palette for result '{}'", name);
     }
 
@@ -390,6 +423,9 @@ public class ClusteringResultManager {
 
         String json = Files.readString(file);
         SavedClusteringResult saved = GSON.fromJson(json, SavedClusteringResult.class);
+        if (saved == null) {
+            throw new IOException("Result file is empty or corrupt: " + file);
+        }
         logger.info("Loaded clustering result '{}' from {}", name, file);
         return saved;
     }
