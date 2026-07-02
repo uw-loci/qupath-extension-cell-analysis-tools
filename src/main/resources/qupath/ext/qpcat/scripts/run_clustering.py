@@ -46,6 +46,7 @@ Outputs (via task.outputs):
   spatial_autocorr: str (JSON) -- per-marker Moran's I scores
   plot_paths: str (JSON) -- dict of plot type -> file path (if generate_plots)
 """
+
 import sys
 import os
 import logging
@@ -97,6 +98,7 @@ def _supported_kwargs(fn, **kw):
     single-threading hints (numba_parallel / n_jobs / show_progress_bar / seed)
     to squidpy without a TypeError when a given version renamed or dropped one."""
     import inspect
+
     try:
         params = inspect.signature(fn).parameters
     except (TypeError, ValueError):
@@ -124,8 +126,11 @@ if n_nonfinite > 0:
     df = df.replace([np.inf, -np.inf], np.nan)
     col_median = df.median(numeric_only=True).fillna(0.0)
     df = df.fillna(col_median).fillna(0.0)
-    logger.warning("Imputed %d non-finite measurement value(s) with per-column "
-                   "median (NaN/Inf are not valid clustering input)", n_nonfinite)
+    logger.warning(
+        "Imputed %d non-finite measurement value(s) with per-column "
+        "median (NaN/Inf are not valid clustering input)",
+        n_nonfinite,
+    )
 
 # Read optional spatial coordinates early (needed by BANKSY and spatial analysis)
 try:
@@ -249,8 +254,9 @@ except NameError:
     pref_spatial_persist_plots = True
 
 # 2. Normalize
-_progress(0.05, "Normalizing measurements (%d cells x %d markers)..."
-          % (n_cells, n_markers))
+_progress(
+    0.05, "Normalizing measurements (%d cells x %d markers)..." % (n_cells, n_markers)
+)
 
 if normalization == "zscore":
     std = df.std()
@@ -320,14 +326,15 @@ if do_spatial_smoothing and has_spatial_coords:
         )
         logger.info(
             "Spatial smoothing using squidpy graph (%s, pure-A row-normalised)",
-            pref_spatial_graph_type)
+            pref_spatial_graph_type,
+        )
     else:
         # Legacy path - sklearn kNN with (A + I) row-normalisation.
         # This path is byte-stable with respect to prior QP-CAT releases.
         from sklearn.neighbors import NearestNeighbors
 
         k = min(pref_spatial_knn, n - 1)
-        nn = NearestNeighbors(n_neighbors=k, metric='euclidean')
+        nn = NearestNeighbors(n_neighbors=k, metric="euclidean")
         nn.fit(spatial_data)
         distances, indices = nn.kneighbors(spatial_data)
 
@@ -339,8 +346,8 @@ if do_spatial_smoothing and has_spatial_coords:
         row_sums = np.array(adj.sum(axis=1)).flatten()
         adj_norm = sp.diags(1.0 / row_sums) @ adj
         logger.info(
-            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)",
-            k)
+            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)", k
+        )
 
     smoothed = df_norm.values.copy()
     for it in range(smoothing_iters):
@@ -348,7 +355,9 @@ if do_spatial_smoothing and has_spatial_coords:
     df_norm = pd.DataFrame(smoothed, columns=df_norm.columns)
     logger.info("Spatial smoothing applied: iterations=%d", smoothing_iters)
 elif do_spatial_smoothing and not has_spatial_coords:
-    logger.warning("Spatial smoothing requested but no spatial coordinates available, skipping")
+    logger.warning(
+        "Spatial smoothing requested but no spatial coordinates available, skipping"
+    )
 
 # 2b. Batch correction (Harmony, for multi-image clustering)
 try:
@@ -372,20 +381,24 @@ if do_batch and batch_labels_list is not None:
             "Harmony batch correction is not available in this Python "
             "environment. Use Utilities > Rebuild Clustering Environment "
             "to refresh, or uncheck 'Batch correction (Harmony)' to run "
-            "without it. Underlying error: %s" % _hp_err)
+            "without it. Underlying error: %s" % _hp_err
+        )
 
     n_batches = len(set(batch_labels_list))
     if n_batches > 1:
-        meta_df = pd.DataFrame({'batch': [str(b) for b in batch_labels_list]})
-        ho = hm.run_harmony(df_norm.values, meta_df, 'batch')
+        meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
+        ho = hm.run_harmony(df_norm.values, meta_df, "batch")
         df_norm = pd.DataFrame(ho.Z_corr.T, columns=df_norm.columns)
         logger.info("Harmony batch correction applied (%d batches)", n_batches)
     else:
         logger.info("Skipping batch correction (only 1 batch)")
 
 # 3. Dimensionality reduction
-_progress(0.15, "Computing %s embedding (%d cells) -- this can take a while..."
-          % (str(embedding_method).upper(), n_cells))
+_progress(
+    0.15,
+    "Computing %s embedding (%d cells) -- this can take a while..."
+    % (str(embedding_method).upper(), n_cells),
+)
 
 # Random seed for the embedding (exposed in the GUI "Advanced" panel; defaults
 # to 42 so prior runs reproduce). Shared by UMAP / t-SNE / PCA.
@@ -394,43 +407,62 @@ embedding_seed = int(embedding_params.get("random_state", 42))
 embedding_result = None
 if embedding_method == "umap":
     import umap
+
     n_neighbors = embedding_params.get("n_neighbors", 15)
     min_dist = embedding_params.get("min_dist", 0.1)
     metric = embedding_params.get("metric", "euclidean")
-    logger.info("UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, seed=%d",
-                n_neighbors, min_dist, metric, embedding_seed)
+    logger.info(
+        "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, seed=%d",
+        n_neighbors,
+        min_dist,
+        metric,
+        embedding_seed,
+    )
     reducer = umap.UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         metric=metric,
         n_components=2,
-        random_state=embedding_seed
+        random_state=embedding_seed,
     )
     embedding_result = reducer.fit_transform(df_norm.values)
 
 elif embedding_method == "pca":
     from sklearn.decomposition import PCA
-    n_components = embedding_params.get("n_components", 2)
-    pca = PCA(n_components=n_components, random_state=embedding_seed)
+
+    # The embedding output is a fixed Nx2 scatter (the Java side packs it as
+    # shape [n_cells, 2]). Honor that contract: force 2 components. A larger
+    # n_components would make np.copyto raise AFTER all clustering work is done.
+    requested_components = int(embedding_params.get("n_components", 2))
+    if requested_components != 2:
+        logger.warning(
+            "PCA embedding forced to 2 components (requested %d); the embedding "
+            "output is a 2D scatter.",
+            requested_components,
+        )
+    pca = PCA(n_components=2, random_state=embedding_seed)
     embedding_result = pca.fit_transform(df_norm.values)
-    logger.info("PCA: explained variance = %s",
-                [round(v, 4) for v in pca.explained_variance_ratio_])
+    logger.info(
+        "PCA: explained variance = %s",
+        [round(v, 4) for v in pca.explained_variance_ratio_],
+    )
 
 elif embedding_method == "tsne":
     import inspect
     from sklearn.manifold import TSNE
+
     perplexity = float(embedding_params.get("perplexity", pref_tsne_perplexity))
     # sklearn requires perplexity < n_samples; clamp so a too-large value (or a
     # tiny dataset) never errors the run.
     max_perp = max(1.0, float(n_cells) - 1.0)
     if perplexity > max_perp:
-        logger.warning("t-SNE perplexity %.1f >= n_cells; clamping to %.1f",
-                       perplexity, max_perp)
+        logger.warning(
+            "t-SNE perplexity %.1f >= n_cells; clamping to %.1f", perplexity, max_perp
+        )
         perplexity = max_perp
     learning_rate = embedding_params.get("learning_rate", 200.0)
     early_exaggeration = float(embedding_params.get("early_exaggeration", 12.0))
-    n_iter = int(embedding_params.get("n_iter",
-                                      embedding_params.get("max_iter", 1000)))
+    n_iter = int(embedding_params.get("n_iter", embedding_params.get("max_iter", 1000)))
     tsne_kwargs = dict(
         n_components=2,
         perplexity=perplexity,
@@ -446,9 +478,15 @@ elif embedding_method == "tsne":
         tsne_kwargs["n_iter"] = n_iter
     tsne = TSNE(**tsne_kwargs)
     embedding_result = tsne.fit_transform(df_norm.values)
-    logger.info("t-SNE: perplexity=%.1f, learning_rate=%s, iterations=%d, "
-                "early_exaggeration=%.1f, seed=%d", perplexity, str(learning_rate),
-                n_iter, early_exaggeration, embedding_seed)
+    logger.info(
+        "t-SNE: perplexity=%.1f, learning_rate=%s, iterations=%d, "
+        "early_exaggeration=%.1f, seed=%d",
+        perplexity,
+        str(learning_rate),
+        n_iter,
+        early_exaggeration,
+        embedding_seed,
+    )
 
 elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)
@@ -473,6 +511,7 @@ if algorithm == "leiden":
 
 elif algorithm == "kmeans":
     from sklearn.cluster import KMeans
+
     n_clusters = algorithm_params.get("n_clusters", 10)
     logger.info("KMeans: n_clusters=%d", n_clusters)
     km = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
@@ -480,15 +519,18 @@ elif algorithm == "kmeans":
 
 elif algorithm == "hdbscan":
     from sklearn.cluster import HDBSCAN
+
     min_cluster_size = algorithm_params.get("min_cluster_size", 15)
     min_samples = algorithm_params.get("min_samples", pref_hdbscan_min_samples)
-    logger.info("HDBSCAN: min_cluster_size=%d, min_samples=%d",
-                min_cluster_size, min_samples)
+    logger.info(
+        "HDBSCAN: min_cluster_size=%d, min_samples=%d", min_cluster_size, min_samples
+    )
     hdb = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
     labels = hdb.fit_predict(df_norm.values)
 
 elif algorithm == "agglomerative":
     from sklearn.cluster import AgglomerativeClustering
+
     n_clusters = algorithm_params.get("n_clusters", 10)
     linkage = algorithm_params.get("linkage", "ward")
     logger.info("Agglomerative: n_clusters=%d, linkage=%s", n_clusters, linkage)
@@ -497,22 +539,26 @@ elif algorithm == "agglomerative":
 
 elif algorithm == "minibatchkmeans":
     from sklearn.cluster import MiniBatchKMeans
+
     n_clusters = algorithm_params.get("n_clusters", 10)
     batch_size = algorithm_params.get("batch_size", pref_minibatch_batch_size)
-    logger.info("MiniBatchKMeans: n_clusters=%d, batch_size=%d",
-                n_clusters, batch_size)
-    mbkm = MiniBatchKMeans(n_clusters=n_clusters, batch_size=batch_size,
-                           random_state=42)
+    logger.info("MiniBatchKMeans: n_clusters=%d, batch_size=%d", n_clusters, batch_size)
+    mbkm = MiniBatchKMeans(
+        n_clusters=n_clusters, batch_size=batch_size, random_state=42
+    )
     labels = mbkm.fit_predict(df_norm.values)
 
 elif algorithm == "gmm":
     from sklearn.mixture import GaussianMixture
+
     n_components = algorithm_params.get("n_components", 10)
     covariance_type = algorithm_params.get("covariance_type", "full")
-    logger.info("GMM: n_components=%d, covariance_type=%s",
-                n_components, covariance_type)
-    gmm = GaussianMixture(n_components=n_components,
-                          covariance_type=covariance_type, random_state=42)
+    logger.info(
+        "GMM: n_components=%d, covariance_type=%s", n_components, covariance_type
+    )
+    gmm = GaussianMixture(
+        n_components=n_components, covariance_type=covariance_type, random_state=42
+    )
     labels = gmm.fit_predict(df_norm.values)
 
 elif algorithm == "banksy":
@@ -541,35 +587,44 @@ elif algorithm == "banksy":
     k_geom = max(2, min(int(k_geom), n_cells - 1))
     capped_pca = max(2, min(int(pca_dims), n_cells - 1, 2 * n_markers))
     if capped_pca != pca_dims:
-        logger.warning("BANKSY pca_dims reduced from %d to %d for this dataset",
-                       pca_dims, capped_pca)
+        logger.warning(
+            "BANKSY pca_dims reduced from %d to %d for this dataset",
+            pca_dims,
+            capped_pca,
+        )
     pca_dims = capped_pca
-    logger.info("BANKSY: lambda=%.2f, k_geom=%d, resolution=%.2f, pca_dims=%d",
-                lambda_param, k_geom, resolution, pca_dims)
+    logger.info(
+        "BANKSY: lambda=%.2f, k_geom=%d, resolution=%.2f, pca_dims=%d",
+        lambda_param,
+        k_geom,
+        resolution,
+        pca_dims,
+    )
 
     # Build AnnData with expression and spatial coordinates. BANKSY's coord_keys
     # is (x_obs_col, y_obs_col, spatial_obsm_key); initialize_banksy reads the
     # coordinates from adata.obsm[coord_keys[2]].
     adata_banksy = ad.AnnData(X=df_norm.values.astype(np.float32))
     adata_banksy.var_names = pd.Index(list(marker_names))
-    adata_banksy.obsm['spatial'] = spatial_data
-    adata_banksy.obs['x'] = spatial_data[:, 0]
-    adata_banksy.obs['y'] = spatial_data[:, 1]
-    coord_keys = ('x', 'y', 'spatial')
+    adata_banksy.obsm["spatial"] = spatial_data
+    adata_banksy.obs["x"] = spatial_data[:, 0]
+    adata_banksy.obs["y"] = spatial_data[:, 1]
+    coord_keys = ("x", "y", "spatial")
 
     # BANKSY prints a large volume of diagnostics via print() -> sys.stdout,
     # which is ALSO Appose's protocol channel. Those lines surface as
     # "[SERVICE-0] <INVALID>" and, on a full pipe, can stall the worker. Silence
     # stdout for the duration of each BANKSY call. task.update() stays OUTSIDE
     # the redirect so progress messages still reach the protocol channel.
-    _progress(0.46, "BANKSY: initializing spatial neighbor graph (%d cells)..."
-              % n_cells)
+    _progress(
+        0.46, "BANKSY: initializing spatial neighbor graph (%d cells)..." % n_cells
+    )
     with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
         banksy_dict = initialize_banksy(
             adata_banksy,
             coord_keys,
             num_neighbours=k_geom,
-            nbr_weight_decay='scaled_gaussian',
+            nbr_weight_decay="scaled_gaussian",
             max_m=1,
             plt_edge_hist=False,
             plt_nbr_weights=False,
@@ -580,9 +635,11 @@ elif algorithm == "banksy":
     _progress(0.49, "BANKSY: building spatially-augmented feature matrix...")
     with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
         banksy_dict, _banksy_matrix = generate_banksy_matrix(
-            adata_banksy, banksy_dict, [lambda_param], 1, verbose=False)
-        pca_umap(banksy_dict, pca_dims=[pca_dims], add_umap=False,
-                 plt_remaining_var=False)
+            adata_banksy, banksy_dict, [lambda_param], 1, verbose=False
+        )
+        pca_umap(
+            banksy_dict, pca_dims=[pca_dims], add_umap=False, plt_remaining_var=False
+        )
 
     _progress(0.55, "BANKSY: Leiden clustering on spatial features...")
     with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
@@ -601,11 +658,14 @@ elif algorithm == "banksy":
     # NOT in adata.obs.
     if results_df is None or len(results_df.index) == 0:
         raise ValueError("BANKSY did not produce cluster labels")
-    label_obj = results_df.loc[results_df.index[0], 'labels']
-    labels = label_obj.dense if hasattr(label_obj, 'dense') else np.asarray(label_obj)
+    label_obj = results_df.loc[results_df.index[0], "labels"]
+    labels = label_obj.dense if hasattr(label_obj, "dense") else np.asarray(label_obj)
     labels = np.asarray(labels).astype(int)
-    logger.info("BANKSY clustering complete: %d clusters for %d cells",
-                len(set(labels.tolist())), len(labels))
+    logger.info(
+        "BANKSY clustering complete: %d clusters for %d cells",
+        len(set(labels.tolist())),
+        len(labels),
+    )
 
 elif algorithm == "none":
     # Embedding only -- assign all cells to cluster 0 (no real clustering)
@@ -716,20 +776,21 @@ cluster_labels_str = [str(x) for x in labels_shifted]
 # panel on the Java side (CLUSTER_COLORS[cluster_id % 20], numeric). Pinning
 # explicit numeric category order keeps both views colored consistently.
 _cluster_category_order = [str(x) for x in sorted({int(s) for s in cluster_labels_str})]
-adata.obs['cluster'] = pd.Categorical(
-    cluster_labels_str, categories=_cluster_category_order, ordered=False)
+adata.obs["cluster"] = pd.Categorical(
+    cluster_labels_str, categories=_cluster_category_order, ordered=False
+)
 
 if embedding_result is not None:
-    adata.obsm['X_embed'] = embedding_result
+    adata.obsm["X_embed"] = embedding_result
 
 # Compute neighbor graph (needed for PAGA and dendrogram)
 n_neigh = min(15, n_cells - 1)
-embedding_only = (algorithm == "none")
+embedding_only = algorithm == "none"
 can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
 
 if can_analyze:
-    sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep='X')
-    sc.tl.dendrogram(adata, groupby='cluster')
+    sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep="X")
+    sc.tl.dendrogram(adata, groupby="cluster")
 
     # 6a. Marker ranking (Wilcoxon rank-sum test)
     try:
@@ -746,7 +807,7 @@ if can_analyze:
         # fold-changes ourselves from the RAW intensities below.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            sc.tl.rank_genes_groups(adata, groupby='cluster', method='wilcoxon')
+            sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon")
 
         # Per-cluster log2 fold-change of MEAN RAW intensity (cluster vs rest).
         # df holds the raw (NaN-imputed) intensities, row-aligned with
@@ -756,7 +817,7 @@ if can_analyze:
         _eps = 1e-9
         _labels_arr = np.asarray(labels_shifted)
         _logfc_by_cluster = {}
-        for _cid in adata.obs['cluster'].cat.categories:
+        for _cid in adata.obs["cluster"].cat.categories:
             _in = _labels_arr == int(_cid)
             if _in.sum() == 0 or (~_in).sum() == 0:
                 _logfc_by_cluster[str(_cid)] = {}
@@ -765,44 +826,49 @@ if can_analyze:
             _mean_rest = _raw[~_in].mean(axis=0)
             _lfc = np.log2((_mean_in + _eps) / (_mean_rest + _eps))
             _logfc_by_cluster[str(_cid)] = {
-                str(marker_names[j]): float(_lfc[j])
-                for j in range(len(marker_names))
+                str(marker_names[j]): float(_lfc[j]) for j in range(len(marker_names))
             }
 
         marker_result = {}
-        result_data = adata.uns['rank_genes_groups']
-        for cid in adata.obs['cluster'].cat.categories:
+        result_data = adata.uns["rank_genes_groups"]
+        for cid in adata.obs["cluster"].cat.categories:
             markers_list = []
-            names = result_data['names'][cid][:top_n]
-            scores = result_data['scores'][cid][:top_n]
-            pvals = result_data['pvals_adj'][cid][:top_n]
+            names = result_data["names"][cid][:top_n]
+            scores = result_data["scores"][cid][:top_n]
+            pvals = result_data["pvals_adj"][cid][:top_n]
             _cluster_lfc = _logfc_by_cluster.get(str(cid), {})
             for i in range(len(names)):
-                markers_list.append({
-                    'name': str(names[i]),
-                    'score': float(scores[i]),
-                    'logfoldchange': _cluster_lfc.get(str(names[i]), float('nan')),
-                    'pval_adj': float(pvals[i])
-                })
+                markers_list.append(
+                    {
+                        "name": str(names[i]),
+                        "score": float(scores[i]),
+                        "logfoldchange": _cluster_lfc.get(str(names[i]), float("nan")),
+                        "pval_adj": float(pvals[i]),
+                    }
+                )
             marker_result[str(cid)] = markers_list
 
-        task.outputs['marker_rankings'] = json.dumps(_sanitize_json_tree(marker_result))
+        task.outputs["marker_rankings"] = json.dumps(_sanitize_json_tree(marker_result))
         logger.info("Marker ranking complete: top %d markers per cluster", top_n)
     except Exception as e:
         logger.warning("Marker ranking failed: %s", e)
 
     # 6b. PAGA (cluster connectivity / trajectory graph)
     try:
-        sc.tl.paga(adata, groups='cluster')
-        paga_conn = adata.uns['paga']['connectivities'].toarray()
+        sc.tl.paga(adata, groups="cluster")
+        paga_conn = adata.uns["paga"]["connectivities"].toarray()
 
         paga_nd = PyNDArray(dtype="float64", shape=list(paga_conn.shape))
         np.copyto(paga_nd.ndarray(), paga_conn.astype(np.float64))
-        task.outputs['paga_connectivity'] = paga_nd
-        task.outputs['paga_cluster_names'] = json.dumps(
-            list(adata.obs['cluster'].cat.categories))
-        logger.info("PAGA connectivity computed (%d x %d)",
-                    paga_conn.shape[0], paga_conn.shape[1])
+        task.outputs["paga_connectivity"] = paga_nd
+        task.outputs["paga_cluster_names"] = json.dumps(
+            list(adata.obs["cluster"].cat.categories)
+        )
+        logger.info(
+            "PAGA connectivity computed (%d x %d)",
+            paga_conn.shape[0],
+            paga_conn.shape[1],
+        )
     except Exception as e:
         logger.warning("PAGA computation failed: %s", e)
 else:
@@ -838,8 +904,8 @@ if has_spatial and n_clusters_found > 1:
             "environment (Utilities > Rebuild) and try again."
         ) from _e
 
-    adata.obsm['spatial'] = spatial_data
-    adata.obsm['X_spatial'] = spatial_data  # for scanpy plotting (basis='spatial')
+    adata.obsm["spatial"] = spatial_data
+    adata.obsm["X_spatial"] = spatial_data  # for scanpy plotting (basis='spatial')
     logger.info("Spatial coordinates loaded (%d cells)", spatial_data.shape[0])
 
     # Build the spatial neighbor graph using the v1 explicit constructor
@@ -853,8 +919,7 @@ if has_spatial and n_clusters_found > 1:
             radius=pref_spatial_graph_radius,
             delaunay_max_edge=pref_spatial_graph_delaunay_max_edge,
         )
-        logger.info("Spatial neighbor graph built (%s)",
-                    pref_spatial_graph_type)
+        logger.info("Spatial neighbor graph built (%s)", pref_spatial_graph_type)
         task.outputs["spatial_graph_type"] = pref_spatial_graph_type
 
         # v0.3 spatial graph overlay: emit edge COO + optional per-cell
@@ -896,6 +961,7 @@ if has_spatial and n_clusters_found > 1:
     _numba_threads_saved = None
     try:
         import numba as _numba_mod
+
         _numba_threads_saved = _numba_mod.get_num_threads()
         _numba_mod.set_num_threads(1)
     except Exception:
@@ -908,39 +974,61 @@ if has_spatial and n_clusters_found > 1:
         # Neighborhood enrichment (z-score matrix)
         try:
             _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
-            sq.gr.nhood_enrichment(adata, cluster_key='cluster', **_supported_kwargs(
-                sq.gr.nhood_enrichment, numba_parallel=False, n_jobs=1,
-                show_progress_bar=False, seed=0))
-            nhood_data = adata.uns['cluster_nhood_enrichment']
-            zscore = nhood_data['zscore']
+            sq.gr.nhood_enrichment(
+                adata,
+                cluster_key="cluster",
+                **_supported_kwargs(
+                    sq.gr.nhood_enrichment,
+                    numba_parallel=False,
+                    n_jobs=1,
+                    show_progress_bar=False,
+                    seed=0,
+                )
+            )
+            nhood_data = adata.uns["cluster_nhood_enrichment"]
+            zscore = nhood_data["zscore"]
 
             nhood_nd = PyNDArray(dtype="float64", shape=list(zscore.shape))
             np.copyto(nhood_nd.ndarray(), zscore.astype(np.float64))
-            task.outputs['nhood_enrichment'] = nhood_nd
-            task.outputs['nhood_cluster_names'] = json.dumps(
-                list(adata.obs['cluster'].cat.categories))
-            logger.info("Neighborhood enrichment computed (%d x %d)",
-                        zscore.shape[0], zscore.shape[1])
+            task.outputs["nhood_enrichment"] = nhood_nd
+            task.outputs["nhood_cluster_names"] = json.dumps(
+                list(adata.obs["cluster"].cat.categories)
+            )
+            logger.info(
+                "Neighborhood enrichment computed (%d x %d)",
+                zscore.shape[0],
+                zscore.shape[1],
+            )
         except Exception as e:
             logger.warning("Neighborhood enrichment failed: %s", e)
 
         # Spatial autocorrelation (Moran's I per marker)
         try:
             _progress(0.82, "Computing Moran's I spatial autocorrelation...")
-            df_autocorr = sq.gr.spatial_autocorr(adata, mode='moran', **_supported_kwargs(
-                sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0))
+            df_autocorr = sq.gr.spatial_autocorr(
+                adata,
+                mode="moran",
+                **_supported_kwargs(
+                    sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0
+                )
+            )
             autocorr_results = {}
             for marker in marker_names:
                 if marker in df_autocorr.index:
                     row = df_autocorr.loc[marker]
                     autocorr_results[marker] = {
-                        'I': float(row['I']),
-                        'pval': float(row.get('pval_norm', row.get('pval_z_sim',
-                                             float('nan'))))
+                        "I": float(row["I"]),
+                        "pval": float(
+                            row.get("pval_norm", row.get("pval_z_sim", float("nan")))
+                        ),
                     }
-            task.outputs['spatial_autocorr'] = json.dumps(_sanitize_json_tree(autocorr_results))
-            logger.info("Spatial autocorrelation (Moran's I) computed for %d markers",
-                        len(autocorr_results))
+            task.outputs["spatial_autocorr"] = json.dumps(
+                _sanitize_json_tree(autocorr_results)
+            )
+            logger.info(
+                "Spatial autocorrelation (Moran's I) computed for %d markers",
+                len(autocorr_results),
+            )
         except Exception as e:
             logger.warning("Spatial autocorrelation failed: %s", e)
 
@@ -949,7 +1037,8 @@ if has_spatial and n_clusters_found > 1:
     # and never escapes to the parent task. Java side checks task.outputs
     # for each key independently (hasRipley / hasGeary / etc.).
     n_perms = _qpcat_spatial.adaptive_permutations(
-        n_cells, override=pref_spatial_permutations)
+        n_cells, override=pref_spatial_permutations
+    )
 
     # Phase 5: route PNG output for the new stats into the same directory
     # the existing matplotlib plots write to (output_dir, when set). If
@@ -969,67 +1058,99 @@ if has_spatial and n_clusters_found > 1:
     plot_paths = {}
 
     if pref_enable_ripley:
-        _progress(0.86, "Computing Ripley K and L (%d permutations on %d cells) "
-                  "-- this can take several minutes..." % (n_perms, n_cells))
+        _progress(
+            0.86,
+            "Computing Ripley K and L (%d permutations on %d cells) "
+            "-- this can take several minutes..." % (n_perms, n_cells),
+        )
         _qpcat_spatial.run_ripley(
-            adata, task, cluster_key='cluster', n_permutations=n_perms,
+            adata,
+            task,
+            cluster_key="cluster",
+            n_permutations=n_perms,
             graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist)
+            plot_dir=_spatial_plot_dir,
+            plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist,
+        )
         if _spatial_persist:
-            _ripley_path = os.path.join(_spatial_plot_dir,
-                                          _qpcat_spatial.PLOT_FILE_RIPLEY)
+            _ripley_path = os.path.join(
+                _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_RIPLEY
+            )
             if os.path.exists(_ripley_path):
                 # The single PNG carries both K and L panels; expose under
                 # both PlotKind savedPlotKey values so either checkbox in
                 # Feature B's exporter finds it.
-                plot_paths['ripley_k'] = _ripley_path
-                plot_paths['ripley_l'] = _ripley_path
+                plot_paths["ripley_k"] = _ripley_path
+                plot_paths["ripley_l"] = _ripley_path
 
     if pref_enable_geary:
-        _progress(0.90, "Computing Geary's C (%d permutations on %d cells)..."
-                  % (n_perms, n_cells))
+        _progress(
+            0.90,
+            "Computing Geary's C (%d permutations on %d cells)..." % (n_perms, n_cells),
+        )
         _qpcat_spatial.run_geary_c(
-            adata, task, n_permutations=n_perms,
+            adata,
+            task,
+            n_permutations=n_perms,
             measurements=list(marker_names),
             graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist)
+            plot_dir=_spatial_plot_dir,
+            plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist,
+        )
         if _spatial_persist:
-            _geary_path = os.path.join(_spatial_plot_dir,
-                                         _qpcat_spatial.PLOT_FILE_GEARY)
+            _geary_path = os.path.join(
+                _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_GEARY
+            )
             if os.path.exists(_geary_path):
-                plot_paths['geary_c'] = _geary_path
+                plot_paths["geary_c"] = _geary_path
 
     if pref_enable_co_occurrence_pairwise:
-        _progress(0.94, "Computing co-occurrence, pairwise (%d cells) "
-                  "-- this can be slow..." % n_cells)
+        _progress(
+            0.94,
+            "Computing co-occurrence, pairwise (%d cells) "
+            "-- this can be slow..." % n_cells,
+        )
         _qpcat_spatial.run_co_occurrence(
-            adata, task, cluster_key='cluster', mode='pairwise',
-            n_permutations=n_perms, spatial_data=spatial_data,
+            adata,
+            task,
+            cluster_key="cluster",
+            mode="pairwise",
+            n_permutations=n_perms,
+            spatial_data=spatial_data,
             graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist)
+            plot_dir=_spatial_plot_dir,
+            plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist,
+        )
         if _spatial_persist:
-            _cooc_p_path = os.path.join(_spatial_plot_dir,
-                                          _qpcat_spatial.PLOT_FILE_COOC_PAIRWISE)
+            _cooc_p_path = os.path.join(
+                _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_COOC_PAIRWISE
+            )
             if os.path.exists(_cooc_p_path):
-                plot_paths['cooc_pairwise'] = _cooc_p_path
+                plot_paths["cooc_pairwise"] = _cooc_p_path
 
     if pref_enable_co_occurrence_one_vs_rest:
-        _progress(0.97, "Computing co-occurrence, one-vs-rest (%d cells)..."
-                  % n_cells)
+        _progress(0.97, "Computing co-occurrence, one-vs-rest (%d cells)..." % n_cells)
         _qpcat_spatial.run_co_occurrence(
-            adata, task, cluster_key='cluster', mode='oneVsRest',
-            n_permutations=n_perms, spatial_data=spatial_data,
+            adata,
+            task,
+            cluster_key="cluster",
+            mode="oneVsRest",
+            n_permutations=n_perms,
+            spatial_data=spatial_data,
             graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir, plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist)
+            plot_dir=_spatial_plot_dir,
+            plot_dpi=pref_plot_dpi,
+            persist_plots=_spatial_persist,
+        )
         if _spatial_persist:
-            _cooc_o_path = os.path.join(_spatial_plot_dir,
-                                          _qpcat_spatial.PLOT_FILE_COOC_ONE_VS_REST)
+            _cooc_o_path = os.path.join(
+                _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_COOC_ONE_VS_REST
+            )
             if os.path.exists(_cooc_o_path):
-                plot_paths['cooc_one_vs_rest'] = _cooc_o_path
+                plot_paths["cooc_one_vs_rest"] = _cooc_o_path
 
     if any_v1_stats:
         # Surface the resolved adaptive count to the Java side so the
@@ -1040,6 +1161,7 @@ if has_spatial and n_clusters_found > 1:
     if _numba_threads_saved is not None:
         try:
             import numba as _numba_mod
+
             _numba_mod.set_num_threads(_numba_threads_saved)
         except Exception:
             pass
@@ -1068,26 +1190,38 @@ if do_plots and plot_dir and can_analyze:
 
     # Dotplot with dendrogram -- fraction expressing + mean expression per cluster
     try:
-        dp = sc.pl.dotplot(adata, var_names=list(marker_names), groupby='cluster',
-                           dendrogram=True, standard_scale='var',
-                           show=False, return_fig=True)
-        dotplot_path = os.path.join(plot_dir, 'cluster_dotplot.png')
-        dp.savefig(dotplot_path, dpi=pref_plot_dpi, bbox_inches='tight')
-        plt.close('all')
-        plot_paths['dotplot'] = dotplot_path
+        dp = sc.pl.dotplot(
+            adata,
+            var_names=list(marker_names),
+            groupby="cluster",
+            dendrogram=True,
+            standard_scale="var",
+            show=False,
+            return_fig=True,
+        )
+        dotplot_path = os.path.join(plot_dir, "cluster_dotplot.png")
+        dp.savefig(dotplot_path, dpi=pref_plot_dpi, bbox_inches="tight")
+        plt.close("all")
+        plot_paths["dotplot"] = dotplot_path
         logger.info("Saved dotplot: %s", dotplot_path)
     except Exception as e:
         logger.warning("Failed to generate dotplot: %s", e)
 
     # Matrix plot -- mean expression heatmap per cluster
     try:
-        mp = sc.pl.matrixplot(adata, var_names=list(marker_names), groupby='cluster',
-                              dendrogram=True, standard_scale='var',
-                              show=False, return_fig=True)
-        matrixplot_path = os.path.join(plot_dir, 'cluster_matrixplot.png')
-        mp.savefig(matrixplot_path, dpi=pref_plot_dpi, bbox_inches='tight')
-        plt.close('all')
-        plot_paths['matrixplot'] = matrixplot_path
+        mp = sc.pl.matrixplot(
+            adata,
+            var_names=list(marker_names),
+            groupby="cluster",
+            dendrogram=True,
+            standard_scale="var",
+            show=False,
+            return_fig=True,
+        )
+        matrixplot_path = os.path.join(plot_dir, "cluster_matrixplot.png")
+        mp.savefig(matrixplot_path, dpi=pref_plot_dpi, bbox_inches="tight")
+        plt.close("all")
+        plot_paths["matrixplot"] = matrixplot_path
         logger.info("Saved matrixplot: %s", matrixplot_path)
     except Exception as e:
         logger.warning("Failed to generate matrixplot: %s", e)
@@ -1095,10 +1229,10 @@ if do_plots and plot_dir and can_analyze:
     # PAGA graph -- cluster connectivity / trajectory
     try:
         sc.pl.paga(adata, show=False)
-        paga_path = os.path.join(plot_dir, 'paga_graph.png')
-        plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches='tight')
-        plt.close('all')
-        plot_paths['paga'] = paga_path
+        paga_path = os.path.join(plot_dir, "paga_graph.png")
+        plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches="tight")
+        plt.close("all")
+        plot_paths["paga"] = paga_path
         logger.info("Saved PAGA graph: %s", paga_path)
     except Exception as e:
         logger.warning("Failed to generate PAGA graph: %s", e)
@@ -1106,13 +1240,18 @@ if do_plots and plot_dir and can_analyze:
     # Stacked violin plot -- expression distribution per cluster
     if n_clusters_found > 1:
         try:
-            sv = sc.pl.stacked_violin(adata, var_names=list(marker_names),
-                                       groupby='cluster', dendrogram=True,
-                                       show=False, return_fig=True)
-            violin_path = os.path.join(plot_dir, 'stacked_violin.png')
-            sv.savefig(violin_path, dpi=pref_plot_dpi, bbox_inches='tight')
-            plt.close('all')
-            plot_paths['stacked_violin'] = violin_path
+            sv = sc.pl.stacked_violin(
+                adata,
+                var_names=list(marker_names),
+                groupby="cluster",
+                dendrogram=True,
+                show=False,
+                return_fig=True,
+            )
+            violin_path = os.path.join(plot_dir, "stacked_violin.png")
+            sv.savefig(violin_path, dpi=pref_plot_dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["stacked_violin"] = violin_path
             logger.info("Saved stacked violin: %s", violin_path)
         except Exception as e:
             logger.warning("Failed to generate stacked violin: %s", e)
@@ -1121,12 +1260,11 @@ if do_plots and plot_dir and can_analyze:
     if embedding_result is not None:
         try:
             fig, ax = plt.subplots(figsize=(8, 6))
-            sc.pl.embedding(adata, basis='embed', color='cluster',
-                            show=False, ax=ax)
-            embed_path = os.path.join(plot_dir, 'cluster_embedding.png')
-            fig.savefig(embed_path, dpi=pref_plot_dpi, bbox_inches='tight')
-            plt.close('all')
-            plot_paths['embedding'] = embed_path
+            sc.pl.embedding(adata, basis="embed", color="cluster", show=False, ax=ax)
+            embed_path = os.path.join(plot_dir, "cluster_embedding.png")
+            fig.savefig(embed_path, dpi=pref_plot_dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["embedding"] = embed_path
             logger.info("Saved embedding plot: %s", embed_path)
         except Exception as e:
             logger.warning("Failed to generate embedding plot: %s", e)
@@ -1135,11 +1273,11 @@ if do_plots and plot_dir and can_analyze:
     if has_spatial:
         # Neighborhood enrichment heatmap
         try:
-            sq.pl.nhood_enrichment(adata, cluster_key='cluster', show=False)
-            nhood_path = os.path.join(plot_dir, 'nhood_enrichment.png')
-            plt.savefig(nhood_path, dpi=pref_plot_dpi, bbox_inches='tight')
-            plt.close('all')
-            plot_paths['nhood_enrichment'] = nhood_path
+            sq.pl.nhood_enrichment(adata, cluster_key="cluster", show=False)
+            nhood_path = os.path.join(plot_dir, "nhood_enrichment.png")
+            plt.savefig(nhood_path, dpi=pref_plot_dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["nhood_enrichment"] = nhood_path
             logger.info("Saved neighborhood enrichment heatmap: %s", nhood_path)
         except Exception as e:
             logger.warning("Failed to generate nhood enrichment plot: %s", e)
@@ -1147,38 +1285,49 @@ if do_plots and plot_dir and can_analyze:
         # Spatial scatter colored by cluster
         try:
             fig, ax = plt.subplots(figsize=(10, 8))
-            clusters_cat = adata.obs['cluster'].cat.categories
+            clusters_cat = adata.obs["cluster"].cat.categories
             n_cats = len(clusters_cat)
-            cmap = plt.cm.get_cmap('tab20' if n_cats > 10 else 'tab10', n_cats)
+            cmap = plt.cm.get_cmap("tab20" if n_cats > 10 else "tab10", n_cats)
             for idx, cl in enumerate(clusters_cat):
-                mask = adata.obs['cluster'] == cl
-                ax.scatter(spatial_data[mask, 0], spatial_data[mask, 1],
-                           c=[cmap(idx)], s=1, alpha=0.5, label=str(cl),
-                           rasterized=True)
-            ax.set_xlabel('X (pixels)')
-            ax.set_ylabel('Y (pixels)')
-            ax.set_aspect('equal')
+                mask = adata.obs["cluster"] == cl
+                ax.scatter(
+                    spatial_data[mask, 0],
+                    spatial_data[mask, 1],
+                    c=[cmap(idx)],
+                    s=1,
+                    alpha=0.5,
+                    label=str(cl),
+                    rasterized=True,
+                )
+            ax.set_xlabel("X (pixels)")
+            ax.set_ylabel("Y (pixels)")
+            ax.set_aspect("equal")
             ax.invert_yaxis()  # image coordinates: Y increases downward
-            ax.set_title('Spatial distribution by cluster')
-            ax.legend(title='Cluster', markerscale=5, fontsize='small',
-                      loc='center left', bbox_to_anchor=(1, 0.5))
-            spatial_path = os.path.join(plot_dir, 'spatial_scatter.png')
-            fig.savefig(spatial_path, dpi=pref_plot_dpi, bbox_inches='tight')
-            plt.close('all')
-            plot_paths['spatial_scatter'] = spatial_path
+            ax.set_title("Spatial distribution by cluster")
+            ax.legend(
+                title="Cluster",
+                markerscale=5,
+                fontsize="small",
+                loc="center left",
+                bbox_to_anchor=(1, 0.5),
+            )
+            spatial_path = os.path.join(plot_dir, "spatial_scatter.png")
+            fig.savefig(spatial_path, dpi=pref_plot_dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["spatial_scatter"] = spatial_path
             logger.info("Saved spatial scatter: %s", spatial_path)
         except Exception as e:
             logger.warning("Failed to generate spatial scatter plot: %s", e)
 
     if plot_paths:
-        task.outputs['plot_paths'] = json.dumps(plot_paths)
+        task.outputs["plot_paths"] = json.dumps(plot_paths)
 else:
     # do_plots was False but spatial-stats may still have populated
     # plot_paths in section 6c -- emit it so Feature B can find the
     # spatial PNGs even when matplotlib plots are disabled.
     try:
         if plot_paths:
-            task.outputs['plot_paths'] = json.dumps(plot_paths)
+            task.outputs["plot_paths"] = json.dumps(plot_paths)
     except NameError:
         pass
 

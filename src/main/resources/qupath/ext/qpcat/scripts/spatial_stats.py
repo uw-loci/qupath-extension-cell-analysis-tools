@@ -175,6 +175,30 @@ def build_spatial_graph(
     raise ValueError("Unknown spatial graph type: %s" % graph_type)
 
 
+def _median_nn_distance(coords):
+    """Median 1-nearest-neighbor distance -- a density-robust cell-scale estimate.
+
+    Returns None if it cannot be computed (too few points / degenerate coords), so
+    callers can fall back to a coarser heuristic.
+    """
+    try:
+        from scipy.spatial import cKDTree
+
+        if coords is None or len(coords) < 2:
+            return None
+        tree = cKDTree(np.asarray(coords, dtype=float))
+        # k=2: the first neighbor is the point itself (distance 0), the second is
+        # its nearest neighbor.
+        dists, _ = tree.query(np.asarray(coords, dtype=float), k=2)
+        nn = dists[:, 1]
+        nn = nn[np.isfinite(nn) & (nn > 0)]
+        if nn.size == 0:
+            return None
+        return float(np.median(nn))
+    except Exception:
+        return None
+
+
 def run_ripley(
     adata,
     task,
@@ -602,14 +626,23 @@ def run_co_occurrence(
         ):
             kwargs["interval"] = np.linspace(min_radius, max_radius, int(n_intervals))
         elif spatial_data is not None and n_intervals > 0:
-            # Auto-derive interval from data extent
+            # Auto-derive the interval from CELL DENSITY, not the bounding box. A
+            # fixed fraction of the bbox diagonal degenerates on thin/elongated or
+            # sparse ROIs (every bin empty or saturated). The median nearest-neighbor
+            # distance is the natural cell scale.
             coords = spatial_data
-            # max range from bounding box; min from a small fraction of it
             xmin, xmax = float(coords[:, 0].min()), float(coords[:, 0].max())
             ymin, ymax = float(coords[:, 1].min()), float(coords[:, 1].max())
             diag = math.hypot(xmax - xmin, ymax - ymin)
-            r_max = diag * 0.1  # 10th-percentile-style cap
-            r_min = max(1.0, diag * 0.001)
+            med_nn = _median_nn_distance(coords)
+            if med_nn is not None and med_nn > 0:
+                # Span ~1 cell spacing up to ~20 spacings, never past half the ROI.
+                r_min = med_nn
+                r_max = min(med_nn * 20.0, max(med_nn * 2.0, diag * 0.5))
+            else:
+                # Fallback: the old bbox-diagonal heuristic.
+                r_min = max(1.0, diag * 0.001)
+                r_max = diag * 0.1
             kwargs["interval"] = np.linspace(r_min, r_max, int(n_intervals))
 
         # Force serial execution (avoids the numba/joblib deadlock on Windows).

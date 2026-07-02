@@ -2997,8 +2997,11 @@ public class ClusteringDialog {
         PathClass.fromString("Cluster " + clusterId).setColor(rgb);
         if (qupath != null) {
             try {
-                var viewer = qupath.getViewer();
-                if (viewer != null) viewer.repaintEntireImage();
+                // "Cluster N" colors are QuPath-wide, so repaint EVERY open viewer, not
+                // just the active one -- otherwise other open images keep stale colors.
+                for (var viewer : qupath.getAllViewers()) {
+                    if (viewer != null) viewer.repaintEntireImage();
+                }
             } catch (Exception ignore) { /* no open viewer */ }
         }
         if (scatterHolder[0] != null) scatterHolder[0].refreshColors();

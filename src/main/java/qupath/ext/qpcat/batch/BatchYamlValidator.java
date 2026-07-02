@@ -504,6 +504,14 @@ public final class BatchYamlValidator {
     private static void validatePerImageOverrides(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.ScopeBlock scope = s.getScope();
         if (scope == null || scope.getPerImageOverrides() == null) return;
+        if (!scope.getPerImageOverrides().isEmpty()) {
+            // The orchestrator does not yet apply per-image overrides. Warn loudly so a
+            // user does not believe an accepted-and-validated override took effect.
+            r.add(ValidationIssue.warning("W004", "scope.per_image_overrides",
+                    "per_image_overrides are parsed and validated but NOT YET APPLIED by "
+                    + "the batch runner; every image uses the top-level blocks. Remove "
+                    + "them or run those images separately until this is implemented."));
+        }
         Set<String> validBlocks = new HashSet<>(Arrays.asList(
                 "clustering", "phenotyping", "spatial_stats", "figure_export"));
         for (int i = 0; i < scope.getPerImageOverrides().size(); i++) {

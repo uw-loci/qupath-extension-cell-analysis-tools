@@ -540,11 +540,25 @@ public class EmbeddingScatterPanel extends VBox {
         dragging = false;
     }
 
-    // Hover tooltip
+    // Hover tooltip -- throttled so the O(nCells) nearest-point scan does not run on
+    // every pixel of mouse movement (this panel is built for large cell counts).
+    private double lastHoverX = Double.NaN;
+    private double lastHoverY = Double.NaN;
+    private int lastHoverIdx = Integer.MIN_VALUE;
+
     private void onMouseMoved(MouseEvent e) {
         if (embedding == null) return;
 
+        // Skip the scan if the pointer barely moved since the last one.
+        double dx = e.getX() - lastHoverX;
+        double dy = e.getY() - lastHoverY;
+        if (dx * dx + dy * dy < 9.0) return;  // < 3px
+        lastHoverX = e.getX();
+        lastHoverY = e.getY();
+
         int bestIdx = findNearestPointIndex(e.getX(), e.getY());
+        if (bestIdx == lastHoverIdx) return;  // no change -> don't churn the tooltip
+        lastHoverIdx = bestIdx;
         if (bestIdx >= 0) {
             tooltip.setText(String.format("Cell %d | Cluster %d\n%s1=%.2f, %s2=%.2f",
                     bestIdx, labels[bestIdx],

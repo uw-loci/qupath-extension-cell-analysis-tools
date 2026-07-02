@@ -1991,22 +1991,42 @@ public class ClusteringWorkflow {
      * from detection measurements. Returns null if no embedding found.
      */
     private double[][] extractExistingEmbedding(List<PathObject> detections) {
-        // Try UMAP, PCA, tSNE in order
+        if (detections == null || detections.isEmpty()) return null;
+        // Try UMAP, PCA, tSNE in order.
         String[][] prefixes = {{"UMAP1", "UMAP2"}, {"PCA1", "PCA2"}, {"tSNE1", "tSNE2"}};
 
         for (String[] pair : prefixes) {
-            PathObject first = detections.get(0);
-            if (first.getMeasurements().containsKey(pair[0])
-                    && first.getMeasurements().containsKey(pair[1])) {
-                double[][] emb = new double[detections.size()][2];
-                for (int i = 0; i < detections.size(); i++) {
-                    var ml = detections.get(i).getMeasurements();
-                    emb[i][0] = ml.getOrDefault(pair[0], 0.0).doubleValue();
-                    emb[i][1] = ml.getOrDefault(pair[1], 0.0).doubleValue();
+            // Decide presence by scanning for ANY detection that carries the pair,
+            // not just detections.get(0) -- a heterogeneous set (e.g. first cell
+            // lacks the columns) would otherwise be misdetected either way.
+            boolean anyPresent = false;
+            for (PathObject det : detections) {
+                var ml = det.getMeasurements();
+                if (ml.containsKey(pair[0]) && ml.containsKey(pair[1])) {
+                    anyPresent = true;
+                    break;
                 }
-                logger.info("Found existing embedding: {}/{}", pair[0], pair[1]);
-                return emb;
             }
+            if (!anyPresent) continue;
+
+            double[][] emb = new double[detections.size()][2];
+            int missing = 0;
+            for (int i = 0; i < detections.size(); i++) {
+                var ml = detections.get(i).getMeasurements();
+                if (!ml.containsKey(pair[0]) || !ml.containsKey(pair[1])) missing++;
+                emb[i][0] = ml.getOrDefault(pair[0], 0.0).doubleValue();
+                emb[i][1] = ml.getOrDefault(pair[1], 0.0).doubleValue();
+            }
+            if (missing > 0) {
+                // Zero-filled cells would sit at the origin of the scatter and skew
+                // any embedding-space distance -- surface it instead of hiding it.
+                logger.warn("Existing embedding {}/{} is missing on {} of {} cells; "
+                        + "those cells were zero-filled (embedding may be unreliable).",
+                        pair[0], pair[1], missing, detections.size());
+            } else {
+                logger.info("Found existing embedding: {}/{}", pair[0], pair[1]);
+            }
+            return emb;
         }
         return null;
     }
@@ -2738,11 +2758,18 @@ public class ClusteringWorkflow {
         if (imageDatas.isEmpty()) throw new IOException("No images could be loaded.");
         try {
 
+        // Capture each image's filtered detection list ONCE so the labels, the tiles,
+        // and the applied results all index the SAME objects in the SAME order.
+        // getDetectionObjects() has no guaranteed stable iteration order across calls, so
+        // re-reading it later (for tile writing) could misalign tile rows with labels.
+        Map<ImageData<BufferedImage>, List<PathObject>> perImageDets = new LinkedHashMap<>();
+
         // Collect detections and labels from each image
         for (ImageData<BufferedImage> imageData : imageDatas) {
             PathObjectHierarchy hierarchy = imageData.getHierarchy();
             List<PathObject> dets = new ArrayList<>(hierarchy.getDetectionObjects());
             if (cellsOnly) dets.removeIf(d -> !d.isCell());
+            perImageDets.put(imageData, dets);
             if (dets.isEmpty()) continue;
 
             // Extract labels for this image's detections
@@ -2814,9 +2841,10 @@ public class ClusteringWorkflow {
             try (var raf = new java.io.RandomAccessFile(tileTempFile.toFile(), "rw")) {
                 for (ImageData<BufferedImage> imageData : imageDatas) {
                     ImageServer<BufferedImage> server = imageData.getServer();
-                    List<PathObject> dets = new ArrayList<>(
-                            imageData.getHierarchy().getDetectionObjects());
-                    if (cellsOnly) dets.removeIf(d -> !d.isCell());
+                    // Reuse the exact list captured above (do NOT re-read the hierarchy --
+                    // that could reorder rows relative to the labels).
+                    List<PathObject> dets = perImageDets.getOrDefault(
+                            imageData, java.util.Collections.emptyList());
                     if (dets.isEmpty()) continue;
 
                     report(progressCallback, "Writing tiles from "

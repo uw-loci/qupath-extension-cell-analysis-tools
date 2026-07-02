@@ -19,11 +19,14 @@ Inputs (injected by Appose 0.10.0):
 Outputs (via task.outputs):
   histograms_json: str (JSON) -- per-marker histogram and threshold data
 """
+
 import logging
 import json
 import warnings
 
 logger = logging.getLogger("qpcat.thresholds")
+
+import math
 
 import numpy as np
 import pandas as pd
@@ -65,6 +68,7 @@ task.update("Computing histograms and thresholds...")
 # Import optional dependencies (available in the pixi env)
 try:
     from skimage.filters import threshold_triangle
+
     has_triangle = True
 except ImportError:
     has_triangle = False
@@ -72,6 +76,7 @@ except ImportError:
 
 try:
     from sklearn.mixture import GaussianMixture
+
     has_gmm = True
 except ImportError:
     has_gmm = False
@@ -79,6 +84,7 @@ except ImportError:
 
 try:
     from scipy.stats import gamma as gamma_dist
+
     has_gamma = True
 except ImportError:
     has_gamma = False
@@ -112,7 +118,9 @@ for i, marker in enumerate(list(marker_names)):
     valid = values[np.isfinite(values)]
 
     if len(valid) < MIN_VALID:
-        logger.warning("Marker '%s' has too few valid values (%d), skipping", marker, len(valid))
+        logger.warning(
+            "Marker '%s' has too few valid values (%d), skipping", marker, len(valid)
+        )
         continue
 
     # Histogram
@@ -134,7 +142,9 @@ for i, marker in enumerate(list(marker_names)):
     # GMM (2-component Gaussian mixture)
     if has_gmm:
         try:
-            gmm = GaussianMixture(n_components=2, random_state=42, max_iter=GMM_MAX_ITER)
+            gmm = GaussianMixture(
+                n_components=2, random_state=42, max_iter=GMM_MAX_ITER
+            )
             gmm.fit(valid.reshape(-1, 1))
             means = gmm.means_.flatten()
             stds = np.sqrt(gmm.covariances_.flatten())
@@ -144,10 +154,42 @@ for i, marker in enumerate(list(marker_names)):
             order = np.argsort(means)
             m1, m2 = means[order]
             s1, s2 = stds[order]
+            w1, w2 = weights[order]
 
-            # Threshold at midpoint between the two means
-            t = float((m1 + m2) / 2)
-            t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
+            # Threshold at the posterior-equal-probability crossing between the two
+            # Gaussians, i.e. solve w1*N(x;m1,s1) == w2*N(x;m2,s2) for x between the
+            # means. The mean-midpoint (m1+m2)/2 is only correct for equal variance
+            # AND equal weight; for a narrow background peak plus a broad positive
+            # tail (the common marker case) it over-gates. Reduces to the midpoint
+            # when the two components are symmetric.
+            t = None
+            if s1 > 0 and s2 > 0 and w1 > 0 and w2 > 0:
+                a = 1.0 / (2.0 * s2 * s2) - 1.0 / (2.0 * s1 * s1)
+                b = m1 / (s1 * s1) - m2 / (s2 * s2)
+                c = (
+                    -(m1 * m1) / (2.0 * s1 * s1)
+                    + (m2 * m2) / (2.0 * s2 * s2)
+                    + math.log(w1 / s1)
+                    - math.log(w2 / s2)
+                )
+                roots = []
+                if abs(a) < 1e-12:
+                    if abs(b) > 1e-12:
+                        roots = [-c / b]
+                else:
+                    disc = b * b - 4.0 * a * c
+                    if disc >= 0:
+                        sq = math.sqrt(disc)
+                        roots = [(-b + sq) / (2.0 * a), (-b - sq) / (2.0 * a)]
+                lo, hi = min(m1, m2), max(m1, m2)
+                mid = (m1 + m2) / 2.0
+                between = [r for r in roots if lo <= r <= hi]
+                if between:
+                    t = min(between, key=lambda r: abs(r - mid))
+            if t is None:
+                # No valid crossing between the means (degenerate fit): fall back.
+                t = (m1 + m2) / 2.0
+            t = max(float(bin_edges[0]), min(float(bin_edges[-1]), float(t)))
             thresholds["gmm"] = round(t, 4)
         except Exception as e:
             logger.warning("GMM threshold failed for '%s': %s", marker, str(e))
@@ -184,6 +226,6 @@ for i, marker in enumerate(list(marker_names)):
 
 # 4. Package outputs
 task.update("Packaging threshold results...")
-task.outputs['histograms_json'] = json.dumps(result)
+task.outputs["histograms_json"] = json.dumps(result)
 
 logger.info("Threshold computation complete for %d markers", len(result))

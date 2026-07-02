@@ -313,6 +313,12 @@ public class ApposeClusteringService {
             initialized = false;
             logger.error("Failed to initialize QPCAT Appose: {}", e.getMessage(), e);
 
+            // Tear down any worker that started before the failure. This both prevents
+            // an orphaned Python process and lets the env-wipe below run safely (a live
+            // worker holding files under .pixi/ would make the wipe partial / risk the
+            // Windows file-lock). Must happen BEFORE looksLikeStaleEnv/wipeEnvForRebuild.
+            teardownPythonServiceQuietly();
+
             // Detect the well-known "stale env" case: the on-disk pixi.toml
             // appears current but the resolved env is missing a required
             // package (most commonly setuptools / pkg_resources, surfaced
@@ -496,6 +502,32 @@ public class ApposeClusteringService {
             throw new IOException("Task '" + scriptName + "' interrupted", e);
         } finally {
             Thread.currentThread().setContextClassLoader(original);
+        }
+    }
+
+    /**
+     * Best-effort teardown of a partially-started Python worker. Used on the init
+     * failure path: if {@code environment.python()} succeeded but a later step threw,
+     * the worker process is left alive and orphaned, and a subsequent env wipe would
+     * race a live process still holding files under {@code .pixi/} (the exact Windows
+     * file-lock we otherwise guard against). Closes, then force-kills, then nulls.
+     */
+    private void teardownPythonServiceQuietly() {
+        if (pythonService == null) {
+            return;
+        }
+        try {
+            pythonService.close();
+            if (pythonService.isAlive()) {
+                pythonService.kill();
+            }
+        } catch (Exception e) {
+            try { pythonService.kill(); }
+            catch (Exception ignored) { /* already down */ }
+            logger.warn("Error tearing down partially-started Python worker: {}",
+                    e.getMessage());
+        } finally {
+            pythonService = null;
         }
     }
 

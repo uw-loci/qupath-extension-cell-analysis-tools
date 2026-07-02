@@ -119,7 +119,11 @@ public final class BatchYamlParser {
         List<ValidationIssue> issues = new ArrayList<>();
         BatchYamlSchema schema = new BatchYamlSchema();
 
-        Yaml yaml = new Yaml();
+        // SafeConstructor: a batch YAML file may come from another user / CI, so refuse
+        // global tags (!!java...) that would instantiate arbitrary classes on the
+        // classpath. We only ever read plain maps/lists/scalars here anyway.
+        Yaml yaml = new Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(
+                new org.yaml.snakeyaml.LoaderOptions()));
         Object root;
         try {
             root = yaml.load(reader);
@@ -462,7 +466,13 @@ public final class BatchYamlParser {
         if (o == null) return null;
         if (o instanceof Number n) return n.intValue();
         try { return Integer.parseInt(o.toString().trim()); }
-        catch (NumberFormatException e) { return null; }
+        catch (NumberFormatException e) {
+            // Present but not an integer (e.g. `resolution: true`). Returning null
+            // makes downstream treat it as absent and skip range validation, so at
+            // least log it rather than dropping it completely silently.
+            logger.warn("Batch YAML: expected an integer but got '{}' -- ignoring.", o);
+            return null;
+        }
     }
 
     static double asDouble(Object o, double dflt) {
@@ -476,7 +486,10 @@ public final class BatchYamlParser {
         if (o == null) return null;
         if (o instanceof Number n) return n.doubleValue();
         try { return Double.parseDouble(o.toString().trim()); }
-        catch (NumberFormatException e) { return null; }
+        catch (NumberFormatException e) {
+            logger.warn("Batch YAML: expected a number but got '{}' -- ignoring.", o);
+            return null;
+        }
     }
 
     static boolean asBool(Object o, boolean dflt) {
@@ -486,7 +499,13 @@ public final class BatchYamlParser {
         return switch (s) {
             case "true", "yes", "y", "on", "1" -> true;
             case "false", "no", "n", "off", "0" -> false;
-            default -> dflt;
+            default -> {
+                // Unrecognized boolean-position string (e.g. a typo): falling back to
+                // the default can silently flip an `enabled` flag, so log it.
+                logger.warn("Batch YAML: expected a boolean but got '{}' -- using "
+                        + "default {}.", o, dflt);
+                yield dflt;
+            }
         };
     }
 
