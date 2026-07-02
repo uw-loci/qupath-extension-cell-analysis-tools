@@ -4,6 +4,20 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.8.1] -- 2026-07-02
+
+### Added
+
+- **Apply cluster color palette (bulk, project-wide).** New menu item "Apply
+  cluster color palette...". Recolors the `Cluster N` classes in one step from a
+  chosen named palette -- tab20, tab10, Okabe-Ito (colorblind-safe), Set1, Dark2,
+  Paired, or evenly-spaced "Distinct hues" for any cluster count. Because PathClass
+  colors are QuPath-wide, the palette applies across every image the clusters were
+  created from; all open viewers repaint at once. The target is the current
+  `Cluster N` classes or a saved QP-CAT result (whose stored palette is updated too,
+  so reopening it restores the palette). A live swatch preview shows the palette
+  before applying.
+
 ## [0.8.0] -- 2026-07-01
 
 Interactive spatial workflow additions from user testing feedback (Alex): manage

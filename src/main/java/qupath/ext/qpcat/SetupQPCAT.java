@@ -20,6 +20,7 @@ import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.ui.BugReportDialog;
 import qupath.ext.qpcat.ui.ApplySavedResultDialog;
 import qupath.ext.qpcat.ui.CellularNeighborhoodDialog;
+import qupath.ext.qpcat.ui.ClusterColorPaletteDialog;
 import qupath.ext.qpcat.ui.SpatialStatsDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
@@ -362,6 +363,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
 
+        // Apply a named color palette to the cluster classes in bulk (project-wide)
+        MenuItem applyPaletteItem = new MenuItem(res.getString("menu.applyPalette"));
+        applyPaletteItem.setOnAction(e -> ClusterColorPaletteDialog.show(qupath));
+        applyPaletteItem.visibleProperty().bind(environmentReady);
+
         // Manage Clusters
         MenuItem manageClustersItem = new MenuItem(res.getString("menu.manageClusters"));
         manageClustersItem.setOnAction(e -> {
@@ -458,6 +464,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 sep3,
                 // -- Manage & results --
                 manageClustersItem,
+                applyPaletteItem,
                 viewResultsItem,
                 manageResultsItem,
                 applySavedResultItem,

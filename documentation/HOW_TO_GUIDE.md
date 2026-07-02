@@ -1665,6 +1665,15 @@ Color Change"** (default off); QP-CAT shows a brief notice while it runs.
 **Persistence.** The palette is saved inside the result JSON. Reopening the result
 via "View Past Results" restores the exact colors you set.
 
+**Applying a palette in bulk.** To recolor all clusters at once from a named
+palette instead of editing them one by one, use **Extensions > QP-CAT > "Apply
+cluster color palette..."**. Pick a palette (tab20, tab10, Okabe-Ito
+colorblind-safe, Set1, Dark2, Paired, or evenly-spaced "Distinct hues" for any
+cluster count) and a target -- the current `Cluster N` classes or a saved result.
+A swatch preview shows the palette; applying recolors the classes project-wide
+(every image the clusters span repaints at once) and, for a saved-result target,
+updates that result's stored palette.
+
 Note: a fresh clustering run intentionally reverts the classes to the canonical
 palette. Edit colors after the run; those edits are saved with the result.
 
