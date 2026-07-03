@@ -15,6 +15,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   for the whole set instead of once per image**. The decision is made up front and applied
   to every image; after the run, a single dialog lists the average connections per cell
   for each image plus the run mean.
+- The **Results window can now be minimized / maximized** -- it is a normal decorated
+  window instead of a JavaFX dialog (which could not minimize).
+
+### Changed
+
+- The **Cluster Explainer** tab now shows a prominent "EXPERIMENTAL / UNTESTED" banner at
+  the top: its LLM-based suggestions are unvalidated hints, to be confirmed against the
+  marker evidence.
 
 ## [0.9.0] -- 2026-07-03
 

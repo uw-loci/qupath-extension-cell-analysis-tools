@@ -119,6 +119,7 @@ public class ClusterExplainerPanel {
         root.setPadding(new Insets(10));
 
         root.getChildren().addAll(
+                buildUntestedBanner(),
                 buildProviderSection(),
                 new Separator(),
                 buildRunSection(),
@@ -156,6 +157,21 @@ public class ClusterExplainerPanel {
         }
         refreshState();
         return root;
+    }
+
+    /** Prominent banner: this LLM-based feature is experimental and unvalidated. */
+    private Node buildUntestedBanner() {
+        Label warn = new Label(
+                "EXPERIMENTAL / UNTESTED: the Cluster Explainer uses an LLM to suggest "
+                + "cluster identities and has not been validated. Treat every suggestion as "
+                + "an unverified hint, not a conclusion -- always confirm it against the "
+                + "marker evidence yourself before relying on it.");
+        warn.setWrapText(true);
+        warn.setMaxWidth(Double.MAX_VALUE);
+        warn.setStyle("-fx-background-color: #fff3cd; -fx-text-fill: #7a5b00; "
+                + "-fx-border-color: #ffe08a; -fx-border-width: 1; "
+                + "-fx-background-radius: 4; -fx-border-radius: 4; -fx-padding: 8;");
+        return warn;
     }
 
     // ---------------------------------------------------------------------

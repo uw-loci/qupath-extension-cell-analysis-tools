@@ -41,6 +41,7 @@ import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
 import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 
@@ -2196,14 +2197,16 @@ public class ClusteringDialog {
             dialogOwner = qupath.getStage();
         }
 
-        Dialog<ButtonType> dialog = new Dialog<>();
-        if (dialogOwner != null) dialog.initOwner(dialogOwner);
-        dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Results"
-                + (loadedResultName != null ? " [" + loadedResultName + "]" : ""));
-        dialog.setHeaderText(result.getNClusters() + " clusters, "
+        // A decorated Stage (not a JavaFX Dialog) so the Results window can be
+        // MINIMIZED / maximized like a normal window. Modeless by default; owned by the
+        // QuPath window so it layers above it but stays independent.
+        Stage stage = new Stage();
+        if (dialogOwner != null) stage.initOwner(dialogOwner);
+        stage.setTitle("QPCAT - Results"
+                + (loadedResultName != null ? " [" + loadedResultName + "]" : "")
+                + "  --  " + result.getNClusters() + " clusters, "
                 + result.getNCells() + " cells");
-        dialog.setResizable(true);
+        stage.setResizable(true);
 
         if (embName == null) embName = "Embedding";
 
@@ -2212,7 +2215,7 @@ public class ClusteringDialog {
         final CellCropService cropService = (qupath != null && result.hasCellRefs())
                 ? new CellCropService(qupath) : null;
         if (cropService != null) {
-            dialog.setOnHidden(ev -> cropService.close());
+            stage.setOnHidden(ev -> cropService.close());
         }
 
         TabPane tabPane = new TabPane();
@@ -2563,7 +2566,9 @@ public class ClusteringDialog {
         openFolderBtn.setDisable(resultsFolder == null);
         openFolderBtn.setOnAction(e -> openFolder(resultsFolder));
 
-        buttonBar.getChildren().addAll(openFolderBtn, saveBtn, manageBtn);
+        Button closeResultsBtn = new Button("Close");
+        closeResultsBtn.setOnAction(e -> stage.close());
+        buttonBar.getChildren().addAll(openFolderBtn, saveBtn, manageBtn, closeResultsBtn);
 
         // Disable save/manage if no project
         if (qp == null || qp.getProject() == null) {
@@ -2585,11 +2590,10 @@ public class ClusteringDialog {
         mainContent.getChildren().add(buttonBar);
         VBox.setVgrow(tabPane, javafx.scene.layout.Priority.ALWAYS);
 
-        dialog.getDialogPane().setContent(mainContent);
-        dialog.getDialogPane().setPrefSize(850, 650);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-
-        dialog.show();
+        mainContent.setPadding(new Insets(10));
+        Scene scene = new Scene(mainContent, 850, 650);
+        stage.setScene(scene);
+        stage.show();
 
         // Over-5 warning: too many saved results for this scope. Fired after the
         // dialog opens so the notification does not race the window.
