@@ -559,6 +559,40 @@ public class ClusteringWorkflow {
         }
 
         final int nImages = extraction.getImageSegments().size();
+
+        // Decide the spatial-graph overlay push ONCE for the whole set (one prompt, not
+        // one per image) and gather per-image average connections for a single summary.
+        Boolean overlayProceed = null;
+        List<String> graphPerImage = new ArrayList<>();
+        double overlaySumAvg = 0.0;
+        if (result.hasSpatialGraphPayload()
+                && config.isPushConnectionsToViewer()
+                && result.getSpatialGraphPayload().hasEdgeCoo()) {
+            int overlayThreshold = config.getConnectionsPromptThreshold();
+            boolean anyDense = false, anyLarge = false;
+            double maxAvg = 0.0;
+            int maxEdges = 0;
+            for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+                ClusteringResult.SpatialGraphPayload sliced =
+                        result.getSpatialGraphPayload().slice(seg.getStartIndex(), seg.getEndIndex());
+                int nCells = seg.getCount();
+                int segEdges = sliced.hasEdgeCoo() ? sliced.getEdgeRow().length : 0;
+                double avg = nCells > 0 ? (2.0 * segEdges) / nCells : 0.0;
+                graphPerImage.add(String.format(java.util.Locale.US,
+                        "%s: %.1f connections/cell (%d edges)",
+                        segmentImageName(seg), avg, segEdges));
+                overlaySumAvg += avg;
+                if (avg > OVERLAY_DENSITY_WARN) anyDense = true;
+                if (overlayThreshold > 0 && segEdges > overlayThreshold) anyLarge = true;
+                if (avg > maxAvg) maxAvg = avg;
+                if (segEdges > maxEdges) maxEdges = segEdges;
+            }
+            overlayProceed = (anyDense || anyLarge)
+                    ? confirmOverlayPushBatch(nImages, maxAvg, maxEdges, overlayThreshold,
+                            anyDense, anyLarge)
+                    : Boolean.TRUE;
+        }
+
         for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
             int start = segment.getStartIndex();
             int end = segment.getEndIndex();
@@ -593,7 +627,7 @@ public class ClusteringWorkflow {
                 ClusteringResult.SpatialGraphPayload sliced =
                         result.getSpatialGraphPayload().slice(start, end);
                 applySpatialGraphPayload(imageData,
-                        new ArrayList<>(segmentDetections), config, sliced);
+                        new ArrayList<>(segmentDetections), config, sliced, overlayProceed);
             }
 
             // Record the run in EVERY processed image's command-history Workflow,
@@ -613,6 +647,14 @@ public class ClusteringWorkflow {
             }
 
             report(progressCallback, "Saved results for " + entry.getImageName());
+        }
+
+        // ONE spatial-graph summary AFTER the loop (never a popup per image): list the
+        // average connections per image plus the mean across the run.
+        if (!graphPerImage.isEmpty()) {
+            double meanAvg = overlaySumAvg / graphPerImage.size();
+            logger.info("Spatial graph per-image averages: {}", String.join("; ", graphPerImage));
+            reportSpatialGraphSummary(graphPerImage, meanAvg);
         }
 
         // Fire hierarchy update for the currently open image (if it was clustered).
@@ -3899,12 +3941,28 @@ public class ClusteringWorkflow {
      * {@code detections.get(i)}; the i-th cell maps to the i-th element
      * of each per-cell array on the payload.</p>
      */
-    @SuppressWarnings("deprecation")
     public void applySpatialGraphPayload(
             ImageData<BufferedImage> imageData,
             List<PathObject> detections,
             ClusteringConfig config,
             ClusteringResult.SpatialGraphPayload payload) {
+        // Single-image path: prompt (once) when the overlay is dense/large.
+        applySpatialGraphPayload(imageData, detections, config, payload, null);
+    }
+
+    /**
+     * @param overlayProceedOverride when non-null, use this pre-decided answer for a
+     *   dense/large overlay INSTEAD of prompting. Multi-image runs decide once for the
+     *   whole set (one prompt, not one per image) and pass the result here. Null keeps
+     *   the single-image prompt behaviour.
+     */
+    @SuppressWarnings("deprecation")
+    public void applySpatialGraphPayload(
+            ImageData<BufferedImage> imageData,
+            List<PathObject> detections,
+            ClusteringConfig config,
+            ClusteringResult.SpatialGraphPayload payload,
+            Boolean overlayProceedOverride) {
 
         if (imageData == null || detections == null || payload == null) return;
         int n = detections.size();
@@ -3948,8 +4006,12 @@ public class ClusteringWorkflow {
                 // F2: prompt the user instead of silently skipping. Workflow
                 // runs on a background thread; use the CountDownLatch +
                 // Platform.runLater pattern documented in
-                // claude-reports/2025-01-30_dialog-fixes-session.md.
-                proceed = confirmOverlayPush(nEdges, threshold, avgDegree, dense, large);
+                // claude-reports/2025-01-30_dialog-fixes-session.md. For multi-image
+                // runs the decision is made ONCE up front and passed in via
+                // overlayProceedOverride, so we do not prompt once per image.
+                proceed = (overlayProceedOverride != null)
+                        ? overlayProceedOverride
+                        : confirmOverlayPush(nEdges, threshold, avgDegree, dense, large);
                 if (!proceed) {
                     logger.info("Spatial graph viewer push declined by user"
                                     + " (edges={}, avgDegree={}, threshold={})",
@@ -4022,6 +4084,86 @@ public class ClusteringWorkflow {
                     + "pan and zoom.)");
         // Dialogs.showYesNoDialog returns true for Yes, false for No.
         return Dialogs.showYesNoDialog("QP-CAT - spatial graph overlay", body.toString());
+    }
+
+    /**
+     * One-prompt confirmation for a MULTI-IMAGE run: decides the overlay push for the
+     * whole set at once (instead of once per image). Same background-thread-safe latch
+     * pattern as {@link #confirmOverlayPush}. Defaults to skip if FX is unavailable.
+     */
+    private boolean confirmOverlayPushBatch(int nImages, double maxAvgDegree, int maxEdges,
+                                            int threshold, boolean dense, boolean large) {
+        if (Platform.isFxApplicationThread()) {
+            return showOverlayPushDialogBatch(nImages, maxAvgDegree, maxEdges, threshold, dense, large);
+        }
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean answer = new AtomicBoolean(false);
+        try {
+            Platform.runLater(() -> {
+                try {
+                    answer.set(showOverlayPushDialogBatch(
+                            nImages, maxAvgDegree, maxEdges, threshold, dense, large));
+                } finally {
+                    latch.countDown();
+                }
+            });
+            latch.await();
+            return answer.get();
+        } catch (IllegalStateException e) {
+            logger.warn("Cannot prompt for overlay push (FX not running); defaulting to skip"
+                    + " (images={}, maxAvgDegree={})", nImages, String.format("%.1f", maxAvgDegree));
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private boolean showOverlayPushDialogBatch(int nImages, double maxAvgDegree, int maxEdges,
+                                               int threshold, boolean dense, boolean large) {
+        StringBuilder body = new StringBuilder();
+        body.append(String.format("Applying the spatial-graph overlay across %d images.%n%n",
+                nImages));
+        if (dense) {
+            body.append(String.format(
+                    "The densest image averages %.1f connections per cell (up to %d edges).%n%n"
+                            + "At this density the overlay usually renders as a solid white mass "
+                            + "that fills the viewer and is not informative -- QP-CAT cannot yet "
+                            + "colour-code edges or nodes to make it readable.%n%n",
+                    maxAvgDegree, maxEdges));
+        } else {
+            body.append(String.format(
+                    "The largest graph has %d edges (threshold: %d).%n%n", maxEdges, threshold));
+        }
+        body.append("Push the overlay to ALL of these images? ")
+            .append("(The graph and its measurements are still computed and saved either way; "
+                    + "this only controls the on-screen overlay. This choice is applied to every "
+                    + "image in the run -- you are asked once, not per image.)");
+        return Dialogs.showYesNoDialog("QP-CAT - spatial graph overlay", body.toString());
+    }
+
+    /** Best available image name for a segment, for the per-image spatial-graph summary. */
+    private static String segmentImageName(MeasurementExtractor.ImageSegment seg) {
+        Object e = seg.getImageEntry();
+        if (e instanceof ProjectImageEntry<?> pe && pe.getImageName() != null) {
+            return pe.getImageName();
+        }
+        return "image";
+    }
+
+    /** Show ONE spatial-graph summary (per-image averages + run mean) on the FX thread. */
+    private void reportSpatialGraphSummary(List<String> perImage, double meanAvg) {
+        if (qupath == null) return;   // headless run: the log line already recorded it
+        int shown = Math.min(perImage.size(), 30);
+        StringBuilder sb = new StringBuilder("Spatial graph -- average connections per cell:\n\n");
+        for (int i = 0; i < shown; i++) sb.append("  ").append(perImage.get(i)).append('\n');
+        if (perImage.size() > shown) {
+            sb.append("  ... and ").append(perImage.size() - shown).append(" more\n");
+        }
+        sb.append(String.format(java.util.Locale.US,
+                "%nMean across %d images: %.1f connections/cell.", perImage.size(), meanAvg));
+        String msg = sb.toString();
+        Platform.runLater(() -> Dialogs.showPlainMessage("QP-CAT - spatial graph overlay", msg));
     }
 
     private void writeNodeMeasurements(List<PathObject> detections,

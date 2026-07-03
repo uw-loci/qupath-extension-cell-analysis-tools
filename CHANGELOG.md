@@ -11,6 +11,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - Clustering dialog: **"Select 'Mean' only" now acts on the visible (filtered) rows only**,
   matching "Select All" / "Select None". So filtering to e.g. "cell" then "Select 'Mean'
   only" checks just the cell Mean measurements; filtered-out rows keep their state.
+- Spatial-graph overlay: **a multi-image run now asks about the dense/large overlay ONCE
+  for the whole set instead of once per image**. The decision is made up front and applied
+  to every image; after the run, a single dialog lists the average connections per cell
+  for each image plus the run mean.
 
 ## [0.9.0] -- 2026-07-03
 
