@@ -130,20 +130,33 @@ public final class VestExporter {
                     + "open image. Run (or apply) clustering first.");
         }
 
-        // 2. Subsample per cluster (deterministic even stride) to bound the export.
+        // 2. Subsample per cluster to bound the export. Use SEEDED UNIFORM RANDOM
+        //    sampling, not an index stride: a stride's representativeness depends on the
+        //    (undefined) getDetectionObjects() order, so any structure in that order --
+        //    acquisition/tile sequence, a batch gradient -- would bias which cells reach
+        //    the embedding. Random sampling is unbiased regardless of order; seeding per
+        //    (run seed, cluster id) keeps it fully reproducible. Note: capping PER CLUSTER
+        //    keeps rare clusters visible but means the exported cloud does NOT preserve
+        //    relative cluster abundance -- a deliberate visualization choice.
         List<PathObject> selected = new ArrayList<>();
         List<Integer> selectedClusters = new ArrayList<>();
         for (var e : byCluster.entrySet()) {
             List<PathObject> group = e.getValue();
             int cap = Math.max(1, opts.maxPerCluster);
+            List<PathObject> chosen;
             if (group.size() <= cap) {
-                for (PathObject d : group) { selected.add(d); selectedClusters.add(e.getKey()); }
+                chosen = group;
             } else {
-                double stride = (double) group.size() / cap;
-                for (int i = 0; i < cap; i++) {
-                    selected.add(group.get((int) Math.floor(i * stride)));
-                    selectedClusters.add(e.getKey());
-                }
+                chosen = new ArrayList<>(group);
+                // Independent, reproducible RNG per cluster so one cluster's size does not
+                // shift another's sample.
+                java.util.Collections.shuffle(chosen,
+                        new java.util.Random(opts.seed * 1000003L + e.getKey()));
+                chosen = chosen.subList(0, cap);
+            }
+            for (PathObject d : chosen) {
+                selected.add(d);
+                selectedClusters.add(e.getKey());
             }
         }
         int n = selected.size();
