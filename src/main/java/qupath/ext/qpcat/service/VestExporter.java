@@ -60,7 +60,10 @@ public final class VestExporter {
     public static final class Options {
         public String method = "umap";        // umap | pca | tsne
         public String normalization = "zscore";
-        public int maxPerCluster = 300;        // per-cluster subsample cap
+        // GLOBAL cell budget (total across all clusters) with a per-class floor, so the
+        // cloud reflects relative abundance but no cluster vanishes to class imbalance.
+        public int globalCap = 1000;
+        public int minPerClass = 30;
         public double cropScale = CellCropService.DEFAULT_CROP_SCALE;
         public int seed = 42;                  // embedding random seed (reproducibility)
         // UMAP
@@ -130,33 +133,36 @@ public final class VestExporter {
                     + "open image. Run (or apply) clustering first.");
         }
 
-        // 2. Subsample per cluster to bound the export. Use SEEDED UNIFORM RANDOM
-        //    sampling, not an index stride: a stride's representativeness depends on the
-        //    (undefined) getDetectionObjects() order, so any structure in that order --
-        //    acquisition/tile sequence, a batch gradient -- would bias which cells reach
-        //    the embedding. Random sampling is unbiased regardless of order; seeding per
-        //    (run seed, cluster id) keeps it fully reproducible. Note: capping PER CLUSTER
-        //    keeps rare clusters visible but means the exported cloud does NOT preserve
-        //    relative cluster abundance -- a deliberate visualization choice.
+        // 2. Allocate a GLOBAL budget across clusters (abundance-weighted) with a
+        //    per-class floor, then draw each cluster's share by SEEDED UNIFORM RANDOM
+        //    sampling. Random (not an index stride) because a stride's representativeness
+        //    depends on the undefined getDetectionObjects() order; seeding per
+        //    (run seed, cluster id) keeps it reproducible.
+        List<Integer> clusterIds = new ArrayList<>(byCluster.keySet());
+        int[] sizes = new int[clusterIds.size()];
+        for (int i = 0; i < clusterIds.size(); i++) {
+            sizes[i] = byCluster.get(clusterIds.get(i)).size();
+        }
+        int[] targets = allocateCounts(sizes, opts.globalCap, opts.minPerClass);
+
         List<PathObject> selected = new ArrayList<>();
         List<Integer> selectedClusters = new ArrayList<>();
-        for (var e : byCluster.entrySet()) {
-            List<PathObject> group = e.getValue();
-            int cap = Math.max(1, opts.maxPerCluster);
+        for (int i = 0; i < clusterIds.size(); i++) {
+            int cid = clusterIds.get(i);
+            List<PathObject> group = byCluster.get(cid);
+            int take = Math.min(targets[i], group.size());
             List<PathObject> chosen;
-            if (group.size() <= cap) {
+            if (take >= group.size()) {
                 chosen = group;
             } else {
                 chosen = new ArrayList<>(group);
-                // Independent, reproducible RNG per cluster so one cluster's size does not
-                // shift another's sample.
                 java.util.Collections.shuffle(chosen,
-                        new java.util.Random(opts.seed * 1000003L + e.getKey()));
-                chosen = chosen.subList(0, cap);
+                        new java.util.Random(opts.seed * 1000003L + cid));
+                chosen = chosen.subList(0, take);
             }
             for (PathObject d : chosen) {
                 selected.add(d);
-                selectedClusters.add(e.getKey());
+                selectedClusters.add(cid);
             }
         }
         int n = selected.size();
@@ -228,6 +234,62 @@ public final class VestExporter {
                 "Exported " + n + " cells (" + written + " crops) across " + byCluster.size()
                 + " clusters to " + opts.outputDir);
         return new Result(n, byCluster.size(), opts.outputDir);
+    }
+
+    /**
+     * Per-cluster export counts under a GLOBAL cell budget with a per-class floor.
+     *
+     * <p>Each cluster gets at least {@code min(minPerClass, size)} cells -- so severe
+     * class imbalance (e.g. one cluster with a million cells) never hides a smaller
+     * cluster -- plus a size-proportional share of {@code globalCap}, capped at the
+     * cluster's actual size. The per-class floor takes priority: when there are so many
+     * clusters that the floors alone exceed the budget, the total exceeds
+     * {@code globalCap} (keeping every cluster visible wins over the nominal cap). Pure
+     * function of its inputs so it can be unit-tested and previewed in the dialog.</p>
+     */
+    public static int[] allocateCounts(int[] sizes, int globalCap, int minPerClass) {
+        int k = sizes.length;
+        int[] out = new int[k];
+        long total = 0;
+        for (int s : sizes) total += Math.max(0, s);
+        if (total == 0) return out;
+        int cap = Math.max(0, globalCap);
+        int floor = Math.max(0, minPerClass);
+        for (int i = 0; i < k; i++) {
+            int s = Math.max(0, sizes[i]);
+            int floorI = Math.min(s, floor);
+            int prop = (int) Math.round((double) cap * s / total);
+            out[i] = Math.min(s, Math.max(floorI, prop));
+        }
+        return out;
+    }
+
+    /** Total cells {@link #allocateCounts} would export for the given cluster sizes. */
+    public static int totalAllocated(int[] sizes, int globalCap, int minPerClass) {
+        int sum = 0;
+        for (int c : allocateCounts(sizes, globalCap, minPerClass)) sum += c;
+        return sum;
+    }
+
+    /**
+     * Sizes of the {@code "Cluster N"} classes on the open image, for the dialog's live
+     * export-size estimate. Returns an empty array if no image / no clustered cells.
+     */
+    public static int[] clusterSizes(QuPathGUI qupath) {
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) return new int[0];
+        Map<Integer, Integer> counts = new LinkedHashMap<>();
+        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
+            PathClass pc = det.getPathClass();
+            if (pc == null) continue;
+            Matcher m = CLUSTER.matcher(pc.toString());
+            if (!m.matches() || det.getROI() == null) continue;
+            counts.merge(Integer.parseInt(m.group(1)), 1, Integer::sum);
+        }
+        int[] out = new int[counts.size()];
+        int i = 0;
+        for (int v : counts.values()) out[i++] = v;
+        return out;
     }
 
     /** All numeric marker measurements present on the cells (coords/embeddings excluded). */

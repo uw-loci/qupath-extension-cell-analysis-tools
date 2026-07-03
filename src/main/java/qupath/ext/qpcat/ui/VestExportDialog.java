@@ -30,7 +30,56 @@ public final class VestExportDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(VestExportDialog.class);
 
+    // Total-cell budget presets. Conservative on purpose: VEST draws one textured image
+    // per cell in WebGL (draw-call-limited) and its example datasets are small.
+    private static final int BUDGET_LOW = 1000;
+    private static final int BUDGET_MEDIUM = 5000;
+    private static final int BUDGET_HIGH = 15000;
+    private static final String[] BUDGET_LABELS = {
+            "Low (~1,000) - recommended",
+            "Medium (~5,000)",
+            "High (~15,000)",
+            "Custom..."
+    };
+
     private VestExportDialog() {}
+
+    private static boolean isCustom(String label) {
+        return label != null && label.startsWith("Custom");
+    }
+
+    private static int budgetValue(String label) {
+        if (label == null) return BUDGET_LOW;
+        if (label.startsWith("Medium")) return BUDGET_MEDIUM;
+        if (label.startsWith("High")) return BUDGET_HIGH;
+        return BUDGET_LOW;
+    }
+
+    /** Honest, count-scaled warning about export time / disk / VEST rendering. */
+    private static String warningFor(int n) {
+        if (n <= BUDGET_LOW) {
+            return "";
+        }
+        if (n <= BUDGET_MEDIUM) {
+            return "Note: ~" + fmt(n) + " cells means ~" + fmt(n) + " crop reads + PNG "
+                    + "writes (a minute or two on a fast disk) and ~" + fmt(n) + " image "
+                    + "textures for VEST to render. Usually fine on a decent GPU.";
+        }
+        String base = "Warning: ~" + fmt(n) + " cells. VEST draws one textured image per "
+                + "cell, which is WebGL draw-call-limited, so the 3D view may become "
+                + "sluggish; export also writes ~" + fmt(n) + " PNG crops (slow on a "
+                + "spinning disk, large folder). Prefer UMAP or PCA over t-SNE at this "
+                + "size (t-SNE scales poorly).";
+        if (n > BUDGET_HIGH) {
+            base += " This is well past VEST's comfortable range -- expect lag and long "
+                    + "export times unless you have a fast SSD and a strong GPU.";
+        }
+        return base;
+    }
+
+    private static String fmt(int n) {
+        return String.format("%,d", n);
+    }
 
     public static void show(QuPathGUI qupath) {
         if (qupath.getImageData() == null) {
@@ -53,9 +102,22 @@ public final class VestExportDialog {
                 Normalization.PERCENTILE, Normalization.NONE);
         normBox.setValue(Normalization.ZSCORE);
 
-        Spinner<Integer> capSpinner = intSpinner(1, 100000, 300, 50);
-        capSpinner.setTooltip(new Tooltip("Maximum cells exported PER cluster "
-                + "(even-strided subsample). Bounds crop count + export time."));
+        // Total cell budget across ALL clusters (abundance-weighted), with a per-class
+        // floor so imbalance never hides a cluster. Conservative presets: VEST renders
+        // one textured image per cell in WebGL, which is draw-call-limited, and its own
+        // example datasets are only hundreds-to-low-thousands.
+        ComboBox<String> budgetBox = new ComboBox<>();
+        budgetBox.getItems().addAll(BUDGET_LABELS);
+        budgetBox.setValue(BUDGET_LABELS[0]);   // default: Low
+        Spinner<Integer> customBudget = intSpinner(50, 200000, 1000, 500);
+        customBudget.setDisable(true);
+        budgetBox.valueProperty().addListener((o, a, b) ->
+                customBudget.setDisable(!isCustom(b)));
+
+        Spinner<Integer> minPerClassSpinner = intSpinner(0, 100000, 30, 5);
+        minPerClassSpinner.setTooltip(new Tooltip("Minimum cells exported per cluster, "
+                + "honored whenever that many exist -- so a huge cluster cannot squeeze "
+                + "small clusters out of the view."));
 
         Spinner<Double> cropScaleSpinner = doubleSpinner(1.0, 10.0, 3.0, 0.5, 1);
         cropScaleSpinner.setTooltip(new Tooltip("Crop side as a multiple of each cell's "
@@ -102,10 +164,34 @@ public final class VestExportDialog {
         int g = 0;
         grid.addRow(g++, new Label("Embedding method:"), methodBox);
         grid.addRow(g++, new Label("Normalization:"), normBox);
-        grid.addRow(g++, new Label("Max cells / cluster:"), capSpinner);
+        grid.addRow(g++, new Label("Total cells (budget):"), budgetBox, customBudget);
+        grid.addRow(g++, new Label("Min cells / cluster:"), minPerClassSpinner);
         grid.addRow(g++, new Label("Crop scale:"), cropScaleSpinner);
         grid.addRow(g++, new Label("Output folder:"), dirField);
         grid.add(browse, 2, g - 1);
+
+        // Live estimate + a warning that scales with the chosen budget.
+        int[] sizes = VestExporter.clusterSizes(qupath);
+        Label estimate = new Label();
+        estimate.setWrapText(true);
+        Label budgetWarn = new Label();
+        budgetWarn.setWrapText(true);
+        budgetWarn.setStyle("-fx-text-fill: #a15c00;");
+        Runnable updateEstimate = () -> {
+            int budget = isCustom(budgetBox.getValue())
+                    ? customBudget.getValue() : budgetValue(budgetBox.getValue());
+            int minv = minPerClassSpinner.getValue();
+            int n = VestExporter.totalAllocated(sizes, budget, minv);
+            estimate.setText(sizes.length == 0
+                    ? "No clustered cells on the open image yet."
+                    : String.format("Will export ~%,d cells across %d clusters "
+                            + "(one PNG crop each).", n, sizes.length));
+            budgetWarn.setText(warningFor(n));
+        };
+        budgetBox.valueProperty().addListener((o, a, b) -> updateEstimate.run());
+        customBudget.valueProperty().addListener((o, a, b) -> updateEstimate.run());
+        minPerClassSpinner.valueProperty().addListener((o, a, b) -> updateEstimate.run());
+        updateEstimate.run();
 
         Label status = new Label("");
         status.setWrapText(true);
@@ -115,7 +201,7 @@ public final class VestExportDialog {
                 new Label("Export the open image's clustered cells as a VEST 3D bundle "
                         + "(embedding.csv + per-cell crops). VEST runs standalone in a "
                         + "browser -- see the README written into the folder."),
-                grid, advanced, status);
+                grid, estimate, budgetWarn, advanced, status);
         content.setPadding(new Insets(12));
         content.setPrefWidth(560);
 
@@ -141,7 +227,9 @@ public final class VestExportDialog {
             VestExporter.Options opts = new VestExporter.Options();
             opts.method = methodBox.getValue().getId();
             opts.normalization = normBox.getValue().getId();
-            opts.maxPerCluster = capSpinner.getValue();
+            opts.globalCap = isCustom(budgetBox.getValue())
+                    ? customBudget.getValue() : budgetValue(budgetBox.getValue());
+            opts.minPerClass = minPerClassSpinner.getValue();
             opts.cropScale = cropScaleSpinner.getValue();
             opts.seed = seedSpinner.getValue();
             opts.umapNeighbors = neighborsSpinner.getValue();

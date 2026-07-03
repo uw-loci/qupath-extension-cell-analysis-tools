@@ -14,8 +14,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   standalone [VEST](https://github.com/scads/vest) tool renders as an interactive 3D
   point cloud of your clustered cells. The 3D layout is a true 3-component embedding
   (UMAP / PCA / t-SNE) computed from the cells' marker measurements; cells are taken
-  from the open image's `Cluster N` classes, subsampled per cluster to bound the export.
-  All embedding knobs (method, normalization, per-cluster cap, crop scale, random seed,
+  from the open image's `Cluster N` classes and drawn under a **global cell budget**
+  (Low/Medium/High presets, default Low, with count-scaled warnings) spread across
+  clusters by abundance with a **per-class floor** (default 30) so class imbalance never
+  hides a cluster; each cluster's share is a seeded uniform-random sample. A live
+  estimate shows how many cells the current settings will export. All embedding knobs
+  (method, normalization, global budget, min-per-class, crop scale, random seed,
   UMAP neighbors/min_dist, t-SNE perplexity, percentile clip bounds) are exposed in the
   dialog (less-common ones under an "Advanced" section). This is a one-way export --
   VEST runs in a browser and does not navigate back into QuPath. Requires no new
