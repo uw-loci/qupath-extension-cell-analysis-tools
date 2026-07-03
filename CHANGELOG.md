@@ -4,6 +4,14 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Fixed
+
+- Clustering dialog: **"Select 'Mean' only" now acts on the visible (filtered) rows only**,
+  matching "Select All" / "Select None". So filtering to e.g. "cell" then "Select 'Mean'
+  only" checks just the cell Mean measurements; filtered-out rows keep their state.
+
 ## [0.9.0] -- 2026-07-03
 
 ### Added

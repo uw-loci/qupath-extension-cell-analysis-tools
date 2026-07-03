@@ -270,13 +270,17 @@ public class ClusteringDialog {
         selectNone.setTooltip(new Tooltip("Uncheck all currently shown measurements."));
         Button selectMean = new Button("Select 'Mean' only");
         selectMean.setOnAction(e -> {
-            for (MeasurementItem m : measurementItems) {
+            // Operate on the VISIBLE (filtered) rows only: among them, check those
+            // containing "Mean" and uncheck the rest. Hidden rows keep their state --
+            // consistent with Select All / Select None above. So filtering to "cell"
+            // then "Select 'Mean' only" checks just the cell Mean measurements.
+            for (MeasurementItem m : filteredMeasurements) {
                 m.setSelected(m.name.contains("Mean"));
             }
         });
         selectMean.setTooltip(new Tooltip(
-                "Check only mean intensity measurements (across all, not just shown).\n"
-                + "Typically the best choice for marker-based clustering."));
+                "Among the currently shown measurements, check those containing 'Mean'\n"
+                + "and uncheck the rest. Filtered-out (hidden) items keep their state."));
         buttonBar.getChildren().addAll(selectAll, selectNone, selectMean);
 
         measurementList.setTooltip(new Tooltip(
