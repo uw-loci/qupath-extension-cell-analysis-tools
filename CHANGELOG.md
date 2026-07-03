@@ -4,6 +4,42 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **Export clustered cells for the VEST 3D viewer.** New menu item "Export clustered
+  cells for VEST (3D viewer)...". Writes a self-contained bundle -- `embedding.csv`
+  (`filename,x,y,z,cluster`) plus an `images/` folder of per-cell crop PNGs -- that the
+  standalone [VEST](https://github.com/scads/vest) tool renders as an interactive 3D
+  point cloud of your clustered cells. The 3D layout is a true 3-component embedding
+  (UMAP / PCA / t-SNE) computed from the cells' marker measurements; cells are taken
+  from the open image's `Cluster N` classes, subsampled per cluster to bound the export.
+  All embedding knobs (method, normalization, per-cluster cap, crop scale, random seed,
+  UMAP neighbors/min_dist, t-SNE perplexity, percentile clip bounds) are exposed in the
+  dialog (less-common ones under an "Advanced" section). This is a one-way export --
+  VEST runs in a browser and does not navigate back into QuPath. Requires no new
+  QP-CAT dependencies; the user installs VEST separately
+  (`pip install vision-embedding-space-travelling`). A separate in-QuPath 3D navigator
+  with click-to-cell is planned.
+
+### Changed
+
+- **Appose Java client bumped 0.11.0 -> 0.12.0.** Verified backward-compatible: the
+  entire API surface QP-CAT uses is byte-identical, 0.12.0 is purely additive, and the
+  wire protocol is unchanged so the Python worker stays at appose 0.11.0.
+
+### Fixed
+
+- Audit-driven robustness pass: closed leaked `ImageData`/`ImageServer` in every
+  project-scope loop; atomic writes for saved results/configs; Ripley no longer reports
+  zero-filled curves as a successful result; PCA embedding clamped to 2 components;
+  autoencoder training no longer double-reads detections; GMM auto-threshold uses the
+  real two-Gaussian crossing; co-occurrence interval derived from median NN distance;
+  Appose init tears down a partially-started worker before the env wipe; several
+  FX-thread / batch-YAML / hover-perf hardening fixes. See
+  `claude-reports/2026-07-02_qpcat-code-audit-and-fixes.md`.
+
 ## [0.8.2] -- 2026-07-02
 
 ### Changed
