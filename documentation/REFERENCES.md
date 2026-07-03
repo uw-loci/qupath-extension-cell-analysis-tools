@@ -528,6 +528,42 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 
 ---
 
+## Subsampling and Sketching (VEST 3D export)
+
+The "Export clustered cells for VEST (3D viewer)" feature draws a bounded subset of cells
+under a global budget. Two modes are offered.
+
+**Stratified (default).** A global cell budget spread across clusters by abundance, with a
+per-class floor so class imbalance never hides a cluster, drawn by seeded uniform-random
+sampling within each cluster. This is standard practice; uniform-random alone is known to
+miss rare populations, which is why the floor and the geosketch mode below exist.
+
+**Representative sketch (geosketch).** Density-aware geometric sketching: dense regions of
+feature space are downsampled more aggressively while sparse regions are retained, which
+increases the relative representation of rare populations and preserves the shape of the
+point cloud. The `gs`/`gs_gap` algorithm is **vendored** (MIT License, Copyright (c) 2018
+brianhie) so the mode adds no new environment dependency; see the header of
+`scripts/geosketch_select.py` for the attribution.
+
+**Method used (vendored):**
+> Hie B, Cho H, DeMeo B, Bryson B, Berger B. "Geometric sketching compactly summarizes the
+> single-cell transcriptomic landscape." *Cell Systems* 8(6), 483-493.e7 (2019).
+> https://doi.org/10.1016/j.cels.2019.05.003
+> Code: https://github.com/brianhie/geosketch (MIT License)
+
+**Related diversity-preserving subsampling methods (not bundled, for reference):**
+> Song D, Li JJ, et al. "scSampler: fast diversity-preserving subsampling of large-scale
+> single-cell transcriptomic data." *Bioinformatics* 38(11), 3126-3127 (2022).
+> https://doi.org/10.1093/bioinformatics/btac271
+
+> Qiu P, Simonds EF, Bendall SC, et al. "Extracting a cellular hierarchy from
+> high-dimensional cytometry data with SPADE." *Nature Biotechnology* 29, 886-891 (2011).
+> https://doi.org/10.1038/nbt.1991
+> (SPADE's density-dependent downsampling: heavily downsample abundant cell types while
+> preserving rare ones, without altering the shape of the point cloud.)
+
+---
+
 ## Key Application Papers (Multiplexed Imaging)
 
 These papers demonstrate workflows similar to QP-CAT's capabilities applied to multiplexed tissue imaging:

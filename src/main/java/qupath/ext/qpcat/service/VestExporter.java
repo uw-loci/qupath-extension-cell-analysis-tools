@@ -60,6 +60,10 @@ public final class VestExporter {
     public static final class Options {
         public String method = "umap";        // umap | pca | tsne
         public String normalization = "zscore";
+        // "stratified" (default): global budget, abundance-weighted, seeded uniform-random
+        // within each cluster. "geosketch": density-aware geometric sketch (preserves rare
+        // structure within clusters too) + the same per-class floor.
+        public String samplingMode = "stratified";
         // GLOBAL cell budget (total across all clusters) with a per-class floor, so the
         // cloud reflects relative abundance but no cluster vanishes to class imbalance.
         public int globalCap = 1000;
@@ -133,64 +137,81 @@ public final class VestExporter {
                     + "open image. Run (or apply) clustering first.");
         }
 
-        // 2. Allocate a GLOBAL budget across clusters (abundance-weighted) with a
-        //    per-class floor, then draw each cluster's share by SEEDED UNIFORM RANDOM
-        //    sampling. Random (not an index stride) because a stride's representativeness
-        //    depends on the undefined getDetectionObjects() order; seeding per
-        //    (run seed, cluster id) keeps it reproducible.
+        // 2. Choose which cells to export + their 3D coordinates, per sampling mode.
         List<Integer> clusterIds = new ArrayList<>(byCluster.keySet());
-        int[] sizes = new int[clusterIds.size()];
-        for (int i = 0; i < clusterIds.size(); i++) {
-            sizes[i] = byCluster.get(clusterIds.get(i)).size();
-        }
-        int[] targets = allocateCounts(sizes, opts.globalCap, opts.minPerClass);
+        MeasurementExtractor extractor = new MeasurementExtractor();
 
-        List<PathObject> selected = new ArrayList<>();
-        List<Integer> selectedClusters = new ArrayList<>();
-        for (int i = 0; i < clusterIds.size(); i++) {
-            int cid = clusterIds.get(i);
-            List<PathObject> group = byCluster.get(cid);
-            int take = Math.min(targets[i], group.size());
-            List<PathObject> chosen;
-            if (take >= group.size()) {
-                chosen = group;
-            } else {
-                chosen = new ArrayList<>(group);
-                java.util.Collections.shuffle(chosen,
-                        new java.util.Random(opts.seed * 1000003L + cid));
-                chosen = chosen.subList(0, take);
+        List<PathObject> selected;
+        List<Integer> selectedClusters;
+        double[][] coords3d;
+
+        if ("geosketch".equalsIgnoreCase(opts.samplingMode)) {
+            // Density-aware geometric sketch over ALL clustered cells (preserves rare
+            // structure within clusters, not just rare whole-clusters) + per-class floor.
+            List<PathObject> allDets = new ArrayList<>();
+            List<Integer> allCids = new ArrayList<>();
+            for (int cid : clusterIds) {
+                for (PathObject d : byCluster.get(cid)) { allDets.add(d); allCids.add(cid); }
             }
-            for (PathObject d : chosen) {
-                selected.add(d);
-                selectedClusters.add(cid);
+            List<String> markerNames = markerMeasurements(allDets);
+            if (markerNames.isEmpty()) {
+                throw new IOException("No marker measurements found on these cells to embed.");
             }
+            Aligned a = extractAligned(extractor, allDets, allCids, markerNames);
+            report(progress, "Representative sketch of " + a.dets.size() + " clustered cells...");
+            int[] labels = a.clusters.stream().mapToInt(Integer::intValue).toArray();
+            int[] sel = geosketchSelect(a.data, markerNames, labels, opts, progress);
+
+            selected = new ArrayList<>(sel.length);
+            selectedClusters = new ArrayList<>(sel.length);
+            double[][] selData = new double[sel.length][];
+            for (int i = 0; i < sel.length; i++) {
+                selected.add(a.dets.get(sel[i]));
+                selectedClusters.add(a.clusters.get(sel[i]));
+                selData[i] = a.data[sel[i]];
+            }
+            report(progress, "Computing 3D embedding (" + opts.method + ", "
+                    + selected.size() + " cells)...");
+            coords3d = compute3dEmbedding(selData, markerNames.toArray(new String[0]), opts, progress);
+        } else {
+            // Stratified: GLOBAL budget (abundance-weighted) + per-class floor, then draw
+            // each cluster's share by SEEDED UNIFORM RANDOM sampling (reproducible; not an
+            // index stride, whose representativeness would depend on detection order).
+            int[] sizes = new int[clusterIds.size()];
+            for (int i = 0; i < clusterIds.size(); i++) sizes[i] = byCluster.get(clusterIds.get(i)).size();
+            int[] targets = allocateCounts(sizes, opts.globalCap, opts.minPerClass);
+
+            List<PathObject> pick = new ArrayList<>();
+            List<Integer> pickCids = new ArrayList<>();
+            for (int i = 0; i < clusterIds.size(); i++) {
+                int cid = clusterIds.get(i);
+                List<PathObject> group = byCluster.get(cid);
+                int take = Math.min(targets[i], group.size());
+                List<PathObject> chosen;
+                if (take >= group.size()) {
+                    chosen = group;
+                } else {
+                    chosen = new ArrayList<>(group);
+                    java.util.Collections.shuffle(chosen,
+                            new java.util.Random(opts.seed * 1000003L + cid));
+                    chosen = chosen.subList(0, take);
+                }
+                for (PathObject d : chosen) { pick.add(d); pickCids.add(cid); }
+            }
+            List<String> markerNames = markerMeasurements(pick);
+            if (markerNames.isEmpty()) {
+                throw new IOException("No marker measurements found on these cells to embed.");
+            }
+            Aligned a = extractAligned(extractor, pick, pickCids, markerNames);
+            selected = a.dets;
+            selectedClusters = a.clusters;
+            report(progress, "Selected " + selected.size() + " cells across "
+                    + byCluster.size() + " clusters.");
+            report(progress, "Computing 3D embedding (" + opts.method + ", "
+                    + selected.size() + " cells)...");
+            coords3d = compute3dEmbedding(a.data, markerNames.toArray(new String[0]), opts, progress);
         }
         int n = selected.size();
-        report(progress, "Selected " + n + " cells across " + byCluster.size() + " clusters.");
-
-        // 3. Extract marker measurements for the selected cells.
-        MeasurementExtractor extractor = new MeasurementExtractor();
-        List<String> markerNames = markerMeasurements(selected);
-        if (markerNames.isEmpty()) {
-            throw new IOException("No marker measurements found on these cells to embed.");
-        }
-        MeasurementExtractor.ExtractionResult extraction = extractor.extract(selected, markerNames);
-        double[][] data = extraction.getData();
-        // extract() may drop rows lacking all measurements; keep our parallel lists aligned.
-        List<PathObject> keptDets = extraction.getDetections();
-        if (keptDets.size() != n) {
-            // Re-derive cluster ids for the kept detections by identity.
-            Map<PathObject, Integer> cidOf = new HashMap<>();
-            for (int i = 0; i < selected.size(); i++) cidOf.put(selected.get(i), selectedClusters.get(i));
-            selectedClusters = new ArrayList<>(keptDets.size());
-            for (PathObject d : keptDets) selectedClusters.add(cidOf.getOrDefault(d, -1));
-            selected = keptDets;
-            n = selected.size();
-        }
-
-        // 4. Compute the 3D embedding via Appose.
-        report(progress, "Computing 3D embedding (" + opts.method + ", " + n + " cells)...");
-        double[][] coords3d = compute3dEmbedding(data, extraction.getMeasurementNames(), opts, progress);
 
         // 5. Write the bundle: images/ + embedding.csv + README.
         Path imagesDir = opts.outputDir.resolve("images");
@@ -356,6 +377,95 @@ public final class VestExporter {
             throw e;
         } catch (Exception e) {
             throw new IOException("3D embedding failed: " + e.getMessage(), e);
+        }
+    }
+
+    /** Detections + their cluster ids aligned to an extracted feature matrix. */
+    private static final class Aligned {
+        final List<PathObject> dets;
+        final List<Integer> clusters;
+        final double[][] data;
+        Aligned(List<PathObject> dets, List<Integer> clusters, double[][] data) {
+            this.dets = dets;
+            this.clusters = clusters;
+            this.data = data;
+        }
+    }
+
+    /**
+     * Extract marker features and keep the detection + cluster-id lists aligned to the
+     * matrix rows -- {@code extract()} can drop rows lacking all measurements.
+     */
+    private static Aligned extractAligned(MeasurementExtractor extractor, List<PathObject> dets,
+                                          List<Integer> cids, List<String> markerNames) {
+        MeasurementExtractor.ExtractionResult ex = extractor.extract(dets, markerNames);
+        List<PathObject> kept = ex.getDetections();
+        if (kept.size() == dets.size()) {
+            return new Aligned(kept, cids, ex.getData());
+        }
+        Map<PathObject, Integer> cidOf = new HashMap<>();
+        for (int i = 0; i < dets.size(); i++) cidOf.put(dets.get(i), cids.get(i));
+        List<Integer> keptCids = new ArrayList<>(kept.size());
+        for (PathObject d : kept) keptCids.add(cidOf.getOrDefault(d, -1));
+        return new Aligned(kept, keptCids, ex.getData());
+    }
+
+    /**
+     * Run the vendored geosketch selection (density-aware + per-class floor) in Python.
+     * Returns row indices into {@code data} to keep.
+     */
+    private static int[] geosketchSelect(double[][] data, List<String> markerNames,
+                                         int[] labels, Options opts, Consumer<String> progress)
+            throws IOException {
+        final int nn = data.length;
+        final int mm = markerNames.size();
+        try {
+            return ApposeClusteringService.withExtensionClassLoader(() -> {
+                NDArray measNd = new NDArray(NDArray.DType.FLOAT64,
+                        new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nn, mm));
+                var buf = measNd.buffer().asDoubleBuffer();
+                for (double[] row : data) buf.put(row);
+                NDArray labelsNd = new NDArray(NDArray.DType.INT32,
+                        new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nn));
+                labelsNd.buffer().asIntBuffer().put(labels);
+
+                Map<String, Object> inputs = new HashMap<>();
+                inputs.put("measurements", measNd);
+                inputs.put("marker_names", new ArrayList<>(markerNames));
+                inputs.put("cluster_labels", labelsNd);
+                inputs.put("normalization", opts.normalization);
+                inputs.put("global_cap", opts.globalCap);
+                inputs.put("min_per_class", opts.minPerClass);
+                inputs.put("percentile_low", opts.percentileLow);
+                inputs.put("percentile_high", opts.percentileHigh);
+                inputs.put("seed", opts.seed);
+
+                try {
+                    Task task = ApposeClusteringService.getInstance().runTaskWithListener(
+                            "geosketch_select", inputs,
+                            event -> {
+                                if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                                    report(progress, event.message);
+                                }
+                            });
+                    NDArray out = (NDArray) task.outputs.get("selected_indices");
+                    if (out == null) {
+                        throw new IOException("geosketch_select returned no indices.");
+                    }
+                    java.nio.IntBuffer ib = out.buffer().asIntBuffer();
+                    int[] idx = new int[ib.remaining()];
+                    ib.get(idx);
+                    out.close();
+                    return idx;
+                } finally {
+                    measNd.close();
+                    labelsNd.close();
+                }
+            });
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Representative sketch failed: " + e.getMessage(), e);
         }
     }
 

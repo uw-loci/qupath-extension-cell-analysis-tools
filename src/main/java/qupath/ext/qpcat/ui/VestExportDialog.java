@@ -42,6 +42,9 @@ public final class VestExportDialog {
             "Custom..."
     };
 
+    private static final String SAMPLING_STRATIFIED = "Stratified (default)";
+    private static final String SAMPLING_GEOSKETCH = "Representative sketch (geosketch)";
+
     private VestExportDialog() {}
 
     private static boolean isCustom(String label) {
@@ -101,6 +104,17 @@ public final class VestExportDialog {
         normBox.getItems().addAll(Normalization.ZSCORE, Normalization.MINMAX,
                 Normalization.PERCENTILE, Normalization.NONE);
         normBox.setValue(Normalization.ZSCORE);
+
+        ComboBox<String> samplingBox = new ComboBox<>();
+        samplingBox.getItems().addAll(SAMPLING_STRATIFIED, SAMPLING_GEOSKETCH);
+        samplingBox.setValue(SAMPLING_STRATIFIED);
+        samplingBox.setTooltip(new Tooltip(
+                "How the budget is drawn.\n"
+                + "Stratified: fast, abundance-weighted with a per-class floor; uniform-"
+                + "random within each cluster.\n"
+                + "Representative sketch (geosketch): density-aware -- downsamples dense "
+                + "regions and keeps sparse/rare structure WITHIN clusters too. A little "
+                + "slower; vendored from geosketch (Hie et al. 2019)."));
 
         // Total cell budget across ALL clusters (abundance-weighted), with a per-class
         // floor so imbalance never hides a cluster. Conservative presets: VEST renders
@@ -164,6 +178,7 @@ public final class VestExportDialog {
         int g = 0;
         grid.addRow(g++, new Label("Embedding method:"), methodBox);
         grid.addRow(g++, new Label("Normalization:"), normBox);
+        grid.addRow(g++, new Label("Sampling:"), samplingBox);
         grid.addRow(g++, new Label("Total cells (budget):"), budgetBox, customBudget);
         grid.addRow(g++, new Label("Min cells / cluster:"), minPerClassSpinner);
         grid.addRow(g++, new Label("Crop scale:"), cropScaleSpinner);
@@ -227,6 +242,8 @@ public final class VestExportDialog {
             VestExporter.Options opts = new VestExporter.Options();
             opts.method = methodBox.getValue().getId();
             opts.normalization = normBox.getValue().getId();
+            opts.samplingMode = SAMPLING_GEOSKETCH.equals(samplingBox.getValue())
+                    ? "geosketch" : "stratified";
             opts.globalCap = isCustom(budgetBox.getValue())
                     ? customBudget.getValue() : budgetValue(budgetBox.getValue());
             opts.minPerClass = minPerClassSpinner.getValue();

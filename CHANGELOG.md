@@ -17,9 +17,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   from the open image's `Cluster N` classes and drawn under a **global cell budget**
   (Low/Medium/High presets, default Low, with count-scaled warnings) spread across
   clusters by abundance with a **per-class floor** (default 30) so class imbalance never
-  hides a cluster; each cluster's share is a seeded uniform-random sample. A live
-  estimate shows how many cells the current settings will export. All embedding knobs
-  (method, normalization, global budget, min-per-class, crop scale, random seed,
+  hides a cluster. Two sampling modes: **Stratified** (default -- seeded uniform-random
+  within each cluster) and **Representative sketch (geosketch)**, a density-aware
+  geometric sketch that also preserves rare structure *within* clusters (algorithm
+  vendored from geosketch, Hie et al. 2019, MIT -- no new environment dependency; see
+  REFERENCES.md and the `geosketch_select.py` header). A live estimate shows how many
+  cells the current settings will export. All embedding knobs
+  (method, normalization, sampling mode, global budget, min-per-class, crop scale, seed,
   UMAP neighbors/min_dist, t-SNE perplexity, percentile clip bounds) are exposed in the
   dialog (less-common ones under an "Advanced" section). This is a one-way export --
   VEST runs in a browser and does not navigate back into QuPath. Requires no new
