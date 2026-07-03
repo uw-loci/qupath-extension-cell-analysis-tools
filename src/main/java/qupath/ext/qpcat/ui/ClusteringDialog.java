@@ -2444,6 +2444,16 @@ public class ClusteringDialog {
         // after the interactive Heatmap, see buildExpressionTrioTabs() below
         // -- not here -- per user request) so we skip them in this loop.
         if (result.hasPlots()) {
+            // Per-image spatial scatters (keys "spatial_scatter::<name>", from multi-image
+            // runs) are shown as ONE tab with an image dropdown, not N separate tabs.
+            java.util.LinkedHashMap<String, String> spatialByImage = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
+                if (entry.getKey().startsWith("spatial_scatter::")) {
+                    spatialByImage.put(
+                            entry.getKey().substring("spatial_scatter::".length()),
+                            entry.getValue());
+                }
+            }
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
                 String pk = entry.getKey();
                 // dotplot/matrixplot are surfaced earlier; ripley_k and ripley_l
@@ -2453,8 +2463,17 @@ public class ClusteringDialog {
                         || "ripley_k".equals(pk) || "ripley_l".equals(pk)) {
                     continue;
                 }
+                // Per-image spatial scatters are combined into one dropdown tab below;
+                // when they exist, also skip the back-compat single "spatial_scatter"
+                // key (it just duplicates the first image).
+                if (pk.startsWith("spatial_scatter::")) continue;
+                if ("spatial_scatter".equals(pk) && !spatialByImage.isEmpty()) continue;
                 Tab tab = buildPlotTabFromPng(entry.getKey(), entry.getValue(), false, pngViews);
                 if (tab != null) tabPane.getTabs().add(tab);
+            }
+            if (!spatialByImage.isEmpty()) {
+                Tab spatialTab = buildSpatialScatterTab(spatialByImage);
+                if (spatialTab != null) tabPane.getTabs().add(spatialTab);
             }
         }
 
@@ -2894,6 +2913,47 @@ public class ClusteringDialog {
         return sb.length() == 0 ? "Plot" : sb.toString();
     }
 
+    /**
+     * One "Spatial Scatter" tab for a MULTI-IMAGE run: an image dropdown swaps the
+     * displayed per-image spatial-distribution PNG. Spatial coordinates from different
+     * images share no frame, so they are never overlaid -- the user picks one image.
+     */
+    private static Tab buildSpatialScatterTab(java.util.LinkedHashMap<String, String> byImage) {
+        ImageView view = new ImageView();
+        view.setPreserveRatio(true);
+
+        ScrollPane scroll = new ScrollPane(view);
+        scroll.setFitToWidth(true);
+        scroll.setPannable(true);
+        view.fitWidthProperty().bind(scroll.widthProperty().subtract(20));
+
+        ComboBox<String> imageBox = new ComboBox<>();
+        imageBox.getItems().addAll(byImage.keySet());
+        Runnable load = () -> {
+            String name = imageBox.getValue();
+            String path = (name != null) ? byImage.get(name) : null;
+            if (path != null) {
+                java.io.File f = new java.io.File(path);
+                if (f.exists()) {
+                    view.setImage(new javafx.scene.image.Image(f.toURI().toString(), true));
+                }
+            }
+        };
+        imageBox.valueProperty().addListener((o, a, b) -> load.run());
+        imageBox.getSelectionModel().selectFirst();
+        load.run();
+
+        HBox picker = new HBox(8, new Label("Image:"), imageBox,
+                new Label("(" + byImage.size() + " images -- coordinates are per image, "
+                        + "not overlaid)"));
+        picker.setAlignment(Pos.CENTER_LEFT);
+        picker.setPadding(new Insets(6));
+
+        VBox box = new VBox(4, picker, scroll);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        return new Tab("Spatial Scatter", box);
+    }
+
     private static Tab buildPlotTabFromPng(String key, String filePath, boolean withCompareLink) {
         return buildPlotTabFromPng(key, filePath, withCompareLink, null);
     }
@@ -3028,7 +3088,12 @@ public class ClusteringDialog {
         Map<String, String> plotPaths = result.getPlotPaths();
         if (plotPaths == null) return;
         boolean wantEmbedding = plotPaths.containsKey("embedding");
-        boolean wantSpatial = plotPaths.containsKey("spatial_scatter");
+        // Skip spatial regen for multi-image runs: the shown spatial plots are the
+        // per-image "spatial_scatter::<name>" PNGs (which the regenerator, lacking image
+        // labels, cannot rebuild), and we must not resurrect a misleading overlaid one.
+        boolean hasPerImageSpatial = plotPaths.keySet().stream()
+                .anyMatch(k -> k.startsWith("spatial_scatter::"));
+        boolean wantSpatial = plotPaths.containsKey("spatial_scatter") && !hasPerImageSpatial;
         if (!wantEmbedding && !wantSpatial) return;
         if (result.getEmbedding() == null || result.getClusterLabels() == null) return;
 

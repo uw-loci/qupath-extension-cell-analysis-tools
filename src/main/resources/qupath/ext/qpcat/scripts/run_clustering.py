@@ -32,6 +32,9 @@ Optional inputs:
   minibatch_kmeans_batch_size: int (default 1024) -- fallback MiniBatchKMeans batch_size
   banksy_pca_dims_default: int (default 20) -- fallback BANKSY PCA dimensions
   plot_dpi: int (default 150) -- DPI for saved plot images
+  image_labels: list[int] -- image index per cell (multi-image runs); splits the
+    spatial distribution plot per image instead of overlaying coordinate frames
+  image_names: list[str] -- image name per index, for the per-image plot titles/keys
 
 Outputs (via task.outputs):
   cluster_labels: NDArray (N_cells,) int32
@@ -140,6 +143,17 @@ try:
 except NameError:
     spatial_data = None
     has_spatial_coords = False
+
+# Optional per-cell image identity (multi-image runs). Used to split the spatial
+# distribution plot per image instead of overlaying different coordinate frames.
+try:
+    image_labels_list = list(image_labels)
+except NameError:
+    image_labels_list = None
+try:
+    image_names_list = list(image_names)
+except NameError:
+    image_names_list = None
 
 # Read preference-backed defaults (injected from Java QpcatPreferences)
 try:
@@ -1282,40 +1296,89 @@ if do_plots and plot_dir and can_analyze:
         except Exception as e:
             logger.warning("Failed to generate nhood enrichment plot: %s", e)
 
-        # Spatial scatter colored by cluster
+        # Spatial scatter colored by cluster. For multi-image runs produce ONE plot PER
+        # IMAGE -- cells from different images share no coordinate frame, so overlaying
+        # them is meaningless. Keys "spatial_scatter::<image name>" let the results dialog
+        # offer an image dropdown; "spatial_scatter" (first image) stays for back-compat.
         try:
-            fig, ax = plt.subplots(figsize=(10, 8))
             clusters_cat = adata.obs["cluster"].cat.categories
             n_cats = len(clusters_cat)
             cmap = plt.cm.get_cmap("tab20" if n_cats > 10 else "tab10", n_cats)
-            for idx, cl in enumerate(clusters_cat):
-                mask = adata.obs["cluster"] == cl
-                ax.scatter(
-                    spatial_data[mask, 0],
-                    spatial_data[mask, 1],
-                    c=[cmap(idx)],
-                    s=1,
-                    alpha=0.5,
-                    label=str(cl),
-                    rasterized=True,
+            clusters_series = adata.obs["cluster"].values
+
+            def _spatial_fig(coords, cluster_vals, title):
+                fig, ax = plt.subplots(figsize=(10, 8))
+                for idx, cl in enumerate(clusters_cat):
+                    m = cluster_vals == cl
+                    if not np.any(m):
+                        continue
+                    ax.scatter(
+                        coords[m, 0],
+                        coords[m, 1],
+                        c=[cmap(idx)],
+                        s=1,
+                        alpha=0.5,
+                        label=str(cl),
+                        rasterized=True,
+                    )
+                ax.set_xlabel("X (pixels)")
+                ax.set_ylabel("Y (pixels)")
+                ax.set_aspect("equal")
+                ax.invert_yaxis()  # image coordinates: Y increases downward
+                ax.set_title(title)
+                ax.legend(
+                    title="Cluster",
+                    markerscale=5,
+                    fontsize="small",
+                    loc="center left",
+                    bbox_to_anchor=(1, 0.5),
                 )
-            ax.set_xlabel("X (pixels)")
-            ax.set_ylabel("Y (pixels)")
-            ax.set_aspect("equal")
-            ax.invert_yaxis()  # image coordinates: Y increases downward
-            ax.set_title("Spatial distribution by cluster")
-            ax.legend(
-                title="Cluster",
-                markerscale=5,
-                fontsize="small",
-                loc="center left",
-                bbox_to_anchor=(1, 0.5),
-            )
-            spatial_path = os.path.join(plot_dir, "spatial_scatter.png")
-            fig.savefig(spatial_path, dpi=pref_plot_dpi, bbox_inches="tight")
+                return fig
+
+            if image_labels_list is not None and len(set(image_labels_list)) > 1:
+                labels_arr = np.asarray(image_labels_list)
+                uniq = sorted(set(image_labels_list))
+                max_images = 24
+                first_path = None
+                for k in uniq[:max_images]:
+                    m = labels_arr == k
+                    name = (
+                        image_names_list[k]
+                        if image_names_list is not None and k < len(image_names_list)
+                        else "Image %d" % k
+                    )
+                    fig = _spatial_fig(
+                        spatial_data[m],
+                        clusters_series[m],
+                        "Spatial distribution -- %s" % name,
+                    )
+                    p = os.path.join(plot_dir, "spatial_scatter_%d.png" % k)
+                    fig.savefig(p, dpi=pref_plot_dpi, bbox_inches="tight")
+                    plt.close(fig)
+                    plot_paths["spatial_scatter::%s" % name] = p
+                    if first_path is None:
+                        first_path = p
+                if first_path is not None:
+                    plot_paths["spatial_scatter"] = first_path
+                if len(uniq) > max_images:
+                    logger.info(
+                        "Spatial scatter: showed first %d of %d images",
+                        max_images,
+                        len(uniq),
+                    )
+                logger.info(
+                    "Saved %d per-image spatial scatters", min(len(uniq), max_images)
+                )
+            else:
+                fig = _spatial_fig(
+                    spatial_data, clusters_series, "Spatial distribution by cluster"
+                )
+                spatial_path = os.path.join(plot_dir, "spatial_scatter.png")
+                fig.savefig(spatial_path, dpi=pref_plot_dpi, bbox_inches="tight")
+                plt.close(fig)
+                plot_paths["spatial_scatter"] = spatial_path
+                logger.info("Saved spatial scatter: %s", spatial_path)
             plt.close("all")
-            plot_paths["spatial_scatter"] = spatial_path
-            logger.info("Saved spatial scatter: %s", spatial_path)
         except Exception as e:
             logger.warning("Failed to generate spatial scatter plot: %s", e)
 

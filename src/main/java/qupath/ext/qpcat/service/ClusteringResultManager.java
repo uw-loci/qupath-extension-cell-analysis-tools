@@ -142,7 +142,11 @@ public class ClusteringResultManager {
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
                 Path srcPath = Path.of(entry.getValue());
                 if (Files.exists(srcPath)) {
-                    String plotFilename = entry.getKey() + getFileExtension(srcPath);
+                    // Sanitize the FILENAME (keep the map key as-is): per-image spatial keys
+                    // like "spatial_scatter::Image 1" contain ':' which is illegal in Windows
+                    // filenames. The key still round-trips; only the on-disk name is cleaned.
+                    String plotFilename = GeneralTools.stripInvalidFilenameChars(entry.getKey())
+                            + getFileExtension(srcPath);
                     Path destPath = plotsDir.resolve(plotFilename);
                     Files.copy(srcPath, destPath, StandardCopyOption.REPLACE_EXISTING);
                     // Store relative path from results directory

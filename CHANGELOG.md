@@ -17,6 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   for each image plus the run mean.
 - The **Results window can now be minimized / maximized** -- it is a normal decorated
   window instead of a JavaFX dialog (which could not minimize).
+- **Spatial distribution ("Spatial Scatter") no longer overlays multiple images.** Cells
+  from different images share no coordinate frame, so a multi-image run now renders one
+  spatial plot PER IMAGE and the Results tab shows an **image dropdown** to pick which one
+  to view (single-image runs are unchanged). Per-image spatial PNGs are named/saved safely
+  on all platforms.
 
 ### Changed
 

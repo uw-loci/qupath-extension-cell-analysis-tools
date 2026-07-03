@@ -1431,6 +1431,22 @@ public class ClusteringWorkflow {
             inputs.put("batch_labels", batchLabels);
         }
 
+        // For multi-image runs, always tell Python which image each cell belongs to (and
+        // the image names) so the "Spatial distribution" plot is split PER IMAGE instead
+        // of overlaying cells from different images that share no coordinate frame. This
+        // is independent of batch correction.
+        if (extraction.isMultiImage()) {
+            List<Integer> imageLabels = new ArrayList<>();
+            List<String> imageNames = new ArrayList<>();
+            for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
+                MeasurementExtractor.ImageSegment seg = extraction.getImageSegments().get(segIdx);
+                imageNames.add(segmentImageName(seg));
+                for (int i = 0; i < seg.getCount(); i++) imageLabels.add(segIdx);
+            }
+            inputs.put("image_labels", imageLabels);
+            inputs.put("image_names", imageNames);
+        }
+
         // Preference-backed defaults (overridable via QP-CAT preferences UI)
         inputs.put("spatial_knn", QpcatPreferences.getClusterSpatialKnn());
         inputs.put("tsne_perplexity_default", QpcatPreferences.getClusterTsnePerplexity());
