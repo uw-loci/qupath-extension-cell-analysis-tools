@@ -1,0 +1,16 @@
+# Isolated Appose environment for the VEST 3D viewer (github.com/scads/vest, MIT).
+# Deliberately SEPARATE from the main QP-CAT clustering env: VEST pulls Flask +
+# a modern pandas/numpy that must not be mixed into the scanpy/squidpy stack.
+# Tiny (~150-170 MB); built on demand the first time the user clicks "Open in VEST".
+[workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
+
+[dependencies]
+python = "3.11.*"
+# Provide pip a compiler-free base; Flask + pandas arrive as PyPI wheels below.
+pip = "*"
+
+[pypi-dependencies]
+# vision-embedding-space-travelling depends on Flask + pandas, both pure wheels.
+vision-embedding-space-travelling = ">=0.2.2"

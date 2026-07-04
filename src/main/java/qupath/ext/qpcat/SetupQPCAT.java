@@ -30,6 +30,7 @@ import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.BatchFigureExportDialog;
 import qupath.ext.qpcat.ui.VestExportDialog;
+import qupath.ext.qpcat.service.VestLauncher;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PlotAndGateDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
@@ -399,6 +400,17 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         exportVestItem.setOnAction(e -> VestExportDialog.show(qupath));
         exportVestItem.visibleProperty().bind(environmentReady);
 
+        // Stop a running VEST viewer (launched from the export dialog's "Open in VEST").
+        MenuItem stopVestItem = new MenuItem(res.getString("menu.stopVest"));
+        stopVestItem.setOnAction(e -> {
+            if (VestLauncher.isRunning()) {
+                VestLauncher.stop();
+                Dialogs.showInfoNotification(EXTENSION_NAME, "VEST viewer stopped.");
+            } else {
+                Dialogs.showInfoNotification(EXTENSION_NAME, "No VEST viewer is running.");
+            }
+        });
+
         SeparatorMenuItem sep1 = new SeparatorMenuItem();
         sep1.visibleProperty().bind(environmentReady);
 
@@ -479,6 +491,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 exportAnnDataItem,
                 exportFiguresItem,
                 exportVestItem,
+                stopVestItem,
                 sep5,
                 // -- Utilities & help --
                 utilitiesMenu,

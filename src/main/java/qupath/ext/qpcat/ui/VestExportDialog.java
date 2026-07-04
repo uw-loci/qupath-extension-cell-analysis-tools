@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig.EmbeddingMethod;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
 import qupath.ext.qpcat.service.VestExporter;
+import qupath.ext.qpcat.service.VestLauncher;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 
@@ -288,15 +289,14 @@ public final class VestExportDialog {
     }
 
     private static void showDone(QuPathGUI qupath, VestExporter.Result res) {
-        String cmd = "vest embedding.csv --image-path ./images";
         TextArea ta = new TextArea(
                 "Exported " + res.cells + " cells across " + res.clusters + " clusters to:\n"
                 + res.outputDir + "\n\n"
-                + "To view in 3D:\n"
-                + "  1. pip install vision-embedding-space-travelling   (once)\n"
-                + "  2. cd \"" + res.outputDir + "\"\n"
-                + "  3. " + cmd + "\n\n"
-                + "See README.txt in the folder for details.");
+                + "Click \"Open in VEST\" to view it in 3D in your browser -- QP-CAT builds a "
+                + "small VEST environment the first time (one-time ~165 MB download) and then "
+                + "starts the viewer. Use QP-CAT > Stop VEST viewer when you are done.\n\n"
+                + "(Or run it yourself: pip install vision-embedding-space-travelling, then in "
+                + "this folder: vest embedding.csv --image-path ./images. See README.txt.)");
         ta.setEditable(false);
         ta.setWrapText(true);
         ta.setPrefRowCount(9);
@@ -305,14 +305,39 @@ public final class VestExportDialog {
         d.setTitle("QP-CAT - VEST export complete");
         d.setHeaderText("VEST bundle written.");
         if (qupath.getStage() != null) d.initOwner(qupath.getStage());
+        ButtonType openVest = new ButtonType("Open in VEST", ButtonBar.ButtonData.LEFT);
         ButtonType openFolder = new ButtonType("Open folder", ButtonBar.ButtonData.LEFT);
-        d.getDialogPane().getButtonTypes().addAll(openFolder, ButtonType.OK);
+        d.getDialogPane().getButtonTypes().addAll(openVest, openFolder, ButtonType.OK);
         d.getDialogPane().setContent(ta);
         d.getDialogPane().setPrefWidth(560);
         var choice = d.showAndWait();
         if (choice.isPresent() && choice.get() == openFolder) {
             openFolderAsync(res.outputDir);
+        } else if (choice.isPresent() && choice.get() == openVest) {
+            launchVestAsync(res.outputDir);
         }
+    }
+
+    /** Build the VEST env if needed and launch the viewer off the FX thread. */
+    private static void launchVestAsync(Path outputDir) {
+        Path csv = outputDir.resolve("embedding.csv");
+        Path images = outputDir.resolve("images");
+        Consumer<String> status = msg -> Platform.runLater(() ->
+                Dialogs.showInfoNotification("QP-CAT - VEST", msg));
+        Thread t = new Thread(() -> {
+            try {
+                String url = VestLauncher.launch(csv, images, status);
+                Platform.runLater(() -> Dialogs.showInfoNotification("QP-CAT - VEST",
+                        "VEST is running at " + url + " -- it should open in your browser. "
+                        + "Stop it via QP-CAT > Stop VEST viewer."));
+            } catch (Exception ex) {
+                logger.error("Could not launch VEST", ex);
+                Platform.runLater(() -> Dialogs.showErrorNotification("QP-CAT - VEST",
+                        "Could not launch VEST: " + ex.getMessage()));
+            }
+        }, "QPCAT-VestLaunch");
+        t.setDaemon(true);
+        t.start();
     }
 
     /** Open a folder in the OS file browser off the FX thread (Desktop.open blocks it). */

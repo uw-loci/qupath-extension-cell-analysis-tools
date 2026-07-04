@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Added
+
+- **"Open in VEST" -- launch the 3D viewer with one click.** The VEST export dialog now
+  has an "Open in VEST" button that builds a small, ISOLATED Appose environment
+  (`qpcat-vest`: Flask + pandas + VEST, ~165 MB, one-time) the first time it is used and
+  then starts VEST on the exported bundle -- VEST opens your browser automatically. The
+  env is deliberately separate from the clustering env so VEST's pandas/numpy never
+  conflict with the scanpy/squidpy stack. One viewer at a time; "QP-CAT > Stop VEST
+  viewer" stops it, and it is always killed when QuPath exits. Running VEST by hand
+  (pip + `vest`) still works and is documented in the export folder's README.
+
 ### Fixed
 
 - Clustering dialog: **"Select 'Mean' only" now acts on the visible (filtered) rows only**,
