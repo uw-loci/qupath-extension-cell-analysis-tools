@@ -52,7 +52,7 @@ public class PhenotypingDialog {
     private final Stage owner;
 
     // UI components
-    private ListView<String> measurementList;
+    private MeasurementSelectionPane measurementPane;
     private TableView<PhenotypeRule> rulesTable;
     private final ObservableList<PhenotypeRule> rulesList = FXCollections.observableArrayList();
     private Spinner<Double> defaultGateSpinner;
@@ -184,29 +184,13 @@ public class PhenotypingDialog {
     }
 
     private TitledPane createMeasurementSection() {
-        measurementList = new ListView<>();
-        measurementList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        measurementList.setPrefHeight(120);
-
-        HBox buttonBar = new HBox(5);
-        Button selectAll = new Button("Select All");
-        selectAll.setOnAction(e -> measurementList.getSelectionModel().selectAll());
-        selectAll.setTooltip(new Tooltip("Select all available measurements as markers."));
-        Button selectNone = new Button("Select None");
-        selectNone.setOnAction(e -> measurementList.getSelectionModel().clearSelection());
-        selectNone.setTooltip(new Tooltip("Clear the marker selection."));
-        Button selectMean = new Button("Select 'Mean' only");
-        selectMean.setOnAction(e -> {
-            measurementList.getSelectionModel().clearSelection();
-            for (int i = 0; i < measurementList.getItems().size(); i++) {
-                if (measurementList.getItems().get(i).contains("Mean")) {
-                    measurementList.getSelectionModel().select(i);
-                }
-            }
+        measurementPane = new MeasurementSelectionPane();
+        // Rebuild the rules-table columns + invalidate the histogram cache whenever the
+        // marker selection changes.
+        measurementPane.setOnSelectionChanged(() -> {
+            rebuildTableColumns();
+            invalidateHistogramCache();
         });
-        selectMean.setTooltip(new Tooltip(
-                "Select only mean intensity measurements.\n"
-                + "Typically the best choice for marker-based phenotyping."));
 
         Button validateBtn = new Button("Validate Channels");
         validateBtn.setOnAction(e -> validateChannels());
@@ -214,16 +198,7 @@ public class PhenotypingDialog {
                 "Check that all project images have the same\n"
                 + "set of measurements. Helps catch panel mismatches."));
 
-        buttonBar.getChildren().addAll(selectAll, selectNone, selectMean, validateBtn);
-
-        // Rebuild table columns when selection changes
-        measurementList.getSelectionModel().getSelectedItems().addListener(
-                (ListChangeListener<String>) change -> {
-                    rebuildTableColumns();
-                    invalidateHistogramCache();
-                });
-
-        VBox box = new VBox(5, measurementList, buttonBar);
+        VBox box = new VBox(5, measurementPane, validateBtn);
         TitledPane pane = new TitledPane("Markers (select measurements for phenotyping)", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -438,7 +413,7 @@ public class PhenotypingDialog {
 
     @SuppressWarnings("unchecked")
     private void rebuildTableColumns() {
-        currentMarkers = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
+        currentMarkers = new ArrayList<>(measurementPane.getSelected());
         rulesTable.getColumns().clear();
         markerGateSpinners.clear();
 
@@ -644,14 +619,7 @@ public class PhenotypingDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        measurementList.setItems(FXCollections.observableArrayList(allMeasurements));
-
-        // Auto-select "Mean" measurements by default
-        for (int i = 0; i < allMeasurements.size(); i++) {
-            if (allMeasurements.get(i).contains("Mean")) {
-                measurementList.getSelectionModel().select(i);
-            }
-        }
+        measurementPane.setMeasurements(allMeasurements, n -> n.contains("Mean"));
     }
 
     /**
@@ -994,7 +962,7 @@ public class PhenotypingDialog {
         }
 
         // Validate markers against available measurements
-        List<String> availableMeasurements = new ArrayList<>(measurementList.getItems());
+        List<String> availableMeasurements = new ArrayList<>(measurementPane.getAllMeasurements());
         ChannelValidator.MarkerMatch match = ChannelValidator.validateMarkers(
                 ruleSet.getMarkers(), availableMeasurements);
 
@@ -1011,14 +979,8 @@ public class PhenotypingDialog {
             if (!proceed) return;
         }
 
-        // Select markers in ListView
-        measurementList.getSelectionModel().clearSelection();
-        for (String marker : match.present()) {
-            int idx = measurementList.getItems().indexOf(marker);
-            if (idx >= 0) {
-                measurementList.getSelectionModel().select(idx);
-            }
-        }
+        // Select the matched markers in the picker.
+        measurementPane.setSelected(match.present());
 
         // Set per-marker gates
         if (ruleSet.getGates() != null) {

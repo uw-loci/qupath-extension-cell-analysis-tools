@@ -37,7 +37,7 @@ public class EmbeddingDialog {
     private final QuPathGUI qupath;
     private final Stage owner;
 
-    private ListView<String> measurementList;
+    private MeasurementSelectionPane measurementPane;
     private ComboBox<Normalization> normalizationCombo;
     private ComboBox<EmbeddingMethod> embeddingCombo;
     private TextField embeddingNameField;
@@ -96,33 +96,8 @@ public class EmbeddingDialog {
     }
 
     private TitledPane createMeasurementSection() {
-        measurementList = new ListView<>();
-        measurementList.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
-        measurementList.setPrefHeight(150);
-
-        HBox buttonBar = new HBox(5);
-        Button selectAll = new Button("Select All");
-        selectAll.setOnAction(e -> measurementList.getSelectionModel().selectAll());
-        selectAll.setTooltip(new Tooltip("Select all available measurements."));
-        Button selectNone = new Button("Select None");
-        selectNone.setOnAction(e -> measurementList.getSelectionModel().clearSelection());
-        selectNone.setTooltip(new Tooltip("Clear the measurement selection."));
-        Button selectMean = new Button("Select 'Mean' only");
-        selectMean.setOnAction(e -> {
-            measurementList.getSelectionModel().clearSelection();
-            for (int i = 0; i < measurementList.getItems().size(); i++) {
-                if (measurementList.getItems().get(i).contains("Mean")) {
-                    measurementList.getSelectionModel().select(i);
-                }
-            }
-        });
-        selectMean.setTooltip(new Tooltip(
-                "Select only mean intensity measurements.\n"
-                + "Typically the best choice for marker-based embeddings."));
-        buttonBar.getChildren().addAll(selectAll, selectNone, selectMean);
-
-        VBox box = new VBox(5, measurementList, buttonBar);
-        TitledPane pane = new TitledPane("Measurements", box);
+        measurementPane = new MeasurementSelectionPane();
+        TitledPane pane = new TitledPane("Measurements", measurementPane);
         pane.setExpanded(true);
         pane.setCollapsible(true);
         return pane;
@@ -244,13 +219,7 @@ public class EmbeddingDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        measurementList.setItems(FXCollections.observableArrayList(allMeasurements));
-
-        for (int i = 0; i < allMeasurements.size(); i++) {
-            if (allMeasurements.get(i).contains("Mean")) {
-                measurementList.getSelectionModel().select(i);
-            }
-        }
+        measurementPane.setMeasurements(allMeasurements, n -> n.contains("Mean"));
     }
 
     /** True if {@code prefix}1 already exists on the current image's detections. */
@@ -263,7 +232,7 @@ public class EmbeddingDialog {
     }
 
     private void runEmbedding() {
-        List<String> selected = new ArrayList<>(measurementList.getSelectionModel().getSelectedItems());
+        List<String> selected = new ArrayList<>(measurementPane.getSelected());
         if (selected.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
             return;
