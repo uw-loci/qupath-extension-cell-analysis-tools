@@ -219,7 +219,8 @@ public class EmbeddingDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        measurementPane.setMeasurements(allMeasurements, n -> n.contains("Mean"));
+        // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
+        measurementPane.setMeasurements(allMeasurements, null);
     }
 
     /** True if {@code prefix}1 already exists on the current image's detections. */

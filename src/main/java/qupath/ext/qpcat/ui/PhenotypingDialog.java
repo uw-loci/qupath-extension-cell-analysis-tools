@@ -619,7 +619,8 @@ public class PhenotypingDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        measurementPane.setMeasurements(allMeasurements, n -> n.contains("Mean"));
+        // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
+        measurementPane.setMeasurements(allMeasurements, null);
     }
 
     /**
