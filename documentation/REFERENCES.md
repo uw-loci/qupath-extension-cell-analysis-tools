@@ -531,7 +531,15 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 ## Subsampling and Sketching (VEST 3D export)
 
 The "Export clustered cells for VEST (3D viewer)" feature draws a bounded subset of cells
-under a global budget. Two modes are offered.
+under a global budget and can launch the VEST viewer to explore them in 3D in a browser.
+
+**Viewer:**
+> VEST -- Vision Embedding Space Travelling. Robert Haase et al., ScaDS.AI / Uni Leipzig.
+> https://github.com/scads/vest (MIT License). A browser-based Three.js/WebGL tool that
+> places image thumbnails at 3D coordinates from a CSV. QP-CAT can install it into an
+> isolated Appose environment and launch it on the exported bundle.
+
+The subsample that feeds the export offers two modes.
 
 **Stratified (default).** A global cell budget spread across clusters by abundance, with a
 per-class floor so class imbalance never hides a cluster, drawn by seeded uniform-random

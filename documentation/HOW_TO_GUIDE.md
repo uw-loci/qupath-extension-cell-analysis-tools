@@ -39,6 +39,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 26. [Managing cluster colors](#26-managing-cluster-colors)
 27. [Spatial statistics on existing clusters (ROI-scoped)](#27-spatial-statistics-on-existing-clusters-roi-scoped)
 28. [Applying a saved result to detections](#28-applying-a-saved-result-to-detections)
+29. [Viewing clusters in 3D with VEST](#29-viewing-clusters-in-3d-with-vest)
 
 ---
 
@@ -1177,6 +1178,8 @@ squidpy neighborhood enrichment z-score matrix between cluster pairs. Red (posit
 
 Cells plotted at their physical tissue coordinates (X / Y centroids), colored by cluster. Shows the spatial distribution of cell types across the tissue section. Compare with the embedding plot -- clusters that overlap in the embedding but are spatially separated may represent the same cell type in different tissue regions.
 
+> **Multi-image runs:** cells from different images share no coordinate frame, so QP-CAT renders **one spatial plot per image** rather than overlaying them. The tab shows an **image dropdown** -- pick which image's spatial distribution to view. (Single-image runs are unchanged.)
+
 ---
 
 ## 21. Spatial graph overlay
@@ -1214,6 +1217,8 @@ If you ran spatial stats in v0.3 without "Push graph edges to viewer" enabled, o
 When the graph has more than 250,000 undirected edges, QP-CAT prompts before pushing -- a large graph rendered at high zoom can make panning feel sluggish. The threshold is `qpcat.spatial.connectionsPromptThreshold` under **Edit > Preferences > QP-CAT: Run Clustering**; raise it (e.g., to 1000000) to suppress the prompt for big slides, or lower it for cautious behavior on slow machines.
 
 The threshold counts undirected edges (each pair `(i, j)` listed once). kNN(k=15) on 100k cells produces ~1.5M directed edges -- roughly 750k after the i<j dedup. Delaunay on 100k cells produces ~300k undirected edges.
+
+> **Multi-image / cohort runs:** you are asked **once for the whole run**, not once per image -- the decision (based on the densest image) is applied to every image. After the run, a single dialog lists the average connections per cell for each image plus the run mean.
 
 ### Per-cell neighbor measurements (`per-cell-neighbor-measurements`)
 
@@ -1780,3 +1785,64 @@ any that were unmatched.
 > Note: `Cluster N` (without a namespace) is a QuPath-wide shared class used by the
 > live clustering run. Applying saved results namespaces them so multiple results
 > don't fight over it; the working run still uses the bare `Cluster N`.
+
+---
+
+## 29. Viewing clusters in 3D with VEST
+
+[VEST](https://github.com/scads/vest) (Vision Embedding Space Travelling, MIT) is a small
+browser-based tool that shows your clustered cells as an **interactive 3D point cloud** --
+each point is a cell thumbnail placed at its embedding coordinates. QP-CAT can export a
+VEST bundle and, if you like, launch VEST for you.
+
+Find it under **Extensions > QP-CAT > Export clustered cells for VEST (3D viewer)...**
+(the open image must already carry `Cluster N` classes -- run or apply clustering first).
+
+### What gets exported
+
+A self-contained folder with:
+
+- `embedding.csv` -- one row per exported cell: `filename, x, y, z, cluster` (a true
+  **3-component** UMAP / PCA / t-SNE embedding of the cells' marker measurements).
+- `images/` -- one small PNG crop per cell, matching the CSV.
+- `README.txt` -- the exact command to run VEST by hand.
+
+### Dialog options
+
+- **Embedding method / Normalization** -- how the 3D layout is computed (same choices as
+  clustering).
+- **Sampling** -- how cells are chosen under the budget:
+  - *Stratified* (default) -- a global cell budget spread across clusters by abundance,
+    with a per-class floor, drawn by seeded uniform-random sampling within each cluster.
+  - *Representative sketch (geosketch)* -- a **density-aware** sketch that downsamples dense
+    regions harder and keeps sparse/rare structure *within* clusters, preserving the shape
+    of the cloud (algorithm vendored from geosketch, Hie et al. 2019; see REFERENCES.md).
+- **Total cells (budget)** -- Low (~1,000, recommended) / Medium / High / Custom.
+  Kept deliberately conservative: VEST draws one textured image per cell in WebGL, which is
+  draw-call-limited, so very large exports get sluggish in the browser. A live estimate
+  shows how many cells the current settings will export.
+- **Min cells / cluster** (default 30) -- honored whenever that many cells exist, so a
+  huge cluster cannot squeeze small clusters out of the view.
+- **Crop scale** and, under **Advanced**, the random seed, UMAP neighbors/min_dist,
+  t-SNE perplexity, and percentile clip bounds -- nothing is hard-coded.
+
+### Opening it
+
+Two ways, from the "export complete" dialog:
+
+- **Open in VEST** -- QP-CAT builds a small, **isolated** Python environment the first time
+  (`qpcat-vest`: Flask + pandas + VEST, a one-time ~165 MB download) and then starts VEST on
+  the bundle. VEST **opens your browser automatically**. The environment is kept separate
+  from the clustering environment on purpose, so VEST's pandas/numpy can never conflict with
+  the scanpy/squidpy stack. Only one VEST viewer runs at a time; stop it with
+  **Extensions > QP-CAT > Stop VEST viewer** (it is also stopped automatically when you quit
+  QuPath).
+- **Open folder** -- just open the export folder; run VEST yourself with
+  `pip install vision-embedding-space-travelling` then `vest embedding.csv --image-path ./images`.
+
+### Notes
+
+- This is a **one-way** export: VEST runs standalone in the browser and does not navigate
+  back into QuPath. (For clicking a point and jumping to that cell *inside* QuPath, use the
+  interactive results plots / 3D view instead.)
+- Color-map by the `cluster` column in VEST's controls to see cluster structure.
