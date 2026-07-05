@@ -4,6 +4,17 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.4] -- 2026-07-05 -- 3D View: configurable background color
+
+> Rides cluster3d-core 0.1.2 (shaded, relocated to `qupath.ext.qpcat.internal.cluster3d`).
+
+### Added
+
+- **3D View: background color control.** Display options gains a "Background" color picker
+  plus an "Auto (theme)" checkbox (default on = matches the QuPath light/dark theme). Uncheck
+  "Auto" to choose a custom background; point/tripod/text colors follow the background luminance
+  so labels stay readable on any color.
+
 ## [0.9.3] -- 2026-07-05 -- 3D View: display-all-cells, per-image cell limit, populating banner
 
 > Picks up `cluster3d-core` **0.1.1** (shaded, relocated to `qupath.ext.qpcat.internal.cluster3d`).
