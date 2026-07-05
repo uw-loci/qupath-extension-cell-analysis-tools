@@ -8,7 +8,7 @@ plugins {
 qupathExtension {
     name = "qupath-extension-cell-analysis-tools"
     group = "io.github.uw-loci"
-    version = "0.9.2"
+    version = "0.9.3"
     description = "QP-CAT: Cell Analysis Tools for QuPath. Python-powered clustering, phenotyping, classification, and spatial analysis for multiplexed imaging data."
     automaticModule = "io.github.uw-loci.extension.qpcat"
 }
@@ -40,7 +40,7 @@ dependencies {
     // the -all.jar. isTransitive=false: core's published POM lists QuPath/JavaFX (injected
     // by qupath-conventions) but the QuPath host provides those at runtime -- bundling them
     // would balloon the jar. Build cluster3d-core with publishToMavenLocal first (mavenLocal).
-    implementation("io.github.uw-loci:cluster3d-core:0.1.0") { isTransitive = false }
+    implementation("io.github.uw-loci:cluster3d-core:0.1.1") { isTransitive = false }
 
     // SnakeYAML for the v1 YAML headless-batch parser. Already present on
     // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)
@@ -66,6 +66,11 @@ dependencies {
 
 tasks.shadowJar {
     mergeServiceFiles()
+    // Relocate the shaded cluster3d-core into a QP-CAT-private package so that if a
+    // user also installs the standalone qupath-extension-cluster-3d-navigator (which
+    // shades its OWN copy), the two identically-named class sets never collide or
+    // version-skew on QuPath's classpath. Each jar carries a fully private backend copy.
+    relocate("qupath.ext.cluster3d", "qupath.ext.qpcat.internal.cluster3d")
 }
 
 tasks.withType<JavaCompile> {

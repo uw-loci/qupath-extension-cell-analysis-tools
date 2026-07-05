@@ -4,6 +4,29 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.3] -- 2026-07-05 -- 3D View: display-all-cells, per-image cell limit, populating banner
+
+> Picks up `cluster3d-core` **0.1.1** (shaded, relocated to `qupath.ext.qpcat.internal.cluster3d`).
+
+### Added
+
+- **Per-image cell limit + seed** (3D View top strip). "Cell limit per image" caps how many cells
+  per image are loaded (0 = no limit) -- a performance option for slower machines that trades data
+  completeness for speed. Cells are chosen per image so every cluster stays represented (each
+  cluster keeps at least its farthest-point representatives; the rest of the budget is filled at
+  random using the seed). A "?" button explains the selection. Points counter shows "(limited)".
+- **Per-cluster representative thumbnails** shown even when zoomed far out ("Representative cells
+  per cluster", 0-5), so the initial view has cell images without needing to zoom/interact.
+- **"Image still populating"** top-center banner while thumbnails load in gradually.
+
+### Changed
+
+- **Crops render with the current viewer display for ALL images** (not just the open one), when
+  the source image's channel count matches the viewer's -- a multi-image cloud now shows every
+  cell with the viewer's brightness/contrast/channel settings.
+- Loading responsiveness: crops nearest the cursor load first; more loader threads / throughput;
+  representatives pre-warm on load.
+
 ## [0.9.2] -- 2026-07-04 -- native 3D View tab + 3-component embedding
 
 > Part of the `cluster-3d-navigator` + `cluster3d-core` effort (see
