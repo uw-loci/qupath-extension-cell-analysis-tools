@@ -72,12 +72,10 @@ public class ClusteringDialog {
     // UI components
     // Reusable 3-way image-scope control (current / all / specific subset).
     private ScopeSection scopeSection;
-    private ListView<MeasurementItem> measurementList;
-    private final ObservableList<MeasurementItem> measurementItems = FXCollections.observableArrayList();
-    private FilteredList<MeasurementItem> filteredMeasurements;
-    private TextField measurementFilter;
+    private MeasurementSelectionPane measurementPane;
     private ComboBox<Normalization> normalizationCombo;
     private ComboBox<EmbeddingMethod> embeddingCombo;
+    private ComboBox<String> embeddingDimCombo;
     private Spinner<Integer> umapNeighborsSpinner;
     private Spinner<Double> umapMinDistSpinner;
     private ComboBox<String> umapMetricCombo;
@@ -210,86 +208,10 @@ public class ClusteringDialog {
         return scopeSection;
     }
 
-    /**
-     * One selectable measurement with an independent checked state. The checked
-     * state lives on the item (not in a ListView selection model), so it
-     * survives text filtering -- filtering only hides rows, it never unchecks.
-     */
-    private static final class MeasurementItem {
-        final String name;
-        private final BooleanProperty selected = new SimpleBooleanProperty(false);
-        MeasurementItem(String name) { this.name = name; }
-        BooleanProperty selectedProperty() { return selected; }
-        boolean isSelected() { return selected.get(); }
-        void setSelected(boolean v) { selected.set(v); }
-    }
-
-    /** Check or uncheck every item currently visible in the (possibly filtered) view. */
-    private static void setChecked(List<MeasurementItem> items, boolean checked) {
-        for (MeasurementItem m : items) {
-            m.setSelected(checked);
-        }
-    }
-
     private TitledPane createMeasurementSection() {
-        measurementList = new ListView<>();
-        measurementList.setPrefHeight(150);
-
-        // Checkbox per row. Toggling a checkbox changes ONLY that item -- a plain
-        // click no longer wipes out every other selection (the old multi-select
-        // ListView behaviour that this replaces).
-        filteredMeasurements = new FilteredList<>(measurementItems, m -> true);
-        measurementList.setItems(filteredMeasurements);
-        measurementList.setCellFactory(CheckBoxListCell.forListView(
-                MeasurementItem::selectedProperty,
-                new javafx.util.StringConverter<MeasurementItem>() {
-                    @Override public String toString(MeasurementItem m) {
-                        return m == null ? "" : m.name;
-                    }
-                    @Override public MeasurementItem fromString(String s) { return null; }
-                }));
-
-        // Simple case-insensitive text filter. Hidden rows keep their checks.
-        measurementFilter = new TextField();
-        measurementFilter.setPromptText("Filter measurements...");
-        measurementFilter.textProperty().addListener((obs, oldVal, newVal) -> {
-            String q = (newVal == null) ? "" : newVal.trim().toLowerCase();
-            filteredMeasurements.setPredicate(q.isEmpty()
-                    ? m -> true
-                    : m -> m.name.toLowerCase().contains(q));
-        });
-        measurementFilter.setTooltip(new Tooltip(
-                "Type to show only matching measurements. Checkboxes stay checked\n"
-                + "even when filtered out, so you can narrow, check, clear filter, repeat."));
-
-        HBox buttonBar = new HBox(5);
-        Button selectAll = new Button("Select All");
-        selectAll.setOnAction(e -> setChecked(filteredMeasurements, true));
-        selectAll.setTooltip(new Tooltip("Check all currently shown measurements."));
-        Button selectNone = new Button("Select None");
-        selectNone.setOnAction(e -> setChecked(filteredMeasurements, false));
-        selectNone.setTooltip(new Tooltip("Uncheck all currently shown measurements."));
-        Button selectMean = new Button("Select 'Mean' only");
-        selectMean.setOnAction(e -> {
-            // Operate on the VISIBLE (filtered) rows only: among them, check those
-            // containing "Mean" and uncheck the rest. Hidden rows keep their state --
-            // consistent with Select All / Select None above. So filtering to "cell"
-            // then "Select 'Mean' only" checks just the cell Mean measurements.
-            for (MeasurementItem m : filteredMeasurements) {
-                m.setSelected(m.name.contains("Mean"));
-            }
-        });
-        selectMean.setTooltip(new Tooltip(
-                "Among the currently shown measurements, check those containing 'Mean'\n"
-                + "and uncheck the rest. Filtered-out (hidden) items keep their state."));
-        buttonBar.getChildren().addAll(selectAll, selectNone, selectMean);
-
-        measurementList.setTooltip(new Tooltip(
-                "Tick the measurements to use for clustering. Use the filter above to\n"
-                + "narrow the list; checked items stay checked when filtered out."));
-
-        VBox box = new VBox(5, measurementFilter, measurementList, buttonBar);
-        TitledPane pane = new TitledPane("Measurements", box);
+        measurementPane = new MeasurementSelectionPane();
+        measurementPane.setOnSelectionChanged(this::updatePreflight);
+        TitledPane pane = new TitledPane("Measurements", measurementPane);
         pane.setExpanded(true);
         pane.setCollapsible(true);
         return pane;
@@ -412,7 +334,20 @@ public class ClusteringDialog {
         boolean[] embNameEdited = {false};
         embeddingNameField.textProperty().addListener((o, a, b) -> embNameEdited[0] = true);
 
+        // Embedding dimensionality: 2D (default, NAME1/NAME2) or 3D (adds NAME3,
+        // a genuine third axis for downstream 3D viewers).
+        embeddingDimCombo = new ComboBox<>(FXCollections.observableArrayList("2D", "3D"));
+        embeddingDimCombo.setValue("2D");
+        embeddingDimCombo.setPrefWidth(70);
+        embeddingDimCombo.setTooltip(new Tooltip(
+                "Number of embedding components written as measurements.\n"
+                + "  2D - NAME1 / NAME2 (default; unchanged behavior).\n"
+                + "  3D - NAME1 / NAME2 / NAME3 -- computes a genuine third axis\n"
+                + "       so a downstream 3D viewer can read a real third coordinate.\n"
+                + "Applies to UMAP / t-SNE / PCA."));
+
         HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo,
+                tipLabel("Dimensions:", embeddingDimCombo), embeddingDimCombo,
                 tipLabel("Name:", embeddingNameField), embeddingNameField);
         embRow.setAlignment(Pos.CENTER_LEFT);
 
@@ -450,6 +385,8 @@ public class ClusteringDialog {
             boolean isUmap = m == EmbeddingMethod.UMAP;
             boolean isTsne = m == EmbeddingMethod.TSNE;
             boolean hasSeed = m != EmbeddingMethod.NONE;
+            // Dimensionality is meaningless with no embedding; disable for None.
+            embeddingDimCombo.setDisable(m == EmbeddingMethod.NONE);
             setRowShown(umapRow, isUmap);
             setRowShown(tsneRow, isTsne);
             setRowShown(umapAdvRow, isUmap);
@@ -1318,10 +1255,8 @@ public class ClusteringDialog {
     private void updatePreflight() {
         if (preflightLabel == null) return;
 
-        List<String> selected = new ArrayList<>();
-        for (MeasurementItem m : measurementItems) {
-            if (m.isSelected()) selected.add(m.name);
-        }
+        List<String> selected = measurementPane != null
+                ? measurementPane.getSelected() : new ArrayList<>();
         int n = selected.size();
         java.util.Set<String> compartments = new java.util.LinkedHashSet<>();
         java.util.Set<String> markers = new java.util.LinkedHashSet<>();
@@ -1531,18 +1466,9 @@ public class ClusteringDialog {
         if (detections.isEmpty()) return;
 
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        // Rebuild the checkbox model; auto-check "Mean" measurements by default.
-        measurementItems.clear();
-        for (String name : allMeasurements) {
-            MeasurementItem m = new MeasurementItem(name);
-            m.setSelected(name.contains("Mean"));
-            m.selectedProperty().addListener((o, a, b) -> updatePreflight());
-            measurementItems.add(m);
-        }
+        // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
+        measurementPane.setMeasurements(allMeasurements, null);
         updatePreflight();
-        if (measurementFilter != null) {
-            measurementFilter.clear();
-        }
     }
 
     private ClusteringConfig buildConfig() {
@@ -1592,12 +1518,7 @@ public class ClusteringDialog {
         config.setLimitEdgesBySameClass(limitEdgesBySameClassCheck.isSelected());
 
         // Selected measurements (checked items, in list order)
-        List<String> selected = new ArrayList<>();
-        for (MeasurementItem m : measurementItems) {
-            if (m.isSelected()) {
-                selected.add(m.name);
-            }
-        }
+        List<String> selected = measurementPane.getSelected();
         if (selected.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
             return null;
@@ -1613,6 +1534,9 @@ public class ClusteringDialog {
         Map<String, Object> embeddingParams = new HashMap<>();
         if (embMethod != EmbeddingMethod.NONE) {
             embeddingParams.put("random_state", embeddingSeedSpinner.getValue());
+            // Embedding dimensionality: 3 -> NAME1/NAME2/NAME3, else 2.
+            embeddingParams.put("n_components",
+                    "3D".equals(embeddingDimCombo.getValue()) ? 3 : 2);
             String embName = embeddingNameField.getText();
             if (embName != null && !embName.isBlank()) {
                 embeddingParams.put("name", embName.trim());
@@ -1930,9 +1854,7 @@ public class ClusteringDialog {
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();
         if (configMeasurements != null && !configMeasurements.isEmpty()) {
-            for (MeasurementItem m : measurementItems) {
-                m.setSelected(configMeasurements.contains(m.name));
-            }
+            measurementPane.setSelected(configMeasurements);
         }
         updatePreflight();
     }
@@ -2015,6 +1937,10 @@ public class ClusteringDialog {
                 // path). Runs the probe, then asks the user what to do.
                 workflow.setSpatialEstimateDecider(est -> askSpatialEstimate(est));
                 ClusteringResult result;
+                // The clustered image scope, threaded to the results dialog so the
+                // "3D View" tab reads exactly those images (no picker). null == the
+                // single current image (the 3D pane falls back to the current image).
+                final List<ProjectImageEntry<BufferedImage>> clusteredScope;
 
                 if (config.isClusterEntireProject()) {
                     // Multi-image project clustering: all images, or just the
@@ -2025,9 +1951,11 @@ public class ClusteringDialog {
                     }
                     List<ProjectImageEntry<BufferedImage>> entries =
                             (subsetEntries != null) ? subsetEntries : project.getImageList();
+                    clusteredScope = entries;
                     result = workflow.runProjectClustering(entries, config, progress);
                 } else {
                     // Single-image clustering
+                    clusteredScope = null;
                     result = workflow.runClustering(config, progress);
                 }
 
@@ -2045,7 +1973,7 @@ public class ClusteringDialog {
                     // inspectable -- even a bare clustering (no plots / spatial
                     // stats) now opens, since the result was auto-saved and is
                     // reloadable via "View Past Results".
-                    showResultsDialog(result);
+                    showResultsDialog(result, clusteredScope);
                 });
             } catch (Exception e) {
                 // Cancellation is not a failure: nothing was written to objects.
@@ -2158,13 +2086,26 @@ public class ClusteringDialog {
     }
 
     private void showResultsDialog(ClusteringResult result) {
-        showResultsDialog(result,
+        showResultsDialog(result, null);
+    }
+
+    /**
+     * Run-path results dialog: like {@link #showResultsDialog(ClusteringResult)} but also
+     * threads the clustered image scope so the "3D View" tab reads exactly those images.
+     *
+     * @param clusteredEntries the images that were clustered (null == single current image)
+     */
+    private void showResultsDialog(ClusteringResult result,
+                                    List<ProjectImageEntry<BufferedImage>> clusteredEntries) {
+        showResultsDialog(qupath.getStage(), qupath, result,
                 embeddingCombo.getValue() != null
                         ? embeddingCombo.getValue().getDisplayName() : "Embedding",
                 algorithmCombo.getValue() != null
                         ? algorithmCombo.getValue().getDisplayName() : null,
                 normalizationCombo.getValue() != null
-                        ? normalizationCombo.getValue().getId() : null);
+                        ? normalizationCombo.getValue().getId() : null,
+                null,
+                clusteredEntries);
     }
 
     /**
@@ -2177,16 +2118,23 @@ public class ClusteringDialog {
      */
     public static void showResultsDialog(ClusteringResult result, String embName,
                                           String algorithm, String normalization) {
-        showResultsDialog(null, null, result, embName, algorithm, normalization, null);
+        // External / reload callers have no clustered-scope context -> null (the 3D tab
+        // then reads the current image only, still without a picker).
+        showResultsDialog(null, null, result, embName, algorithm, normalization, null, null);
     }
 
     /**
      * Full results dialog builder. Supports save to project and display of loaded results.
+     *
+     * @param clusteredEntries the images that were clustered (nullable); fed to the "3D View"
+     *                         tab so it reads exactly that scope with no image picker. null ->
+     *                         current image only.
      */
     private static void showResultsDialog(Stage ownerStage, QuPathGUI qupathRef,
                                            ClusteringResult result, String embName,
                                            String algorithm, String normalization,
-                                           String loadedResultName) {
+                                           String loadedResultName,
+                                           List<ProjectImageEntry<BufferedImage>> clusteredEntries) {
         // Resolve owner and qupath from static context if needed
         Stage dialogOwner = ownerStage;
         QuPathGUI qupath = qupathRef;
@@ -2287,6 +2235,39 @@ public class ClusteringDialog {
                     "embedding-tab-interactive"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
+        }
+
+        // 3D View tab -- the shared Apache-2.0 cluster3d-core viewer. It reads the
+        // clustered images' detections + PathClass + embedding measurements (UMAP1/2/3
+        // etc.) generically, so it just needs opening after the run wrote them; no
+        // in-memory result plumbing. Built LAZILY on first selection so the cloud is
+        // not read until the user opens the tab. Disposed when the window hides. The
+        // scope is FIXED to the clustered images (initializeForHost, no image picker).
+        if (qupath != null) {
+            final QuPathGUI qupath3d = qupath;
+            final List<ProjectImageEntry<BufferedImage>> scope3d = clusteredEntries;
+            final qupath.ext.cluster3d.ui.Cluster3DNavigatorPane[] pane3dHolder = {null};
+            Label placeholder3d = new Label("Open this tab to load the interactive 3D view.");
+            placeholder3d.setPadding(new Insets(12));
+            Tab tab3d = new Tab("3D View", placeholder3d);
+            tab3d.setClosable(false);
+            tabPane.getTabs().add(tab3d);
+            tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+                if (newTab == tab3d && pane3dHolder[0] == null) {
+                    qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d =
+                            new qupath.ext.cluster3d.ui.Cluster3DNavigatorPane(qupath3d);
+                    pane3dHolder[0] = pane3d;
+                    tab3d.setContent(pane3d);
+                    // Host owns the scope (the clustered images) -> no picker prompt.
+                    pane3d.initializeForHost(scope3d);
+                }
+            });
+            // Stacks with (does not clobber) any existing WINDOW_HIDDEN handler.
+            stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, ev -> {
+                if (pane3dHolder[0] != null) {
+                    pane3dHolder[0].dispose();
+                }
+            });
         }
 
         // Representative cells gallery tab -- per-cluster montage of medoid +
@@ -2719,11 +2700,14 @@ public class ClusteringDialog {
             // Resolve plot paths
             ClusteringResult result = ClusteringResultManager.loadResult(project, selectedName);
 
+            // Loaded past result: no clustered-scope context -> null (3D tab reads
+            // the current image only, still without a picker).
             showResultsDialog(qupath.getStage(), qupath, result,
                     saved.getEmbeddingMethod(),
                     saved.getAlgorithm(),
                     saved.getNormalization(),
-                    selectedName);
+                    selectedName,
+                    null);
 
         } catch (Exception e) {
             logger.error("Failed to load past results", e);

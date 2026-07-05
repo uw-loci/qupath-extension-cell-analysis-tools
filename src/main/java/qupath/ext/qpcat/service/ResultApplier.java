@@ -127,10 +127,16 @@ public class ResultApplier {
     }
 
     /**
-     * Applies 2D embedding coordinates as measurements on detections.
+     * Applies embedding coordinates as measurements on detections.
+     * <p>
+     * Writes one measurement per embedding column, named {@code <prefix>1},
+     * {@code <prefix>2}, ... The column count is taken from the embedding rows,
+     * so a 2-component embedding writes NAME1/NAME2 (unchanged) and a
+     * 3-component embedding also writes NAME3 -- a genuine third axis for
+     * downstream 3D viewers.
      *
      * @param detections ordered list of detections
-     * @param embedding  2D array [nCells][2] of embedding coordinates
+     * @param embedding  2D array [nCells][nComponents] of embedding coordinates
      * @param prefix     name prefix for the measurements (e.g., "UMAP", "PCA", "tSNE")
      */
     public void applyEmbedding(List<PathObject> detections, double[][] embedding, String prefix) {
@@ -142,16 +148,17 @@ public class ResultApplier {
                     + ") does not match embedding row count (" + embedding.length + ")");
         }
 
-        String name1 = prefix + "1";
-        String name2 = prefix + "2";
-
+        int nComponents = embedding.length > 0 ? embedding[0].length : 0;
         for (int i = 0; i < detections.size(); i++) {
             var ml = detections.get(i).getMeasurements();
-            ml.put(name1, embedding[i][0]);
-            ml.put(name2, embedding[i][1]);
+            double[] row = embedding[i];
+            for (int c = 0; c < row.length; c++) {
+                ml.put(prefix + (c + 1), row[c]);
+            }
         }
 
-        logger.info("Applied {} embedding to {} detections", prefix, detections.size());
+        logger.info("Applied {} embedding ({} components) to {} detections",
+                prefix, nComponents, detections.size());
     }
 
     /**

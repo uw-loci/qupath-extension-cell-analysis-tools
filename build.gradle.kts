@@ -8,7 +8,7 @@ plugins {
 qupathExtension {
     name = "qupath-extension-cell-analysis-tools"
     group = "io.github.uw-loci"
-    version = "0.9.1"
+    version = "0.9.2"
     description = "QP-CAT: Cell Analysis Tools for QuPath. Python-powered clustering, phenotyping, classification, and spatial analysis for multiplexed imaging data."
     automaticModule = "io.github.uw-loci.extension.qpcat"
 }
@@ -34,6 +34,13 @@ dependencies {
 
     // Appose for embedded Java-Python IPC with shared memory
     implementation("org.apposed:appose:0.12.0")
+
+    // Apache-2.0 shared 3D point-cloud viewer (the "3D View" results tab). It is the
+    // extension's own code, so it is an `implementation` dependency and gets SHADED into
+    // the -all.jar. isTransitive=false: core's published POM lists QuPath/JavaFX (injected
+    // by qupath-conventions) but the QuPath host provides those at runtime -- bundling them
+    // would balloon the jar. Build cluster3d-core with publishToMavenLocal first (mavenLocal).
+    implementation("io.github.uw-loci:cluster3d-core:0.1.0") { isTransitive = false }
 
     // SnakeYAML for the v1 YAML headless-batch parser. Already present on
     // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)

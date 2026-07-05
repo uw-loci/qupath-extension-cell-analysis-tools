@@ -8,6 +8,9 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   algorithm_params: dict (algorithm-specific parameters)
   normalization: str ("zscore", "minmax", "percentile", "none")
   embedding_method: str ("umap", "pca", "tsne", "none")
+  embedding_n_components: int (2 or 3, default 2) -- embedding dimensionality.
+    2 keeps the historical NAME1/NAME2 scatter; 3 adds a genuine third axis
+    (NAME1/NAME2/NAME3) for downstream 3D viewers.
   embedding_params: dict (method-specific parameters; all optional)
     shared:  random_state (int, default 42)
     umap:    n_neighbors (int, default 15), min_dist (float, default 0.1),
@@ -39,7 +42,8 @@ Optional inputs:
 Outputs (via task.outputs):
   cluster_labels: NDArray (N_cells,) int32
   n_clusters: int
-  embedding: NDArray (N_cells x 2) float64 (if embedding_method != "none")
+  embedding: NDArray (N_cells x embedding_n_components) float64
+    (if embedding_method != "none"; second dim is 2 or 3)
   cluster_stats: NDArray (n_clusters x N_markers) float64 -- per-cluster marker means
   marker_rankings: str (JSON) -- top markers per cluster with scores
   paga_connectivity: NDArray (n_clusters x n_clusters) float64 -- PAGA graph weights
@@ -418,6 +422,20 @@ _progress(
 # to 42 so prior runs reproduce). Shared by UMAP / t-SNE / PCA.
 embedding_seed = int(embedding_params.get("random_state", 42))
 
+# Number of embedding components to compute. 2 (default) preserves the historical
+# NAME1/NAME2 scatter byte-for-byte; 3 emits a genuine third axis (NAME1/2/3) for
+# downstream 3D viewers. Passed as a top-level input from Java; defaults to 2.
+try:
+    embedding_n_components = int(embedding_n_components)
+except NameError:
+    embedding_n_components = 2
+if embedding_n_components not in (2, 3):
+    logger.warning(
+        "embedding_n_components=%s unsupported (expected 2 or 3); using 2",
+        embedding_n_components,
+    )
+    embedding_n_components = 2
+
 embedding_result = None
 if embedding_method == "umap":
     import umap
@@ -426,17 +444,18 @@ if embedding_method == "umap":
     min_dist = embedding_params.get("min_dist", 0.1)
     metric = embedding_params.get("metric", "euclidean")
     logger.info(
-        "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, seed=%d",
+        "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, n_components=%d, seed=%d",
         n_neighbors,
         min_dist,
         metric,
+        embedding_n_components,
         embedding_seed,
     )
     reducer = umap.UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         metric=metric,
-        n_components=2,
+        n_components=embedding_n_components,
         random_state=embedding_seed,
     )
     embedding_result = reducer.fit_transform(df_norm.values)
@@ -444,17 +463,9 @@ if embedding_method == "umap":
 elif embedding_method == "pca":
     from sklearn.decomposition import PCA
 
-    # The embedding output is a fixed Nx2 scatter (the Java side packs it as
-    # shape [n_cells, 2]). Honor that contract: force 2 components. A larger
-    # n_components would make np.copyto raise AFTER all clustering work is done.
-    requested_components = int(embedding_params.get("n_components", 2))
-    if requested_components != 2:
-        logger.warning(
-            "PCA embedding forced to 2 components (requested %d); the embedding "
-            "output is a 2D scatter.",
-            requested_components,
-        )
-    pca = PCA(n_components=2, random_state=embedding_seed)
+    # The embedding output shape follows embedding_n_components (2 or 3); the
+    # Java side reads the second dim from the NDArray shape and writes NAME1..K.
+    pca = PCA(n_components=embedding_n_components, random_state=embedding_seed)
     embedding_result = pca.fit_transform(df_norm.values)
     logger.info(
         "PCA: explained variance = %s",
@@ -478,7 +489,7 @@ elif embedding_method == "tsne":
     early_exaggeration = float(embedding_params.get("early_exaggeration", 12.0))
     n_iter = int(embedding_params.get("n_iter", embedding_params.get("max_iter", 1000)))
     tsne_kwargs = dict(
-        n_components=2,
+        n_components=embedding_n_components,
         perplexity=perplexity,
         learning_rate=learning_rate,
         early_exaggeration=early_exaggeration,
@@ -1403,9 +1414,11 @@ np.copyto(labels_nd.ndarray(), labels.astype(np.int32))
 task.outputs["cluster_labels"] = labels_nd
 task.outputs["n_clusters"] = n_clusters_found
 
-# Embedding
+# Embedding. Second dim follows the computed component count (2 or 3); the Java
+# side reads it from the NDArray shape and writes NAME1/NAME2[/NAME3].
 if embedding_result is not None:
-    emb_nd = PyNDArray(dtype="float64", shape=[n_cells, 2])
+    n_emb_dims = int(embedding_result.shape[1])
+    emb_nd = PyNDArray(dtype="float64", shape=[n_cells, n_emb_dims])
     np.copyto(emb_nd.ndarray(), embedding_result.astype(np.float64))
     task.outputs["embedding"] = emb_nd
 

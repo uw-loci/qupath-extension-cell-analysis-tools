@@ -768,7 +768,9 @@ For general support and feature requests, please post on the [image.sc forum](ht
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](LICENSE). QP-CAT is a QuPath plugin; when distributed together with
+QuPath (GPL-3.0) the combined work is governed by the GPL. Third-party dependencies and
+inspirations are recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## AI-Assisted Development
 

@@ -1414,6 +1414,10 @@ public class ClusteringWorkflow {
         inputs.put("normalization", config.getNormalization().getId());
         inputs.put("embedding_method", config.getEmbeddingMethod().getId());
         inputs.put("embedding_params", config.getEmbeddingParams());
+        // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
+        // in embeddingParams as "n_components"; forwarded as the top-level input the
+        // Python task reads so a missing key cleanly defaults to 2.
+        inputs.put("embedding_n_components", embeddingNComponents(config));
         inputs.put("top_n_markers", config.getTopNMarkers());
         inputs.put("generate_plots", plotDir != null);
         if (plotDir != null) {
@@ -1540,7 +1544,11 @@ public class ClusteringWorkflow {
             double[][] embedding = null;
             if (task.outputs.containsKey("embedding")) {
                 embNd = (NDArray) task.outputs.get("embedding");
-                embedding = new double[nCells][2];
+                // Second dim is 2 (default) or 3 (user chose a 3D embedding); read
+                // it from the NDArray shape instead of hard-coding 2 so a genuine
+                // third axis (NAME3) flows through to the measurement writer.
+                int nEmbDims = embNd.shape().length() >= 2 ? embNd.shape().get(1) : 2;
+                embedding = new double[nCells][nEmbDims];
                 var embBuf = embNd.buffer().asDoubleBuffer();
                 for (int i = 0; i < nCells; i++) {
                     embBuf.get(embedding[i]);
@@ -4463,5 +4471,19 @@ public class ClusteringWorkflow {
         Map<String, Object> p = config.getEmbeddingParams();
         Object name = (p == null) ? null : p.get("name");
         return name == null ? null : name.toString();
+    }
+
+    /**
+     * Embedding dimensionality from the config params ("n_components"). Only 2 or
+     * 3 are supported; anything else (or unset) defaults to 2 so existing behavior
+     * is preserved.
+     */
+    private static int embeddingNComponents(ClusteringConfig config) {
+        Map<String, Object> p = config.getEmbeddingParams();
+        Object v = (p == null) ? null : p.get("n_components");
+        if (v instanceof Number n) {
+            return (n.intValue() == 3) ? 3 : 2;
+        }
+        return 2;
     }
 }

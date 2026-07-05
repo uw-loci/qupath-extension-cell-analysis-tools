@@ -4,6 +4,30 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.2] -- 2026-07-04 -- native 3D View tab + 3-component embedding
+
+> Part of the `cluster-3d-navigator` + `cluster3d-core` effort (see
+> `claude-reports/2026-07-04_cluster-3d-navigator-and-shared-core.md`). Distinct from the
+> 0.9.1 VEST *export* / "Open in VEST" work below. Build order: `cluster3d-core`
+> publishToMavenLocal before this repo's shadowJar (see THIRD_PARTY_NOTICES.md / CLAUDE.md).
+
+### Added
+
+- **Native "3D View" results tab.** The clustering Results window gains a **"3D View"** tab
+  (next to the 2D embedding scatter) with an interactive 3D point cloud of your clustered
+  cells; **click a point to select and center that cell** in the QuPath viewer, hover/click
+  for a crop preview, optional in-cloud cell thumbnails when zoomed in. Backed by the shared
+  Apache-2.0 `cluster3d-core` library (shaded into the jar; `isTransitive=false` keeps
+  host-provided JavaFX out). Lazy -- the cloud is not read until the tab is opened. Renders on
+  a portable JavaFX Canvas (works on WSL/remote where hardware JavaFX-3D does not). This is the
+  in-app, bidirectional complement to the browser-based VEST export.
+- **Embedding "Dimensions: 2D / 3D" option.** The Dimensionality Reduction section can now
+  compute a true **3-component** embedding and write **UMAP1/UMAP2/UMAP3** (or PCA/tSNE 1/2/3)
+  back as per-cell measurements -- giving the "3D View" tab (and any external 3D viewer) a real
+  third axis. Default 2D; 2D output is byte-for-byte unchanged. Note: a 3D UMAP is a fresh fit,
+  so it yields a new UMAP1/2/3 set (not the 2D UMAP1/2 plus a third component). `run_clustering.py`
+  is a scripts/ file, so no Appose version bump was required.
+
 ## [0.9.1] -- 2026-07-03
 
 ### Added
