@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.lib.display.ChannelDisplayInfo;
 import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -159,19 +160,64 @@ public class CellCropService implements AutoCloseable {
                 && viewer.getImageDisplay() != null) {
             return viewer.getImageDisplay();
         }
-        // Other images -> a cached default display (channel colors + auto contrast).
+        // Other images -> a cached display that MIRRORS the open viewer's channel
+        // selection + contrast (multiplex panels share channel names), so "Update from
+        // viewer" affects crops from every image, not just the currently-open one.
+        // The cache is cleared on "Update from viewer", so this re-mirrors each refresh.
         if (ref.getImageId() == null) {
             return null;
         }
+        ImageDisplay viewerDisplay = (viewer != null) ? viewer.getImageDisplay() : null;
         return displays.computeIfAbsent(ref.getImageId(), id -> {
             try {
-                return ImageDisplay.create(new ImageData<>(server));
+                ImageDisplay d = ImageDisplay.create(new ImageData<>(server));
+                mirrorViewerDisplay(d, viewerDisplay, ref);
+                return d;
             } catch (Exception e) {
                 logger.warn("Could not build display for '{}': {}",
                         ref.getImageName(), e.getMessage());
                 return null;
             }
         });
+    }
+
+    /**
+     * Copy the open viewer's display onto another image's display so a crop from that
+     * image matches what the user sees. Uses QuPath's cross-image {@code updateFromDisplay}
+     * (matches channels by name), then explicitly mirrors the on/off selection by channel
+     * name -- guarded so a panel whose channel names do not overlap is left at its defaults
+     * (never blanked).
+     */
+    private void mirrorViewerDisplay(ImageDisplay target, ImageDisplay source, CellRef ref) {
+        if (target == null || source == null) {
+            return;
+        }
+        try {
+            target.updateFromDisplay(source);
+        } catch (Exception e) {
+            logger.debug("updateFromDisplay failed for '{}': {}", ref.getImageName(), e.getMessage());
+        }
+        try {
+            java.util.Set<String> onNames = new java.util.HashSet<>();
+            for (ChannelDisplayInfo ch : source.selectedChannels()) {
+                onNames.add(ch.getName());
+            }
+            boolean anyMatch = false;
+            for (ChannelDisplayInfo ch : target.availableChannels()) {
+                if (onNames.contains(ch.getName())) {
+                    anyMatch = true;
+                    break;
+                }
+            }
+            if (anyMatch) {
+                for (ChannelDisplayInfo ch : target.availableChannels()) {
+                    target.setChannelSelected(ch, onNames.contains(ch.getName()));
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not mirror channel selection for '{}': {}",
+                    ref.getImageName(), e.getMessage());
+        }
     }
 
     /**
