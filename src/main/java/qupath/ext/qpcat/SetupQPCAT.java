@@ -356,8 +356,10 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // Manage Clusters
         MenuItem manageClustersItem = new MenuItem(res.getString("menu.manageClusters"));
         manageClustersItem.setOnAction(e -> {
-            if (qupath.getImageData() == null) {
-                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+            // The saved-result path works project-wide without an open image; the
+            // dialog itself warns if neither a project nor an open image is present.
+            if (qupath.getProject() == null && qupath.getImageData() == null) {
+                Dialogs.showWarningNotification(EXTENSION_NAME, "Open a project or an image first.");
                 return;
             }
             new ClusterManagementDialog(qupath).show();

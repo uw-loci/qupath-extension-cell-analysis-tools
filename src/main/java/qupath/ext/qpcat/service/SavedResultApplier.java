@@ -80,14 +80,8 @@ public final class SavedResultApplier {
             return report;
         }
 
-        ResultApplier applier = new ResultApplier();
-
+        String openId = openImageId(qupath);
         ImageData<BufferedImage> openData = qupath.getImageData();
-        String openId = null;
-        if (openData != null) {
-            ProjectImageEntry<BufferedImage> e = project.getEntry(openData);
-            if (e != null) openId = e.getID();
-        }
 
         Set<String> targetIds = new LinkedHashSet<>();
         if (allImages) {
@@ -109,6 +103,116 @@ public final class SavedResultApplier {
         String prefix = ResultApplier.getEmbeddingPrefix(
                 saved.getEmbeddingMethod() != null ? saved.getEmbeddingMethod() : "umap",
                 namespace);
+
+        applyCore(project, saved, targetIds, openId, openData, embedding, prefix,
+                label -> ResultApplier.clusterClassName(namespace, label),
+                "apply saved result", report);
+
+        // Restore the saved palette AFTER applying labels: applyClusterLabelsNamed
+        // seeds the canonical tab20 on each namespaced class, which would otherwise
+        // clobber the user's saved colors. Restoring last makes the saved palette win.
+        new ResultApplier().applyClusterColors(saved.getClusterColors(), namespace);
+        return report;
+    }
+
+    /**
+     * Apply a rename/merge to the detections across every image the saved result
+     * references, in place (bare class names, no result-name namespace) -- so
+     * "Cluster 3" becomes "Tumor" everywhere the original run labelled cells, not
+     * just on the open image. Cells are matched by source image id + centroid,
+     * identically to {@link #apply}. The caller is responsible for having written
+     * the non-destructive renamed COPY of the saved result beforehand; this method
+     * only touches live detections and never mutates the original result JSON.
+     *
+     * <p>Must be called off the JavaFX application thread.</p>
+     *
+     * @param nameByLabel cluster label -&gt; new display name (merge: two+ labels map
+     *                    to the same name); labels absent from the map keep
+     *                    "Cluster &lt;label&gt;"
+     */
+    @SuppressWarnings("unchecked")
+    public static ApplyReport applyRenamed(QuPathGUI qupath, SavedClusteringResult saved,
+                                           Map<Integer, String> nameByLabel) {
+        ApplyReport report = new ApplyReport();
+        Project<BufferedImage> project = (Project<BufferedImage>) qupath.getProject();
+        if (project == null) {
+            report.error = "A project must be open to apply a rename/merge.";
+            return report;
+        }
+        int[] labels = saved.getClusterLabels();
+        String[] cellImageIds = saved.getCellImageIds();
+        double[] cx = saved.getCellX();
+        double[] cy = saved.getCellY();
+        if (labels == null || cellImageIds == null || cx == null || cy == null) {
+            report.error = "This saved result lacks the per-cell references (image id + "
+                    + "centroid) needed to match cells safely; it was saved by an older "
+                    + "version of QP-CAT.";
+            return report;
+        }
+
+        Set<String> targetIds = new LinkedHashSet<>();
+        for (String id : cellImageIds) if (id != null) targetIds.add(id);
+        if (targetIds.isEmpty()) {
+            report.error = "The saved result references no images to update.";
+            return report;
+        }
+
+        applyCore(project, saved, targetIds, openImageId(qupath), qupath.getImageData(),
+                null, null,
+                label -> {
+                    String n = nameByLabel != null ? nameByLabel.get(label) : null;
+                    return (n != null && !n.isBlank()) ? n : "Cluster " + label;
+                },
+                "rename/merge clusters", report);
+
+        // Preserve each cluster's color under its (possibly new/merged) name.
+        new ResultApplier().applyClusterColors(renamedColors(saved, nameByLabel), null);
+        return report;
+    }
+
+    /**
+     * Cluster palette for a renamed/merged result, keyed by the NEW class name.
+     * Each distinct label contributes its original saved color (or the canonical
+     * tab20 color when the result carried none); on a merge the first constituent
+     * label's color wins. Used to (a) recolor live detections after an in-place
+     * rename and (b) seed the {@code clusterColors} of the saved COPY.
+     */
+    public static Map<String, Integer> renamedColors(SavedClusteringResult saved,
+                                                      Map<Integer, String> nameByLabel) {
+        Map<String, Integer> out = new java.util.LinkedHashMap<>();
+        int[] labels = saved.getClusterLabels();
+        if (labels == null) return out;
+        Map<String, Integer> src = saved.getClusterColors();  // keyed "Cluster L"
+        Set<Integer> seen = new java.util.HashSet<>();
+        for (int lab : labels) {
+            if (lab < 0 || !seen.add(lab)) continue;
+            String n = nameByLabel != null ? nameByLabel.get(lab) : null;
+            String name = (n != null && !n.isBlank()) ? n : "Cluster " + lab;
+            Integer rgb = src != null ? src.get("Cluster " + lab) : null;
+            if (rgb == null) rgb = ClusterPalette.rgbFor(lab);
+            out.putIfAbsent(name, rgb);
+        }
+        return out;
+    }
+
+    /**
+     * Shared per-image matching + apply loop. For each target image: match saved
+     * cells to detections by centroid, class them via {@code namer}, optionally
+     * write embedding measurements, record a workflow step, save the image data,
+     * and (for the open image) fire a hierarchy-changed event so labels appear
+     * without a manual reload. Populates {@code report}.
+     */
+    private static void applyCore(Project<BufferedImage> project, SavedClusteringResult saved,
+                                  Set<String> targetIds, String openId,
+                                  ImageData<BufferedImage> openData,
+                                  double[][] embedding, String embPrefix,
+                                  java.util.function.IntFunction<String> namer,
+                                  String actionLabel, ApplyReport report) {
+        int[] labels = saved.getClusterLabels();
+        String[] cellImageIds = saved.getCellImageIds();
+        double[] cx = saved.getCellX();
+        double[] cy = saved.getCellY();
+        ResultApplier applier = new ResultApplier();
 
         for (String eid : targetIds) {
             // A detached read we opened ourselves and must close; null for the live image.
@@ -156,13 +260,13 @@ public final class SavedResultApplier {
 
                 int[] lab = new int[matchedLab.size()];
                 for (int i = 0; i < lab.length; i++) lab[i] = matchedLab.get(i);
-                applier.applyClusterLabels(matchedDet, lab, namespace);
+                applier.applyClusterLabelsNamed(matchedDet, lab, namer);
                 if (matchedEmb != null && matchedEmb.size() == matchedDet.size()) {
                     applier.applyEmbedding(matchedDet,
-                            matchedEmb.toArray(new double[0][]), prefix);
+                            matchedEmb.toArray(new double[0][]), embPrefix);
                 }
 
-                recordStep(data, saved, matchedDet.size(), unmatched);
+                recordStep(data, saved, matchedDet.size(), unmatched, actionLabel);
 
                 ProjectImageEntry<BufferedImage> entry = project.getEntry(data);
                 if (entry != null) entry.saveImageData(data);
@@ -179,18 +283,12 @@ public final class SavedResultApplier {
                         + matchedDet.size() + " of " + savedForImage
                         + (unmatched > 0 ? " (" + unmatched + " unmatched)" : ""));
             } catch (Exception ex) {
-                logger.error("Failed to apply saved result to image {}", eid, ex);
+                logger.error("Failed to {} on image {}", actionLabel, eid, ex);
                 report.perImage.add(shortName(project, eid) + ": ERROR " + ex.getMessage());
             } finally {
                 ImageDataResources.closeQuietly(toClose);
             }
         }
-
-        // Restore the saved palette AFTER applying labels: applyClusterLabels seeds
-        // the canonical tab20 on each namespaced class, which would otherwise
-        // clobber the user's saved colors. Restoring last makes the saved palette win.
-        applier.applyClusterColors(saved.getClusterColors(), namespace);
-        return report;
     }
 
     /** Number of saved cells referencing a given image id. */
@@ -277,20 +375,21 @@ public final class SavedResultApplier {
     }
 
     private static void recordStep(ImageData<BufferedImage> data, SavedClusteringResult saved,
-                                   int applied, int unmatched) {
+                                   int applied, int unmatched, String actionLabel) {
         if (data == null) return;
         try {
             String script = String.join("\n",
-                    "// QP-CAT: applied saved clustering result '" + saved.getName() + "'",
+                    "// QP-CAT: " + actionLabel + " from saved clustering result '"
+                            + saved.getName() + "'",
                     "// " + saved.getNClusters() + " clusters; " + applied
-                            + " detections labelled as '" + saved.getName() + ": Cluster N'"
+                            + " detections relabelled"
                             + (unmatched > 0
                                 ? " (" + unmatched + " saved cells had no matching detection)" : ""),
-                    "// Labels matched by source image id + centroid; no re-clustering.");
+                    "// Cells matched by source image id + centroid; no re-clustering.");
             data.getHistoryWorkflow().addStep(new DefaultScriptableWorkflowStep(
-                    "QP-CAT: apply saved result (" + applied + " cells)", script));
+                    "QP-CAT: " + actionLabel + " (" + applied + " cells)", script));
         } catch (Exception e) {
-            logger.warn("Failed to record apply-saved-result workflow step: {}", e.getMessage());
+            logger.warn("Failed to record {} workflow step: {}", actionLabel, e.getMessage());
         }
     }
 }

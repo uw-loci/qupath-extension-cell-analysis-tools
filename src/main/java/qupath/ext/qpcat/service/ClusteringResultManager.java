@@ -254,6 +254,128 @@ public class ClusteringResultManager {
     }
 
     /**
+     * Write a NON-DESTRUCTIVE renamed/merged COPY of an existing saved result. The
+     * original {@code sourceName} JSON and its plots are left completely untouched;
+     * a new result named {@code newName} is written carrying the custom
+     * label-&gt;name map (a merge maps two+ labels to one name), a palette recolored
+     * to the new names, and a self-contained copy of the source's plot images.
+     * Backs the "Manage Clusters" rename/merge when a saved result is the target.
+     *
+     * @param nameByLabel cluster label -&gt; new display name (labels absent keep "Cluster N")
+     * @return the sanitized base name actually used on disk
+     * @throws IOException if the name is empty/duplicate or the source cannot be read
+     */
+    public static String saveRenamedCopy(Project<?> project, String sourceName, String newName,
+                                         Map<Integer, String> nameByLabel) throws IOException {
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new IOException("New result name cannot be empty");
+        }
+        SavedClusteringResult saved = loadSavedResult(project, sourceName);  // fresh load; never mutated on disk
+        Path resultsDir = getResultsDirectory(project);
+        String safeName = GeneralTools.stripInvalidFilenameChars(newName.trim());
+        if (safeName.isEmpty()) safeName = "result";
+        if (safeName.equals(sourceName)) {
+            throw new IOException("The copy name must differ from the original ('" + sourceName + "').");
+        }
+        Path targetJson = resultsDir.resolve(safeName + JSON_EXT);
+        if (Files.exists(targetJson)) {
+            throw new IOException("A saved result named '" + safeName + "' already exists.");
+        }
+
+        saved.setName(newName);
+        saved.setTimestamp(LocalDateTime.now().toString());
+        saved.setAutoSaved(false);
+        saved.setClusterNames(nameByLabel);
+        saved.setClusterColors(SavedResultApplier.renamedColors(saved, nameByLabel));
+
+        // Copy the plot images so the new result is self-contained, rewriting each
+        // relative path's "<source>_plots/" prefix to "<copy>_plots/". (The PNG
+        // legends still show the original cluster numbers; regenerate plots to
+        // refresh them -- out of scope for a pure rename.)
+        Map<String, String> plots = saved.getPlotPaths();
+        if (plots != null && !plots.isEmpty()) {
+            Path srcPlots = resultsDir.resolve(sourceName + PLOTS_SUFFIX);
+            Path dstPlots = resultsDir.resolve(safeName + PLOTS_SUFFIX);
+            String srcPrefix = sourceName + PLOTS_SUFFIX + "/";
+            String dstPrefix = safeName + PLOTS_SUFFIX + "/";
+            Map<String, String> rewritten = new LinkedHashMap<>();
+            if (Files.isDirectory(srcPlots)) {
+                if (!Files.exists(dstPlots)) Files.createDirectories(dstPlots);
+                for (Map.Entry<String, String> e : plots.entrySet()) {
+                    String rel = e.getValue();
+                    if (rel == null || !rel.startsWith(srcPrefix)) continue;
+                    String fname = rel.substring(srcPrefix.length());
+                    Path s = srcPlots.resolve(fname);
+                    if (Files.exists(s)) {
+                        Files.copy(s, dstPlots.resolve(fname), StandardCopyOption.REPLACE_EXISTING);
+                        rewritten.put(e.getKey(), dstPrefix + fname);
+                    }
+                }
+            }
+            saved.setPlotPaths(rewritten.isEmpty() ? null : rewritten);
+        }
+
+        writeStringAtomic(targetJson, GSON.toJson(saved));
+        logger.info("Wrote renamed copy '{}' of saved result '{}' ({} custom names)",
+                safeName, sourceName, nameByLabel != null ? nameByLabel.size() : 0);
+        return safeName;
+    }
+
+    /**
+     * Write a labels-only saved result snapshotting the current classifications of
+     * a set of cells (no embedding / markers / plots). Backs the optional "Save as
+     * new result" on the "Manage Clusters" MANUAL path, which exists only when no
+     * saved result was available to target -- so a first re-appliable result can be
+     * bootstrapped from hand-labelled detections.
+     *
+     * @param labels       per-cell integer label (parallel to the cell arrays); &lt; 0 = unclassified
+     * @param names        label -&gt; class name (so the snapshot re-applies the exact names)
+     * @param cellImageIds per-cell source image id
+     * @param cx,cy        per-cell centroid (full-res pixels)
+     * @return the sanitized base name actually used on disk
+     */
+    public static String saveLabelSnapshot(Project<?> project, String name, int[] labels,
+                                           Map<Integer, String> names, String[] cellImageIds,
+                                           double[] cx, double[] cy,
+                                           String scopeKey, String scopeLabel) throws IOException {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IOException("Result name cannot be empty");
+        }
+        Path resultsDir = getResultsDirectory(project);
+        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
+        if (safeName.isEmpty()) safeName = "result";
+        Path file = resultsDir.resolve(safeName + JSON_EXT);
+        if (Files.exists(file)) {
+            throw new IOException("A saved result named '" + safeName + "' already exists.");
+        }
+
+        SavedClusteringResult saved = new SavedClusteringResult();
+        saved.setName(name);
+        saved.setTimestamp(LocalDateTime.now().toString());
+        saved.setAlgorithm("manual");
+        int nClusters = (int) Arrays.stream(labels).filter(l -> l >= 0).distinct().count();
+        saved.setNClusters(nClusters);
+        saved.setNCells(labels.length);
+        saved.setClusterLabels(labels);
+        saved.setClusterNames(names);
+        saved.setCellImageIds(cellImageIds);
+        saved.setCellX(cx);
+        saved.setCellY(cy);
+        saved.setClusterColors(SavedResultApplier.renamedColors(saved, names));
+        saved.setScopeKey(scopeKey);
+        saved.setScopeLabel(scopeLabel);
+        saved.setAutoSaved(false);
+        String extVer = GeneralTools.getPackageVersion(SavedClusteringResult.class);
+        saved.setExtensionVersion(extVer != null ? extVer : "dev");
+        saved.setQupathVersion(GeneralTools.getVersion().toString());
+
+        writeStringAtomic(file, GSON.toJson(saved));
+        logger.info("Wrote manual label snapshot '{}' ({} cells, {} clusters)",
+                safeName, labels.length, nClusters);
+        return safeName;
+    }
+
+    /**
      * Count saved results whose scopeKey matches (null-safe). Used to warn the
      * user when a single image / the project accumulates more than a handful.
      */

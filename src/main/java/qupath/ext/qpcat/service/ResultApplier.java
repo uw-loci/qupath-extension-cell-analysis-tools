@@ -49,37 +49,46 @@ public class ResultApplier {
      * @param namespace class-name namespace, or null for bare "Cluster N"
      */
     public void applyClusterLabels(List<PathObject> detections, int[] labels, String namespace) {
+        applyClusterLabelsNamed(detections, labels, label -> clusterClassName(namespace, label));
+        logger.info("Applied cluster labels to {} detections{}", labels.length,
+                (namespace != null && !namespace.isBlank()) ? " (namespace '" + namespace + "')" : "");
+    }
+
+    /**
+     * Applies cluster labels to detections, deriving each non-noise label's
+     * class name from {@code namer}. Generalizes {@link #applyClusterLabels(List, int[], String)}
+     * (whose namer is "Cluster N"/"ns: Cluster N") to arbitrary per-label names --
+     * used by "Manage Clusters" to rename ("Cluster 3" -&gt; "Tumor") or merge (two
+     * labels -&gt; one name) across a saved result's scope. Noise (label &lt; 0) becomes
+     * unclassified. The canonical palette color is seeded once per distinct NAME
+     * (keyed on the first label that maps to it), so unrenamed clusters keep their
+     * colors and a merged class takes the color of its first constituent; a later
+     * {@link #applyClusterColors} pass restores any user-customized colors.
+     *
+     * @param namer maps a non-negative label to its PathClass name (never null/blank)
+     */
+    public void applyClusterLabelsNamed(List<PathObject> detections, int[] labels,
+                                        java.util.function.IntFunction<String> namer) {
         if (detections.size() != labels.length) {
             throw new IllegalArgumentException(
                     "Detection count (" + detections.size()
                     + ") does not match label count (" + labels.length + ")");
         }
-
-        int applied = 0;
         Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
-
             if (label < 0) {
                 det.setPathClass(PathClass.getNullClass());
-            } else {
-                String name = clusterClassName(namespace, label);
-                PathClass pc = PathClass.fromString(name);
-                // Seed the canonical palette color once per distinct cluster so the
-                // viewer overlay and the QP-CAT plots start from the same colors.
-                // (A user edit later overrides this and is restored from the saved
-                // result; a fresh clustering run intentionally reverts to canonical.)
-                if (seeded.add(name)) {
-                    pc.setColor(ClusterPalette.rgbFor(label));
-                }
-                det.setPathClass(pc);
+                continue;
             }
-            applied++;
+            String name = namer.apply(label);
+            PathClass pc = PathClass.fromString(name);
+            if (seeded.add(name)) {
+                pc.setColor(ClusterPalette.rgbFor(label));
+            }
+            det.setPathClass(pc);
         }
-
-        logger.info("Applied cluster labels to {} detections{}", applied,
-                (namespace != null && !namespace.isBlank()) ? " (namespace '" + namespace + "')" : "");
     }
 
     /**

@@ -470,18 +470,49 @@ Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets` in 
 
 ## 11. Managing Clusters (Rename/Merge)
 
-Organize cluster assignments after clustering.
+Rename clusters to biological names (e.g. "Cluster 3" -> "CD8+ T Cells") or merge several
+clusters into one -- **across every image the clustering run covered**, not just the open
+image.
+
+A rename or merge is a label edit, so it has to reach the same cells the run labelled. The
+dialog is therefore built around a **saved clustering result**: it reads the run's per-cell
+references and relabels the matching cells in all of the images that run touched (matched by
+source image id + centroid, the same mechanism as "Apply saved result"). This is the
+recommended and default path, and it is **non-destructive** -- your edit is written as a new
+copy, and the original saved result is never changed.
+
+### Rename / merge using a saved result (recommended)
 
 1. **Extensions > QP-CAT > Rename or merge cell populations...**
-2. The dialog shows all classifications with cell counts
-3. **To rename:** Select one cluster, click **Rename...**, enter the new name
-   - Example: "Cluster 3" -> "CD8+ T Cells"
-4. **To merge:** Select two or more clusters (Ctrl/Cmd+click), click **Merge Selected**
-   - Enter a name for the merged cluster
-   - All selected clusters are reassigned to the new name
-5. Click **Refresh** if you make changes outside the dialog
+2. Under **Apply changes to**, leave **Use a saved clustering result (recommended)** selected
+   and pick the run from the drop-down (each entry shows its timestamp and scope, e.g.
+   "6 project images").
+3. The list shows each cluster with its cell count (summed across all images in the run).
+4. **To rename:** select one cluster, click **Rename...**, type the new name.
+5. **To merge:** select two or more clusters (Ctrl/Cmd+click), click **Merge Selected**, type
+   the merged name. Merged rows combine and show their constituent cluster numbers in
+   brackets.
+6. Edits are **staged** -- nothing is written until you click **Apply**. (Use **Reset** to
+   discard staged edits.)
+7. Click **Apply**. You are asked to name the **new copy** (default `<result>_renamed`). QP-CAT
+   then writes that copy and relabels the detections across all referenced images; a busy
+   indicator runs while it works, and a summary reports how many cells were relabelled per
+   image. Labels appear live -- no manual "Reload data" needed.
 
-Changes are applied immediately to detection objects.
+The original saved result and its plots are left untouched, so you can always go back to the
+run's original labels.
+
+### If you have no saved result (manual fallback)
+
+The **Choose images manually** option is **disabled whenever a saved result exists** -- the
+saved-result path above is safer and reaches exactly the right cells. It unlocks only when no
+saved-result JSON is found in the project. In that case it relabels detections by their
+current class name across the image scope you choose (Current image / All / Specific images),
+and offers **Save the result as a new saved result** so you can bootstrap a reusable result
+and target it directly next time.
+
+> Tip: if Manage Clusters offers only the manual path, run a clustering analysis first (QP-CAT
+> auto-saves each run), then reopen this dialog -- the saved-result path will be available.
 
 ---
 

@@ -47,6 +47,14 @@ public class SavedClusteringResult {
     // on the "Cluster N" PathClasses (which are the single source of truth).
     private Map<String, Integer> clusterColors;
 
+    // Custom display name per cluster label (integer label -> name). Optional; null
+    // on runs that were never renamed/merged. Populated when a result is renamed or
+    // merged via "Manage Clusters", which writes a NEW copy carrying this map (the
+    // original result is never mutated). A merge maps two+ labels to the same name;
+    // the raw clusterLabels ints are left intact so the mapping is non-destructive.
+    // When a label has no entry here the display name defaults to "Cluster <label>".
+    private Map<Integer, String> clusterNames;
+
     // Spatial analysis
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
@@ -144,6 +152,24 @@ public class SavedClusteringResult {
     // --- Cluster palette ---
     public Map<String, Integer> getClusterColors() { return clusterColors; }
     public void setClusterColors(Map<String, Integer> m) { this.clusterColors = m; }
+
+    // --- Custom cluster names (label -> display name) ---
+    public Map<Integer, String> getClusterNames() { return clusterNames; }
+    public void setClusterNames(Map<Integer, String> m) { this.clusterNames = m; }
+
+    /**
+     * Display name for a cluster label: the custom name if this result was
+     * renamed/merged, else the default "Cluster &lt;label&gt;". Never returns a name
+     * for noise (label &lt; 0); callers map those to unclassified.
+     */
+    public String displayNameForLabel(int label) {
+        if (label < 0) return null;
+        if (clusterNames != null) {
+            String n = clusterNames.get(label);
+            if (n != null && !n.isBlank()) return n;
+        }
+        return "Cluster " + label;
+    }
 
     // --- Spatial ---
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }

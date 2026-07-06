@@ -4,7 +4,31 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.9.5] -- 2026-07-06 -- Remove zero-shot phenotyping
+## [0.9.6] -- 2026-07-06 -- Manage Clusters: project-wide rename/merge
+
+### Changed
+
+- **"Manage Clusters" (rename / merge cell populations) now works across every image
+  the clustering run covered, not just the open image.** Previously a rename or merge
+  only touched the current image's detections, so in a multi-image project the other
+  images silently kept the old labels. The dialog is now built around a **saved
+  clustering result** as the target: it reads the run's per-cell references and relabels
+  the matching cells across all referenced images (matched by source image id + centroid,
+  the same mechanism as "Apply saved result").
+- **Rename / merge is non-destructive.** Applying an edit against a saved result **writes
+  a NEW copy** (you name it) carrying the custom cluster names and a recolored palette;
+  the original saved result and its plots are never modified or deleted. Merges map two or
+  more cluster labels to one name while leaving the underlying label ids intact.
+- The dialog **strongly steers you to the saved-result path**: the "choose images
+  manually" option is disabled whenever any saved result exists, and unlocks only when no
+  saved-result JSON is found (relabels by class name, with an optional "save as a new
+  result" to bootstrap a reusable result). Edits are now staged and applied together via
+  an **Apply** button (with a busy indicator), instead of taking effect one at a time.
+
+### Added
+
+- `SavedClusteringResult` gains an optional `clusterNames` map (cluster label -> display
+  name) so a renamed/merged copy persists its names and reopens correctly.
 
 ### Removed
 
