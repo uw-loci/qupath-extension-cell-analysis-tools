@@ -28,8 +28,7 @@ it is noted for attribution.
 
 | Project / work | License | What it inspired |
 |---|---|---|
-| LazySlide | MIT | Zero-shot phenotyping / feature-extraction integration approach |
-| BiomedCLIP (Microsoft) | MIT | Vision-language similarity for zero-shot phenotyping |
+| LazySlide | MIT | Foundation-model feature-extraction integration approach |
 | OpenIMC (dean-tessone/OpenIMC) | see project repo | Batch figure export + YAML-config batch mode (`openimc workflow`) |
 | CellSighter (Amitay et al. 2023, Nature Communications) | academic reference | Neighbor-spillover features for classification (method, not code) |
 
@@ -38,4 +37,4 @@ it is noted for attribution.
 - No QuPath source code is copied into QP-CAT; the QuPath coupling is a runtime dependency
   plus implementation of the `QuPathExtension` interface.
 - Inline attributions also appear in the relevant source files (e.g. `ClusteringWorkflow.java`,
-  `ZeroShotPhenotypingDialog.java`, `FeatureExtractionDialog.java`, `AutoencoderDialog.java`).
+  `FeatureExtractionDialog.java`, `AutoencoderDialog.java`).

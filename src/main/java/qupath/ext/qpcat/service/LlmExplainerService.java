@@ -117,8 +117,7 @@ public class LlmExplainerService {
      * Wraps the Appose dispatch in
      * {@link ApposeClusteringService#withExtensionClassLoader(java.util.concurrent.Callable)}
      * (TCCL workaround) and never blocks on the FX thread by design --
-     * callers spawn a daemon thread per
-     * {@code ZeroShotPhenotypingDialog.runPhenotyping} pattern.
+     * callers spawn a daemon thread and marshal results back via Platform.runLater.
      *
      * @param req       request parameters
      * @param cancelled soft-cancel flag; checked after the Appose call

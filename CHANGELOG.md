@@ -4,6 +4,23 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.10.0] -- 2026-07-06 -- Remove zero-shot phenotyping
+
+### Removed
+
+- **Zero-shot phenotyping (BiomedCLIP) is removed entirely.** The feature scored an RGB
+  crop of each cell against free-text prompts, but it only made sense for brightfield
+  H&E / IHC and was unreliable-to-meaningless on multiplex fluorescence: the crop was a
+  raw `getRGB()` dump with no display transform applied, the channel labels
+  (DAPI/Cy5/Cy3/FITC...) were never passed to the model, and the model had no way to map
+  a fluorophore to a marker -- yet it still emitted confident-looking labels. Rather than
+  leave that trap in place it has been removed: the "Zero-Shot Phenotyping" menu item,
+  its dialog, the `zero_shot_phenotyping.py` Appose task, the workflow method, the
+  `zsTileSize`/`zsBatchSize`/`zsMinSimilarity` preferences, and all documentation of it
+  are gone. For multiplex fluorescence use **rule-based Phenotyping** (marker-intensity
+  gates) or **clustering** instead. The `open-clip-torch` Python dependency, used only by
+  this feature, is now dead and will be dropped from the pixi environment in a follow-up.
+
 ## [0.9.4] -- 2026-07-05 -- 3D View: configurable background color
 
 > Rides cluster3d-core 0.1.2 (shaded, relocated to `qupath.ext.qpcat.internal.cluster3d`).

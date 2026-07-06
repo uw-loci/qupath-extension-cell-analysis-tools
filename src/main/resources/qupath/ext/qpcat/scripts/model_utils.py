@@ -2,7 +2,7 @@
 Shared utilities for QP-CAT foundation model scripts.
 
 Provides device detection and the foundation model registry.
-Used by extract_features.py and zero_shot_phenotyping.py.
+Used by extract_features.py.
 
 Foundation model integration inspired by LazySlide (MIT License).
 Zheng, Y. et al. Nature Methods (2026). https://doi.org/10.1038/s41592-026-03044-7

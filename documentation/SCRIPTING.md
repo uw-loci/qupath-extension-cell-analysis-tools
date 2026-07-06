@@ -422,7 +422,7 @@ Each row captures method name, graph type, permutation count, cell count, and a 
 
 ## Not in v1 (deferred)
 
-- **Clustering, embedding, phenotyping, autoencoder training/inference, foundation-model extraction, zero-shot phenotyping, LLM cluster explainer.** All still dialog-only.
+- **Clustering, embedding, phenotyping, autoencoder training/inference, foundation-model extraction, LLM cluster explainer.** All still dialog-only.
 - **Reading results back as `AnnData`.** Use the existing AnnData export from the dialog or the script-level **QP-CAT > Export AnnData** menu.
 - **End-to-end "run a stats call from a script without the dialog."** v1 stages the option-map vocabulary; v2 will execute the full pipeline programmatically.
 

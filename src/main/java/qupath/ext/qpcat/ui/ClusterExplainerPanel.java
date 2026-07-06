@@ -58,8 +58,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * static -- the dialog is shared between live and reloaded results and we
  * don't want stale UI state leaking across opens).
  * <p>
- * Follows the {@code ZeroShotPhenotypingDialog.runPhenotyping}
- * async-on-FX pattern: a daemon thread spawns when Run is pressed; results
+ * Async-on-FX pattern: a daemon thread spawns when Run is pressed; results
  * are marshalled back to the FX thread via {@link Platform#runLater}.
  */
 public class ClusterExplainerPanel {

@@ -36,7 +36,6 @@ import qupath.ext.qpcat.ui.PlotAndGateDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
 import qupath.ext.qpcat.ui.SetupEnvironmentDialog;
 import qupath.ext.qpcat.ui.SpinnerUtils;
-import qupath.ext.qpcat.ui.ZeroShotPhenotypingDialog;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.Version;
@@ -189,22 +188,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 Bindings.createBooleanBinding(
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
-
-        // Zero-Shot Phenotyping (BiomedCLIP)
-        MenuItem zeroShotItem = new MenuItem(res.getString("menu.zeroShotPhenotyping"));
-        zeroShotItem.setOnAction(e -> {
-            if (qupath.getImageData() == null) {
-                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
-                return;
-            }
-            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
-                Dialogs.showWarningNotification(EXTENSION_NAME,
-                        "No detections found. Run cell detection first.");
-                return;
-            }
-            new ZeroShotPhenotypingDialog(qupath).show();
-        });
-        zeroShotItem.visibleProperty().bind(environmentReady);
 
         // Find Cellular Neighborhoods (spatial niches over an existing cell-type column)
         MenuItem cellularNeighborhoodsItem = new MenuItem(res.getString("menu.cellularNeighborhoods"));
@@ -473,7 +456,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 sep1,
                 // -- Label cells as types --
                 runPhenotypingItem,
-                zeroShotItem,
                 cellularNeighborhoodsItem,
                 spatialStatsItem,
                 sep2,

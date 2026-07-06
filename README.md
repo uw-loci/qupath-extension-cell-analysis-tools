@@ -4,7 +4,7 @@ Python-powered cell analysis for highly multiplexed imaging data in [QuPath](htt
 
 Warning: This is a continuation of my work integrating other people's software into Qupath, like with Caleb's [CytoMap](https://forum.image.sc/t/there-and-back-again-qupath-cytomap-cluster-analysis/43352) and Alan's [QuBaLab](https://github.com/saramcardle/FS2K/blob/main/Clustering%20using%20Python.ipynb), attempting to make clustering and analysis more accessible on the QuPath side, but many of the features are lightly tested or entirely untested! 
 
-QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based and zero-shot phenotyping, autoencoder-based cell classification, foundation model feature extraction, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
+QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, autoencoder-based cell classification, foundation model feature extraction, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
 ![QP-CAT clustering: the Run Clustering dialog, a multiplexed tissue image, and the resulting UMAP scatter plot colored by cluster](documentation/images/clustering-overview.png)
 
@@ -28,7 +28,6 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 
 - **No-setup install** -- one click downloads and configures the full Python environment for you. No conda, no command line, no environment fights. ~1.5-2.5 GB download, ~2.5 GB on disk
 - **Discover cell types without labels** -- automatic grouping of cells by their marker expression. Pick the algorithm that fits your question: Leiden or KMeans for first-pass discovery, HDBSCAN when you expect rare populations or noise, BANKSY when tissue architecture matters; plus Agglomerative, MiniBatch KMeans, and Gaussian Mixture for special cases
-- **Phenotype with plain-English prompts** -- type "exhausted T cell" or "tumor-associated macrophage" and the model labels matching cells, no training required (zero-shot via [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224), MIT License, Microsoft)
 - **Get a phenotype suggestion for each cluster, in plain English** [Beta] -- after clustering, push one button and the model reads each cluster's top markers, then proposes a cell-type label and a short rationale citing the markers it relied on. Useful when the panel is unfamiliar, when reviewing a student's clusters, or when writing up results. Bring your own key for Anthropic Claude, or point at a local Ollama endpoint for no-API-spend / offline use; the prompt and response are saved to the project audit log every time (LLM cluster explainer; Anthropic + Ollama providers)
 - **Annotate a few cells, classify the rest** *(test feature)* -- label a small subset of cells in QuPath and a variational autoencoder (VAE) extends those labels to every cell in the project. Learns from your marker measurements, from the actual image patch around each cell (optionally with a CellSighter-style cell-mask channel so the network knows which cell is "the" cell), or both combined
 - **Cluster on what cells look like, not just what markers say** -- pretrained vision models turn each tile into a numerical fingerprint of its morphology, so clusters can be driven by tissue appearance in addition to marker intensities. Useful when staining is variable, channels are limited, or morphology carries information your markers miss (H-optimus-0, Virchow, Hibou-B/L, Midnight, DINOv2-Large via [LazySlide](https://doi.org/10.1038/s41592-026-03044-7))
@@ -285,30 +284,6 @@ All models are downloaded on-demand from HuggingFace and cached locally -- they 
 Foundation model features capture rich morphological information from the image tile surrounding each cell. They can be used as input measurements for clustering (instead of or alongside channel intensity measurements), enabling morphology-driven cell grouping.
 
 Feature extraction is powered by [LazySlide](https://doi.org/10.1038/s41592-026-03044-7).
-
-</details>
-
----
-
-<details>
-<summary><h2>Zero-Shot Phenotyping</h2></summary>
-
-**Extensions > QP-CAT > Zero-Shot Phenotyping (BiomedCLIP)...** assigns cell phenotypes using natural language text prompts -- no marker gating rules or training data required.
-
-### How It Works
-
-1. Image tiles are extracted around each cell detection
-2. [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224) (MIT License, Microsoft) computes vision-language similarity between each tile and your text prompts
-3. Each cell is assigned the phenotype whose text prompt best matches its image tile
-4. A confidence score is stored alongside each assignment
-
-### Usage
-
-1. Open the dialog and enter phenotype text prompts, one per line (e.g., "lymphocyte", "tumor cell", "stromal cell", "macrophage")
-2. Click **Run**
-3. Each detection receives a classification matching the highest-scoring prompt
-
-BiomedCLIP is downloaded on-demand from HuggingFace and cached locally. It does not require a HuggingFace auth token.
 
 </details>
 
@@ -585,8 +560,7 @@ QP-CAT manages its own isolated Python environment via [Appose](https://github.c
 | pybanksy | Spatially-aware BANKSY clustering |
 | anndata | AnnData format for interoperability |
 | lazyslide | Foundation model feature extraction |
-| open_clip | BiomedCLIP vision-language model for zero-shot phenotyping |
-| torch | Deep learning runtime for foundation models and BiomedCLIP |
+| torch | Deep learning runtime for the autoencoder classifier + foundation-model features |
 | scikit-image | Auto-thresholding (Triangle method) |
 | scipy | Gamma distribution fitting for auto-thresholds |
 | matplotlib | Plot generation |
@@ -614,7 +588,6 @@ All items are under **Extensions > QP-CAT**:
 | Run Clustering... | Full clustering dialog with all options | Image + detections |
 | Compute Embedding Only... | UMAP/PCA/t-SNE without clustering | Image + detections |
 | Extract Foundation Model Features... | Extract morphological embeddings from vision models | Image + detections |
-| Zero-Shot Phenotyping (BiomedCLIP)... | Text-prompt cell phenotyping via vision-language model | Image + detections |
 | [TEST] Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
 | Run Phenotyping... | Rule-based cell type classification | Image + detections + project |
 | Quick Cluster > Quick Leiden | One-click Leiden clustering with defaults | Image + detections |
@@ -724,7 +697,6 @@ src/main/java/qupath/ext/qpcat/
     PhenotypingDialog.java        Phenotyping rules and gating dialog
     PythonConsoleWindow.java      Real-time Python stderr viewer
     SetupEnvironmentDialog.java   Environment download progress dialog
-    ZeroShotPhenotypingDialog.java  Zero-shot BiomedCLIP phenotyping dialog
 
 src/main/resources/qupath/ext/qpcat/
   pixi.toml                       Python environment specification
@@ -739,7 +711,6 @@ src/main/resources/qupath/ext/qpcat/
     run_phenotyping.py            Phenotyping pipeline
     system_info.py                Python environment info collection
     train_autoencoder.py          VAE autoencoder training pipeline
-    zero_shot_phenotyping.py      BiomedCLIP zero-shot cell phenotyping
 ```
 
 </details>
@@ -758,7 +729,6 @@ Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI
 - [BANKSY](https://github.com/prabhakarlab/Banksy_py) -- Spatially-aware clustering
 - [Harmony](https://github.com/immunogenomics/harmony) -- Batch correction
 - [LazySlide](https://github.com/rendeirolab/LazySlide) -- Foundation model feature extraction
-- [BiomedCLIP](https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224) -- Zero-shot vision-language phenotyping (MIT License, Microsoft)
 
 ---
 

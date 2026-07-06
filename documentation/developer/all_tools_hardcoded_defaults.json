@@ -76,7 +76,7 @@
     },
     "progress_log_interval": {
       "value": 5,
-      "file": "extract_features.py, zero_shot_phenotyping.py",
+      "file": "extract_features.py",
       "description": "Log progress every N batches.",
       "why_not_change": "Display-only constant. Changing it has no effect on results."
     }

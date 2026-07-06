@@ -19,7 +19,6 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 6. [Rule-Based Phenotyping](#6-rule-based-phenotyping)
 7. [Using Auto-Thresholding](#7-using-auto-thresholding)
 8. [Removed features](#8-removed-features)
-9. [Zero-Shot Phenotyping](#9-zero-shot-phenotyping)
 10. [Explaining Clusters with an LLM (Beta)](#10-explaining-clusters-with-an-llm-beta)
 11. [Managing Clusters (Rename/Merge)](#11-managing-clusters-renamemerge)
 12. [Autoencoder Cell Classifier (TEST)](#12-test-autoencoder-cell-classifier)
@@ -315,56 +314,6 @@ request.
 
 ---
 
-## 9. Zero-Shot Phenotyping
-
-Assign cell phenotypes using natural language text prompts and the BiomedCLIP vision-language model -- no marker gating rules or training data required.
-
-**Supported image types:** for each cell, a square **RGB** crop around its centroid is scored
-against your prompts, so this tool is aimed at **brightfield histology -- H&E and IHC/DAB**
-(naturally RGB) images. Fluorescence and multiplex images are rendered to false-color RGB
-before scoring, which is out-of-distribution for BiomedCLIP; results on those are
-**experimental** and should be verified -- for multiplex/fluorescence, prefer
-[Rule-Based Phenotyping](#6-rule-based-phenotyping) or [Clustering](#2-running-clustering).
-Requires cell detections.
-
-### Step-by-step:
-
-1. Open an image with cell detections
-2. **Extensions > QP-CAT > Label cells from a text description (AI / zero-shot)...**
-3. Fill in the prompt table -- one row per phenotype, each with a **Phenotype Name** (the
-   label written onto cells) and a **Text Prompt** (the description scored against each cell).
-   Use **+** / **-** to add and remove rows. The table is pre-filled with examples:
-
-   | Phenotype Name | Text Prompt |
-   |----------------|-------------|
-   | Lymphocyte | lymphocyte |
-   | Tumor Cell | tumor cell |
-   | Stromal Cell | stromal cell |
-   | Macrophage | macrophage |
-
-4. Set the **Min. similarity** (cells below it become `Unknown`), assignment **Mode**
-   (hard label, or also store all per-prompt scores), **Tile size**, and **Batch size**.
-5. Click **Run Zero-Shot Phenotyping**
-6. BiomedCLIP is downloaded on first use and cached locally (MIT License, Microsoft)
-7. Wait for the model to process each cell's image tile against all prompts
-
-### What happens to your data:
-
-- Each detection receives a PathClass classification matching the highest-scoring text prompt
-- A confidence score is stored as a measurement for each detection
-- The QuPath viewer updates to show phenotype colors on cells
-
-### Tips for effective prompts:
-
-- Use concise, descriptive terms that a pathologist would use
-- Be specific: "CD8-positive T lymphocyte" may work better than just "T cell"
-- Add an "other" or "background" prompt as a catch-all for cells that do not match any specific type
-- Experiment with different phrasings -- slight changes in wording can affect results
-
-**Note:** BiomedCLIP does not require a HuggingFace auth token. It is downloaded on-demand and cached locally.
-
----
-
 ## 10. Explaining Clusters with an LLM [Beta]
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
@@ -375,7 +324,6 @@ This feature is marked **[Beta]** for v1. The prompt template, output JSON shape
 
 ### When to use this feature
 
-- **vs Zero-Shot Phenotyping (BiomedCLIP)** -- BiomedCLIP labels *individual cells* from pixel tiles; this labels *clusters* from marker statistics. The two are complementary -- if both run on the same project, comparing them is itself useful: agreement is reassuring, disagreement is a flag to investigate (often a low-quality cluster, a faint marker, or a tissue artifact)
 - **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
 - **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
 - **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 4.5 (`claude-sonnet-4-5`) on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
@@ -474,7 +422,6 @@ Each row of the result table has:
 
 **Cross-checking strategies:**
 - Open the **Marker Rankings** tab and verify the supporting markers are actually top-ranked for that cluster
-- If Zero-Shot Phenotyping has also been run on the project, see if the dominant BiomedCLIP label per cluster agrees with the LLM suggestion (perfect agreement is rare; broad agreement is reassuring)
 - For publication-tier analyses, treat LLM suggestions as **hypotheses to validate** with rule-based gating, not as final labels
 
 ### Reproducibility Caveats

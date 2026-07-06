@@ -98,7 +98,6 @@ try:
     _optional_packages = {
         "torch": "PyTorch",
         "timm": "timm",
-        "open_clip": "open-clip-torch",
     }
     for pkg, display in _optional_packages.items():
         try:
@@ -106,7 +105,7 @@ try:
             ver = getattr(mod, "__version__", "available")
             logger.info("  %s: %s", display, ver)
         except ImportError:
-            logger.info("  %s: NOT INSTALLED (feature extraction/zero-shot unavailable)", display)
+            logger.info("  %s: NOT INSTALLED (feature extraction unavailable)", display)
 
     init_error = None
 

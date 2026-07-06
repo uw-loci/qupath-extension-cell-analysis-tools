@@ -462,26 +462,6 @@ reinstated.
 
 ---
 
-## Zero-Shot Phenotyping
-
-### BiomedCLIP
-
-Biomedical vision-language foundation model for zero-shot image classification, trained on PubMed figure-caption pairs.
-
-**Original paper:**
-> Zhang S, Xu Y, Usuyama N, et al. "BiomedCLIP: a multimodal biomedical foundation model pretrained from fifteen million scientific image-text pairs." *arXiv* 2303.00915 (2023).
-> https://doi.org/10.48550/arXiv.2303.00915
-
-**Model card:**
-> Microsoft. "BiomedCLIP-PubMedBERT_256-vit_base_patch16_224." HuggingFace.
-> https://huggingface.co/microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
-
-**License:** MIT
-
-**Used in:** Zero-shot phenotyping (vision-language cell classification via text prompts)
-
----
-
 ## Spatial Feature Smoothing
 
 ### Graph Convolution for Spatial Smoothing

@@ -17,7 +17,6 @@ public final class QpcatPreferences {
     private static final String CATEGORY_CLUSTERING = "QP-CAT: Run Clustering";
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
     private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";
-    private static final String CATEGORY_ZERO_SHOT = "QP-CAT: Zero-Shot Phenotyping";
     private static final String CATEGORY_LLM = "QP-CAT: [Beta] LLM Cluster Explainer";
     private static final String CATEGORY_GENERAL = "QP-CAT";
 
@@ -267,17 +266,6 @@ public final class QpcatPreferences {
     private static final IntegerProperty fmBatchSize = PathPrefs.createPersistentPreference(
             "qpcat.fm.batchSize", 32);
 
-    // ==================== Zero-Shot Phenotyping ====================
-
-    private static final IntegerProperty zsTileSize = PathPrefs.createPersistentPreference(
-            "qpcat.zs.tileSize", 224);
-
-    private static final IntegerProperty zsBatchSize = PathPrefs.createPersistentPreference(
-            "qpcat.zs.batchSize", 32);
-
-    private static final DoubleProperty zsMinSimilarity = PathPrefs.createPersistentPreference(
-            "qpcat.zs.minSimilarity", 0.1);
-
     // ==================== LLM Cluster Explainer ====================
     // The API key is intentionally NOT persisted (in-memory + env-var fallback only).
 
@@ -520,13 +508,6 @@ public final class QpcatPreferences {
     public static int getFmBatchSize() { return fmBatchSize.get(); }
     public static void setFmBatchSize(int v) { fmBatchSize.set(v); }
 
-    // Zero-shot getters/setters
-    public static int getZsTileSize() { return zsTileSize.get(); }
-    public static void setZsTileSize(int v) { zsTileSize.set(v); }
-    public static int getZsBatchSize() { return zsBatchSize.get(); }
-    public static void setZsBatchSize(int v) { zsBatchSize.set(v); }
-    public static double getZsMinSimilarity() { return zsMinSimilarity.get(); }
-    public static void setZsMinSimilarity(double v) { zsMinSimilarity.set(v); }
 
     // LLM Cluster Explainer getters / setters
     public static String getLlmProvider() { return llmProvider.get(); }
@@ -868,29 +849,6 @@ public final class QpcatPreferences {
                 .category(CATEGORY_FEATURES)
                 .description("Number of tiles per GPU batch for feature extraction (default: 32). "
                         + "Reduce if running out of GPU memory. Range: 1-128.")
-                .build());
-
-        // --- Zero-Shot Phenotyping ---
-
-        items.add(new PropertyItemBuilder<>(zsTileSize, Integer.class)
-                .name("Tile Size")
-                .category(CATEGORY_ZERO_SHOT)
-                .description("Tile size in pixels for BiomedCLIP input (default: 224). "
-                        + "BiomedCLIP expects 224. Only change for different vision-language models.")
-                .build());
-
-        items.add(new PropertyItemBuilder<>(zsBatchSize, Integer.class)
-                .name("Batch Size")
-                .category(CATEGORY_ZERO_SHOT)
-                .description("Number of tiles per GPU batch for zero-shot inference (default: 32). "
-                        + "Reduce if running out of GPU memory. Range: 1-128.")
-                .build());
-
-        items.add(new PropertyItemBuilder<>(zsMinSimilarity, Double.class)
-                .name("Min Similarity Threshold")
-                .category(CATEGORY_ZERO_SHOT)
-                .description("Minimum cosine similarity for phenotype assignment (default: 0.1). "
-                        + "Cells below this threshold are classified as 'Unknown'. Range: 0.0-1.0.")
                 .build());
 
         // --- LLM Cluster Explainer ---

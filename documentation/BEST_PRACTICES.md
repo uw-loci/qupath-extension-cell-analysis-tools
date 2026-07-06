@@ -15,7 +15,7 @@ Recommendations for getting the best results from cell clustering and phenotypin
 6. [Cluster Evaluation](#cluster-evaluation)
 7. [Foundation Model Features vs Channel Measurements (removed in v0.7.0)](#foundation-model-features-vs-channel-measurements)
 8. [Phenotyping Strategy](#phenotyping-strategy)
-9. [Zero-Shot vs Rule-Based Phenotyping](#zero-shot-vs-rule-based-phenotyping)
+9. [Rule-Based Phenotyping](#rule-based-phenotyping)
 10. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
 11. [Spatial Analysis](#spatial-analysis)
 12. [When to Batch-Export Figures](#when-to-batch-export-figures)
@@ -358,17 +358,10 @@ A recommended approach:
 
 ---
 
-## Zero-Shot vs Rule-Based Phenotyping
+## Rule-Based Phenotyping
 
-QP-CAT offers two complementary approaches to cell phenotyping:
-
-### When to Use Zero-Shot Phenotyping (BiomedCLIP)
-
-- **Exploratory analysis** -- quickly get a sense of cell types present without defining rules
-- **H&E or brightfield images** -- where you have no marker channels for gating, only morphology
-- **Limited panel** -- when your marker panel does not cover all cell types you want to identify
-- **Rapid prototyping** -- test phenotype hypotheses before investing time in rule design
-- **Non-expert users** -- natural language prompts are more accessible than marker gating
+Rule-based phenotyping assigns cell types by gating on marker intensities -- you define
+which markers (and thresholds) characterize each phenotype.
 
 ### When to Use Rule-Based Phenotyping
 
@@ -378,27 +371,14 @@ QP-CAT offers two complementary approaches to cell phenotyping:
 - **Fine-grained control** -- rule order, per-marker thresholds, and positive/negative logic give precise control
 - **Large panels (>10 markers)** -- rule-based gating scales well with many markers
 
-### Combining Both Approaches
-
-A recommended workflow:
-
-1. Run **zero-shot phenotyping** first for a quick overview of cell populations
-2. Use the zero-shot results to inform which **markers and thresholds** to use for rule-based gating
-3. Define and refine **phenotype rules** for your final, reproducible analysis
-4. Compare zero-shot and rule-based assignments to identify discrepancies worth investigating
-
-### Zero-Shot Limitations
-
-- Results depend on text prompt phrasing -- small changes can shift assignments
-- The model was trained on biomedical literature and may not perfectly match every tissue type
-- Confidence scores should be checked -- low-confidence assignments may be unreliable
-- Not deterministic across model versions if BiomedCLIP is updated upstream
+For unsupervised discovery when you don't yet know the phenotypes, use **clustering** (and
+optionally the LLM cluster explainer, below) instead.
 
 ---
 
 ## When to Use the LLM Cluster Explainer
 
-The LLM cluster explainer ([HOW_TO_GUIDE section 10](HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)) sits alongside Zero-Shot Phenotyping and Rule-Based Phenotyping as a third, complementary tool. It is the only one of the three that operates on **per-cluster statistics** rather than per-cell data.
+The LLM cluster explainer ([HOW_TO_GUIDE section 10](HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)) sits alongside Rule-Based Phenotyping and clustering as a complementary tool. It operates on **per-cluster statistics** rather than per-cell data.
 
 ### When to Trust the LLM Output
 
@@ -411,7 +391,6 @@ The LLM cluster explainer ([HOW_TO_GUIDE section 10](HOW_TO_GUIDE.md#10-explaini
 - **For publication-tier phenotype labels** -- prefer rule-based gating. Use the LLM suggestion to design your gating strategy; cite the rules, not the LLM, in your methods section
 - **When the suggestion is plausible but the markers don't support it** -- the LLM will produce confident answers for incoherent clusters (when it doesn't refuse outright). If the cluster's heatmap row is uniform or the top markers are biologically unrelated, ignore the suggestion and re-cluster instead
 - **When the LLM emits "(no suggestion)"** -- this is a deliberate refusal, not an error. The rationale column explains why; treat it as a useful flag that the cluster itself probably warrants a closer look before trusting any label
-- **When BiomedCLIP and the LLM explainer disagree** -- this is informative. Often one of: (a) the cluster is morphologically distinct but marker-flat (BiomedCLIP right), (b) the cluster is marker-rich but morphologically mixed (LLM right), (c) the cluster is poorly defined and both are guessing
 
 ### Prompt-Shape Limitations
 
@@ -422,7 +401,8 @@ The LLM sees **marker statistics, not individual cells**. This means:
 - It cannot account for tissue type unless you tell it (v1 does not surface this)
 - It cannot validate the clustering itself -- it accepts the cluster boundaries QP-CAT gave it. If the clustering is bad, the LLM's confident labels for those bad clusters will also be bad
 
-If you need cell-level or morphology-level reasoning, run BiomedCLIP zero-shot phenotyping in parallel and compare.
+The LLM reasons over per-cluster marker statistics -- it cannot supply cell-level or
+morphology-level reasoning.
 
 ### Audit-Log Discipline for Publications
 
@@ -621,7 +601,7 @@ Before you ship a paper:
 - [ ] The YAML file is committed alongside the data + paper draft.
 - [ ] The audit log from the analysis run is committed.
 - [ ] The QP-CAT version is recorded.
-- [ ] Every model used (BiomedCLIP version, LLM model + `prompt_template_version`) is recorded.
+- [ ] Every model used (LLM model + `prompt_template_version`) is recorded.
 - [ ] `random_seed` is explicitly set (not just defaulted).
 - [ ] The figure-export `output_dir` is named after the revision, not overwritten across revisions.
 
@@ -767,7 +747,7 @@ Name rule sets with versions (e.g., "Immune Panel v1", "Immune Panel v2") rather
 - **Measurement mode**: When marker expression patterns distinguish cell types. Fast, works on CPU. Start here.
 - **Tile mode**: When morphology or spatial texture matters (e.g., differentiating activated vs resting T cells by size/shape). Slower, benefits from GPU.
 - **vs Clustering**: Use the autoencoder when you have labeled examples and want to propagate labels. Use clustering when exploring unlabeled data.
-- **vs Zero-shot**: Use the autoencoder when you have labeled training data. Use zero-shot when you have no labels but can describe phenotypes in text.
+- **vs Clustering**: Use the autoencoder when you have labeled training data and want a supervised classifier. Use clustering when you have no labels and want to discover populations.
 
 ### Labeling Strategy
 
