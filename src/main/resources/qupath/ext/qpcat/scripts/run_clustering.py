@@ -521,6 +521,21 @@ _progress(0.45, "Running %s clustering (%d cells)..." % (str(algorithm), n_cells
 
 labels = None
 
+# Clustering seed. The GUI exposes a single "Random seed" that drives both the
+# embedding and the (stochastic) clustering algorithm, so a run is fully
+# reproducible from the UI. We read it from algorithm_params first, then fall
+# back to the embedding seed, then 42, so headless (YAML) and older configs
+# still behave. KMeans / MiniBatchKMeans / GMM / Leiden / BANKSY all consume it.
+clustering_seed = int(
+    algorithm_params.get(
+        "random_state",
+        algorithm_params.get(
+            "random_seed", embedding_params.get("random_state", 42)
+        ),
+    )
+)
+logger.info("Clustering random seed: %d", clustering_seed)
+
 if algorithm == "leiden":
     import scanpy as sc
     import anndata as ad
@@ -530,8 +545,14 @@ if algorithm == "leiden":
     logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
 
     adata = ad.AnnData(X=df_norm.values)
-    sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X")
-    sc.tl.leiden(adata, resolution=resolution, flavor="igraph", n_iterations=-1)
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X", random_state=clustering_seed)
+    sc.tl.leiden(
+        adata,
+        resolution=resolution,
+        flavor="igraph",
+        n_iterations=-1,
+        random_state=clustering_seed,
+    )
     labels = adata.obs["leiden"].astype(int).values
 
 elif algorithm == "kmeans":
@@ -539,7 +560,7 @@ elif algorithm == "kmeans":
 
     n_clusters = algorithm_params.get("n_clusters", 10)
     logger.info("KMeans: n_clusters=%d", n_clusters)
-    km = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
+    km = KMeans(n_clusters=n_clusters, n_init=10, random_state=clustering_seed)
     labels = km.fit_predict(df_norm.values)
 
 elif algorithm == "hdbscan":
@@ -569,7 +590,7 @@ elif algorithm == "minibatchkmeans":
     batch_size = algorithm_params.get("batch_size", pref_minibatch_batch_size)
     logger.info("MiniBatchKMeans: n_clusters=%d, batch_size=%d", n_clusters, batch_size)
     mbkm = MiniBatchKMeans(
-        n_clusters=n_clusters, batch_size=batch_size, random_state=42
+        n_clusters=n_clusters, batch_size=batch_size, random_state=clustering_seed
     )
     labels = mbkm.fit_predict(df_norm.values)
 
@@ -582,7 +603,7 @@ elif algorithm == "gmm":
         "GMM: n_components=%d, covariance_type=%s", n_components, covariance_type
     )
     gmm = GaussianMixture(
-        n_components=n_components, covariance_type=covariance_type, random_state=42
+        n_components=n_components, covariance_type=covariance_type, random_state=clustering_seed
     )
     labels = gmm.fit_predict(df_norm.values)
 
@@ -673,7 +694,7 @@ elif algorithm == "banksy":
             [resolution],
             num_nn=50,
             num_iterations=-1,
-            partition_seed=1234,
+            partition_seed=clustering_seed,
             match_labels=False,
             annotations=None,
             max_labels=None,

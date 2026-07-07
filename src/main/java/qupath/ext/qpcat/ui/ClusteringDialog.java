@@ -21,6 +21,7 @@ import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
@@ -85,6 +86,10 @@ public class ClusteringDialog {
     private Spinner<Integer> tsneIterationsSpinner;
     private Spinner<Double> tsneEarlyExaggerationSpinner;
     private Spinner<Integer> embeddingSeedSpinner;
+    // Refreshes the embedding "Advanced" pane's row visibility (incl. the shared
+    // seed row). Set when the embedding section is built; called by the algorithm
+    // section, which is built afterwards.
+    private Runnable embeddingAdvancedVisibilityUpdater;
     private ComboBox<Algorithm> algorithmCombo;
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
@@ -320,8 +325,10 @@ public class ClusteringDialog {
         SpinnerUtils.commitOnFocusLoss(embeddingSeedSpinner);
         embeddingSeedSpinner.setPrefWidth(110);
         embeddingSeedSpinner.setTooltip(new Tooltip(
-                "Random seed for the embedding (UMAP / t-SNE / PCA). Keep it fixed for\n"
-                + "reproducible layouts; change it to check a layout is stable. Default 42."));
+                "Random seed for the embedding (UMAP / t-SNE / PCA) AND the stochastic\n"
+                + "clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY).\n"
+                + "Keep it fixed for reproducible layouts and cluster assignments; change\n"
+                + "it to check a result is stable. Default 42."));
 
         // Measurement name (prefix NAME1/NAME2). Defaults to the method; change
         // it to keep two embeddings side by side instead of overwriting.
@@ -368,7 +375,7 @@ public class ClusteringDialog {
                 tipLabel("iterations:", tsneIterationsSpinner), tsneIterationsSpinner,
                 tipLabel("early_exag:", tsneEarlyExaggerationSpinner), tsneEarlyExaggerationSpinner);
         tsneAdvRow.setAlignment(Pos.CENTER_LEFT);
-        HBox seedRow = new HBox(10, tipLabel("random seed:", embeddingSeedSpinner), embeddingSeedSpinner);
+        HBox seedRow = new HBox(10, tipLabel("random seed (embedding + clustering):", embeddingSeedSpinner), embeddingSeedSpinner);
         seedRow.setAlignment(Pos.CENTER_LEFT);
         Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
                 + "accepts; they apply to GUI and headless (YAML) runs alike.");
@@ -384,7 +391,12 @@ public class ClusteringDialog {
             EmbeddingMethod m = embeddingCombo.getValue();
             boolean isUmap = m == EmbeddingMethod.UMAP;
             boolean isTsne = m == EmbeddingMethod.TSNE;
-            boolean hasSeed = m != EmbeddingMethod.NONE;
+            // The seed drives the embedding AND stochastic clustering, so show it
+            // whenever either is in play (e.g. KMeans with no embedding). The
+            // algorithm combo is built after this section, so guard for null on
+            // the initial pass.
+            boolean hasSeed = m != EmbeddingMethod.NONE
+                    || (algorithmCombo != null && isStochasticAlgorithm(algorithmCombo.getValue()));
             // Dimensionality is meaningless with no embedding; disable for None.
             embeddingDimCombo.setDisable(m == EmbeddingMethod.NONE);
             setRowShown(umapRow, isUmap);
@@ -397,6 +409,9 @@ public class ClusteringDialog {
             advancedPane.setVisible(anyAdvanced);
             advancedPane.setManaged(anyAdvanced);
         };
+        // Exposed so the (later-built) algorithm section can refresh seed visibility
+        // when a stochastic algorithm is chosen with no embedding.
+        this.embeddingAdvancedVisibilityUpdater = updateVisibility;
         embeddingCombo.setOnAction(e -> {
             updateVisibility.run();
             // Track the method name until the user customizes it.
@@ -428,6 +443,11 @@ public class ClusteringDialog {
         algorithmCombo.setOnAction(e -> {
             updateAlgorithmParams();
             updatePreflight();
+            // Seed row lives in the embedding section; refresh it so a stochastic
+            // algorithm reveals the seed even when no embedding is computed.
+            if (embeddingAdvancedVisibilityUpdater != null) {
+                embeddingAdvancedVisibilityUpdater.run();
+            }
         });
         algorithmCombo.setTooltip(new Tooltip(
                 "Clustering algorithm:\n"
@@ -1471,6 +1491,20 @@ public class ClusteringDialog {
         updatePreflight();
     }
 
+    /**
+     * True for clustering algorithms whose result depends on the random seed
+     * (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). HDBSCAN, Agglomerative
+     * and None are deterministic. Used to decide whether the seed control is
+     * relevant when no embedding is computed.
+     */
+    private static boolean isStochasticAlgorithm(Algorithm algo) {
+        return algo == Algorithm.KMEANS
+                || algo == Algorithm.MINIBATCHKMEANS
+                || algo == Algorithm.GMM
+                || algo == Algorithm.LEIDEN
+                || algo == Algorithm.BANKSY;
+    }
+
     private ClusteringConfig buildConfig() {
         ClusteringConfig config = new ClusteringConfig();
 
@@ -1558,6 +1592,11 @@ public class ClusteringDialog {
         Algorithm algo = algorithmCombo.getValue();
         config.setAlgorithm(algo);
         Map<String, Object> algorithmParams = new HashMap<>();
+        // The single GUI "Random seed" drives clustering as well as the embedding,
+        // so stochastic algorithms (KMeans / MiniBatchKMeans / GMM / Leiden /
+        // BANKSY) are reproducible from the UI. run_clustering.py reads this as
+        // algorithm_params["random_state"], falling back to the embedding seed.
+        algorithmParams.put("random_state", embeddingSeedSpinner.getValue());
 
         switch (algo) {
             case LEIDEN -> {
@@ -2222,7 +2261,8 @@ public class ClusteringDialog {
             javafx.scene.Node scatterNode = (qupath != null && result.getCellRefs() != null)
                     ? GateActionBar.wrap(scatter, result.getCellRefs(), qupath)
                     : scatter;
-            Tab tab = new Tab(embName, wrapWithGuide(scatterNode,
+            Tab tab = new Tab(EmbeddingScatterPanel.prettyEmbeddingName(embName) + " 2D",
+                    wrapWithGuide(scatterNode,
                     "Each point is one cell, colored by cluster assignment. "
                     + "Cells close together have similar marker expression profiles.\n"
                     + "Well-separated groups indicate distinct cell populations. "
@@ -2235,6 +2275,71 @@ public class ClusteringDialog {
                     "embedding-tab-interactive"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
+        }
+
+        // Composition tabs -- simplified per-group cluster breakdowns (counts,
+        // proportions, one pie per group). "By image" always appears when we
+        // have per-cell image references; "By annotation" only when cells were
+        // inside named/classified annotations at run time. A cluster confined
+        // to a single group here is the tell-tale of an image/region batch
+        // effect rather than a shared phenotype.
+        if (result.hasCellRefs()) {
+            java.util.function.IntFunction<Color> clusterColorFn = id -> {
+                Integer rgb = PathClass.fromString("Cluster " + id).getColor();
+                return rgb != null
+                        ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
+                        : EmbeddingScatterPanel.clusterColorFor(id);
+            };
+
+            // Resolve any missing per-cell image names from the project by id
+            // (reloaded results persist names, but be defensive).
+            java.util.Map<String, String> idToName = new java.util.HashMap<>();
+            if (qupath != null && qupath.getProject() != null) {
+                for (ProjectImageEntry<BufferedImage> e : qupath.getProject().getImageList()) {
+                    idToName.put(e.getID(), e.getImageName());
+                }
+            }
+            qupath.ext.qpcat.model.CellRef[] cellRefs = result.getCellRefs();
+            String[] imageGroups = new String[cellRefs.length];
+            for (int i = 0; i < cellRefs.length; i++) {
+                qupath.ext.qpcat.model.CellRef r = cellRefs[i];
+                String name = r != null ? r.getImageName() : null;
+                if ((name == null || name.isBlank()) && r != null) {
+                    name = idToName.get(r.getImageId());
+                }
+                imageGroups[i] = (name == null || name.isBlank()) ? "(unknown image)" : name;
+            }
+            ClusterCompositionPanel byImage = new ClusterCompositionPanel(
+                    result.getClusterLabels(), result.getNClusters(), imageGroups,
+                    "Image", clusterColorFn);
+            Tab imgTab = new Tab("Composition by image", wrapWithGuide(byImage,
+                    "Cluster counts and proportions per source image.\n"
+                    + "Each row of the table is one image; the pie charts show the same "
+                    + "proportions visually. Use the Counts / Row % toggle and Copy table "
+                    + "for the raw numbers.\n"
+                    + "IMPORTANT: if each cluster appears in only ONE image, the clustering "
+                    + "separated cells by image rather than by cell phenotype -- a batch "
+                    + "effect. Biologically meaningful clusters should span multiple images. "
+                    + "Consider per-image differences in staining/exposure, and enable "
+                    + "Batch correction (Harmony) on the next run.",
+                    "composition-by-image-tab"));
+            imgTab.setClosable(false);
+            tabPane.getTabs().add(imgTab);
+
+            if (result.hasCellParentNames()) {
+                ClusterCompositionPanel byAnnotation = new ClusterCompositionPanel(
+                        result.getClusterLabels(), result.getNClusters(),
+                        result.getCellParentNames(), "Annotation", clusterColorFn);
+                Tab annTab = new Tab("Composition by annotation", wrapWithGuide(byAnnotation,
+                        "Cluster counts and proportions per parent annotation (the named / "
+                        + "classified region each cell was inside when clustering ran).\n"
+                        + "Cells outside any annotation are grouped under \"(none)\". Use this "
+                        + "to compare cluster makeup across tissue regions or conditions you "
+                        + "annotated.",
+                        "composition-by-annotation-tab"));
+                annTab.setClosable(false);
+                tabPane.getTabs().add(annTab);
+            }
         }
 
         // 3D View tab -- the shared Apache-2.0 cluster3d-core viewer. It reads the
@@ -2656,6 +2761,51 @@ public class ClusteringDialog {
     }
 
     /**
+     * Resolve the set of project images a saved result was clustered over, so a
+     * reopened result can point the "3D View" tab at the same scope instead of
+     * falling back to the current image only.
+     *
+     * <p>Prefers the exact set of image ids referenced by the saved per-cell
+     * back-references (robust to images added/removed since the run). Falls back
+     * to the scope key: whole project, or a single image id. Returns {@code null}
+     * when nothing can be resolved (older saves with no cell ids and no scope
+     * key), which keeps the prior current-image behavior.</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static List<ProjectImageEntry<BufferedImage>> resolveClusteredScope(
+            Project<?> project, SavedClusteringResult saved) {
+        if (project == null || saved == null) return null;
+        List<ProjectImageEntry<BufferedImage>> all = new ArrayList<>();
+        for (ProjectImageEntry<?> e : project.getImageList()) {
+            all.add((ProjectImageEntry<BufferedImage>) e);
+        }
+        // Preferred: the exact images whose cells were clustered.
+        String[] ids = saved.getCellImageIds();
+        if (ids != null && ids.length > 0) {
+            java.util.Set<String> want = new java.util.LinkedHashSet<>();
+            for (String id : ids) {
+                if (id != null) want.add(id);
+            }
+            List<ProjectImageEntry<BufferedImage>> matched = new ArrayList<>();
+            for (ProjectImageEntry<BufferedImage> e : all) {
+                if (want.contains(e.getID())) matched.add(e);
+            }
+            if (!matched.isEmpty()) return matched;
+        }
+        // Fallback: scope key (whole project, or a single source image id).
+        String key = saved.getScopeKey();
+        if (SavedClusteringResult.PROJECT_SCOPE_KEY.equals(key)) {
+            return all;
+        }
+        if (key != null) {
+            for (ProjectImageEntry<BufferedImage> e : all) {
+                if (key.equals(e.getID())) return List.of(e);
+            }
+        }
+        return null;
+    }
+
+    /**
      * Show a chooser dialog to load and view past clustering results from the project.
      */
     public static void showPastResultsChooser(QuPathGUI qupath) {
@@ -2700,14 +2850,18 @@ public class ClusteringDialog {
             // Resolve plot paths
             ClusteringResult result = ClusteringResultManager.loadResult(project, selectedName);
 
-            // Loaded past result: no clustered-scope context -> null (3D tab reads
-            // the current image only, still without a picker).
+            // Reconstruct the exact set of images this result was clustered over
+            // (from the saved per-cell image ids / scope key) so the "3D View" tab
+            // reads ALL of them, not just the current image. Without this a
+            // reloaded project-wide result showed only the open image's cells.
+            List<ProjectImageEntry<BufferedImage>> clusteredScope =
+                    resolveClusteredScope(project, saved);
             showResultsDialog(qupath.getStage(), qupath, result,
                     saved.getEmbeddingMethod(),
                     saved.getAlgorithm(),
                     saved.getNormalization(),
                     selectedName,
-                    null);
+                    clusteredScope);
 
         } catch (Exception e) {
             logger.error("Failed to load past results", e);
@@ -2946,9 +3100,15 @@ public class ClusteringDialog {
      * Build the collapsible "Cluster colors" panel for the Results dialog. Each
      * cluster gets a ColorPicker seeded from its "Cluster N" PathClass color (the
      * single source of truth). Editing a color updates the class, repaints the
-     * viewer overlay, and live-recolors the interactive scatter; a "Regenerate
-     * static plots" button (and the auto-regenerate preference) rebuilds the
-     * color-dependent PNGs. Returns null when there are no non-noise clusters.
+     * viewer overlay, and live-recolors the interactive scatter. A bulk "Apply
+     * palette..." button recolors every cluster from a named palette, and a
+     * "Regenerate static plots" button (plus the auto-regenerate preference)
+     * rebuilds the color-dependent PNGs. Returns null when there are no non-noise
+     * clusters.
+     *
+     * <p>The swatch grid wraps and sits in a scroll area that grows with the
+     * panel, so a large cluster count (e.g. 25) is not crammed into a fixed
+     * sliver above the buttons.</p>
      */
     private static Node buildClusterColorPanel(ClusteringResult result, QuPathGUI qupath,
             EmbeddingScatterPanel[] scatterHolder, Map<String, ImageView> pngViews,
@@ -2959,11 +3119,14 @@ public class ClusteringDialog {
         for (int v : labels) if (v >= 0) ids.add(v);
         if (ids.isEmpty()) return null;
 
-        FlowPane swatches = new FlowPane(8, 6);
+        FlowPane swatches = new FlowPane(10, 6);
         swatches.setPadding(new Insets(6));
+        swatches.setPrefWrapLength(760);   // wrap into columns instead of one tall column
 
         // Manual + auto regenerate share one closure; regen[0] is filled below.
         final Runnable[] regen = {null};
+        // Keep each cluster's picker so a bulk palette apply can reseed them.
+        final Map<Integer, ColorPicker> pickers = new java.util.LinkedHashMap<>();
 
         Button regenBtn = new Button("Regenerate static plots");
         regenBtn.setTooltip(new Tooltip("Rebuild the static embedding / spatial PNGs "
@@ -2977,6 +3140,7 @@ public class ClusteringDialog {
                     : EmbeddingScatterPanel.clusterColorFor(id);
             ColorPicker picker = new ColorPicker(init);
             picker.setStyle("-fx-color-label-visible: false;");
+            pickers.put(id, picker);
             final int cid = id;
             picker.setOnAction(e -> {
                 applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
@@ -3015,6 +3179,35 @@ public class ClusteringDialog {
                     || result.getPlotPaths().containsKey("spatial_scatter"));
         regenBtn.setDisable(!hasColorPngs);
 
+        // Bulk recolor from a named palette -- the "adjust all at once" control.
+        // After applying, reseed the individual pickers from the (now updated)
+        // PathClasses and live-recolor the scatter so everything stays in sync.
+        Button paletteBtn = new Button("Apply palette...");
+        paletteBtn.setTooltip(new Tooltip("Recolor every cluster at once from a named "
+                + "color palette (viridis, tab20, ...). Individual edits above still work."));
+        paletteBtn.setDisable(qupath == null);
+        paletteBtn.setOnAction(e -> {
+            ClusterColorPaletteDialog.show(qupath);
+            // Reseed pickers from the classes the palette dialog just updated.
+            for (Map.Entry<Integer, ColorPicker> en : pickers.entrySet()) {
+                Integer c = PathClass.fromString("Cluster " + en.getKey()).getColor();
+                if (c != null) {
+                    en.getValue().setValue(Color.rgb(
+                            ColorTools.red(c), ColorTools.green(c), ColorTools.blue(c)));
+                }
+            }
+            if (scatterHolder[0] != null) scatterHolder[0].refreshColors();
+            if (loadedResultName != null && qupath.getProject() != null) {
+                try {
+                    ClusteringResultManager.persistCurrentPalette(
+                            qupath.getProject(), loadedResultName, result.getClusterLabels());
+                } catch (Exception ex) {
+                    logger.warn("Could not persist palette to result '{}': {}",
+                            loadedResultName, ex.getMessage());
+                }
+            }
+        });
+
         Label hint = new Label("Colors are the QuPath \"Cluster N\" class colors -- editing "
                 + "here updates the image overlay and the plots. The palette is saved with "
                 + "this result and restored when you reopen it.");
@@ -3023,13 +3216,20 @@ public class ClusteringDialog {
 
         ScrollPane swScroll = new ScrollPane(swatches);
         swScroll.setFitToWidth(true);
-        swScroll.setPrefViewportHeight(70);
+        // Taller viewport that grows with the pane instead of a fixed 70px sliver.
+        swScroll.setPrefViewportHeight(150);
         swScroll.setStyle("-fx-background-color: transparent;");
+        VBox.setVgrow(swScroll, javafx.scene.layout.Priority.ALWAYS);
 
-        VBox body = new VBox(6, swScroll, new HBox(10, regenBtn), hint);
+        javafx.scene.layout.Region btnSpacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(btnSpacer, javafx.scene.layout.Priority.ALWAYS);
+        HBox buttonRow = new HBox(10, paletteBtn, btnSpacer, regenBtn);
+        buttonRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox body = new VBox(6, swScroll, buttonRow, hint);
         body.setPadding(new Insets(4));
 
-        TitledPane pane = new TitledPane("Cluster colors", body);
+        TitledPane pane = new TitledPane("Cluster colors (" + ids.size() + ")", body);
         pane.setExpanded(false);
         pane.setAnimated(false);
         return pane;
@@ -3049,10 +3249,18 @@ public class ClusteringDialog {
         PathClass.fromString("Cluster " + clusterId).setColor(rgb);
         if (qupath != null) {
             try {
-                // "Cluster N" colors are QuPath-wide, so repaint EVERY open viewer, not
+                // "Cluster N" colors are QuPath-wide, so refresh EVERY open viewer, not
                 // just the active one -- otherwise other open images keep stale colors.
+                // repaintEntireImage() alone reuses the cached detection-overlay tiles
+                // (keyed by class color), so the recolor would not show until the
+                // hierarchy fires a change event that invalidates that cache.
                 for (var viewer : qupath.getAllViewers()) {
-                    if (viewer != null) viewer.repaintEntireImage();
+                    if (viewer == null) continue;
+                    var hierarchy = viewer.getHierarchy();
+                    if (hierarchy != null) {
+                        hierarchy.fireHierarchyChangedEvent(ClusteringDialog.class);
+                    }
+                    viewer.repaintEntireImage();
                 }
             } catch (Exception ignore) { /* no open viewer */ }
         }

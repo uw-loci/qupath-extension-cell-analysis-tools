@@ -3,9 +3,11 @@ package qupath.ext.qpcat.ui;
 import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -13,8 +15,13 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
@@ -36,11 +43,22 @@ import java.util.function.IntFunction;
  * Interactive JavaFX scatter plot of embedding coordinates colored by cluster.
  * Supports zoom (scroll wheel) and pan (middle-click drag).
  * Renders efficiently using Canvas for large cell counts.
+ *
+ * <p>Layout: an interaction hint sits <b>above</b> the plot so it is not missed;
+ * the plot canvas fills the available width and height (resize the window to
+ * scale it); a scrollable side legend lists <b>every</b> cluster with its live
+ * color and cell count; and the clicked-cell crop preview appears in the same
+ * right-hand column rather than below the plot.</p>
  */
 public class EmbeddingScatterPanel extends VBox {
 
-    private static final double CANVAS_W = 600;
-    private static final double CANVAS_H = 500;
+    // Initial + minimum plot canvas size. The canvas is bound to its container,
+    // so these are just the starting/floor dimensions -- the plot grows with the
+    // window (this is how the user "scales the displayed area").
+    private static final double DEFAULT_PLOT_W = 620;
+    private static final double DEFAULT_PLOT_H = 520;
+    private static final double MIN_PLOT_W = 320;
+    private static final double MIN_PLOT_H = 260;
     private static final double MARGIN = 40;
     private static final double POINT_RADIUS = 1.5;
 
@@ -62,12 +80,15 @@ public class EmbeddingScatterPanel extends VBox {
     public static final IntFunction<String> DEFAULT_CLUSTER_NAMES = c -> "Cluster " + c;
 
     private final Canvas canvas;
+    private final Pane plotPane;
     private final Label titleLabel;
     private final Label statsLabel;
     private final Label helpLabel;
     private final Tooltip tooltip;
     private final ImageView previewView;
     private final Label previewLabel;
+    private final VBox legendBox;      // one row per cluster (swatch + label + count)
+    private final Label legendTitle;
 
     private double[][] embedding;
     private int[] labels;
@@ -117,17 +138,25 @@ public class EmbeddingScatterPanel extends VBox {
     };
 
     public EmbeddingScatterPanel() {
-        setSpacing(5);
+        setSpacing(6);
         setPadding(new Insets(5));
 
-        titleLabel = new Label("Embedding Scatter Plot");
-        titleLabel.setFont(Font.font("System", 12));
+        titleLabel = new Label("Embedding 2D scatter");
+        titleLabel.setFont(Font.font("System", 13));
         titleLabel.setStyle("-fx-font-weight: bold;");
 
         statsLabel = new Label("");
         statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
 
-        canvas = new Canvas(CANVAS_W, CANVAS_H);
+        // Interaction hint ABOVE the plot, readable (not the old tiny/faint line).
+        helpLabel = new Label("Scroll to zoom  -  middle-drag to pan  -  click a point to select");
+        helpLabel.setWrapText(true);
+        helpLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #2b6cb0; "
+                + "-fx-background-color: #eef4fb; -fx-padding: 4 8 4 8; "
+                + "-fx-background-radius: 4;");
+        helpLabel.setMaxWidth(Double.MAX_VALUE);
+
+        canvas = new Canvas(DEFAULT_PLOT_W, DEFAULT_PLOT_H);
         tooltip = new Tooltip();
         tooltip.setShowDelay(Duration.millis(200));
         Tooltip.install(canvas, tooltip);
@@ -149,22 +178,52 @@ public class EmbeddingScatterPanel extends VBox {
             }
         });
 
-        helpLabel = new Label("Scroll to zoom, drag to pan");
-        helpLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #999;");
+        // Responsive plot: the canvas fills its container and redraws on resize,
+        // so resizing the window scales the displayed area.
+        plotPane = new Pane(canvas);
+        plotPane.setMinSize(MIN_PLOT_W, MIN_PLOT_H);
+        plotPane.setPrefSize(DEFAULT_PLOT_W, DEFAULT_PLOT_H);
+        plotPane.setStyle("-fx-border-color: #ccc; -fx-border-width: 1;");
+        canvas.widthProperty().bind(plotPane.widthProperty());
+        canvas.heightProperty().bind(plotPane.heightProperty());
+        canvas.widthProperty().addListener((o, a, b) -> redraw());
+        canvas.heightProperty().addListener((o, a, b) -> redraw());
+        HBox.setHgrow(plotPane, Priority.ALWAYS);
 
-        // Crop preview (hidden until navigation is wired + a point is clicked).
+        // --- Right column: scrollable legend (all clusters) + crop preview ---
+        legendTitle = new Label("Clusters");
+        legendTitle.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+        legendBox = new VBox(2);
+        legendBox.setPadding(new Insets(2, 4, 2, 2));
+        ScrollPane legendScroll = new ScrollPane(legendBox);
+        legendScroll.setFitToWidth(true);
+        legendScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        legendScroll.setStyle("-fx-background-color: transparent;");
+        legendScroll.setPrefWidth(150);
+        legendScroll.setMinWidth(120);
+        VBox.setVgrow(legendScroll, Priority.ALWAYS);
+
         previewLabel = new Label();
         previewLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
         previewLabel.setVisible(false);
-        previewLabel.setManaged(false);   // don't reserve layout space when hidden
+        previewLabel.setManaged(false);
         previewView = new ImageView();
         previewView.setPreserveRatio(true);
-        previewView.setFitWidth(160);
-        previewView.setFitHeight(160);
+        previewView.setFitWidth(150);
+        previewView.setFitHeight(150);
         previewView.setVisible(false);
-        previewView.setManaged(false);    // (else it leaves a ~160px gap below the plot)
+        previewView.setManaged(false);
 
-        getChildren().addAll(titleLabel, canvas, statsLabel, helpLabel, previewLabel, previewView);
+        VBox rightColumn = new VBox(6, legendTitle, legendScroll, previewLabel, previewView);
+        rightColumn.setPadding(new Insets(0, 0, 0, 6));
+        rightColumn.setMinWidth(130);
+        rightColumn.setPrefWidth(160);
+
+        HBox plotRow = new HBox(4, plotPane, rightColumn);
+        plotRow.setAlignment(Pos.TOP_LEFT);
+        VBox.setVgrow(plotRow, Priority.ALWAYS);
+
+        getChildren().addAll(titleLabel, statsLabel, helpLabel, plotRow);
     }
 
     /**
@@ -184,8 +243,9 @@ public class EmbeddingScatterPanel extends VBox {
         this.cropService = cropService;
         boolean enabled = cellRefs != null && qupath != null;
         helpLabel.setText(enabled
-                ? "Scroll zoom, middle-drag pan, click a point to center + select its cell"
-                : "Scroll to zoom, drag to pan");
+                ? "Scroll to zoom  -  middle-drag to pan  -  click a point to center + select its cell "
+                  + "(double-click opens its image)"
+                : "Scroll to zoom  -  drag to pan");
     }
 
     /** Crop window size as a multiple of each cell's bounding box. */
@@ -215,7 +275,8 @@ public class EmbeddingScatterPanel extends VBox {
         this.nCells = embedding.length;
         this.embeddingName = embeddingName;
 
-        titleLabel.setText(embeddingName + " Scatter Plot (" + nCells + " cells)");
+        String pretty = prettyEmbeddingName(embeddingName);
+        titleLabel.setText(pretty + " 2D scatter (" + nCells + " cells)");
         statsLabel.setText(nClusters + " clusters");
 
         // Compute data bounds
@@ -239,7 +300,26 @@ public class EmbeddingScatterPanel extends VBox {
         dataMaxY += padY;
 
         resetView();
+        rebuildLegend();
         redraw();
+    }
+
+    /**
+     * Human-friendly display of the embedding method name. Uppercases the known
+     * method ids (which arrive lowercase, e.g. "umap") and leaves custom names
+     * untouched. Used for the title and axis labels so the tab reads "UMAP 2D"
+     * rather than "umap".
+     */
+    static String prettyEmbeddingName(String name) {
+        if (name == null || name.isBlank()) return "Embedding";
+        String n = name.trim();
+        switch (n.toLowerCase()) {
+            case "umap": return "UMAP";
+            case "pca": return "PCA";
+            case "tsne":
+            case "t-sne": return "t-SNE";
+            default: return n;
+        }
     }
 
     /** Reset zoom/pan to show all data. */
@@ -251,14 +331,18 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     private void redraw() {
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        if (cw <= 0 || ch <= 0) return;  // not laid out yet; a resize listener redraws
+
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.setFill(Color.WHITE);
-        gc.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        gc.fillRect(0, 0, cw, ch);
 
         if (embedding == null) return;
 
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
         if (rangeX == 0) rangeX = 1;
@@ -273,8 +357,8 @@ public class EmbeddingScatterPanel extends VBox {
             double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
 
             // Skip points outside canvas
-            if (px < MARGIN - r || px > CANVAS_W - MARGIN + r
-                    || py < MARGIN - r || py > CANVAS_H - MARGIN + r) {
+            if (px < MARGIN - r || px > cw - MARGIN + r
+                    || py < MARGIN - r || py > ch - MARGIN + r) {
                 continue;
             }
 
@@ -291,7 +375,7 @@ public class EmbeddingScatterPanel extends VBox {
         if (selectedIndex >= 0 && selectedIndex < nCells) {
             double sx = MARGIN + ((embedding[selectedIndex][0] - viewMinX) / rangeX) * plotW;
             double sy = MARGIN + ((embedding[selectedIndex][1] - viewMinY) / rangeY) * plotH;
-            if (sx >= MARGIN && sx <= CANVAS_W - MARGIN && sy >= MARGIN && sy <= CANVAS_H - MARGIN) {
+            if (sx >= MARGIN && sx <= cw - MARGIN && sy >= MARGIN && sy <= ch - MARGIN) {
                 gc.setStroke(Color.BLACK);
                 gc.setLineWidth(2);
                 gc.strokeOval(sx - 6, sy - 6, 12, 12);
@@ -363,48 +447,68 @@ public class EmbeddingScatterPanel extends VBox {
         gc.setFill(Color.BLACK);
         gc.setFont(Font.font("System", 10));
 
+        String pretty = prettyEmbeddingName(embeddingName);
+
         // X axis labels
         gc.setTextAlign(TextAlignment.CENTER);
-        gc.fillText(String.format("%.1f", viewMinX), MARGIN, CANVAS_H - MARGIN + 15);
-        gc.fillText(String.format("%.1f", viewMaxX), CANVAS_W - MARGIN, CANVAS_H - MARGIN + 15);
-        gc.fillText(axisLabelX != null ? axisLabelX : (embeddingName + " 1"), CANVAS_W / 2, CANVAS_H - 5);
+        gc.fillText(String.format("%.1f", viewMinX), MARGIN, ch - MARGIN + 15);
+        gc.fillText(String.format("%.1f", viewMaxX), cw - MARGIN, ch - MARGIN + 15);
+        gc.fillText(axisLabelX != null ? axisLabelX : (pretty + " 1"), cw / 2, ch - 5);
 
         // Y axis labels
         gc.setTextAlign(TextAlignment.RIGHT);
         gc.fillText(String.format("%.1f", viewMinY), MARGIN - 5, MARGIN + 10);
-        gc.fillText(String.format("%.1f", viewMaxY), MARGIN - 5, CANVAS_H - MARGIN);
+        gc.fillText(String.format("%.1f", viewMaxY), MARGIN - 5, ch - MARGIN);
 
         gc.save();
-        gc.translate(12, CANVAS_H / 2);
+        gc.translate(12, ch / 2);
         gc.rotate(-90);
         gc.setTextAlign(TextAlignment.CENTER);
-        gc.fillText(axisLabelY != null ? axisLabelY : (embeddingName + " 2"), 0, 0);
+        gc.fillText(axisLabelY != null ? axisLabelY : (pretty + " 2"), 0, 0);
         gc.restore();
-
-        // Legend (compact, right side)
-        drawLegend(gc);
     }
 
-    private void drawLegend(GraphicsContext gc) {
-        double legendX = CANVAS_W - MARGIN - 10;
-        double legendY = MARGIN + 5;
-        int maxShown = Math.min(nClusters, 15);
-
-        gc.setFont(Font.font("System", 9));
-        gc.setTextAlign(TextAlignment.RIGHT);
-
-        for (int i = 0; i < maxShown; i++) {
-            double y = legendY + i * 14;
-            gc.setFill(clusterColor(i));
-            gc.fillRect(legendX - 8, y - 6, 8, 8);
-            gc.setFill(Color.BLACK);
-            gc.fillText(String.valueOf(i), legendX - 12, y + 2);
+    /**
+     * Rebuild the side legend: one row per cluster (colored swatch, "Cluster N",
+     * and its cell count), plus noise if present. The whole list is scrollable so
+     * nothing is cut off regardless of cluster count.
+     */
+    private void rebuildLegend() {
+        legendBox.getChildren().clear();
+        if (labels == null || nClusters <= 0) {
+            legendTitle.setText("Clusters");
+            return;
         }
-        if (nClusters > maxShown) {
-            gc.setFill(Color.gray(0.5));
-            gc.fillText("+" + (nClusters - maxShown) + " more", legendX,
-                    legendY + maxShown * 14 + 2);
+        // Per-cluster counts (index = cluster id; noise counted separately).
+        int[] counts = new int[nClusters];
+        int noise = 0;
+        for (int lab : labels) {
+            if (lab >= 0 && lab < nClusters) counts[lab]++;
+            else noise++;
         }
+        legendTitle.setText("Clusters (" + nClusters + ")");
+        for (int i = 0; i < nClusters; i++) {
+            legendBox.getChildren().add(legendRow(clusterColor(i), "Cluster " + i, counts[i]));
+        }
+        if (noise > 0) {
+            legendBox.getChildren().add(legendRow(Color.LIGHTGRAY, "Noise", noise));
+        }
+    }
+
+    private HBox legendRow(Color color, String name, int count) {
+        Rectangle sw = new Rectangle(11, 11, color);
+        sw.setArcWidth(3);
+        sw.setArcHeight(3);
+        sw.setStroke(Color.gray(0.6));
+        Label lbl = new Label(name);
+        lbl.setStyle("-fx-font-size: 10.5px;");
+        Label cnt = new Label(String.valueOf(count));
+        cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox row = new HBox(5, sw, lbl, spacer, cnt);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     private Color clusterColor(int cluster) {
@@ -423,6 +527,7 @@ public class EmbeddingScatterPanel extends VBox {
 
     /** Re-read cluster colors from their PathClasses and repaint (no data change). */
     public void refreshColors() {
+        rebuildLegend();
         redraw();
     }
 
@@ -467,10 +572,12 @@ public class EmbeddingScatterPanel extends VBox {
     private void onScroll(ScrollEvent e) {
         if (embedding == null) return;
 
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
         double factor = e.getDeltaY() > 0 ? 0.85 : 1.18;
 
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
 
@@ -518,8 +625,10 @@ public class EmbeddingScatterPanel extends VBox {
     private void onMouseDragged(MouseEvent e) {
         if (!dragging || embedding == null) return;
 
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
 
@@ -560,10 +669,11 @@ public class EmbeddingScatterPanel extends VBox {
         if (bestIdx == lastHoverIdx) return;  // no change -> don't churn the tooltip
         lastHoverIdx = bestIdx;
         if (bestIdx >= 0) {
+            String pretty = prettyEmbeddingName(embeddingName);
             tooltip.setText(String.format("Cell %d | Cluster %d\n%s1=%.2f, %s2=%.2f",
                     bestIdx, labels[bestIdx],
-                    embeddingName, embedding[bestIdx][0],
-                    embeddingName, embedding[bestIdx][1]));
+                    pretty, embedding[bestIdx][0],
+                    pretty, embedding[bestIdx][1]));
         } else {
             tooltip.setText("");
         }
@@ -572,8 +682,10 @@ public class EmbeddingScatterPanel extends VBox {
     /** Nearest plotted point to a canvas pixel, within a 5px radius; -1 if none. */
     private int findNearestPointIndex(double mouseX, double mouseY) {
         if (embedding == null) return -1;
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
         if (rangeX == 0) rangeX = 1;
@@ -687,8 +799,8 @@ public class EmbeddingScatterPanel extends VBox {
         helpLabel.setText(on
                 ? "Gate: click to add points, double-click (or right-click) to close, Esc to cancel"
                 : (cellRefs != null && qupath != null
-                    ? "Scroll zoom, middle-drag pan, click a point to center + select its cell"
-                    : "Scroll to zoom, drag to pan"));
+                    ? "Scroll to zoom  -  middle-drag to pan  -  click a point to center + select its cell"
+                    : "Scroll to zoom  -  drag to pan"));
         redraw();
     }
 
@@ -734,8 +846,10 @@ public class EmbeddingScatterPanel extends VBox {
      */
     public void commitCurrentGate(String label) {
         if (gatePolygon.size() < 3) return;
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
         if (rangeX == 0) rangeX = 1;
@@ -780,8 +894,10 @@ public class EmbeddingScatterPanel extends VBox {
             return;
         }
         gateClosed = true;
-        double plotW = CANVAS_W - 2 * MARGIN;
-        double plotH = CANVAS_H - 2 * MARGIN;
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        double plotW = cw - 2 * MARGIN;
+        double plotH = ch - 2 * MARGIN;
         double rangeX = viewMaxX - viewMinX;
         double rangeY = viewMaxY - viewMinY;
         if (rangeX == 0) rangeX = 1;

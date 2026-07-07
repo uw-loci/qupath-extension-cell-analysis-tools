@@ -312,6 +312,51 @@ Caveats:
 - The crop window is a multiple of each cell's bounding box (default 3x), so the cell fills a
   consistent fraction of every thumbnail regardless of objective magnification.
 
+<a name="reading-the-composition-tabs"></a>
+### Reading the composition tabs (and spotting batch effects)
+
+The **Composition by image** and **Composition by annotation** tabs break the
+clustering down by group -- one table row and one pie chart per source image (or
+per parent annotation), showing how many cells of each cluster fall in that
+group. Toggle **Counts / Row %** to read raw counts or per-group percentages, and
+**Copy table (TSV)** to paste the numbers into a spreadsheet.
+
+The single most useful thing these tabs tell you is whether your clustering found
+**cell types or images**. In a healthy project-wide run, a real cell type appears
+in every slide that contains it, so each cluster spans multiple groups and the
+pies share colors. The failure mode to watch for:
+
+- **Each cluster is confined to a single image** (every pie is one solid color;
+  each table row has one non-zero cell). This is a **batch effect**: the
+  clustering separated cells by which image they came from rather than by
+  phenotype. It is not real population structure.
+
+Why it happens: normalization (z-score / min-max / percentile) is computed
+**globally across all cells, not per image**, so any systematic per-image
+difference -- staining intensity, illumination or exposure, a vignetting gradient
+across a slide -- survives into the feature space. When that offset is larger than
+the genuine cell-to-cell variation, it becomes the dominant axis and clusters
+collapse onto image identity. (Even crops taken from a single parent image can
+show this if they sample different parts of an illumination gradient.)
+
+What to do about it:
+
+- Turn on **Batch correction (Harmony)** on the next run (multi-image scope only).
+  It aligns the per-image distributions before clustering.
+- Exclude measurements that differ systematically by image rather than by cell
+  type (compare the per-cluster **Heatmap** for a marker that is ~constant within
+  each image).
+- Make sure every image was stained and imaged under matched conditions; fix the
+  acquisition side where you can.
+
+Note that QP-CAT already guards one specific cause automatically: a measurement
+present on some images but **entirely absent on others** is dropped before
+clustering (you get a warning naming it), because an all-missing column gets
+imputed to a single constant and would itself force per-image clusters. The
+offered measurement list is read from the currently open image, so this mismatch
+is easy to introduce across a heterogeneous project -- the warning tells you which
+images are missing what.
+
 ### Iterate
 
 Clustering is rarely perfect on the first try. A typical workflow:

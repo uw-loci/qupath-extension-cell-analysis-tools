@@ -81,6 +81,25 @@ public class ClusteringResult {
     public void setCellRefs(CellRef[] refs) { this.cellRefs = refs; }
     public boolean hasCellRefs() { return cellRefs != null && cellRefs.length > 0; }
 
+    // Per-cell parent-annotation display name (index-aligned with clusterLabels).
+    // Null for cells whose parent is the image root (i.e. not inside a named /
+    // classified annotation). Used by the "Composition by annotation" results
+    // tab; kept as a parallel array rather than on CellRef so navigation/crop
+    // code that constructs CellRef elsewhere is untouched.
+    private String[] cellParentNames;
+
+    public String[] getCellParentNames() { return cellParentNames; }
+    public void setCellParentNames(String[] names) { this.cellParentNames = names; }
+
+    /** True if at least one cell carries a non-null parent-annotation name. */
+    public boolean hasCellParentNames() {
+        if (cellParentNames == null) return false;
+        for (String n : cellParentNames) {
+            if (n != null) return true;
+        }
+        return false;
+    }
+
     // --- Auto-save bookkeeping ---
     public String getSavedName() { return savedName; }
     public void setSavedName(String savedName) { this.savedName = savedName; }

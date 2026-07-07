@@ -7,6 +7,7 @@ import qupath.lib.objects.PathObject;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,6 +31,7 @@ public class MeasurementExtractor {
         private final String[] measurementNames;
         private final List<PathObject> detections;
         private final List<ImageSegment> imageSegments;
+        private List<String> droppedMeasurements;  // absent on >=1 whole image; excluded
 
         ExtractionResult(double[][] data, String[] measurementNames,
                          List<PathObject> detections, List<ImageSegment> imageSegments) {
@@ -44,6 +46,24 @@ public class MeasurementExtractor {
         public List<PathObject> getDetections() { return detections; }
         public int getNCells() { return data.length; }
         public int getNMeasurements() { return measurementNames.length; }
+
+        void setDroppedMeasurements(List<String> dropped) { this.droppedMeasurements = dropped; }
+
+        /**
+         * Selected measurements that were excluded because they were absent on
+         * one or more entire images (multi-image extraction only). Such columns
+         * would otherwise be filled with NaN for every cell in the missing
+         * image(s) and, after imputation + normalization, act as an
+         * image-discriminating constant -- a batch-effect artifact. Empty when
+         * nothing was dropped.
+         */
+        public List<String> getDroppedMeasurements() {
+            return droppedMeasurements == null ? List.of() : droppedMeasurements;
+        }
+
+        public boolean hasDroppedMeasurements() {
+            return droppedMeasurements != null && !droppedMeasurements.isEmpty();
+        }
 
         /**
          * Returns image segments tracking which detections belong to which image.
@@ -157,14 +177,69 @@ public class MeasurementExtractor {
             throw new IllegalArgumentException("No detection objects found across selected images");
         }
 
-        String[] measurementNames = resolveMeasurementNames(allDetections, measurements);
+        String[] requestedNames = resolveMeasurementNames(allDetections, measurements);
+
+        // Drop measurements that are absent on one or more ENTIRE images. Such a
+        // measurement is present for some images' cells and missing for all cells
+        // of at least one other image; the missing cells would be NaN-imputed to a
+        // single value, turning the column into an image-discriminating constant
+        // (a batch-effect artifact that makes clusters segregate by image rather
+        // than by phenotype). Keeping only measurements present in every image
+        // removes that artifact at the source. The offered list is discovered from
+        // one image (the open one), so cross-image gaps are easy to hit.
+        List<Set<String>> perImageKeys = new ArrayList<>();
+        for (ImageSegment seg : segments) {
+            Set<String> keys = new HashSet<>();
+            for (int i = seg.getStartIndex(); i < seg.getEndIndex(); i++) {
+                keys.addAll(allDetections.get(i).getMeasurements().keySet());
+            }
+            perImageKeys.add(keys);
+        }
+
+        List<String> kept = new ArrayList<>();
+        List<String> dropped = new ArrayList<>();
+        for (String name : requestedNames) {
+            boolean inEveryImage = true;
+            for (Set<String> keys : perImageKeys) {
+                if (!keys.contains(name)) {
+                    inEveryImage = false;
+                    break;
+                }
+            }
+            (inEveryImage ? kept : dropped).add(name);
+        }
+
+        String[] measurementNames;
+        List<String> droppedForReport;
+        if (kept.isEmpty()) {
+            // Pathological: every selected measurement is missing on some image.
+            // Keep them all rather than produce an empty matrix, but warn loudly --
+            // clustering is likely to separate cells by image in this case.
+            logger.warn("All {} selected measurement(s) are absent on at least one "
+                    + "image; keeping them anyway (clusters may separate by image). "
+                    + "Check that every image carries the same measurements.",
+                    requestedNames.length);
+            measurementNames = requestedNames;
+            droppedForReport = List.of();
+        } else {
+            measurementNames = kept.toArray(new String[0]);
+            droppedForReport = dropped;
+            if (!dropped.isEmpty()) {
+                logger.warn("Excluding {} of {} selected measurement(s) not present on "
+                        + "every image (would create image-discriminating constant "
+                        + "columns -> batch effect): {}",
+                        dropped.size(), requestedNames.length, dropped);
+            }
+        }
 
         logger.info("Extracting {} measurements from {} detections across {} images",
                 measurementNames.length, allDetections.size(), segments.size());
 
         double[][] data = extractDataMatrix(allDetections, measurementNames);
 
-        return new ExtractionResult(data, measurementNames, allDetections, segments);
+        ExtractionResult result = new ExtractionResult(data, measurementNames, allDetections, segments);
+        result.setDroppedMeasurements(droppedForReport);
+        return result;
     }
 
     /**
@@ -194,7 +269,7 @@ public class MeasurementExtractor {
 
     private double[][] extractDataMatrix(List<PathObject> detections, String[] measurementNames) {
         double[][] data = new double[detections.size()][measurementNames.length];
-        int skippedNaN = 0;
+        int missing = 0;
 
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
@@ -204,14 +279,19 @@ public class MeasurementExtractor {
                 if (val != null && !Double.isNaN(val.doubleValue())) {
                     data[i][j] = val.doubleValue();
                 } else {
-                    data[i][j] = 0.0;
-                    skippedNaN++;
+                    // Leave missing values as NaN so the Python side imputes them
+                    // per-column median (run_clustering.py / embed_3d.py both do).
+                    // Filling 0.0 here injected a fake extreme value that biased
+                    // normalization and clustering.
+                    data[i][j] = Double.NaN;
+                    missing++;
                 }
             }
         }
 
-        if (skippedNaN > 0) {
-            logger.warn("Replaced {} NaN values with 0.0", skippedNaN);
+        if (missing > 0) {
+            logger.warn("Left {} missing measurement value(s) as NaN for downstream "
+                    + "per-column median imputation", missing);
         }
 
         return data;

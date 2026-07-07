@@ -49,6 +49,17 @@ public class ApposeClusteringService {
      */
     static final String EXPECTED_ENV_VERSION = "0.2.7";
 
+    /**
+     * Per-package minimum versions the code actually depends on, independent of
+     * the coarse env-version string. run_clustering.py imports
+     * {@code from sklearn.cluster import HDBSCAN}, which only exists in
+     * scikit-learn >= 1.3; an older wheel (e.g. from a partially-rebuilt env)
+     * passes the env-version check but fails at the first HDBSCAN run. Assert it
+     * up front with an actionable message. Keep this list to versions we can
+     * state with confidence -- a spurious minimum warning is worse than none.
+     */
+    static final String MIN_SKLEARN_VERSION = "1.3";
+
     private static ApposeClusteringService instance;
 
     private Environment environment;
@@ -291,6 +302,18 @@ public class ApposeClusteringService {
                             "Warning: environment version mismatch (expected "
                             + EXPECTED_ENV_VERSION + ", got " + envVersion
                             + "). Rebuild recommended.");
+                }
+
+                // Per-package minimum-version assertion (independent of the coarse
+                // env-version string). scikit-learn < 1.3 lacks sklearn.cluster.HDBSCAN,
+                // which run_clustering.py imports -- surface it here, not at first run.
+                if (!meetsMinVersion(sklearnVersion, MIN_SKLEARN_VERSION)) {
+                    logger.warn("scikit-learn {} is older than the required {}; HDBSCAN "
+                            + "clustering will fail. Use Utilities > Rebuild Clustering "
+                            + "Environment.", sklearnVersion, MIN_SKLEARN_VERSION);
+                    report(statusCallback,
+                            "Warning: scikit-learn " + sklearnVersion + " < "
+                            + MIN_SKLEARN_VERSION + " (HDBSCAN unavailable). Rebuild recommended.");
                 }
 
                 initialized = true;
@@ -626,6 +649,37 @@ public class ApposeClusteringService {
 
     private static void report(Consumer<String> callback, String message) {
         if (callback != null) callback.accept(message);
+    }
+
+    /**
+     * True if {@code actual} is >= {@code minimum} by dotted numeric comparison
+     * (e.g. "1.3.2" >= "1.3"). Non-numeric / pre-release suffixes on a component
+     * are ignored (only the leading integer of each component is compared). On
+     * any parse failure this returns {@code true} so an unrecognized version
+     * string never blocks or spuriously warns.
+     */
+    static boolean meetsMinVersion(String actual, String minimum) {
+        if (actual == null || minimum == null) return true;
+        try {
+            String[] a = actual.split("\\.");
+            String[] m = minimum.split("\\.");
+            int n = Math.max(a.length, m.length);
+            for (int i = 0; i < n; i++) {
+                int av = i < a.length ? leadingInt(a[i]) : 0;
+                int mv = i < m.length ? leadingInt(m[i]) : 0;
+                if (av != mv) return av > mv;
+            }
+            return true;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /** Leading integer of a version component ("2rc1" -> 2, "" -> 0). */
+    private static int leadingInt(String s) {
+        int i = 0;
+        while (i < s.length() && Character.isDigit(s.charAt(i))) i++;
+        return i == 0 ? 0 : Integer.parseInt(s.substring(0, i));
     }
 
     /** Concatenate the message of a throwable and its entire cause chain.

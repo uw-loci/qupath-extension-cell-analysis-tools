@@ -1072,6 +1072,18 @@ Interactive scatter plot of cells in the chosen embedding (UMAP / PCA / t-SNE), 
 
 Distances within a cluster are meaningful (similar cells cluster together) but absolute distances between clusters should be interpreted cautiously -- embeddings preserve local topology, not global geometry.
 
+### Composition by image tab
+
+A simplified overview of how each cluster is distributed across the source images. A table lists, per image, the cell count in each cluster plus a row total; a **Counts / Row %** toggle switches the cells between raw counts and per-image percentages, and **Copy table (TSV)** puts the numbers on the clipboard for a spreadsheet. Below the table is one pie chart per image, colored with the same cluster palette as every other tab (a shared legend runs across the top). This tab always appears when the result carries per-cell image references, and it survives reload via **View Past Results...**.
+
+Use it as a fast sanity check on a project-wide run. Biologically meaningful clusters should span multiple images -- the same cell type appears in every slide that contains it. **If instead each cluster is confined to a single image (its pie is one solid color and the table has one non-zero cell per row), the clustering separated cells by image rather than by phenotype -- a batch effect**, not a real population structure. Common causes are per-image differences in staining or illumination (z-score / min-max normalization is computed globally, not per image, so a consistent per-image offset survives into the clustering), or clustering on a measurement that only some images carry. Remedies: enable **Batch correction (Harmony)** on the next run, drop measurements that differ systematically by image, or confirm every image was stained and imaged under matched conditions. See [Best Practices -> Reading the composition tabs](BEST_PRACTICES.md#reading-the-composition-tabs).
+
+> Note: a measurement that is present on some images but entirely absent on others is **excluded automatically** before clustering (with a warning naming the dropped measurements), precisely because it would otherwise become an image-discriminating constant column. If you see that warning, it means the offered measurement list -- built from the currently open image -- included a measurement that other images do not have.
+
+### Composition by annotation tab
+
+The same table + pie-chart view as [Composition by image](#composition-by-image-tab), but grouped by each cell's **parent annotation** -- the named or classified region the cell was inside when clustering ran. This tab appears only when the clustered cells actually had annotation parents (cells sitting directly on the image, outside any annotation, are grouped under `(none)`). Use it to compare cluster makeup across the tissue regions or conditions you annotated -- e.g. tumor vs. stroma, or treated vs. control cores -- without leaving the results dialog. Parent-annotation names are captured at run time and persist with the saved result.
+
 ### Representative cells tab
 
 Per-cluster gallery of image crops of the most typical cells. For each cluster, cells are ranked by distance to the cluster center and the closest few are shown as thumbnails, with the **medoid** (the single closest real cell) outlined. Click any thumbnail to open its image and center on the cell. **Save montages** writes one horizontal PNG strip per cluster next to the other result plots (`<project>/qpcat/cluster_results/<name>_plots/cluster_<c>_representatives.png`).

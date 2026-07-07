@@ -38,6 +38,39 @@ public class ClusteringResultManager {
     private ClusteringResultManager() {}
 
     /**
+     * Scalar-only view of a saved result, used for listing / counting without
+     * paying to deserialize the large {@code clusterLabels} / {@code embedding} /
+     * per-cell arrays. Gson skips any JSON field absent from this class, so
+     * parsing a result file into a {@code Meta} allocates none of those arrays --
+     * turning listing from O(results x filesize) allocations into a cheap scan.
+     */
+    private static final class Meta {
+        String timestamp;
+        String algorithm;
+        int nClusters;
+        int nCells;
+        String scopeKey;
+
+        String summary() {
+            return nClusters + " clusters, " + nCells + " cells"
+                    + (algorithm != null ? " (" + algorithm + ")" : "");
+        }
+    }
+
+    /** Parse only the scalar metadata of a saved result (skips the big arrays). */
+    private static Meta loadMeta(Project<?> project, String name) throws IOException {
+        Path file = getResultsDirectory(project).resolve(name + JSON_EXT);
+        if (!Files.exists(file)) {
+            throw new IOException("Result file not found: " + file);
+        }
+        Meta meta = GSON.fromJson(Files.readString(file), Meta.class);
+        if (meta == null) {
+            throw new IOException("Result file is empty or corrupt: " + file);
+        }
+        return meta;
+    }
+
+    /**
      * Get the results directory for a project, creating it if needed.
      */
     public static Path getResultsDirectory(Project<?> project) throws IOException {
@@ -80,11 +113,11 @@ public class ClusteringResultManager {
         Map<String, String> summaries = new LinkedHashMap<>();
         for (String name : listResults(project)) {
             try {
-                SavedClusteringResult saved = loadSavedResult(project, name);
-                String summary = saved.getTimestamp() != null
-                        ? saved.getTimestamp().substring(0, Math.min(16, saved.getTimestamp().length()))
-                        + " - " + saved.getSummary()
-                        : saved.getSummary();
+                Meta meta = loadMeta(project, name);
+                String summary = meta.timestamp != null
+                        ? meta.timestamp.substring(0, Math.min(16, meta.timestamp.length()))
+                        + " - " + meta.summary()
+                        : meta.summary();
                 summaries.put(name, summary);
             } catch (Exception e) {
                 summaries.put(name, "(failed to read)");
@@ -384,8 +417,7 @@ public class ClusteringResultManager {
         int count = 0;
         for (String name : listResults(project)) {
             try {
-                SavedClusteringResult saved = loadSavedResult(project, name);
-                if (Objects.equals(scopeKey, saved.getScopeKey())) count++;
+                if (Objects.equals(scopeKey, loadMeta(project, name).scopeKey)) count++;
             } catch (Exception e) {
                 // ignore unreadable entries for counting
             }

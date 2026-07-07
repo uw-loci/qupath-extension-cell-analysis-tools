@@ -165,10 +165,17 @@ public final class ClusterColorPaletteDialog {
             pc.setColor(colors[i]);
             if (!available.contains(pc)) available.add(pc);
         }
-        // Repaint every open viewer so the recolor shows across all images at once.
+        // Refresh every open viewer so the recolor shows across all images at once.
+        // A bare repaint reuses cached detection-overlay tiles (keyed by class
+        // color), so fire a hierarchy change event first to invalidate that cache.
         try {
             for (var viewer : qupath.getAllViewers()) {
-                if (viewer != null) viewer.repaintEntireImage();
+                if (viewer == null) continue;
+                var hierarchy = viewer.getHierarchy();
+                if (hierarchy != null) {
+                    hierarchy.fireHierarchyChangedEvent(ClusterColorPaletteDialog.class);
+                }
+                viewer.repaintEntireImage();
             }
         } catch (Exception e) {
             logger.debug("Viewer repaint skipped: {}", e.getMessage());

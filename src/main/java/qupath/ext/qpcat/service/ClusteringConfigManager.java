@@ -2,6 +2,7 @@ package qupath.ext.qpcat.service;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
@@ -27,7 +28,14 @@ public class ClusteringConfigManager {
     private static final String CONFIGS_DIR = "qpcat/cluster_configs";
     private static final String JSON_EXT = ".json";
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    // The config's algorithm/embedding params are Map<String,Object>; without a
+    // number strategy Gson deserializes every JSON number as Double, so a reloaded
+    // config turns n_neighbors=50 into 50.0 -- which then reaches the Python side
+    // (or an Integer cast) as a float. LONG_OR_DOUBLE keeps integral values as Long.
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
+            .create();
 
     private ClusteringConfigManager() {}
 

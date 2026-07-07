@@ -37,6 +37,14 @@ public class SavedClusteringResult {
     // Parallel, index-aligned with clusterLabels. Image NAME is not persisted --
     // it is looked up from the project by id at navigate time.
     private String[] cellImageIds;
+    private String[] cellImageNames;    // display names, persisted so the
+                                        // "Composition by image" tab reads
+                                        // friendly labels after reload; older
+                                        // saves lack this (null -> id fallback).
+    private String[] cellParentNames;   // per-cell parent-annotation name;
+                                        // null on older saves and for cells not
+                                        // inside an annotation. Drives the
+                                        // "Composition by annotation" tab.
     private double[] cellX;
     private double[] cellY;
     private double[] cellBboxHalf;
@@ -136,6 +144,12 @@ public class SavedClusteringResult {
     // --- Plot-click navigation + representatives ---
     public String[] getCellImageIds() { return cellImageIds; }
     public void setCellImageIds(String[] v) { this.cellImageIds = v; }
+
+    public String[] getCellImageNames() { return cellImageNames; }
+    public void setCellImageNames(String[] v) { this.cellImageNames = v; }
+
+    public String[] getCellParentNames() { return cellParentNames; }
+    public void setCellParentNames(String[] v) { this.cellParentNames = v; }
 
     public double[] getCellX() { return cellX; }
     public void setCellX(double[] v) { this.cellX = v; }
@@ -249,20 +263,29 @@ public class SavedClusteringResult {
         CellRef[] refs = result.getCellRefs();
         if (refs != null && refs.length > 0) {
             String[] ids = new String[refs.length];
+            String[] names = new String[refs.length];
             double[] xs = new double[refs.length];
             double[] ys = new double[refs.length];
             double[] halves = new double[refs.length];
             for (int i = 0; i < refs.length; i++) {
                 CellRef r = refs[i];
                 ids[i] = r != null ? r.getImageId() : null;
+                names[i] = r != null ? r.getImageName() : null;
                 xs[i] = r != null ? r.getX() : 0;
                 ys[i] = r != null ? r.getY() : 0;
                 halves[i] = r != null ? r.getBboxHalf() : 0;
             }
             saved.setCellImageIds(ids);
+            saved.setCellImageNames(names);
             saved.setCellX(xs);
             saved.setCellY(ys);
             saved.setCellBboxHalf(halves);
+        }
+
+        // Per-cell parent-annotation names for the "Composition by annotation"
+        // tab. Only stored when at least one cell is inside an annotation.
+        if (result.hasCellParentNames()) {
+            saved.setCellParentNames(result.getCellParentNames());
         }
 
         // Spatial stats expansion (v1) -- bundle only set when at least one
@@ -305,12 +328,18 @@ public class SavedClusteringResult {
         if (cellImageIds != null && cellX != null && cellY != null) {
             int n = cellImageIds.length;
             CellRef[] refs = new CellRef[n];
+            boolean haveNames = cellImageNames != null && cellImageNames.length == n;
             for (int i = 0; i < n; i++) {
                 double half = (cellBboxHalf != null && cellBboxHalf.length == n) ? cellBboxHalf[i] : 0;
-                // Image name is not persisted -- looked up by id at navigate time.
-                refs[i] = new CellRef(cellImageIds[i], null, cellX[i], cellY[i], half);
+                // Image name persisted since v0.x; older saves fall back to
+                // an id lookup at navigate time (null name).
+                String name = haveNames ? cellImageNames[i] : null;
+                refs[i] = new CellRef(cellImageIds[i], name, cellX[i], cellY[i], half);
             }
             result.setCellRefs(refs);
+        }
+        if (cellParentNames != null) {
+            result.setCellParentNames(cellParentNames);
         }
 
         // Spatial stats expansion (v1) -- absent on older saves; the

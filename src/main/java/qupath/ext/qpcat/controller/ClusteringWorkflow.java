@@ -321,6 +321,7 @@ public class ClusteringWorkflow {
             if (openEntry != null) fbId = openEntry.getID();
         }
         result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
+        result.setCellParentNames(buildParentNames(extraction));
 
         // Apply results back to QuPath
         reportPhase(progressCallback, "apply", "Applying results to QuPath...");
@@ -415,6 +416,77 @@ public class ClusteringWorkflow {
             }
         }
         return refs;
+    }
+
+    /**
+     * If multi-image extraction excluded any measurements because they were not
+     * present on every image, tell the user (a batch-effect guard, since such
+     * columns would otherwise force clusters to separate by image). No-op in
+     * headless runs (qupath == null) -- the extractor already logs the details.
+     */
+    private void warnDroppedMeasurements(MeasurementExtractor.ExtractionResult extraction) {
+        if (qupath == null || !extraction.hasDroppedMeasurements()) {
+            return;
+        }
+        List<String> dropped = extraction.getDroppedMeasurements();
+        int shown = Math.min(dropped.size(), 8);
+        StringBuilder sb = new StringBuilder();
+        sb.append(dropped.size()).append(" selected measurement(s) were excluded because ")
+                .append("they are not present on every image. Keeping them would make ")
+                .append("clusters separate by image (a batch effect) rather than by cell ")
+                .append("type. Excluded: ");
+        for (int i = 0; i < shown; i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(dropped.get(i));
+        }
+        if (dropped.size() > shown) {
+            sb.append(", ... (").append(dropped.size() - shown).append(" more)");
+        }
+        final String msg = sb.toString();
+        Platform.runLater(() -> Dialogs.showWarningNotification("QPCAT clustering", msg));
+    }
+
+    /**
+     * Per-cell parent-annotation display name, index-aligned with the
+     * extraction's detection order (same order as clusterLabels / cellRefs).
+     * A cell whose parent is the image root (not inside an annotation) gets
+     * null. Feeds the "Composition by annotation" results tab.
+     */
+    private String[] buildParentNames(MeasurementExtractor.ExtractionResult extraction) {
+        List<PathObject> detections = extraction.getDetections();
+        String[] names = new String[detections.size()];
+        for (int i = 0; i < detections.size(); i++) {
+            names[i] = parentGroupName(detections.get(i));
+        }
+        return names;
+    }
+
+    /**
+     * Friendly grouping name for a detection's parent annotation: the
+     * annotation's name if set, else its classification, else a generic
+     * "Annotation" label. Returns null when the parent is the image root
+     * (or absent), i.e. the cell is not inside any annotation.
+     */
+    private static String parentGroupName(PathObject det) {
+        PathObject parent = det.getParent();
+        if (parent == null || parent.isRootObject()) {
+            return null;
+        }
+        String name = parent.getName();
+        if (name != null && !name.isBlank()) {
+            return name;
+        }
+        PathClass pc = parent.getPathClass();
+        if (pc != null) {
+            String pcName = pc.toString();
+            if (pcName != null && !pcName.isBlank()) {
+                return pcName;
+            }
+        }
+        // A parent object with neither name nor class -- only treat named /
+        // classified annotations as meaningful groups; anything else (an
+        // anonymous parent) is left ungrouped.
+        return parent.isAnnotation() ? "Annotation" : null;
     }
 
     /**
@@ -520,6 +592,8 @@ public class ClusteringWorkflow {
                 extraction.getNCells(), extraction.getNMeasurements(),
                 extraction.getImageSegments().size());
 
+        warnDroppedMeasurements(extraction);
+
         // Run clustering via Appose
         report(progressCallback, "Sending data to Python (" + extraction.getNCells()
                 + " cells x " + extraction.getNMeasurements() + " markers from "
@@ -538,6 +612,7 @@ public class ClusteringWorkflow {
         // Per-cell back-references: multi-image segments each carry their own
         // ProjectImageEntry, so no fallback id/name is needed.
         result.setCellRefs(buildCellRefs(extraction, null, null));
+        result.setCellParentNames(buildParentNames(extraction));
 
         // Apply results back per-image and save
         reportPhase(progressCallback, "apply", "Applying results to project images...");
