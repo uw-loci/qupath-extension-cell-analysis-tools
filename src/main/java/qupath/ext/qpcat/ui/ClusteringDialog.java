@@ -3156,13 +3156,25 @@ public class ClusteringDialog {
                     embName, loadedResultName);
         });
 
+        // Rename / merge clusters, scoped to the SAME images this result covers.
+        // Pre-selects the loaded result (or, for a fresh run, its auto-saved name)
+        // in the manage dialog so the relabel reaches exactly the run's images.
+        Button manageBtn = new Button("Rename or merge clusters...");
+        manageBtn.setTooltip(new Tooltip("Rename or merge cluster populations across the same "
+                + "images this result was clustered over."));
+        manageBtn.setDisable(qupath == null);
+        final String presetName = loadedResultName != null
+                ? loadedResultName : result.getSavedName();
+        manageBtn.setOnAction(e -> new ClusterManagementDialog(qupath, presetName).show());
+
         Label hint = new Label("Cluster colors are the QuPath \"Cluster N\" class colors "
                 + "(one source of truth). Editing recolors the image overlay and the plots; "
-                + "the palette is saved with this result and restored when you reopen it.");
+                + "the palette is saved with this result and restored when you reopen it. "
+                + "Rename or merge applies across the same images this result covers.");
         hint.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
         hint.setWrapText(true);
 
-        HBox bar = new HBox(10, new Label("Cluster colors:"), editBtn);
+        HBox bar = new HBox(10, new Label("Cluster colors:"), editBtn, manageBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(3, bar, hint);
         box.setPadding(new Insets(2, 0, 0, 0));

@@ -481,9 +481,11 @@ source image id + centroid, the same mechanism as "Apply saved result"). This is
 recommended and default path, and it is **non-destructive** -- your edit is written as a new
 copy, and the original saved result is never changed.
 
+You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Rename or merge cell populations...**), or from the **Results window** -- the **"Rename or merge clusters..."** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
+
 ### Rename / merge using a saved result (recommended)
 
-1. **Extensions > QP-CAT > Rename or merge cell populations...**
+1. **Extensions > QP-CAT > Rename or merge cell populations...** (or the **"Rename or merge clusters..."** button in the Results window, which pre-selects the current result)
 2. Under **Apply changes to**, leave **Use a saved clustering result (recommended)** selected
    and pick the run from the drop-down (each entry shows its timestamp and scope, e.g.
    "6 project images").

@@ -98,9 +98,25 @@ public class ClusterManagementDialog {
         }
     }
 
+    // When set, the saved-result chooser pre-selects this result on open, so the
+    // rename/merge is scoped to exactly the images that result was clustered over.
+    // Null means "let the user pick" (defaults to the most recent).
+    private final String presetResultName;
+
     public ClusterManagementDialog(QuPathGUI qupath) {
+        this(qupath, null);
+    }
+
+    /**
+     * @param presetResultName saved-result name to pre-select in the chooser
+     *                         (e.g. the result open in the Results window), so the
+     *                         rename/merge targets the same images. Null to let the
+     *                         user choose.
+     */
+    public ClusterManagementDialog(QuPathGUI qupath, String presetResultName) {
         this.qupath = qupath;
         this.owner = qupath.getStage();
+        this.presetResultName = presetResultName;
     }
 
     public void show() {
@@ -169,7 +185,22 @@ public class ClusterManagementDialog {
             savedResultRadio.setSelected(true);
             manualRadio.setDisable(true);
             manualRadio.setText("Choose images manually (only when no saved result exists)");
-            resultChooser.getSelectionModel().selectFirst();
+            // Pre-select the caller's result (Results window) when given, so the
+            // rename/merge is scoped to the same images; else the most recent.
+            ClusteringResultManager.ResultEntry presetEntry = null;
+            if (presetResultName != null) {
+                for (ClusteringResultManager.ResultEntry en : resultChooser.getItems()) {
+                    if (en != null && presetResultName.equals(en.name)) {
+                        presetEntry = en;
+                        break;
+                    }
+                }
+            }
+            if (presetEntry != null) {
+                resultChooser.getSelectionModel().select(presetEntry);
+            } else {
+                resultChooser.getSelectionModel().selectFirst();
+            }
             manualHint.setText("A saved result records exactly which cells the run labelled, "
                     + "so the rename/merge reaches all of them and writes a safe copy. "
                     + "The manual option is disabled while saved results exist.");
