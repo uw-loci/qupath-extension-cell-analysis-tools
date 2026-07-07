@@ -86,11 +86,18 @@ public class ClusteringResultManager {
     /**
      * List available saved result names (without extension), most recent first.
      */
+    // Sidecar written next to each result by ClusteringRunRecord. It is a plain
+    // ClusteringConfig (no cluster/cell data), so it must NOT be listed as a
+    // result -- otherwise "View Past Results" shows a phantom "0 clusters" entry
+    // beside the real one.
+    private static final String CONFIG_SIDECAR_SUFFIX = "_config" + JSON_EXT;
+
     public static List<String> listResults(Project<?> project) throws IOException {
         Path resultsDir = getResultsDirectory(project);
         List<String> names = new ArrayList<>();
         try (Stream<Path> files = Files.list(resultsDir)) {
             files.filter(p -> p.toString().endsWith(JSON_EXT))
+                    .filter(p -> !isConfigSidecar(p, resultsDir))
                     .sorted(Comparator.comparing((Path p) -> {
                         // Sort key must never be null: a single unreadable file would
                         // otherwise NPE the whole listing during comparison.
@@ -103,6 +110,19 @@ public class ClusteringResultManager {
                     });
         }
         return names;
+    }
+
+    /**
+     * True if {@code p} is a ClusteringRunRecord config sidecar
+     * ({@code <name>_config.json}) that sits beside its real result
+     * ({@code <name>.json}). Requiring the sibling to exist avoids hiding a
+     * result a user happened to name ending in "_config".
+     */
+    private static boolean isConfigSidecar(Path p, Path resultsDir) {
+        String filename = p.getFileName().toString();
+        if (!filename.endsWith(CONFIG_SIDECAR_SUFFIX)) return false;
+        String base = filename.substring(0, filename.length() - CONFIG_SIDECAR_SUFFIX.length());
+        return Files.exists(resultsDir.resolve(base + JSON_EXT));
     }
 
     /**
@@ -607,6 +627,11 @@ public class ClusteringResultManager {
             }
             Files.delete(plotsDir);
         }
+
+        // Delete the ClusteringRunRecord sidecars (config JSON + run-info text)
+        // so they do not orphan and reappear as phantom listings.
+        Files.deleteIfExists(resultsDir.resolve(safeName + CONFIG_SIDECAR_SUFFIX));
+        Files.deleteIfExists(resultsDir.resolve(safeName + "_RUN_INFO.txt"));
 
         // Delete JSON
         if (Files.exists(file)) {
