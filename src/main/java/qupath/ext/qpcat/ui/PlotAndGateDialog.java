@@ -21,6 +21,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.fx.dialogs.Dialogs;
@@ -383,7 +384,8 @@ public class PlotAndGateDialog {
                                String colX, String colY, List<double[]> xy,
                                List<CellRef> refs, List<String> classOf) {
         int examined = 0;
-        for (PathObject det : data.getHierarchy().getDetectionObjects()) {
+        for (PathObject det : DetectionSelector.filterToCellsWhenPresent(
+                data.getHierarchy().getDetectionObjects(), imageName)) {
             examined++;
             var ml = det.getMeasurements();
             Number vx = ml.get(colX);

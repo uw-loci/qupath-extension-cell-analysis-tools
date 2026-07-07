@@ -6,6 +6,7 @@ import org.apposed.appose.Service.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
@@ -198,7 +199,8 @@ public class CellularNeighborhoodWorkflow {
             throw new IOException("No image is open");
         }
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
-        List<PathObject> detections = new ArrayList<>(hierarchy.getDetectionObjects());
+        List<PathObject> detections = DetectionSelector.filterToCellsWhenPresent(
+                hierarchy.getDetectionObjects(), "neighborhoods");
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found. Run cell detection first.");
         }
@@ -398,6 +400,7 @@ public class CellularNeighborhoodWorkflow {
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
+            dets = DetectionSelector.filterToCellsWhenPresent(dets, entry.getImageName());
             loaded.add(new LoadedImage(entry, imageData, dets, !isOpenImage));
             logger.info("Loaded {} detections from {}", dets.size(), entry.getImageName());
         }

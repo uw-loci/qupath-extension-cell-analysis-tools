@@ -36,6 +36,27 @@ Clustering quality depends heavily on the quality of upstream cell detection and
 - Check that cells are not over- or under-segmented
 - Ensure that detection measurements are meaningful (not dominated by background)
 
+### Cells vs. detections (and subcellular objects)
+
+QP-CAT analyzes the cell-level objects in your hierarchy. Because QuPath's detection
+list is flattened, it mixes together cells, plain nucleus detections, and any
+subcellular spots nested inside cells. QP-CAT resolves this with one rule at every
+analysis step (clustering, phenotyping, neighborhoods, spatial stats, gating,
+embedding, AnnData export):
+
+- **If any cell objects are present, only cells are analyzed.** Subcellular
+  detections (and any other non-cell detections) are ignored, so they are not
+  clustered or phenotyped as if they were cells. The number ignored is written to
+  the log.
+- **If there are no cell objects** -- e.g. a detection method that emits only
+  nucleus boundaries -- **every detection is analyzed**, since those detections
+  *are* your cells. (This is why QP-CAT does not simply "use cell objects only":
+  that would silently drop every object in a nucleus-only project.)
+
+Projects with no subcellular objects are unaffected. The Autoencoder Classifier is
+the one tool with its own explicit "All detections / Cell objects only" choice, so
+it does not apply this automatic rule.
+
 ### Number of Cells
 
 - **Minimum:** ~200 cells for meaningful clustering

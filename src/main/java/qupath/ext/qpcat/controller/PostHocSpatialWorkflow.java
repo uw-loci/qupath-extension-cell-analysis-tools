@@ -13,6 +13,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.GearyCResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.SavedResultApplier;
@@ -438,6 +439,7 @@ public class PostHocSpatialWorkflow {
         if (sourceAnnos == null) {
             List<PathObject> cells = new ArrayList<>(hierarchy.getDetectionObjects());
             cells.removeAll(excluded);
+            cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
             windows.add(new Window(t.imageName, t.entryId, pxUm, "whole image", null, cells));
         } else if (opts.perAnnotation) {
             int n = 0;
@@ -445,6 +447,7 @@ public class PostHocSpatialWorkflow {
                 n++;
                 List<PathObject> cells = new ArrayList<>(hierarchy.getAllDetectionsForROI(a.getROI()));
                 cells.removeAll(excluded);
+                cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
                 String label = a.getName() != null && !a.getName().isBlank()
                         ? a.getName()
                         : (a.getPathClass() != null ? a.getPathClass().toString() : "region") + " #" + n;
@@ -460,7 +463,7 @@ public class PostHocSpatialWorkflow {
             String label = opts.useSelectedAnnotations ? "selected annotations"
                     : "class: " + opts.windowClass;
             windows.add(new Window(t.imageName, t.entryId, pxUm, label, opts.windowClass,
-                    new ArrayList<>(cells)));
+                    DetectionSelector.filterToCellsWhenPresent(cells, t.imageName)));
         }
         return windows;
     }

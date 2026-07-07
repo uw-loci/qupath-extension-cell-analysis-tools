@@ -14,6 +14,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -259,6 +260,11 @@ public class ClusteringWorkflow {
                 logger.info("Using {} selected detections", detections.size());
             }
         }
+
+        // If cells are present, analyze only cells so subcellular detections
+        // (spots nested inside cells) are not treated as cells. Nucleus-only
+        // pipelines (no cell objects) keep every detection. See DetectionSelector.
+        detections = DetectionSelector.filterToCellsWhenPresent(detections, "clustering");
 
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found. Run cell detection first.");
@@ -576,6 +582,10 @@ public class ClusteringWorkflow {
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
+            // Per-image: drop subcellular / non-cell detections when this image
+            // has cell objects; keep all when it is a nucleus-only image.
+            detections = DetectionSelector.filterToCellsWhenPresent(
+                    detections, entry.getImageName());
 
             groups.add(new MeasurementExtractor.ImageDetectionGroup(
                     entry, imageData, detections));
@@ -914,7 +924,8 @@ public class ClusteringWorkflow {
         }
 
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
-        List<PathObject> detections = new ArrayList<>(hierarchy.getDetectionObjects());
+        List<PathObject> detections = DetectionSelector.filterToCellsWhenPresent(
+                hierarchy.getDetectionObjects(), "embedding");
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found. Run cell detection first.");
         }
@@ -1132,6 +1143,8 @@ public class ClusteringWorkflow {
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
+            detections = DetectionSelector.filterToCellsWhenPresent(
+                    detections, entry.getImageName());
             groups.add(new MeasurementExtractor.ImageDetectionGroup(entry, imageData, detections));
             logger.info("Loaded {} detections from {}", detections.size(), entry.getImageName());
         }
@@ -1210,8 +1223,8 @@ public class ClusteringWorkflow {
             throw new IOException("No image is open");
         }
 
-        List<PathObject> detections = new ArrayList<>(
-                imageData.getHierarchy().getDetectionObjects());
+        List<PathObject> detections = DetectionSelector.filterToCellsWhenPresent(
+                imageData.getHierarchy().getDetectionObjects(), "phenotyping");
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found.");
         }
@@ -1981,8 +1994,8 @@ public class ClusteringWorkflow {
             throw new IOException("No image is open");
         }
 
-        List<PathObject> detections = new ArrayList<>(
-                imageData.getHierarchy().getDetectionObjects());
+        List<PathObject> detections = DetectionSelector.filterToCellsWhenPresent(
+                imageData.getHierarchy().getDetectionObjects(), "AnnData export");
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found.");
         }

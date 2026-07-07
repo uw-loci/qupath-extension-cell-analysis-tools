@@ -8,6 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **Subcellular detections are no longer analyzed as cells.** QuPath's
+  `getDetectionObjects()` returns a flattened set that includes subcellular spots
+  (detections nested inside cells) alongside the cells themselves, so they were
+  being clustered / phenotyped / spatially analyzed as if each spot were a cell.
+  QP-CAT now applies one rule at every analysis gather point: **if any cell
+  objects are present, analyze only cells; if there are no cells (a nucleus-only
+  detection pipeline), analyze every detection.** Subcellular spots effectively
+  always coexist with the cells they sit in, so "cells present -> cells only"
+  removes them reliably, while nucleus-only projects are never emptied (which is
+  why a plain "cells only" filter would be wrong). Applies to Run Clustering
+  (single + multi-image), Quick Cluster, Compute Embedding, Run Phenotyping,
+  Find Cellular Neighborhoods, Spatial statistics, Plot & Gate, and AnnData
+  export. When cells are present the number of ignored non-cell detections is
+  logged. Projects without subcellular objects see no change. The Autoencoder
+  Classifier is unaffected -- it keeps its own explicit "All detections / Cell
+  objects only" choice. New unit-tested helper `DetectionSelector`.
+
 - **"Manage Clusters" (rename / merge cell populations) now works across every image
   the clustering run covered, not just the open image.** Previously a rename or merge
   only touched the current image's detections, so in a multi-image project the other
