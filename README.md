@@ -454,6 +454,7 @@ After clustering, QP-CAT can generate:
 | **Composition by image** | Per-image cluster counts + proportions (table + pie per image); a cluster confined to one image flags an image batch effect |
 | **Composition by annotation** | Per-parent-annotation cluster counts + proportions (shown only when annotations were selected as the clustering input) |
 | **Marker rankings** | Top differentially expressed markers per cluster (Wilcoxon rank-sum test) |
+| **Marker fingerprints** | At-a-glance small-multiples: one bar-chart card per cluster showing its top markers (log2FC bars), palette-colored |
 | **PAGA graph** | Cluster connectivity/trajectory graph |
 | **Dotplot** | Fraction expressing + mean expression per cluster per marker |
 | **Stacked violin** | Expression distributions per cluster |

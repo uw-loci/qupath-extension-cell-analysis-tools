@@ -1102,6 +1102,12 @@ Top differentially expressed markers per cluster from scanpy's Wilcoxon rank-sum
 
 Use the top-scoring markers per cluster as cell-type annotation starting points. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells.
 
+### Marker Fingerprints tab
+
+A glanceable, holistic alternative to the numeric table and the heatmaps: one small **card per cluster**, tinted with that cluster's palette color, showing its top markers as horizontal bars. Bar length is the marker's **log2 fold-change vs. the rest** (falling back to the Wilcoxon score where fold-change is undefined), normalized across all clusters so magnitudes are comparable -- the longest bars are the most cluster-defining markers. The card header shows the cluster's cell count and share of the total. A **Markers per cluster** spinner shows more or fewer bars; hovering a bar reveals its exact log2FC, Wilcoxon score, and adjusted p-value.
+
+This view is built from the same data as the **Marker Rankings** table (which remains the place for the full numbers and copy-paste). It is meant for reading a whole clustering result at a glance -- scan down the cards and each cluster's identity is spelled out in named markers rather than a color gradient. The bars re-color live when you edit cluster colors.
+
 ### Spatial Autocorrelation tab
 
 Per-marker Moran's I -- a global measure of how spatially organised each marker's expression is across the tissue.
@@ -1639,19 +1645,25 @@ interactive embedding scatter, and the representative-cell swatches all read it.
 When clustering applies labels, QP-CAT seeds the canonical `tab20` palette on the
 `Cluster N` classes so the viewer and the plots start out matching.
 
-**Editing colors.** Open the Results window and expand the **"Cluster colors"**
-panel (below the tabs). Each cluster has a color picker; changing it:
+**Editing colors.** Open the Results window and click **"Edit cluster colors..."**
+in the bar below the tabs. This opens a dedicated, **resizable** editor with a
+color picker for every cluster in a grid that fills the window (the docked results
+window has no room for 20+ pickers, so editing lives in its own dialog). Changing a
+picker:
 
 - updates that class's color everywhere (the image overlay repaints immediately),
-- live-recolors the interactive embedding scatter and the representative-cell
-  swatches -- no re-run.
+- live-recolors the interactive embedding scatter, the Marker Fingerprints bars,
+  and the representative-cell swatches -- no re-run.
 
-Because the class color IS the source of truth, "applying colors back to QuPath"
-is automatic: editing here already edits the class.
+The editor also has **"Apply palette..."** (recolor every cluster at once from a
+named palette such as viridis or tab20) and **"Reset to defaults"** (restore the
+canonical tab20 color for every cluster). Because the class color IS the source of
+truth, "applying colors back to QuPath" is automatic: editing here already edits the
+class.
 
 **The static PNG plots.** The saved matplotlib PNGs (the "Embedding Plot" and
 "Spatial Scatter" tabs) bake their colors in and cannot recolor live. Click
-**"Regenerate static plots"** to rebuild the color-dependent PNGs from cached data
+**"Regenerate static plots"** (in the color editor) to rebuild the color-dependent PNGs from cached data
 using the current palette (a fast Python round-trip -- it does NOT re-cluster). To
 have this happen automatically after every color edit, turn on
 **Edit > Preferences > QP-CAT: Run Clustering > "Auto-Regenerate Static Plots on

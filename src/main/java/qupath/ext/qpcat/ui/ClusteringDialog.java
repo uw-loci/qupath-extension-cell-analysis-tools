@@ -2401,6 +2401,26 @@ public class ClusteringDialog {
             tabPane.getTabs().add(tab);
         }
 
+        // Marker fingerprints tab -- glanceable small-multiples of each cluster's
+        // top markers (one bar-chart card per cluster), built from the same
+        // marker-rankings payload as the text table below. Placed first so the
+        // at-a-glance view leads and the raw numbers follow.
+        if (result.hasMarkerRankings()) {
+            MarkerFingerprintPanel fingerprints = new MarkerFingerprintPanel(
+                    result.getMarkerRankingsJson(), result.getClusterLabels(),
+                    result.getNClusters(), EmbeddingScatterPanel::clusterColorFor);
+            Tab fpTab = new Tab("Marker Fingerprints", wrapWithGuide(fingerprints,
+                    "A quick, holistic read of what defines each cluster: one card per "
+                    + "cluster showing its top markers as bars (log2 fold-change vs. the "
+                    + "rest), colored with the cluster palette.\n"
+                    + "Longer bar = more cluster-defining. Use the spinner to show more or "
+                    + "fewer markers per cluster; hover a bar for its Wilcoxon score and "
+                    + "adjusted p-value. The Marker Rankings tab has the full numeric table.",
+                    "marker-fingerprints-tab"));
+            fpTab.setClosable(false);
+            tabPane.getTabs().add(fpTab);
+        }
+
         // Marker rankings tab
         if (result.hasMarkerRankings()) {
             TextArea rankingsText = new TextArea(formatMarkerRankings(result));
@@ -3125,20 +3145,68 @@ public class ClusteringDialog {
         for (int v : labels) if (v >= 0) ids.add(v);
         if (ids.isEmpty()) return null;
 
-        FlowPane swatches = new FlowPane(10, 6);
-        swatches.setPadding(new Insets(6));
-        swatches.setPrefWrapLength(760);   // wrap into columns instead of one tall column
+        // A single compact bar. The docked results window has no vertical room for
+        // 20+ color pickers (the tab area takes it all), so editing happens in a
+        // dedicated resizable dialog instead of a thin scroll sliver.
+        Button editBtn = new Button("Edit cluster colors (" + ids.size() + ")...");
+        editBtn.setOnAction(e -> {
+            javafx.stage.Window w = editBtn.getScene() != null ? editBtn.getScene().getWindow() : null;
+            Stage owner = (w instanceof Stage) ? (Stage) w : (qupath != null ? qupath.getStage() : null);
+            showClusterColorEditor(owner, result, qupath, scatterHolder, pngViews,
+                    embName, loadedResultName);
+        });
 
-        // Manual + auto regenerate share one closure; regen[0] is filled below.
-        final Runnable[] regen = {null};
-        // Keep each cluster's picker so a bulk palette apply can reseed them.
+        Label hint = new Label("Cluster colors are the QuPath \"Cluster N\" class colors "
+                + "(one source of truth). Editing recolors the image overlay and the plots; "
+                + "the palette is saved with this result and restored when you reopen it.");
+        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        hint.setWrapText(true);
+
+        HBox bar = new HBox(10, new Label("Cluster colors:"), editBtn);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(3, bar, hint);
+        box.setPadding(new Insets(2, 0, 0, 0));
+        return box;
+    }
+
+    /**
+     * Roomy, resizable editor for per-cluster colors. Shows every cluster's
+     * ColorPicker in a wrapping grid that fills the window (resize for more), plus
+     * bulk "Apply palette...", "Reset to defaults", and "Regenerate static plots".
+     * Editing a color updates the "Cluster N" PathClass (the source of truth),
+     * live-recolors the viewer + interactive scatter, and (for a reopened saved
+     * result) persists the palette to the result JSON.
+     */
+    private static void showClusterColorEditor(Stage owner, ClusteringResult result,
+            QuPathGUI qupath, EmbeddingScatterPanel[] scatterHolder,
+            Map<String, ImageView> pngViews, String embName, String loadedResultName) {
+        int[] labels = result.getClusterLabels();
+        if (labels == null) return;
+        java.util.TreeSet<Integer> ids = new java.util.TreeSet<>();
+        for (int v : labels) if (v >= 0) ids.add(v);
+        if (ids.isEmpty()) return;
+
         final Map<Integer, ColorPicker> pickers = new java.util.LinkedHashMap<>();
+
+        Runnable persist = () -> {
+            if (loadedResultName != null && qupath != null && qupath.getProject() != null) {
+                try {
+                    ClusteringResultManager.persistCurrentPalette(
+                            qupath.getProject(), loadedResultName, result.getClusterLabels());
+                } catch (Exception ex) {
+                    logger.warn("Could not persist palette to result '{}': {}",
+                            loadedResultName, ex.getMessage());
+                }
+            }
+        };
 
         Button regenBtn = new Button("Regenerate static plots");
         regenBtn.setTooltip(new Tooltip("Rebuild the static embedding / spatial PNGs "
                 + "using the current cluster colors. The interactive plots already "
                 + "recolor instantly; this refreshes the saved PNG images too."));
 
+        FlowPane swatches = new FlowPane(14, 10);
+        swatches.setPadding(new Insets(10));
         for (int id : ids) {
             Integer rgb = PathClass.fromString("Cluster " + id).getColor();
             Color init = rgb != null
@@ -3150,51 +3218,28 @@ public class ClusteringDialog {
             final int cid = id;
             picker.setOnAction(e -> {
                 applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
-                // If this is a reopened saved result, persist the edit into its JSON
-                // so the palette on disk stays consistent with the classes + PNGs.
-                if (loadedResultName != null && qupath != null && qupath.getProject() != null) {
-                    try {
-                        ClusteringResultManager.persistCurrentPalette(
-                                qupath.getProject(), loadedResultName, result.getClusterLabels());
-                    } catch (Exception ex) {
-                        logger.warn("Could not persist palette to result '{}': {}",
-                                loadedResultName, ex.getMessage());
-                    }
-                }
-                // Auto-regenerate only when opted in AND no regeneration is already
-                // running (regenBtn is disabled while one is in flight -- a simple
-                // debounce for rapid successive color edits).
-                if (QpcatPreferences.isClusterAutoRegeneratePlots()
-                        && regen[0] != null && !regenBtn.isDisabled()) {
-                    regen[0].run();
+                persist.run();
+                if (QpcatPreferences.isClusterAutoRegeneratePlots() && !regenBtn.isDisabled()) {
+                    regenerateStaticPlots(result, qupath, pngViews, embName,
+                            loadedResultName, regenBtn, false);
                 }
             });
-            HBox row = new HBox(4, picker, new Label("Cluster " + id));
+            HBox row = new HBox(5, picker, new Label("Cluster " + id));
             row.setAlignment(Pos.CENTER_LEFT);
+            row.setMinWidth(150);
             swatches.getChildren().add(row);
         }
-
-        regen[0] = () -> regenerateStaticPlots(result, qupath, pngViews, embName,
-                loadedResultName, regenBtn, false);
-        regenBtn.setOnAction(e -> regenerateStaticPlots(result, qupath, pngViews, embName,
-                loadedResultName, regenBtn, true));
 
         // Nothing to regenerate unless the color-dependent PNGs were saved.
         boolean hasColorPngs = result.getPlotPaths() != null
                 && (result.getPlotPaths().containsKey("embedding")
                     || result.getPlotPaths().containsKey("spatial_scatter"));
         regenBtn.setDisable(!hasColorPngs);
+        regenBtn.setOnAction(e -> regenerateStaticPlots(result, qupath, pngViews, embName,
+                loadedResultName, regenBtn, true));
 
-        // Bulk recolor from a named palette -- the "adjust all at once" control.
-        // After applying, reseed the individual pickers from the (now updated)
-        // PathClasses and live-recolor the scatter so everything stays in sync.
-        Button paletteBtn = new Button("Apply palette...");
-        paletteBtn.setTooltip(new Tooltip("Recolor every cluster at once from a named "
-                + "color palette (viridis, tab20, ...). Individual edits above still work."));
-        paletteBtn.setDisable(qupath == null);
-        paletteBtn.setOnAction(e -> {
-            ClusterColorPaletteDialog.show(qupath);
-            // Reseed pickers from the classes the palette dialog just updated.
+        // Reseed every picker from the live PathClasses (after a bulk change).
+        Runnable reseed = () -> {
             for (Map.Entry<Integer, ColorPicker> en : pickers.entrySet()) {
                 Integer c = PathClass.fromString("Cluster " + en.getKey()).getColor();
                 if (c != null) {
@@ -3203,42 +3248,56 @@ public class ClusteringDialog {
                 }
             }
             if (scatterHolder[0] != null) scatterHolder[0].refreshColors();
-            if (loadedResultName != null && qupath.getProject() != null) {
-                try {
-                    ClusteringResultManager.persistCurrentPalette(
-                            qupath.getProject(), loadedResultName, result.getClusterLabels());
-                } catch (Exception ex) {
-                    logger.warn("Could not persist palette to result '{}': {}",
-                            loadedResultName, ex.getMessage());
-                }
-            }
+            persist.run();
+        };
+
+        Button paletteBtn = new Button("Apply palette...");
+        paletteBtn.setTooltip(new Tooltip("Recolor every cluster at once from a named "
+                + "color palette (viridis, tab20, ...)."));
+        paletteBtn.setDisable(qupath == null);
+        paletteBtn.setOnAction(e -> {
+            ClusterColorPaletteDialog.show(qupath);
+            reseed.run();
         });
 
-        Label hint = new Label("Colors are the QuPath \"Cluster N\" class colors -- editing "
-                + "here updates the image overlay and the plots. The palette is saved with "
-                + "this result and restored when you reopen it.");
-        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        Button resetBtn = new Button("Reset to defaults");
+        resetBtn.setTooltip(new Tooltip("Restore the default (tab20) palette color for every cluster."));
+        resetBtn.setOnAction(e -> {
+            for (int id : ids) {
+                int def = EmbeddingScatterPanel.defaultClusterRgb(id);
+                applyClusterColor(id, Color.rgb(
+                        ColorTools.red(def), ColorTools.green(def), ColorTools.blue(def)),
+                        qupath, scatterHolder);
+            }
+            reseed.run();
+        });
+
+        Label hint = new Label("Each cluster's color is its QuPath \"Cluster N\" class color -- "
+                + "editing here recolors the image overlay and every plot. The palette is saved "
+                + "with this result and restored when you reopen it.");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
         hint.setWrapText(true);
 
-        ScrollPane swScroll = new ScrollPane(swatches);
-        swScroll.setFitToWidth(true);
-        // Taller viewport that grows with the pane instead of a fixed 70px sliver.
-        swScroll.setPrefViewportHeight(150);
-        swScroll.setStyle("-fx-background-color: transparent;");
-        VBox.setVgrow(swScroll, javafx.scene.layout.Priority.ALWAYS);
+        ScrollPane scroll = new ScrollPane(swatches);
+        scroll.setFitToWidth(true);
+        VBox.setVgrow(scroll, javafx.scene.layout.Priority.ALWAYS);
 
-        javafx.scene.layout.Region btnSpacer = new javafx.scene.layout.Region();
-        HBox.setHgrow(btnSpacer, javafx.scene.layout.Priority.ALWAYS);
-        HBox buttonRow = new HBox(10, paletteBtn, btnSpacer, regenBtn);
-        buttonRow.setAlignment(Pos.CENTER_LEFT);
+        Button closeBtn = new Button("Close");
+        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
+        HBox buttons = new HBox(10, paletteBtn, resetBtn, regenBtn, spacer, closeBtn);
+        buttons.setAlignment(Pos.CENTER_LEFT);
 
-        VBox body = new VBox(6, swScroll, buttonRow, hint);
-        body.setPadding(new Insets(4));
+        VBox content = new VBox(8, hint, scroll, buttons);
+        content.setPadding(new Insets(12));
 
-        TitledPane pane = new TitledPane("Cluster colors (" + ids.size() + ")", body);
-        pane.setExpanded(false);
-        pane.setAnimated(false);
-        return pane;
+        Stage dlg = new Stage();
+        if (owner != null) dlg.initOwner(owner);
+        dlg.setTitle("Cluster colors (" + ids.size() + ")");
+        dlg.setScene(new Scene(content, 640, 560));
+        dlg.setResizable(true);
+        closeBtn.setOnAction(e -> dlg.close());
+        dlg.show();
     }
 
     /**
