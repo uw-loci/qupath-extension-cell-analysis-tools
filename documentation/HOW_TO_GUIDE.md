@@ -1006,14 +1006,19 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 
 The Dimensionality Reduction section shows only the controls for the **currently
 selected** method. n_neighbors and min_dist sit beside the Method dropdown;
-`metric` and the random seed are under the section's **Advanced** expander.
+`metric` and the random seed are under the section's **Advanced** expander. The
+**random seed drives both the embedding and the clustering** -- fix it and a whole
+run (layout *and* cluster assignments) reproduces exactly. The seed control stays
+available even with **None** embedding when the chosen algorithm is stochastic
+(KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY), and is honored by the YAML
+headless batch (`random_seed`) too.
 
 | Parameter | Range | Default | Description |
 |-----------|-------|---------|-------------|
 | n_neighbors | 2-200 | 15 | Local neighborhood size. Smaller = more local detail, larger = more global structure. |
 | min_dist | 0.0-1.0 | 0.1 | Minimum distance between embedded points. Smaller = tighter clusters. |
 | metric | euclidean / manhattan / cosine / correlation / chebyshev | euclidean | Distance used to find neighbors. cosine / correlation compare profile shape, not magnitude. *(Advanced)* |
-| random seed | int | 42 | Seed for the embedding; fix for reproducible layouts. *(Advanced)* |
+| random seed | int | 42 | Seed for the embedding **and** the stochastic clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY); fix for reproducible layouts and cluster assignments. *(Advanced)* |
 
 ### t-SNE
 
@@ -1026,7 +1031,7 @@ other knobs are under **Advanced**. (Ranges below are typical starting points.)
 | learning_rate | 100-1000 | 200 | Gradient-descent step size. Too low (<10) bunches clusters centrally; too high disperses points randomly. *(Advanced)* |
 | iterations | 1,000-5,000 | 1000 | Max optimization steps; runs often converge and stop earlier. *(Advanced)* |
 | early_exaggeration | 4-12 | 12 | How tightly groups pack during the initial phase. Higher pushes well-separated clusters apart; lower preserves more accurate embeddings. *(Advanced)* |
-| random seed | int | 42 | Seed for the embedding; fix for reproducible layouts. *(Advanced)* |
+| random seed | int | 42 | Seed for the embedding **and** the stochastic clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY); fix for reproducible layouts and cluster assignments. *(Advanced)* |
 
 > The t-SNE perplexity **default** comes from Preferences > QP-CAT > t-SNE
 > Perplexity; the per-run spinner overrides it for that run. PCA exposes no
@@ -1068,9 +1073,9 @@ Use this to identify which markers define each cluster and to guide cell-type an
 
 ### Embedding tab (interactive)
 
-Interactive scatter plot of cells in the chosen embedding (UMAP / PCA / t-SNE), colored by cluster. Scroll to zoom, **middle-drag to pan**, hover for cell details.
+Interactive 2D scatter plot of cells in the chosen embedding (titled by method, e.g. **"UMAP 2D"**), colored by cluster. The interaction hint sits in a banner **above** the plot; scroll to zoom, **middle-drag to pan**, hover for cell details. The plot **fills the available space and redraws as you resize the window**, so you scale it by resizing. A scrollable **side legend** on the right lists every cluster with its live color and cell count (nothing is cut off, whatever the cluster count).
 
-**Click a point** to select the nearest cell: a crop preview loads below the plot, and the cell is selected in the object hierarchy if its image is open. **Double-click a point** to open that cell's image (switching images if needed) and center the viewer's field of view on it. This closes the loop from an abstract embedding point back to the actual cell in the slide -- useful for ground-truthing boundary points and outliers.
+**Click a point** to select the nearest cell: a crop preview loads in the right-hand column (next to the legend, using the space beside the plot), and the cell is selected in the object hierarchy if its image is open. **Double-click a point** to open that cell's image (switching images if needed) and center the viewer's field of view on it. This closes the loop from an abstract embedding point back to the actual cell in the slide -- useful for ground-truthing boundary points and outliers. Cluster colors here update live when you edit them in the color editor.
 
 Distances within a cluster are meaningful (similar cells cluster together) but absolute distances between clusters should be interpreted cautiously -- embeddings preserve local topology, not global geometry.
 
@@ -1660,8 +1665,9 @@ window has no room for 20+ pickers, so editing lives in its own dialog). Changin
 picker:
 
 - updates that class's color everywhere (the image overlay repaints immediately),
-- live-recolors the interactive embedding scatter, the Marker Fingerprints bars,
-  and the representative-cell swatches -- no re-run.
+- live-recolors the interactive embedding scatter, the Marker Fingerprints cards,
+  the Composition tab pie charts + legend, and the representative-cell swatches --
+  no re-run.
 
 The editor also has **"Apply palette..."** (recolor every cluster at once from a
 named palette such as viridis or tab20) and **"Reset to defaults"** (restore the

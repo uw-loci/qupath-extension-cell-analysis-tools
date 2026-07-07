@@ -755,6 +755,7 @@ Multi-image clustering loads all detection data into memory. For large projects:
 For publications, report:
 - Clustering algorithm and all parameters
 - Normalization method
+- The random seed (it drives both the embedding layout **and** the stochastic clustering algorithms, so a fixed seed reproduces the whole run)
 - Number of cells and markers used
 - Any manual gate adjustments
 - Software versions (Extensions > QP-CAT > Utilities > System Info)
