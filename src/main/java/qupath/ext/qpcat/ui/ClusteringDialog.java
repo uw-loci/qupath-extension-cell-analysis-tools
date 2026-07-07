@@ -3268,7 +3268,11 @@ public class ClusteringDialog {
         Runnable refreshPanels = () -> {
             if (colorRefreshers != null) {
                 for (Runnable r : colorRefreshers) {
-                    try { r.run(); } catch (Exception ignore) { /* panel may be gone */ }
+                    try {
+                        r.run();
+                    } catch (Exception ex) {
+                        logger.trace("Color refresher skipped (panel may be gone): {}", ex.getMessage());
+                    }
                 }
             }
         };

@@ -29,6 +29,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 - `SavedClusteringResult` gains an optional `clusterNames` map (cluster label -> display
   name) so a renamed/merged copy persists its names and reopens correctly.
+- **One-time "back up your project" warning.** The first time you open any tool that can
+  overwrite detection classifications -- Run Clustering, the Quick Cluster actions, Run
+  Phenotyping, Find Cellular Neighborhoods, the Autoencoder Classifier, Plot & Gate, Manage
+  Clusters, or Apply saved result -- a modal warning recommends duplicating your project
+  folder (e.g. to a zip) before continuing. It appears once; the acknowledgement is
+  persistent and can be re-armed from Edit > Preferences > QP-CAT (General > "Backup
+  Warning Acknowledged"). Read-only tools (View Past Results, Spatial statistics, Compute
+  Embedding, Apply palette) do not trigger it.
 - **Representative cells: optional "Show channels from Marker Rankings" legend.** A new
   checkbox appends a small legend to the end of each cluster's row showing the image
   channels behind that cluster's top-ranked markers -- each a colored swatch (the

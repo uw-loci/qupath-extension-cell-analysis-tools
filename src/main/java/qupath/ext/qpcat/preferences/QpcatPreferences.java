@@ -80,6 +80,12 @@ public final class QpcatPreferences {
     private static final BooleanProperty aeCellsOnly = PathPrefs.createPersistentPreference(
             "qpcat.ae.cellsOnly", false);
 
+    // One-time acknowledgement of the "back up your project before running
+    // classification-changing tools" warning. Set true the first time the user
+    // continues past that modal; kept persistent so the warning shows once.
+    private static final BooleanProperty acknowledgedBackupWarning =
+            PathPrefs.createPersistentPreference("qpcat.acknowledgedBackupWarning", false);
+
     // ==================== Advanced VAE Training ====================
 
     private static final DoubleProperty aeKlBetaMax = PathPrefs.createPersistentPreference(
@@ -353,6 +359,9 @@ public final class QpcatPreferences {
 
     public static boolean isAeCellsOnly() { return aeCellsOnly.get(); }
     public static void setAeCellsOnly(boolean v) { aeCellsOnly.set(v); }
+
+    public static boolean hasAcknowledgedBackupWarning() { return acknowledgedBackupWarning.get(); }
+    public static void setAcknowledgedBackupWarning(boolean v) { acknowledgedBackupWarning.set(v); }
 
     /**
      * Saves all current dialog values to persistent preferences.
@@ -920,6 +929,15 @@ public final class QpcatPreferences {
                 .category(CATEGORY_GENERAL)
                 .description("Milliseconds to wait for Python service shutdown (default: 5000). "
                         + "Increase if Python tasks take longer to stop gracefully.")
+                .build());
+
+        items.add(new PropertyItemBuilder<>(acknowledgedBackupWarning, Boolean.class)
+                .name("Backup Warning Acknowledged")
+                .category(CATEGORY_GENERAL)
+                .description("When checked, the one-time 'back up your project before running "
+                        + "classification-changing tools' warning has been dismissed and will "
+                        + "not show again. Uncheck to see the warning again the next time you "
+                        + "open a clustering / phenotyping tool.")
                 .build());
     }
 }

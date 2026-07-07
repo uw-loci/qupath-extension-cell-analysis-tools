@@ -17,6 +17,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.ui.BackupWarningDialog;
 import qupath.ext.qpcat.ui.BugReportDialog;
 import qupath.ext.qpcat.ui.ApplySavedResultDialog;
 import qupath.ext.qpcat.ui.CellularNeighborhoodDialog;
@@ -165,6 +166,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         "No detections found. Run cell detection first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new ClusteringDialog(qupath).show();
         });
         runClusteringItem.visibleProperty().bind(environmentReady);
@@ -181,6 +183,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         "No detections found. Run cell detection first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new PhenotypingDialog(qupath).show();
         });
         runPhenotypingItem.visibleProperty().bind(environmentReady);
@@ -201,6 +204,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         "No detections found. Run cell detection first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new CellularNeighborhoodDialog(qupath).show();
         });
         cellularNeighborhoodsItem.visibleProperty().bind(environmentReady);
@@ -235,6 +239,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         "Open a project or image first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new AutoencoderDialog(qupath).show();
         });
         autoencoderItem.visibleProperty().bind(environmentReady);
@@ -262,6 +267,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         "Open an image or a project first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new PlotAndGateDialog(qupath).show();
         });
         plotAndGateItem.visibleProperty().bind(environmentReady);
@@ -341,7 +347,10 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         // Apply a saved result back onto detections (safety-checked write-back)
         MenuItem applySavedResultItem = new MenuItem(res.getString("menu.applySavedResult"));
-        applySavedResultItem.setOnAction(e -> ApplySavedResultDialog.show(qupath));
+        applySavedResultItem.setOnAction(e -> {
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
+            ApplySavedResultDialog.show(qupath);
+        });
         applySavedResultItem.visibleProperty().bind(environmentReady);
         applySavedResultItem.disableProperty().bind(
                 Bindings.createBooleanBinding(
@@ -362,6 +371,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 Dialogs.showWarningNotification(EXTENSION_NAME, "Open a project or an image first.");
                 return;
             }
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
             new ClusterManagementDialog(qupath).show();
         });
         manageClustersItem.visibleProperty().bind(environmentReady);
@@ -678,6 +688,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                     "No detections found. Run cell detection first.");
             return;
         }
+
+        // Quick Cluster overwrites detection classifications; warn once first.
+        if (!BackupWarningDialog.acknowledgeOnce()) return;
 
         // Auto-select "Mean" measurements
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
