@@ -2211,6 +2211,13 @@ public class ClusteringDialog {
         // and reload the regenerated PNGs after a color edit (PathClass = truth).
         final EmbeddingScatterPanel[] scatterHolder = {null};
         final Map<String, ImageView> pngViews = new LinkedHashMap<>();
+        // Other panels that also draw with cluster colors (composition pies +
+        // legend, fingerprints); the color editor calls these on every edit.
+        final List<Runnable> colorRefreshers = new ArrayList<>();
+        // Channel name -> Viewer color (packed RGB), read from the open image so
+        // the Marker Fingerprints channel views can color-code channels even when
+        // a channel is toggled off. Empty when no image/channels are available.
+        final Map<String, Integer> channelColors = readChannelColors(qupath);
 
         // Interactive heatmap tab (cluster-marker means)
         if (result.getClusterStats() != null && result.getNClusters() > 1) {
@@ -2325,8 +2332,8 @@ public class ClusteringDialog {
                     + "Batch correction (Harmony) on the next run.",
                     "composition-by-image-tab"));
             imgTab.setClosable(false);
-            // Front of the tab list so composition is the first thing shown.
-            tabPane.getTabs().add(0, imgTab);
+            tabPane.getTabs().add(imgTab);
+            colorRefreshers.add(byImage::refreshColors);
 
             // "By annotation" only when annotations were selected as the clustering
             // input (not merely when some cells happen to sit inside an annotation).
@@ -2342,10 +2349,9 @@ public class ClusteringDialog {
                         + "annotated.",
                         "composition-by-annotation-tab"));
                 annTab.setClosable(false);
-                tabPane.getTabs().add(1, annTab);   // right after "by image"
+                tabPane.getTabs().add(annTab);
+                colorRefreshers.add(byAnnotation::refreshColors);
             }
-            // Show a composition tab first.
-            tabPane.getSelectionModel().selectFirst();
         }
 
         // 3D View tab -- the shared Apache-2.0 cluster3d-core viewer. It reads the
@@ -2408,17 +2414,21 @@ public class ClusteringDialog {
         if (result.hasMarkerRankings()) {
             MarkerFingerprintPanel fingerprints = new MarkerFingerprintPanel(
                     result.getMarkerRankingsJson(), result.getClusterLabels(),
-                    result.getNClusters(), EmbeddingScatterPanel::clusterColorFor);
+                    result.getNClusters(), EmbeddingScatterPanel::clusterColorFor, channelColors);
             Tab fpTab = new Tab("Marker Fingerprints", wrapWithGuide(fingerprints,
-                    "A quick, holistic read of what defines each cluster: one card per "
-                    + "cluster showing its top markers as bars (log2 fold-change vs. the "
-                    + "rest), colored with the cluster palette.\n"
-                    + "Longer bar = more cluster-defining. Use the spinner to show more or "
-                    + "fewer markers per cluster; hover a bar for its Wilcoxon score and "
-                    + "adjusted p-value. The Marker Rankings tab has the full numeric table.",
+                    "A quick, holistic read of what defines each cluster, with three views "
+                    + "(toggle at the top):\n"
+                    + "  Measurements -- one card per cluster, its top markers as bars (log2 "
+                    + "fold-change vs. the rest); longer = more cluster-defining.\n"
+                    + "  Channels -- one card per cluster, the imaging channels those markers "
+                    + "come from, colored by the channel's Viewer color; \"Other\" = non-channel "
+                    + "measurements (e.g. Area).\n"
+                    + "  Channels -> clusters -- one card per channel, the clusters it defines.\n"
+                    + "Use the spinner to change how many markers per cluster are considered.",
                     "marker-fingerprints-tab"));
             fpTab.setClosable(false);
             tabPane.getTabs().add(fpTab);
+            colorRefreshers.add(fingerprints::refreshColors);
         }
 
         // Marker rankings tab
@@ -2708,11 +2718,18 @@ public class ClusteringDialog {
             manageBtn.setDisable(true);
         }
 
+        // Lead with the at-a-glance tabs: Composition by image, then the two
+        // marker tabs, then everything else. Composition by annotation (rare)
+        // stays adjacent to Composition by image when present.
+        reorderLeadingTabs(tabPane, "Composition by image", "Composition by annotation",
+                "Marker Fingerprints", "Marker Rankings");
+        tabPane.getSelectionModel().selectFirst();
+
         // Cluster-colors panel: edit each cluster's color (the "Cluster N"
         // PathClass color is the single source of truth), recolor the viewer +
         // interactive plots live, and regenerate the static PNGs on demand.
         Node colorPanel = buildClusterColorPanel(result, qupath, scatterHolder,
-                pngViews, embName, loadedResultName);
+                pngViews, embName, loadedResultName, colorRefreshers);
 
         VBox mainContent = new VBox(8);
         mainContent.getChildren().add(tabPane);
@@ -3123,6 +3140,53 @@ public class ClusteringDialog {
     }
 
     /**
+     * Move the named tabs to the front of the TabPane, in the given order,
+     * skipping any that are absent. Used so the at-a-glance tabs lead.
+     */
+    private static void reorderLeadingTabs(TabPane tabPane, String... orderedTitles) {
+        int target = 0;
+        for (String title : orderedTitles) {
+            for (int i = target; i < tabPane.getTabs().size(); i++) {
+                Tab t = tabPane.getTabs().get(i);
+                if (title.equals(t.getText())) {
+                    if (i != target) {
+                        tabPane.getTabs().remove(i);
+                        tabPane.getTabs().add(target, t);
+                    }
+                    target++;
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Channel name -> packed RGB color from the open image's metadata. The color
+     * is the channel's assigned color, independent of whether it is toggled on in
+     * the Viewer. Empty when no image / no channels are available.
+     */
+    private static Map<String, Integer> readChannelColors(QuPathGUI qupath) {
+        Map<String, Integer> out = new LinkedHashMap<>();
+        if (qupath == null) return out;
+        try {
+            var data = qupath.getImageData();
+            if (data == null) return out;
+            for (qupath.lib.images.servers.ImageChannel ch
+                    : data.getServer().getMetadata().getChannels()) {
+                if (ch == null) continue;
+                String name = ch.getName();
+                Integer color = ch.getColor();
+                if (name != null && !name.isBlank() && color != null) {
+                    out.putIfAbsent(name, color);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read channel colors: {}", e.getMessage());
+        }
+        return out;
+    }
+
+    /**
      * Build the collapsible "Cluster colors" panel for the Results dialog. Each
      * cluster gets a ColorPicker seeded from its "Cluster N" PathClass color (the
      * single source of truth). Editing a color updates the class, repaints the
@@ -3138,7 +3202,7 @@ public class ClusteringDialog {
      */
     private static Node buildClusterColorPanel(ClusteringResult result, QuPathGUI qupath,
             EmbeddingScatterPanel[] scatterHolder, Map<String, ImageView> pngViews,
-            String embName, String loadedResultName) {
+            String embName, String loadedResultName, List<Runnable> colorRefreshers) {
         int[] labels = result.getClusterLabels();
         if (labels == null) return null;
         java.util.TreeSet<Integer> ids = new java.util.TreeSet<>();
@@ -3153,7 +3217,7 @@ public class ClusteringDialog {
             javafx.stage.Window w = editBtn.getScene() != null ? editBtn.getScene().getWindow() : null;
             Stage owner = (w instanceof Stage) ? (Stage) w : (qupath != null ? qupath.getStage() : null);
             showClusterColorEditor(owner, result, qupath, scatterHolder, pngViews,
-                    embName, loadedResultName);
+                    embName, loadedResultName, colorRefreshers);
         });
 
         // Rename / merge clusters, scoped to the SAME images this result covers.
@@ -3191,12 +3255,23 @@ public class ClusteringDialog {
      */
     private static void showClusterColorEditor(Stage owner, ClusteringResult result,
             QuPathGUI qupath, EmbeddingScatterPanel[] scatterHolder,
-            Map<String, ImageView> pngViews, String embName, String loadedResultName) {
+            Map<String, ImageView> pngViews, String embName, String loadedResultName,
+            List<Runnable> colorRefreshers) {
         int[] labels = result.getClusterLabels();
         if (labels == null) return;
         java.util.TreeSet<Integer> ids = new java.util.TreeSet<>();
         for (int v : labels) if (v >= 0) ids.add(v);
         if (ids.isEmpty()) return;
+
+        // Recolor the other cluster-colored panels (composition pies + legend,
+        // fingerprints) after any edit. The scatter is refreshed by applyClusterColor.
+        Runnable refreshPanels = () -> {
+            if (colorRefreshers != null) {
+                for (Runnable r : colorRefreshers) {
+                    try { r.run(); } catch (Exception ignore) { /* panel may be gone */ }
+                }
+            }
+        };
 
         final Map<Integer, ColorPicker> pickers = new java.util.LinkedHashMap<>();
 
@@ -3230,6 +3305,7 @@ public class ClusteringDialog {
             final int cid = id;
             picker.setOnAction(e -> {
                 applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
+                refreshPanels.run();
                 persist.run();
                 if (QpcatPreferences.isClusterAutoRegeneratePlots() && !regenBtn.isDisabled()) {
                     regenerateStaticPlots(result, qupath, pngViews, embName,
@@ -3260,6 +3336,7 @@ public class ClusteringDialog {
                 }
             }
             if (scatterHolder[0] != null) scatterHolder[0].refreshColors();
+            refreshPanels.run();
             persist.run();
         };
 

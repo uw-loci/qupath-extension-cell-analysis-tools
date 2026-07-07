@@ -55,6 +55,12 @@ public class ClusterCompositionPanel extends BorderPane {
     private final TableView<String[]> table = new TableView<>();
     private boolean showPercent = false;
 
+    // References kept so cluster colors can be re-applied live when the user edits
+    // them in the Results window: {Integer cluster, PieChart.Data} per pie slice,
+    // and the top-legend swatch rectangle per cluster.
+    private final List<Object[]> sliceRefs = new ArrayList<>();
+    private final Map<Integer, Rectangle> legendSwatches = new LinkedHashMap<>();
+
     /**
      * @param clusterLabels      per-cell cluster id (index-aligned with cellGroups)
      * @param nClusters          number of clusters
@@ -154,9 +160,28 @@ public class ClusterCompositionPanel extends BorderPane {
         Rectangle r = new Rectangle(12, 12, colorFor(cluster));
         r.setArcWidth(3);
         r.setArcHeight(3);
+        legendSwatches.put(cluster, r);
         HBox h = new HBox(4, r, new Label(text));
         h.setAlignment(Pos.CENTER_LEFT);
         return h;
+    }
+
+    /**
+     * Re-read each cluster's color and re-apply it to the top-legend swatches and
+     * every pie slice, so editing cluster colors in the Results window updates
+     * this tab live (the color function reads the live "Cluster N" PathClass).
+     */
+    public void refreshColors() {
+        for (Map.Entry<Integer, Rectangle> e : legendSwatches.entrySet()) {
+            e.getValue().setFill(colorFor(e.getKey()));
+        }
+        for (Object[] ref : sliceRefs) {
+            int cluster = (Integer) ref[0];
+            PieChart.Data d = (PieChart.Data) ref[1];
+            if (d.getNode() != null) {
+                d.getNode().setStyle("-fx-pie-color: " + toHex(colorFor(cluster)) + ";");
+            }
+        }
     }
 
     private Region buildBody(String groupDimensionLabel) {
@@ -272,6 +297,7 @@ public class ClusterCompositionPanel extends BorderPane {
             final int cluster = c;
             PieChart.Data d = new PieChart.Data("Cluster " + c, row[c]);
             chart.getData().add(d);
+            sliceRefs.add(new Object[]{c, d});
             double pct = total > 0 ? 100.0 * row[c] / total : 0;
             // Node exists only once the slice is laid out; style + tooltip then.
             d.nodeProperty().addListener((obs, oldN, newN) -> {

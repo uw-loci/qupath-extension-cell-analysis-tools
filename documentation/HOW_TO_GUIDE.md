@@ -1108,9 +1108,13 @@ Use the top-scoring markers per cluster as cell-type annotation starting points.
 
 ### Marker Fingerprints tab
 
-A glanceable, holistic alternative to the numeric table and the heatmaps: one small **card per cluster**, tinted with that cluster's palette color, showing its top markers as horizontal bars. Bar length is the marker's **log2 fold-change vs. the rest** (falling back to the Wilcoxon score where fold-change is undefined), normalized across all clusters so magnitudes are comparable -- the longest bars are the most cluster-defining markers. The card header shows the cluster's cell count and share of the total. A **Markers per cluster** spinner shows more or fewer bars; hovering a bar reveals its exact log2FC, Wilcoxon score, and adjusted p-value.
+A glanceable, holistic alternative to the numeric table and the heatmaps, with **three views** switchable by the toggle at the top (a **Markers per cluster** spinner bounds how many top markers each view considers). All three are built from the same data as the **Marker Rankings** table.
 
-This view is built from the same data as the **Marker Rankings** table (which remains the place for the full numbers and copy-paste). It is meant for reading a whole clustering result at a glance -- scan down the cards and each cluster's identity is spelled out in named markers rather than a color gradient. The bars re-color live when you edit cluster colors.
+- **Measurements** (default) -- one **card per cluster**, tinted with the cluster's palette color, showing its top markers as horizontal bars. Bar length is the marker's **log2 fold-change vs. the rest** (falling back to the Wilcoxon score where undefined), normalized across clusters so magnitudes are comparable. Marker names wrap to full width so long QuPath measurement names (e.g. `Cytoplasm: 18_Ki67: Mean`) read without hovering; hovering still shows the exact log2FC, Wilcoxon score, and adjusted p-value. The header shows the cluster's cell count and share of the total.
+- **Channels** -- one card per cluster showing, instead of measurements, the **imaging channels** its top markers come from, as chips colored by the channel's **Viewer color** (even if that channel is toggled off). Deduplicated and ordered most-defining-first, this is a shorter, more interpretable summary. Top markers that are not tied to a channel (e.g. `Nucleus: Area`) collapse into a trailing **"Other"** chip -- switch to Measurements to see those.
+- **Channels -> clusters** -- the transpose: one card per channel (channel-colored), listing the clusters that channel is a top marker of, strongest first. An **"Other"** card gathers clusters whose top markers include a non-channel measurement.
+
+Channels are matched from each measurement name against the open image's channel names; the two channel views need one of the clustered images open (they are disabled otherwise). All cards re-color live when you edit cluster colors.
 
 ### Spatial Autocorrelation tab
 
