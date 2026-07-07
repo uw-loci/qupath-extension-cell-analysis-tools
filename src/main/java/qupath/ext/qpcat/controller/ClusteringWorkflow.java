@@ -231,6 +231,10 @@ public class ClusteringWorkflow {
 
         // If no selection, use all detections
         Collection<PathObject> detections;
+        // True when the user had annotation(s) selected when launching the run,
+        // i.e. annotations were chosen as the clustering input. Drives whether the
+        // "Composition by annotation" tab is offered.
+        boolean annotationInput = selected.stream().anyMatch(PathObject::isAnnotation);
         if (selected.isEmpty() || selected.stream().noneMatch(p -> p.isDetection())) {
             detections = new ArrayList<>(hierarchy.getDetectionObjects());
             logger.info("No detections selected - using all {} detections", detections.size());
@@ -322,6 +326,7 @@ public class ClusteringWorkflow {
         }
         result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
         result.setCellParentNames(buildParentNames(extraction));
+        result.setAnnotationInput(annotationInput);
 
         // Apply results back to QuPath
         reportPhase(progressCallback, "apply", "Applying results to QuPath...");

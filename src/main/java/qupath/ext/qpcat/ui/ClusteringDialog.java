@@ -2278,11 +2278,12 @@ public class ClusteringDialog {
         }
 
         // Composition tabs -- simplified per-group cluster breakdowns (counts,
-        // proportions, one pie per group). "By image" always appears when we
-        // have per-cell image references; "By annotation" only when cells were
-        // inside named/classified annotations at run time. A cluster confined
-        // to a single group here is the tell-tale of an image/region batch
-        // effect rather than a shared phenotype.
+        // proportions, one pie per group). Inserted at the FRONT so they are the
+        // first tabs shown. "By image" always appears when we have per-cell image
+        // references; "By annotation" only when annotations were actually
+        // selected as the clustering input. A cluster confined to a single group
+        // here is the tell-tale of an image/region batch effect rather than a
+        // shared phenotype.
         if (result.hasCellRefs()) {
             java.util.function.IntFunction<Color> clusterColorFn = id -> {
                 Integer rgb = PathClass.fromString("Cluster " + id).getColor();
@@ -2324,9 +2325,12 @@ public class ClusteringDialog {
                     + "Batch correction (Harmony) on the next run.",
                     "composition-by-image-tab"));
             imgTab.setClosable(false);
-            tabPane.getTabs().add(imgTab);
+            // Front of the tab list so composition is the first thing shown.
+            tabPane.getTabs().add(0, imgTab);
 
-            if (result.hasCellParentNames()) {
+            // "By annotation" only when annotations were selected as the clustering
+            // input (not merely when some cells happen to sit inside an annotation).
+            if (result.isAnnotationInput() && result.hasCellParentNames()) {
                 ClusterCompositionPanel byAnnotation = new ClusterCompositionPanel(
                         result.getClusterLabels(), result.getNClusters(),
                         result.getCellParentNames(), "Annotation", clusterColorFn);
@@ -2338,8 +2342,10 @@ public class ClusteringDialog {
                         + "annotated.",
                         "composition-by-annotation-tab"));
                 annTab.setClosable(false);
-                tabPane.getTabs().add(annTab);
+                tabPane.getTabs().add(1, annTab);   // right after "by image"
             }
+            // Show a composition tab first.
+            tabPane.getSelectionModel().selectFirst();
         }
 
         // 3D View tab -- the shared Apache-2.0 cluster3d-core viewer. It reads the

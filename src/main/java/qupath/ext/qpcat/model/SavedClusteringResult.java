@@ -45,6 +45,10 @@ public class SavedClusteringResult {
                                         // null on older saves and for cells not
                                         // inside an annotation. Drives the
                                         // "Composition by annotation" tab.
+    private boolean annotationInput;    // true when annotations were selected as
+                                        // the clustering input; gates whether the
+                                        // "Composition by annotation" tab is shown
+                                        // (false on older saves).
     private double[] cellX;
     private double[] cellY;
     private double[] cellBboxHalf;
@@ -150,6 +154,9 @@ public class SavedClusteringResult {
 
     public String[] getCellParentNames() { return cellParentNames; }
     public void setCellParentNames(String[] v) { this.cellParentNames = v; }
+
+    public boolean isAnnotationInput() { return annotationInput; }
+    public void setAnnotationInput(boolean v) { this.annotationInput = v; }
 
     public double[] getCellX() { return cellX; }
     public void setCellX(double[] v) { this.cellX = v; }
@@ -287,6 +294,7 @@ public class SavedClusteringResult {
         if (result.hasCellParentNames()) {
             saved.setCellParentNames(result.getCellParentNames());
         }
+        saved.setAnnotationInput(result.isAnnotationInput());
 
         // Spatial stats expansion (v1) -- bundle only set when at least one
         // statistic ran. Older code paths leave this null and the result
@@ -341,6 +349,7 @@ public class SavedClusteringResult {
         if (cellParentNames != null) {
             result.setCellParentNames(cellParentNames);
         }
+        result.setAnnotationInput(annotationInput);
 
         // Spatial stats expansion (v1) -- absent on older saves; the
         // hasAnySpatialStats() check on the ClusteringResult guards the

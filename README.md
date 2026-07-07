@@ -452,7 +452,7 @@ After clustering, QP-CAT can generate:
 | **Interactive heatmap** | Cluster-by-marker mean expression with click-to-select |
 | **Interactive scatter** | UMAP/PCA/t-SNE plot colored by cluster, zoomable and pannable |
 | **Composition by image** | Per-image cluster counts + proportions (table + pie per image); a cluster confined to one image flags an image batch effect |
-| **Composition by annotation** | Per-parent-annotation cluster counts + proportions (shown when cells had annotation parents) |
+| **Composition by annotation** | Per-parent-annotation cluster counts + proportions (shown only when annotations were selected as the clustering input) |
 | **Marker rankings** | Top differentially expressed markers per cluster (Wilcoxon rank-sum test) |
 | **PAGA graph** | Cluster connectivity/trajectory graph |
 | **Dotplot** | Fraction expressing + mean expression per cluster per marker |

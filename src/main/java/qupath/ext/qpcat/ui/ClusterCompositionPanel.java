@@ -162,8 +162,24 @@ public class ClusterCompositionPanel extends BorderPane {
     private Region buildBody(String groupDimensionLabel) {
         buildTableColumns(groupDimensionLabel);
         refreshTable(groupDimensionLabel);
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
-        table.setPrefHeight(220);
+        // Natural column widths + horizontal scroll: with many clusters the
+        // constrained policy squeezed every header to "Clu...". Each column now
+        // keeps a readable width and the table scrolls sideways instead.
+        table.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
+        // A fixed row height lets us size the table to show all its rows. Without
+        // an explicit min height the tall pies below (Vgrow) starved the table
+        // down to just its header row.
+        final double rowH = 26;
+        table.setFixedCellSize(rowH);
+        int dataRows = groups.size() + 1;                 // groups + "All" summary
+        int visibleRows = Math.min(dataRows, 10);
+        double headerH = 30;
+        table.setPrefHeight(headerH + rowH * visibleRows + 2);
+        table.setMinHeight(headerH + rowH * Math.min(dataRows, 4) + 2);
+
+        Label tableCaption = new Label("Per-" + groupDimensionLabel.toLowerCase()
+                + " cluster counts (Cn = cluster n):");
+        tableCaption.setStyle("-fx-font-size: 11px; -fx-text-fill: #555;");
 
         FlowPane pies = new FlowPane(14, 14);
         pies.setPadding(new Insets(10, 0, 0, 0));
@@ -173,8 +189,8 @@ public class ClusterCompositionPanel extends BorderPane {
         ScrollPane piesScroll = new ScrollPane(pies);
         piesScroll.setFitToWidth(true);
 
-        VBox body = new VBox(8, table, new Label("Per-" + groupDimensionLabel.toLowerCase()
-                + " cluster proportions:"), piesScroll);
+        VBox body = new VBox(6, tableCaption, table, new Label("Per-"
+                + groupDimensionLabel.toLowerCase() + " cluster proportions:"), piesScroll);
         VBox.setVgrow(piesScroll, javafx.scene.layout.Priority.ALWAYS);
         return body;
     }
@@ -185,11 +201,15 @@ public class ClusterCompositionPanel extends BorderPane {
         TableColumn<String[], String> groupCol = new TableColumn<>(groupDimensionLabel);
         groupCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                 cd.getValue()[0]));
+        groupCol.setPrefWidth(150);
         table.getColumns().add(groupCol);
 
         for (int c = 0; c < nClusters; c++) {
             final int col = c + 1;
-            TableColumn<String[], String> cc = new TableColumn<>("Cluster " + c);
+            // Short header ("C0", "C1", ...) so 20+ columns stay readable; the
+            // shared legend above maps each to its cluster + color.
+            TableColumn<String[], String> cc = new TableColumn<>("C" + c);
+            cc.setPrefWidth(48);
             cc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                     col < cd.getValue().length ? cd.getValue()[col] : ""));
             table.getColumns().add(cc);
@@ -197,6 +217,7 @@ public class ClusterCompositionPanel extends BorderPane {
 
         final int totalCol = nClusters + 1;
         TableColumn<String[], String> totCol = new TableColumn<>("Total");
+        totCol.setPrefWidth(64);
         totCol.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                 totalCol < cd.getValue().length ? cd.getValue()[totalCol] : ""));
         table.getColumns().add(totCol);

@@ -100,6 +100,15 @@ public class ClusteringResult {
         return false;
     }
 
+    // True when annotations were selected as the clustering INPUT (i.e. the run
+    // was scoped to detections inside chosen annotations), as opposed to simply
+    // clustering all detections some of which happen to lie inside annotations.
+    // Gates the "Composition by annotation" results tab.
+    private boolean annotationInput = false;
+
+    public boolean isAnnotationInput() { return annotationInput; }
+    public void setAnnotationInput(boolean v) { this.annotationInput = v; }
+
     // --- Auto-save bookkeeping ---
     public String getSavedName() { return savedName; }
     public void setSavedName(String savedName) { this.savedName = savedName; }
