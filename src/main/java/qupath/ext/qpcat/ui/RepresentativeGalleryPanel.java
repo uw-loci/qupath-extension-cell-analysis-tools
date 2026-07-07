@@ -1,13 +1,19 @@
 package qupath.ext.qpcat.ui;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
@@ -23,15 +29,21 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.CellCropService;
+import qupath.ext.qpcat.service.ChannelMatcher;
 import qupath.ext.qpcat.service.ViewerNavigator;
 import qupath.fx.dialogs.Dialogs;
+import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.images.ImageData;
+import qupath.lib.images.servers.ImageChannel;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,6 +63,8 @@ public class RepresentativeGalleryPanel extends VBox {
 
     private static final Logger logger = LoggerFactory.getLogger(RepresentativeGalleryPanel.class);
     private static final double THUMB_SIZE = 110;
+    /** Default number of channels shown in the per-cluster legend. */
+    private static final int DEFAULT_LEGEND_CHANNELS = 4;
 
     private final ClusteringResult result;
     private final QuPathGUI qupath;
@@ -58,10 +72,22 @@ public class RepresentativeGalleryPanel extends VBox {
 
     private final ChoiceBox<String> spaceChoice;
     private final Spinner<Double> scaleSpinner;
+    private final CheckBox channelLegendCheck;
+    private final Spinner<Integer> legendChannelSpinner;
     private final VBox clustersBox;
+
+    // Per-cluster ranked marker (measurement) names from the run's marker
+    // rankings, cluster id (as string) -> ordered measurement names. Empty when
+    // the run produced no rankings.
+    private final Map<String, List<String>> rankedMarkersByCluster;
+    // Image channel name -> display color, in channel order. Empty when no image
+    // is open (the legend then simply shows nothing).
+    private final LinkedHashMap<String, Color> channelColors;
 
     private boolean useEmbedding = false;
     private double cropScale = CellCropService.DEFAULT_CROP_SCALE;
+    private boolean showChannelLegend = false;
+    private int legendChannels = DEFAULT_LEGEND_CHANNELS;
 
     // Crops loaded for the current (space, scale), keyed by cell index. Reused
     // by "Save montages" so it composes exactly what the user sees.
@@ -73,6 +99,8 @@ public class RepresentativeGalleryPanel extends VBox {
         this.result = result;
         this.qupath = qupath;
         this.cropService = cropService;
+        this.rankedMarkersByCluster = parseRankedMarkers(result.getMarkerRankingsJson());
+        this.channelColors = readChannelColors(qupath);
 
         setSpacing(8);
         setPadding(new Insets(8));
@@ -112,12 +140,49 @@ public class RepresentativeGalleryPanel extends VBox {
         Button saveBtn = new Button("Save montages");
         saveBtn.setOnAction(e -> saveMontages());
 
+        // Optional per-cluster channel legend derived from the Marker Rankings.
+        boolean legendPossible = !rankedMarkersByCluster.isEmpty() && !channelColors.isEmpty();
+
+        legendChannelSpinner = new Spinner<>(1, 8, legendChannels, 1);
+        legendChannelSpinner.setPrefWidth(70);
+        legendChannelSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(legendChannelSpinner);
+        legendChannelSpinner.setDisable(true);
+        legendChannelSpinner.valueProperty().addListener((obs, o, n) -> {
+            if (n != null) {
+                legendChannels = n;
+                if (showChannelLegend) rebuild();
+            }
+        });
+        Label legendChannelLabel = new Label("Channels:");
+
+        channelLegendCheck = new CheckBox("Show channels from Marker Rankings");
+        channelLegendCheck.setTooltip(new Tooltip(
+                "Append a small legend to each cluster showing the channels for its\n"
+                + "top-ranked markers, matched by channel name appearing in the\n"
+                + "measurement name. If channels or measurements were renamed so that\n"
+                + "nothing matches, no channels are shown (this never errors)."));
+        channelLegendCheck.setDisable(!legendPossible);
+        if (!legendPossible) {
+            channelLegendCheck.setTooltip(new Tooltip(
+                    rankedMarkersByCluster.isEmpty()
+                            ? "This result has no Marker Rankings, so no channel legend can be built."
+                            : "No image is open, so channel colors are unavailable for a legend."));
+        }
+        channelLegendCheck.selectedProperty().addListener((obs, o, n) -> {
+            showChannelLegend = Boolean.TRUE.equals(n);
+            legendChannelSpinner.setDisable(!showChannelLegend);
+            rebuild();
+        });
+
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         HBox controls = new HBox(8,
                 new Label("Center:"), spaceChoice,
                 new Label("Crop x bbox:"), scaleSpinner,
+                new Separator(Orientation.VERTICAL),
+                channelLegendCheck, legendChannelLabel, legendChannelSpinner,
                 spacer, refreshBtn, saveBtn);
         controls.setAlignment(Pos.CENTER_LEFT);
 
@@ -172,8 +237,119 @@ public class RepresentativeGalleryPanel extends VBox {
                 }
             }
 
+            if (showChannelLegend) {
+                Region legend = buildChannelLegend(c);
+                if (legend != null) {
+                    strip.getChildren().addAll(new Separator(Orientation.VERTICAL), legend);
+                }
+            }
+
             clustersBox.getChildren().addAll(headerBox, strip);
         }
+    }
+
+    /**
+     * Build the "channels from Marker Rankings" legend for one cluster: the
+     * image channels backing that cluster's top-ranked markers, each as a
+     * color swatch + name. Returns {@code null} when nothing matches (e.g. the
+     * user renamed channels or measurements) so the caller shows no legend --
+     * this never throws.
+     */
+    private Region buildChannelLegend(int cluster) {
+        List<String> ranked = rankedMarkersByCluster.get(String.valueOf(cluster));
+        if (ranked == null || ranked.isEmpty() || channelColors.isEmpty()) {
+            return null;
+        }
+        List<String> matched = ChannelMatcher.matchChannels(
+                new ArrayList<>(channelColors.keySet()), ranked, legendChannels);
+        if (matched.isEmpty()) {
+            return null;
+        }
+
+        VBox rows = new VBox(2);
+        rows.setAlignment(Pos.CENTER_LEFT);
+        Label title = new Label("Channels");
+        title.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #555;");
+        rows.getChildren().add(title);
+        for (String name : matched) {
+            Color color = channelColors.getOrDefault(name, Color.GRAY);
+            Rectangle chip = new Rectangle(11, 11, color);
+            chip.setStroke(Color.gray(0.6));
+            Label lbl = new Label(name);
+            lbl.setStyle("-fx-font-size: 11px;");
+            HBox row = new HBox(5, chip, lbl);
+            row.setAlignment(Pos.CENTER_LEFT);
+            rows.getChildren().add(row);
+        }
+        rows.setPadding(new Insets(0, 4, 0, 0));
+        Tooltip.install(rows, new Tooltip(
+                "Top channels for this cluster, from its Marker Rankings.\n"
+                + "Matched by channel name appearing in the measurement name."));
+        return rows;
+    }
+
+    /**
+     * Parse the run's {@code marker_rankings} JSON into cluster id (as string)
+     * -> ordered measurement names. Same JSON shape the fingerprint view reads
+     * ({@code {name, score, logfoldchange, pval_adj}}); we keep only the ordered
+     * {@code name}s. Returns an empty map on any problem (never throws).
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, List<String>> parseRankedMarkers(String json) {
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        if (json == null || json.isBlank()) {
+            return out;
+        }
+        try {
+            Gson gson = new GsonBuilder().serializeNulls().setLenient().create();
+            Type type = new TypeToken<Map<String, List<Map<String, Object>>>>() {}.getType();
+            Map<String, List<Map<String, Object>>> parsed = gson.fromJson(json, type);
+            if (parsed == null) {
+                return out;
+            }
+            for (Map.Entry<String, List<Map<String, Object>>> e : parsed.entrySet()) {
+                List<String> names = new ArrayList<>();
+                if (e.getValue() != null) {
+                    for (Map<String, Object> m : e.getValue()) {
+                        Object nm = (m == null) ? null : m.get("name");
+                        if (nm != null) names.add(String.valueOf(nm));
+                    }
+                }
+                out.put(e.getKey(), names);
+            }
+        } catch (Exception e) {
+            logger.warn("Could not parse marker rankings for channel legend: {}", e.getMessage());
+        }
+        return out;
+    }
+
+    /**
+     * Read the open image's channel names and display colors, in channel order.
+     * Returns an empty map when no image is open or channels have no color (the
+     * legend then shows nothing).
+     */
+    private static LinkedHashMap<String, Color> readChannelColors(QuPathGUI qupath) {
+        LinkedHashMap<String, Color> out = new LinkedHashMap<>();
+        if (qupath == null) {
+            return out;
+        }
+        try {
+            ImageData<BufferedImage> data = qupath.getImageData();
+            if (data == null || data.getServer() == null) {
+                return out;
+            }
+            for (ImageChannel ch : data.getServer().getMetadata().getChannels()) {
+                if (ch == null || ch.getName() == null) continue;
+                Integer rgb = ch.getColor();
+                Color color = (rgb != null)
+                        ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
+                        : Color.GRAY;
+                out.putIfAbsent(ch.getName(), color);
+            }
+        } catch (Exception e) {
+            logger.warn("Could not read image channels for legend: {}", e.getMessage());
+        }
+        return out;
     }
 
     private VBox buildThumb(int cellIdx, CellRef ref, boolean isMedoid, long token) {

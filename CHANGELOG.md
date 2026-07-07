@@ -29,6 +29,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 - `SavedClusteringResult` gains an optional `clusterNames` map (cluster label -> display
   name) so a renamed/merged copy persists its names and reopens correctly.
+- **Representative cells: optional "Show channels from Marker Rankings" legend.** A new
+  checkbox appends a small legend to the end of each cluster's row showing the image
+  channels behind that cluster's top-ranked markers -- each a colored swatch (the
+  channel's display color) plus its name -- with a **Channels** spinner for how many to
+  show (default 4). Channels are resolved by matching the cluster's top measurements back
+  to image channels via the channel name appearing inside the measurement name, so it
+  works across detection engines with different measurement naming schemas. If channels or
+  measurements were renamed so nothing matches, the legend shows no channels rather than
+  erroring; the checkbox is disabled when the result has no Marker Rankings or no image is
+  open. Matching lives in the unit-tested `ChannelMatcher`.
 
 ### Removed
 
