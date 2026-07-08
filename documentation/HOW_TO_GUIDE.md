@@ -98,6 +98,21 @@ Full clustering with all configuration options.
 - If embedding was computed, measurements **UMAP1/UMAP2** (or PCA1/PCA2, tSNE1/tSNE2) are added to each detection
 - The QuPath viewer updates to show cluster colors on cells
 
+> **Back up your project first.** The first time you open any QP-CAT tool that can change
+> detection classifications -- Run Clustering, the Quick Cluster actions, Run Phenotyping,
+> Find Cellular Neighborhoods, the Autoencoder Classifier, Plot & Gate, Manage Clusters, or
+> Apply saved result -- a one-time modal warns you that these tools overwrite the current
+> classifications of detections across every image the run covers. Duplicate your project
+> folder (e.g. to a zip) before continuing. The warning appears once; re-arm it from
+> **Edit > Preferences > QP-CAT** (General > "Backup Warning Acknowledged"). Read-only tools
+> (View Past Results, Spatial statistics, Compute Embedding, Apply palette) do not trigger it.
+
+> **Cells vs. detections.** If your hierarchy contains cell objects, QP-CAT analyzes only
+> cells, so subcellular detections (spots nested inside cells) are not clustered as if they
+> were cells; the number ignored is logged. If there are no cell objects (a nucleus-only
+> detection method), every detection is analyzed instead. Projects without subcellular
+> objects are unaffected. See [Best Practices -> Cells vs. detections](BEST_PRACTICES.md#cells-vs-detections-and-subcellular-objects).
+
 ### Spatial Feature Smoothing
 
 When "Spatial feature smoothing" is checked, a graph convolution pre-step is applied before clustering:
