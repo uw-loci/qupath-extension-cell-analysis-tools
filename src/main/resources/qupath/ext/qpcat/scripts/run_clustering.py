@@ -378,6 +378,28 @@ elif do_spatial_smoothing and not has_spatial_coords:
     )
 
 # 2b. Batch correction (Harmony, for multi-image clustering)
+
+
+def _orient_batch_corrected(corrected, expected_shape):
+    """Return the Harmony output oriented as (n_cells, n_markers).
+
+    harmonypy's public `Harmony.Z_corr` property has returned
+    (n_cells, n_features) since 0.2.0; the 0.0.x releases exposed the internal
+    (n_features, n_cells) matrix instead. Accept either orientation so that a
+    harmonypy bump inside our pinned range cannot silently transpose the
+    feature matrix. Raise rather than guess when neither axis matches.
+    """
+    arr = np.asarray(corrected)
+    if arr.shape == expected_shape:
+        return arr
+    if arr.T.shape == expected_shape:
+        return arr.T
+    raise ValueError(
+        "Harmony returned an array of shape %s; expected %s or its transpose"
+        % (arr.shape, expected_shape)
+    )
+
+
 try:
     do_batch = enable_batch_correction
 except NameError:
@@ -406,7 +428,8 @@ if do_batch and batch_labels_list is not None:
     if n_batches > 1:
         meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
         ho = hm.run_harmony(df_norm.values, meta_df, "batch")
-        df_norm = pd.DataFrame(ho.Z_corr.T, columns=df_norm.columns)
+        corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
+        df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
         logger.info("Harmony batch correction applied (%d batches)", n_batches)
     else:
         logger.info("Skipping batch correction (only 1 batch)")
@@ -529,9 +552,7 @@ labels = None
 clustering_seed = int(
     algorithm_params.get(
         "random_state",
-        algorithm_params.get(
-            "random_seed", embedding_params.get("random_state", 42)
-        ),
+        algorithm_params.get("random_seed", embedding_params.get("random_state", 42)),
     )
 )
 logger.info("Clustering random seed: %d", clustering_seed)
@@ -545,7 +566,9 @@ if algorithm == "leiden":
     logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
 
     adata = ad.AnnData(X=df_norm.values)
-    sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X", random_state=clustering_seed)
+    sc.pp.neighbors(
+        adata, n_neighbors=n_neighbors, use_rep="X", random_state=clustering_seed
+    )
     sc.tl.leiden(
         adata,
         resolution=resolution,
@@ -603,7 +626,9 @@ elif algorithm == "gmm":
         "GMM: n_components=%d, covariance_type=%s", n_components, covariance_type
     )
     gmm = GaussianMixture(
-        n_components=n_components, covariance_type=covariance_type, random_state=clustering_seed
+        n_components=n_components,
+        covariance_type=covariance_type,
+        random_state=clustering_seed,
     )
     labels = gmm.fit_predict(df_norm.values)
 

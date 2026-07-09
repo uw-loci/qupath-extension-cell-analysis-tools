@@ -80,6 +80,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   gates) or **clustering** instead. The `open-clip-torch` Python dependency, used only by
   this feature, is now dead and will be dropped from the pixi environment in a follow-up.
 
+### Fixed
+
+- **Harmony batch correction crashed every multi-image run** with
+  `ValueError: Shape of passed values is (n_markers, n_cells), indices imply ...`.
+  `run_clustering.py` transposed `harmonypy`'s `Harmony.Z_corr` before handing it to
+  the pandas constructor, but the public `Z_corr` property has returned
+  `(n_cells, n_features)` since harmonypy 0.2.0 -- only the 0.0.x releases exposed the
+  internal `(n_features, n_cells)` matrix. Our pin moved to `>=0.2.0,<2` without the
+  call site being revisited, so batch correction was broken for every user on every
+  run (the pandas constructor raised whenever `n_cells != n_markers`, i.e. always).
+  The result is now oriented through a new `_orient_batch_corrected` helper that
+  accepts either layout and raises when neither axis matches, so a future harmonypy
+  flip cannot silently transpose the feature matrix. The corrected frame also keeps
+  `df_norm`'s index instead of dropping it.
+  Diagnosed and reported by [@koopa31](https://github.com/koopa31) in
+  [#10](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/10),
+  who also proposed the shape-tolerant fix adopted here.
+
+### Added
+
+- **Python test suite + CI for the Appose scripts** (`python_tests/`, run by
+  `.github/workflows/python-tests.yml`). The scripts under `scripts/` are exec'd by
+  Appose with injected globals and are never importable, so tests pull individual
+  top-level helpers out of the shipped source with `ast` (`load_script_symbol`).
+  Beyond covering `_orient_batch_corrected`, the suite pins the *harmonypy contract*
+  itself -- asserting `Z_corr` is cells-by-markers and that correction shrinks the
+  between-batch mean gap -- which is the check that would have caught the bug above,
+  since the break was a silent orientation change in a dependency rather than in our
+  code. Tests that need harmonypy skip cleanly when it is absent.
+
 ## [0.9.4] -- 2026-07-05 -- 3D View: configurable background color
 
 > Rides cluster3d-core 0.1.2 (shaded, relocated to `qupath.ext.qpcat.internal.cluster3d`).

@@ -42,6 +42,20 @@ through a nullable `clusteredEntries` param on the full `showResultsDialog(...)`
 Results" and external (SpatialStats*) callers pass `null` -> the tab reads the current image only,
 still without a picker. The standalone navigator keeps using `initialLoad()` + its picker.
 
+## Python (Appose) script tests
+
+The scripts in `src/main/resources/qupath/ext/qpcat/scripts/` are exec'd by Appose with
+injected globals and are **not importable**. `python_tests/` tests them anyway, by
+AST-extracting individual top-level helpers from the shipped source
+(`conftest.load_script_symbol`). Run with `python3 -m pytest python_tests/ -v`; CI runs
+them via `.github/workflows/python-tests.yml`.
+
+**When a script calls into a third-party library, pin the library's contract with a
+test.** Issue #10 (Harmony batch correction) was a silent orientation change in
+harmonypy's `Z_corr` property between 0.0.x and 0.2.0 -- our pin moved, the call site
+did not, and no test of our own code could have caught it. See
+`python_tests/test_run_clustering_harmony.py` for the pattern.
+
 ## Conventions
 
 - ASCII-only in logs / internal strings (Windows cp1252). Use `qupath.fx.dialogs.Dialogs`.
