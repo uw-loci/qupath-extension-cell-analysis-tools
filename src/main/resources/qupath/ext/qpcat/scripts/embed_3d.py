@@ -32,20 +32,12 @@ import pandas as pd
 from appose import NDArray as PyNDArray
 
 # ---- inputs -------------------------------------------------------------
-data = measurements.ndarray().copy()
+# UMAP/PCA reject NaN/Inf; impute per-column median (see model_utils).
+data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 logger.info("VEST embed_3d: %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=list(marker_names))
-
-# Guard against non-finite values (UMAP/PCA reject NaN/Inf). Impute per-column
-# median, matching run_clustering.py.
-n_nonfinite = int(np.count_nonzero(~np.isfinite(df.to_numpy(dtype=float))))
-if n_nonfinite > 0:
-    df = df.replace([np.inf, -np.inf], np.nan)
-    col_median = df.median(numeric_only=True).fillna(0.0)
-    df = df.fillna(col_median).fillna(0.0)
-    logger.warning("Imputed %d non-finite value(s) with per-column median", n_nonfinite)
 
 try:
     norm = normalization

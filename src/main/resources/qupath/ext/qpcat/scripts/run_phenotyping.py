@@ -34,6 +34,21 @@ data = measurements.ndarray().copy()
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
+# Deliberately NOT imputed. Gating asks "is this marker above threshold for
+# this cell", and a cell whose marker QuPath could not compute has no defensible
+# answer -- imputing the column median would invent a value and could call the
+# cell positive. pandas skips NaN when computing the normalization statistics,
+# and `NaN > threshold` is False, so such a cell is gated negative for that
+# marker. That is the intended behaviour; warn so it is not silent.
+n_nonfinite = int(np.count_nonzero(~np.isfinite(data)))
+if n_nonfinite > 0:
+    logger.warning(
+        "%d non-finite measurement value(s) present. Normalization statistics "
+        "ignore them, and any cell with a missing marker is gated NEGATIVE for "
+        "that marker (not imputed). Check for measurements absent on some cells.",
+        n_nonfinite,
+    )
+
 df = pd.DataFrame(data, columns=marker_names)
 
 # 2. Normalize

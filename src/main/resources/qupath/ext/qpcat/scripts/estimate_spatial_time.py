@@ -41,7 +41,7 @@ try:
 except Exception:
     pass
 
-data = measurements.ndarray().copy()
+data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 coords = spatial_coords.ndarray().copy()
 n_cells, n_markers = data.shape
 

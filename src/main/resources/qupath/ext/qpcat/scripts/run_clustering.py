@@ -115,29 +115,17 @@ def _supported_kwargs(fn, **kw):
     return {k: v for k, v in kw.items() if k in params}
 
 
-# 1. Reshape input NDArray to numpy and release shared memory
-data = measurements.ndarray().copy()
+# 1. Reshape input NDArray to numpy and release shared memory.
+# UMAP, KMeans, and Leiden/BANKSY all reject NaN/Inf, and a marker can
+# legitimately be NaN for some cells when QuPath could not compute it (this is
+# what made BANKSY fail with "Input contains NaN"). impute_nonfinite keeps every
+# cell so rows stay aligned with the spatial coordinates -- BANKSY indexes cells
+# by row, so dropping rows would misalign the spatial graph.
+data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=marker_names)
-
-# Guard against non-finite measurements. UMAP, KMeans, and Leiden/BANKSY all
-# reject NaN/Inf, and a marker can legitimately be NaN for some cells when
-# QuPath could not compute it (this is what made BANKSY fail with
-# "Input contains NaN"). Impute per-column with the column median so every cell
-# is kept and stays row-aligned with its spatial coordinates (BANKSY indexes
-# cells by row, so dropping rows would misalign the spatial graph).
-n_nonfinite = int(np.count_nonzero(~np.isfinite(df.to_numpy(dtype=float))))
-if n_nonfinite > 0:
-    df = df.replace([np.inf, -np.inf], np.nan)
-    col_median = df.median(numeric_only=True).fillna(0.0)
-    df = df.fillna(col_median).fillna(0.0)
-    logger.warning(
-        "Imputed %d non-finite measurement value(s) with per-column "
-        "median (NaN/Inf are not valid clustering input)",
-        n_nonfinite,
-    )
 
 # Read optional spatial coordinates early (needed by BANKSY and spatial analysis)
 try:

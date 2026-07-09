@@ -82,6 +82,41 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Missing measurements silently corrupted the autoencoders.** `MeasurementExtractor`
+  now leaves a measurement QuPath could not compute as `NaN` (it used to substitute
+  `0.0`, a fake extreme value that biased normalization) so that Python can impute it
+  per-column. But only four of the nine scripts fed that matrix actually sanitized it.
+  The autoencoders were the dangerous case: `numpy`'s `mean`/`std` are **not**
+  NaN-aware and the usual `std[std == 0] = 1` guard does not catch NaN, so a single
+  missing measurement turned a whole column of normalization statistics into NaN and
+  trained/applied the model on NaN **without ever raising**. All six scripts that need
+  a dense finite matrix (`run_clustering`, `embed_3d`, `geosketch_select`,
+  `train_autoencoder`, `infer_autoencoder`, `estimate_spatial_time`) now route through
+  one shared `model_utils.impute_nonfinite()` helper, replacing three copy-pasted
+  inline guards. Introduced unreleased in this cycle; no released version is affected.
+- **Two scripts deliberately do not impute, and now say so.** `export_anndata` preserves
+  NaN (fabricating a median in a file meant for external analysis would be worse) and
+  warns; `run_phenotyping` gates a cell NEGATIVE for a marker it is missing rather than
+  inventing a value, and warns. `compute_thresholds` already filtered non-finite values
+  per marker and is unchanged.
+- **Feature extraction could never load either ungated foundation model.**
+  `dinov2-large` pointed at `hf_hub:facebook/dinov2-large`, which is a *transformers*
+  repo: its `config.json` carries `architectures` (plural), so `timm.create_model`
+  died with a bare `KeyError: 'architecture'`. It now points at
+  `hf_hub:timm/vit_large_patch14_dinov2.lvd142m` -- the same Apache-2.0 weights in a
+  timm-loadable repo. `midnight` (`kaiko-ai/midnight`) has the same problem and has been
+  **removed** from the registry until a transformers loader exists; it never worked.
+  `extract_features.py` now translates that `KeyError` into a message that names the
+  model and says it is a registry bug, not an environment problem. The four gated models
+  (`h-optimus-0`, `virchow`, `hibou-l`, `hibou-b`) could not be verified without an HF
+  token. Reported in
+  [#8](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/8).
+- **The bug reporter now asks for a one-line Summary**, used as the GitHub issue title.
+  Previously the title was the first line of the description, so a report opening with a
+  greeting produced an issue titled "[bug] Hi," ([#8]). The dialog never said the first
+  line mattered. The Worker prefers the new `summary` field and falls back to the old
+  behaviour for jars that do not send one.
+
 - **Harmony batch correction crashed every multi-image run** with
   `ValueError: Shape of passed values is (n_markers, n_cells), indices imply ...`.
   `run_clustering.py` transposed `harmonypy`'s `Harmony.Z_corr` before handing it to
@@ -99,6 +134,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   who also proposed the shape-tolerant fix adopted here.
 
 ### Added
+
+- **`model_utils.impute_nonfinite()`** -- the single shared non-finite guard for the
+  measurements matrix, exec'd into every task script's globals alongside `detect_device()`.
+  Replaces three copy-pasted inline guards. Rows are never dropped (callers index cells by
+  row against spatial coordinates and CellRefs); an all-NaN column imputes to 0.0.
 
 - **Python test suite + CI for the Appose scripts** (`python_tests/`, run by
   `.github/workflows/python-tests.yml`). The scripts under `scripts/` are exec'd by

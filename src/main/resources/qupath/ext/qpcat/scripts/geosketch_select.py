@@ -182,7 +182,7 @@ def _gs_gap(
 # ---------------------------------------------------------------------------
 # Task body
 # ---------------------------------------------------------------------------
-data = measurements.ndarray().copy()
+data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 # cluster_labels arrives as an int32 NDArray (shared memory); tolerate a plain list too.
 try:
@@ -192,10 +192,6 @@ except AttributeError:
 logger.info("Geosketch select: %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=list(marker_names))
-n_nonfinite = int(np.count_nonzero(~np.isfinite(df.to_numpy(dtype=float))))
-if n_nonfinite > 0:
-    df = df.replace([np.inf, -np.inf], np.nan)
-    df = df.fillna(df.median(numeric_only=True).fillna(0.0)).fillna(0.0)
 
 try:
     norm = normalization

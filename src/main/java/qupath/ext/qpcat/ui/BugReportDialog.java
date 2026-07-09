@@ -19,6 +19,7 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
@@ -60,6 +61,7 @@ public class BugReportDialog {
     private final Stage stage;
     private final Window owner;
 
+    private final TextField summaryField = new TextField();
     private final TextArea descriptionArea = new TextArea();
     private final CheckBox chkSysInfo = new CheckBox("Include system info (versions, OS)");
     private final CheckBox chkSessionLog = new CheckBox("Include QP-CAT operation log");
@@ -98,6 +100,11 @@ public class BugReportDialog {
     private Region buildContent() {
         VBox root = new VBox(10);
         root.setPadding(new Insets(16));
+
+        Label summaryHeading = new Label("Summary (used as the issue title):");
+        summaryHeading.setStyle("-fx-font-weight: bold;");
+
+        summaryField.setPromptText("One line, e.g. \"Harmony batch correction crashes on 2 images\"");
 
         Label heading =
                 new Label("Describe the bug (minimum " + BugReportService.MIN_DESCRIPTION_CHARS + " characters):");
@@ -157,7 +164,8 @@ public class BugReportDialog {
             root.getChildren().add(notConfigured);
         }
 
-        root.getChildren().addAll(heading, descriptionArea, options, statusLabel, buttons);
+        root.getChildren().addAll(
+                summaryHeading, summaryField, heading, descriptionArea, options, statusLabel, buttons);
         return root;
     }
 
@@ -165,6 +173,17 @@ public class BugReportDialog {
         if (submitting) {
             return;
         }
+        String summary = summaryField.getText().trim();
+        if (summary.length() < BugReportService.MIN_SUMMARY_CHARS) {
+            setStatus("Please enter a one-line summary (at least "
+                    + BugReportService.MIN_SUMMARY_CHARS + " characters). It becomes the issue title.", true);
+            return;
+        }
+        if (summary.length() > BugReportService.MAX_SUMMARY_CHARS) {
+            setStatus("Summary is too long (max " + BugReportService.MAX_SUMMARY_CHARS + " characters).", true);
+            return;
+        }
+
         String description = descriptionArea.getText().trim();
         if (description.length() < BugReportService.MIN_DESCRIPTION_CHARS) {
             setStatus("Please enter at least " + BugReportService.MIN_DESCRIPTION_CHARS + " characters.", true);
@@ -201,11 +220,12 @@ public class BugReportDialog {
         Map<String, String> artifacts =
                 BugReportService.gatherLogArtifacts(chkSessionLog.isSelected(), chkQuPathLog.isSelected());
 
-        BugReport report = new BugReport(description, sysinfo, artifacts, screenshotBase64);
+        BugReport report = new BugReport(summary, description, sysinfo, artifacts, screenshotBase64);
 
         submitting = true;
         submitButton.setDisable(true);
         submitButton.setText("Submitting...");
+        summaryField.setDisable(true);
         descriptionArea.setDisable(true);
         setStatus("Submitting...", false);
 
@@ -223,6 +243,7 @@ public class BugReportDialog {
         submitting = false;
         submitButton.setDisable(false);
         submitButton.setText("Submit");
+        summaryField.setDisable(false);
         descriptionArea.setDisable(false);
 
         if (result.ok()) {

@@ -54,6 +54,10 @@ public class BugReportService {
     public static final int MIN_DESCRIPTION_CHARS = 20;
     public static final int MAX_DESCRIPTION_CHARS = 10000;
 
+    /** The worker truncates the issue title at 80 characters. */
+    public static final int MIN_SUMMARY_CHARS = 8;
+    public static final int MAX_SUMMARY_CHARS = 80;
+
     private static final int MAX_RUN_LOG_CHARS = 40000;
     private static final int MAX_QUPATH_LOG_CHARS = 12000;
 
@@ -66,7 +70,8 @@ public class BugReportService {
 
     /** Immutable request assembled by the dialog. */
     public record BugReport(
-            String description, String sysinfo, Map<String, String> artifacts, String screenshotBase64) {}
+            String summary, String description, String sysinfo,
+            Map<String, String> artifacts, String screenshotBase64) {}
 
     /** Outcome of a submission. {@code ok} false carries a user-facing {@code error}. */
     public record Result(boolean ok, String issueUrl, Integer issueNumber, String error) {}
@@ -243,6 +248,7 @@ public class BugReportService {
         String version = getExtensionVersion();
         root.addProperty("extension", EXTENSION_LABEL + " " + version);
         root.addProperty("app_version", version);
+        root.addProperty("summary", report.summary());
         root.addProperty("description", report.description());
 
         String sysinfo = report.sysinfo();

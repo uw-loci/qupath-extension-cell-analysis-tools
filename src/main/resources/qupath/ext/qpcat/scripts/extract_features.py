@@ -66,7 +66,21 @@ if token:
     import os
     os.environ["HF_TOKEN"] = token
 
-model = timm.create_model(timm_id, pretrained=True, num_classes=0)
+try:
+    model = timm.create_model(timm_id, pretrained=True, num_classes=0)
+except KeyError as _cfg_err:
+    # timm raises a bare KeyError: 'architecture' when the HuggingFace repo is a
+    # transformers model rather than a timm one -- its config.json has
+    # "architectures" (plural). Translate it into something actionable.
+    if "architecture" not in str(_cfg_err):
+        raise
+    raise RuntimeError(
+        "Model '%s' (%s) is not loadable by timm: its HuggingFace config.json "
+        "has no 'architecture' key, which means it is a transformers model, not "
+        "a timm one. This is a bug in the QP-CAT model registry, not a problem "
+        "with your environment -- please report it with the model name."
+        % (model_name, timm_id)
+    ) from _cfg_err
 model.eval()
 
 device = detect_device()

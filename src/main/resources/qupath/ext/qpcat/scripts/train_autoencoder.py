@@ -505,7 +505,8 @@ if use_tiles:
     data = None
     n_markers = 0
 else:
-    data = measurements.ndarray().copy().astype(np.float32)
+    data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
+    data = data.astype(np.float32)
     n_cells, n_markers = data.shape
     raw_tiles = None
     img_channels = 0
@@ -766,7 +767,13 @@ has_tile_measurements = False
 if use_tiles:
     try:
         if tile_measurements is not None:
-            tile_meas_data = tile_measurements.ndarray().copy().astype(np.float32)
+            # Impute before computing statistics: mean/std are not NaN-aware, so
+            # one missing measurement would turn a whole column into NaN and
+            # train the model on NaN without ever raising.
+            tile_meas_data, _ = impute_nonfinite(
+                tile_measurements.ndarray(), context="tile measurement"
+            )
+            tile_meas_data = tile_meas_data.astype(np.float32)
             n_tile_measurements = tile_meas_data.shape[1]
             tile_meas_mean = tile_meas_data.mean(axis=0)
             tile_meas_std = tile_meas_data.std(axis=0)

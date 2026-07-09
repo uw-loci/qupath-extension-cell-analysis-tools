@@ -34,6 +34,19 @@ data = measurements.ndarray().copy()
 n_cells, n_markers = data.shape
 logger.info("Exporting %d cells x %d markers to AnnData", n_cells, n_markers)
 
+# Deliberately NOT imputed. A measurement QuPath could not compute arrives as
+# NaN, and AnnData represents that faithfully -- substituting a median here
+# would fabricate data in a file meant for external analysis. Warn instead, so
+# the user knows to handle it downstream (scanpy rejects NaN in most tools).
+n_nonfinite = int(np.count_nonzero(~np.isfinite(data)))
+if n_nonfinite > 0:
+    logger.warning(
+        "Exporting %d non-finite value(s) as NaN. They are preserved rather "
+        "than imputed; most scanpy tools reject NaN, so filter or impute in "
+        "your own pipeline (e.g. adata.X = np.nan_to_num(adata.X)).",
+        n_nonfinite,
+    )
+
 adata = ad.AnnData(X=data)
 adata.var_names = pd.Index(list(marker_names))
 

@@ -174,7 +174,8 @@ if use_tiles:
 
     data_norm = None  # tiles normalized per-batch in encode loop
 else:
-    raw_data = measurements.ndarray().copy().astype(np.float32)
+    raw_data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
+    raw_data = raw_data.astype(np.float32)
     n_cells, n_markers = raw_data.shape
     ckpt_n_markers = checkpoint['n_markers']
     logger.info("Measurement inference: %d cells x %d markers", n_cells, n_markers)
@@ -215,7 +216,10 @@ infer_meas_std = None
 if use_tiles and n_tile_meas > 0:
     try:
         if tile_measurements is not None:
-            infer_tile_meas = tile_measurements.ndarray().copy().astype(np.float32)
+            infer_tile_meas, _ = impute_nonfinite(
+                tile_measurements.ndarray(), context="tile measurement"
+            )
+            infer_tile_meas = infer_tile_meas.astype(np.float32)
             ckpt_meas_mean = checkpoint.get('tile_meas_mean')
             ckpt_meas_std = checkpoint.get('tile_meas_std')
             if ckpt_meas_mean is not None:

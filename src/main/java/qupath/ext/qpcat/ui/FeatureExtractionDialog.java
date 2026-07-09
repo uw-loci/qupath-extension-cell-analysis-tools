@@ -47,11 +47,14 @@ public class FeatureExtractionDialog {
     private static final String[][] MODELS = {
         {"hibou-b",       "Hibou-B (Apache 2.0, 86M params, 768-dim)"},
         {"hibou-l",       "Hibou-L (Apache 2.0, 300M params, 1024-dim)"},
-        {"midnight",      "Midnight (MIT, 1.1B params, 1536-dim)"},
         {"dinov2-large",  "DINOv2-Large (Apache 2.0, general-purpose, 1024-dim)"},
         {"h-optimus-0",   "H-optimus-0 (Apache 2.0, 1.1B params, 1536-dim, gated)"},
         {"virchow",       "Virchow (Apache 2.0, 632M params, 2560-dim, gated)"},
     };
+    // "midnight" (kaiko-ai/midnight) was listed here but is a transformers repo,
+    // not a timm one, so timm.create_model could never load it (issue #8). It
+    // needs a transformers AutoModel path before it can be offered again -- see
+    // FOUNDATION_MODELS in model_utils.py.
 
     private final QuPathGUI qupath;
     private final Stage owner;
