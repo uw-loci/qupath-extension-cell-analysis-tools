@@ -17,6 +17,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.SessionLogBuffer;
 import qupath.ext.qpcat.ui.BackupWarningDialog;
 import qupath.ext.qpcat.ui.BugReportDialog;
 import qupath.ext.qpcat.ui.ApplySavedResultDialog;
@@ -83,6 +84,10 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
     @Override
     public void installExtension(QuPathGUI qupath) {
         logger.info("Installing extension: {}", EXTENSION_NAME);
+
+        // Start capturing QuPath's live log in memory so the bug reporter can
+        // attach it even when file logging is disabled (the default).
+        SessionLogBuffer.init();
 
         updateEnvironmentState();
         QpcatPreferences.installPreferences(qupath);

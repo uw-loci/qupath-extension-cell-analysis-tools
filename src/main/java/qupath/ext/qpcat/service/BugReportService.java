@@ -115,7 +115,13 @@ public class BugReportService {
             }
         }
         if (includeQuPathLog) {
-            String content = readCappedLog(findQuPathLogFile(), MAX_QUPATH_LOG_CHARS);
+            // Prefer QuPath's on-disk log (complete, includes startup) when file
+            // logging is enabled; otherwise fall back to the in-memory capture of
+            // the live log, which is present even when no log file is written.
+            Path quPathLog = findQuPathLogFile();
+            String content = quPathLog != null
+                    ? readCappedLog(quPathLog, MAX_QUPATH_LOG_CHARS)
+                    : capAndScrub(SessionLogBuffer.getText(), MAX_QUPATH_LOG_CHARS);
             if (!content.isEmpty()) {
                 artifacts.put("qupath_log", content);
             }
@@ -128,9 +134,13 @@ public class BugReportService {
         return findSessionLogFile() != null;
     }
 
-    /** True if a QuPath-side log file could be located on disk (drives a checkbox state). */
+    /**
+     * True if a QuPath log can be attached -- either an on-disk log file exists,
+     * or the in-memory session buffer has captured the live log (the usual case,
+     * since QuPath writes no file by default). Drives a checkbox state.
+     */
     public static boolean isQuPathLogAvailable() {
-        return findQuPathLogFile() != null;
+        return findQuPathLogFile() != null || SessionLogBuffer.hasContent();
     }
 
     private static Path findSessionLogFile() {
@@ -151,6 +161,14 @@ public class BugReportService {
             text = Files.readString(path, StandardCharsets.UTF_8);
         } catch (IOException e) {
             logger.debug("Could not read log artifact {}: {}", path, e.getMessage());
+            return "";
+        }
+        return capAndScrub(text, maxChars);
+    }
+
+    /** Caps text to the most recent {@code maxChars} and scrubs home-dir paths. */
+    private static String capAndScrub(String text, int maxChars) {
+        if (text == null || text.isEmpty()) {
             return "";
         }
         if (text.length() > maxChars) {

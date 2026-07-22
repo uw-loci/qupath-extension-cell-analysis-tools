@@ -128,11 +128,7 @@ public class BugReportDialog {
         chkQuPathLog.setSelected(quPathLogAvailable);
         chkQuPathLog.setDisable(!quPathLogAvailable);
         if (!quPathLogAvailable) {
-            chkQuPathLog.setText("Include QuPath log (enable log files in QuPath Preferences)");
-            chkQuPathLog.setTooltip(new Tooltip(
-                    "QuPath only writes a log file when 'Create log files' is enabled in\n"
-                            + "Edit > Preferences (General tab). Turn it on, set a user directory if\n"
-                            + "prompted, then restart QuPath -- the log becomes attachable here."));
+            chkQuPathLog.setText("Include QuPath log (none captured this session)");
         }
 
         chkScreenshot.setSelected(false);

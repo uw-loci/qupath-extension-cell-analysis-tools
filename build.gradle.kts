@@ -32,6 +32,10 @@ dependencies {
     shadow(libs.qupath.fxtras)
     shadow(libs.gson)
 
+    // QuPath's log-viewer API (provided at runtime by QuPath) -- lets the bug
+    // reporter capture the live log in memory when file logging is disabled.
+    shadow("io.github.qupath:logviewer-api:0.2.0")
+
     // Appose for embedded Java-Python IPC with shared memory
     implementation("org.apposed:appose:0.12.0")
 
@@ -40,7 +44,7 @@ dependencies {
     // the -all.jar. isTransitive=false: core's published POM lists QuPath/JavaFX (injected
     // by qupath-conventions) but the QuPath host provides those at runtime -- bundling them
     // would balloon the jar. Build cluster3d-core with publishToMavenLocal first (mavenLocal).
-    implementation("io.github.uw-loci:cluster3d-core:0.1.2") { isTransitive = false }
+    implementation("io.github.uw-loci:cluster3d-core:0.1.5") { isTransitive = false }
 
     // SnakeYAML for the v1 YAML headless-batch parser. Already present on
     // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)
