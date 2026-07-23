@@ -9,7 +9,7 @@ pluginManagement {
 }
 
 qupath {
-    version = "0.6.0-rc4"
+    version = "0.7.0"
 }
 
 plugins {

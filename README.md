@@ -46,7 +46,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 
 ## Requirements
 
-- **QuPath** 0.6.0 or later
+- **QuPath** 0.7.0 or later
 - **Java** 21+
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment

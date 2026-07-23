@@ -3,7 +3,7 @@
 Step-by-step instructions for every workflow in the QP-CAT extension.
 
 **Prerequisites for all workflows:**
-- QuPath 0.6.0+ with QP-CAT installed
+- QuPath 0.7.0+ with QP-CAT installed
 - Python environment set up (Extensions > QP-CAT > Set up analysis environment (first run)...)
 - An image open in QuPath with cell detections present
 
