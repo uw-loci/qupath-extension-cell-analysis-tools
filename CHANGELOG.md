@@ -117,6 +117,29 @@ have frozen the UI on arrival anyway. Full analysis with measurements in
   the whole Ripley step -- L is the variance-stabilized transform of K and carries
   the same clustering-vs-dispersion signal.
 
+- **Measurement transfer drops to float32, bit-identically.** QuPath stores
+  detection measurements as float32 (`PathDetectionObject` uses
+  `MeasurementListType.FLOAT`; `PathCellObject` extends it), so shipping float64
+  over Appose doubled the shared segment to carry 29 bits of guaranteed zeros.
+  The matrix is now sent as float32 **when every value round-trips exactly** --
+  checked per value rather than assumed, so a double-backed list from an older
+  project or another extension falls back to float64 and says so. Measured at
+  1M cells x 40 markers: shared segment 320 MB -> 160 MB, for 63 ms of guard
+  scan (the narrower fill is itself ~7 ms faster, so net cost is ~56 ms).
+
+  Verified bit-identical end-to-end: the same clustering run on the phantom
+  dataset, in `reproducible` mode, produced identical cluster labels, identical
+  embedding coordinates, and identical cluster statistics (max abs diff 0.0)
+  before and after.
+
+  Python widens back to float64 before any arithmetic. Most scripts got that
+  free via `impute_nonfinite`; `run_phenotyping`, `compute_thresholds` and
+  `export_anndata` read the matrix directly and now widen explicitly with
+  `copy=True` (a plain `asarray` would alias the shared segment, which Appose
+  frees when the task returns). Doing the maths in float32 is the change that
+  flipped up to 28% of cluster labels in the 2026-06-26 perf pass; this is
+  deliberately not that change.
+
 ### Changed
 
 - **README catches up with the foundation-model removal.** `FeatureExtractionDialog`

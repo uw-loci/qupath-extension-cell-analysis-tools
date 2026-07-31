@@ -1283,12 +1283,7 @@ public class ClusteringWorkflow {
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
 
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var buf = measurementsNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            buf.put(data[i]);
-        }
+        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("measurements", measurementsNd);
@@ -1327,12 +1322,7 @@ public class ClusteringWorkflow {
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
 
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var buf = measurementsNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            buf.put(data[i]);
-        }
+        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("measurements", measurementsNd);
@@ -1394,20 +1384,10 @@ public class ClusteringWorkflow {
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
 
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var mbuf = measurementsNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            mbuf.put(data[i]);
-        }
+        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
         double[][] centroids = MeasurementExtractor.extractCentroids(extraction.getDetections());
-        NDArray.Shape spatialShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
-        NDArray spatialNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
-        var sbuf = spatialNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            sbuf.put(centroids[i]);
-        }
+        NDArray spatialNd = buildMeasurementNDArray(centroids, nCells, 2);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("measurements", measurementsNd);
@@ -1472,12 +1452,7 @@ public class ClusteringWorkflow {
         double[][] data = extraction.getData();
 
         // Create NDArray for measurement data (input -- closed after task completes)
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var buf = measurementsNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            buf.put(data[i]);
-        }
+        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
         // Create temp directory for plots if requested
         Path plotDir = null;
@@ -1918,6 +1893,44 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Build the shared-memory measurement matrix for an Appose task.
+     * <p>
+     * Ships float32 when every value round-trips exactly, which is the normal case
+     * because QuPath already stores detection measurements as float32 (see
+     * {@link MeasurementExtractor#isFloat32Exact}). That halves both the shared
+     * segment and the wire payload -- roughly 320 MB -> 160 MB at 1M cells x 40
+     * markers -- while remaining bit-identical, because the discarded bits are
+     * guaranteed zeros. Falls back to float64 and says so if any value would lose
+     * precision.
+     * <p>
+     * The Python side must widen back to float64 before doing arithmetic. Scripts
+     * that go through {@code impute_nonfinite} get that for free; the ones that read
+     * {@code measurements.ndarray()} directly upcast explicitly.
+     */
+    private static NDArray buildMeasurementNDArray(double[][] data, int nCells, int nMeasurements) {
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+        if (MeasurementExtractor.isFloat32Exact(data)) {
+            NDArray nd = new NDArray(NDArray.DType.FLOAT32, shape);
+            var buf = nd.buffer().asFloatBuffer();
+            for (int i = 0; i < nCells; i++) {
+                double[] row = data[i];
+                for (int j = 0; j < nMeasurements; j++) {
+                    buf.put((float) row[j]);
+                }
+            }
+            return nd;
+        }
+        logger.info("Measurement matrix is not float32-exact; shipping float64 "
+                + "({} cells x {} markers)", nCells, nMeasurements);
+        NDArray nd = new NDArray(NDArray.DType.FLOAT64, shape);
+        var buf = nd.buffer().asDoubleBuffer();
+        for (int i = 0; i < nCells; i++) {
+            buf.put(data[i]);
+        }
+        return nd;
+    }
+
+    /**
      * Runs sub-clustering on detections within a specific parent cluster.
      * The parent cluster detections are re-clustered and assigned hierarchical labels
      * (e.g., "Cluster 3.0", "Cluster 3.1").
@@ -2090,12 +2103,7 @@ public class ClusteringWorkflow {
         double[][] data = extraction.getData();
 
         // Create measurement NDArray
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var buf = measurementsNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            buf.put(data[i]);
-        }
+        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("measurements", measurementsNd);
@@ -2153,12 +2161,7 @@ public class ClusteringWorkflow {
 
         // Extract spatial coordinates (centroids)
         double[][] centroids = MeasurementExtractor.extractCentroids(extraction.getDetections());
-        NDArray.Shape spatialShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
-        NDArray spatialNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
-        var spatialBuf = spatialNd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            spatialBuf.put(centroids[i]);
-        }
+        NDArray spatialNd = buildMeasurementNDArray(centroids, nCells, 2);
         inputs.put("spatial_coords", spatialNd);
 
         try {
@@ -2992,11 +2995,8 @@ public class ClusteringWorkflow {
                 if (!useTiles) {
                     // Measurement mode
                     int nMeasurements = finalExtraction.getNMeasurements();
-                    NDArray.Shape shape = new NDArray.Shape(
-                            NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-                    NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-                    var buf = measurementsNd.buffer().asDoubleBuffer();
-                    for (double[] row : finalExtraction.getData()) buf.put(row);
+                    NDArray measurementsNd = buildMeasurementNDArray(
+                            finalExtraction.getData(), nCells, nMeasurements);
                     inputs.put("measurements", measurementsNd);
                     inputs.put("marker_names", List.of(finalExtraction.getMeasurementNames()));
                 } else {

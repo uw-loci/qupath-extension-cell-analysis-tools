@@ -19,6 +19,7 @@ Outputs (via task.outputs):
   n_markers: int
   file_path: str
 """
+
 import logging
 
 logger = logging.getLogger("qpcat.export")
@@ -30,7 +31,12 @@ import anndata as ad
 task.update("Building AnnData object...")
 
 # Build core data matrix
-data = measurements.ndarray().copy()
+# The Java side ships float32 when the values round-trip exactly (QuPath
+# stores detection measurements as float32 anyway), so widen to float64
+# HERE before any arithmetic. Doing the maths in float32 would change
+# results -- normalization and the distribution fits below are sensitive
+# to it -- which is exactly the regression this upcast exists to prevent.
+data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Exporting %d cells x %d markers to AnnData", n_cells, n_markers)
 
@@ -54,7 +60,7 @@ adata.var_names = pd.Index(list(marker_names))
 try:
     if cluster_labels is not None:
         labels_list = list(cluster_labels)
-        adata.obs['cluster'] = pd.Categorical([str(x) for x in labels_list])
+        adata.obs["cluster"] = pd.Categorical([str(x) for x in labels_list])
         logger.info("Added cluster labels (%d unique)", len(set(labels_list)))
 except NameError:
     pass
@@ -63,7 +69,7 @@ except NameError:
 try:
     if phenotype_labels is not None:
         pheno_list = list(phenotype_labels)
-        adata.obs['phenotype'] = pd.Categorical(pheno_list)
+        adata.obs["phenotype"] = pd.Categorical(pheno_list)
         logger.info("Added phenotype labels (%d unique)", len(set(pheno_list)))
 except NameError:
     pass
@@ -76,14 +82,16 @@ try:
     except NameError:
         emb_name = "X_umap"
     adata.obsm[emb_name] = emb_data
-    logger.info("Added embedding '%s' (%d x %d)", emb_name, emb_data.shape[0], emb_data.shape[1])
+    logger.info(
+        "Added embedding '%s' (%d x %d)", emb_name, emb_data.shape[0], emb_data.shape[1]
+    )
 except NameError:
     pass
 
 # Add spatial coordinates if provided
 try:
     spatial_data = spatial_coords.ndarray().copy()
-    adata.obsm['spatial'] = spatial_data
+    adata.obsm["spatial"] = spatial_data
     logger.info("Added spatial coordinates (%d cells)", spatial_data.shape[0])
 except NameError:
     pass
@@ -94,7 +102,7 @@ adata.write_h5ad(output_path)
 logger.info("AnnData written to %s", output_path)
 
 # Package outputs
-task.outputs['success'] = True
-task.outputs['n_cells'] = n_cells
-task.outputs['n_markers'] = n_markers
-task.outputs['file_path'] = output_path
+task.outputs["success"] = True
+task.outputs["n_cells"] = n_cells
+task.outputs["n_markers"] = n_markers
+task.outputs["file_path"] = output_path

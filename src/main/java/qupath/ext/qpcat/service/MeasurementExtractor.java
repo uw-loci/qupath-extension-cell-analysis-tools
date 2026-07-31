@@ -339,6 +339,39 @@ public class MeasurementExtractor {
     }
 
     /**
+     * True when every value in {@code data} survives a float32 round-trip exactly.
+     * <p>
+     * QuPath stores detection measurements as float32 -- {@link qupath.lib.objects.PathDetectionObject}
+     * creates its list with {@code MeasurementListType.FLOAT}, and
+     * {@code NumericMeasurementList.FloatList.setValue} casts to {@code (float)}.
+     * {@code PathCellObject} extends {@code PathDetectionObject}, so cells are float32
+     * too. Widening those back to double and shipping float64 over Appose therefore
+     * doubles the payload to carry 29 bits of guaranteed zeros.
+     * <p>
+     * This CHECKS rather than assumes, because the premise is about object
+     * provenance, not about the current QuPath version: a measurement list
+     * deserialized from an older project, or written by another extension, could in
+     * principle be double-backed. The check costs one comparison per value on a
+     * matrix we are copying anyway, and it turns a silent precision loss into an
+     * explicit fallback.
+     *
+     * @return true if a float32 transfer is lossless for this matrix
+     */
+    public static boolean isFloat32Exact(double[][] data) {
+        if (data == null) return false;
+        for (double[] row : data) {
+            if (row == null) continue;
+            for (double v : row) {
+                // NaN is fine -- it round-trips as NaN, and NaN != NaN so it needs
+                // its own branch rather than an equality test.
+                if (Double.isNaN(v)) continue;
+                if ((double) (float) v != v) return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Returns all unique measurement names from the given detections.
      */
     public static List<String> getAllMeasurements(Collection<? extends PathObject> detections) {

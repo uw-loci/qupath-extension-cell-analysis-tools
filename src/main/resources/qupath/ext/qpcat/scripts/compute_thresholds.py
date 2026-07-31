@@ -33,7 +33,12 @@ import pandas as pd
 
 # 1. Load data
 task.update("Loading measurements for threshold computation...")
-data = measurements.ndarray().copy()
+# The Java side ships float32 when the values round-trip exactly (QuPath
+# stores detection measurements as float32 anyway), so widen to float64
+# HERE before any arithmetic. Doing the maths in float32 would change
+# results -- normalization and the distribution fits below are sensitive
+# to it -- which is exactly the regression this upcast exists to prevent.
+data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Computing thresholds for %d cells x %d markers", n_cells, n_markers)
 

@@ -19,6 +19,7 @@ Outputs (via task.outputs):
   n_phenotypes: int
   phenotype_counts: str (JSON) -- {phenotype_name: count}
 """
+
 import logging
 import json
 
@@ -30,7 +31,12 @@ from appose import NDArray as PyNDArray
 
 # 1. Load data
 task.update("Loading measurements...")
-data = measurements.ndarray().copy()
+# The Java side ships float32 when the values round-trip exactly (QuPath
+# stores detection measurements as float32 anyway), so widen to float64
+# HERE before any arithmetic. Doing the maths in float32 would change
+# results -- normalization and the distribution fits below are sensitive
+# to it -- which is exactly the regression this upcast exists to prevent.
+data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
@@ -107,7 +113,7 @@ norm_data = df_norm.values
 labels = np.full(n_cells, -1, dtype=np.int32)
 
 for rule_idx, rule in enumerate(rules):
-    cell_type = rule.get('cellType', 'Unknown')
+    cell_type = rule.get("cellType", "Unknown")
 
     # Only evaluate unassigned cells
     unassigned = labels == -1
@@ -119,7 +125,7 @@ for rule_idx, rule in enumerate(rules):
     has_criteria = False
 
     for marker, condition in rule.items():
-        if marker == 'cellType' or not condition:
+        if marker == "cellType" or not condition:
             continue
         if marker not in marker_idx:
             logger.warning("Marker '%s' not found in data, skipping", marker)
@@ -132,13 +138,14 @@ for rule_idx, rule in enumerate(rules):
         # Use per-marker gate, falling back to default
         marker_gate = gates.get(marker, default_gate)
 
-        if condition == 'pos':
+        if condition == "pos":
             matches &= values >= marker_gate
-        elif condition == 'neg':
+        elif condition == "neg":
             matches &= values < marker_gate
         else:
-            logger.warning("Unknown condition '%s' for marker '%s', skipping",
-                           condition, marker)
+            logger.warning(
+                "Unknown condition '%s' for marker '%s', skipping", condition, marker
+            )
 
     if has_criteria:
         n_matched = int(np.sum(matches))
@@ -154,8 +161,14 @@ for rule_idx, rule in enumerate(rules):
 # for, so a too-strict rule set is obvious at a glance (e.g. "most of my Unknowns
 # are multi-positive"). Computed while Unknown cells are still labelled -1.
 unknown_mask = labels == -1
-rule_markers = sorted({m for r in rules for m, c in r.items()
-                       if m != 'cellType' and c and m in marker_idx})
+rule_markers = sorted(
+    {
+        m
+        for r in rules
+        for m, c in r.items()
+        if m != "cellType" and c and m in marker_idx
+    }
+)
 unknown_breakdown = {}
 if bool(np.any(unknown_mask)) and rule_markers:
     pos_count = np.zeros(n_cells, dtype=np.int32)
@@ -169,13 +182,15 @@ if bool(np.any(unknown_mask)) and rule_markers:
         "positive_for_one_marker": int(np.sum(u_pos == 1)),
         "positive_for_multiple_markers": int(np.sum(u_pos >= 2)),
     }
-    logger.info("Unknown breakdown: %d total | %d negative for all rule markers | "
-                "%d positive for exactly one | %d positive for >=2 markers "
-                "(failed an exclusivity 'neg' condition)",
-                unknown_breakdown["total"],
-                unknown_breakdown["negative_for_all_rule_markers"],
-                unknown_breakdown["positive_for_one_marker"],
-                unknown_breakdown["positive_for_multiple_markers"])
+    logger.info(
+        "Unknown breakdown: %d total | %d negative for all rule markers | "
+        "%d positive for exactly one | %d positive for >=2 markers "
+        "(failed an exclusivity 'neg' condition)",
+        unknown_breakdown["total"],
+        unknown_breakdown["negative_for_all_rule_markers"],
+        unknown_breakdown["positive_for_one_marker"],
+        unknown_breakdown["positive_for_multiple_markers"],
+    )
 
 # Unassigned cells get "Unknown"
 unknown_idx = len(rules)
@@ -183,11 +198,14 @@ n_unknown = int(np.sum(labels == -1))
 labels[labels == -1] = unknown_idx
 
 # Build phenotype names list
-phenotype_names = [r.get('cellType', 'Unknown') for r in rules] + ['Unknown']
+phenotype_names = [r.get("cellType", "Unknown") for r in rules] + ["Unknown"]
 n_phenotypes = len(set(int(x) for x in labels))
 
-logger.info("Phenotyping complete: %d distinct phenotypes, %d unknown cells",
-            n_phenotypes, n_unknown)
+logger.info(
+    "Phenotyping complete: %d distinct phenotypes, %d unknown cells",
+    n_phenotypes,
+    n_unknown,
+)
 
 # 5. Build counts summary
 counts = {}
@@ -201,10 +219,10 @@ task.update("Packaging results...")
 
 labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), labels)
-task.outputs['phenotype_labels'] = labels_nd
-task.outputs['phenotype_names'] = json.dumps(phenotype_names)
-task.outputs['n_phenotypes'] = n_phenotypes
-task.outputs['phenotype_counts'] = json.dumps(counts)
-task.outputs['unknown_breakdown'] = json.dumps(unknown_breakdown)
+task.outputs["phenotype_labels"] = labels_nd
+task.outputs["phenotype_names"] = json.dumps(phenotype_names)
+task.outputs["n_phenotypes"] = n_phenotypes
+task.outputs["phenotype_counts"] = json.dumps(counts)
+task.outputs["unknown_breakdown"] = json.dumps(unknown_breakdown)
 
 logger.info("Phenotyping results packaged")
