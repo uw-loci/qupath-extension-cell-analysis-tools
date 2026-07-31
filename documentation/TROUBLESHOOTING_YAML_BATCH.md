@@ -264,6 +264,53 @@ The YAML file contains a literal `sk-ant-*` string. Committing this to a repo le
 
 </details>
 
+<details>
+<summary><b>E021: a marker is gated at more than one threshold</b></summary>
+
+**What you see:**
+
+```
+[qpcat-batch] ERROR E021 phenotyping.rules: marker 'Cell: CD3 mean' is gated at more than one threshold (1.0 from [T_cell]; 2.0 from [Activated_T]). Phenotyping applies ONE gate per marker across all rules, so this cannot be honoured as written.
+```
+
+**What it means:**
+
+The YAML lets each rule carry its own `require_min_zscore` / `exclude_max_zscore`,
+but the phenotyping engine keeps **one gate per marker**, shared by every rule.
+If two rules ask for different thresholds on the same marker, only one can apply.
+
+Rules are evaluated **first-match-wins**, so silently picking one threshold would
+move cells into a different phenotype and still report plausible counts -- with
+nothing in the log to say the run did not match the config. The batch runner
+rejects the config instead, for the same reason E011 rejects JavaFX-only plot
+kinds rather than substituting something else.
+
+Note the two fields default independently (both `1.0`), so this most often shows
+up when a marker is an `exclude_markers` entry in one rule and a
+`require_markers` entry in another, and only one of the two thresholds was
+customised.
+
+**What to do:**
+
+1. Give the marker the **same** threshold in every rule that uses it:
+
+   ```yaml
+   rules:
+     - name: T_cell
+       require_markers: ["Cell: CD3 mean"]
+       require_min_zscore: 1.5
+     - name: Cytotoxic_T
+       require_markers: ["Cell: CD3 mean", "Cell: CD8 mean"]
+       require_min_zscore: 1.5     # same gate for CD3
+   ```
+
+2. Or split the rules into **separate runs**, each with its own config, if the
+   thresholds genuinely need to differ.
+3. Leaving the z-scores at their defaults never triggers this -- every marker
+   resolves to `1.0`.
+
+</details>
+
 ---
 
 ## See also

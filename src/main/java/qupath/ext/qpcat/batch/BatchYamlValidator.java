@@ -6,8 +6,10 @@ import qupath.ext.qpcat.model.PlotKind;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -258,6 +260,63 @@ public final class BatchYamlValidator {
         }
     }
 
+    /**
+     * Reject rule sets that ask for a per-marker gate the engine cannot honour.
+     * <p>
+     * The YAML carries a z-score threshold <b>per rule</b>
+     * ({@code require_min_zscore} / {@code exclude_max_zscore}), but
+     * {@code run_phenotyping.py} evaluates against one gate <b>per marker</b>,
+     * shared by every rule ({@code marker_gate = gates.get(marker, default_gate)}).
+     * So the schema is strictly more expressive than the engine: a marker used by
+     * two rules at different thresholds has no faithful representation.
+     * <p>
+     * Approximating it is worse than refusing it. Rules are evaluated
+     * first-match-wins, so quietly widening one rule's gate re-routes cells into a
+     * different phenotype, and the run still reports plausible-looking counts with
+     * nothing in the log to say the config was not what ran. The batch surface is
+     * sold as reproducible and CI-friendly; a config that silently means something
+     * other than what it says is exactly the failure that promise excludes. Same
+     * reasoning as E011 refusing JavaFX-only plot kinds rather than substituting.
+     * <p>
+     * Configs on the defaults never trip this: every threshold is 1.0, so every
+     * marker resolves to one value regardless of rule or direction.
+     */
+    private static void validateGateConsistency(
+            List<BatchYamlSchema.PhenotypeRuleEntry> rules, ValidationResult r) {
+        // marker -> gate value -> the rules that asked for it
+        Map<String, Map<Double, List<String>>> byMarker = new LinkedHashMap<>();
+        for (BatchYamlSchema.PhenotypeRuleEntry rule : rules) {
+            String name = rule.getName() == null ? "<unnamed>" : rule.getName();
+            collectGate(byMarker, rule.getRequireMarkers(), rule.getRequireMinZscore(), name);
+            collectGate(byMarker, rule.getExcludeMarkers(), rule.getExcludeMaxZscore(), name);
+        }
+        for (Map.Entry<String, Map<Double, List<String>>> e : byMarker.entrySet()) {
+            if (e.getValue().size() < 2) continue;
+            StringBuilder detail = new StringBuilder();
+            for (Map.Entry<Double, List<String>> g : e.getValue().entrySet()) {
+                if (detail.length() > 0) detail.append("; ");
+                detail.append(g.getKey()).append(" from ").append(g.getValue());
+            }
+            r.add(ValidationIssue.error("E021", "phenotyping.rules",
+                    "marker '" + asciiSafe(e.getKey()) + "' is gated at more than one "
+                    + "threshold (" + detail + "). Phenotyping applies ONE gate per "
+                    + "marker across all rules, so this cannot be honoured as written. "
+                    + "Give the marker the same require_min_zscore / exclude_max_zscore "
+                    + "in every rule that uses it, or split the rules into separate runs."));
+        }
+    }
+
+    private static void collectGate(Map<String, Map<Double, List<String>>> byMarker,
+                                    List<String> markers, double gate, String ruleName) {
+        if (markers == null) return;
+        for (String marker : markers) {
+            if (marker == null || marker.isEmpty()) continue;
+            byMarker.computeIfAbsent(marker, k -> new LinkedHashMap<>())
+                    .computeIfAbsent(gate, k -> new ArrayList<>())
+                    .add(ruleName);
+        }
+    }
+
     private static void validatePhenotyping(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.PhenotypingBlock p = s.getPhenotyping();
         if (p == null) return;
@@ -279,6 +338,7 @@ public final class BatchYamlValidator {
                             "required and must have at least one marker"));
                 }
             }
+            validateGateConsistency(p.getRules(), r);
         }
         BatchYamlSchema.LlmExplainerBlock llm = p.getLlmExplainer();
         if (llm != null && llm.isEnabled()) {

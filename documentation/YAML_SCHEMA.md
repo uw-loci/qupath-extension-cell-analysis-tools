@@ -146,6 +146,19 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `rules[].exclude_markers` | list[string] | `[]` | Markers required negative. |
 | `rules[].require_min_zscore` | double | `1.0` | Minimum z-score for `require_markers`. |
 | `rules[].exclude_max_zscore` | double | `1.0` | Maximum z-score for `exclude_markers`. |
+
+> **One gate per marker.** These z-scores are written per rule, but the
+> phenotyping engine applies **one gate per marker across all rules**. A marker
+> gated at two different thresholds is rejected with **E021** rather than
+> approximated -- rules are first-match-wins, so quietly picking one threshold
+> would reroute cells with no trace in the log. Leaving the defaults never
+> trips it.
+
+> **Phenotyping runs once per project, not per image.** The gates are z-scores,
+> which are only comparable across images when the cells are normalized
+> together, so all resolved images are phenotyped in a single pass and each is
+> saved with its labels. `clustering.normalization` and
+> `clustering.measurements` supply the panel; `zscore` is used if absent.
 | `llm_explainer` | object | -- | Optional LLM cluster-explainer block. See below. |
 
 ### `phenotyping.llm_explainer` (optional, object)

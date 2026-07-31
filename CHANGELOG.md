@@ -140,6 +140,36 @@ have frozen the UI on arrival anyway. Full analysis with measurements in
   flipped up to 28% of cluster labels in the 2026-06-26 perf pass; this is
   deliberately not that change.
 
+- **Headless phenotyping now actually runs.** The YAML batch used to log
+  `phenotyping dispatch deferred to v1.1 (headless entry point pending)` and do
+  nothing. `runPhenotypingProject` needed exactly one fix to work without a GUI --
+  its `Platform.runLater` block dereferenced a null `QuPathGUI`, the same guard
+  `runProjectClustering` already had. New `HeadlessPhenotypingWorkflow` mirrors
+  `HeadlessClusteringWorkflow` and converts the YAML rules into the two JSON
+  payloads the Python task expects.
+
+  It runs **once per project rather than per image**, deliberately: the rules are
+  z-score gates, and a z-score is only comparable across images when the cells are
+  normalized together. A per-image loop would silently give every image its own
+  thresholds.
+
+  Validated against the synthetic TME dataset's ground truth: 6 rules over 5,743
+  cells, **94.1% accuracy** (tumor 100%, macrophage 99.9%, B cell 98.8%,
+  fibroblast 97.2%; the T-cell subsets sit at 82-85% because a z >= 1.0 gate is
+  strict for small cells whose per-cell mean is diluted -- the misses go to
+  Unknown, not to a wrong phenotype).
+
+  This also closes the coverage gap flagged with the float32 work: `run_phenotyping.py`
+  is now reachable from the CLI, so the phantom smoke test exercises it.
+
+- **E021 rejects rules that gate one marker at two thresholds.** The YAML carries
+  `require_min_zscore` / `exclude_max_zscore` per rule, but the engine keeps one
+  gate per marker for all rules, so the schema is more expressive than the engine.
+  Because rules are first-match-wins, approximating would reroute cells and still
+  report plausible counts; the config is refused instead, naming the marker and
+  the rules that disagree. Same stance as E011 on JavaFX-only plot kinds. Default
+  configs never trip it.
+
 ### Changed
 
 - **README catches up with the foundation-model removal.** `FeatureExtractionDialog`

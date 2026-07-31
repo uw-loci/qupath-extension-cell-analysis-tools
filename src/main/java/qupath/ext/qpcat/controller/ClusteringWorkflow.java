@@ -1096,12 +1096,17 @@ public class ClusteringWorkflow {
         }
 
         // Fire hierarchy update for the currently open image (if it was phenotyped).
-        Platform.runLater(() -> {
-            ImageData<BufferedImage> currentImageData = qupath.getImageData();
-            if (currentImageData != null) {
-                currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
-            }
-        });
+        // Null-safe: headless dispatch (YAML batch) passes a null QuPathGUI, and
+        // there is no FX toolkit to post to -- the per-image saves above already
+        // persisted the labels. Same guard as runProjectClustering.
+        if (qupath != null) {
+            Platform.runLater(() -> {
+                ImageData<BufferedImage> currentImageData = qupath.getImageData();
+                if (currentImageData != null) {
+                    currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+                }
+            });
+        }
 
         String completeMsg = "Project phenotyping complete: " + resultMap.get("n_phenotypes")
                 + " phenotypes assigned to " + extraction.getNCells() + " cells across "

@@ -234,6 +234,10 @@ public final class YamlBatchOrchestrator {
                 }
             }
 
+            if (!options.isDryRun()) {
+                runProjectPhenotyping(schema, rp, emitter);
+            }
+
             for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
                 processed++;
                 ImageOutcome out = new ImageOutcome(entry.getImageName());
@@ -402,18 +406,10 @@ public final class YamlBatchOrchestrator {
         }
 
         // ---- Phenotyping ----
-        // Headless phenotyping is GUI-only on the existing code path (binds
-        // to QuPathGUI.getImageData()). v1 YAML batch logs the request but
-        // defers actual dispatch to a v1.1 follow-up where a headless phenotype
-        // entry point is added. We surface this as a WARN per design Section 9.
-        if (schema.getPhenotyping() != null && schema.getPhenotyping().isEnabled()) {
-            emitter.emitRow(ProgressEmitter.Level.WARN, index, total,
-                    ProgressEmitter.fields("image", entry.getImageName(),
-                            "step", "phenotyping",
-                            "rules", schema.getPhenotyping().getRules() == null
-                                    ? 0 : schema.getPhenotyping().getRules().size()),
-                    "phenotyping dispatch deferred to v1.1 (headless entry point pending)");
-        }
+        // Runs ONCE per project, not per image -- see runProjectPhenotyping. The
+        // rules are z-score gates, and z-scores are only comparable across images
+        // if the cells are normalized together, so a per-image loop would silently
+        // give each image its own thresholds.
 
         // ---- Spatial stats ----
         // The existing pipeline runs spatial stats AS PART OF clustering when
@@ -453,6 +449,54 @@ public final class YamlBatchOrchestrator {
                                 "step", "figure_export"),
                         "failed: " + BatchYamlParser.asciiSafe(e.getMessage()));
             }
+        }
+    }
+
+    /**
+     * Run rule-based phenotyping ONCE across all of a project's resolved images.
+     * <p>
+     * Deliberately project-level rather than per-image: the rules are z-score
+     * gates, and a z-score is only comparable across images when the cells are
+     * normalized together. Running per image would silently give every image its
+     * own thresholds, so "CD3 &gt;= 1.0" would mean a different absolute intensity
+     * in each one. This matches the GUI's all-images scope, which normalizes
+     * jointly for the same reason.
+     * <p>
+     * Non-fatal: phenotyping failure is reported and the run continues, because
+     * clustering results for the project are already saved by this point.
+     */
+    private static void runProjectPhenotyping(BatchYamlSchema schema,
+                                              ScopeResolver.ResolvedProject rp,
+                                              ProgressEmitter emitter) {
+        BatchYamlSchema.PhenotypingBlock pb = schema.getPhenotyping();
+        if (pb == null || !pb.isEnabled()) return;
+        if (pb.getRules() == null || pb.getRules().isEmpty()) return;  // llm-only block
+
+        int nImages = rp.getImages().size();
+        emitter.emit(ProgressEmitter.Level.INFO, "Phenotyping across " + nImages
+                + " image(s): " + pb.getRules().size() + " rule(s)");
+        try {
+            // Normalization follows the clustering block when present, so gates
+            // mean the same thing as the clustering that produced the panel.
+            String normalization = (schema.getClustering() != null
+                    && schema.getClustering().getNormalization() != null)
+                    ? schema.getClustering().getNormalization() : "zscore";
+            List<String> measurements = (schema.getClustering() != null)
+                    ? schema.getClustering().getMeasurements() : null;
+
+            HeadlessPhenotypingWorkflow hw = new HeadlessPhenotypingWorkflow();
+            HeadlessPhenotypingWorkflow.Outcome res = hw.runPhenotyping(
+                    rp.getImages(), pb.getRules(), normalization, measurements, null);
+
+            for (String w : res.getWarnings()) {
+                emitter.emit(ProgressEmitter.Level.WARN, "phenotyping: " + w);
+            }
+            emitter.emit(ProgressEmitter.Level.OK, "Phenotyping complete: "
+                    + res.getNPhenotypes() + " phenotype(s) assigned to "
+                    + res.getNCells() + " cells across " + nImages + " image(s)");
+        } catch (Exception e) {
+            emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed: "
+                    + BatchYamlParser.asciiSafe(e.getMessage()));
         }
     }
 
