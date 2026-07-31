@@ -24,24 +24,44 @@ QP-CAT embeds a full scientific Python environment (via [Appose](https://github.
 
 ## Features
 
-Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in parentheses for when you need to know what's under the hood.
+One line each -- what you can *do*, with the method named in small text. Follow
+a link for the detail: which algorithm to pick, when to reach for it, and the
+caveats.
 
-- **No-setup install** -- one click downloads and configures the full Python environment for you. No conda, no command line, no environment fights. ~1.5-2.5 GB download, ~2.5 GB on disk
-- **Discover cell types without labels** -- automatic grouping of cells by their marker expression. Pick the algorithm that fits your question: Leiden or KMeans for first-pass discovery, HDBSCAN when you expect rare populations or noise, BANKSY when tissue architecture matters; plus Agglomerative, MiniBatch KMeans, and Gaussian Mixture for special cases
-- **Get a phenotype suggestion for each cluster, in plain English** [Beta-largely untested] -- after clustering, push one button and the model reads each cluster's top markers, then proposes a cell-type label and a short rationale citing the markers it relied on. Useful when the panel is unfamiliar, when reviewing a student's clusters, or when writing up results. Bring your own key for Anthropic Claude, or point at a local Ollama endpoint for no-API-spend / offline use; the prompt and response are saved to the project audit log every time (LLM cluster explainer; Anthropic + Ollama providers)
-- **Annotate a few cells, classify the rest** *(test feature)* -- label a small subset of cells in QuPath and a variational autoencoder (VAE) extends those labels to every cell in the project. Learns from your marker measurements, from the actual image patch around each cell (optionally with a CellSighter-style cell-mask channel so the network knows which cell is "the" cell), or both combined
-- **Cleaner clusters via tissue context** -- optional pre-step that averages each cell's features with its spatial neighbors before clustering, so niches and tissue zones come out as connected regions instead of salt-and-pepper noise. Turns any of the algorithms above into a spatially-aware version (graph convolution smoothing)
-- **Marker gating with auto-thresholds** -- classic flow-cytometry-style cell typing, with sensible threshold suggestions per marker (Triangle, GMM, and Gamma auto-threshold methods)
-- **Click the plot, see the cells** -- interactive UMAP / PCA / t-SNE: brush a region of the embedding and the corresponding cells highlight on the slide
-- **Test where cell types live in tissue** -- ask whether two phenotypes co-localize or avoid each other, whether a marker is spatially structured at short range or long range, and how often two cell types meet at a given distance. Choose the graph behind the analysis explicitly (kNN, Radius, or Delaunay) so the same neighborhood backs every stat (neighborhood enrichment, Ripley's K/L, Geary's C, Moran's I, pairwise + one-vs-rest co-occurrence via squidpy; matches OpenIMC's spatial-stats catalog while reusing the squidpy backend QP-CAT already ships)
-- **Compare across slides and batches** -- batch correction so your clusters reflect biology, not slide-of-origin or staining-day effects, when you analyze a multi-image project all at once (Harmony integration)
-- **Publication-ready follow-up** -- find the markers that define each cluster (Wilcoxon ranking) and generate dotplots, violin plots, and PAGA trajectory graphs without leaving QuPath
-- **Easy hand-off to Python / R** -- export results as standard `.h5ad` AnnData files. Compatible with Scanpy, Seurat, and cellxgene, so you can keep going in your usual notebook when you want to
-- **Export every figure from a clustering run in one click** -- pick the project images you want, pick which plots you need (dotplot, matrix plot, PAGA, violin, scanpy embedding, neighborhood enrichment, spatial scatter, Ripley K/L, Geary's C, co-occurrence, ...), and write the lot to a directory at 300 DPI by default. PNG and TIFF in v1 (SVG / PDF / EPS arrive in v1.1). Image subsetting is mandatory, not just an "all / current" toggle. Callable from a Groovy script for batch / headless use (inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action)
-- **Run QP-CAT in batch mode from a single YAML config, no GUI required** -- write the clustering / phenotyping / spatial-stats / figure-export plan in one file, then run it across every image in a project from a terminal via QuPath's `script` subcommand. Same surface the dialog uses (Appose env, audit log, saved results); reproducible, version-controllable, and CI-friendly. Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's extension class loader so the analysis surface is identical to the dialog (YAML schema in [documentation/YAML_SCHEMA.md](documentation/YAML_SCHEMA.md), entry point `qpcat_batch.groovy`)
-- **Reproducible audit trail** -- every operation is logged per-project with the full parameters used, so you (or a reviewer) can retrace exactly what was run, when, and how
+**Set up**
 
----
+- **[No-setup install](documentation/HOW_TO_GUIDE.md#1-setting-up-the-environment)** -- one click configures the full Python environment. No conda, no command line. <sub>~1.5-2.5 GB download, ~2.5 GB on disk</sub>
+
+**Find cell types**
+
+- **[Discover cell types without labels](documentation/HOW_TO_GUIDE.md#2-running-clustering)** -- group cells automatically by marker expression. <sub>Leiden or KMeans to start, HDBSCAN for rare populations, BANKSY when architecture matters; plus 3 more</sub>
+- **[Marker gating with auto-thresholds](documentation/HOW_TO_GUIDE.md#6-rule-based-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
+- **[Cleaner clusters via tissue context](documentation/BEST_PRACTICES.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
+- **[Annotate a few cells, classify the rest](documentation/HOW_TO_GUIDE.md#12-test-autoencoder-cell-classifier)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; *test feature*</sub>
+- **[Get a phenotype suggestion in plain English](documentation/HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
+
+**Ask spatial questions**
+
+- **[Test where cell types live in tissue](documentation/HOW_TO_GUIDE.md#17-spatial-statistics-ripley-geary-co-occurrence)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley K/L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
+- **[Find cellular neighborhoods](documentation/HOW_TO_GUIDE.md#22-finding-cellular-neighborhoods-spatial-niches)** -- recurring tissue niches, from the cell-type composition around each cell. <sub>Windowed composition + clustering</sub>
+- **[Compare across slides and batches](documentation/BEST_PRACTICES.md#batch-correction)** -- clusters that reflect biology, not slide-of-origin or staining day. <sub>Harmony, across a multi-image project</sub>
+
+**Look at results**
+
+- **[Click the plot, see the cells](documentation/HOW_TO_GUIDE.md#20-results-dialog-reference)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
+- **[Gate cells on a 2D plot](documentation/HOW_TO_GUIDE.md#25-gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
+- **[Publication-ready follow-up](documentation/HOW_TO_GUIDE.md#20-results-dialog-reference)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
+
+**Get results out**
+
+- **[Hand off to Python / R](documentation/HOW_TO_GUIDE.md#13-exporting-anndata)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
+- **[Export every figure in one click](documentation/HOW_TO_GUIDE.md#18-exporting-figures)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF; SVG / PDF / EPS in v1.1; callable from Groovy</sub>
+- **[Run in batch from one YAML config](documentation/YAML_SCHEMA.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is identical to the dialog</sub>
+- **[Reproducible audit trail](documentation/HOW_TO_GUIDE.md#16-reviewing-the-operation-audit-trail)** -- every run's parameters, cell counts and results, in plain text. <sub>Per-project log, diff-friendly</sub>
+
+<sub>Batch export and YAML batch mode were inspired by
+[OpenIMC](https://github.com/dean-tessone/OpenIMC); QP-CAT's spatial-stats
+catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 
 ## Requirements
 
