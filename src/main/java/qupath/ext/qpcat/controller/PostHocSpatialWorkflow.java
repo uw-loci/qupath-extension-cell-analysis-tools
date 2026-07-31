@@ -67,8 +67,32 @@ public class PostHocSpatialWorkflow {
     // Absolute path of the persisted results folder from the last run, or null.
     private String lastSavedPath;
 
+    // Explicit project for headless runs (QuPath script), where qupath is null.
+    private Project<BufferedImage> headlessProject;
+
     public PostHocSpatialWorkflow(QuPathGUI qupath) {
         this.qupath = qupath;
+    }
+
+    /**
+     * Supply the project for headless runs (YAML batch / script mode), where
+     * {@code qupath} is null. Required to persist results to the project folder.
+     */
+    public void setHeadlessProject(Project<BufferedImage> project) {
+        this.headlessProject = project;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Project<BufferedImage> currentProject() {
+        if (qupath != null && qupath.getProject() != null) {
+            return (Project<BufferedImage>) qupath.getProject();
+        }
+        return headlessProject;
+    }
+
+    @SuppressWarnings("unchecked")
+    private ImageData<BufferedImage> currentImageData() {
+        return qupath != null ? (ImageData<BufferedImage>) qupath.getImageData() : null;
     }
 
     /** User-selected options for a post-hoc spatial-stats run. */
@@ -224,7 +248,7 @@ public class PostHocSpatialWorkflow {
      */
     @SuppressWarnings("unchecked")
     private String persistToProject(Options opts, List<WindowResult> results) {
-        Project<BufferedImage> project = (Project<BufferedImage>) qupath.getProject();
+        Project<BufferedImage> project = currentProject();
         if (project == null || project.getPath() == null) return null;
         try {
             Path dir = project.getPath().getParent().resolve("qpcat/spatial_stats");
@@ -380,8 +404,8 @@ public class PostHocSpatialWorkflow {
     @SuppressWarnings("unchecked")
     private List<Target> resolveTargets(Options opts) throws IOException {
         List<Target> targets = new ArrayList<>();
-        Project<BufferedImage> project = (Project<BufferedImage>) qupath.getProject();
-        ImageData<BufferedImage> openData = qupath.getImageData();
+        Project<BufferedImage> project = currentProject();
+        ImageData<BufferedImage> openData = currentImageData();
         String openId = null;
         if (project != null && openData != null) {
             ProjectImageEntry<BufferedImage> e = project.getEntry(openData);

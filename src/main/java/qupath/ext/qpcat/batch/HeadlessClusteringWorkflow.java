@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.lib.projects.ProjectImageEntry;
 
 import java.awt.image.BufferedImage;
@@ -64,6 +65,14 @@ public final class HeadlessClusteringWorkflow {
         }
         if (config == null) {
             throw new IOException("HeadlessClusteringWorkflow: clustering config is null");
+        }
+        // Headless entry point: the GUI normally initializes the Appose service
+        // at startup, but under `QuPath script` nothing does. Start it on demand
+        // (the env must already be built; this only spins up the Python worker).
+        ApposeClusteringService service = ApposeClusteringService.getInstance();
+        if (!service.isAvailable()) {
+            logger.info("[headless-cluster] initializing QPCAT service...");
+            service.initialize(progressMessage);
         }
         long start = System.currentTimeMillis();
         ClusteringResult result = inner.runProjectClustering(
