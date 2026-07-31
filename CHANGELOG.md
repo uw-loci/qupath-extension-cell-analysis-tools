@@ -87,6 +87,45 @@ have frozen the UI on arrival anyway. Full analysis with measurements in
   sole caller sketches to ~1000 cells first. Fixed at the same time so raising that
   cap cannot resurrect it.
 
+- **`./gradlew test` runs again.** It had been dying before a single test
+  executed with `java.lang.module.FindException: Module javafx.base not found`.
+  `tasks.test` passed `--add-modules javafx.base,...`, but JavaFX reaches the
+  tests on the **classpath** (`testImplementation("org.openjfx:...")`), and
+  `--add-modules` only resolves modules from the module path or the JDK's own
+  platform modules -- which no plain OpenJDK build provides for JavaFX. Both that
+  flag and the accompanying `--add-opens` are gone (classpath classes are in the
+  unnamed module, which is already open). This is unrelated to the Java 21 vs 25
+  note further down `build.gradle.kts`; separately, note that Gradle 8.12 cannot
+  run *on* Java 25, so the build JVM stays 21.
+
+  With the suite able to start, three `SpatialConnectionsScriptsTest` cases were
+  found failing on `new ImageData<>(null)`, which QuPath 0.7 rejects ("Cannot
+  create ImageData without a server or server builder"). That arrived with the
+  0.6 -> 0.7 bump and had been invisible for as long as the tests could not boot.
+  They now use a mock server. **147 tests across 20 classes, 0 failures.**
+
+- **Headless (`QuPath script`) fixes**, groundwork for a small demo dataset.
+  `HeadlessClusteringWorkflow` now initializes the Appose service on demand --
+  the GUI normally does this at startup and nothing did so headlessly, so batch
+  clustering failed before reaching Python. `PostHocSpatialWorkflow` no longer
+  assumes a `QuPathGUI`: `persistToProject` and `resolveTargets` dereferenced
+  `qupath.getProject()` / `getImageData()` unconditionally and NPE'd when null;
+  a headless caller now supplies the project via `setHeadlessProject()`.
+
+- **Ripley `mode="K"` is optional again.** Newer squidpy (`RipleyStat`) ships only
+  F/G/L and raises on `mode="K"`. K is now logged and skipped rather than failing
+  the whole Ripley step -- L is the variance-stabilized transform of K and carries
+  the same clustering-vs-dispersion signal.
+
+### Changed
+
+- **README catches up with the foundation-model removal.** `FeatureExtractionDialog`
+  was unwired from the menu in v0.7.0 and HOW_TO_GUIDE section 8 already covered
+  it, but the README still documented "Extract Foundation Model Features..." as a
+  live feature with a supported-model table. `open-clip-torch` is also dropped
+  from the bundled pixi manifest (lock regenerated to match) -- it existed only for
+  zero-shot phenotyping, which no longer has any code referencing `open_clip`.
+
 ### Added
 
 - `python_tests/test_resolve_umap_execution.py` -- pins the umap-learn
