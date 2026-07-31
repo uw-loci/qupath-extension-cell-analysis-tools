@@ -4,7 +4,7 @@ Python-powered cell analysis for highly multiplexed imaging data in [QuPath](htt
 
 Warning: This is a continuation of my work integrating other people's software into Qupath, like with Caleb's [CytoMap](https://forum.image.sc/t/there-and-back-again-qupath-cytomap-cluster-analysis/43352) and Alan's [QuBaLab](https://github.com/saramcardle/FS2K/blob/main/Clustering%20using%20Python.ipynb), attempting to make clustering and analysis more accessible on the QuPath side, but many of the features are lightly tested or entirely untested! 
 
-QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, autoencoder-based cell classification, foundation model feature extraction, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
+QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, autoencoder-based cell classification, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
 ![QP-CAT clustering: the Run Clustering dialog, a multiplexed tissue image, and the resulting UMAP scatter plot colored by cluster](documentation/images/clustering-overview.png)
 
@@ -49,8 +49,7 @@ Each bullet leads with what you can *do* with QP-CAT; the algorithm name is in p
 - **Java** 21+
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
-- No GPU required -- all operations run on CPU (foundation model extraction benefits from GPU but works on CPU)
-- **HuggingFace account** (optional) -- required only for gated models (H-optimus-0, Virchow, Hibou); set your auth token in the dialog
+- No GPU required -- all operations run on CPU
 - **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Beta]* feature. Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
@@ -261,37 +260,11 @@ This is a lighter-weight alternative to BANKSY when you want spatial awareness w
 ---
 
 <details>
-<summary><h2>Foundation Model Feature Extraction</h2></summary>
-
-**Extensions > QP-CAT > Extract Foundation Model Features...** extracts tile-level morphological embeddings from pre-trained vision foundation models and stores them as per-detection measurements (`FM_0`, `FM_1`, ..., `FM_N`).
-
-### Supported Models
-
-| Model | Developer | License | Embedding Dim | Gated? |
-|-------|-----------|---------|:---:|:---:|
-| **H-optimus-0** | Bioptimus | Apache 2.0 | 1536 | Yes |
-| **Virchow** | Paige AI | Apache 2.0 | 2560 | Yes |
-| **Hibou-B** | HistAI | Apache 2.0 | 768 | Yes |
-| **Hibou-L** | HistAI | Apache 2.0 | 1024 | Yes |
-| **Midnight** | kaiko.ai | Apache 2.0 | 768 | No |
-| **DINOv2-Large** | Meta AI | Apache 2.0 | 1024 | No |
-
-All models are downloaded on-demand from HuggingFace and cached locally -- they are not bundled with the extension. Only models with commercially permissive licenses (Apache 2.0) are included.
-
-**Gated models** (H-optimus-0, Virchow, Hibou) require a HuggingFace account and auth token. Accept the model's license on its HuggingFace page, then enter your token in the extraction dialog.
-
-Foundation model features capture rich morphological information from the image tile surrounding each cell. They can be used as input measurements for clustering (instead of or alongside channel intensity measurements), enabling morphology-driven cell grouping.
-
-Feature extraction is powered by [LazySlide](https://doi.org/10.1038/s41592-026-03044-7).
-
-</details>
-
----
-
-<details>
 <summary><h2>Cluster Explainer (LLM) [Beta]</h2></summary>
 
 **Cluster results dialog > Cluster Explainer (LLM) [Beta] tab** turns each cluster's top-marker statistics into a plain-English phenotype suggestion with rationale. The LLM reads only the per-cluster marker rankings and cluster summary statistics -- no pixels, no cell-level data, no patient-identifiable information.
+
+> **[UNTESTED]** This feature has not yet been validated end-to-end on real data. The LLM calls, provider integrations (Anthropic / Ollama), and rendered output are unverified -- treat any phenotype suggestion as provisional and validate it independently before relying on it. Behavior may change.
 
 This feature is marked **[Beta]** for v1: the surface area (prompt template, output JSON, audit-log row shape) may change in v1.1 based on user feedback. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
@@ -561,8 +534,7 @@ QP-CAT manages its own isolated Python environment via [Appose](https://github.c
 | harmonypy | Batch correction for multi-sample integration |
 | pybanksy | Spatially-aware BANKSY clustering |
 | anndata | AnnData format for interoperability |
-| lazyslide | Foundation model feature extraction |
-| torch | Deep learning runtime for the autoencoder classifier + foundation-model features |
+| torch | Deep learning runtime for the autoencoder classifier |
 | scikit-image | Auto-thresholding (Triangle method) |
 | scipy | Gamma distribution fitting for auto-thresholds |
 | matplotlib | Plot generation |
@@ -589,7 +561,6 @@ All items are under **Extensions > QP-CAT**:
 | Setup Clustering Environment | One-time Python environment installation | Internet connection |
 | Run Clustering... | Full clustering dialog with all options | Image + detections |
 | Compute Embedding Only... | UMAP/PCA/t-SNE without clustering | Image + detections |
-| Extract Foundation Model Features... | Extract morphological embeddings from vision models | Image + detections |
 | [TEST] Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
 | Run Phenotyping... | Rule-based cell type classification | Image + detections + project |
 | Quick Cluster > Quick Leiden | One-click Leiden clustering with defaults | Image + detections |
@@ -710,7 +681,7 @@ src/main/java/qupath/ext/qpcat/
     ClusterManagementDialog.java  Rename/merge cluster classifications
     EmbeddingDialog.java          Embedding-only computation dialog
     EmbeddingScatterPanel.java    Interactive 2D embedding scatter plot
-    FeatureExtractionDialog.java  Foundation model feature extraction dialog
+    FeatureExtractionDialog.java  Foundation-model feature extraction dialog (removed/unwired; see HOW_TO_GUIDE "Removed features")
     HistogramPanel.java           Interactive histogram with draggable threshold
     PhenotypingDialog.java        Phenotyping rules and gating dialog
     PythonConsoleWindow.java      Real-time Python stderr viewer
@@ -721,7 +692,7 @@ src/main/resources/qupath/ext/qpcat/
   scripts/
     compute_thresholds.py         Auto-threshold computation
     export_anndata.py             AnnData export
-    extract_features.py           Foundation model feature extraction
+    extract_features.py           Foundation-model feature extraction (removed/unwired)
     infer_autoencoder.py          Autoencoder inference on new data
     init_services.py              Python worker initialization
     model_utils.py                Model save/load and architecture utilities
@@ -746,7 +717,6 @@ Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI
 - [squidpy](https://squidpy.readthedocs.io/) -- Spatial single-cell analysis
 - [BANKSY](https://github.com/prabhakarlab/Banksy_py) -- Spatially-aware clustering
 - [Harmony](https://github.com/immunogenomics/harmony) -- Batch correction
-- [LazySlide](https://github.com/rendeirolab/LazySlide) -- Foundation model feature extraction
 
 ---
 

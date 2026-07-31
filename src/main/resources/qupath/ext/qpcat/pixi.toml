@@ -55,11 +55,10 @@ squidpy = ">=1.4.0"
 harmonypy = ">=0.2.0,<2"
 pybanksy = ">=1.3.4"
 scikit-image = ">=0.21"
-# Foundation model feature extraction and zero-shot phenotyping
+# Foundation model feature extraction
 # Inspired by LazySlide (Zheng et al. 2026, Nature Methods)
 # Models downloaded on-demand from HuggingFace, not bundled
 timm = ">=1.0.3"
-open-clip-torch = ">=2.24.0"
 huggingface-hub = ">=0.20.0"
 # LLM Cluster Explainer [Beta] (v0.2.6+): Anthropic SDK + requests
 # (requests is already transitive via huggingface-hub; listed explicitly so
