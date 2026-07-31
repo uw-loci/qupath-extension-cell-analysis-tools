@@ -245,7 +245,15 @@ def run_ripley(
 
         # Compute K and L separately - squidpy's mode='K' / mode='L' branches
         # share underlying state via adata.uns['<cluster_key>_ripley_K'] etc.
-        sq.gr.ripley(adata, mode="K", **kwargs)
+        # Newer squidpy (RipleyStat) dropped mode='K' (only F/G/L remain); K is
+        # optional -- L (the variance-stabilized transform) carries the same
+        # clustering-vs-dispersion signal, so skip K if unsupported.
+        k_available = True
+        try:
+            sq.gr.ripley(adata, mode="K", **kwargs)
+        except Exception as e:
+            logger.warning("Ripley K unavailable in this squidpy (%s); using L only", e)
+            k_available = False
         sq.gr.ripley(adata, mode="L", **kwargs)
 
         k_data = adata.uns.get("%s_ripley_K" % cluster_key, {})
@@ -312,6 +320,13 @@ def run_ripley(
                 k_shape_matched,
                 getattr(sq, "__version__", "?"),
             )
+        elif not k_available:
+            # This squidpy build dropped mode='K' entirely (only F/G/L remain),
+            # so there is no K payload to extract. That is expected, not an
+            # error -- continue with L (the variance-stabilized transform), which
+            # carries the same clustering-vs-dispersion signal. K curves are
+            # zero-padded below and flagged via ripley_k_unavailable.
+            task.outputs["ripley_k_unavailable"] = "true"
         else:
             # Extraction genuinely failed: squidpy's Ripley payload shape is
             # unrecognized (its uns layout has changed across versions). Emitting
@@ -339,10 +354,26 @@ def run_ripley(
             return
 
         try:
-            if hasattr(l_data, "columns"):
+            # squidpy 1.6.x stores the L result as a dict {"bins", "stats"} in
+            # adata.uns (same shape as the K branch, extracted above). Handle
+            # that first so radii/curves come from L when K is unavailable.
+            l_bins = l_data.get("bins") if isinstance(l_data, dict) else None
+            l_stats = l_data.get("stats") if isinstance(l_data, dict) else None
+            if l_bins is not None and l_stats is not None:
+                if not radii:
+                    radii = [float(r) for r in l_bins]
+                for cname in cluster_names:
+                    if cname in l_stats:
+                        l_curves.append([float(v) for v in l_stats[cname]])
+                    else:
+                        l_curves.append([0.0] * len(radii))
+            elif hasattr(l_data, "columns"):
                 cols = list(l_data.columns)
                 cluster_col = cluster_key if cluster_key in cols else None
                 if cluster_col:
+                    if not radii and "bins" in cols:
+                        radii = [float(r) for r in l_data[l_data[cluster_col]
+                                 == cluster_names[0]]["bins"]] if cluster_names else []
                     for cname in cluster_names:
                         sub = l_data[l_data[cluster_col] == cname]
                         if "stats" in cols:
@@ -350,6 +381,8 @@ def run_ripley(
                         else:
                             l_curves.append([0.0] * len(radii))
                 elif "stats" in cols:
+                    if not radii and "bins" in cols:
+                        radii = [float(r) for r in l_data["bins"]]
                     l_curves = [[float(v) for v in l_data["stats"]]]
         except Exception as e:
             logger.warning("Ripley L extraction failed: %s", e)
