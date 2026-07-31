@@ -83,12 +83,18 @@ tasks.withType<JavaCompile> {
     options.compilerArgs.add("-Xlint:unchecked")
 }
 
+// NOTE: do NOT add `--add-modules javafx.base,...` here. JavaFX arrives on the
+// test CLASSPATH (the testImplementation org.openjfx deps below), not the module
+// path, and --add-modules only resolves modules from the module path or the JDK's
+// own platform modules. On a JDK that does not bundle JavaFX -- which is every
+// plain OpenJDK build, including the java-21-openjdk we build with -- the test JVM
+// then dies before running a single test with:
+//     java.lang.module.FindException: Module javafx.base not found
+// Classpath JavaFX is fine for these tests: they exercise model/parsing/scripting
+// code and never start the FX toolkit. (--add-opens was likewise unnecessary --
+// classpath classes land in the unnamed module, which is already fully open.)
 tasks.test {
     useJUnitPlatform()
-    jvmArgs = listOf(
-        "--add-modules", "javafx.base,javafx.graphics,javafx.controls",
-        "--add-opens", "javafx.graphics/javafx.stage=ALL-UNNAMED"
-    )
 }
 
 // ---------------------------------------------------------------------------

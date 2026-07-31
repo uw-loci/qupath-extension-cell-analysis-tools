@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.scripting;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.objects.DefaultPathObjectConnectionGroup;
@@ -54,7 +55,7 @@ class SpatialConnectionsScriptsTest {
         DefaultPathObjectConnectionGroup source =
                 new DefaultPathObjectConnectionGroup(sourceView);
 
-        ImageData<BufferedImage> imageData = new ImageData<>((ImageServer<BufferedImage>) null);
+        ImageData<BufferedImage> imageData = newImageData();
         PathObjectHierarchy h = imageData.getHierarchy();
         h.addObject(a0); h.addObject(a1); h.addObject(b0); h.addObject(b1);
         PathObjectConnections connections = new PathObjectConnections();
@@ -93,7 +94,7 @@ class SpatialConnectionsScriptsTest {
 
     @Test
     void pushConnectionsToViewerRejectsBlankResultName() {
-        ImageData<BufferedImage> imageData = new ImageData<>((ImageServer<BufferedImage>) null);
+        ImageData<BufferedImage> imageData = newImageData();
         assertThatThrownBy(() ->
                 SpatialConnectionsScripts.pushConnectionsToViewer(imageData, ""))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -110,7 +111,7 @@ class SpatialConnectionsScriptsTest {
         // No QuPathGUI in the test JVM means resolveProject() returns null;
         // the facade should raise IllegalStateException with a clear
         // message about the missing project.
-        ImageData<BufferedImage> imageData = new ImageData<>((ImageServer<BufferedImage>) null);
+        ImageData<BufferedImage> imageData = newImageData();
         assertThatThrownBy(() ->
                 SpatialConnectionsScripts.pushConnectionsToViewer(imageData, "no-such-result"))
                 .isInstanceOf(IllegalStateException.class)
@@ -118,6 +119,18 @@ class SpatialConnectionsScriptsTest {
     }
 
     // ---- Test helpers ----
+
+    /**
+     * QuPath 0.7 rejects a null server ("Cannot create ImageData without a server
+     * or server builder", ImageData.java:148), so these tests can no longer pass
+     * null. Nothing here reads pixels or metadata -- only the hierarchy and the
+     * property map are exercised -- and the constructor just stores the server, so
+     * a bare mock is enough.
+     */
+    @SuppressWarnings("unchecked")
+    private static ImageData<BufferedImage> newImageData() {
+        return new ImageData<>(Mockito.mock(ImageServer.class));
+    }
 
     private static PathObject newDet(double x, double y, PathClass cls) {
         return PathObjects.createDetectionObject(
