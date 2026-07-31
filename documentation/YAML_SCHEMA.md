@@ -113,6 +113,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `tsne_iterations` | int | `1000` | t-SNE only. Max optimization steps (typical 1,000-5,000). |
 | `tsne_early_exaggeration` | double | `12.0` | t-SNE only. Typical 4-12. |
 | `embedding_seed` | int | `42` | Random seed for the embedding (UMAP / t-SNE / PCA). Mirrors the GUI Advanced "random seed". |
+| `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). Recorded in the audit log. |
 | `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
 | `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per-image. |
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |

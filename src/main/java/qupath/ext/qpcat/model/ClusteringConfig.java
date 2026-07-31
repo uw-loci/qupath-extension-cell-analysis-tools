@@ -91,6 +91,21 @@ public class ClusteringConfig {
     private boolean enableSpatialSmoothing = false;
     private int spatialSmoothingIterations = 1;
 
+    /**
+     * Reproducibility-vs-speed policy for the UMAP embedding: {@code "auto"},
+     * {@code "reproducible"} or {@code "fast"}.
+     * <p>
+     * umap-learn disables ALL parallelism as soon as a {@code random_state} is
+     * supplied -- it forces {@code n_jobs=1} and compiles the layout optimisation
+     * without numba {@code prange}. So a fixed seed costs every core, which is
+     * measurably 6-8x on 16 cores and grows worse with cell count. "auto" keeps the
+     * seeded path on datasets small enough for it to be quick and switches to the
+     * parallel path above {@code EMBEDDING_FAST_MODE_CELLS} (200k, defined in
+     * {@code model_utils.py}); "reproducible" pins the seed whatever the size (the
+     * pre-0.9.7 behaviour); "fast" always uses every core.
+     */
+    private String embeddingExecutionMode = "auto";
+
     // ---- Spatial stats expansion (v1) ----
     // Graph constructor type and parameters used by spatial smoothing and
     // every v1 spatial statistic. These default from QpcatPreferences when
@@ -155,6 +170,17 @@ public class ClusteringConfig {
 
     public Map<String, Object> getEmbeddingParams() { return embeddingParams; }
     public void setEmbeddingParams(Map<String, Object> params) { this.embeddingParams = params; }
+
+    /** @see #embeddingExecutionMode */
+    public String getEmbeddingExecutionMode() {
+        // Older saved configs and YAML files predate this field; Gson leaves it null.
+        return embeddingExecutionMode == null ? "auto" : embeddingExecutionMode;
+    }
+
+    /** @see #embeddingExecutionMode */
+    public void setEmbeddingExecutionMode(String mode) {
+        this.embeddingExecutionMode = (mode == null || mode.isBlank()) ? "auto" : mode;
+    }
 
     public List<String> getSelectedMeasurements() { return selectedMeasurements; }
     public void setSelectedMeasurements(List<String> measurements) { this.selectedMeasurements = measurements; }

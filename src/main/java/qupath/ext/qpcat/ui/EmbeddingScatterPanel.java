@@ -62,6 +62,20 @@ public class EmbeddingScatterPanel extends VBox {
     private static final double MARGIN = 40;
     private static final double POINT_RADIUS = 1.5;
 
+    /**
+     * Most points drawn in one repaint. Above this the canvas is saturated -- the
+     * plot is redrawn on every scroll, pan, resize and color edit, and a million
+     * fillOval calls per frame on the FX thread freezes QuPath outright. 150k
+     * still covers a 620x520 plot several times over.
+     */
+    private static final int MAX_DRAW_POINTS = 150_000;
+
+    /**
+     * Floor of drawn points per cluster, so a rare population stays visible in the
+     * subsample instead of being proportioned away to nothing.
+     */
+    private static final int MIN_DRAW_PER_CLUSTER = 500;
+
     // Cluster color palette (up to 20 distinct colors), derived from the shared
     // canonical palette in ClusterPalette so the plots, the seeded PathClass
     // colors, and the Python PNGs all agree before any user customization.
@@ -94,6 +108,10 @@ public class EmbeddingScatterPanel extends VBox {
     private int[] labels;
     private int nClusters;
     private int nCells;
+    // Cluster-stratified subsample of indices to draw when the full set is too
+    // large to paint per frame; null means "draw every cell". Gating, hover and
+    // selection always use the full arrays, so only the rendering is sampled.
+    private int[] drawOrder;
     private String embeddingName = "Embedding";
     private String axisLabelX;   // optional explicit axis labels (e.g. biaxial markers)
     private String axisLabelY;
@@ -188,6 +206,10 @@ public class EmbeddingScatterPanel extends VBox {
         canvas.heightProperty().bind(plotPane.heightProperty());
         canvas.widthProperty().addListener((o, a, b) -> redraw());
         canvas.heightProperty().addListener((o, a, b) -> redraw());
+        // redraw() refuses to paint an off-scene or hidden canvas (JDK-8092801), so
+        // repaint when it comes back -- e.g. when its results tab is selected.
+        canvas.sceneProperty().addListener((o, a, b) -> { if (b != null) redraw(); });
+        canvas.visibleProperty().addListener((o, a, b) -> { if (b) redraw(); });
         HBox.setHgrow(plotPane, Priority.ALWAYS);
 
         // --- Right column: scrollable legend (all clusters) + crop preview ---
@@ -275,8 +297,15 @@ public class EmbeddingScatterPanel extends VBox {
         this.nCells = embedding.length;
         this.embeddingName = embeddingName;
 
+        drawOrder = buildDrawOrder();
+
         String pretty = prettyEmbeddingName(embeddingName);
-        titleLabel.setText(pretty + " 2D scatter (" + nCells + " cells)");
+        // Say so when the plot is showing a subsample -- a silently decimated
+        // scatter would misrepresent how much data is behind it.
+        String scope = drawOrder == null
+                ? nCells + " cells"
+                : nCells + " cells, showing " + drawOrder.length;
+        titleLabel.setText(pretty + " 2D scatter (" + scope + ")");
         statsLabel.setText(nClusters + " clusters");
 
         // Compute data bounds
@@ -335,6 +364,14 @@ public class EmbeddingScatterPanel extends VBox {
         double ch = canvas.getHeight();
         if (cw <= 0 || ch <= 0) return;  // not laid out yet; a resize listener redraws
 
+        // Never draw into a Canvas that is not showing. GraphicsContext pushes every
+        // call onto a command buffer that is only drained by the render thread at the
+        // end of a pulse -- a Canvas on an unselected tab never gets that pulse, so
+        // the buffer grows without bound (JDK-8092801). With a large scatter that is
+        // an OutOfMemoryError, not just wasted work. The scene/visible listener below
+        // repaints once the panel is shown again.
+        if (canvas.getScene() == null || !canvas.isVisible()) return;
+
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.setFill(Color.WHITE);
         gc.fillRect(0, 0, cw, ch);
@@ -352,7 +389,26 @@ public class EmbeddingScatterPanel extends VBox {
         // the gated ones so the selection reads clearly.
         boolean haveGate = gatedMask != null && gatedCount > 0;
         double r = POINT_RADIUS;
-        for (int i = 0; i < nCells; i++) {
+
+        // Resolve the per-cluster fill colors ONCE per repaint. Calling
+        // clusterColor(cluster) inside the loop cost a string concatenation
+        // ("Cluster " + id), a PathClass.fromString lookup AND a Color allocation
+        // for every point on every frame -- three million of each per repaint at a
+        // million cells, which is what made the results window unusable.
+        Color[] fillPlain = buildFills(haveGate ? 0.12 : 0.6);
+        Color[] fillGated = haveGate ? buildFills(0.95) : null;
+
+        // Level of detail: past a few hundred thousand points the canvas is fully
+        // saturated, so drawing every one costs seconds and shows nothing extra.
+        // Draw a cluster-stratified subsample instead (rare clusters keep their
+        // share), and fall back to every point once the user has zoomed in far
+        // enough that the sample would look sparse. drawOrder is null below the
+        // threshold, in which case this is the original all-points loop.
+        int[] order = currentDrawOrder(rangeX, rangeY);
+        int drawn = order != null ? order.length : nCells;
+
+        for (int k = 0; k < drawn; k++) {
+            int i = order != null ? order[k] : k;
             double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
             double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
 
@@ -363,11 +419,9 @@ public class EmbeddingScatterPanel extends VBox {
             }
 
             int cluster = labels[i];
-            Color c = clusterColor(cluster);
             boolean gated = haveGate && gatedMask[i];
-            double alpha = haveGate ? (gated ? 0.95 : 0.12) : 0.6;
             double pr = gated ? r + 0.7 : r;
-            gc.setFill(Color.color(c.getRed(), c.getGreen(), c.getBlue(), alpha));
+            gc.setFill(fillFor(gated ? fillGated : fillPlain, cluster));
             gc.fillOval(px - pr, py - pr, pr * 2, pr * 2);
         }
 
@@ -513,6 +567,118 @@ public class EmbeddingScatterPanel extends VBox {
 
     private Color clusterColor(int cluster) {
         return clusterColorFor(cluster, classNameResolver);
+    }
+
+    /**
+     * Per-cluster fill colors at a fixed alpha, resolved once per repaint. Index
+     * {@code nClusters} is the noise/out-of-range slot, so a lookup never needs a
+     * branch back into {@link #clusterColor}.
+     */
+    private Color[] buildFills(double alpha) {
+        int n = Math.max(0, nClusters);
+        Color[] out = new Color[n + 1];
+        for (int i = 0; i < n; i++) {
+            Color c = clusterColor(i);
+            out[i] = Color.color(c.getRed(), c.getGreen(), c.getBlue(), alpha);
+        }
+        Color noise = Color.LIGHTGRAY;
+        out[n] = Color.color(noise.getRed(), noise.getGreen(), noise.getBlue(), alpha);
+        return out;
+    }
+
+    /** Fill for a cluster id, routing noise / out-of-range ids to the last slot. */
+    private static Color fillFor(Color[] fills, int cluster) {
+        return (cluster >= 0 && cluster < fills.length - 1)
+                ? fills[cluster] : fills[fills.length - 1];
+    }
+
+    /**
+     * Indices to draw this frame, or null to draw every cell.
+     * <p>
+     * Above {@link #MAX_DRAW_POINTS} the canvas is saturated -- a million overlapping
+     * 3 px dots carry no more information than a couple of hundred thousand, and cost
+     * seconds per frame on the FX thread. So we draw the cluster-stratified subsample
+     * built in {@link #setData}. Once the user zooms in far enough that the visible
+     * cells would fit under the budget anyway, we switch back to every cell so a
+     * zoomed-in view is never artificially sparse. The visible-count estimate assumes
+     * uniform density, which is only a heuristic -- the off-canvas cull in the draw
+     * loop bounds the real cost either way.
+     */
+    private int[] currentDrawOrder(double rangeX, double rangeY) {
+        if (drawOrder == null) return null;
+        double dataRangeX = dataMaxX - dataMinX;
+        double dataRangeY = dataMaxY - dataMinY;
+        if (dataRangeX <= 0 || dataRangeY <= 0) return drawOrder;
+        double visibleFraction = Math.min(1.0, (rangeX / dataRangeX) * (rangeY / dataRangeY));
+        return (nCells * visibleFraction <= MAX_DRAW_POINTS) ? null : drawOrder;
+    }
+
+    /**
+     * Build the cluster-stratified draw sample. Every cluster keeps at least
+     * {@link #MIN_DRAW_PER_CLUSTER} points (so a rare population does not vanish from
+     * the plot) and the rest of the budget is shared in proportion to cluster size.
+     * Selection is a deterministic even stride through each cluster's members, so the
+     * sample is stable across repaints and across sessions -- the plot must not
+     * reshuffle itself when the window is resized.
+     * <p>
+     * Returns null when the full set is already under budget.
+     */
+    private int[] buildDrawOrder() {
+        if (nCells <= MAX_DRAW_POINTS || labels == null || nClusters <= 0) {
+            return null;
+        }
+        int slots = nClusters + 1;  // last slot = noise / out-of-range
+        int[] counts = new int[slots];
+        for (int i = 0; i < nCells; i++) {
+            counts[slotOf(labels[i])]++;
+        }
+
+        // Budget per cluster: a floor for rare clusters, remainder by proportion.
+        int[] budget = new int[slots];
+        int reserved = 0;
+        for (int s = 0; s < slots; s++) {
+            budget[s] = Math.min(counts[s], MIN_DRAW_PER_CLUSTER);
+            reserved += budget[s];
+        }
+        int remaining = Math.max(0, MAX_DRAW_POINTS - reserved);
+        int spare = 0;
+        for (int s = 0; s < slots; s++) {
+            spare += Math.max(0, counts[s] - budget[s]);
+        }
+        if (spare > 0 && remaining > 0) {
+            for (int s = 0; s < slots; s++) {
+                int extra = Math.max(0, counts[s] - budget[s]);
+                budget[s] += (int) ((long) remaining * extra / spare);
+                budget[s] = Math.min(budget[s], counts[s]);
+            }
+        }
+
+        int total = 0;
+        for (int b : budget) total += b;
+        int[] out = new int[total];
+
+        // Even stride through each cluster's members -- deterministic, no RNG, and
+        // it spreads the sample across the whole cluster rather than its first cells.
+        int[] seen = new int[slots];
+        int[] taken = new int[slots];
+        int w = 0;
+        for (int i = 0; i < nCells && w < total; i++) {
+            int s = slotOf(labels[i]);
+            if (budget[s] == 0) continue;
+            int idx = seen[s]++;
+            // Take this member if it lands on the next stride boundary.
+            long want = (long) (idx + 1) * budget[s] / counts[s];
+            if (want > taken[s]) {
+                taken[s]++;
+                out[w++] = i;
+            }
+        }
+        return w == out.length ? out : java.util.Arrays.copyOf(out, w);
+    }
+
+    /** Cluster id to draw-sample slot; noise and out-of-range share the last slot. */
+    private int slotOf(int label) {
+        return (label >= 0 && label < nClusters) ? label : nClusters;
     }
 
     /**

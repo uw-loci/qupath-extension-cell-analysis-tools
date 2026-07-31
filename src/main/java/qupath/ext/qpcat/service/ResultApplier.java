@@ -5,8 +5,10 @@ import org.slf4j.LoggerFactory;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -74,6 +76,11 @@ public class ResultApplier {
                     "Detection count (" + detections.size()
                     + ") does not match label count (" + labels.length + ")");
         }
+        // Resolve each DISTINCT label to its PathClass once. Doing the string
+        // concatenation and PathClass.fromString lookup inside the loop costs one
+        // of each per cell -- at a million cells that is a million throwaway
+        // strings and map lookups for what is a handful of distinct classes.
+        Map<Integer, PathClass> byLabel = new HashMap<>();
         Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
@@ -82,10 +89,14 @@ public class ResultApplier {
                 det.setPathClass(PathClass.getNullClass());
                 continue;
             }
-            String name = namer.apply(label);
-            PathClass pc = PathClass.fromString(name);
-            if (seeded.add(name)) {
-                pc.setColor(ClusterPalette.rgbFor(label));
+            PathClass pc = byLabel.get(label);
+            if (pc == null) {
+                String name = namer.apply(label);
+                pc = PathClass.fromString(name);
+                if (seeded.add(name)) {
+                    pc.setColor(ClusterPalette.rgbFor(label));
+                }
+                byLabel.put(label, pc);
             }
             det.setPathClass(pc);
         }
@@ -158,12 +169,19 @@ public class ResultApplier {
         }
 
         int nComponents = embedding.length > 0 ? embedding[0].length : 0;
+        // Build the measurement names once rather than concatenating per cell.
+        String[] names = new String[nComponents];
+        for (int c = 0; c < nComponents; c++) {
+            names[c] = prefix + (c + 1);
+        }
+
         for (int i = 0; i < detections.size(); i++) {
-            var ml = detections.get(i).getMeasurements();
+            var ml = detections.get(i).getMeasurementList();
             double[] row = embedding[i];
-            for (int c = 0; c < row.length; c++) {
-                ml.put(prefix + (c + 1), row[c]);
+            for (int c = 0; c < row.length && c < names.length; c++) {
+                ml.put(names[c], row[c]);
             }
+            ml.close();
         }
 
         logger.info("Applied {} embedding ({} components) to {} detections",
@@ -188,15 +206,21 @@ public class ResultApplier {
                     + ") does not match label count (" + labels.length + ")");
         }
 
+        // One PathClass lookup per distinct phenotype, not per cell.
+        Map<Integer, PathClass> byLabel = new HashMap<>();
         Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
-            String name = (label >= 0 && label < phenotypeNames.length)
-                    ? phenotypeNames[label] : "Unknown";
-            PathClass pc = PathClass.fromString(name);
-            if (label >= 0 && seeded.add(name)) {
-                pc.setColor(ClusterPalette.rgbFor(label));
+            PathClass pc = byLabel.get(label);
+            if (pc == null) {
+                String name = (label >= 0 && label < phenotypeNames.length)
+                        ? phenotypeNames[label] : "Unknown";
+                pc = PathClass.fromString(name);
+                if (label >= 0 && seeded.add(name)) {
+                    pc.setColor(ClusterPalette.rgbFor(label));
+                }
+                byLabel.put(label, pc);
             }
             det.setPathClass(pc);
         }
@@ -221,7 +245,9 @@ public class ResultApplier {
                     + ") does not match label count (" + labels.length + ")");
         }
         for (int i = 0; i < detections.size(); i++) {
-            detections.get(i).getMeasurements().put(measurementName, labels[i]);
+            var ml = detections.get(i).getMeasurementList();
+            ml.put(measurementName, labels[i]);
+            ml.close();
         }
         logger.info("Applied neighborhood measurement '{}' to {} detections",
                 measurementName, detections.size());
@@ -245,14 +271,18 @@ public class ResultApplier {
                     + ") does not match label count (" + labels.length + ")");
         }
 
-        Set<Integer> seeded = new HashSet<>();
+        // One name build + PathClass lookup per distinct sub-cluster, not per cell.
+        Map<Integer, PathClass> byLabel = new HashMap<>();
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
-            String subName = parentClusterName + "." + label;
-            PathClass pc = PathClass.fromString(subName);
-            if (label >= 0 && seeded.add(label)) {
-                pc.setColor(ClusterPalette.rgbFor(label));
+            PathClass pc = byLabel.get(label);
+            if (pc == null) {
+                pc = PathClass.fromString(parentClusterName + "." + label);
+                if (label >= 0) {
+                    pc.setColor(ClusterPalette.rgbFor(label));
+                }
+                byLabel.put(label, pc);
             }
             det.setPathClass(pc);
         }

@@ -33,6 +33,12 @@ public class ClusteringResult {
     // JSON shape: { "<cluster>": { "feature": [idx,...], "embedding": [idx,...] } }.
     // Indices are into the same cell order as clusterLabels / cellRefs.
     private String representativesJson;
+
+    // How the embedding was actually computed (parallelism + initialisation), as
+    // reported by run_clustering.py. A parallel UMAP layout is not bit-reproducible,
+    // so the audit trail has to say which path was taken -- see
+    // model_utils.resolve_umap_execution.
+    private String embeddingExecution;
     private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
     // Auto-save bookkeeping (transient; set by ClusteringWorkflow after the
@@ -53,6 +59,12 @@ public class ClusteringResult {
         this.clusterStats = clusterStats;
         this.markerNames = markerNames;
     }
+
+    /** @see #embeddingExecution */
+    public String getEmbeddingExecution() { return embeddingExecution; }
+
+    /** @see #embeddingExecution */
+    public void setEmbeddingExecution(String note) { this.embeddingExecution = note; }
 
     public int[] getClusterLabels() { return clusterLabels; }
     public int getNClusters() { return nClusters; }

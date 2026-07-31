@@ -124,11 +124,21 @@ else:  # umap (default)
     import umap
 
     n_neigh = int(min(umap_neighbors, max(2, n_cells - 1)))
+    # Same reproducibility-vs-parallelism trade as run_clustering.py: a pinned
+    # random_state makes umap-learn force n_jobs=1 and drop numba prange from the
+    # layout optimisation. Today this script only ever sees the VEST exporter's
+    # sketch (~1000 cells) so "auto" keeps the seeded path, but the coupling is
+    # the same and must not silently bite if the cap is ever raised.
+    try:
+        embed_mode = embedding_execution_mode
+    except NameError:
+        embed_mode = "auto"
+    exec_kwargs, _exec_reproducible, exec_note = resolve_umap_execution(
+        n_cells, embed_seed, embed_mode
+    )
+    logger.info("VEST embed_3d UMAP execution: %s", exec_note)
     embedding = umap.UMAP(
-        n_components=3,
-        n_neighbors=n_neigh,
-        min_dist=umap_min_dist,
-        random_state=embed_seed,
+        n_components=3, n_neighbors=n_neigh, min_dist=umap_min_dist, **exec_kwargs
     ).fit_transform(x)
 
 embedding = np.ascontiguousarray(np.asarray(embedding, dtype=np.float64))

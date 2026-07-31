@@ -11,6 +11,11 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   embedding_n_components: int (2 or 3, default 2) -- embedding dimensionality.
     2 keeps the historical NAME1/NAME2 scatter; 3 adds a genuine third axis
     (NAME1/NAME2/NAME3) for downstream 3D viewers.
+  embedding_execution_mode: str ("auto" | "reproducible" | "fast", default "auto")
+    Reproducibility-vs-speed policy for UMAP. umap-learn forces single-threaded
+    execution whenever random_state is set, so a pinned seed costs every core.
+    "auto" keeps the seed below EMBEDDING_FAST_MODE_CELLS and drops it above.
+    See resolve_umap_execution.
   embedding_params: dict (method-specific parameters; all optional)
     shared:  random_state (int, default 42)
     umap:    n_neighbors (int, default 15), min_dist (float, default 0.1),
@@ -45,6 +50,8 @@ Outputs (via task.outputs):
   embedding: NDArray (N_cells x embedding_n_components) float64
     (if embedding_method != "none"; second dim is 2 or 3)
   cluster_stats: NDArray (n_clusters x N_markers) float64 -- per-cluster marker means
+  embedding_execution: str -- how UMAP was run (parallelism + init), for the audit log
+  embedding_reproducible: bool -- whether the embedding is bit-reproducible
   marker_rankings: str (JSON) -- top markers per cluster with scores
   paga_connectivity: NDArray (n_clusters x n_clusters) float64 -- PAGA graph weights
   paga_cluster_names: str (JSON) -- ordered cluster names for PAGA matrix
@@ -97,6 +104,8 @@ def _progress(frac, message, phase=None):
     except (TypeError, ValueError):
         f = 0.0
     token = phase if phase else _phase_for_fraction(f)
+    # Every phase boundary is a cancellation point.
+    check_cancelled(task)
     task.update(token + "|" + message, current=int(f * 1000), maximum=1000)
 
 
@@ -447,6 +456,14 @@ if embedding_n_components not in (2, 3):
     )
     embedding_n_components = 2
 
+# How to trade reproducibility against speed for the embedding. See
+# resolve_umap_execution above. Defaults to "auto" so an older caller that does
+# not send the input still gets the parallel path on large datasets.
+try:
+    embedding_mode = embedding_execution_mode
+except NameError:
+    embedding_mode = "auto"
+
 embedding_result = None
 if embedding_method == "umap":
     import umap
@@ -454,6 +471,10 @@ if embedding_method == "umap":
     n_neighbors = embedding_params.get("n_neighbors", 15)
     min_dist = embedding_params.get("min_dist", 0.1)
     metric = embedding_params.get("metric", "euclidean")
+
+    exec_kwargs, exec_reproducible, exec_note = resolve_umap_execution(
+        n_cells, embedding_seed, embedding_mode
+    )
     logger.info(
         "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, n_components=%d, seed=%d",
         n_neighbors,
@@ -462,12 +483,25 @@ if embedding_method == "umap":
         embedding_n_components,
         embedding_seed,
     )
+    logger.info("UMAP execution: %s", exec_note)
+    # Surface the resolved choice so the Java audit log can record exactly how
+    # this embedding was produced -- a non-reproducible layout must be traceable.
+    task.outputs["embedding_execution"] = exec_note
+    task.outputs["embedding_reproducible"] = bool(exec_reproducible)
+
+    if not exec_reproducible:
+        _progress(
+            0.15,
+            "Computing UMAP on %d cells using all CPU cores "
+            "(layout not bit-reproducible)..." % n_cells,
+        )
+
     reducer = umap.UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
         metric=metric,
         n_components=embedding_n_components,
-        random_state=embedding_seed,
+        **exec_kwargs
     )
     embedding_result = reducer.fit_transform(df_norm.values)
 

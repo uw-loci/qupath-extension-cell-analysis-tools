@@ -86,6 +86,30 @@ public class ClusteringDialog {
     private Spinner<Integer> tsneIterationsSpinner;
     private Spinner<Double> tsneEarlyExaggerationSpinner;
     private Spinner<Integer> embeddingSeedSpinner;
+    private ComboBox<String> embeddingModeCombo;
+
+    // Display labels for the UMAP reproducibility/speed choice, and their mapping
+    // to the ids the Python side understands (see model_utils.resolve_umap_execution).
+    private static final String EMBEDDING_MODE_AUTO =
+            "Automatic (seed under 200,000 cells)";
+    private static final String EMBEDDING_MODE_REPRODUCIBLE =
+            "Reproducible (always seeded, 1 core)";
+    private static final String EMBEDDING_MODE_FAST =
+            "Fast (all cores, layout varies)";
+
+    /** Display label -> the id sent to Python. */
+    static String embeddingModeId(String label) {
+        if (EMBEDDING_MODE_REPRODUCIBLE.equals(label)) return "reproducible";
+        if (EMBEDDING_MODE_FAST.equals(label)) return "fast";
+        return "auto";
+    }
+
+    /** The id sent to Python -> display label (for restoring a saved config). */
+    static String embeddingModeLabel(String id) {
+        if ("reproducible".equalsIgnoreCase(id)) return EMBEDDING_MODE_REPRODUCIBLE;
+        if ("fast".equalsIgnoreCase(id)) return EMBEDDING_MODE_FAST;
+        return EMBEDDING_MODE_AUTO;
+    }
     // Refreshes the embedding "Advanced" pane's row visibility (incl. the shared
     // seed row). Set when the embedding section is built; called by the algorithm
     // section, which is built afterwards.
@@ -330,6 +354,28 @@ public class ClusteringDialog {
                 + "Keep it fixed for reproducible layouts and cluster assignments; change\n"
                 + "it to check a result is stable. Default 42."));
 
+        // Reproducibility vs speed. umap-learn turns OFF all parallelism the moment
+        // a random seed is supplied (it forces n_jobs=1 and drops numba prange from
+        // the layout optimisation), so the seed above is not free -- on 16 cores it
+        // costs 6-8x, and the penalty grows with cell count. Rather than silently
+        // pick one, let the user choose, and default to deciding by dataset size.
+        embeddingModeCombo = new ComboBox<>(FXCollections.observableArrayList(
+                EMBEDDING_MODE_AUTO, EMBEDDING_MODE_REPRODUCIBLE, EMBEDDING_MODE_FAST));
+        embeddingModeCombo.setValue(EMBEDDING_MODE_AUTO);
+        embeddingModeCombo.setPrefWidth(230);
+        embeddingModeCombo.setTooltip(new Tooltip(
+                "How UMAP trades reproducibility against speed.\n\n"
+                + "Automatic (default): use the random seed below 200,000 cells, and\n"
+                + "  all CPU cores above it. Large runs finish; small ones stay exactly\n"
+                + "  reproducible.\n"
+                + "Reproducible: always honor the seed. Same input always gives the same\n"
+                + "  layout -- but UMAP runs on ONE core, which on a million cells means\n"
+                + "  hours.\n"
+                + "Fast: always use all cores. Roughly 6-8x quicker; the layout differs\n"
+                + "  slightly between runs (clusters are the same, their arrangement on\n"
+                + "  the plot is not).\n\n"
+                + "The mode actually used is recorded in the audit log."));
+
         // Measurement name (prefix NAME1/NAME2). Defaults to the method; change
         // it to keep two embeddings side by side instead of overwriting.
         embeddingNameField = new TextField(
@@ -377,11 +423,14 @@ public class ClusteringDialog {
         tsneAdvRow.setAlignment(Pos.CENTER_LEFT);
         HBox seedRow = new HBox(10, tipLabel("random seed (embedding + clustering):", embeddingSeedSpinner), embeddingSeedSpinner);
         seedRow.setAlignment(Pos.CENTER_LEFT);
+        HBox embModeRow = new HBox(10,
+                tipLabel("UMAP speed vs reproducibility:", embeddingModeCombo), embeddingModeCombo);
+        embModeRow.setAlignment(Pos.CENTER_LEFT);
         Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
                 + "accepts; they apply to GUI and headless (YAML) runs alike.");
         advNote.setWrapText(true);
         advNote.setStyle("-fx-text-fill: #666; -fx-font-size: 10.5px;");
-        VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, advNote);
+        VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, embModeRow, advNote);
         TitledPane advancedPane = new TitledPane("Advanced", advBox);
         advancedPane.setExpanded(false);
         advancedPane.setCollapsible(true);
@@ -1565,6 +1614,7 @@ public class ClusteringDialog {
         // Embedding
         EmbeddingMethod embMethod = embeddingCombo.getValue();
         config.setEmbeddingMethod(embMethod);
+        config.setEmbeddingExecutionMode(embeddingModeId(embeddingModeCombo.getValue()));
         Map<String, Object> embeddingParams = new HashMap<>();
         if (embMethod != EmbeddingMethod.NONE) {
             embeddingParams.put("random_state", embeddingSeedSpinner.getValue());
@@ -1823,6 +1873,7 @@ public class ClusteringDialog {
                         ((Number) embParams.get("random_state")).intValue());
             }
         }
+        embeddingModeCombo.setValue(embeddingModeLabel(config.getEmbeddingExecutionMode()));
 
         // Algorithm params
         Map<String, Object> algoParams = config.getAlgorithmParams();

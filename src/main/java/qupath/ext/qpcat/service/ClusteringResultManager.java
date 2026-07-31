@@ -33,7 +33,16 @@ public class ClusteringResultManager {
     private static final String JSON_EXT = ".json";
     private static final String PLOTS_SUFFIX = "_plots";
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    // serializeSpecialFloatingPointValues: spatial stats can legitimately
+    // produce NaN (e.g. Geary's C / Moran's I for a zero-variance marker when a
+    // cell type is entirely absent from an image). Without this, Gson throws
+    // "NaN is not a valid double" and the whole result fails to save. NaN is
+    // preserved honestly (undefined stat), and is read back by both Gson and
+    // Python's json module.
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .serializeSpecialFloatingPointValues()
+            .create();
 
     private ClusteringResultManager() {}
 
@@ -63,7 +72,14 @@ public class ClusteringResultManager {
         if (!Files.exists(file)) {
             throw new IOException("Result file not found: " + file);
         }
-        Meta meta = GSON.fromJson(Files.readString(file), Meta.class);
+        // Stream the parse. Files.readString would pull the WHOLE result file into
+        // a String first -- for a million-cell result that is hundreds of MB, which
+        // defeats the point of the scalar-only Meta view. listResultSummaries and
+        // countResultsForScope call this once per saved result.
+        Meta meta;
+        try (java.io.Reader r = Files.newBufferedReader(file, java.nio.charset.StandardCharsets.UTF_8)) {
+            meta = GSON.fromJson(r, Meta.class);
+        }
         if (meta == null) {
             throw new IOException("Result file is empty or corrupt: " + file);
         }
@@ -229,8 +245,7 @@ public class ClusteringResultManager {
 
         // Write JSON atomically so a mid-write failure cannot corrupt an existing result.
         Path file = resultsDir.resolve(safeName + JSON_EXT);
-        String json = GSON.toJson(saved);
-        writeStringAtomic(file, json);
+        writeJsonAtomic(file, saved);
         logger.info("Saved clustering result '{}' to {} ({} clusters, {} cells, {})",
                 name, file, result.getNClusters(), result.getNCells(),
                 autoSaved ? "auto" : "named");
@@ -263,8 +278,30 @@ public class ClusteringResultManager {
      * non-atomic replace only if the filesystem rejects ATOMIC_MOVE.
      */
     private static void writeStringAtomic(Path file, String content) throws IOException {
+        writeAtomic(file, w -> w.write(content));
+    }
+
+    /**
+     * As {@link #writeStringAtomic} but serializing {@code value} straight into the
+     * temp file's writer, so the JSON is never materialized as one giant String.
+     * <p>
+     * A saved result carries eight per-cell arrays (labels, embedding, image ids and
+     * names, parent names, x, y, bbox). At a million cells {@code GSON.toJson(value)}
+     * builds a ~250 MB String -- ~500 MB of {@code char[]} once UTF-16, with
+     * StringBuilder doubling transients on top -- which is then re-encoded to a
+     * separate UTF-8 byte array. Streaming removes both peaks. The on-disk format is
+     * byte-for-byte identical to the String form.
+     */
+    private static void writeJsonAtomic(Path file, Object value) throws IOException {
+        writeAtomic(file, w -> GSON.toJson(value, w));
+    }
+
+    /** Shared atomic temp-file-then-move body for the two writers above. */
+    private static void writeAtomic(Path file, JsonBody body) throws IOException {
         Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, content);
+        try (java.io.Writer w = Files.newBufferedWriter(tmp, java.nio.charset.StandardCharsets.UTF_8)) {
+            body.writeTo(w);
+        }
         try {
             Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE,
                     StandardCopyOption.REPLACE_EXISTING);
@@ -277,6 +314,24 @@ public class ClusteringResultManager {
                 // best-effort temp cleanup
             }
             throw e;
+        }
+    }
+
+    /** Writes the payload into an already-open writer. */
+    @FunctionalInterface
+    private interface JsonBody {
+        void writeTo(java.io.Writer w) throws IOException;
+    }
+
+    /**
+     * Parse a full saved result straight from the file. Streaming rather than
+     * {@code Files.readString} matters here for the same reason it does in
+     * {@link #loadMeta}: a million-cell result is hundreds of MB of JSON, and
+     * reading it into a String first doubles the peak for no benefit.
+     */
+    private static SavedClusteringResult readSavedJson(Path file) throws IOException {
+        try (java.io.Reader r = Files.newBufferedReader(file, java.nio.charset.StandardCharsets.UTF_8)) {
+            return GSON.fromJson(r, SavedClusteringResult.class);
         }
     }
 
@@ -368,7 +423,7 @@ public class ClusteringResultManager {
             saved.setPlotPaths(rewritten.isEmpty() ? null : rewritten);
         }
 
-        writeStringAtomic(targetJson, GSON.toJson(saved));
+        writeJsonAtomic(targetJson, saved);
         logger.info("Wrote renamed copy '{}' of saved result '{}' ({} custom names)",
                 safeName, sourceName, nameByLabel != null ? nameByLabel.size() : 0);
         return safeName;
@@ -422,7 +477,7 @@ public class ClusteringResultManager {
         saved.setExtensionVersion(extVer != null ? extVer : "dev");
         saved.setQupathVersion(GeneralTools.getVersion().toString());
 
-        writeStringAtomic(file, GSON.toJson(saved));
+        writeJsonAtomic(file, saved);
         logger.info("Wrote manual label snapshot '{}' ({} cells, {} clusters)",
                 safeName, labels.length, nClusters);
         return safeName;
@@ -575,15 +630,14 @@ public class ClusteringResultManager {
         if (colors == null) return;
         Path file = getResultsDirectory(project).resolve(name + JSON_EXT);
         if (!Files.exists(file)) return;
-        SavedClusteringResult saved = GSON.fromJson(Files.readString(file),
-                SavedClusteringResult.class);
+        SavedClusteringResult saved = readSavedJson(file);
         if (saved == null) {
             throw new IOException("Saved result '" + name + "' is empty or corrupt; "
                     + "cannot update its palette.");
         }
         saved.setClusterColors(colors);
         // Atomic: never truncate a good result file just to rewrite its palette.
-        writeStringAtomic(file, GSON.toJson(saved));
+        writeJsonAtomic(file, saved);
         logger.info("Updated saved palette for result '{}'", name);
     }
 
@@ -599,8 +653,7 @@ public class ClusteringResultManager {
             throw new IOException("Result file not found: " + file);
         }
 
-        String json = Files.readString(file);
-        SavedClusteringResult saved = GSON.fromJson(json, SavedClusteringResult.class);
+        SavedClusteringResult saved = readSavedJson(file);
         if (saved == null) {
             throw new IOException("Result file is empty or corrupt: " + file);
         }

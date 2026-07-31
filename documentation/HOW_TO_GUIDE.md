@@ -317,15 +317,51 @@ these can be **re-added if there is enough interest** -- open an issue or use
 
 ### Foundation-model feature extraction (removed in v0.7.0)
 
-Earlier versions had **"Add AI appearance features to cells..."**, which extracted
-morphological embeddings from pretrained pathology vision foundation models
-(H-optimus-0, Virchow, Hibou-B/L, Midnight, DINOv2-Large) and stored them as
-per-cell `FM_*` measurements; those could then be selected in the clustering
-dialog like channel intensities to cluster cells by appearance rather than marker
-expression. It was removed from the menu in v0.7.0 because it saw little use and
-added a heavy model-download dependency. The backend (`FeatureExtractionDialog`
-and its Python) is retained but unwired; the menu command can be reinstated on
-request.
+Earlier versions had **"Add AI appearance features to cells..."** (later
+**"Extract Foundation Model Features..."**), which extracted morphological
+embeddings from pretrained pathology vision foundation models (H-optimus-0,
+Virchow, Hibou-B/L, Midnight, DINOv2-Large) and stored them as per-cell `FM_*`
+measurements; those could then be selected in the clustering dialog like channel
+intensities to cluster cells by appearance rather than marker expression. It was
+removed from the menu in v0.7.0 because it saw little use and added a heavy
+model-download dependency. The backend (`FeatureExtractionDialog`,
+`extract_features.py`) is retained but unwired; the menu command can be
+reinstated on request.
+
+The feature was **never validated end-to-end on real data** -- if it is ever
+reinstated it must be treated as untested until verified.
+
+<details>
+<summary>Full pre-removal documentation (preserved for revival)</summary>
+
+**Extensions > QP-CAT > Extract Foundation Model Features...** extracted
+tile-level morphological embeddings from pre-trained vision foundation models and
+stored them as per-detection measurements (`FM_0`, `FM_1`, ..., `FM_N`).
+
+Supported models:
+
+| Model | Developer | License | Embedding Dim | Gated? |
+|-------|-----------|---------|:---:|:---:|
+| **H-optimus-0** | Bioptimus | Apache 2.0 | 1536 | Yes |
+| **Virchow** | Paige AI | Apache 2.0 | 2560 | Yes |
+| **Hibou-B** | HistAI | Apache 2.0 | 768 | Yes |
+| **Hibou-L** | HistAI | Apache 2.0 | 1024 | Yes |
+| **Midnight** | kaiko.ai | Apache 2.0 | 768 | No |
+| **DINOv2-Large** | Meta AI | Apache 2.0 | 1024 | No |
+
+All models were downloaded on-demand from HuggingFace and cached locally (not
+bundled with the extension); only commercially permissive (Apache 2.0) licenses
+were included. Gated models (H-optimus-0, Virchow, Hibou) required a HuggingFace
+account and auth token: accept the model's license on its HuggingFace page, then
+enter the token in the extraction dialog.
+
+Foundation model features capture rich morphological information from the image
+tile surrounding each cell, usable as input measurements for clustering (instead
+of or alongside channel intensities) for morphology-driven cell grouping. Powered
+by [LazySlide](https://doi.org/10.1038/s41592-026-03044-7). The Python
+dependencies (`timm`, `huggingface-hub`) remain in `pixi.toml`.
+
+</details>
 
 ---
 
@@ -1034,6 +1070,7 @@ headless batch (`random_seed`) too.
 | min_dist | 0.0-1.0 | 0.1 | Minimum distance between embedded points. Smaller = tighter clusters. |
 | metric | euclidean / manhattan / cosine / correlation / chebyshev | euclidean | Distance used to find neighbors. cosine / correlation compare profile shape, not magnitude. *(Advanced)* |
 | random seed | int | 42 | Seed for the embedding **and** the stochastic clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY); fix for reproducible layouts and cluster assignments. *(Advanced)* |
+| UMAP speed vs reproducibility | Automatic / Reproducible / Fast | Automatic | Whether UMAP may use every CPU core. umap-learn turns **off** all parallelism whenever a random seed is set, so the seed above is not free -- on 16 cores it costs 6-8x, and more as cell counts grow. *Automatic* uses the seed below 200,000 cells and all cores above it; *Reproducible* always honors the seed (identical results every run, but one core); *Fast* always uses all cores (same clusters, slightly different layout each run). The mode used is recorded in the audit log. *(Advanced)* |
 
 ### t-SNE
 
@@ -1091,6 +1128,19 @@ Use this to identify which markers define each cluster and to guide cell-type an
 Interactive 2D scatter plot of cells in the chosen embedding (titled by method, e.g. **"UMAP 2D"**), colored by cluster. The interaction hint sits in a banner **above** the plot; scroll to zoom, **middle-drag to pan**, hover for cell details. The plot **fills the available space and redraws as you resize the window**, so you scale it by resizing. A scrollable **side legend** on the right lists every cluster with its live color and cell count (nothing is cut off, whatever the cluster count).
 
 **Click a point** to select the nearest cell: a crop preview loads in the right-hand column (next to the legend, using the space beside the plot), and the cell is selected in the object hierarchy if its image is open. **Double-click a point** to open that cell's image (switching images if needed) and center the viewer's field of view on it. This closes the loop from an abstract embedding point back to the actual cell in the slide -- useful for ground-truthing boundary points and outliers. Cluster colors here update live when you edit them in the color editor.
+
+Above **150,000 cells the plot draws a subsample** and says so in its title
+(e.g. "UMAP 2D scatter (1,240,000 cells, showing 150,000)"). The sample is
+stratified by cluster with a floor of 500 points per cluster, so a rare
+population is never proportioned away to nothing, and zooming in restores every
+point once the visible subset fits the budget. This affects **display only** --
+clustering ran on all cells, and gating, hover and click-to-navigate all still
+use the full dataset. Drawing a million overlapping 3-pixel dots is both slow and
+misleading: the canvas saturates, so dense and very-dense regions look identical.
+Subsampling an embedding for display is the standard convention in this field
+(CATALYST plots a 1,000-cell-per-sample UMAP over clusters computed on every
+cell; umap-learn's own `umap.plot` switches representation above
+`width * height / 10` points).
 
 Distances within a cluster are meaningful (similar cells cluster together) but absolute distances between clusters should be interpreted cautiously -- embeddings preserve local topology, not global geometry.
 

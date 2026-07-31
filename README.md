@@ -629,11 +629,27 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 - Check the marker selection -- "Mean" measurements are usually best for clustering
 - View the interactive heatmap to assess cluster quality
 
-### Memory issues with large datasets
+### Large datasets (hundreds of thousands to millions of cells)
 
-- Use MiniBatch KMeans for datasets with >100,000 cells
-- Reduce the number of selected measurements
-- Consider clustering a subset (select detections within an annotation)
+- **A run that seems stuck is usually the embedding.** UMAP dominates wall time at
+  this scale. Leave **Dimensionality Reduction > Advanced > "UMAP speed vs
+  reproducibility"** on *Automatic*: above 200,000 cells it lets UMAP use every
+  CPU core, which is 6-8x faster. (umap-learn switches parallelism off whenever a
+  fixed random seed is supplied, so *Reproducible* mode really does run on one
+  core.) The mode used is recorded in the audit log.
+- **Cancel works from v0.9.7 on**, but only between phases -- a UMAP fit or Leiden
+  partition already in progress has to finish first.
+- Use MiniBatch KMeans or Leiden rather than Agglomerative (O(n^2)) or HDBSCAN.
+- Enable permutation-based spatial statistics (Ripley, Geary, co-occurrence) only
+  for final runs; they are the most expensive step QP-CAT has.
+- Reduce the number of selected measurements before reducing the number of cells.
+- Consider clustering a subset while exploring (select detections within an
+  annotation).
+- Above 150,000 cells the embedding scatter plot draws a cluster-stratified
+  subsample, stated in the plot title. Clustering still uses every cell.
+
+See [BEST_PRACTICES: Large datasets](documentation/BEST_PRACTICES.md#large-datasets-200000-cells)
+for the reasoning and sources.
 
 ### Cluster Explainer (LLM) issues
 

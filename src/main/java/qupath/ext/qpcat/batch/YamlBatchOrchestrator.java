@@ -592,6 +592,9 @@ public final class YamlBatchOrchestrator {
         }
         if (cc.getEmbeddingSeed() != null) embParams.put("random_state", cc.getEmbeddingSeed());
         config.setEmbeddingParams(embParams);
+        if (cc.getEmbeddingExecutionMode() != null) {
+            config.setEmbeddingExecutionMode(cc.getEmbeddingExecutionMode());
+        }
 
         // Measurements
         config.setSelectedMeasurements(cc.getMeasurements());

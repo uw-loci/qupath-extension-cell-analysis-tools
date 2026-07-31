@@ -4,6 +4,97 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.7] -- 2026-07-31 -- large-dataset scaling: UMAP parallelism, working Cancel, plot decimation
+
+Fixes [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/11)
+("UMAP computation issue with large cell datasets"), reported against a >1M-cell
+multiplex dataset that never completed even on a 512 GB machine. Memory was never
+the constraint -- the run was single-threaded, could not be cancelled, and would
+have frozen the UI on arrival anyway. Full analysis with measurements in
+`claude-reports/2026-07-31_qpcat-million-cell-scaling-audit.md`.
+
+### Fixed
+
+- **UMAP no longer runs single-threaded.** QP-CAT always passed the GUI's random
+  seed to `umap.UMAP`, and umap-learn responds by forcing `n_jobs=1` **and**
+  compiling the layout optimisation without numba `prange` -- so a fixed seed
+  silently cost every CPU core in both halves of UMAP. Measured on 16 cores /
+  30 markers: **100k cells 62.5 s -> 10.2 s; 250k cells 175 s -> 22.4 s.** Above
+  100k cells the non-reproducible path also swaps UMAP's spectral initialisation
+  (a single-threaded ARPACK eigensolve that scales ~N^1.9 and can fail to
+  converge after burning the time) for PCA initialisation.
+
+  This is a genuine trade-off, so it is now an explicit choice under
+  **Dimensionality Reduction > Advanced > "UMAP speed vs reproducibility"**:
+  - *Automatic* (default) -- seeded below 200,000 cells, all cores above it.
+  - *Reproducible* -- always seeded. **Byte-identical to 0.9.6 at every cell
+    count**, so existing analyses reproduce exactly.
+  - *Fast* -- always all cores; cluster membership is unchanged but the layout
+    differs slightly between runs.
+
+  The mode actually used is written to the audit log as `Embedding execution`.
+  Headless runs set `clustering.embedding_execution_mode` in the YAML.
+
+- **Cancel now actually cancels.** Appose cancellation is cooperative -- a CANCEL
+  request only sets `task.cancel_requested` in the Python worker, and no QP-CAT
+  script ever looked at it. Pressing Cancel therefore did nothing: the task ran to
+  completion while the UI stayed blocked, and a retry stacked a second concurrent
+  run in the same worker. `run_clustering.py` now checks the flag at every phase
+  boundary and calls `task.cancel()`. (A single long library call -- one UMAP fit,
+  one Leiden partition -- still has to finish before the check is reached.)
+
+- **The results window no longer freezes on large results.** The embedding scatter
+  drew one `fillOval` per cell per repaint, and resolved the fill through a string
+  concatenation plus a `PathClass` lookup **per point** -- repeated on every zoom,
+  pan, resize and colour edit. Colours are now resolved once per repaint, and above
+  150,000 cells the plot draws a cluster-stratified subsample (minimum 500 points
+  per cluster, so rare populations stay visible) and says so in the title; zooming
+  in past the budget restores every point. Gating, hover and selection continue to
+  use all cells. Subsampling for *display* is standard practice in this field --
+  see CATALYST's `runDR(cells = 1000)` and umap-learn's own `umap.plot`, which
+  switches representation above `width * height / 10` points.
+
+- **The scatter canvas no longer paints while hidden.** JavaFX buffers every
+  `GraphicsContext` call until the render thread drains it at the end of a pulse;
+  a canvas on an unselected tab never gets that pulse, so the buffer grows without
+  bound (JDK-8092801). With a million-point scatter that is an `OutOfMemoryError`.
+
+- **Writing results back no longer de-pools a million measurement lists.**
+  `ResultApplier.applyEmbedding` / `applyNeighborhoodMeasurement` added new
+  measurement names without calling `MeasurementList.close()`. QuPath closes these
+  lists on load so every detection shares one interned name list; writing to a
+  closed list re-opens it and gives that object a **private** copy of every name --
+  roughly 200-500 MB of retained heap at a million cells, and it drops the name
+  lookup to a linear scan, so every later measurement read in the project is slower
+  too. Both writers now close, matching what the spatial-measurement writer already
+  did. Cluster / phenotype / sub-cluster labels also resolve one `PathClass` per
+  distinct label instead of one per cell.
+
+- **Saved results no longer build the whole JSON in memory.** A result carries
+  eight per-cell arrays and is pretty-printed; at a million cells that is a ~250 MB
+  `String` (~500 MB as UTF-16, plus StringBuilder growth) re-encoded into a second
+  ~250 MB byte array, on **every** run because results are auto-saved. Reads had
+  the same problem: `loadMeta`'s scalar-only fast path still pulled the entire file
+  into a `String` first. Both directions now stream. The on-disk format is
+  unchanged.
+
+- **`estimateSpatialSeconds` leaked its shared memory.** It allocated the full
+  measurement and coordinate `NDArray`s with no `try`/`finally` -- about 336 MB of
+  `/dev/shm` per spatial-enabled run, never reclaimed. Every sibling task method
+  already closed correctly.
+
+- **`embed_3d.py` had the identical `random_state` bug**, latent only because its
+  sole caller sketches to ~1000 cells first. Fixed at the same time so raising that
+  cap cannot resurrect it.
+
+### Added
+
+- `python_tests/test_resolve_umap_execution.py` -- pins the umap-learn
+  parallelism contract. Following the rule added after issue #10 ("when a script
+  calls into a third-party library, pin the library's contract with a test"), it
+  asserts both that umap-learn still couples `random_state` to serial execution
+  and that QP-CAT never asks for a seeded-and-parallel run.
+
 ## [0.9.6] -- 2026-07-09 -- Manage Clusters, Harmony + NaN + foundation-model fixes
 
 ### Changed

@@ -131,3 +131,106 @@ def detect_device():
             torch.__version__,
         )
     return "cpu"
+
+
+# Cell count at or above which "auto" embedding mode drops the pinned seed in
+# favour of parallelism. Measured on 16 cores, 30 markers, umap-learn 0.5.12:
+#
+#   n=100k   seeded 62.5 s   parallel+PCA-init 10.2 s
+#   n=250k   seeded  175 s   parallel+PCA-init 22.4 s
+#
+# Below the threshold the seeded run is quick enough that byte-for-byte
+# reproducibility is the better default; above it the seeded run grows into
+# hours and reads as a hang.
+EMBEDDING_FAST_MODE_CELLS = 200000
+
+# Cell count above which UMAP's spectral initialisation is replaced by PCA.
+# spectral init runs ARPACK eigsh single-threaded regardless of n_jobs and
+# scales about N^1.9 (0.2 s at 25k, 4.1 s at 100k, 23.2 s at 250k), and it can
+# fail to converge and silently fall back to random init having spent the time.
+EMBEDDING_PCA_INIT_CELLS = 100000
+
+
+def resolve_umap_execution(n_cells, seed, mode):
+    """Pick UMAP's parallelism and initialisation for this dataset size.
+
+    umap-learn couples reproducibility to serialism: passing any ``random_state``
+    makes it force ``n_jobs=1`` (umap_.py:1950, applied to pynndescent via
+    ``numba.set_num_threads``) AND compile the layout optimisation without numba
+    ``prange`` (``parallel=random_state is None``, umap_.py:2891). So a pinned
+    seed costs every core in BOTH halves of UMAP -- roughly 6-8x on a 16-core
+    box, and the gap widens with cell count.
+
+    Parameters
+    ----------
+    n_cells : int
+        Rows in the feature matrix.
+    seed : int
+        The user's random seed.
+    mode : str
+        "reproducible" -- always pin the seed (exactly the pre-0.9.7 behaviour).
+        "fast"         -- always drop the seed and use every core.
+        "auto"         -- reproducible below EMBEDDING_FAST_MODE_CELLS, fast above.
+
+    Returns
+    -------
+    (kwargs, reproducible, note)
+        ``kwargs`` to splice into the ``umap.UMAP(...)`` call, whether the run is
+        byte-reproducible, and a short human-readable reason for the log and the
+        audit trail.
+    """
+    normalized = str(mode).lower() if mode is not None else "auto"
+    if normalized not in ("auto", "fast", "reproducible"):
+        logger.warning("Unknown embedding mode %r; using 'auto'", mode)
+        normalized = "auto"
+
+    if normalized == "auto":
+        reproducible = n_cells < EMBEDDING_FAST_MODE_CELLS
+    else:
+        reproducible = normalized == "reproducible"
+
+    kwargs = {}
+    if reproducible:
+        # Deliberately nothing but the seed. "reproducible" has to mean EXACTLY
+        # the pre-0.9.7 call at any cell count -- init in particular changes the
+        # layout, so adding it here would silently invalidate a user's earlier
+        # figures. The whole point of this branch is that it is unchanged.
+        kwargs["random_state"] = int(seed)
+        note = "seeded (reproducible, single-threaded)"
+    else:
+        # random_state MUST be None -- any value re-triggers the n_jobs override.
+        kwargs["random_state"] = None
+        kwargs["n_jobs"] = -1
+        note = "parallel (all cores, layout not bit-reproducible)"
+
+        # Replace the spectral initialisation once its ARPACK eigensolve stops
+        # being cheap. This is only reached on the non-reproducible path, where
+        # the layout is already free to differ between runs. Preference order for
+        # large N is pca > tswspectral > spectral (umap-learn PR #924).
+        if n_cells >= EMBEDDING_PCA_INIT_CELLS:
+            kwargs["init"] = "pca"
+            note += ", PCA init"
+
+    if normalized == "auto":
+        note += " [auto at %d cells]" % n_cells
+
+    return kwargs, reproducible, note
+
+
+def check_cancelled(task_obj):
+    """Stop the run if the user pressed Cancel.
+
+    Appose cancellation is COOPERATIVE: a CANCEL request only sets
+    ``task.cancel_requested`` on the worker (appose python_worker.py), and the
+    script has to notice. Nothing in QP-CAT used to look at the flag, so Cancel
+    never actually stopped anything -- the task ran to completion and the UI
+    stayed blocked, which is a large part of why a slow run read as a hang.
+
+    Calling ``task.cancel()`` moves the task to CANCELED so the Java side stops
+    waiting. Cancellation is only checked BETWEEN phases; a single long library
+    call (a UMAP fit, a Leiden partition) still has to finish first.
+    """
+    if getattr(task_obj, "cancel_requested", False):
+        logger.info("Cancellation requested -- stopping before the next phase")
+        task_obj.cancel()
+        raise RuntimeError("QPCAT_CANCELLED: cancelled by the user")

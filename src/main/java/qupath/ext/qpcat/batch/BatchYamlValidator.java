@@ -49,6 +49,12 @@ public final class BatchYamlValidator {
     private static final Set<String> EMBEDDINGS = new HashSet<>(Arrays.asList(
             "umap", "pca", "tsne", "none"));
 
+    // Must match the ids model_utils.resolve_umap_execution accepts. A typo here
+    // would otherwise fall back to "auto" silently, which is exactly the kind of
+    // quiet substitution a headless run must not make.
+    private static final Set<String> EMBEDDING_EXECUTION_MODES = new HashSet<>(
+            Arrays.asList("auto", "reproducible", "fast"));
+
     private static final Set<String> STATISTIC_SLUGS = new HashSet<>(Arrays.asList(
             "moran_i", "geary_c", "ripley", "ripley_k", "ripley_l",
             "co_occurrence_pairwise", "co_occurrence_one_vs_rest",
@@ -228,6 +234,13 @@ public final class BatchYamlValidator {
                 && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase())) {
             r.add(ValidationIssue.error("E005", "clustering.embedding",
                     "'" + asciiSafe(c.getEmbedding()) + "' is not one of " + EMBEDDINGS));
+        }
+        if (c.getEmbeddingExecutionMode() != null
+                && !EMBEDDING_EXECUTION_MODES.contains(
+                        c.getEmbeddingExecutionMode().toLowerCase())) {
+            r.add(ValidationIssue.error("E005", "clustering.embedding_execution_mode",
+                    "'" + asciiSafe(c.getEmbeddingExecutionMode()) + "' is not one of "
+                    + EMBEDDING_EXECUTION_MODES));
         }
         if (c.getUmapNNeighbors() != null) {
             int n = c.getUmapNNeighbors();

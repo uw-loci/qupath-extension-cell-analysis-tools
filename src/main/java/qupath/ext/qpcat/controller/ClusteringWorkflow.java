@@ -208,6 +208,16 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Null-safe access to the current project. In headless runs (YAML batch)
+     * {@code qupath} is null; callers must tolerate a null project (the batch
+     * orchestrator persists results itself via an explicit project reference).
+     */
+    private Project<BufferedImage> currentProject() {
+        QuPathGUI gui = this.qupath;
+        return gui != null ? gui.getProject() : null;
+    }
+
+    /**
      * Runs clustering on detections from the current image using the given configuration.
      * This method should be called from a background thread.
      *
@@ -325,7 +335,7 @@ public class ClusteringWorkflow {
         // id (looked up from the project) + name as the fallback.
         String fbName = imageData.getServer().getMetadata().getName();
         String fbId = null;
-        var projectForRefs = qupath.getProject();
+        var projectForRefs = currentProject();
         if (projectForRefs != null) {
             var openEntry = projectForRefs.getEntry(imageData);
             if (openEntry != null) fbId = openEntry.getID();
@@ -377,17 +387,20 @@ public class ClusteringWorkflow {
         long elapsed = System.currentTimeMillis() - startTime;
         String opType = config.getAlgorithm() == ClusteringConfig.Algorithm.NONE
                 ? "EMBEDDING" : "CLUSTERING";
-        OperationLogger.getInstance().logOperation(opType,
-                OperationLogger.clusteringParams(
-                        config.getAlgorithm().getDisplayName(),
-                        config.getAlgorithmParams(),
-                        config.getNormalization().getId(),
-                        config.getEmbeddingMethod().getId(),
-                        extraction.getNMeasurements(),
-                        extraction.getNCells(),
-                        config.isEnableSpatialAnalysis(),
-                        config.isEnableBatchCorrection()),
-                completeMsg, elapsed);
+        Map<String, String> auditParams = OperationLogger.clusteringParams(
+                config.getAlgorithm().getDisplayName(),
+                config.getAlgorithmParams(),
+                config.getNormalization().getId(),
+                config.getEmbeddingMethod().getId(),
+                extraction.getNMeasurements(),
+                extraction.getNCells(),
+                config.isEnableSpatialAnalysis(),
+                config.isEnableBatchCorrection());
+        // A parallel UMAP layout is not bit-reproducible, so the run must say so.
+        if (result.getEmbeddingExecution() != null) {
+            auditParams.put("Embedding execution", result.getEmbeddingExecution());
+        }
+        OperationLogger.getInstance().logOperation(opType, auditParams, completeMsg, elapsed);
 
         // Auto-save so the result is always reloadable via "View Past Results",
         // and record the run in QuPath's native command-history Workflow.
@@ -807,7 +820,7 @@ public class ClusteringWorkflow {
      */
     private void autoSaveResult(ClusteringResult result, ClusteringConfig config,
                                 String scopeKey, String scopeLabel) {
-        Project<BufferedImage> project = qupath.getProject();
+        Project<BufferedImage> project = currentProject();
         if (project == null) {
             // No project: results live only on the objects + audit log. Nothing
             // to auto-save into; the dialog still opens for live inspection.
@@ -1412,28 +1425,37 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdgePixels(config));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
 
-        Task task = ApposeClusteringService.getInstance().runTaskWithListener(
-                "estimate_spatial_time", inputs,
-                event -> {
-                    if (event.responseType == ResponseType.UPDATE && event.message != null) {
-                        report(progressCallback, event.message);
-                    }
-                },
-                t -> currentTask = t);
-
-        Object est = task.outputs.get("estimate_seconds");
-        if (est == null) {
-            return null;
-        }
-        // Python emits json.dumps(estimate_seconds): a number string or "null".
-        String s = String.valueOf(est).trim();
-        if (s.isEmpty() || "null".equalsIgnoreCase(s)) {
-            return null;
-        }
+        // Both NDArrays are shared-memory segments; they must be closed or the
+        // segment stays mapped for the JVM's lifetime. At 1M cells x 40 markers
+        // that is ~336 MB leaked per spatial-enabled run. Every sibling task
+        // method already closes in a finally -- this one did not.
         try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return null;
+            Task task = ApposeClusteringService.getInstance().runTaskWithListener(
+                    "estimate_spatial_time", inputs,
+                    event -> {
+                        if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                            report(progressCallback, event.message);
+                        }
+                    },
+                    t -> currentTask = t);
+
+            Object est = task.outputs.get("estimate_seconds");
+            if (est == null) {
+                return null;
+            }
+            // Python emits json.dumps(estimate_seconds): a number string or "null".
+            String s = String.valueOf(est).trim();
+            if (s.isEmpty() || "null".equalsIgnoreCase(s)) {
+                return null;
+            }
+            try {
+                return Double.parseDouble(s);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        } finally {
+            measurementsNd.close();
+            spatialNd.close();
         }
     }
 
@@ -1507,6 +1529,7 @@ public class ClusteringWorkflow {
         inputs.put("normalization", config.getNormalization().getId());
         inputs.put("embedding_method", config.getEmbeddingMethod().getId());
         inputs.put("embedding_params", config.getEmbeddingParams());
+        inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
         // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
         // in embeddingParams as "n_components"; forwarded as the top-level input the
         // Python task reads so a missing key cleanly defaults to 2.
@@ -1857,6 +1880,14 @@ public class ClusteringWorkflow {
                         -1);
             }
 
+            // How UMAP was actually run. Recorded so a non-reproducible layout is
+            // never silently non-reproducible.
+            Object execNote = task.outputs.get("embedding_execution");
+            if (execNote != null) {
+                result.setEmbeddingExecution(String.valueOf(execNote));
+                logger.info("Embedding execution: {}", execNote);
+            }
+
             // ---- Spatial graph overlay (v0.3) outputs ----
             ClusteringResult.SpatialGraphPayload payload = retrieveSpatialGraphPayload(
                     task, nCells);
@@ -1865,6 +1896,15 @@ public class ClusteringWorkflow {
             }
 
             return result;
+        } catch (IOException e) {
+            // A cancelled task ends in Appose's CANCELED state, which counts as an
+            // error status -- so Task.waitFor() THROWS rather than returning, and the
+            // "if (cancelled)" check above is never reached. Without this the user
+            // gets "Task 'run_clustering' failed: ..." after pressing Cancel.
+            if (cancelled) {
+                throw new IOException("Clustering cancelled before results were applied.");
+            }
+            throw e;
         } finally {
             // Release all shared memory
             measurementsNd.close();
@@ -2757,8 +2797,8 @@ public class ClusteringWorkflow {
                 try {
                     // Use live ImageData for current image
                     var currentData = qupath.getImageData();
-                    var currentEntry = (qupath.getProject() != null && currentData != null)
-                            ? qupath.getProject().getEntry(currentData) : null;
+                    var currentEntry = (currentProject() != null && currentData != null)
+                            ? currentProject().getEntry(currentData) : null;
                     if (currentEntry != null && currentEntry.equals(entry)) {
                         imageDatas.add(currentData);
                     } else {
@@ -3041,8 +3081,8 @@ public class ClusteringWorkflow {
             report(progressCallback, "Saving results to " + imageDatas.size() + " images...");
             for (int i = 0; i < selectedImages.size() && i < imageDatas.size(); i++) {
                 var currentData = qupath.getImageData();
-                var currentEntry = (qupath.getProject() != null && currentData != null)
-                        ? qupath.getProject().getEntry(currentData) : null;
+                var currentEntry = (currentProject() != null && currentData != null)
+                        ? currentProject().getEntry(currentData) : null;
                 if (currentEntry != null && currentEntry.equals(selectedImages.get(i))) {
                     // Current image: already modified in-memory, just fire update
                     continue;
@@ -3123,8 +3163,8 @@ public class ClusteringWorkflow {
             ImageData<BufferedImage> imageData;
             try {
                 var currentData = qupath.getImageData();
-                var currentEntry = (qupath.getProject() != null && currentData != null)
-                        ? qupath.getProject().getEntry(currentData) : null;
+                var currentEntry = (currentProject() != null && currentData != null)
+                        ? currentProject().getEntry(currentData) : null;
                 if (currentEntry != null && currentEntry.equals(entry)) {
                     imageData = currentData;
                 } else {
@@ -3338,8 +3378,8 @@ public class ClusteringWorkflow {
             boolean isCurrentImage = false;
             try {
                 var currentData = qupath.getImageData();
-                var currentEntry = (qupath.getProject() != null && currentData != null)
-                        ? qupath.getProject().getEntry(currentData) : null;
+                var currentEntry = (currentProject() != null && currentData != null)
+                        ? currentProject().getEntry(currentData) : null;
                 isCurrentImage = (currentEntry != null && currentEntry.equals(entry));
                 imageData = entry.readImageData();
             } catch (Exception e) {
@@ -3553,11 +3593,11 @@ public class ClusteringWorkflow {
      * Creates .qpcat_temp/ if it doesn't exist. Requires a project to be open.
      */
     private Path getProjectTempDir() throws IOException {
-        if (qupath.getProject() == null) {
+        if (currentProject() == null) {
             throw new IOException("A project must be open for tile-based training "
                     + "(temp files are stored in the project folder).");
         }
-        Path projectDir = qupath.getProject().getPath().getParent();
+        Path projectDir = currentProject().getPath().getParent();
         Path tempDir = projectDir.resolve(".qpcat_temp");
         Files.createDirectories(tempDir);
         return tempDir;

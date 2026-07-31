@@ -55,6 +55,7 @@ public final class BatchYamlParser {
             "pca_n_components", "umap_n_neighbors", "umap_min_dist",
             "umap_metric", "tsne_perplexity", "tsne_learning_rate",
             "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
+            "embedding_execution_mode",
             "random_seed", "result_name",
             "measurements", "spatial_smoothing", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
@@ -263,6 +264,7 @@ public final class BatchYamlParser {
                 case "tsne_iterations" -> c.setTsneIterations(asIntObj(value));
                 case "tsne_early_exaggeration" -> c.setTsneEarlyExaggeration(asDoubleObj(value));
                 case "embedding_seed" -> c.setEmbeddingSeed(asIntObj(value));
+                case "embedding_execution_mode" -> c.setEmbeddingExecutionMode(asString(value));
                 case "random_seed" -> c.setRandomSeed(asIntObj(value));
                 case "result_name" -> c.setResultName(asString(value));
                 case "measurements" -> c.setMeasurements(asStringList(value));

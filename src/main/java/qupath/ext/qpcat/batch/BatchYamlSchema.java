@@ -135,6 +135,11 @@ public final class BatchYamlSchema {
         private Double tsneEarlyExaggeration;
         private Integer embeddingSeed;
         private Integer randomSeed;
+        // "auto" (default) | "reproducible" | "fast". umap-learn disables all
+        // parallelism whenever a seed is set, so this is how a headless run opts
+        // into using every core on a large dataset. See
+        // model_utils.resolve_umap_execution.
+        private String embeddingExecutionMode;
         private String resultName;
         private List<String> measurements;
         private Boolean spatialSmoothing;
@@ -218,6 +223,11 @@ public final class BatchYamlSchema {
 
         public Integer getRandomSeed() { return randomSeed; }
         public void setRandomSeed(Integer randomSeed) { this.randomSeed = randomSeed; }
+
+        public String getEmbeddingExecutionMode() { return embeddingExecutionMode; }
+        public void setEmbeddingExecutionMode(String mode) {
+            this.embeddingExecutionMode = mode;
+        }
 
         public String getResultName() { return resultName; }
         public void setResultName(String resultName) { this.resultName = resultName; }

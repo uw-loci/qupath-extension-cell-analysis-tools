@@ -61,8 +61,50 @@ it does not apply this automatic rule.
 
 - **Minimum:** ~200 cells for meaningful clustering
 - **Recommended:** 1,000-50,000 cells for standard analyses
-- **Large datasets (>100,000):** Consider MiniBatch KMeans or subsetting via annotation selection
 - **Very small datasets (<200):** Results may be unstable; consider increasing cell detection sensitivity
+
+#### Large datasets (>200,000 cells)
+
+Multiplex imaging routinely produces hundreds of thousands to millions of cells.
+What actually costs time at that scale is the **embedding**, not the clustering:
+in a published 1.4M-cell scanpy benchmark, UMAP was roughly 90% of total wall
+time while neighbors and Leiden were each about a minute.
+
+- **Leave "UMAP speed vs reproducibility" on *Automatic*.** Above 200,000 cells it
+  drops the fixed random seed so UMAP can use every CPU core. This matters more
+  than it sounds: umap-learn disables all parallelism whenever a seed is set, so
+  the seeded path is 6-8x slower on a typical workstation and the gap widens with
+  cell count. The trade is that the *layout* differs slightly between runs --
+  cluster membership does not. Set it to *Reproducible* for a final figure you
+  intend to regenerate exactly, and expect it to take much longer.
+- **Prefer MiniBatch KMeans or Leiden over Agglomerative and HDBSCAN.**
+  Agglomerative is O(n^2). Leiden's graph construction scales well and is the
+  usual choice in the spatial-omics literature at this size.
+- **Turn off permutation-based spatial statistics for exploration.** Ripley,
+  Geary and co-occurrence are the most expensive things QP-CAT can do; the
+  adaptive permutation count already scales down with cell count, but at a million
+  cells you should enable them only for a final run, or on a subset of images.
+- **Reduce the marker set before you reduce the cell count.** Dropping
+  uninformative measurements cuts every downstream step and costs no cells.
+- **Subset by annotation when you are exploring.** Clustering the cells inside one
+  representative region is a legitimate way to choose parameters before committing
+  to a full run.
+
+**A note on subsampling.** QP-CAT clusters *every* cell; only the interactive
+scatter plot draws a subsample (see [Embedding Scatter Plot](#embedding-scatter-plot)).
+That distinction is deliberate and follows the cytometry literature: subsampling
+for **visualization** is universal -- CATALYST's standard workflow clusters all
+cells with FlowSOM and plots a 1,000-cell-per-sample UMAP -- whereas subsampling
+for **clustering** risks losing rare populations outright. Weber and Robinson
+(2016) put it directly: methods that require subsampling for large datasets "are
+not well-suited for the task of detecting rare populations." If you do want to
+cluster a subset, do it deliberately by annotation, and check that the populations
+you care about survived.
+
+**Sources:** scanpy dask tutorial timings, https://scanpy.readthedocs.io/en/1.11.x/tutorials/experimental/dask.html;
+umap-learn reproducibility docs, https://umap-learn.readthedocs.io/en/latest/reproducibility.html;
+Weber LM, Robinson MD. *Cytometry A* 89:1084-1096 (2016), https://doi.org/10.1002/cyto.a.23030;
+CATALYST differential-analysis vignette, https://www.bioconductor.org/packages/release/bioc/vignettes/CATALYST/inst/doc/differential.html
 
 ---
 
