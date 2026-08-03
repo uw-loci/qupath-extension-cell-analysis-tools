@@ -87,8 +87,15 @@ Full clustering with all configuration options.
    - "Spatial analysis" -- computes neighborhood enrichment and Moran's I
    - "Spatial feature smoothing" -- smooths features using spatial neighbors before clustering (see note below)
    - "Batch correction" -- applies Harmony (only for multi-image scope)
-9. Click **Run Clustering**
-10. View results in the results dialog (heatmap, scatter plot, marker rankings, plots)
+
+9. **Pre-flight checks** -- A box below the settings may show scale warnings or blocks:
+   - **Amber box (scale warning)** = this configuration will run but may be slow or approach your machine's memory ceiling
+   - **Red box (scale block)** = this configuration cannot finish on this machine; the **Run** button is disabled. The message names the problem (e.g., "Agglomerative clustering needs about 50 GB but you have 16 GB") and suggests alternatives (e.g., "Use Leiden or MiniBatch KMeans instead")
+   - Both are machine-dependent -- the same config might warn on your laptop but run fine on a 512 GB server
+   - See [Large datasets](../README.md#large-datasets-hundreds-of-thousands-to-millions-of-cells) in the README for the reasoning
+
+10. Click **Run Clustering**
+11. View results in the results dialog (heatmap, scatter plot, marker rankings, plots)
 
 ![Clustering results dialog showing the cluster-by-marker heatmap, with tabs for UMAP, marker rankings, dotplot, matrix plot, PAGA trajectory, stacked violin, and embedding plot](images/cluster-marker-heatmap.png)
 

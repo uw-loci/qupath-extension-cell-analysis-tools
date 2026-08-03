@@ -622,6 +622,14 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 
 ### Large datasets (hundreds of thousands to millions of cells)
 
+- **QP-CAT v0.9.8+ refuses doomed configurations before they start.** If you select
+  Agglomerative clustering with 1 million cells, or co-occurrence with 60 clusters,
+  QP-CAT predicts whether it can finish on *your machine's actual RAM* and refuses
+  runs that would crash or hang. The clustering dialog shows this as a red box with
+  the reason and an alternative; YAML batch runs fail the image with a clear error
+  message. See [TROUBLESHOOTING_YAML_BATCH.md](documentation/TROUBLESHOOTING_YAML_BATCH.md)
+  for the list of guarded analyses and remedies.
+
 - **A run that seems stuck is usually the embedding.** UMAP dominates wall time at
   this scale. Leave **Dimensionality Reduction > Advanced > "UMAP speed vs
   reproducibility"** on *Automatic*: above 200,000 cells it lets UMAP use every

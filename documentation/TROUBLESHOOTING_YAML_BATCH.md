@@ -311,6 +311,64 @@ customised.
 
 </details>
 
+<details>
+<summary><b>Configuration refused due to scale: "cannot complete on this machine"</b></summary>
+
+**What you see:**
+
+```
+[qpcat-batch] 2026-08-03 10:15:33 ERROR [1/10] image=LargePanel_001 step=clustering failed:
+               This configuration cannot complete on this machine:
+
+               - Agglomerative clustering of 200,000 cells: hierarchical clustering has to
+                 hold every pairwise distance in memory at once, which grows with the SQUARE
+                 of the cell count (needs about 298 GB) This machine has 16 GB. Use Leiden
+                 (graph-based) for large panels, or MiniBatch KMeans if you need a fixed
+                 number of clusters. Both handle millions of cells.
+```
+
+Co-occurrence and Ripley's L are different: they are **skipped, not failed**, and
+appear as a warning while the rest of the run continues to completion.
+
+```
+[qpcat-batch] 2026-08-03 14:22:15 WARN  [7/10] image=Panel_007
+               SKIPPING co-occurrence on 500000 cells x 24 clusters: it needs
+               about 55 GB but this machine has 32 GB. Re-run with co-occurrence
+               turned off, or with fewer clusters -- its memory grows with the
+               SQUARE of the cluster count.
+```
+
+**What it means:**
+
+One of the analyses in QP-CAT either cannot complete at all, or will be so slow it is impractical, given your actual dataset size and machine RAM. The blocking analyses are:
+
+- **Agglomerative (hierarchical) clustering:** holds every pairwise distance in memory at once; memory grows as the *square* of cell count. Measured 3.2 GB at 20,000 cells, out of memory by 50,000; predicted ~19 GB at 50,000.
+- **HDBSCAN:** bounded by *time*, not memory (its footprint stays under 0.3 GB). Runtime grows about N^2.13 -- measured 34 s at 50,000 cells and 151 s at 100,000, which extrapolates to roughly 5.7 hours at 1 million.
+- **Co-occurrence spatial statistic:** allocates one counter per cell per distance interval per cluster *pair*, so memory grows with the square of the cluster count. Measured 4.5 GB at 50,000 cells with 20 clusters; predicted ~34 GB at 50,000 cells with 60 clusters.
+- **Ripley's L spatial statistic:** memory is set by the *largest* cluster, not the total, because every pairwise distance within a cluster is materialized. If one cluster dominates, it can exhaust RAM even when the total cell count is modest.
+
+The check is *machine-dependent* -- the same config might pass on a 512 GB server but fail on a laptop with 8 GB. A fixed cell-count cap cannot express this.
+
+**What to do:**
+
+1. **For agglomerative clustering:** switch to `leiden` or `minibatch_kmeans` in your YAML. Both handle millions of cells and are much faster. Set `clustering.algorithm:` to one of these.
+
+2. **For HDBSCAN:** this runs to completion but very slowly on large datasets. Switch to `leiden`, which is graph-based and scales roughly linearly. If you need density-based clustering, consider a smaller region or subset.
+
+3. **For co-occurrence or Ripley's L:** these are turned on via `spatial_analysis.enable_ripley` and `spatial_analysis.enable_co_occurrence` in the YAML. Turn them off, or reduce `clustering.n_clusters` to shrink the working set.
+
+4. **To estimate the cost:** the error message shows the predicted peak RAM and your machine's actual RAM. Use the remedy it suggests (e.g. "Use Leiden instead") to modify `clustering.yaml` and re-run.
+
+5. **To run on a bigger machine:** if you have access to a server with more RAM, simply run the same YAML there. The check scales automatically.
+
+Note the two different behaviours. Ripley's L and co-occurrence are checked only
+once clustering has finished, because their cost depends on the cluster labels --
+so they are skipped with a warning and the rest of the run is kept, rather than a
+ten-minute clustering being thrown away. Every other refusal happens *before* any
+clustering starts, and fails the image.
+
+</details>
+
 ---
 
 ## See also
