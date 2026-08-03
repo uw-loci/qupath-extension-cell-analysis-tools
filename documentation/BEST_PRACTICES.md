@@ -70,6 +70,14 @@ What actually costs time at that scale is the **embedding**, not the clustering:
 in a published 1.4M-cell scanpy benchmark, UMAP was roughly 90% of total wall
 time while neighbors and Leiden were each about a minute.
 
+As of v0.9.8, **QP-CAT actively enforces these limits** on configurations that
+cannot complete on your machine. The pre-flight check in the clustering dialog
+will show a red block if you select a method that is too expensive for your data
+size and RAM; YAML batch runs will fail the image with a clear explanation. See
+[README: Large datasets](../README.md#large-datasets-hundreds-of-thousands-to-millions-of-cells)
+and [TROUBLESHOOTING_YAML_BATCH](TROUBLESHOOTING_YAML_BATCH.md) for what is
+guarded and why.
+
 - **Leave "UMAP speed vs reproducibility" on *Automatic*.** Above 200,000 cells it
   drops the fixed random seed so UMAP can use every CPU core. This matters more
   than it sounds: umap-learn disables all parallelism whenever a seed is set, so
@@ -79,11 +87,14 @@ time while neighbors and Leiden were each about a minute.
   intend to regenerate exactly, and expect it to take much longer.
 - **Prefer MiniBatch KMeans or Leiden over Agglomerative and HDBSCAN.**
   Agglomerative is O(n^2). Leiden's graph construction scales well and is the
-  usual choice in the spatial-omics literature at this size.
+  usual choice in the spatial-omics literature at this size. At very large scales,
+  Agglomerative may be refused outright rather than allowed to crash.
 - **Turn off permutation-based spatial statistics for exploration.** Ripley,
   Geary and co-occurrence are the most expensive things QP-CAT can do; the
   adaptive permutation count already scales down with cell count, but at a million
   cells you should enable them only for a final run, or on a subset of images.
+  On very large datasets, these analyses are skipped with a warning if the cost
+  would exceed available RAM.
 - **Reduce the marker set before you reduce the cell count.** Dropping
   uninformative measurements cuts every downstream step and costs no cells.
 - **Subset by annotation when you are exploring.** Clustering the cells inside one
