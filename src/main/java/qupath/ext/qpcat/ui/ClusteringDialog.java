@@ -22,6 +22,7 @@ import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
@@ -146,6 +147,8 @@ public class ClusteringDialog {
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
+    /** True between Run and completion; keeps the pre-flight from re-enabling Run. */
+    private boolean runActive;
     private Button cancelButton;
     // All settings controls, grouped so they can be disabled during a run.
     private VBox settingsBox;
@@ -1378,15 +1381,88 @@ public class ClusteringDialog {
                     + "types into one cluster. Turn it off if you are after cell types.");
         }
 
-        if (warns.isEmpty()) {
+        // Scale hazards are a separate class of problem from under-clustering:
+        // these do not give a poor answer, they give no answer at all. Shown in
+        // the same box but under their own heading, and a BLOCK also disables
+        // Run so the user cannot start something that must fail.
+        List<ScalingLimits.Finding> scaling = checkScaling();
+        boolean blocked = ScalingLimits.isBlocked(scaling);
+
+        if (warns.isEmpty() && scaling.isEmpty()) {
             preflightLabel.setVisible(false);
             preflightLabel.setManaged(false);
         } else {
-            preflightLabel.setText("Heads up -- this configuration may under-cluster:\n- "
-                    + String.join("\n- ", warns));
+            StringBuilder sb = new StringBuilder();
+            if (!scaling.isEmpty()) {
+                sb.append(blocked
+                        ? "This will not run at this size:"
+                        : "This will be slow at this size:");
+                for (var f : scaling) sb.append("\n- ").append(f.describe());
+                if (!warns.isEmpty()) sb.append("\n\n");
+            }
+            if (!warns.isEmpty()) {
+                sb.append("Heads up -- this configuration may under-cluster:\n- ")
+                        .append(String.join("\n- ", warns));
+            }
+            preflightLabel.setText(sb.toString());
+            // Amber for "slow", red for "impossible" -- a block is not a caution.
+            preflightLabel.setStyle(blocked
+                    ? "-fx-text-fill: #7f1d1d; -fx-background-color: #fee2e2; "
+                            + "-fx-padding: 6 8 6 8; -fx-border-color: #dc7070; "
+                            + "-fx-border-radius: 4; -fx-background-radius: 4;"
+                    : "-fx-text-fill: #7a5c00; -fx-background-color: #fff8e1; "
+                            + "-fx-padding: 6 8 6 8; -fx-border-color: #e0c060; "
+                            + "-fx-border-radius: 4; -fx-background-radius: 4;");
             preflightLabel.setVisible(true);
             preflightLabel.setManaged(true);
         }
+
+        // Never re-enable Run while a run is in flight -- setRunActive owns that.
+        if (runButton != null) runButton.setDisable(blocked || runActive);
+    }
+
+    /**
+     * Predicted scale problems for the current configuration.
+     *
+     * <p>The cell count is exact for single-image scope and an estimate for
+     * project scope (this image's count times the number of images), because
+     * counting detections across a project means opening every image. The
+     * estimate only drives this advisory box -- {@code ClusteringWorkflow}
+     * re-checks with the true count once the measurements are extracted, and
+     * that check is the one that can refuse the run.
+     */
+    private List<ScalingLimits.Finding> checkScaling() {
+        try {
+            return checkScalingImpl();
+        } catch (Exception e) {
+            // A guard must never be the thing that breaks the dialog it
+            // protects. Failing open costs a prediction; failing closed costs
+            // the user their whole configuration.
+            logger.warn("Scale pre-flight failed, continuing without it: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<ScalingLimits.Finding> checkScalingImpl() {
+        var imageData = qupath.getImageData();
+        if (imageData == null) return List.of();
+        long nCells = imageData.getHierarchy().getDetectionObjects().size();
+        if (nCells == 0) return List.of();
+
+        if (scopeSection != null && !scopeSection.isCurrentImage()) {
+            try {
+                int nImages = scopeSection.resolveEntries().size();
+                if (nImages > 1) nCells *= nImages;
+            } catch (Exception e) {
+                logger.debug("Could not resolve project scope for the scale check: {}",
+                        e.getMessage());
+            }
+        }
+
+        int nFeatures = measurementPane != null ? measurementPane.getSelected().size() : 0;
+        ClusteringConfig probe = buildConfig();
+        return ScalingLimits.check(
+                ClusteringWorkflow.scalingRequest(nCells, nFeatures, probe));
     }
 
     /**
@@ -1411,6 +1487,7 @@ public class ClusteringDialog {
     }
 
     private void setRunActive(boolean active) {
+        runActive = active;
         progressBar.setVisible(active);
         cancelButton.setVisible(active);
         cancelButton.setManaged(active);

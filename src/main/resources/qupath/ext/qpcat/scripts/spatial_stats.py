@@ -46,6 +46,122 @@ import numpy as np
 logger = logging.getLogger("qpcat.spatial_stats")
 
 
+# ---------------------------------------------------------------------------
+# Scale guards
+#
+# Ripley's L and co-occurrence are the two helpers here whose cost is set by
+# something the Java side cannot know before clustering runs: the number of
+# clusters, and the size of the largest one. Java refuses configurations it can
+# predict from the cell count alone (see ScalingLimits.java); these two need the
+# real labels, so they are checked here, at the last possible moment.
+#
+# On a breach we log and return WITHOUT setting task.outputs -- the documented
+# contract for every helper in this module. That degrades one sub-analysis
+# instead of killing a clustering run that may already have taken ten minutes.
+#
+# The coefficients MUST match ScalingLimits.java. Both sides are pinned to the
+# same measurements: python_tests/test_scaling_guard.py and ScalingLimitsTest.
+# ---------------------------------------------------------------------------
+
+_BASE_GB = 0.2
+_BLOCK_RAM_FRACTION = 0.85
+
+
+def _total_ram_gb():
+    """Physical RAM in GB, or 8.0 when it cannot be determined.
+
+    No psutil in the QP-CAT environment, so this uses sysconf on POSIX and
+    GlobalMemoryStatusEx on Windows. A wrong answer here only changes the
+    threshold, never correctness, hence the forgiving fallback.
+    """
+    try:
+        return (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) / 1024.0**3
+    except (ValueError, AttributeError, OSError):
+        pass
+    try:
+        import ctypes
+
+        class _MemStatus(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        stat = _MemStatus()
+        stat.dwLength = ctypes.sizeof(_MemStatus)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+        if stat.ullTotalPhys > 0:
+            return stat.ullTotalPhys / 1024.0**3
+    except Exception:
+        pass
+    return 8.0
+
+
+def co_occurrence_peak_gb(n_cells, n_clusters, n_intervals):
+    """Peak allocation of squidpy's co-occurrence kernel, in GB.
+
+    squidpy 1.6.6's `_occur_count` allocates (n_cells, n_intervals *
+    n_clusters ** 2) int32 up front. Note `n_splits` does NOT bound this any
+    more -- in 1.6.6 it survives only in a log message.
+    """
+    k = max(1, int(n_clusters))
+    return (
+        _BASE_GB + 0.75 + (float(n_cells) * int(n_intervals) * k * k * 4.0) / 1024.0**3
+    )
+
+
+def ripley_peak_gb(largest_cluster_size):
+    """Peak allocation of Ripley's L, in GB.
+
+    squidpy runs `pdist` over the observed cells of each cluster in turn, so the
+    LARGEST cluster sets the peak. `n_observations` caps only the simulated
+    point patterns, not this.
+    """
+    m = float(largest_cluster_size)
+    return _BASE_GB + 0.6 + 2.68e-8 * m * m
+
+
+def _cluster_sizes(adata, cluster_key):
+    """(n_clusters, largest_cluster_size) for the labels actually present."""
+    try:
+        labels = np.asarray(adata.obs[cluster_key])
+        _, counts = np.unique(labels, return_counts=True)
+        if counts.size == 0:
+            return 0, 0
+        return int(counts.size), int(counts.max())
+    except Exception:
+        return 0, 0
+
+
+def _refuse_if_too_big(what, predicted_gb, remedy):
+    """True when `what` must be skipped. Logs the reason either way."""
+    ram = _total_ram_gb()
+    if predicted_gb < ram * _BLOCK_RAM_FRACTION:
+        if predicted_gb > ram * 0.5:
+            logger.warning(
+                "%s needs about %.0f GB of %.0f GB -- this may swap",
+                what,
+                predicted_gb,
+                ram,
+            )
+        return False
+    logger.warning(
+        "SKIPPING %s: it needs about %.0f GB but this machine has %.0f GB. %s",
+        what,
+        predicted_gb,
+        ram,
+        remedy,
+    )
+    return True
+
+
 def _safe_kwargs(fn, **kw):
     """Keep only kwargs that `fn` accepts. Used to pass single-threading hints
     (n_jobs=1 / show_progress_bar=False / seed) to squidpy without a TypeError
@@ -231,6 +347,15 @@ def run_ripley(
     """
     import squidpy as sq
 
+    _, largest = _cluster_sizes(adata, cluster_key)
+    if _refuse_if_too_big(
+        "Ripley's L (largest cluster has %d cells)" % largest,
+        ripley_peak_gb(largest),
+        "Re-run with Ripley turned off. Its cost is set by the LARGEST cluster, "
+        "because every pairwise distance within a cluster is materialized.",
+    ):
+        return
+
     try:
         kwargs = {"cluster_key": cluster_key, "n_simulations": n_permutations}
         if max_radius is not None and max_radius > 0:
@@ -372,8 +497,16 @@ def run_ripley(
                 cluster_col = cluster_key if cluster_key in cols else None
                 if cluster_col:
                     if not radii and "bins" in cols:
-                        radii = [float(r) for r in l_data[l_data[cluster_col]
-                                 == cluster_names[0]]["bins"]] if cluster_names else []
+                        radii = (
+                            [
+                                float(r)
+                                for r in l_data[
+                                    l_data[cluster_col] == cluster_names[0]
+                                ]["bins"]
+                            ]
+                            if cluster_names
+                            else []
+                        )
                     for cname in cluster_names:
                         sub = l_data[l_data[cluster_col] == cname]
                         if "stats" in cols:
@@ -648,6 +781,17 @@ def run_co_occurrence(
       }
     """
     import squidpy as sq
+
+    n_clusters, _ = _cluster_sizes(adata, cluster_key)
+    n_int = int(n_intervals) if n_intervals and n_intervals > 0 else 50
+    if _refuse_if_too_big(
+        "co-occurrence on %d cells x %d clusters" % (adata.n_obs, n_clusters),
+        co_occurrence_peak_gb(adata.n_obs, n_clusters, n_int),
+        "Re-run with co-occurrence turned off, or with fewer clusters -- its "
+        "memory grows with the SQUARE of the cluster count. Neighborhood "
+        "enrichment answers a similar question far more cheaply.",
+    ):
+        return
 
     try:
         kwargs = {"cluster_key": cluster_key, "n_splits": 1}

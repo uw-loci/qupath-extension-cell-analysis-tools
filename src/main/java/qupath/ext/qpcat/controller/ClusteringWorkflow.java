@@ -11,6 +11,7 @@ import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.ClusteringResultManager;
@@ -1445,6 +1446,59 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Builds the scaling request for a config whose clustering has NOT run yet,
+     * so the cluster count is whatever the user asked for (KMeans, GMM,
+     * Agglomerative, MiniBatch KMeans) or an assumption (Leiden, HDBSCAN,
+     * BANKSY, which discover it).
+     */
+    public static ScalingLimits.Request scalingRequest(long nCells, int nFeatures,
+                                                       ClusteringConfig config) {
+        ScalingLimits.Request r = new ScalingLimits.Request(
+                config.getAlgorithm(), nCells, nFeatures);
+        Map<String, Object> params = config.getAlgorithmParams();
+        Object k = params.get("n_clusters");
+        if (k == null) k = params.get("n_components");
+        if (k instanceof Number num && num.intValue() > 0) {
+            r.nClusters = num.intValue();
+            r.clusterCountIsExact = true;
+        }
+        Object nn = params.get("n_neighbors");
+        if (nn instanceof Number num && num.intValue() > 0) r.nNeighbors = num.intValue();
+        r.ripley = config.isEnableRipley();
+        r.coOccurrence = config.isEnableCoOccurrencePairwise()
+                || config.isEnableCoOccurrenceOneVsRest();
+        return r;
+    }
+
+    /**
+     * Refuses a run that cannot finish, and logs the ones that merely will be
+     * slow. Throwing here surfaces as a normal error dialog in the GUI and as a
+     * failed image in the YAML batch report, which is what we want: the user
+     * finds out in seconds rather than after an overnight hang or an OOM kill
+     * that takes QuPath down with it.
+     */
+    private void enforceScalingLimits(int nCells, int nFeatures, ClusteringConfig config)
+            throws IOException {
+        List<ScalingLimits.Finding> findings =
+                ScalingLimits.check(scalingRequest(nCells, nFeatures, config));
+        for (var f : findings) {
+            if (f.severity() == ScalingLimits.Severity.WARN)
+                logger.warn("Scaling caution -- {}", f.describe());
+        }
+        if (!ScalingLimits.isBlocked(findings)) return;
+
+        StringBuilder sb = new StringBuilder(
+                "This configuration cannot complete on this machine:\n");
+        for (var f : findings) {
+            if (f.severity() == ScalingLimits.Severity.BLOCK)
+                sb.append("\n- ").append(f.describe());
+        }
+        String msg = sb.toString();
+        logger.error("Refusing clustering run. {}", msg);
+        throw new IOException(msg);
+    }
+
+    /**
      * Executes the clustering task via Appose. Must be called with TCCL set.
      */
     private ClusteringResult executeClusteringTask(
@@ -1455,6 +1509,12 @@ public class ClusteringWorkflow {
         int nCells = extraction.getNCells();
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
+
+        // Refuse configurations that cannot finish on this machine BEFORE any
+        // shared memory is allocated or Python is handed the data. This is the
+        // one chokepoint every entry point reaches -- GUI single-image, GUI
+        // project, and the headless YAML batch all arrive here.
+        enforceScalingLimits(nCells, nMeasurements, config);
 
         // Create NDArray for measurement data (input -- closed after task completes)
         NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);

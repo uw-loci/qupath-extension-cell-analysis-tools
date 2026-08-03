@@ -4,6 +4,78 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.8] -- 2026-08-03 -- refuse runs that cannot finish, instead of crashing partway
+
+v0.9.7 fixed the specific slowdown behind [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/11).
+This release audits the rest of the pipeline for the same class of problem and
+**stops doomed configurations before they start**. Full analysis, measurements and
+what is still open in
+`claude-reports/2026-08-03_qpcat-scale-hazard-audit-and-preflight-guard.md`.
+
+### Added
+
+- **A pre-flight scale check that refuses impossible runs.** Three analyses in
+  QP-CAT do not merely get slow on large data -- they cannot complete at all, and
+  until now the only way to find out was an out-of-memory kill (which takes
+  QuPath down with it) or an overnight hang. Each is now predicted and refused up
+  front, with the reason and an alternative.
+
+  The check runs against **this machine's actual RAM**, not a fixed cell-count
+  cap. "Too many cells" is not a property of the data: agglomerative clustering
+  that dies at 50,000 cells in 8 GB is comfortable at 200,000 in 512 GB. A fixed
+  limit would either block work a workstation can do or fail to protect a laptop.
+
+  What is guarded, and why (measured on 16 cores, 20 features, 20 clusters, peak
+  RSS sampled from `/proc`):
+
+  - **Agglomerative (hierarchical) clustering** holds every pairwise distance at
+    once, so memory grows with the SQUARE of the cell count -- 3.2 GB at 20,000
+    cells, out of memory by 50,000, about 7,450 GB at a million. It is offered as
+    one of eight equal-looking menu choices, with nothing to distinguish it from
+    KMeans beside it. Points users at Leiden or MiniBatch KMeans.
+  - **HDBSCAN** is bounded by TIME, not memory (its footprint never exceeded
+    0.27 GB). Runtime grows about as N^2.13: 34 s at 50,000 cells, 151 s at
+    100,000, roughly 5.7 hours at a million. A memory-only check would have
+    called this safe.
+  - **Co-occurrence** allocates one counter per cell per distance interval per
+    cluster PAIR, so its memory grows with the square of the cluster count as
+    well as the cell count -- **50,000 cells with 60 clusters needs 34 GB**, which
+    is not a configuration anyone would flag as large. Note that squidpy's own
+    `n_splits` guard no longer bounds this: in squidpy 1.6.6 the parameter
+    survives only in a log message.
+  - **Ripley's L** computes every pairwise distance WITHIN each cluster, so the
+    largest cluster sets the peak, not the total cell count -- and one dominant
+    cluster is a normal clustering outcome. squidpy's `n_observations` caps only
+    the simulated patterns.
+
+  KMeans, MiniBatch KMeans and GMM are deliberately **not** guarded: all three
+  measured flat to 250,000 cells (1.4-2.3 s, under 0.3 GB). Warning about safe
+  methods is how the real warnings get ignored.
+
+  The check runs at three points, because the deciding information arrives at
+  three different times. The clustering dialog shows it live and disables Run on
+  a block. `ClusteringWorkflow` re-checks with the exact extracted cell count
+  before any data reaches Python -- this is the authoritative gate, and the GUI,
+  project and headless YAML paths all pass through it. Co-occurrence and Ripley
+  are checked in `spatial_stats.py` immediately before they run, because their
+  cost depends on cluster labels that do not exist until clustering has finished;
+  a breach there **skips that one sub-analysis** rather than discarding a
+  clustering run that may already have taken ten minutes.
+
+  Every coefficient is fitted to a measurement and pinned by a test naming the
+  measurement it reproduces, in both languages -- the model is written twice (Java
+  for what is knowable up front, Python for what needs the labels), so
+  `python_tests/test_scaling_guard.py` also asserts the two halves agree
+  numerically.
+
+### Fixed
+
+- The clustering dialog's pre-flight box could not previously say anything about
+  dataset size at all; it only flagged configurations likely to *under-cluster*.
+  Those warnings remain, now shown alongside the scale findings rather than in
+  place of them, and a blocking finding renders red instead of amber -- a block is
+  not a caution.
+
 ## [0.9.7] -- 2026-07-31 -- large-dataset scaling: UMAP parallelism, working Cancel, plot decimation
 
 Fixes [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/11)
