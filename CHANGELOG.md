@@ -76,6 +76,41 @@ what is still open in
   place of them, and a blocking finding renders red instead of amber -- a block is
   not a caution.
 
+### Known limitations -- scaling work still outstanding
+
+The guard covers the analyses that **cannot finish**. The audit also turned up
+places that are slow, wasteful or fragile at a million cells but do complete, and
+those are **not** guarded or fixed in this release. None is reachable as a
+"choose this from a menu and it dies" hazard, which is why they are documented
+rather than blocked -- but they are real, and they are the next work:
+
+- **`compute_thresholds.py` fits a Gaussian mixture and a gamma MLE per marker on
+  the full cell count.** Both are 1-D distribution fits whose parameters are
+  indistinguishable on a 100,000-cell subsample, so at 40 markers this is a
+  multi-hour dialog freeze for no statistical gain. Highest-value, lowest-risk
+  subsampling target in the repo.
+- **Four independent neighbour structures get built over the same coordinates**
+  in a spatial run (two `spatial_neighbors` calls in radius-auto mode, a
+  `cKDTree`, a fresh `Delaunay`, plus a throwaway graph for smoothing), and the
+  per-cluster summary tables build a third full kNN graph over every cell to
+  produce a roughly 20x40 table.
+- **Known hot spots carried over unfixed from the 2026-07-31 audit:**
+  `geosketch_select.py:104-125` (reallocates an N x M table per bisection
+  iteration, up to 200 times), `spatial_stats.py:863` (`.tolil()` on an N x N
+  sparse matrix that is immediately `.nonzero()`-ed, which works on CSR
+  directly), `spatial_stats.py:168-173` (Delaunay pruning with two LIL scalar
+  assignments per edge), `train_autoencoder.py:1067-1069` (moves the entire
+  matrix and a full decode output to the GPU for a diagnostic that is printed and
+  discarded, while every other part of the script is batched), and
+  `cellular_neighborhoods.py:220,241` (radius mode returns a ragged object array
+  with no degree cap).
+- **`export_anndata.py`** writes float64 with no compression -- about 800 MB for
+  1M x 100 -- and both it and `spatial_stats_standalone.py` build a Python string
+  object per cell where `pd.Categorical.from_codes` would do.
+
+Detail, measurements and the reasoning for each in
+`claude-reports/2026-08-03_qpcat-scale-hazard-audit-and-preflight-guard.md`.
+
 ## [0.9.7] -- 2026-07-31 -- large-dataset scaling: UMAP parallelism, working Cancel, plot decimation
 
 Fixes [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/11)
