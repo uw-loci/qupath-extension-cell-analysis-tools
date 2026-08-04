@@ -2931,7 +2931,7 @@ public class ClusteringWorkflow {
         int[] classLabels = allLabels.stream().mapToInt(Integer::intValue).toArray();
         int nLabeled = 0;
         for (int l : classLabels) if (l >= 0) nLabeled++;
-        logger.info("[TEST] Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
+        logger.info("Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
                 inputMode, allDetections.size(), imageDatas.size(), nLabeled, classNames.size());
 
         // Extract measurements (for measurement mode, or hybrid tile+measurements mode)
@@ -3178,7 +3178,7 @@ public class ClusteringWorkflow {
                        "Classes", String.valueOf(classNames.size()),
                        "LatentDim", String.valueOf(latentDim),
                        "Epochs", String.valueOf(epochs)),
-                "[TEST] Autoencoder trained", elapsed);
+                "Autoencoder trained", elapsed);
 
         // Clean up tile temp file
         deleteTempFile(tileTempFile);
@@ -3191,7 +3191,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * [TEST FEATURE] Evaluates a trained autoencoder against existing labels.
+     * Evaluates a trained autoencoder against existing labels.
      * Runs inference on checked images and compares predictions to ground truth
      * WITHOUT modifying any object classifications.
      *
@@ -3398,14 +3398,14 @@ public class ClusteringWorkflow {
         result.put("misclassifications", misclassifications);
 
         double accuracy = totalLabeled > 0 ? (double) totalCorrect / totalLabeled * 100 : 0;
-        logger.info("[TEST] Evaluation: {}/{} correct ({} labeled cells across {} images)",
+        logger.info("Autoencoder evaluation: {}/{} correct ({} labeled cells across {} images)",
                 totalCorrect, totalLabeled, totalLabeled, imageEntries.size());
 
         return result;
     }
 
     /**
-     * [TEST FEATURE] Applies a trained autoencoder to selected images.
+     * Applies a trained autoencoder to selected images.
      *
      * @param imageEntries     project images to apply to
      * @param measurements     measurement names (must match training)
@@ -3635,7 +3635,7 @@ public class ClusteringWorkflow {
         }
 
         long elapsed = System.currentTimeMillis() - startTime;
-        String msg = "[TEST] Autoencoder applied to " + totalApplied + "/"
+        String msg = "Autoencoder applied to " + totalApplied + "/"
                 + imageEntries.size() + " images";
         report(progressCallback, msg);
         OperationLogger.getInstance().logOperation("AUTOENCODER_PROJECT_APPLY",

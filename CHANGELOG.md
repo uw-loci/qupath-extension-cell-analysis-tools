@@ -135,6 +135,19 @@ be repeated and reversed.
   `...` or vanished. The bar is now a `BorderPane`, which lays the link out at its
   preferred width first and lets the (wrapping) guide prose give way instead.
 
+### Changed -- feature status labels
+
+- **The Autoencoder Cell Classifier is no longer marked `[TEST]`.** It has been
+  tested and works. Two facts about it are now stated instead, because they
+  matter more than a "test" tag did: it is an **original QP-CAT implementation**
+  rather than a wrapper around a published Python library (the VAE, the
+  semi-supervised classifier head, the KL annealing schedule and the tile-mode
+  masking were written for this extension), and it is **unpublished and not peer
+  reviewed**. The design draws on published methods, listed in REFERENCES.md, but
+  this combination has not been through review -- validate it on your own data,
+  and describe it as software rather than citing it as a method. The `[TEST]`
+  prefix is also gone from its log lines.
+
 ### Notes
 
 - **"Experimental" on the Cluster Explainer means unproven, not unvalidated.**

@@ -21,7 +21,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 8. [Removed features](#8-removed-features)
 10. [Explaining Clusters with an LLM (Beta)](#10-explaining-clusters-with-an-llm-beta)
 11. [Managing Clusters (Rename/Merge)](#11-managing-clusters-renamemerge)
-12. [Autoencoder Cell Classifier (TEST)](#12-test-autoencoder-cell-classifier)
+12. [Autoencoder Cell Classifier](#12-autoencoder-cell-classifier)
 13. [Exporting AnnData](#13-exporting-anndata)
 14. [Saving and Loading Configurations](#14-saving-and-loading-configurations)
 15. [Viewing the Python Console](#15-viewing-the-python-console)
@@ -677,9 +677,20 @@ and target it directly next time.
 
 ---
 
-## 12. [TEST] Autoencoder Cell Classifier
+## 12. Autoencoder Cell Classifier
 
-Train a VAE-based classifier on labeled cells, then apply across the project. This is a **test feature**.
+Train a VAE-based classifier on labeled cells, then apply across the project.
+
+> **Status.** Tested and working. Two things to know before you build on it:
+> it is an **original QP-CAT implementation**, not a wrapper around a published
+> Python library -- the VAE, the semi-supervised classifier head, the KL
+> annealing schedule and the tile-mode masking were written for this extension.
+> And it is **unpublished and not peer reviewed**. The design draws on published
+> methods (see [REFERENCES.md](REFERENCES.md#autoencoder-cell-classification)),
+> but this particular combination has not been through review. Validate it on
+> your own data before relying on it, and describe it as software rather than
+> citing it as a method.
+
 
 ![Autoencoder Cell Classifier dialog showing object-type and label-source options, per-class training images, input data settings, and training parameters, with a pie chart of labeled-cell class balance](images/autoencoder-classifier-dialog.png)
 

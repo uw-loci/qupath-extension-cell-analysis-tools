@@ -22,7 +22,7 @@ Recommendations for getting the best results from cell clustering and phenotypin
 13. [Multi-Image Projects](#multi-image-projects)
 14. [Reproducibility](#reproducibility)
 15. [Common Pitfalls](#common-pitfalls)
-16. [[TEST] Autoencoder Cell Classifier](#test-autoencoder-cell-classifier)
+16. [Autoencoder Cell Classifier](#autoencoder-cell-classifier)
 
 ---
 
@@ -860,7 +860,7 @@ Name rule sets with versions (e.g., "Immune Panel v1", "Immune Panel v2") rather
 
 ---
 
-## [TEST] Autoencoder Cell Classifier
+## Autoencoder Cell Classifier
 
 ### When to Use
 

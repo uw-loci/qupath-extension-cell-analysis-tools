@@ -145,7 +145,7 @@ public class AutoencoderDialog {
         VBox content = new VBox(10);
         content.setPadding(new Insets(15));
 
-        content.getChildren().add(QpcatDocLinks.linkBar("12-test-autoencoder-cell-classifier"));
+        content.getChildren().add(QpcatDocLinks.linkBar("12-autoencoder-cell-classifier"));
         content.getChildren().addAll(
                 createObjectTypeSection(),
                 createLabelSourceSection(),

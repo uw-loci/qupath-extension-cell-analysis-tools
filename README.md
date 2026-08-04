@@ -37,7 +37,7 @@ caveats.
 - **[Discover cell types without labels](documentation/HOW_TO_GUIDE.md#2-running-clustering)** -- group cells automatically by marker expression. <sub>Leiden or KMeans to start, HDBSCAN for rare populations, BANKSY when architecture matters; plus 3 more</sub>
 - **[Marker gating with auto-thresholds](documentation/HOW_TO_GUIDE.md#6-rule-based-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
 - **[Cleaner clusters via tissue context](documentation/BEST_PRACTICES.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
-- **[Annotate a few cells, classify the rest](documentation/HOW_TO_GUIDE.md#12-test-autoencoder-cell-classifier)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; *test feature*</sub>
+- **[Annotate a few cells, classify the rest](documentation/HOW_TO_GUIDE.md#12-autoencoder-cell-classifier)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
 - **[Get a phenotype suggestion in plain English](documentation/HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
 
 **Ask spatial questions**
@@ -328,9 +328,11 @@ See [How-To Guide section 10](documentation/HOW_TO_GUIDE.md#10-explaining-cluste
 ---
 
 <details>
-<summary><h2>[TEST] Autoencoder Cell Classifier</h2></summary>
+<summary><h2>Autoencoder Cell Classifier</h2></summary>
 
-**Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. This is a **test feature** under active development.
+**Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. Tested and working.
+
+This is an **original QP-CAT implementation**, not a wrapper around a published Python library -- the VAE, the classifier head, the KL annealing schedule and the tile-mode masking were written for this extension -- and it is **unpublished and not peer reviewed**. The design draws on published methods ([REFERENCES.md](documentation/REFERENCES.md#autoencoder-cell-classification)), but this combination has not been through review; validate it on your own data, and describe it as software rather than citing it as a method.
 
 ### How It Works
 
@@ -590,7 +592,7 @@ All items are under **Extensions > QP-CAT**:
 | Setup Clustering Environment | One-time Python environment installation | Internet connection |
 | Run Clustering... | Full clustering dialog with all options | Image + detections |
 | Compute Embedding Only... | UMAP/PCA/t-SNE without clustering | Image + detections |
-| [TEST] Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
+| Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
 | Run Phenotyping... | Rule-based cell type classification | Image + detections + project |
 | Quick Cluster > Quick Leiden | One-click Leiden clustering with defaults | Image + detections |
 | Quick Cluster > Quick KMeans | One-click KMeans (k=10) | Image + detections |
