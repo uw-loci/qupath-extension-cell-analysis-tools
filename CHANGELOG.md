@@ -11,7 +11,8 @@ Addresses [issue #12](https://github.com/uw-loci/qupath-extension-cell-analysis-
 The issue asked for three things. Two of them already shipped and are covered in
 the docs -- the answer there is discoverability, not a missing feature:
 
-- **Reopening the results window** -- **Extensions > QP-CAT > View Past Results...**.
+- **Reopening the results window** -- **Extensions > QP-CAT > Results & populations >
+  View Past Results...** (that path is new in this release; see the menu change below).
   Every clustering run is auto-saved, so any past run reopens with all its tabs,
   including the composition pies and table.
 - **Renaming and merging clusters from the results window** -- the
