@@ -4,53 +4,7 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.9.10] -- 2026-08-04 -- find a marker without reading the whole table
-
-### Added
-
-- **A "Find marker" box on the Marker Rankings and Marker Fingerprints tabs.**
-  A JavaFX dialog has no Ctrl-F, so answering "is CD8 a top marker anywhere"
-  previously meant reading a several-hundred-line table, or every card.
-  - **Marker Rankings** *filters*: only the matching rows are shown, with a count
-    (`14 rows in 6 clusters`). A long monospace dump does not benefit from a
-    highlight you have to scroll to find.
-  - **Marker Fingerprints** *highlights*: matching rows, chips and cards get an
-    amber tint and everything else stays put, because that tab exists to give an
-    overview and hiding the non-matches would destroy what you are searching. The
-    highlight persists across the three views, so you can search in Measurements
-    and switch to Channels -> clusters without re-typing. Readout: `7 matches in
-    4 cards`.
-  - Both report **no matches** explicitly, so a typo does not read as "that
-    marker is unimportant".
-
-- **`MarkerNameTokens`** -- reduces a QuPath measurement name to the marker it is
-  about by dropping compartment and statistic words (`cell`, `cytoplasm`,
-  `membrane`, `nucleus`, `mean`, `max`, `min`, `median`, `std.dev` / `stddev`,
-  `variance`). `Cell: CD8 mean`, `Nucleus: CD8: Max` and `Mean_CD8` all reduce to
-  `CD8`.
-
-  Searching is done against that reduced name, which is what makes the exclusion
-  list meaningful: `CD8` matches in every compartment and every statistic, while
-  `mean` or `nucleus` match nothing -- they say where or how a measurement was
-  taken, not what it measured.
-
-### Notes
-
-- **Whole-word removal, never substring.** A marker that merely contains an
-  excluded word -- `MinK`, `Maximum`, `Cellulose`, `Meanwell` -- is left intact
-  and stays searchable. Substring stripping would have turned `MinK` into `K`.
-- `Std.Dev.` is treated as one word, so a marker legitimately called `Dev` is
-  unaffected.
-- A measurement whose every token is boilerplate (`Nucleus: Mean`) keeps its full
-  original name rather than reducing to an empty, unfindable label.
-- There is no single measurement-naming convention -- `ChannelMatcher` documents
-  four seen in the wild, with the compartment before, after, or absent -- so the
-  reduction splits on `: ; , _ /` and whitespace and drops whole tokens, rather
-  than parsing positionally. All four schemas are pinned by tests.
-- Unlike the two Channels views, this needs no open image: it works from the
-  saved rankings alone, so it is available on a reopened past result.
-
-## [0.9.9] -- 2026-08-04 -- composition figures export, and renamed clusters stay renamed
+## [0.9.9] -- 2026-08-04 -- composition figures export, renamed clusters stay renamed, six-row menu, marker search
 
 Addresses [issue #12](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/12).
 
@@ -148,6 +102,34 @@ be repeated and reversed.
   maps several labels to one display name, so the pre-merge version restores
   exactly. There is now a test pinning that.
 
+### Added -- finding a marker
+
+- **A "Find marker" box on the Marker Rankings and Marker Fingerprints tabs.**
+  A JavaFX dialog has no Ctrl-F, so answering "is CD8 a top marker anywhere"
+  previously meant reading a several-hundred-line table, or every card.
+  - **Marker Rankings** *filters*: only the matching rows are shown, with a count
+    (`14 rows in 6 clusters`). A long monospace dump does not benefit from a
+    highlight you have to scroll to find.
+  - **Marker Fingerprints** *highlights*: matching rows, chips and cards get an
+    amber tint and everything else stays put, because that tab exists to give an
+    overview and hiding the non-matches would destroy what you are searching. The
+    highlight persists across the three views, so you can search in Measurements
+    and switch to Channels -> clusters without re-typing. Readout: `7 matches in
+    4 cards`.
+  - Both report **no matches** explicitly, so a typo does not read as "that
+    marker is unimportant".
+
+- **`MarkerNameTokens`** -- reduces a QuPath measurement name to the marker it is
+  about by dropping compartment and statistic words (`cell`, `cytoplasm`,
+  `membrane`, `nucleus`, `mean`, `max`, `min`, `median`, `std.dev` / `stddev`,
+  `variance`). `Cell: CD8 mean`, `Nucleus: CD8: Max` and `Mean_CD8` all reduce to
+  `CD8`.
+
+  Searching is done against that reduced name, which is what makes the exclusion
+  list meaningful: `CD8` matches in every compartment and every statistic, while
+  `mean` or `nucleus` match nothing -- they say where or how a measurement was
+  taken, not what it measured.
+
 ### Changed -- interface
 
 - **The menu is six rows instead of nineteen.** `Find cell populations
@@ -197,6 +179,19 @@ be repeated and reversed.
 
 ### Notes
 
+- **Whole-word removal, never substring.** A marker that merely contains an
+  excluded word -- `MinK`, `Maximum`, `Cellulose`, `Meanwell` -- is left intact
+  and stays searchable. Substring stripping would have turned `MinK` into `K`.
+- `Std.Dev.` is treated as one word, so a marker legitimately called `Dev` is
+  unaffected.
+- A measurement whose every token is boilerplate (`Nucleus: Mean`) keeps its full
+  original name rather than reducing to an empty, unfindable label.
+- There is no single measurement-naming convention -- `ChannelMatcher` documents
+  four seen in the wild, with the compartment before, after, or absent -- so the
+  reduction splits on `: ; , _ /` and whitespace and drops whole tokens, rather
+  than parsing positionally. All four schemas are pinned by tests.
+- Unlike the two Channels views, this needs no open image: it works from the
+  saved rankings alone, so it is available on a reopened past result.
 - **Foundation-model feature extraction: status checked, not guessed.** The
   removed-in-v0.7.0 feature's docs said only that it was "never validated
   end-to-end on real data", which conflated three different things. Checked on
