@@ -1,4 +1,8 @@
-# QP-CAT -- Cluster Explainer (LLM) [Beta] Troubleshooting
+# QP-CAT -- Cluster Explainer (LLM) [Experimental] Troubleshooting
+
+> **This feature has never been successfully run end-to-end by the QP-CAT
+> developers.** The error states below are derived from the code, not from
+> observed failures, so the list is neither complete nor confirmed.
 
 This page covers the error states you may see in the **Cluster Explainer (LLM)** tab of the cluster results dialog, what each one typically means, and what to do about it.
 
@@ -116,7 +120,7 @@ See also:
 <details>
 <summary><strong>The tab is greyed out / Run Explainer is disabled</strong></summary>
 
-**What you see:** The Cluster Explainer (LLM) [Beta] tab opens but the **Run Explainer** button is disabled with a tooltip like *"Marker rankings not available for this clustering result"* or *"Select a provider"*.
+**What you see:** The Cluster Explainer (LLM) [Experimental] tab opens but the **Run Explainer** button is disabled with a tooltip like *"Marker rankings not available for this clustering result"* or *"Select a provider"*.
 
 **What it usually means:** Either the clustering result does not contain Wilcoxon marker rankings (some algorithms or partial runs skip this), or you have not selected a provider in the tab's Provider dropdown.
 
@@ -135,6 +139,6 @@ See also:
 
 **What to do:**
 - Wait for the rebuild to complete. The full clustering env (torch, scanpy, etc.) is not re-downloaded; only the new pip packages are installed.
-- If the rebuild fails, use **Extensions > QP-CAT > Utilities > Rebuild Clustering Environment** to start fresh.
+- If the rebuild fails, use **Extensions > QP-CAT > Setup & help > Rebuild analysis environment** to start fresh.
 
 </details>

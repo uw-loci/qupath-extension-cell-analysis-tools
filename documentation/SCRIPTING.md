@@ -205,7 +205,7 @@ All three are Gson-serialisable and persist on `SavedClusteringResult.spatialSta
 
 ## FigureExportScripts
 
-Static facade for batch figure export. Writes one or more plots from saved clustering results to a directory. Matches the behavior of the **Extensions > QP-CAT > Export Figures...** dialog but without the GUI -- callable from scripts, the **Run for project** workflow, and the QP-CAT YAML batch (Feature C).
+Static facade for batch figure export. Writes one or more plots from saved clustering results to a directory. Matches the behavior of the **Extensions > QP-CAT > Export > Export figures (batch)...** dialog but without the GUI -- callable from scripts, the **Run for project** workflow, and the QP-CAT YAML batch (Feature C).
 
 > **Headless plot scope.** The scripting API exports the **saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment matrix, spatial scatter, plus the Feature A spatial-stats line charts when the Feature A persisted-PNG path is implemented) and the **cluster-composition figures and tables** (`composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`), which QP-CAT renders in Java straight from the saved result. The four JavaFX-rendered plots (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) are GUI-thread-only and require the interactive **Export Figures** dialog -- the script call records them as failures in the returned `ExportResult` and continues. This restriction is per v1 architect design; v1.1 may lift it via off-screen scene-graph rendering on `Platform.runLater`.
 >

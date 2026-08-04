@@ -16,7 +16,7 @@ QP-CAT embeds a full scientific Python environment (via [Appose](https://github.
 - **[Best Practices](documentation/BEST_PRACTICES.md)** -- Recommendations for measurement selection, normalization, algorithm choice, and phenotyping strategy
 - **[Scripting (Groovy)](documentation/SCRIPTING.md)** -- programmatic API for the spatial graph, spatial statistics, batch figure export, and the YAML headless-batch runner, callable from QuPath workflow scripts
 - **[YAML Schema](documentation/YAML_SCHEMA.md)** -- field-by-field reference for the YAML headless-batch config file
-- **[Troubleshooting -- LLM Cluster Explainer](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md)** -- error states for the Cluster Explainer (LLM) [Beta] tab with what-you-see / what-it-means / what-to-do for every case
+- **[Troubleshooting -- LLM Cluster Explainer](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md)** -- error states for the Cluster Explainer (LLM) [Experimental] tab with what-you-see / what-it-means / what-to-do for every case
 - **[Troubleshooting -- YAML Headless Batch](documentation/TROUBLESHOOTING_YAML_BATCH.md)** -- error-by-error remediation for the YAML batch runner, keyed by `E0xx` validation codes
 - **[References](documentation/REFERENCES.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
 
@@ -70,7 +70,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
 - No GPU required -- all operations run on CPU
-- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Beta]* feature. Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
+- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (which has never been successfully run end-to-end by the developers). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
 
@@ -81,7 +81,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 1. Download the latest `.jar` from the [Releases](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/releases) page
 2. Drag the JAR onto the QuPath window, or place it in your QuPath extensions directory
 3. Restart QuPath
-4. Go to **Extensions > QP-CAT > Setup Clustering Environment** and click "Setup"
+4. Go to **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** and click "Setup"
 5. Wait for the Python environment to build (first time only, ~5-10 minutes)
 
 ### Building from Source
@@ -99,7 +99,7 @@ The built JAR will be in `build/libs/`. Copy it to your QuPath extensions direct
 ## Quick Start
 
 1. Open an image in QuPath with cell detections (run cell detection first if needed)
-2. **Extensions > QP-CAT > Run Clustering...**
+2. **Extensions > QP-CAT > Find cell populations (clustering)...**
 3. Select measurements (defaults to "Mean" intensity channels)
 4. Choose algorithm (Leiden recommended) and click **Run Clustering**
 5. Results are applied directly to detections as classifications (Cluster 0, Cluster 1, ...)
@@ -169,9 +169,9 @@ QP-CAT pins `harmonypy >= 0.2.0, < 2`. Version 2.0.0+ is a pybind11/CMake build 
 
 **If the checkbox is unexpectedly grayed out:**
 
-1. Open the QP-CAT Python log (Extensions > QP-CAT > System Info, or check the QuPath log).
+1. Open the QP-CAT Python log (Extensions > QP-CAT > Setup & help > System Info..., or check the QuPath log).
 2. Look for the line `harmonypy: <version>` -- if you instead see `harmonypy: NOT INSTALLED`, the env build skipped or failed for this package.
-3. **Use Extensions > QP-CAT > Utilities > Rebuild Clustering Environment** to delete and re-create the pixi env from a clean slate. This re-resolves the harmonypy pin and should produce a working install.
+3. **Use Extensions > QP-CAT > Setup & help > Rebuild analysis environment** to delete and re-create the pixi env from a clean slate. This re-resolves the harmonypy pin and should produce a working install.
 4. If rebuild still fails, file a bug report with the full QuPath log attached.
 
 </details>
@@ -185,7 +185,7 @@ Rule-based cell type classification using marker gating thresholds.
 
 ### Workflow
 
-1. **Extensions > QP-CAT > Run Phenotyping...**
+1. **Extensions > QP-CAT > Classify cells > Label cells by marker rules (phenotyping)...**
 2. Select markers to use as gating channels
 3. Set per-marker gate thresholds (manually or via auto-thresholding)
 4. Define phenotype rules: each rule maps a cell type name to marker conditions (positive/negative)
@@ -280,13 +280,13 @@ This is a lighter-weight alternative to BANKSY when you want spatial awareness w
 ---
 
 <details>
-<summary><h2>Cluster Explainer (LLM) [Beta]</h2></summary>
+<summary><h2>Cluster Explainer (LLM) [Experimental]</h2></summary>
 
-**Cluster results dialog > Cluster Explainer (LLM) [Beta] tab** turns each cluster's top-marker statistics into a plain-English phenotype suggestion with rationale. The LLM reads only the per-cluster marker rankings and cluster summary statistics -- no pixels, no cell-level data, no patient-identifiable information.
+**Cluster results dialog > Cluster Explainer (LLM) [Experimental] tab** turns each cluster's top-marker statistics into a plain-English phenotype suggestion with rationale. The LLM reads only the per-cluster marker rankings and cluster summary statistics -- no pixels, no cell-level data, no patient-identifiable information.
 
 > **[UNTESTED]** This feature has not yet been validated end-to-end on real data. The LLM calls, provider integrations (Anthropic / Ollama), and rendered output are unverified -- treat any phenotype suggestion as provisional and validate it independently before relying on it. Behavior may change.
 
-This feature is marked **[Beta]** for v1: the surface area (prompt template, output JSON, audit-log row shape) may change in v1.1 based on user feedback. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
+**This feature has never been successfully run end-to-end by the QP-CAT developers** -- "experimental" means the path is unproven, not merely that its output is unvalidated. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
 Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See `documentation/HOW_TO_GUIDE.md` Section 10 for the workflow.
 
@@ -301,7 +301,7 @@ OpenAI is intentionally **not** supported in v1.
 
 ### How It Works
 
-1. After clustering completes (or after "View Past Results"), open the **Cluster Explainer (LLM) [Beta]** tab in the results dialog
+1. After clustering completes (or after "View Past Results"), open the **Cluster Explainer (LLM) [Experimental]** tab in the results dialog
 2. Pick a provider and model directly in the tab, and -- for Anthropic -- paste your API key
 3. Click **Run Explainer**. One LLM call is made with all clusters' Wilcoxon marker rankings + cell counts as input
 4. Results render as a per-cluster table: suggested phenotype, confidence band, top supporting markers, one-paragraph rationale
@@ -330,7 +330,7 @@ See [How-To Guide section 10](documentation/HOW_TO_GUIDE.md#10-explaining-cluste
 <details>
 <summary><h2>[TEST] Autoencoder Cell Classifier</h2></summary>
 
-**Extensions > QP-CAT > [TEST] Autoencoder Classifier...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. This is a **test feature** under active development.
+**Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. This is a **test feature** under active development.
 
 ### How It Works
 
@@ -467,7 +467,7 @@ After clustering, QP-CAT can generate:
 
 Export your data to the AnnData format for use with external tools:
 
-- **Extensions > QP-CAT > Export AnnData (.h5ad)...**
+- **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**
 
 The exported file includes:
 - All selected measurements as the expression matrix
@@ -485,7 +485,7 @@ Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cel
 <details>
 <summary><h2>Cluster Management</h2></summary>
 
-**Extensions > QP-CAT > Manage Clusters...** opens a dialog for post-hoc cluster organization:
+**Extensions > QP-CAT > Results & populations > Rename or merge cell populations...** opens a dialog for post-hoc cluster organization:
 
 - **Rename** -- Change a cluster's classification name (e.g., "Cluster 3" -> "CD8+ T Cells")
 - **Merge** -- Combine two or more clusters into one with a user-specified name
@@ -529,7 +529,7 @@ This provides a reproducibility trail -- you can always see exactly what paramet
 <details>
 <summary><h2>Python Console</h2></summary>
 
-**Extensions > QP-CAT > Utilities > Python Console** opens a window showing real-time Python stderr/debug output from the embedded Python environment. Useful for:
+**Extensions > QP-CAT > Setup & help > Python Console** opens a window showing real-time Python stderr/debug output from the embedded Python environment. Useful for:
 
 - Monitoring long-running operations
 - Debugging Python-side errors
@@ -572,7 +572,7 @@ QP-CAT manages its own isolated Python environment via [Appose](https://github.c
 
 If the environment becomes corrupted or you need to update packages:
 
-1. **Extensions > QP-CAT > Utilities > Rebuild Clustering Environment**
+1. **Extensions > QP-CAT > Setup & help > Rebuild analysis environment**
 2. Confirm the rebuild (this deletes the existing environment)
 3. Click "Setup" in the dialog that appears
 

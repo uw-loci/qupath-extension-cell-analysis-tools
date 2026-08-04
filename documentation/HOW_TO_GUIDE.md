@@ -4,7 +4,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 
 **Prerequisites for all workflows:**
 - QuPath 0.7.0+ with QP-CAT installed
-- Python environment set up (Extensions > QP-CAT > Set up analysis environment (first run)...)
+- Python environment set up (Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...)
 - An image open in QuPath with cell detections present
 
 ---
@@ -42,12 +42,57 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 
 ---
 
+## The QP-CAT menu at a glance
+
+Everything lives under **Extensions > QP-CAT**. The two things QP-CAT is *for* --
+finding populations and classifying cells -- are at the top level; everything else
+is grouped by when you would reach for it.
+
+```
+Find cell populations (clustering)...        the main tool, chapter 2
+Classify cells >
+    Label cells by marker rules (phenotyping)...          ch. 6
+    Classify cells by appearance (deep learning)...       ch. 12
+--------
+Explore & spatial >
+    Quick clustering presets >               one-click Leiden / KMeans / HDBSCAN / Delaunay
+    Map cells in 2D (UMAP / PCA / t-SNE)...               ch. 3
+    Plot & gate cells (2D)...                             ch. 25
+    Find cellular neighborhoods (spatial niches)...       ch. 13
+    Spatial statistics on existing clusters...            ch. 27
+Results & populations >
+    View Past Results...                                  ch. 20
+    Manage Saved Results...
+    Rename or merge cell populations...                   ch. 11
+    Apply saved result to detections...                   ch. 28
+    Apply cluster color palette...                        ch. 26
+Export >
+    Export figures (batch)...                             ch. 18
+    Export cells for Python / scanpy (AnnData)...
+    Export clustered cells for VEST (3D viewer)...        ch. 29
+    Stop VEST viewer
+--------
+Setup & help >
+    Set up analysis environment (first run)...            ch. 1 (hidden once set up)
+    Python Console
+    Clear cell connections...
+    System Info...
+    Rebuild analysis environment
+    Documentation (How-to guide)...                       opens this page
+    Report a Bug...
+```
+
+Menu paths throughout this guide are written in full, e.g.
+**Extensions > QP-CAT > Explore & spatial > Plot & gate cells (2D)...**.
+
+---
+
 ## 1. Setting Up the Environment
 
 **First-time only.** This downloads Python and all scientific packages (~1.5-2.5 GB).
 
 1. Open QuPath
-2. Go to **Extensions > QP-CAT > Set up analysis environment (first run)...**
+2. Go to **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...**
 3. Click **Setup Environment**
 4. Wait for the download and build to complete (5-10 minutes depending on internet speed)
 5. When "Environment setup complete!" appears, close the dialog
@@ -138,7 +183,7 @@ This makes **any** algorithm spatially-aware (not just BANKSY). Adjust the smoot
 One-click clustering with sensible defaults. Good for initial exploration.
 
 1. Open an image with cell detections
-2. **Extensions > QP-CAT > Find cell populations (quick presets)** and pick one:
+2. **Extensions > QP-CAT > Explore & spatial > Quick clustering presets** and pick one:
    - **Quick Leiden (auto)** -- Leiden with n_neighbors=50, resolution=1.0, Z-score normalization, UMAP embedding
    - **Quick KMeans (k=10)** -- KMeans with 10 clusters
    - **Quick HDBSCAN (auto)** -- HDBSCAN with min_cluster_size=15
@@ -176,7 +221,7 @@ All detections across the chosen images are combined into a single dataset, clus
 
 Add UMAP/PCA/t-SNE coordinates to detections without changing existing classifications.
 
-1. **Extensions > QP-CAT > Map cells in 2D (UMAP / PCA / t-SNE)...**
+1. **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...**
 2. Select measurements and normalization
 3. Choose embedding method (UMAP recommended)
 
@@ -221,7 +266,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 
 ### Step-by-step:
 
-1. **Extensions > QP-CAT > Label cells by marker rules (phenotyping)...**
+1. **Extensions > QP-CAT > Classify cells > Label cells by marker rules (phenotyping)...**
 2. **Choose the scope** at the top -- **Current image** (the default),
    **All project images**, or **Specific images...** (click **Choose images...**
    for the subset picker with name + metadata filters and checkboxes; see
@@ -372,11 +417,17 @@ dependencies (`timm`, `huggingface-hub`) remain in `pixi.toml`.
 
 ---
 
-## 10. Explaining Clusters with an LLM [Beta]
+## 10. Explaining Clusters with an LLM [Experimental]
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
 
-This feature is marked **[Beta]** for v1. The prompt template, output JSON shape, and audit-log row format may evolve in v1.1.
+> **This feature has never been successfully run end-to-end by the QP-CAT developers.**
+> "Experimental" here does not mean "works, but the output is unvalidated" -- it means the
+> path has not been exercised against a live provider at all. Expect to hit problems no one
+> has hit yet, and please [report them](#reporting-a-bug) if you do. Everything below
+> describes the intended design, not observed behaviour.
+
+The prompt template, output JSON shape, and audit-log row format may also change.
 
 **Inspiration and prior art.** The design was inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping feature. QP-CAT's implementation differs in three notable ways: (a) supports Anthropic Claude and local Ollama in v1; OpenAI is intentionally not supported, (b) the LLM reads marker statistics only -- no pixels and no patient-identifying metadata cross the network boundary, (c) the full prompt and response are captured to a per-project audit log on every call, with API keys scrubbed on both the Java and Python sides before logging.
 
@@ -398,7 +449,7 @@ OpenAI is **not** supported in v1.
 ### Quick Start
 
 1. Open an image (or project), run **Find cell populations (clustering)...** to completion
-2. In the results dialog, open the **Cluster Explainer (LLM) [Beta]** tab
+2. In the results dialog, open the **Cluster Explainer (LLM) [Experimental]** tab -- it is the **last** tab, after the data tabs
 3. In the tab itself, select a provider, model, and (for Anthropic) paste your API key
 4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model
 5. Read the table: suggested phenotype, confidence, supporting markers, one-paragraph rationale per cluster
@@ -511,9 +562,14 @@ Pricing changes; the audit log captures the exact `Input tokens:` and `Output to
 
 A **Cancel** button is exposed during the in-flight call. Cancelled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
 
-### [Beta] notice
+### [Experimental] notice
 
-This is the first feature in QP-CAT that calls a remote LLM API. The surface area is intentionally narrow for v1:
+**Status: unproven.** No QP-CAT developer has completed a successful run of this feature.
+It is shipped because the code path is complete and self-contained, not because it has been
+demonstrated to work. Treat every statement below as design intent.
+
+This is the first feature in QP-CAT that calls a remote LLM API. The surface area is
+intentionally narrow:
 
 - One prompt template (`cluster_phenotype_v1`); not user-editable yet
 - Two providers (Anthropic, Ollama); OpenAI deferred
@@ -539,11 +595,11 @@ source image id + centroid, the same mechanism as "Apply saved result"). This is
 recommended and default path, and it is **non-destructive** -- your edit is written as a new
 copy, and the original saved result is never changed.
 
-You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Rename or merge cell populations...**), or from the **Results window** -- the **"Rename or merge clusters..."** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
+You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Results & populations > Rename or merge cell populations...**), or from the **Results window** -- the **"Rename or merge clusters..."** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
 
 ### Rename / merge using a saved result (recommended)
 
-1. **Extensions > QP-CAT > Rename or merge cell populations...** (or the **"Rename or merge clusters..."** button in the Results window, which pre-selects the current result)
+1. **Extensions > QP-CAT > Results & populations > Rename or merge cell populations...** (or the **"Rename or merge clusters..."** button in the Results window, which pre-selects the current result)
 2. Under **Apply changes to**, leave **Use a saved clustering result (recommended)** selected
    and pick the run from the drop-down (each entry shows its timestamp and scope, e.g.
    "6 project images").
@@ -633,7 +689,7 @@ Train a VAE-based classifier on labeled cells, then apply across the project. Th
    - **Locked annotations** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
    - **Point annotations** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels. Precise for single-cell labeling.
    - **Detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
-2. **Extensions > QP-CAT > Classify cells by appearance (deep learning)...**
+2. **Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...**
 3. **Select training images**: Choose one or more project images. Multi-image training produces more robust classifiers. The current image is pre-selected.
 4. **Choose input mode:**
    - **Measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
@@ -701,7 +757,7 @@ All dialog settings (input mode, tile size, hyperparameters, label sources, augm
 
 Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 
-1. **Extensions > QP-CAT > Export cells for Python / scanpy (AnnData)...**
+1. **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**
 2. Choose a save location and filename
 3. The export includes:
    - Expression matrix (all measurements)
@@ -745,7 +801,7 @@ Rule sets are stored in `<project>/qpcat/phenotype_rules/`.
 
 Monitor Python-side output in real time.
 
-1. **Extensions > QP-CAT > Utilities > Python Console**
+1. **Extensions > QP-CAT > Setup & help > Python Console**
 2. The console shows timestamped debug messages from the Python environment
 3. **Auto-scroll** toggle: keeps the view at the latest output
 4. **Clear**: empties the console
@@ -888,7 +944,7 @@ QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot,
 ### Quick Start
 
 1. **Run clustering** on at least one image (and save the result if you haven't already)
-2. **Extensions > QP-CAT > Export figures (batch)...**
+2. **Extensions > QP-CAT > Export > Export figures (batch)...**
 3. Pick **Output directory**, check the images and plots you want, pick a format and DPI
 4. Click **Export Figures**
 5. Watch the progress bar; when it finishes, browse the output folder to inspect the files
@@ -933,7 +989,21 @@ Three things differ from the per-image plots, all of them deliberate:
 
 Cluster colors come from the live `Cluster N` classes, so recoloring clusters in the Results window changes the exported figure too.
 
-For a one-off export of just the tab you are looking at, the Composition tabs also have an **Export figure + table...** button, which writes `composition_by_image.png` and `composition_by_image.csv` to a folder you pick. It uses the same renderer as the batch path, so the output does not depend on the window's size, scroll position or theme.
+For a one-off export of just the tab you are looking at, the Composition tabs also have an **Export figure + table...** button. Pick a folder and it writes:
+
+```
+composition_by_image.png            the combined figure (all pies + legend)
+composition_by_image.csv            the table, counts and percentages
+composition_by_image_panels/
+    legend.png                      one shared cluster key
+    slide_01.ome.tif.png            one pie per image, on its own
+    slide_02.ome.tif.png
+    ...
+```
+
+The combined PNG is what the batch exporter produces. The `_panels/` folder exists because QP-CAT deliberately offers few layout options: rather than adding knobs for grid size, ordering and legend placement, it gives you the pieces so you can lay the panel out in whatever figure editor you already use. One legend, not one per pie, since repeating the key under every chart is wasted space in a real figure.
+
+Single pies use the same geometry and colours as their tile in the combined figure, so the two are visually interchangeable. Everything is rendered by the same code as the batch path, so no output depends on the window's size, scroll position or theme.
 
 ### Filename patterns
 
@@ -1007,7 +1077,7 @@ Rule of thumb: **if the analysis appears in a paper, commit a YAML batch config 
 
 ### Prerequisites
 
-1. Run **Extensions > QP-CAT > Set up analysis environment (first run)...** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
+1. Run **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
 2. Confirm the QuPath launcher's `script` subcommand is reachable:
 
    ```bash
@@ -1165,7 +1235,7 @@ other knobs are under **Advanced**. (Ranges below are typical starting points.)
 
 ## 20. Results dialog reference
 
-The Results dialog opens automatically after **every** clustering run completes (even a bare run with no plots or spatial statistics), and can be reopened later via Extensions > QPCAT > **View Past Results...**. Each tab is one view of the same underlying clustering result. This chapter documents what each tab shows, when to use it, and how it relates to its neighbors.
+The Results dialog opens automatically after **every** clustering run completes (even a bare run with no plots or spatial statistics), and can be reopened later via Extensions > QP-CAT > Results & populations > **View Past Results...**. Each tab is one view of the same underlying clustering result. This chapter documents what each tab shows, when to use it, and how it relates to its neighbors.
 
 The "Documentation" hyperlink in the guide bar of each tab points back to the relevant subsection below.
 
@@ -1173,7 +1243,7 @@ The "Documentation" hyperlink in the guide bar of each tab points back to the re
 
 Every successful clustering / embedding run is **auto-saved** to `<project>/qpcat/cluster_results/` with a timestamped, scope-tagged name (e.g. `auto_20260617_193235_leiden`). You do not need to click anything -- the run is reopenable immediately via **View Past Results...**. The footer of the Results dialog shows exactly where the result was saved and its size on disk; the run is also recorded as a step in QuPath's native command-history **Workflow** (Workflow tab, exportable as a script) and in the per-project audit log under `<project>/qpcat/logs/`.
 
-The **Save a named copy...** button saves an additional, human-named copy (handy for marking a run you want to find by name later). **Manage saved results...** (also at Extensions > QPCAT > Manage Saved Results...) opens a checkbox list of every saved result -- name, timestamp, summary, scope, origin, and per-result size -- for multi-select deletion; its header shows the results folder location and total size on disk.
+The **Save a named copy...** button saves an additional, human-named copy (handy for marking a run you want to find by name later). **Manage saved results...** (also at Extensions > QP-CAT > Results & populations > Manage Saved Results...) opens a checkbox list of every saved result -- name, timestamp, summary, scope, origin, and per-result size -- for multi-select deletion; its header shows the results folder location and total size on disk.
 
 When more than five results accumulate for one scope (a single image, or "Entire project" for project-wide runs), QP-CAT warns you and points at Manage saved results so you can prune old ones. Auto-saves are **never** deleted automatically -- removal is always your explicit choice.
 
@@ -1440,7 +1510,7 @@ Four things to check when the overlay does not appear after a run:
 
 ### Clearing the overlay -- `Utilities > Clear cell connections...` (`clear-connections`)
 
-`Extensions > QP-CAT > Utilities > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or simply when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
+`Extensions > QP-CAT > Setup & help > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or simply when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
 
 The action is reversible: re-running clustering with **Viewer overlay** enabled, or clicking **Push to viewer now** on a saved result, repopulates the connection group. No data is lost; the overlay payload lives in `ImageData` properties only, not in the saved result on disk.
 
@@ -1458,7 +1528,7 @@ Returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for 
 
 ## 22. Finding Cellular Neighborhoods (Spatial Niches)
 
-`Extensions > QP-CAT > Find cellular neighborhoods (spatial niches)...`
+`Extensions > QP-CAT > Explore & spatial > Find cellular neighborhoods (spatial niches)...`
 
 A **cellular neighborhood (CN)** groups cells by the *cell-type mixture around
 them* rather than by their own measurements. Two T cells get different CN labels
@@ -1618,7 +1688,7 @@ Every clustering run is **auto-saved** to the project's `clustering_results/`
 folder. Four ways to get back to it, from "just look again" to "re-run headless":
 
 1. **View the result again (no recompute).**
-   **Extensions > QP-CAT > View Past Results...** -> pick the run. Reloads the
+   **Extensions > QP-CAT > Results & populations > View Past Results...** -> pick the run. Reloads the
    labels, plots, and spatial stats exactly as computed. Nothing is recomputed.
 
 2. **Re-run in the GUI with the same settings (turnkey).**
@@ -1694,7 +1764,7 @@ plots), so to cluster *on the embedding* you run it in two steps.
 
 **Steps.**
 
-1. **Compute the embedding.** Run **Extensions > QP-CAT > Map cells in 2D
+1. **Compute the embedding.** Run **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...
    (UMAP / PCA / t-SNE)...** ([section 5](#5-computing-embeddings-only)) with UMAP.
    This writes `UMAP1` and `UMAP2` measurements onto every detection. (A normal
    clustering run with UMAP embedding writes them too.)
@@ -1746,7 +1816,7 @@ survives reload.
 - **In the clustering Results dialog -- the "Embedding" tab.** After any run with
   an embedding, the scatter has a **Gate** toggle. This gates on the run's own
   UMAP/t-SNE/PCA, colored by cluster. Works on reopened past results too.
-- **The standalone tool: Extensions > QP-CAT > Plot & gate cells (2D)...** Pick a
+- **The standalone tool: Extensions > QP-CAT > Explore & spatial > Plot & gate cells (2D)...** Pick a
   **scope** (Current / All / Specific images) and an axis source:
   - **2D embedding** -- plots existing `UMAP1/UMAP2` (or `tSNE1/2`, `PCA1/2`)
     coordinates. Run **Map cells in 2D** ([chapter 5](#5-computing-embeddings-only))
@@ -1826,8 +1896,8 @@ Color Change"** (default off); QP-CAT shows a brief notice while it runs.
 via "View Past Results" restores the exact colors you set.
 
 **Applying a palette in bulk.** To recolor all clusters at once from a named
-palette instead of editing them one by one, use **Extensions > QP-CAT > "Apply
-cluster color palette..."**. Pick a palette (tab20, tab10, Okabe-Ito
+palette instead of editing them one by one, use **Extensions > QP-CAT > Results & populations >
+"Apply cluster color palette..."**. Pick a palette (tab20, tab10, Okabe-Ito
 colorblind-safe, Set1, Dark2, Paired, or evenly-spaced "Distinct hues" for any
 cluster count) and a target -- the current `Cluster N` classes or a saved result.
 A swatch preview shows the palette; applying recolors the classes project-wide
@@ -1841,7 +1911,7 @@ palette. Edit colors after the run; those edits are saved with the result.
 
 ## 27. Spatial statistics on existing clusters (ROI-scoped)
 
-**Menu: Extensions > QP-CAT > "Spatial statistics on existing clusters..."**
+**Menu: Extensions > QP-CAT > Explore & spatial > "Spatial statistics on existing clusters..."**
 
 Run the spatial-statistics suite over cells that **already** carry a
 classification (from clustering, phenotyping, or any classifier) **without
@@ -1910,7 +1980,7 @@ to the object hierarchy -- this is read-only.
 
 ## 28. Applying a saved result to detections
 
-**Menu: Extensions > QP-CAT > "Apply saved result to detections..."**
+**Menu: Extensions > QP-CAT > Results & populations > "Apply saved result to detections..."**
 
 Writes a previously saved clustering result's labels back onto detections. Use it
 when a saved result holds the correct labels but they are not showing on the open
@@ -1953,7 +2023,7 @@ browser-based tool that shows your clustered cells as an **interactive 3D point 
 each point is a cell thumbnail placed at its embedding coordinates. QP-CAT can export a
 VEST bundle and, if you like, launch VEST for you.
 
-Find it under **Extensions > QP-CAT > Export clustered cells for VEST (3D viewer)...**
+Find it under **Extensions > QP-CAT > Export > Export clustered cells for VEST (3D viewer)...**
 (the open image must already carry `Cluster N` classes -- run or apply clustering first).
 
 ### What gets exported
@@ -1993,7 +2063,7 @@ Two ways, from the "export complete" dialog:
   the bundle. VEST **opens your browser automatically**. The environment is kept separate
   from the clustering environment on purpose, so VEST's pandas/numpy can never conflict with
   the scanpy/squidpy stack. Only one VEST viewer runs at a time; stop it with
-  **Extensions > QP-CAT > Stop VEST viewer** (it is also stopped automatically when you quit
+  **Extensions > QP-CAT > Export > Stop VEST viewer** (it is also stopped automatically when you quit
   QuPath).
 - **Open folder** -- just open the export folder; run VEST yourself with
   `pip install vision-embedding-space-travelling` then `vest embedding.csv --image-path ./images`.

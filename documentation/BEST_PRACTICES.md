@@ -811,7 +811,7 @@ For publications, report:
 - The random seed (it drives both the embedding layout **and** the stochastic clustering algorithms, so a fixed seed reproduces the whole run)
 - Number of cells and markers used
 - Any manual gate adjustments
-- Software versions (Extensions > QP-CAT > Utilities > System Info)
+- Software versions (Extensions > QP-CAT > Setup & help > System Info...)
 
 ### Version Your Rule Sets
 

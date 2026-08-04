@@ -150,6 +150,42 @@ class CompositionFigureTest {
     }
 
     @Test
+    void singlePiesAndAStandaloneLegendRenderIndependently() {
+        // The panel export writes one PNG per group plus ONE legend, so a user
+        // can lay the panel out themselves instead of cropping the combined
+        // figure. Each piece has to stand on its own.
+        CompositionFigure f = sample();
+        BufferedImage pie = f.renderSingle("a", 1.0, c -> 0x336699);
+        BufferedImage legend = f.renderLegend(1.0, c -> 0x336699);
+
+        assertThat(pie.getWidth()).isGreaterThan(0);
+        assertThat(pie.getHeight()).isGreaterThan(pie.getWidth());   // pie + caption
+        assertThat(legend.getWidth()).isGreaterThan(0);
+        // One row per cluster, so the legend grows with the cluster count.
+        BufferedImage bigger = CompositionFigure.tally(
+                new int[]{0, 1, 2, 3, 4, 5}, 6,
+                new String[]{"a", "a", "a", "a", "a", "a"}, "Image")
+                .renderLegend(1.0, c -> 0x336699);
+        assertThat(bigger.getHeight()).isGreaterThan(legend.getHeight());
+    }
+
+    @Test
+    void aStandaloneLegendWidensToFitTheLongestName() {
+        CompositionFigure shortNames = sample().withClusterNames(c -> "T" + c);
+        CompositionFigure longNames = sample().withClusterNames(
+                c -> "Tumor-associated macrophage subtype " + c);
+        assertThat(longNames.renderLegend(1.0, c -> 0x336699).getWidth())
+                .isGreaterThan(shortNames.renderLegend(1.0, c -> 0x336699).getWidth());
+    }
+
+    @Test
+    void anUnknownGroupRendersAnEmptyPieRatherThanThrowing() {
+        // Guard code must not be the thing that breaks an export.
+        assertThat(sample().renderSingle("not-a-group", 1.0, c -> 0x336699)).isNotNull();
+        assertThat(sample().renderSingle(null, 1.0, null)).isNotNull();
+    }
+
+    @Test
     void renderSurvivesAnEmptyTally() {
         // Everything was noise: still produce a readable stub, because an export
         // that throws here would abort a whole batch over an empty pie.

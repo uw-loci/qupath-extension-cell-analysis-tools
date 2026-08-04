@@ -2687,24 +2687,6 @@ public class ClusteringDialog {
             tabPane.getTabs().add(tab);
         }
 
-        // LLM Cluster Explainer tab (Beta) -- text-analysis sibling of the
-        // marker rankings tab. Only built when marker rankings are present;
-        // see ClusterExplainerPanel for state diagram and design contract.
-        if (result.hasMarkerRankings()) {
-            ClusterExplainerPanel explainerPanel =
-                    new ClusterExplainerPanel(result, loadedResultName);
-            Tab tab = new Tab("Cluster Explainer (LLM) [Beta]",
-                    wrapWithGuide(explainerPanel.build(),
-                    "Suggests cell-type names for each cluster from its top markers, "
-                    + "using a remote or local LLM. Suggestions are starting points -- "
-                    + "always check against the Marker Rankings tab and your domain "
-                    + "knowledge. The API key is held in memory only; you re-enter it "
-                    + "each QuPath session, or set QPCAT_ANTHROPIC_KEY in your shell.",
-                    "cluster-explainer-llm-tab"));
-            tab.setClosable(false);
-            tabPane.getTabs().add(tab);
-        }
-
         // Plot tabs (PNGs from Python). Iteration order = result.getPlotPaths
         // map order, which mirrors the order plots are produced in Python.
         // Dotplot and Matrix Plot are deliberately surfaced earlier (right
@@ -2757,6 +2739,30 @@ public class ClusteringDialog {
             summary.setWrapText(true);
             summary.setPadding(new Insets(12));
             Tab tab = new Tab("Summary", summary);
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
+        // LLM Cluster Explainer tab -- LAST, deliberately. It is the only tab
+        // whose output is generated rather than measured, and it has NOT been
+        // successfully run end-to-end by us; putting it after the tabs that show
+        // the actual data keeps it where an unproven tool belongs. Only built
+        // when marker rankings are present; see ClusterExplainerPanel for its
+        // state diagram and design contract.
+        if (result.hasMarkerRankings()) {
+            ClusterExplainerPanel explainerPanel =
+                    new ClusterExplainerPanel(result, loadedResultName);
+            Tab tab = new Tab("Cluster Explainer (LLM) [Experimental]",
+                    wrapWithGuide(explainerPanel.build(),
+                    "EXPERIMENTAL -- this feature has never been successfully run "
+                    + "end-to-end by the QP-CAT developers. Treat it as unproven, not "
+                    + "merely unvalidated.\n"
+                    + "It asks a remote or local LLM to suggest cell-type names for each "
+                    + "cluster from its top markers. Any suggestion is a starting point -- "
+                    + "check it against the Marker Rankings tab and your own domain "
+                    + "knowledge. The API key is held in memory only; you re-enter it "
+                    + "each QuPath session, or set QPCAT_ANTHROPIC_KEY in your shell.",
+                    "cluster-explainer-llm-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }
@@ -3188,11 +3194,16 @@ public class ClusteringDialog {
         guide.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(guide, Priority.ALWAYS);
 
-        HBox bar = new HBox(8);
+        // A BorderPane, not an HBox: the right-hand region is laid out at its
+        // preferred width FIRST and the centre gets what is left. An HBox instead
+        // shares out shortfall by shrinking children toward their minimums, which
+        // is how the Documentation link ended up as "..." (or clipped away
+        // entirely) whenever the window was narrower than the guide text.
+        BorderPane bar = new BorderPane();
         bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
                 + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
-        bar.setAlignment(Pos.TOP_LEFT);
-        bar.getChildren().add(guide);
+        bar.setCenter(guide);
+        BorderPane.setAlignment(guide, Pos.TOP_LEFT);
 
         VBox links = new VBox(2);
         links.setAlignment(Pos.TOP_RIGHT);
@@ -3206,7 +3217,12 @@ public class ClusteringDialog {
             doc.setOnAction(e -> QuPathGUI.openInBrowser(DOCS_BASE + "#" + docAnchor));
             links.getChildren().add(doc);
         }
-        if (!links.getChildren().isEmpty()) bar.getChildren().add(links);
+        if (!links.getChildren().isEmpty()) {
+            links.setMinWidth(Region.USE_PREF_SIZE);
+            BorderPane.setMargin(links, new Insets(0, 0, 0, 8));
+            BorderPane.setAlignment(links, Pos.TOP_RIGHT);
+            bar.setRight(links);
+        }
 
         VBox box = new VBox(bar, content);
         VBox.setVgrow(content, Priority.ALWAYS);
@@ -3216,6 +3232,8 @@ public class ClusteringDialog {
     private static void styleGuideHyperlink(Hyperlink h) {
         h.setStyle("-fx-font-size: 11px; -fx-padding: 0 0 0 0;");
         h.setBorder(null);
+        // Never ellipsize a link the user is meant to find and click.
+        h.setMinWidth(Region.USE_PREF_SIZE);
     }
 
     /** "Compare expression views" hyperlink shared by Heatmap, Dotplot,

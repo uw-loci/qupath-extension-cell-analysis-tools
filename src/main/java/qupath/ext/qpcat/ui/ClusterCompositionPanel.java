@@ -22,6 +22,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
 import qupath.ext.qpcat.service.CompositionFigure;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.fx.dialogs.Dialogs;
 
 import javax.imageio.ImageIO;
@@ -141,8 +142,10 @@ public class ClusterCompositionPanel extends BorderPane {
         // saved by "Export figures (batch)" are the same picture.
         Button exportBtn = new Button("Export figure + table...");
         exportBtn.setTooltip(new Tooltip(
-                "Write the pie figure (PNG) and the composition table (CSV) to a folder. "
-                + "Identical to what \"Export figures (batch)\" produces for this result."));
+                "Write the combined pie figure (PNG) and the composition table (CSV) to a "
+                + "folder, plus a subfolder holding each pie as its own PNG and one shared "
+                + "legend -- so you can lay the panel out yourself. The combined figure is "
+                + "identical to what \"Export figures (batch)\" produces for this result."));
         exportBtn.setOnAction(e -> exportFigureAndTable());
 
         HBox controls = new HBox(10, new Label("Show:"), countsBtn, pctBtn, copyBtn, exportBtn);
@@ -349,17 +352,37 @@ public class ClusterCompositionPanel extends BorderPane {
         if (dir == null) return;
 
         String base = "composition_by_" + figure.getDimension().toLowerCase();
-        Path png = dir.toPath().resolve(base + ".png");
-        Path csv = dir.toPath().resolve(base + ".csv");
+        // Cluster colors come from the live "Cluster N" (or renamed) classes, so
+        // an edit in the Results window is already reflected in every file here.
+        java.util.function.IntUnaryOperator colors = CompositionFigure::defaultColorRgb;
         try {
-            // Cluster colors come from the live "Cluster N" classes, so an edit
-            // in the Results window is already reflected here.
-            ImageIO.write(figure.render(2.0, CompositionFigure::defaultColorRgb),
-                    "PNG", png.toFile());
-            Files.writeString(csv, figure.toCsv(), StandardCharsets.UTF_8);
-            Dialogs.showInfoNotification("QPCAT",
-                    "Wrote " + png.getFileName() + " and " + csv.getFileName()
-                            + " to " + dir.getName());
+            Path root = dir.toPath();
+            ImageIO.write(figure.render(2.0, colors), "PNG",
+                    root.resolve(base + ".png").toFile());
+            Files.writeString(root.resolve(base + ".csv"), figure.toCsv(),
+                    StandardCharsets.UTF_8);
+
+            // Individual pies plus ONE shared legend, so the panel can be
+            // rebuilt in a figure editor without cropping the combined image
+            // and without a redundant key under every chart. They go in a
+            // subfolder because a 40-image result would otherwise bury the
+            // combined figure and the table in its own output.
+            Path parts = root.resolve(base + "_panels");
+            Files.createDirectories(parts);
+            ImageIO.write(figure.renderLegend(2.0, colors), "PNG",
+                    parts.resolve("legend.png").toFile());
+            int n = 0;
+            for (String group : groups()) {
+                String safe = FilenameSanitizer.sanitize(group);
+                if (safe.isBlank()) safe = "group_" + n;
+                ImageIO.write(figure.renderSingle(group, 2.0, colors), "PNG",
+                        parts.resolve(safe + ".png").toFile());
+                n++;
+            }
+
+            Dialogs.showInfoNotification("QPCAT", String.format(
+                    "Wrote %s.png, %s.csv and %d individual %s (plus legend.png) to %s",
+                    base, base, n, n == 1 ? "pie" : "pies", dir.getName()));
         } catch (Exception e) {
             Dialogs.showErrorNotification("QPCAT",
                     "Could not write composition export: " + e.getMessage());

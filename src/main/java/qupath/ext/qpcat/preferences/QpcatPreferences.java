@@ -17,7 +17,7 @@ public final class QpcatPreferences {
     private static final String CATEGORY_CLUSTERING = "QP-CAT: Run Clustering";
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
     private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";
-    private static final String CATEGORY_LLM = "QP-CAT: [Beta] LLM Cluster Explainer";
+    private static final String CATEGORY_LLM = "QP-CAT: [Experimental] LLM Cluster Explainer";
     private static final String CATEGORY_GENERAL = "QP-CAT";
 
     private QpcatPreferences() {}

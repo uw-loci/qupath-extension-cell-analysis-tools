@@ -231,15 +231,7 @@ public final class CompositionFigure {
                 BufferedImage.TYPE_INT_RGB);
         Graphics2D g = img.createGraphics();
         try {
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                    RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                    RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL,
-                    RenderingHints.VALUE_STROKE_PURE);
-            g.setColor(Color.WHITE);
-            g.fillRect(0, 0, img.getWidth(), img.getHeight());
-            g.scale(s, s);
+            prepare(g, img, s);
 
             int y = MARGIN;
             g.setColor(Color.BLACK);
@@ -269,6 +261,92 @@ public final class CompositionFigure {
             g.dispose();
         }
         return img;
+    }
+
+    /**
+     * One group's pie on its own, with its caption -- for dropping a single
+     * image's composition into a figure panel. Same geometry and colors as that
+     * group's tile in {@link #render}, so a single pie and the combined figure
+     * are visually interchangeable.
+     *
+     * @param group one of {@link #getGroups()}; an unknown group renders empty
+     */
+    public BufferedImage renderSingle(String group, double scale, IntUnaryOperator colorFn) {
+        double sc = Math.max(0.5, Math.min(scale, 6.0));
+        IntUnaryOperator colors = colorFn != null ? colorFn : CompositionFigure::defaultColorRgb;
+        int w = PIE_SIZE + MARGIN * 2;
+        int h = PIE_SIZE + CAPTION_H + MARGIN * 2;
+        BufferedImage img = newCanvas(w, h, sc);
+        Graphics2D g = img.createGraphics();
+        try {
+            prepare(g, img, sc);
+            drawPie(g, group, MARGIN, MARGIN, colors);
+        } finally {
+            g.dispose();
+        }
+        return img;
+    }
+
+    /**
+     * The cluster legend on its own, so a panel of single pies needs exactly one
+     * key rather than repeating it under every chart. Laid out in a single column
+     * -- a standalone legend is normally set beside or beneath a figure, where a
+     * tall narrow block composes better than a wide one.
+     */
+    public BufferedImage renderLegend(double scale, IntUnaryOperator colorFn) {
+        double sc = Math.max(0.5, Math.min(scale, 6.0));
+        IntUnaryOperator colors = colorFn != null ? colorFn : CompositionFigure::defaultColorRgb;
+
+        // Measure first: the widest name decides the width.
+        BufferedImage probeImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        Graphics2D probe = probeImg.createGraphics();
+        probe.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        int textW = 0;
+        for (int c = 0; c < nClusters; c++) {
+            textW = Math.max(textW, probe.getFontMetrics().stringWidth(clusterName(c)));
+        }
+        probe.dispose();
+
+        int rowH = 20;
+        int w = MARGIN * 2 + 18 + textW;
+        int h = MARGIN * 2 + Math.max(1, nClusters) * rowH;
+        BufferedImage img = newCanvas(w, h, sc);
+        Graphics2D g = img.createGraphics();
+        try {
+            prepare(g, img, sc);
+            g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            for (int c = 0; c < nClusters; c++) {
+                int y = MARGIN + c * rowH;
+                g.setColor(awtColor(colors.applyAsInt(c)));
+                g.fillRoundRect(MARGIN, y + 3, 12, 12, 3, 3);
+                g.setColor(Color.DARK_GRAY);
+                g.drawRoundRect(MARGIN, y + 3, 12, 12, 3, 3);
+                g.setColor(Color.BLACK);
+                g.drawString(clusterName(c), MARGIN + 18, y + 13);
+            }
+        } finally {
+            g.dispose();
+        }
+        return img;
+    }
+
+    private static BufferedImage newCanvas(int logicalW, int logicalH, double scale) {
+        return new BufferedImage(
+                (int) Math.ceil(logicalW * scale), (int) Math.ceil(logicalH * scale),
+                BufferedImage.TYPE_INT_RGB);
+    }
+
+    /** White background, antialiasing on, scaled to the requested resolution. */
+    private static void prepare(Graphics2D g, BufferedImage img, double scale) {
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL,
+                RenderingHints.VALUE_STROKE_PURE);
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        g.scale(scale, scale);
     }
 
     /** Title line, matching the header of the interactive panel. */

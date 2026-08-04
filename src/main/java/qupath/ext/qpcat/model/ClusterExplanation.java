@@ -7,7 +7,7 @@ import java.util.List;
  * <p>
  * Produced by the LLM Cluster Explainer feature (see
  * {@code LlmExplainerService}) and rendered as one row in the
- * "Cluster Explainer (LLM) [Beta]" tab of the cluster results dialog.
+ * "Cluster Explainer (LLM) [Experimental]" tab of the cluster results dialog.
  * <p>
  * The LLM is allowed to refuse: {@link #phenotype} and {@link #confidence}
  * may both be {@code null} when the model considers the signal insufficient.

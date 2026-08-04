@@ -101,8 +101,47 @@ be repeated and reversed.
   maps several labels to one display name, so the pre-merge version restores
   exactly. There is now a test pinning that.
 
+### Changed -- interface
+
+- **The menu is six rows instead of nineteen.** `Find cell populations
+  (clustering)...` stays at the top level, `Classify cells` joins it as a named
+  group (phenotyping and the deep-learning classifier were four rows apart with
+  unrelated items between them), and the rest group into `Explore & spatial`,
+  `Results & populations`, `Export` and `Setup & help`. The old `Utilities`
+  submenu is folded into `Setup & help` beside the setup and rebuild actions it
+  belongs with. `Find cell populations (quick presets)` is renamed **Quick
+  clustering presets** -- two adjacent rows both beginning "Find cell
+  populations" read as a duplicate. A menu map is at the top of the how-to guide,
+  and every menu path in the docs is updated.
+- **A Documentation item** under `Setup & help` opens the how-to guide. The
+  Results window links to the relevant chapter per tab, but that only helps
+  someone who already has a result open.
+- **`Export figure + table...` now also writes the individual pies.** Alongside
+  the combined figure and the CSV it creates a `<name>_panels/` folder holding
+  one PNG per image or annotation plus a single shared `legend.png`. QP-CAT
+  deliberately offers few layout knobs, so this hands you the pieces to lay out
+  in your own figure editor rather than adding grid / ordering / legend-placement
+  options. One legend, not one per pie.
+- **The Cluster Explainer tab moved to the end** of the results window and is
+  relabelled `[Experimental]`. It is the only tab whose content is generated
+  rather than measured, so it now sits after the tabs that show actual data.
+
+### Fixed -- interface
+
+- **The Documentation link in the Results window could disappear.** The guide bar
+  was an `HBox`, which shares out a shortfall by shrinking children toward their
+  minimum widths -- and a `Hyperlink`'s minimum is an ellipsis. On a window
+  narrower than the guide text, the only route to the documentation collapsed to
+  `...` or vanished. The bar is now a `BorderPane`, which lays the link out at its
+  preferred width first and lets the (wrapping) guide prose give way instead.
+
 ### Notes
 
+- **"Experimental" on the Cluster Explainer means unproven, not unvalidated.**
+  No QP-CAT developer has completed a successful end-to-end run of that feature
+  against a live provider. The docs previously implied only that its output was
+  unchecked, which understated it. The tab, the how-to chapter, the
+  troubleshooting page and the README now say so plainly.
 - Step back needs the earlier result to still exist. Deleting a parent in Manage
   Saved Results removes that rung of the ladder, which is why the listing now
   shows which results are parents of others.

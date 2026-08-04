@@ -26,6 +26,7 @@ import qupath.ext.qpcat.ui.ClusterColorPaletteDialog;
 import qupath.ext.qpcat.ui.SpatialStatsDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
+import qupath.ext.qpcat.ui.QpcatDocLinks;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
@@ -209,9 +210,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         setupItem.setOnAction(e -> showSetupDialog(qupath));
         BooleanBinding showSetup = environmentReady.not();
         setupItem.visibleProperty().bind(showSetup);
-
-        SeparatorMenuItem setupSeparator = new SeparatorMenuItem();
-        setupSeparator.visibleProperty().bind(showSetup);
 
         // Run Clustering (main workflow)
         MenuItem runClusteringItem = new MenuItem(res.getString("menu.runClustering"));
@@ -465,14 +463,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             }
         });
 
-        SeparatorMenuItem sep1 = new SeparatorMenuItem();
-        sep1.visibleProperty().bind(environmentReady);
-
-        SeparatorMenuItem sep2 = new SeparatorMenuItem();
-        sep2.visibleProperty().bind(environmentReady);
-
-        // Utilities submenu
-        Menu utilitiesMenu = new Menu("Utilities");
+        // Environment tools. These used to be their own "Utilities" submenu; they
+        // now sit in "Setup & help" beside the setup / rebuild actions they belong
+        // with, so there is one place to go when something is wrong.
 
         // Python Console
         MenuItem pythonConsoleItem = new MenuItem(res.getString("menu.pythonConsole"));
@@ -499,57 +492,84 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         MenuItem rebuildItem = new MenuItem(res.getString("menu.rebuildEnvironment"));
         rebuildItem.setOnAction(e -> rebuildEnvironment(qupath));
 
-        utilitiesMenu.getItems().addAll(pythonConsoleItem, clearConnectionsItem,
-                systemInfoItem, new SeparatorMenuItem(), rebuildItem);
-
-        SeparatorMenuItem sep3 = new SeparatorMenuItem();
-        sep3.visibleProperty().bind(environmentReady);
-
-        SeparatorMenuItem sep4 = new SeparatorMenuItem();
-        sep4.visibleProperty().bind(environmentReady);
-
-        SeparatorMenuItem sep5 = new SeparatorMenuItem();
-        sep5.visibleProperty().bind(environmentReady);
-
         // Report a Bug (always available -- files a GitHub issue via the shared
         // Cloudflare Worker; no GitHub account needed from the user)
         MenuItem reportBugItem = new MenuItem("Report a Bug...");
         reportBugItem.setOnAction(e -> BugReportDialog.show());
 
-        extensionMenu.getItems().addAll(
-                setupItem,
-                setupSeparator,
-                // -- Find / explore populations --
-                runClusteringItem,
+        // Documentation. The Results window links to the relevant chapter per tab,
+        // but that only helps someone who already has a result open -- this is the
+        // route in from a cold start. Always available: reading the guide is the
+        // one thing that should not require a built environment.
+        MenuItem documentationItem = new MenuItem(res.getString("menu.documentation"));
+        documentationItem.setOnAction(e ->
+                QuPathGUI.openInBrowser(QpcatDocLinks.HOW_TO_GUIDE));
+
+        // ---- Menu structure -------------------------------------------------
+        // Six rows, not nineteen. The two things QP-CAT is FOR -- finding
+        // populations and classifying cells -- stay at the top level; everything
+        // else groups by when you would reach for it. Named submenus do the
+        // grouping that separators only hinted at.
+
+        Menu classifyMenu = new Menu(res.getString("menu.classifyCells"));
+        classifyMenu.visibleProperty().bind(environmentReady);
+        classifyMenu.getItems().addAll(
+                runPhenotypingItem,
+                autoencoderItem);
+
+        Menu exploreMenu = new Menu(res.getString("menu.exploreSpatial"));
+        exploreMenu.visibleProperty().bind(environmentReady);
+        exploreMenu.getItems().addAll(
                 quickClusterMenu,
                 computeEmbeddingItem,
                 plotAndGateItem,
-                sep1,
-                // -- Label cells as types --
-                runPhenotypingItem,
+                new SeparatorMenuItem(),
                 cellularNeighborhoodsItem,
-                spatialStatsItem,
-                sep2,
-                // -- Appearance / deep learning --
-                autoencoderItem,
-                sep3,
-                // -- Manage & results --
-                manageClustersItem,
-                applyPaletteItem,
+                spatialStatsItem);
+
+        Menu resultsMenu = new Menu(res.getString("menu.resultsPopulations"));
+        resultsMenu.visibleProperty().bind(environmentReady);
+        resultsMenu.getItems().addAll(
                 viewResultsItem,
                 manageResultsItem,
-                applySavedResultItem,
-                sep4,
-                // -- Export --
-                exportAnnDataItem,
-                exportFiguresItem,
-                exportVestItem,
-                stopVestItem,
-                sep5,
-                // -- Utilities & help --
-                utilitiesMenu,
                 new SeparatorMenuItem(),
-                reportBugItem
+                manageClustersItem,
+                applySavedResultItem,
+                applyPaletteItem);
+
+        Menu exportMenu = new Menu(res.getString("menu.exportGroup"));
+        exportMenu.visibleProperty().bind(environmentReady);
+        exportMenu.getItems().addAll(
+                exportFiguresItem,
+                exportAnnDataItem,
+                new SeparatorMenuItem(),
+                exportVestItem,
+                stopVestItem);
+
+        // Always visible: setup is how you get an environment in the first place,
+        // and the docs / bug reporter must work before one exists.
+        Menu setupHelpMenu = new Menu(res.getString("menu.setupHelp"));
+        setupHelpMenu.getItems().addAll(
+                setupItem,
+                pythonConsoleItem,
+                clearConnectionsItem,
+                systemInfoItem,
+                rebuildItem,
+                new SeparatorMenuItem(),
+                documentationItem,
+                reportBugItem);
+
+        extensionMenu.getItems().addAll(
+                // -- The two main tools --
+                runClusteringItem,
+                classifyMenu,
+                new SeparatorMenuItem(),
+                // -- Everything else, by when you need it --
+                exploreMenu,
+                resultsMenu,
+                exportMenu,
+                new SeparatorMenuItem(),
+                setupHelpMenu
         );
 
         logger.info("Menu items added for extension: {}", EXTENSION_NAME);

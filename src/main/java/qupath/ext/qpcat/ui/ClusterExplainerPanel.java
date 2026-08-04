@@ -52,7 +52,11 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Tab content for the "Cluster Explainer (LLM) [Beta]" results tab.
+ * Tab content for the "Cluster Explainer (LLM) [Experimental]" results tab.
+ * <p>
+ * EXPERIMENTAL means UNPROVEN: no developer has completed a successful run of
+ * this path against a live provider. That is a stronger claim than "the output
+ * is unvalidated", and the UI says so.
  * <p>
  * One instance per parent {@code showResultsDialog} call (state must NOT be
  * static -- the dialog is shared between live and reloaded results and we
