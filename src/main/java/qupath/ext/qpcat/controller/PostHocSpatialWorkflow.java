@@ -517,7 +517,10 @@ public class PostHocSpatialWorkflow {
                         roi.getCentroidX(), roi.getCentroidY()));
                 if (id == null || id < 0) continue;
                 cells.add(d);
-                cellKeys.add("Cluster " + id);
+                // Display name, so a renamed / merged result labels its spatial
+                // results the way the rest of QP-CAT labels it. Merged labels
+                // collapse to one key here, which is the point of the merge.
+                cellKeys.add(opts.savedLabelSource.displayNameForLabel(id));
             } else {
                 PathClass pc = d.getPathClass();
                 if (pc == null || pc == PathClass.getNullClass()) continue;

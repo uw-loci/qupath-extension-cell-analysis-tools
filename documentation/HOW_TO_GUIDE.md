@@ -1858,7 +1858,10 @@ one graph (that would create false neighbors). This is why comparison is
 PathClass) or *Saved QP-CAT result...* -- the latter matches the saved result's
 cluster labels to cells in memory (by image id + centroid) and **does not write
 PathClasses**, so you can analyze a saved result's labels without modifying the
-hierarchy.
+hierarchy. **If the saved result has renamed or merged clusters, the spatial stats
+are keyed by those display names** (e.g. "CD8+ T Cell" rather than "Cluster 3")
+in the results tabs and in any plots the run persists. Merged clusters share one
+key, so they are analyzed as the single population the merge made them.
 
 **Scope.** Current image / all project images / a chosen subset (via the standard
 scope control). Every image in the scope is analyzed independently.
