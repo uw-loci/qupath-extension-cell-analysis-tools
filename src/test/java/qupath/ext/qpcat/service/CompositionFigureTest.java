@@ -87,6 +87,31 @@ class CompositionFigureTest {
     }
 
     @Test
+    void customClusterNamesReachTheLegendAndTheCsvHeader() {
+        // A renamed result must export as "Tumor", not "Cluster 0" -- otherwise
+        // the exported table cannot be read without the rename map beside it.
+        CompositionFigure f = sample().withClusterNames(
+                c -> c == 0 ? "Tumor" : c == 1 ? "Stroma" : null);
+        assertThat(f.clusterName(0)).isEqualTo("Tumor");
+        assertThat(f.clusterName(2)).isEqualTo("Cluster 2");   // null -> default
+        assertThat(f.toCsv().lines().findFirst().orElseThrow())
+                .isEqualTo("Image,Tumor (n),Tumor (%),Stroma (n),Stroma (%),"
+                        + "Cluster 2 (n),Cluster 2 (%),Total");
+    }
+
+    @Test
+    void aClusterNameContainingACommaIsQuotedInTheCsv() {
+        CompositionFigure f = sample().withClusterNames(c -> "T cells, CD8+");
+        assertThat(f.toCsv()).contains("\"T cells, CD8+ (n)\"");
+    }
+
+    @Test
+    void clearingTheNameResolverGoesBackToTheDefault() {
+        CompositionFigure f = sample().withClusterNames(c -> "X").withClusterNames(null);
+        assertThat(f.clusterName(0)).isEqualTo("Cluster 0");
+    }
+
+    @Test
     void csvQuotesGroupNamesContainingCommas() {
         // Real image names do contain commas ("slide 3, region B.ome.tif").
         CompositionFigure f = CompositionFigure.tally(

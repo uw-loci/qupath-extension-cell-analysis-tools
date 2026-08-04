@@ -667,7 +667,7 @@ public class ClusterExplainerPanel {
             rationaleArea.clear();
             return;
         }
-        String text = "Cluster " + row.getClusterId();
+        String text = result.clusterName(row.getClusterId());
         if (row.getPhenotype() != null) {
             text += " -- " + row.getPhenotype();
         }

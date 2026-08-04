@@ -68,6 +68,9 @@ public class MarkerFingerprintPanel extends BorderPane {
     private final long totalCells;
     private final IntFunction<Color> clusterColor;
 
+    // Cluster id -> display name; null on a result that was never renamed.
+    private final IntFunction<String> clusterName;
+
     // Channel name -> Viewer color (packed 0xRRGGBB), and names longest-first so a
     // measurement matches the most specific channel ("CD31" before "CD3").
     private final Map<String, Color> channelColor = new LinkedHashMap<>();
@@ -88,6 +91,18 @@ public class MarkerFingerprintPanel extends BorderPane {
     public MarkerFingerprintPanel(String markerRankingsJson, int[] clusterLabels,
                                   int nClusters, IntFunction<Color> clusterColorFn,
                                   Map<String, Integer> channelColors) {
+        this(markerRankingsJson, clusterLabels, nClusters, clusterColorFn, channelColors, null);
+    }
+
+    /**
+     * As above, labelling clusters with {@code clusterNameFn} -- the custom names
+     * of a renamed / merged result. Null gives the default "Cluster N".
+     */
+    public MarkerFingerprintPanel(String markerRankingsJson, int[] clusterLabels,
+                                  int nClusters, IntFunction<Color> clusterColorFn,
+                                  Map<String, Integer> channelColors,
+                                  IntFunction<String> clusterNameFn) {
+        this.clusterName = clusterNameFn;
         this.clusterColor = clusterColorFn;
         this.rankings = parse(markerRankingsJson);
 
@@ -386,7 +401,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             FlowPane chips = new FlowPane(6, 6);
             for (double[] c : clusters) {
                 int clusterId = (int) c[0];
-                String label = "Cluster " + clusterId;
+                String label = clusterName(clusterId);
                 if (!Double.isNaN(c[1])) label += String.format(" (%+.1f)", c[1]);
                 chips.getChildren().add(chip(clusterColorFor(clusterId), label));
             }
@@ -403,7 +418,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             FlowPane chips = new FlowPane(6, 6);
             for (double[] c : otherClusters) {
                 int clusterId = (int) c[0];
-                chips.getChildren().add(chip(clusterColorFor(clusterId), "Cluster " + clusterId));
+                chips.getChildren().add(chip(clusterColorFor(clusterId), clusterName(clusterId)));
             }
             card.getChildren().add(chips);
             cards.getChildren().add(card);
@@ -422,10 +437,19 @@ public class MarkerFingerprintPanel extends BorderPane {
         return card;
     }
 
+    /** Display name for a cluster; the custom name of a renamed result, else "Cluster N". */
+    private String clusterName(int clusterId) {
+        if (clusterName != null) {
+            String n = clusterName.apply(clusterId);
+            if (n != null && !n.isBlank()) return n;
+        }
+        return "Cluster " + clusterId;
+    }
+
     private HBox clusterHeader(String cid, int clusterId, Color color) {
         Label size = new Label(sizeText(clusterId));
         size.setStyle("-fx-font-size: 10.5px; -fx-text-fill: #777;");
-        HBox header = new HBox(6, colorChip(color, 13), boldLabel("Cluster " + cid), size);
+        HBox header = new HBox(6, colorChip(color, 13), boldLabel(clusterName(clusterId)), size);
         header.setAlignment(Pos.CENTER_LEFT);
         return header;
     }

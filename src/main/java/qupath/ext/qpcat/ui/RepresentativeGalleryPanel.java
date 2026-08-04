@@ -215,9 +215,10 @@ public class RepresentativeGalleryPanel extends VBox {
             int[] idx = result.getRepresentativeIndices(c, useEmbedding);
 
             // Header with color swatch + count
-            Rectangle swatch = new Rectangle(12, 12, EmbeddingScatterPanel.clusterColorFor(c));
+            Rectangle swatch = new Rectangle(12, 12,
+                    EmbeddingScatterPanel.clusterColorFor(c, result::clusterName));
             swatch.setStroke(Color.GRAY);
-            Label header = new Label("Cluster " + c + "  (" + clusterCount(c) + " cells)");
+            Label header = new Label(result.clusterName(c) + "  (" + clusterCount(c) + " cells)");
             header.setStyle("-fx-font-weight: bold;");
             HBox headerBox = new HBox(6, swatch, header);
             headerBox.setAlignment(Pos.CENTER_LEFT);

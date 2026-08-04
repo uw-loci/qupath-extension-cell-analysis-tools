@@ -489,8 +489,17 @@ Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cel
 
 - **Rename** -- Change a cluster's classification name (e.g., "Cluster 3" -> "CD8+ T Cells")
 - **Merge** -- Combine two or more clusters into one with a user-specified name
+- **Step back to '<parent>'** -- re-apply the previous version's names to the cells, undoing an edit
+- **Put this version on the cells** -- the same move forwards, for any saved version
 
-Changes are applied directly to detection objects and reflected immediately in QuPath's viewer.
+Changes are applied directly to detection objects across every image the result covers, and
+reflected immediately in QuPath's viewer. Each edit is **non-destructive**: it writes a new
+saved result, records which result it came from, and leaves the original alone -- so an
+iterative session leaves a chain of versions you can step through in either direction. Your
+names then appear throughout the Results window (heatmap, embedding legend, composition table
+and pies, fingerprints, gallery) and in exported figures and CSVs.
+
+See [HOW_TO_GUIDE: Iterating, and stepping backwards](documentation/HOW_TO_GUIDE.md#iterating-and-stepping-backwards).
 
 </details>
 

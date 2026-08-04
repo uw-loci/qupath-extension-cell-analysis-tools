@@ -562,6 +562,51 @@ You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Rename
 The original saved result and its plots are left untouched, so you can always go back to the
 run's original labels.
 
+### Renamed clusters in the Results window
+
+Reopen the copy via **View Past Results...** and every tab shows your names -- the heatmap's
+row labels, the embedding legend and hover text, the composition legend, pies and table
+headers, the marker fingerprints, the representative-cell gallery and the Cluster Explainer.
+Exported composition figures and CSVs carry them too, so a table reads `Tumor (n)` rather than
+`Cluster 0 (n)`.
+
+A partial rename is fine: any cluster you did not rename still shows as `Cluster N`. The
+result's colour editor also follows the rename -- it edits the class your cells are actually
+classified as, so recolouring "Tumor" recolours the overlay.
+
+### Iterating, and stepping backwards
+
+Refining phenotypes is rarely one pass, so the dialog is built to be run repeatedly and to be
+undone.
+
+**Every edit is a new version.** A rename/merge never modifies an existing saved result; it
+writes a copy and records what that copy came from. So a session naturally leaves a chain --
+`auto_20260804_leiden` -> `..._renamed` -> `..._renamed_v2` -- with every step still on disk.
+
+**The chain is visible.** Each derived result shows its parent in
+**Manage Saved Results...** (`<- rename/merge of '<parent>'`), in the **View Past Results**
+picker, in the Results-window title bar, and in the Manage Clusters status line. Without that,
+five near-identical names read as five unrelated results rather than a history.
+
+**Stepping back is one button.** With a derived result selected, **Step back to '<parent>'...**
+re-applies the parent version's cluster names to the detections across the same images. It
+does **not** delete anything -- both versions stay saved.
+
+**Stepping forward is the same move.** **Put this version on the cells** re-applies whichever
+saved result is currently selected. Step back, look, step forward again; or jump straight
+between any two versions. Neither button writes a copy, so switching versions does not grow
+the chain.
+
+Two things worth knowing:
+
+- **A merge is reversible because the raw labels are never rewritten.** Merging clusters 0 and
+  1 into "Immune" maps two labels to one *name*; the per-cell integers stay 0 and 1. That is
+  what lets the pre-merge version be restored exactly.
+- **Do not delete a parent you might want back.** Step back needs the earlier result to still
+  exist; if you delete it in Manage Saved Results, that rung of the ladder is gone. The listing
+  shows which results are parents of others precisely so you can see what a deletion would
+  cost.
+
 ### If you have no saved result (manual fallback)
 
 The **Choose images manually** option is **disabled whenever a saved result exists** -- the

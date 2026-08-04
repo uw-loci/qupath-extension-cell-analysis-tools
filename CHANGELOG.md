@@ -4,7 +4,7 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.9.9] -- 2026-08-04 -- export the cluster-composition figures with the rest
+## [0.9.9] -- 2026-08-04 -- composition figures export, and renamed clusters stay renamed
 
 Addresses [issue #12](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/12).
 
@@ -59,8 +59,53 @@ no export path except copying the table to the clipboard. That is fixed here.
   and the dialog's "Expected files" count accounts for it. The table kinds
   always write `.csv` whatever raster format is ticked.
 
+### Fixed
+
+- **A renamed cluster now reads as its name everywhere in the Results window.**
+  Renaming or merging clusters saved correctly -- onto the detections and into a
+  new saved result -- but reopening that result relabelled everything back to
+  `Cluster 0`, `Cluster 1`, ..., because the names were never carried from the
+  saved JSON into the in-memory result and every panel hardcoded the label. They
+  now flow through the heatmap rows, embedding legend and hover text, composition
+  legend / pies / table headers, marker fingerprints, representative gallery,
+  Cluster Explainer, Ripley and co-occurrence series, and the marker-ranking
+  table -- and into exported composition figures and CSVs.
+- **The Results window's colour editor follows a rename.** It edited the
+  `Cluster N` class while the cells were classified as `Tumor`, so on a reopened
+  renamed result colour changes did nothing visible. It now edits the class the
+  cells actually carry.
+- **Re-applying a renamed result no longer loses its names or its colours.**
+  `Apply saved result` named classes `<result>: Cluster N` regardless of the
+  rename, while the palette saved beside it is keyed by the display name -- so
+  the names were dropped and the restored colours landed on classes nothing was
+  classified as. It now applies as `<result>: Tumor`. This is also what makes
+  stepping backwards restore a version faithfully.
+
+### Added -- iterating on cluster names, and undoing it
+
+Refining phenotypes is rarely one pass, so the rename/merge flow is now built to
+be repeated and reversed.
+
+- **Edit lineage is recorded and shown.** Each renamed copy stores what it was
+  derived from and by what operation. That parent is displayed in Manage Saved
+  Results (`<- rename/merge of '<parent>'`), the View Past Results picker, the
+  Results-window title bar and the Manage Clusters status line -- so a chain of
+  near-identical names reads as a history instead of five unrelated results.
+- **"Step back to '<parent>'..."** in the rename dialog re-applies the previous
+  version's cluster names to the detections across the same images. Nothing is
+  deleted; both versions stay saved.
+- **"Put this version on the cells"** does the same for whichever saved result is
+  selected -- the forward direction, and a way to jump between any two versions.
+  Neither button writes a copy, so switching versions does not grow the chain.
+- A merge remains reversible because it never rewrites the raw integer labels: it
+  maps several labels to one display name, so the pre-merge version restores
+  exactly. There is now a test pinning that.
+
 ### Notes
 
+- Step back needs the earlier result to still exist. Deleting a parent in Manage
+  Saved Results removes that rung of the ladder, which is why the listing now
+  shows which results are parents of others.
 - The exported CSV carries **both** counts and row percentages
   (`Cluster 0 (n)`, `Cluster 0 (%)`, ... `Total`), one row per group plus an
   all-groups row, so the file answers both questions the on-screen

@@ -58,6 +58,8 @@ public class ClusterManagementDialog {
     private final ObservableList<ClusterRow> rows = FXCollections.observableArrayList();
 
     private Button applyButton;
+    private Button stepBackBtn;
+    private Button applyVersionBtn;
     private ProgressIndicator busy;
     private Label statusLabel;
 
@@ -247,7 +249,27 @@ public class ClusterManagementDialog {
         resetBtn.setOnAction(e -> reloadClusters());
         resetBtn.setTooltip(new Tooltip("Discard pending edits and reload the cluster list."));
 
-        HBox editBar = new HBox(8, renameBtn, mergeBtn, new Region(), resetBtn);
+        // The undo for an edit you regret. Every rename/merge writes a new copy
+        // and leaves the original untouched, so stepping back is just re-applying
+        // the earlier result -- but nothing said so, and nothing pointed at which
+        // result that was. This button does both.
+        stepBackBtn = new Button("Step back...");
+        stepBackBtn.setDisable(true);
+        stepBackBtn.setOnAction(e -> stepBackToParent());
+
+        applyVersionBtn = new Button("Put this version on the cells");
+        applyVersionBtn.setDisable(true);
+        applyVersionBtn.setTooltip(new Tooltip(
+                "Re-apply the SELECTED saved result's cluster names to the detections, without "
+                + "writing a new copy. This is how you step forward again after a step back, "
+                + "and how you switch the cells between any two saved versions."));
+        applyVersionBtn.setOnAction(e -> {
+            if (activeSaved == null || activeSourceName == null) return;
+            applyVersionToCells(activeSaved, activeSourceName);
+        });
+
+        HBox editBar = new HBox(8, renameBtn, mergeBtn, new Region(),
+                applyVersionBtn, stepBackBtn, resetBtn);
         HBox.setHgrow(editBar.getChildren().get(2), Priority.ALWAYS);
         editBar.setAlignment(Pos.CENTER_LEFT);
 
@@ -308,6 +330,10 @@ public class ClusterManagementDialog {
         activeSaved = null;
         activeSourceName = null;
         statusLabel.setText("");
+        // Cleared first so an early return in either loader (no labels, an older
+        // save with no cell refs, the manual path) leaves the button disabled
+        // rather than still offering the previous selection's parent.
+        updateStepBackButton();
 
         if (isSavedPath()) {
             loadSavedClusters();
@@ -345,8 +371,111 @@ public class ClusterManagementDialog {
             workingName.putIfAbsent(lab, activeSaved.displayNameForLabel(lab));
         }
         rebuildSavedRows();
+        updateStepBackButton();
         statusLabel.setText(countByLabel.size() + " clusters across "
-                + distinctImages(activeSaved.getCellImageIds()) + " image(s).");
+                + distinctImages(activeSaved.getCellImageIds()) + " image(s)."
+                + (activeSaved.isDerived()
+                    ? "  " + (activeSaved.getDerivedOp() != null
+                        ? capitalize(activeSaved.getDerivedOp()) : "Edit")
+                      + " of '" + activeSaved.getDerivedFrom() + "'."
+                    : ""));
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s;
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    /**
+     * The step-back button targets the PARENT of the selected result, so it only
+     * lights up for a result that is itself an edit. An original run has nothing
+     * to step back to -- disabling it says that more clearly than an error would.
+     */
+    private void updateStepBackButton() {
+        if (applyVersionBtn != null) {
+            applyVersionBtn.setDisable(!(isSavedPath() && activeSaved != null
+                    && activeSaved.getClusterLabels() != null
+                    && activeSaved.getCellImageIds() != null));
+        }
+        if (stepBackBtn == null) return;
+        boolean can = isSavedPath() && activeSaved != null && activeSaved.isDerived();
+        stepBackBtn.setDisable(!can);
+        stepBackBtn.setText(can ? "Step back to '" + activeSaved.getDerivedFrom() + "'..."
+                : "Step back...");
+        stepBackBtn.setTooltip(new Tooltip(can
+                ? "Re-apply '" + activeSaved.getDerivedFrom() + "' to the detections, undoing "
+                  + "this edit's names on the cells. Neither saved result is deleted, so you "
+                  + "can step forward again by re-applying this one."
+                : "Only an edited result can be stepped back. This one is an original run "
+                  + "(or no saved result is selected)."));
+    }
+
+    /**
+     * Re-apply the parent of the selected result to the detections. This is the
+     * undo: the parent's labels AND its own names go back onto the cells across
+     * the same images. Nothing is deleted -- both results stay on disk, so the
+     * move is reversible in either direction.
+     */
+    private void stepBackToParent() {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null || activeSaved == null || !activeSaved.isDerived()) return;
+        String parentName = activeSaved.getDerivedFrom();
+
+        SavedClusteringResult parent;
+        try {
+            parent = ClusteringResultManager.loadSavedResult(project, parentName);
+        } catch (Exception e) {
+            Dialogs.showErrorNotification("QPCAT",
+                    "Could not load '" + parentName + "': " + e.getMessage()
+                    + "\nIt may have been deleted; a step back needs the earlier result "
+                    + "to still exist.");
+            return;
+        }
+        applyVersionToCells(parent, parentName);
+    }
+
+    /**
+     * Put one saved version's cluster names back on the detections, in place and
+     * without writing a copy. This is the whole of "step backwards" and "step
+     * forwards" -- the direction is just which version you point it at. Nothing is
+     * ever deleted, so the move is reversible either way.
+     */
+    private void applyVersionToCells(SavedClusteringResult version, String versionName) {
+        Project<BufferedImage> project = qupath.getProject();
+        if (project == null || version == null) return;
+        if (version.getClusterLabels() == null || version.getCellImageIds() == null) {
+            Dialogs.showErrorNotification("QPCAT",
+                    "'" + versionName + "' cannot be re-applied (it has no per-cell "
+                    + "references; it was saved by an older QP-CAT).");
+            return;
+        }
+
+        boolean ok = Dialogs.showConfirmDialog("Put this version on the cells",
+                "Re-apply '" + versionName + "' to the detections?\n\n"
+                + "This puts that version's cluster names back on the cells across the "
+                + "images it covers. No saved result is deleted or changed, so you can "
+                + "switch to any other version the same way.");
+        if (!ok) return;
+
+        setBusy(true, "Re-applying '" + versionName + "'...");
+        Thread t = new Thread(() -> {
+            SavedResultApplier.ApplyReport report =
+                    SavedResultApplier.applyRenamed(qupath, version, version.getClusterNames());
+            Platform.runLater(() -> {
+                setBusy(false, "");
+                showApplyReport(report, "The cells now carry '" + versionName + "'.");
+                // Retarget the dialog at the version now on the cells.
+                for (ClusteringResultManager.ResultEntry en : resultChooser.getItems()) {
+                    if (en.name.equals(versionName)) {
+                        resultChooser.getSelectionModel().select(en);
+                        break;
+                    }
+                }
+                reloadClusters();
+            });
+        }, "QPCAT-ManageClusters-ApplyVersion");
+        t.setDaemon(true);
+        t.start();
     }
 
     private void rebuildSavedRows() {

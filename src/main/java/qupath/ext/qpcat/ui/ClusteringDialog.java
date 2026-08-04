@@ -2320,7 +2320,13 @@ public class ClusteringDialog {
         stage.setTitle("QPCAT - Results"
                 + (loadedResultName != null ? " [" + loadedResultName + "]" : "")
                 + "  --  " + result.getNClusters() + " clusters, "
-                + result.getNCells() + " cells");
+                + result.getNCells() + " cells"
+                // An edited result looks just like its parent in the title bar
+                // otherwise, which is how the wrong one gets worked on.
+                + (result.getDerivedFrom() != null
+                    ? "  --  " + (result.getDerivedOp() != null ? result.getDerivedOp() : "edit")
+                      + " of '" + result.getDerivedFrom() + "'"
+                    : ""));
         stage.setResizable(true);
 
         if (embName == null) embName = "Embedding";
@@ -2350,6 +2356,7 @@ public class ClusteringDialog {
         // Interactive heatmap tab (cluster-marker means)
         if (result.getClusterStats() != null && result.getNClusters() > 1) {
             ClusterHeatmapPanel heatmap = new ClusterHeatmapPanel();
+            heatmap.setClusterNames(result.clusterNameFn());
             heatmap.setData(result.getClusterStats(), result.getMarkerNames());
             ScrollPane heatmapScroll = new ScrollPane(heatmap);
             heatmapScroll.setFitToWidth(true);
@@ -2384,6 +2391,11 @@ public class ClusteringDialog {
         // Interactive embedding scatter tab
         if (result.hasEmbedding()) {
             EmbeddingScatterPanel scatter = new EmbeddingScatterPanel();
+            // Names first: setData rebuilds the legend, and the class-name
+            // resolver decides which PathClass the plot reads its colors from --
+            // for a renamed result that is the custom name, not "Cluster N".
+            scatter.setClusterDisplayNames(result.clusterNameFn());
+            scatter.setClassNameResolver(result.clusterNameFn());
             scatter.setData(result.getEmbedding(), result.getClusterLabels(),
                     result.getNClusters(), embName);
             scatterHolder[0] = scatter;
@@ -2420,8 +2432,9 @@ public class ClusteringDialog {
         // here is the tell-tale of an image/region batch effect rather than a
         // shared phenotype.
         if (result.hasCellRefs()) {
+            final ClusteringResult colorResult = result;
             java.util.function.IntFunction<Color> clusterColorFn = id -> {
-                Integer rgb = PathClass.fromString("Cluster " + id).getColor();
+                Integer rgb = PathClass.fromString(clusterClassName(colorResult, id)).getColor();
                 return rgb != null
                         ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
                         : EmbeddingScatterPanel.clusterColorFor(id);
@@ -2447,7 +2460,7 @@ public class ClusteringDialog {
             }
             ClusterCompositionPanel byImage = new ClusterCompositionPanel(
                     result.getClusterLabels(), result.getNClusters(), imageGroups,
-                    "Image", clusterColorFn);
+                    "Image", clusterColorFn, result.clusterNameFn());
             Tab imgTab = new Tab("Composition by image", wrapWithGuide(byImage,
                     "Cluster counts and proportions per source image.\n"
                     + "Each row of the table is one image; the pie charts show the same "
@@ -2468,7 +2481,8 @@ public class ClusteringDialog {
             if (result.isAnnotationInput() && result.hasCellParentNames()) {
                 ClusterCompositionPanel byAnnotation = new ClusterCompositionPanel(
                         result.getClusterLabels(), result.getNClusters(),
-                        result.getCellParentNames(), "Annotation", clusterColorFn);
+                        result.getCellParentNames(), "Annotation", clusterColorFn,
+                        result.clusterNameFn());
                 Tab annTab = new Tab("Composition by annotation", wrapWithGuide(byAnnotation,
                         "Cluster counts and proportions per parent annotation (the named / "
                         + "classified region each cell was inside when clustering ran).\n"
@@ -2542,7 +2556,10 @@ public class ClusteringDialog {
         if (result.hasMarkerRankings()) {
             MarkerFingerprintPanel fingerprints = new MarkerFingerprintPanel(
                     result.getMarkerRankingsJson(), result.getClusterLabels(),
-                    result.getNClusters(), EmbeddingScatterPanel::clusterColorFor, channelColors);
+                    result.getNClusters(),
+                    // Color follows the same class the rename moved the cells to.
+                    id -> EmbeddingScatterPanel.clusterColorFor(id, result.clusterNameFn()),
+                    channelColors, result.clusterNameFn());
             Tab fpTab = new Tab("Marker Fingerprints", wrapWithGuide(fingerprints,
                     "A quick, holistic read of what defines each cluster, with three views "
                     + "(toggle at the top):\n"
@@ -2606,8 +2623,8 @@ public class ClusteringDialog {
         // and co-occurrence use a monospaced TextArea mirroring the
         // Moran's I rendering style.
         if (result.hasRipley()) {
-            javafx.scene.Node ripleyNode = buildRipleyChartPane(result.getRipley(),
-                    result.getSpatialUnit());
+            javafx.scene.Node ripleyNode = buildRipleyChartPane(
+                    result.getRipley(), result.getSpatialUnit(), result);
             Tab tab = new Tab("Ripley K and L", wrapWithGuide(ripleyNode,
                     "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
                     + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
@@ -3084,7 +3101,13 @@ public class ClusteringDialog {
                         + "   --   " + (entry.timestamp.isEmpty() ? "" : entry.timestamp + "  ")
                         + entry.summary
                         + "   [" + scope + (entry.autoSaved ? ", auto" : "") + "]"
-                        + "   (" + ClusteringResultManager.formatBytes(entry.sizeBytes) + ")";
+                        + "   (" + ClusteringResultManager.formatBytes(entry.sizeBytes) + ")"
+                        // Edit lineage: deleting the parent of a rename loses the
+                        // version you would step back to, so say what came from what.
+                        + (entry.derivedFrom != null && !entry.derivedFrom.isBlank()
+                            ? "   <- " + (entry.derivedOp != null ? entry.derivedOp : "edit")
+                              + " of '" + entry.derivedFrom + "'"
+                            : "");
                 CheckBox cb = new CheckBox(label);
                 cb.setUserData(entry.name);
                 checks.add(cb);
@@ -3315,6 +3338,33 @@ public class ClusteringDialog {
     }
 
     /**
+     * The PathClass that carries a cluster's color. For a renamed / merged result
+     * this is the custom name -- the detections were relabelled to it, so looking
+     * up "Cluster N" would read (and edit) a class nothing is classified as, and
+     * the viewer overlay would silently ignore every color change.
+     */
+    private static String clusterClassName(ClusteringResult result, int id) {
+        return result != null ? result.clusterName(id) : "Cluster " + id;
+    }
+
+    /**
+     * Display name for a cluster identified by its label as a STRING, which is how
+     * the Python-side spatial results and marker rankings key their clusters. Falls
+     * back to "Cluster &lt;key&gt;" when the key is not a plain integer (so a future
+     * non-numeric key degrades rather than throws).
+     */
+    private static String clusterNameForKey(ClusteringResult result, String key) {
+        if (result != null && key != null) {
+            try {
+                return result.clusterName(Integer.parseInt(key.trim()));
+            } catch (NumberFormatException ignore) {
+                // Not a plain label -- fall through to the literal form.
+            }
+        }
+        return "Cluster " + key;
+    }
+
+    /**
      * Build the collapsible "Cluster colors" panel for the Results dialog. Each
      * cluster gets a ColorPicker seeded from its "Cluster N" PathClass color (the
      * single source of truth). Editing a color updates the class, repaints the
@@ -3427,7 +3477,7 @@ public class ClusteringDialog {
         FlowPane swatches = new FlowPane(14, 10);
         swatches.setPadding(new Insets(10));
         for (int id : ids) {
-            Integer rgb = PathClass.fromString("Cluster " + id).getColor();
+            Integer rgb = PathClass.fromString(clusterClassName(result, id)).getColor();
             Color init = rgb != null
                     ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
                     : EmbeddingScatterPanel.clusterColorFor(id);
@@ -3436,7 +3486,8 @@ public class ClusteringDialog {
             pickers.put(id, picker);
             final int cid = id;
             picker.setOnAction(e -> {
-                applyClusterColor(cid, picker.getValue(), qupath, scatterHolder);
+                applyClusterColor(clusterClassName(result, cid), cid, picker.getValue(),
+                        qupath, scatterHolder);
                 refreshPanels.run();
                 persist.run();
                 if (QpcatPreferences.isClusterAutoRegeneratePlots() && !regenBtn.isDisabled()) {
@@ -3444,7 +3495,7 @@ public class ClusteringDialog {
                             loadedResultName, regenBtn, false);
                 }
             });
-            HBox row = new HBox(5, picker, new Label("Cluster " + id));
+            HBox row = new HBox(5, picker, new Label(clusterClassName(result, id)));
             row.setAlignment(Pos.CENTER_LEFT);
             row.setMinWidth(150);
             swatches.getChildren().add(row);
@@ -3461,7 +3512,8 @@ public class ClusteringDialog {
         // Reseed every picker from the live PathClasses (after a bulk change).
         Runnable reseed = () -> {
             for (Map.Entry<Integer, ColorPicker> en : pickers.entrySet()) {
-                Integer c = PathClass.fromString("Cluster " + en.getKey()).getColor();
+                Integer c = PathClass.fromString(
+                        clusterClassName(result, en.getKey())).getColor();
                 if (c != null) {
                     en.getValue().setValue(Color.rgb(
                             ColorTools.red(c), ColorTools.green(c), ColorTools.blue(c)));
@@ -3486,16 +3538,16 @@ public class ClusteringDialog {
         resetBtn.setOnAction(e -> {
             for (int id : ids) {
                 int def = EmbeddingScatterPanel.defaultClusterRgb(id);
-                applyClusterColor(id, Color.rgb(
+                applyClusterColor(clusterClassName(result, id), id, Color.rgb(
                         ColorTools.red(def), ColorTools.green(def), ColorTools.blue(def)),
                         qupath, scatterHolder);
             }
             reseed.run();
         });
 
-        Label hint = new Label("Each cluster's color is its QuPath \"Cluster N\" class color -- "
-                + "editing here recolors the image overlay and every plot. The palette is saved "
-                + "with this result and restored when you reopen it.");
+        Label hint = new Label("Each cluster's color is its QuPath class color (\"Cluster N\", or "
+                + "the name you gave it) -- editing here recolors the image overlay and every "
+                + "plot. The palette is saved with this result and restored when you reopen it.");
         hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
         hint.setWrapText(true);
 
@@ -3525,14 +3577,15 @@ public class ClusteringDialog {
      * Set a cluster's PathClass color (the source of truth), repaint the viewer
      * overlay, and live-recolor the interactive scatter.
      */
-    private static void applyClusterColor(int clusterId, Color c, QuPathGUI qupath,
+    private static void applyClusterColor(String className, int clusterId, Color c,
+                                          QuPathGUI qupath,
                                           EmbeddingScatterPanel[] scatterHolder) {
         if (c == null) return;
         int rgb = ColorTools.packRGB(
                 (int) Math.round(c.getRed() * 255),
                 (int) Math.round(c.getGreen() * 255),
                 (int) Math.round(c.getBlue() * 255));
-        PathClass.fromString("Cluster " + clusterId).setColor(rgb);
+        PathClass.fromString(className).setColor(rgb);
         if (qupath != null) {
             try {
                 // "Cluster N" colors are QuPath-wide, so refresh EVERY open viewer, not
@@ -3584,7 +3637,7 @@ public class ClusteringDialog {
         for (int v : result.getClusterLabels()) if (v > maxId) maxId = v;
         java.util.List<String> colors = new java.util.ArrayList<>();
         for (int i = 0; i <= maxId; i++) {
-            Integer rgb = PathClass.fromString("Cluster " + i).getColor();
+            Integer rgb = PathClass.fromString(clusterClassName(result, i)).getColor();
             colors.add(rgb != null ? ClusterPalette.toHex(rgb) : ClusterPalette.hexFor(i));
         }
 
@@ -3869,7 +3922,8 @@ public class ClusteringDialog {
      * vertically below.
      */
     private static javafx.scene.Node buildRipleyChartPane(
-            qupath.ext.qpcat.model.RipleyResult ripley, String unit) {
+            qupath.ext.qpcat.model.RipleyResult ripley, String unit,
+            ClusteringResult result) {
         if (ripley == null || ripley.getRadii() == null
                 || ripley.getRadii().length == 0) {
             return new Label("No Ripley K/L data available.");
@@ -3911,7 +3965,7 @@ public class ClusteringDialog {
             for (int i = 0; i < clusterNames.size() && i < kValues.length; i++) {
                 javafx.scene.chart.XYChart.Series<Number, Number> series =
                         new javafx.scene.chart.XYChart.Series<>();
-                series.setName("Cluster " + clusterNames.get(i));
+                series.setName(clusterNameForKey(result, clusterNames.get(i)));
                 for (int r = 0; r < radii.length && r < kValues[i].length; r++) {
                     series.getData().add(new javafx.scene.chart.XYChart.Data<>(
                             radii[r], kValues[i][r]));
@@ -3923,7 +3977,7 @@ public class ClusteringDialog {
             for (int i = 0; i < clusterNames.size() && i < lValues.length; i++) {
                 javafx.scene.chart.XYChart.Series<Number, Number> series =
                         new javafx.scene.chart.XYChart.Series<>();
-                series.setName("Cluster " + clusterNames.get(i));
+                series.setName(clusterNameForKey(result, clusterNames.get(i)));
                 for (int r = 0; r < radii.length && r < lValues[i].length; r++) {
                     series.getData().add(new javafx.scene.chart.XYChart.Data<>(
                             radii[r], lValues[i][r]));
@@ -4126,7 +4180,7 @@ public class ClusteringDialog {
             for (Map.Entry<String, List<Map<String, Object>>> cluster : rankings.entrySet()) {
                 for (Map<String, Object> marker : cluster.getValue()) {
                     sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
-                            "Cluster " + cluster.getKey(),
+                            clusterNameForKey(result, cluster.getKey()),
                             String.valueOf(marker.get("name")),
                             formatDouble(marker.get("score"), "%.2f"),
                             formatDouble(marker.get("logfoldchange"), "%.3f"),

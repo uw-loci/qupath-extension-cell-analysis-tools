@@ -74,10 +74,23 @@ public class ClusterCompositionPanel extends BorderPane {
      */
     public ClusterCompositionPanel(int[] clusterLabels, int nClusters, String[] cellGroups,
                                    String groupDimensionLabel, IntFunction<Color> clusterColorFn) {
+        this(clusterLabels, nClusters, cellGroups, groupDimensionLabel, clusterColorFn, null);
+    }
+
+    /**
+     * As above, but labelling clusters with {@code clusterNameFn} -- the custom
+     * names of a renamed / merged result. Pass null for the default "Cluster N".
+     *
+     * @param clusterNameFn cluster id -> display name
+     */
+    public ClusterCompositionPanel(int[] clusterLabels, int nClusters, String[] cellGroups,
+                                   String groupDimensionLabel, IntFunction<Color> clusterColorFn,
+                                   IntFunction<String> clusterNameFn) {
         this.nClusters = Math.max(nClusters, 0);
         this.clusterColor = clusterColorFn;
         this.figure = CompositionFigure.tally(
-                clusterLabels, this.nClusters, cellGroups, groupDimensionLabel);
+                        clusterLabels, this.nClusters, cellGroups, groupDimensionLabel)
+                .withClusterNames(clusterNameFn == null ? null : clusterNameFn::apply);
 
         setPadding(new Insets(10));
         setTop(buildHeader(groupDimensionLabel));
@@ -108,7 +121,7 @@ public class ClusterCompositionPanel extends BorderPane {
         // each show default JavaFX colors that do not match the palette).
         FlowPane legend = new FlowPane(10, 4);
         for (int c = 0; c < nClusters; c++) {
-            legend.getChildren().add(swatch(c, "Cluster " + c));
+            legend.getChildren().add(swatch(c, figure.clusterName(c)));
         }
 
         // Counts / percentage toggle.
@@ -215,9 +228,13 @@ public class ClusterCompositionPanel extends BorderPane {
         for (int c = 0; c < nClusters; c++) {
             final int col = c + 1;
             // Short header ("C0", "C1", ...) so 20+ columns stay readable; the
-            // shared legend above maps each to its cluster + color.
-            TableColumn<String[], String> cc = new TableColumn<>("C" + c);
-            cc.setPrefWidth(48);
+            // shared legend above maps each to its cluster + color. A renamed
+            // cluster shows its name instead -- "C3" would throw away the very
+            // thing the user renamed it for.
+            boolean renamed = !figure.clusterName(c).equals("Cluster " + c);
+            TableColumn<String[], String> cc = new TableColumn<>(
+                    renamed ? figure.clusterName(c) : "C" + c);
+            cc.setPrefWidth(renamed ? 110 : 48);
             cc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                     col < cd.getValue().length ? cd.getValue()[col] : ""));
             table.getColumns().add(cc);
@@ -278,7 +295,7 @@ public class ClusterCompositionPanel extends BorderPane {
         for (int c = 0; c < nClusters; c++) {
             if (row[c] <= 0) continue;
             final int cluster = c;
-            PieChart.Data d = new PieChart.Data("Cluster " + c, row[c]);
+            PieChart.Data d = new PieChart.Data(figure.clusterName(c), row[c]);
             chart.getData().add(d);
             sliceRefs.add(new Object[]{c, d});
             double pct = total > 0 ? 100.0 * row[c] / total : 0;
@@ -287,7 +304,8 @@ public class ClusterCompositionPanel extends BorderPane {
                 if (newN != null) {
                     newN.setStyle("-fx-pie-color: " + toHex(colorFor(cluster)) + ";");
                     Tooltip.install(newN, new Tooltip(String.format(
-                            "Cluster %d: %d cells (%.1f%%)", cluster, row[cluster], pct)));
+                            "%s: %d cells (%.1f%%)",
+                            figure.clusterName(cluster), row[cluster], pct)));
                 }
             });
         }
@@ -304,7 +322,7 @@ public class ClusterCompositionPanel extends BorderPane {
     private void copyTableAsTsv(String groupDimensionLabel) {
         StringBuilder sb = new StringBuilder();
         sb.append(groupDimensionLabel);
-        for (int c = 0; c < nClusters; c++) sb.append('\t').append("Cluster ").append(c);
+        for (int c = 0; c < nClusters; c++) sb.append('\t').append(figure.clusterName(c));
         sb.append('\t').append("Total").append('\n');
         for (String[] row : table.getItems()) {
             for (int i = 0; i < row.length; i++) {

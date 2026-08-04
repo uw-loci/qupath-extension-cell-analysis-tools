@@ -59,10 +59,18 @@ public class ClusteringResultManager {
         int nClusters;
         int nCells;
         String scopeKey;
+        String derivedFrom;
+        String derivedOp;
 
         String summary() {
             return nClusters + " clusters, " + nCells + " cells"
-                    + (algorithm != null ? " (" + algorithm + ")" : "");
+                    + (algorithm != null ? " (" + algorithm + ")" : "")
+                    // Show the edit chain, so a list of five near-identical names
+                    // reads as a history instead of five unrelated results.
+                    + (derivedFrom != null && !derivedFrom.isBlank()
+                        ? " [" + (derivedOp != null ? derivedOp : "edit")
+                          + " of " + derivedFrom + "]"
+                        : "");
         }
     }
 
@@ -395,6 +403,10 @@ public class ClusteringResultManager {
         saved.setAutoSaved(false);
         saved.setClusterNames(nameByLabel);
         saved.setClusterColors(SavedResultApplier.renamedColors(saved, nameByLabel));
+        // Provenance: what this copy came from, so an iterative chain of edits
+        // stays legible and there is always a named result to step back to.
+        saved.setDerivedFrom(sourceName);
+        saved.setDerivedOp("rename/merge");
 
         // Copy the plot images so the new result is self-contained, rewriting each
         // relative path's "<source>_plots/" prefix to "<copy>_plots/". (The PNG
@@ -563,6 +575,8 @@ public class ClusteringResultManager {
                 e.summary = saved.getSummary();
                 e.scopeLabel = saved.getScopeLabel();
                 e.autoSaved = saved.isAutoSaved();
+                e.derivedFrom = saved.getDerivedFrom();
+                e.derivedOp = saved.getDerivedOp();
             } catch (Exception ex) {
                 e.summary = "(failed to read)";
             }
@@ -586,6 +600,10 @@ public class ClusteringResultManager {
         public String scopeLabel;
         public boolean autoSaved;
         public long sizeBytes;
+        /** Name of the result this one was derived from; null for an original run. */
+        public String derivedFrom;
+        /** What produced it ("rename/merge"); null for an original run. */
+        public String derivedOp;
     }
 
     /**

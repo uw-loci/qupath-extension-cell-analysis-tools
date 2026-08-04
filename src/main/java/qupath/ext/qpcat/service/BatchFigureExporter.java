@@ -428,7 +428,10 @@ public final class BatchFigureExporter {
             groups = imageGroupsFor(project, clustering);
             dimension = "Image";
         }
-        return CompositionFigure.tally(labels, clustering.getNClusters(), groups, dimension);
+        // Custom names from a rename / merge, so an exported figure says "Tumor"
+        // wherever the results window does.
+        return CompositionFigure.tally(labels, clustering.getNClusters(), groups, dimension)
+                .withClusterNames(clustering::clusterName);
     }
 
     /** Per-cell source-image names, resolving any missing name by project id. */

@@ -29,6 +29,20 @@ public class ClusteringResult {
     // SavedClusteringResult.
     private CellRef[] cellRefs;
 
+    // Custom display name per cluster label, set when the result was renamed or
+    // merged via "Manage Clusters". Absent (null) on a result that was never
+    // renamed -- a label with no entry displays as "Cluster <label>". This is
+    // display metadata only: the raw clusterLabels ints are never rewritten, so
+    // a merge stays reversible and a rename never invalidates the embedding.
+    private Map<Integer, String> clusterNames;
+
+    // Display-only provenance, copied off the saved result when one is reopened:
+    // which result this was derived from and by what operation. Lets the results
+    // window say "renamed from X" instead of leaving the user to guess which of
+    // five similarly-named results they are looking at.
+    private transient String derivedFrom;
+    private transient String derivedOp;
+
     // Representative-cell indices per cluster, as returned by run_clustering.py.
     // JSON shape: { "<cluster>": { "feature": [idx,...], "embedding": [idx,...] } }.
     // Indices are into the same cell order as clusterLabels / cellRefs.
@@ -92,6 +106,43 @@ public class ClusteringResult {
     public CellRef[] getCellRefs() { return cellRefs; }
     public void setCellRefs(CellRef[] refs) { this.cellRefs = refs; }
     public boolean hasCellRefs() { return cellRefs != null && cellRefs.length > 0; }
+
+    // --- Cluster display names (rename / merge) ---
+
+    public Map<Integer, String> getClusterNames() { return clusterNames; }
+
+    public void setClusterNames(Map<Integer, String> m) { this.clusterNames = m; }
+
+    public String getDerivedFrom() { return derivedFrom; }
+    public void setDerivedFrom(String v) { this.derivedFrom = v; }
+
+    public String getDerivedOp() { return derivedOp; }
+    public void setDerivedOp(String v) { this.derivedOp = v; }
+
+    /** True when this result carries at least one renamed / merged cluster. */
+    public boolean hasClusterNames() { return clusterNames != null && !clusterNames.isEmpty(); }
+
+    /**
+     * Display name for a cluster label: the custom name if this result was
+     * renamed / merged, else {@code "Cluster <label>"}. Every panel that labels a
+     * cluster goes through this (usually via {@link #clusterNameFn()}) so a
+     * rename reaches the whole results window, not just the viewer overlay.
+     */
+    public String clusterName(int label) {
+        if (clusterNames != null) {
+            String n = clusterNames.get(label);
+            if (n != null && !n.isBlank()) return n;
+        }
+        return "Cluster " + label;
+    }
+
+    /**
+     * {@link #clusterName(int)} as a function, for panels that take a name
+     * resolver. Safe to hold: it reads the map live, so it is never stale.
+     */
+    public java.util.function.IntFunction<String> clusterNameFn() {
+        return this::clusterName;
+    }
 
     // Per-cell parent-annotation display name (index-aligned with clusterLabels).
     // Null for cells whose parent is the image root (i.e. not inside a named /

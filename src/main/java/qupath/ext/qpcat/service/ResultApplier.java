@@ -109,10 +109,21 @@ public class ResultApplier {
      * it round-trips through {@link PathClass#fromString(String)}.
      */
     public static String clusterClassName(String namespace, int label) {
+        return clusterClassName(namespace, CLUSTER_PREFIX + label);
+    }
+
+    /**
+     * As {@link #clusterClassName(String, int)} but for a cluster's DISPLAY name
+     * rather than its raw label -- so re-applying a result that was renamed gives
+     * "&lt;namespace&gt;: Tumor", matching the palette that was saved alongside it
+     * (which is keyed by the same display name).
+     */
+    public static String clusterClassName(String namespace, String baseName) {
+        String base = (baseName == null || baseName.isBlank()) ? "Cluster" : baseName.trim();
         if (namespace == null || namespace.isBlank()) {
-            return CLUSTER_PREFIX + label;
+            return base;
         }
-        return namespace.replace(":", " ").trim() + ": " + CLUSTER_PREFIX + label;
+        return namespace.replace(":", " ").trim() + ": " + base;
     }
 
     /**

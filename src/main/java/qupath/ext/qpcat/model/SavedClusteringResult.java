@@ -67,6 +67,14 @@ public class SavedClusteringResult {
     // When a label has no entry here the display name defaults to "Cluster <label>".
     private Map<Integer, String> clusterNames;
 
+    // Provenance for an iterative edit chain. derivedFrom is the on-disk base
+    // name of the result this copy was made from; derivedOp says what was done
+    // ("rename/merge"). Both null on an original run. Kept so a user three edits
+    // deep can see where a result came from -- and, more importantly, which
+    // earlier result to re-apply if the edit turned out to be wrong.
+    private String derivedFrom;
+    private String derivedOp;
+
     // Spatial analysis
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
@@ -177,6 +185,19 @@ public class SavedClusteringResult {
     // --- Custom cluster names (label -> display name) ---
     public Map<Integer, String> getClusterNames() { return clusterNames; }
     public void setClusterNames(Map<Integer, String> m) { this.clusterNames = m; }
+
+    // --- Edit provenance ---
+
+    /** On-disk base name of the result this one was derived from; null for an original run. */
+    public String getDerivedFrom() { return derivedFrom; }
+    public void setDerivedFrom(String v) { this.derivedFrom = v; }
+
+    /** What produced this copy, e.g. "rename/merge"; null for an original run. */
+    public String getDerivedOp() { return derivedOp; }
+    public void setDerivedOp(String v) { this.derivedOp = v; }
+
+    /** True when this result is an edit of an earlier one. */
+    public boolean isDerived() { return derivedFrom != null && !derivedFrom.isBlank(); }
 
     /**
      * Display name for a cluster label: the custom name if this result was
@@ -296,6 +317,12 @@ public class SavedClusteringResult {
         }
         saved.setAnnotationInput(result.isAnnotationInput());
 
+        // Custom cluster names survive a re-save, so a renamed result that is
+        // saved again under a new name does not silently revert to "Cluster N".
+        if (result.hasClusterNames()) {
+            saved.setClusterNames(result.getClusterNames());
+        }
+
         // Spatial stats expansion (v1) -- bundle only set when at least one
         // statistic ran. Older code paths leave this null and the result
         // saves identically to pre-v1.
@@ -349,6 +376,14 @@ public class SavedClusteringResult {
         if (cellParentNames != null) {
             result.setCellParentNames(cellParentNames);
         }
+        // Custom names from a rename / merge. Without this the reopened results
+        // window relabels everything back to "Cluster N" even though the names
+        // are right here on disk -- which reads as "the rename did not save".
+        if (clusterNames != null && !clusterNames.isEmpty()) {
+            result.setClusterNames(clusterNames);
+        }
+        result.setDerivedFrom(derivedFrom);
+        result.setDerivedOp(derivedOp);
         result.setAnnotationInput(annotationInput);
 
         // Spatial stats expansion (v1) -- absent on older saves; the

@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
 
 /**
@@ -43,12 +44,20 @@ public final class CompositionFigure {
     /** Bucket label for cells with no group (outside any annotation, unknown image). */
     public static final String NONE_LABEL = "(none)";
 
+    /** The label a cluster carries when the result was never renamed. */
+    public static final IntFunction<String> DEFAULT_CLUSTER_NAME = c -> "Cluster " + c;
+
     private final String dimension;
     private final int nClusters;
     private final List<String> groups = new ArrayList<>();
     private final Map<String, long[]> counts = new LinkedHashMap<>();
     private final long[] clusterTotals;
     private long grandTotal;
+
+    // Cluster label -> display name. Defaults to "Cluster N"; a result that was
+    // renamed or merged supplies its own, so an exported figure carries the same
+    // names as the screen instead of reverting to the raw label.
+    private IntFunction<String> clusterNames = DEFAULT_CLUSTER_NAME;
 
     private CompositionFigure(String dimension, int nClusters) {
         this.dimension = (dimension == null || dimension.isBlank()) ? "Group" : dimension;
@@ -86,6 +95,22 @@ public final class CompositionFigure {
         }
         f.groups.sort(String.CASE_INSENSITIVE_ORDER);
         return f;
+    }
+
+    /**
+     * Use custom cluster display names (from a rename / merge) in the legend and
+     * the CSV headers. Pass null to go back to "Cluster N". Returns {@code this}
+     * so it chains onto {@link #tally}.
+     */
+    public CompositionFigure withClusterNames(IntFunction<String> names) {
+        this.clusterNames = names != null ? names : DEFAULT_CLUSTER_NAME;
+        return this;
+    }
+
+    /** Display name for one cluster; never null. */
+    public String clusterName(int cluster) {
+        String n = clusterNames.apply(cluster);
+        return (n == null || n.isBlank()) ? "Cluster " + cluster : n;
     }
 
     // ---- Model ----
@@ -134,8 +159,8 @@ public final class CompositionFigure {
         StringBuilder sb = new StringBuilder();
         sb.append(csvCell(dimension));
         for (int c = 0; c < nClusters; c++) {
-            sb.append(',').append(csvCell("Cluster " + c + " (n)"));
-            sb.append(',').append(csvCell("Cluster " + c + " (%)"));
+            sb.append(',').append(csvCell(clusterName(c) + " (n)"));
+            sb.append(',').append(csvCell(clusterName(c) + " (%)"));
         }
         sb.append(",Total\n");
         for (String group : groups) {
@@ -261,7 +286,7 @@ public final class CompositionFigure {
         int cy = y;
         int rowH = 22;
         for (int c = 0; c < nClusters; c++) {
-            String label = "Cluster " + c;
+            String label = clusterName(c);
             int w = 14 + 4 + fm.stringWidth(label) + 12;
             if (cx > x && cx + w > x + width) {
                 cx = x;

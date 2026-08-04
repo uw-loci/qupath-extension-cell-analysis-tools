@@ -105,7 +105,12 @@ public final class SavedResultApplier {
                 namespace);
 
         applyCore(project, saved, targetIds, openId, openData, embedding, prefix,
-                label -> ResultApplier.clusterClassName(namespace, label),
+                // Display name, not the raw label: a result that was renamed or
+                // merged must re-apply AS ITS NAMES, or stepping back to an earlier
+                // version silently reverts the naming too -- and its saved palette,
+                // which is keyed by those names, would not match the classes.
+                label -> ResultApplier.clusterClassName(
+                        namespace, saved.displayNameForLabel(label)),
                 "apply saved result", report);
 
         // Restore the saved palette AFTER applying labels: applyClusterLabelsNamed

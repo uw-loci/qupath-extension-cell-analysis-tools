@@ -542,7 +542,7 @@ public class EmbeddingScatterPanel extends VBox {
         }
         legendTitle.setText("Clusters (" + nClusters + ")");
         for (int i = 0; i < nClusters; i++) {
-            legendBox.getChildren().add(legendRow(clusterColor(i), "Cluster " + i, counts[i]));
+            legendBox.getChildren().add(legendRow(clusterColor(i), displayName(i), counts[i]));
         }
         if (noise > 0) {
             legendBox.getChildren().add(legendRow(Color.LIGHTGRAY, "Noise", noise));
@@ -691,6 +691,25 @@ public class EmbeddingScatterPanel extends VBox {
         this.classNameResolver = resolver;
     }
 
+    // Cluster id -> display name for the legend and hover text. Distinct from
+    // classNameResolver above, which resolves the PathClass whose COLOR is read;
+    // a renamed result changes what the user is called, not where color lives.
+    private IntFunction<String> displayNames = DEFAULT_CLUSTER_NAMES;
+
+    /**
+     * Label the legend and hover text with custom cluster names (from a rename /
+     * merge). Null restores "Cluster N". Call {@link #refreshColors()} after, to
+     * rebuild the legend.
+     */
+    public void setClusterDisplayNames(IntFunction<String> names) {
+        this.displayNames = names != null ? names : DEFAULT_CLUSTER_NAMES;
+    }
+
+    private String displayName(int cluster) {
+        String n = displayNames.apply(cluster);
+        return (n == null || n.isBlank()) ? "Cluster " + cluster : n;
+    }
+
     /** Re-read cluster colors from their PathClasses and repaint (no data change). */
     public void refreshColors() {
         rebuildLegend();
@@ -836,8 +855,9 @@ public class EmbeddingScatterPanel extends VBox {
         lastHoverIdx = bestIdx;
         if (bestIdx >= 0) {
             String pretty = prettyEmbeddingName(embeddingName);
-            tooltip.setText(String.format("Cell %d | Cluster %d\n%s1=%.2f, %s2=%.2f",
-                    bestIdx, labels[bestIdx],
+            int lab = labels[bestIdx];
+            tooltip.setText(String.format("Cell %d | %s\n%s1=%.2f, %s2=%.2f",
+                    bestIdx, lab >= 0 ? displayName(lab) : "Noise",
                     pretty, embedding[bestIdx][0],
                     pretty, embedding[bestIdx][1]));
         } else {
