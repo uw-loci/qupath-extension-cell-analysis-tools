@@ -380,8 +380,29 @@ model-download dependency. The backend (`FeatureExtractionDialog`,
 `extract_features.py`) is retained but unwired; the menu command can be
 reinstated on request.
 
-The feature was **never validated end-to-end on real data** -- if it is ever
-reinstated it must be treated as untested until verified.
+**Test status (checked 2026-08-04).** Be precise about what has and has not been
+run, because "untested" was previously doing too much work here:
+
+- The **Python side runs.** `extract_features.py` was executed against the shipped
+  `model_utils.py` registry with `dinov2-large` and 12 synthetic 224x224 RGB
+  tiles: it loaded the model through timm, ran inference and returned a
+  `(12, 1024)` float32 array -- all finite, non-degenerate, and matching the
+  embedding dimension the registry declares. So the extraction logic, the
+  batching, the model-output handling and the NDArray packaging all work.
+- **Four of the five models are unverified.** H-optimus-0, Virchow, Hibou-B and
+  Hibou-L are all gated on HuggingFace (their `config.json` returns HTTP 401
+  without an accepted licence and a token), so none of their registry entries has
+  been confirmed loadable. `dinov2-large` is the only ungated entry and the only
+  one anyone has run. Note the script carries an explicit guard for a repo that
+  is a *transformers* model rather than a *timm* one -- which is a failure mode a
+  gated entry could still be sitting in.
+- **The Java side has never been run.** The dialog is unwired from the menu, so
+  the full path -- QuPath detections to tiles, shared-memory transfer, `FM_*`
+  measurements written back onto cells -- has not been exercised end-to-end by
+  anyone. This, not the Python, is the untested part.
+
+If the feature is ever reinstated, treat the Java round trip as unproven and the
+four gated models as unconfirmed.
 
 <details>
 <summary>Full pre-removal documentation (preserved for revival)</summary>

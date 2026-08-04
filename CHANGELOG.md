@@ -150,6 +150,16 @@ be repeated and reversed.
 
 ### Notes
 
+- **Foundation-model feature extraction: status checked, not guessed.** The
+  removed-in-v0.7.0 feature's docs said only that it was "never validated
+  end-to-end on real data", which conflated three different things. Checked on
+  2026-08-04 by running the shipped `extract_features.py` directly: the Python
+  side **works** (dinov2-large, 12 tiles -> a finite, non-degenerate 12x1024
+  float32 array whose width matches the registry). What is genuinely unverified
+  is (a) the other four models, all gated on HuggingFace and so never loaded by
+  anyone, and (b) the Java round trip -- detections to tiles to `FM_*`
+  measurements -- which the unwired dialog means has never been exercised. The
+  guide now says exactly that.
 - **"Experimental" on the Cluster Explainer means unproven, not unvalidated.**
   No QP-CAT developer has completed a successful end-to-end run of that feature
   against a live provider. The docs previously implied only that its output was
