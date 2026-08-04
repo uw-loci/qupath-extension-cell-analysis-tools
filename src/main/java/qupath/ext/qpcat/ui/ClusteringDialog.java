@@ -23,6 +23,7 @@ import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
+import qupath.ext.qpcat.service.MarkerNameTokens;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
@@ -2578,12 +2579,8 @@ public class ClusteringDialog {
 
         // Marker rankings tab
         if (result.hasMarkerRankings()) {
-            TextArea rankingsText = new TextArea(formatMarkerRankings(result));
-            rankingsText.setEditable(false);
-            rankingsText.setWrapText(false);
-            rankingsText.setPrefRowCount(30);
-            rankingsText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
-            Tab tab = new Tab("Marker Rankings", wrapWithGuide(rankingsText,
+            javafx.scene.Node rankingsPane = buildMarkerRankingsPane(result);
+            Tab tab = new Tab("Marker Rankings", wrapWithGuide(rankingsPane,
                     "Top differentially expressed markers per cluster (Wilcoxon rank-sum test).\n"
                     + "  Score: test statistic -- higher values indicate stronger differential expression.\n"
                     + "  Log2FC: log2 fold change vs. all other clusters -- positive means upregulated "
@@ -4179,9 +4176,78 @@ public class ClusteringDialog {
     }
 
     @SuppressWarnings("deprecation")  // GsonBuilder.setLenient() vs the 2.11+ Strictness API
-    private static String formatMarkerRankings(ClusteringResult result) {
+    /**
+     * The Marker Rankings tab: a find-marker box over the monospace table.
+     *
+     * <p>A dialog has no Ctrl-F, so without this the only way to answer "is CD8
+     * a top marker anywhere" in a several-hundred-line dump is to read it.</p>
+     */
+    private static javafx.scene.Node buildMarkerRankingsPane(ClusteringResult result) {
+        TextArea rankingsText = new TextArea();
+        rankingsText.setEditable(false);
+        rankingsText.setWrapText(false);
+        rankingsText.setPrefRowCount(30);
+        rankingsText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+
+        TextField field = new TextField();
+        field.setPromptText("Find a marker (e.g. CD8)");
+        field.setPrefColumnCount(18);
+        field.setTooltip(new Tooltip(
+                "Show only the rows for one marker.\n\n"
+                + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
+                + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"
+                + "Ignored words: "
+                + String.join(", ", MarkerNameTokens.excludedTokensSorted())));
+
+        Button clear = new Button("Clear");
+        clear.setOnAction(e -> field.clear());
+        clear.disableProperty().bind(field.textProperty().isEmpty());
+
+        Label count = new Label();
+        count.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        Runnable refresh = () -> {
+            String q = field.getText();
+            RankingsText rt = formatMarkerRankings(result, q);
+            rankingsText.setText(rt.text());
+            if (q == null || q.isBlank()) {
+                count.setText("");
+            } else if (rt.rows() == 0) {
+                count.setStyle("-fx-font-size: 11px; -fx-text-fill: #a33;");
+                count.setText("no matches");
+            } else {
+                count.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+                count.setText(rt.rows() + (rt.rows() == 1 ? " row in " : " rows in ")
+                        + rt.clusters() + (rt.clusters() == 1 ? " cluster" : " clusters"));
+            }
+        };
+        field.textProperty().addListener((o, was, now) -> refresh.run());
+        refresh.run();
+
+        HBox bar = new HBox(8, new Label("Find marker:"), field, clear, count);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(0, 0, 6, 0));
+
+        VBox box = new VBox(bar, rankingsText);
+        VBox.setVgrow(rankingsText, Priority.ALWAYS);
+        box.setPadding(new Insets(8));
+        return box;
+    }
+
+    /** Formatted rankings plus what the current filter kept, for the count readout. */
+    private record RankingsText(String text, int rows, int clusters) {}
+
+    /**
+     * Render the marker-ranking table, optionally filtered to one marker.
+     *
+     * <p>Filtered rather than highlighted: this is a monospace dump that can run
+     * to hundreds of lines, and a highlight you have to scroll to find is not an
+     * answer. The match is on the marker part of each measurement name, so
+     * "mean" and "nucleus" match nothing -- see {@link MarkerNameTokens}.</p>
+     */
+    private static RankingsText formatMarkerRankings(ClusteringResult result, String query) {
         String json = result.getMarkerRankingsJson();
-        if (json == null) return "No marker rankings available.";
+        if (json == null) return new RankingsText("No marker rankings available.", 0, 0);
 
         try {
             com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
@@ -4195,23 +4261,36 @@ public class ClusteringDialog {
                     "Cluster", "Marker", "Score", "Log2FC", "Adj. P-val"));
             sb.append("-".repeat(80)).append(System.lineSeparator());
 
+            int rows = 0;
+            int clusters = 0;
             for (Map.Entry<String, List<Map<String, Object>>> cluster : rankings.entrySet()) {
+                int before = rows;
                 for (Map<String, Object> marker : cluster.getValue()) {
+                    String name = String.valueOf(marker.get("name"));
+                    if (!MarkerNameTokens.matches(name, query)) continue;
                     sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
                             clusterNameForKey(result, cluster.getKey()),
-                            String.valueOf(marker.get("name")),
+                            name,
                             formatDouble(marker.get("score"), "%.2f"),
                             formatDouble(marker.get("logfoldchange"), "%.3f"),
                             formatDouble(marker.get("pval_adj"), "%.2e")));
+                    rows++;
                 }
-                sb.append(System.lineSeparator());
+                if (rows > before) {
+                    clusters++;
+                    sb.append(System.lineSeparator());
+                }
             }
-            return sb.toString();
+            if (rows == 0 && query != null && !query.isBlank()) {
+                sb.append("(no marker matches \"").append(query.trim()).append("\")")
+                  .append(System.lineSeparator());
+            }
+            return new RankingsText(sb.toString(), rows, clusters);
         } catch (Exception e) {
             logger.warn("Failed to format marker rankings: {}", e.getMessage());
-            return "Marker rankings could not be parsed: " + e.getMessage()
+            return new RankingsText("Marker rankings could not be parsed: " + e.getMessage()
                     + System.lineSeparator() + System.lineSeparator()
-                    + "Raw payload:" + System.lineSeparator() + json;
+                    + "Raw payload:" + System.lineSeparator() + json, 0, 0);
         }
     }
 

@@ -5,10 +5,13 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
@@ -18,6 +21,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import qupath.ext.qpcat.service.MarkerNameTokens;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,6 +84,14 @@ public class MarkerFingerprintPanel extends BorderPane {
     private final Label noteLabel = new Label();
     private int topK = 5;
     private View view = View.MEASUREMENTS;
+
+    // Live marker search. Matched against the marker part of a measurement name
+    // (compartment / statistic words stripped by MarkerNameTokens), so "mean"
+    // deliberately matches nothing while "CD8" matches every compartment.
+    private String query = "";
+    private final Label matchLabel = new Label();
+    private int matchCount = 0;
+    private int matchCards = 0;
 
     /**
      * @param markerRankingsJson the run's {@code marker_rankings} payload (may be null)
@@ -218,14 +230,91 @@ public class MarkerFingerprintPanel extends BorderPane {
         ((HBox) controls.getChildren().get(0)).setAlignment(Pos.CENTER_LEFT);
         ((HBox) controls.getChildren().get(1)).setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(title, noteLabel, controls);
+        box.getChildren().addAll(title, noteLabel, controls, buildSearchBar());
         return box;
+    }
+
+    /**
+     * The marker search bar. A dialog has no Ctrl-F, so this is it: type a marker
+     * and every mention of it lights up across whichever view is showing.
+     * Highlight rather than filter -- this tab exists to give an overview, and
+     * hiding the non-matches would destroy the thing being searched.
+     */
+    private Node buildSearchBar() {
+        TextField field = new TextField();
+        field.setPromptText("Highlight a marker (e.g. CD8)");
+        field.setPrefColumnCount(18);
+
+        List<String> vocabulary = markerVocabulary();
+        String vocabText = vocabulary.isEmpty() ? "(none found)"
+                : String.join(", ", vocabulary.subList(0, Math.min(40, vocabulary.size())))
+                  + (vocabulary.size() > 40 ? ", ..." : "");
+        field.setTooltip(new Tooltip(
+                "Type part of a marker name to highlight it everywhere in this tab.\n\n"
+                + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
+                + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"
+                + "Ignored words: " + String.join(", ", MarkerNameTokens.excludedTokensSorted())
+                + "\n\nMarkers in this result: " + vocabText));
+
+        Button clear = new Button("Clear");
+        clear.setOnAction(e -> field.clear());
+        clear.disableProperty().bind(field.textProperty().isEmpty());
+
+        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        field.textProperty().addListener((o, was, now) -> {
+            query = now == null ? "" : now;
+            rebuild();
+        });
+
+        HBox bar = new HBox(8, new Label("Find marker:"), field, clear, matchLabel);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(4, 0, 0, 0));
+        return bar;
+    }
+
+    /** Distinct marker names across every ranked measurement in this result. */
+    private List<String> markerVocabulary() {
+        Set<String> names = new LinkedHashSet<>();
+        for (List<Map<String, Object>> markers : rankings.values()) {
+            if (markers == null) continue;
+            for (Map<String, Object> m : markers) {
+                Object n = m.get("name");
+                if (n != null) names.add(String.valueOf(n));
+            }
+        }
+        return MarkerNameTokens.distinctMarkers(names);
+    }
+
+    /** True when a measurement/channel name should be highlighted right now. */
+    private boolean isHit(String name) {
+        return !query.isBlank() && MarkerNameTokens.matches(name, query);
+    }
+
+    /** Report what the current search found, so a typo is obvious immediately. */
+    private void updateMatchLabel() {
+        if (query.isBlank()) {
+            matchLabel.setText("");
+            return;
+        }
+        if (matchCount == 0) {
+            matchLabel.setText("no matches -- check the spelling, or it may not be "
+                    + "a top marker of any cluster");
+            matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #a33;");
+            return;
+        }
+        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        matchLabel.setText(matchCount + (matchCount == 1 ? " match in " : " matches in ")
+                + matchCards + (matchCards == 1 ? " card" : " cards"));
     }
 
     private void rebuild() {
         cards.getChildren().clear();
+        matchCount = 0;
+        matchCards = 0;
         if (rankings.isEmpty()) {
             cards.getChildren().add(new Label("No marker rankings available for this result."));
+            updateMatchLabel();
             return;
         }
         switch (view) {
@@ -233,6 +322,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             case CHANNELS -> buildChannelPerClusterCards();
             case CHANNELS_TO_CLUSTERS -> buildChannelToClusterCards();
         }
+        updateMatchLabel();
     }
 
     // ---------- View 1: measurements per cluster ----------
@@ -255,6 +345,7 @@ public class MarkerFingerprintPanel extends BorderPane {
     }
 
     private VBox measurementCard(String cid, List<Map<String, Object>> markers, double globalMax) {
+        int hitsBefore = matchCount;
         int clusterId = intOrNeg(cid);
         Color color = clusterColorFor(clusterId);
         VBox card = card(color);
@@ -269,6 +360,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             rows.getChildren().add(measurementRow(markers.get(i), color, globalMax));
         }
         card.getChildren().add(rows);
+        if (matchCount > hitsBefore) matchCards++;
         return card;
     }
 
@@ -301,6 +393,12 @@ public class MarkerFingerprintPanel extends BorderPane {
         barLine.setAlignment(Pos.CENTER_LEFT);
 
         VBox cell = new VBox(1, nameLbl, barLine);
+        if (isHit(mName)) {
+            nameLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+            cell.setPadding(new Insets(2, 4, 2, 4));
+            markHit(cell);
+            matchCount++;
+        }
         Tooltip.install(cell, new Tooltip(markerTooltip(mName, marker)));
         return cell;
     }
@@ -314,6 +412,7 @@ public class MarkerFingerprintPanel extends BorderPane {
                 + "(e.g. Area) -- see the Measurements view for those.");
 
         for (String cid : sortedClusterIds()) {
+            int hitsBefore = matchCount;
             int clusterId = intOrNeg(cid);
             Color color = clusterColorFor(clusterId);
             VBox card = card(color);
@@ -334,12 +433,20 @@ public class MarkerFingerprintPanel extends BorderPane {
                 chips.getChildren().add(muted("(no markers)"));
             }
             for (String ch : chans) {
-                chips.getChildren().add(chip(channelColor.getOrDefault(ch, Color.GRAY), ch));
+                HBox c = chip(channelColor.getOrDefault(ch, Color.GRAY), ch);
+                // Chips carry a channel name, which is already the marker -- no
+                // compartment/statistic boilerplate to strip.
+                if (isHit(ch)) {
+                    markHit(c);
+                    matchCount++;
+                }
+                chips.getChildren().add(c);
             }
             if (hasOther) {
                 chips.getChildren().add(chip(Color.gray(0.6), "Other"));
             }
             card.getChildren().add(chips);
+            if (matchCount > hitsBefore) matchCards++;
             cards.getChildren().add(card);
         }
     }
@@ -390,6 +497,11 @@ public class MarkerFingerprintPanel extends BorderPane {
             HBox header = new HBox(6, colorChip(color, 14), boldLabel(ch));
             header.setAlignment(Pos.CENTER_LEFT);
             card.getChildren().add(header);
+            if (isHit(ch)) {
+                markHit(card);
+                matchCount++;
+                matchCards++;
+            }
 
             List<double[]> clusters = byChannel.get(ch);
             // Strongest association first: lowest rank, then highest lfc.
@@ -460,6 +572,17 @@ public class MarkerFingerprintPanel extends BorderPane {
             return String.format("  %,d (%.1f%%)", sz, 100.0 * sz / totalCells);
         }
         return "";
+    }
+
+    /**
+     * Mark a node as a search hit: a warm tint plus a border, which reads as
+     * "found" without recolouring anything that already carries meaning (the
+     * cluster tints and channel colours are data here, not decoration).
+     */
+    private static void markHit(javafx.scene.layout.Region node) {
+        node.setStyle((node.getStyle() == null ? "" : node.getStyle())
+                + "-fx-background-color: #fff2b8; -fx-border-color: #d9a400; "
+                + "-fx-border-width: 1; -fx-border-radius: 4; -fx-background-radius: 4;");
     }
 
     /** A colored square + text "chip". */

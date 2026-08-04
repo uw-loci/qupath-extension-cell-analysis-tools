@@ -1352,6 +1352,19 @@ Top differentially expressed markers per cluster from scanpy's Wilcoxon rank-sum
 
 Use the top-scoring markers per cluster as cell-type annotation starting points. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells.
 
+#### Finding one marker
+
+A JavaFX dialog has no Ctrl-F, so both this tab and [Marker Fingerprints](#marker-fingerprints-tab) carry a **Find marker** box.
+
+Type part of a marker name and the table shows **only** the rows for it, with a count (`14 rows in 6 clusters`) so an unproductive search is obvious rather than looking like "that marker is unimportant". **Clear** restores the full table.
+
+The search matches the **marker** part of a measurement name -- the compartment and statistic words are stripped first, so:
+
+- `CD8` finds it in every compartment and every statistic: `Cell: CD8 mean`, `Nucleus: CD8: Max`, `Membrane: CD8: Std.Dev.` all match.
+- `mean`, `nucleus`, `cell`, `median` and the rest of that vocabulary match **nothing** -- they describe where or how a measurement was taken, not what it measured, so searching them would light up half the table and tell you nothing.
+
+The full ignored list is `cell`, `cytoplasm`, `membrane`, `nucleus`, `mean`, `max`, `min`, `median`, `std.dev` / `stddev` and `variance` (hover the box to see it). Matching is on whole words, so a marker that merely *contains* one of them -- `MinK`, `Maximum`, `Cellulose` -- is left alone and stays searchable.
+
 ### Marker Fingerprints tab
 
 A glanceable, holistic alternative to the numeric table and the heatmaps, with **three views** switchable by the toggle at the top (a **Markers per cluster** spinner bounds how many top markers each view considers). All three are built from the same data as the **Marker Rankings** table.
@@ -1361,6 +1374,10 @@ A glanceable, holistic alternative to the numeric table and the heatmaps, with *
 - **Channels -> clusters** -- the transpose: one card per channel (channel-colored), listing the clusters that channel is a top marker of, strongest first. An **"Other"** card gathers clusters whose top markers include a non-channel measurement.
 
 Channels are matched from each measurement name against the open image's channel names; the two channel views need one of the clustered images open (they are disabled otherwise). All cards re-color live when you edit cluster colors.
+
+**Find marker.** The box at the top of this tab **highlights** rather than filters -- the point of this tab is the overview, and hiding the non-matches would destroy the thing you are searching. Matching rows, chips or cards get an amber tint; everything else stays put, so you can see at a glance which clusters your marker is and is not defining. The readout (`7 matches in 4 cards`) counts what lit up.
+
+The highlight follows you across views: search `CD8` in **Measurements** to see the exact measurements and their fold-changes, then switch to **Channels -> clusters** to see every cluster CD8 defines, without re-typing. The matching rules are the same as on the Marker Rankings tab -- see [Finding one marker](#finding-one-marker).
 
 ### Spatial Autocorrelation tab
 
