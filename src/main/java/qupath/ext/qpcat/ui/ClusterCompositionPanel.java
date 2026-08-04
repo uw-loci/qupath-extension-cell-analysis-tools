@@ -21,6 +21,14 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
+import qupath.ext.qpcat.service.CompositionFigure;
+import qupath.fx.dialogs.Dialogs;
+
+import javax.imageio.ImageIO;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,16 +49,11 @@ import java.util.function.IntFunction;
  */
 public class ClusterCompositionPanel extends BorderPane {
 
-    private static final String NONE_LABEL = "(none)";
-
     private final int nClusters;
     private final IntFunction<Color> clusterColor;
 
-    // Ordered group labels and their per-cluster counts (row-aligned).
-    private final List<String> groups = new ArrayList<>();
-    private final Map<String, long[]> counts = new LinkedHashMap<>();
-    private final long[] clusterTotals;
-    private long grandTotal = 0;
+    /** The tally, CSV and exportable figure all live here; this class is the view. */
+    private final CompositionFigure figure;
 
     private final TableView<String[]> table = new TableView<>();
     private boolean showPercent = false;
@@ -73,9 +76,8 @@ public class ClusterCompositionPanel extends BorderPane {
                                    String groupDimensionLabel, IntFunction<Color> clusterColorFn) {
         this.nClusters = Math.max(nClusters, 0);
         this.clusterColor = clusterColorFn;
-        this.clusterTotals = new long[this.nClusters];
-
-        tally(clusterLabels, cellGroups);
+        this.figure = CompositionFigure.tally(
+                clusterLabels, this.nClusters, cellGroups, groupDimensionLabel);
 
         setPadding(new Insets(10));
         setTop(buildHeader(groupDimensionLabel));
@@ -83,37 +85,15 @@ public class ClusterCompositionPanel extends BorderPane {
     }
 
     // ---- Data ----
+    //
+    // Delegated to CompositionFigure so the numbers on screen and the numbers in
+    // an exported CSV / PNG cannot drift apart -- there is one tally, not two.
 
-    private void tally(int[] clusterLabels, String[] cellGroups) {
-        int n = clusterLabels == null ? 0 : clusterLabels.length;
-        for (int i = 0; i < n; i++) {
-            int c = clusterLabels[i];
-            if (c < 0 || c >= nClusters) {
-                continue;  // noise / out-of-range labels are not charted
-            }
-            String g = (cellGroups != null && i < cellGroups.length && cellGroups[i] != null)
-                    ? cellGroups[i] : NONE_LABEL;
-            long[] row = counts.get(g);
-            if (row == null) {
-                row = new long[nClusters];
-                counts.put(g, row);
-                groups.add(g);
-            }
-            row[c]++;
-            clusterTotals[c]++;
-            grandTotal++;
-        }
-        groups.sort(String.CASE_INSENSITIVE_ORDER);
-    }
+    private List<String> groups() { return figure.getGroups(); }
 
-    private long groupTotal(String group) {
-        long t = 0;
-        long[] row = counts.get(group);
-        if (row != null) {
-            for (long v : row) t += v;
-        }
-        return t;
-    }
+    private long[] countsFor(String group) { return figure.countsFor(group); }
+
+    private long groupTotal(String group) { return figure.groupTotal(group); }
 
     // ---- UI ----
 
@@ -121,12 +101,7 @@ public class ClusterCompositionPanel extends BorderPane {
         VBox box = new VBox(6);
         box.setPadding(new Insets(0, 0, 8, 0));
 
-        Label title = new Label(String.format(
-                "%d cells across %d %s%s, %d clusters",
-                grandTotal, groups.size(),
-                groupDimensionLabel.toLowerCase(),
-                groups.size() == 1 ? "" : "s",
-                nClusters));
+        Label title = new Label(figure.title());
         title.setStyle("-fx-font-weight: bold;");
 
         // Shared legend so every pie can hide its own (they would otherwise
@@ -149,7 +124,15 @@ public class ClusterCompositionPanel extends BorderPane {
         Button copyBtn = new Button("Copy table (TSV)");
         copyBtn.setOnAction(e -> copyTableAsTsv(groupDimensionLabel));
 
-        HBox controls = new HBox(10, new Label("Show:"), countsBtn, pctBtn, copyBtn);
+        // Same renderer the batch exporter uses, so a figure saved here and one
+        // saved by "Export figures (batch)" are the same picture.
+        Button exportBtn = new Button("Export figure + table...");
+        exportBtn.setTooltip(new Tooltip(
+                "Write the pie figure (PNG) and the composition table (CSV) to a folder. "
+                + "Identical to what \"Export figures (batch)\" produces for this result."));
+        exportBtn.setOnAction(e -> exportFigureAndTable());
+
+        HBox controls = new HBox(10, new Label("Show:"), countsBtn, pctBtn, copyBtn, exportBtn);
         controls.setAlignment(Pos.CENTER_LEFT);
 
         box.getChildren().addAll(title, legend, controls);
@@ -196,7 +179,7 @@ public class ClusterCompositionPanel extends BorderPane {
         // down to just its header row.
         final double rowH = 26;
         table.setFixedCellSize(rowH);
-        int dataRows = groups.size() + 1;                 // groups + "All" summary
+        int dataRows = groups().size() + 1;                 // groups + "All" summary
         int visibleRows = Math.min(dataRows, 10);
         double headerH = 30;
         table.setPrefHeight(headerH + rowH * visibleRows + 2);
@@ -208,7 +191,7 @@ public class ClusterCompositionPanel extends BorderPane {
 
         FlowPane pies = new FlowPane(14, 14);
         pies.setPadding(new Insets(10, 0, 0, 0));
-        for (String group : groups) {
+        for (String group : groups()) {
             pies.getChildren().add(buildPie(group));
         }
         ScrollPane piesScroll = new ScrollPane(pies);
@@ -250,8 +233,8 @@ public class ClusterCompositionPanel extends BorderPane {
 
     private void refreshTable(String groupDimensionLabel) {
         List<String[]> rows = new ArrayList<>();
-        for (String group : groups) {
-            long[] row = counts.get(group);
+        for (String group : groups()) {
+            long[] row = countsFor(group);
             long total = groupTotal(group);
             String[] disp = new String[nClusters + 2];
             disp[0] = group;
@@ -263,11 +246,11 @@ public class ClusterCompositionPanel extends BorderPane {
         }
         // Trailing "All groups" summary row.
         String[] allRow = new String[nClusters + 2];
-        allRow[0] = "All " + groupDimensionLabel.toLowerCase() + "s";
+        allRow[0] = figure.allGroupsLabel();
         for (int c = 0; c < nClusters; c++) {
-            allRow[c + 1] = formatCell(clusterTotals[c], grandTotal);
+            allRow[c + 1] = formatCell(figure.getClusterTotals()[c], figure.getGrandTotal());
         }
-        allRow[nClusters + 1] = String.valueOf(grandTotal);
+        allRow[nClusters + 1] = String.valueOf(figure.getGrandTotal());
         rows.add(allRow);
 
         table.getItems().setAll(rows);
@@ -282,7 +265,7 @@ public class ClusterCompositionPanel extends BorderPane {
     }
 
     private VBox buildPie(String group) {
-        long[] row = counts.get(group);
+        long[] row = countsFor(group);
         long total = groupTotal(group);
 
         PieChart chart = new PieChart();
@@ -333,6 +316,36 @@ public class ClusterCompositionPanel extends BorderPane {
         ClipboardContent content = new ClipboardContent();
         content.putString(sb.toString());
         Clipboard.getSystemClipboard().setContent(content);
+    }
+
+    /**
+     * Write the pie figure (PNG) and the composition table (CSV) to a folder the
+     * user picks. Rendered by {@link CompositionFigure}, not snapshotted from
+     * this scene graph, so the output does not depend on the window's current
+     * size, scroll position or theme -- and matches the batch exporter exactly.
+     */
+    private void exportFigureAndTable() {
+        var chooser = new javafx.stage.DirectoryChooser();
+        chooser.setTitle("Choose a folder for the cluster-composition export");
+        File dir = chooser.showDialog(getScene() != null ? getScene().getWindow() : null);
+        if (dir == null) return;
+
+        String base = "composition_by_" + figure.getDimension().toLowerCase();
+        Path png = dir.toPath().resolve(base + ".png");
+        Path csv = dir.toPath().resolve(base + ".csv");
+        try {
+            // Cluster colors come from the live "Cluster N" classes, so an edit
+            // in the Results window is already reflected here.
+            ImageIO.write(figure.render(2.0, CompositionFigure::defaultColorRgb),
+                    "PNG", png.toFile());
+            Files.writeString(csv, figure.toCsv(), StandardCharsets.UTF_8);
+            Dialogs.showInfoNotification("QPCAT",
+                    "Wrote " + png.getFileName() + " and " + csv.getFileName()
+                            + " to " + dir.getName());
+        } catch (Exception e) {
+            Dialogs.showErrorNotification("QPCAT",
+                    "Could not write composition export: " + e.getMessage());
+        }
     }
 
     private Color colorFor(int cluster) {

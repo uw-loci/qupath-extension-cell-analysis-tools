@@ -4,6 +4,70 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.9] -- 2026-08-04 -- export the cluster-composition figures with the rest
+
+Addresses [issue #12](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/12).
+
+The issue asked for three things. Two of them already shipped and are covered in
+the docs -- the answer there is discoverability, not a missing feature:
+
+- **Reopening the results window** -- **Extensions > QP-CAT > View Past Results...**.
+  Every clustering run is auto-saved, so any past run reopens with all its tabs,
+  including the composition pies and table.
+- **Renaming and merging clusters from the results window** -- the
+  **"Rename or merge clusters..."** button in the "Cluster colors:" bar below the
+  tabs. Opened from there it pre-selects the result you are viewing, so the
+  rename is already scoped to exactly the images that result covers.
+
+The third was a real gap: those pies and tables were the only results view with
+no export path except copying the table to the clipboard. That is fixed here.
+
+### Added
+
+- **Cluster composition is now a first-class export**, alongside the dotplot,
+  PAGA and the rest. Four new plot kinds in **Export figures (batch)**, in the
+  Groovy scripting API and in the YAML batch:
+  `composition_pie_image`, `composition_table_image`,
+  `composition_pie_annotation`, `composition_table_annotation`.
+  The two by-image kinds are on by default; the by-annotation pair is off,
+  because it only applies to a result that was clustered on annotation input and
+  ticking it by default would manufacture a failure row for everyone else.
+- **An "Export figure + table..." button** on the Composition by image /
+  Composition by annotation tabs, for exporting just the tab in front of you.
+- `FigureExportScripts.headlessKinds()` -- every plot kind a headless call can
+  actually produce (matplotlib PNGs plus composition). `matplotlibKinds()` is
+  unchanged and remains the PNG-only set.
+- In YAML, `figure_export.figures: all` now means matplotlib **plus** composition.
+  `all_matplotlib` keeps its old PNG-only meaning, so existing YAML is unaffected.
+
+### Changed
+
+- The composition figures render through `java.awt` rather than a JavaFX
+  snapshot. Three consequences, all intended: they export identically from the
+  GUI and from a headless batch; the output does not depend on the window's
+  size, scroll position or theme; and they work with no image open, because
+  everything they need (cluster labels, per-cell image ids, per-cell annotation
+  names) is already persisted with the saved result. Cluster colors still come
+  from the live `Cluster N` classes, so recoloring in the Results window changes
+  the exported figure.
+- `ClusterCompositionPanel` now reads its numbers from the shared
+  `CompositionFigure` model instead of tallying independently, so what is on
+  screen and what is in an exported CSV cannot drift apart.
+- Composition files are written **once per result**, not once per selected
+  image -- they describe the whole result, so a per-image loop would write N
+  copies of one picture. `{image}` expands to `all-images` in their filenames,
+  and the dialog's "Expected files" count accounts for it. The table kinds
+  always write `.csv` whatever raster format is ticked.
+
+### Notes
+
+- The exported CSV carries **both** counts and row percentages
+  (`Cluster 0 (n)`, `Cluster 0 (%)`, ... `Total`), one row per group plus an
+  all-groups row, so the file answers both questions the on-screen
+  Counts / Row % toggle does.
+- The four JavaFX-only plot kinds (heatmap, interactive embedding, autoencoder
+  pie, histogram) are still GUI-only; this release does not change that.
+
 ## [0.9.8] -- 2026-08-03 -- refuse runs that cannot finish, instead of crashing partway
 
 v0.9.7 fixed the specific slowdown behind [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/11).

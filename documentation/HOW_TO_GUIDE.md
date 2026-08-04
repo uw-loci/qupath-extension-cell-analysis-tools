@@ -864,9 +864,31 @@ Not every plot exists for every image / clustering result. The dialog shows this
 
 - **Saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter) -- written to disk when `Run Clustering` completes and persisted with the project. These export with or without the results dialog open.
 - **Spatial-stats plots** (Ripley K/L, Geary's C, co-occurrence pairwise / one-vs-rest) -- saved with the result when Feature A's stats were enabled AND the spatial-stats PNG-output enhancement was on. If they weren't, the rows in the plot list show as missing for that image.
+- **Cluster composition** (composition pies by image / by annotation, and the matching CSV tables) -- **always available**, because QP-CAT draws them from the saved result itself rather than reading a PNG the run happened to write. They need no open image, no results dialog, and no plotting options ticked at run time. The two "by annotation" kinds need a result that was clustered on annotation input; they are off by default for that reason. See [Exporting the composition figures](#exporting-the-composition-figures) below.
 - **Live JavaFX plots** (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) -- only exportable when the results dialog is open for that image. Default off in the checklist for v1; flip on if you have the right dialog open.
 
-For the **headless scripting API** (see [SCRIPTING.md](SCRIPTING.md#figureexportscripts)), only saved plots are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
+For the **headless scripting API** (see [SCRIPTING.md](SCRIPTING.md#figureexportscripts)), the saved matplotlib plots and the cluster-composition figures / tables are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
+
+### Exporting the composition figures
+
+The pie charts and composition table from the Results window's **Composition by image** / **Composition by annotation** tabs export like any other figure. Four plot kinds:
+
+| Slug | Writes | Notes |
+|---|---|---|
+| `composition_pie_image` | One pie per source image, plus the shared cluster legend | On by default |
+| `composition_table_image` | The per-image counts table | Always `.csv`, whatever raster format is ticked |
+| `composition_pie_annotation` | One pie per parent annotation | Off by default -- needs an annotation-input result |
+| `composition_table_annotation` | The per-annotation counts table | Always `.csv` |
+
+Three things differ from the per-image plots, all of them deliberate:
+
+- **One file per result, not per image.** Composition describes how *this result's* clusters split across every image, so exporting it once per selected image would write N copies of the same picture. The "Expected files" count in the dialog already accounts for this.
+- **`{image}` expands to `all-images`** in the filename pattern, so a composition file is never mistaken for a per-image one. With the default pattern you get `all-images_composition_pie_image.png`.
+- **The CSV carries both counts and percentages** (`Cluster 0 (n)`, `Cluster 0 (%)`, ... `Total`), one row per group plus an all-groups row -- so the file answers both questions the on-screen Counts / Row % toggle does, without you having to remember which mode was active.
+
+Cluster colors come from the live `Cluster N` classes, so recoloring clusters in the Results window changes the exported figure too.
+
+For a one-off export of just the tab you are looking at, the Composition tabs also have an **Export figure + table...** button, which writes `composition_by_image.png` and `composition_by_image.csv` to a folder you pick. It uses the same renderer as the batch path, so the output does not depend on the window's size, scroll position or theme.
 
 ### Filename patterns
 
@@ -877,7 +899,7 @@ Available substitution variables:
 | Token | Expands to | Example |
 |---|---|---|
 | `{image}` | QuPath image name (filesystem-sanitised) | `Slide_07` |
-| `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
+| `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
 | `{result_name}` | Saved-result name from `ClusteringResultManager`, sanitised | `Leiden_res1.0_2026-05-13` |
 | `{date}` | YYYY-MM-DD date of export | `2026-05-13` |
 | `{ext}` | File extension matching the format (`png` or `tif`) | `png` |
@@ -1153,7 +1175,7 @@ Distances within a cluster are meaningful (similar cells cluster together) but a
 
 ### Composition by image tab
 
-A simplified overview of how each cluster is distributed across the source images. It is one of the **first tabs** in the results window. A table lists, per image, the cell count in each cluster (short `Cn` headers = cluster _n_; the shared legend above maps each to its color) plus a row total; a **Counts / Row %** toggle switches the cells between raw counts and per-image percentages, and **Copy table (TSV)** puts the numbers on the clipboard for a spreadsheet. Below the table is one pie chart per image, colored with the same cluster palette as every other tab. This tab always appears when the result carries per-cell image references, and it survives reload via **View Past Results...**.
+A simplified overview of how each cluster is distributed across the source images. It is one of the **first tabs** in the results window. A table lists, per image, the cell count in each cluster (short `Cn` headers = cluster _n_; the shared legend above maps each to its color) plus a row total; a **Counts / Row %** toggle switches the cells between raw counts and per-image percentages, and **Copy table (TSV)** puts the numbers on the clipboard for a spreadsheet. Below the table is one pie chart per image, colored with the same cluster palette as every other tab. This tab always appears when the result carries per-cell image references, and it survives reload via **View Past Results...**. **Export figure + table...** writes the pie figure as a PNG and the table as a CSV (counts *and* percentages, one row per image plus an all-images row) to a folder you pick; the same figures are available in bulk from **Export figures (batch)** as the `composition_pie_image` / `composition_table_image` plot kinds -- see [Exporting the composition figures](#exporting-the-composition-figures).
 
 Use it as a fast sanity check on a project-wide run. Biologically meaningful clusters should span multiple images -- the same cell type appears in every slide that contains it. **If instead each cluster is confined to a single image (its pie is one solid color and the table has one non-zero cell per row), the clustering separated cells by image rather than by phenotype -- a batch effect**, not a real population structure. Common causes are per-image differences in staining or illumination (z-score / min-max normalization is computed globally, not per image, so a consistent per-image offset survives into the clustering), or clustering on a measurement that only some images carry. Remedies: enable **Batch correction (Harmony)** on the next run, drop measurements that differ systematically by image, or confirm every image was stained and imaged under matched conditions. See [Best Practices -> Reading the composition tabs](BEST_PRACTICES.md#reading-the-composition-tabs).
 
@@ -1161,7 +1183,7 @@ Use it as a fast sanity check on a project-wide run. Biologically meaningful clu
 
 ### Composition by annotation tab
 
-The same table + pie-chart view as [Composition by image](#composition-by-image-tab), but grouped by each cell's **parent annotation** -- the named or classified region the cell was inside when clustering ran. This tab appears **only when annotations were selected as the clustering input** (i.e. you had one or more annotations selected when you launched the run); a whole-image or project-wide run that clustered every detection does not show it, even if some cells happen to sit inside annotations. Cells outside any annotation are grouped under `(none)`. Use it to compare cluster makeup across the tissue regions or conditions you annotated -- e.g. tumor vs. stroma, or treated vs. control cores -- without leaving the results dialog. The flag and parent-annotation names are captured at run time and persist with the saved result.
+The same table + pie-chart view as [Composition by image](#composition-by-image-tab), but grouped by each cell's **parent annotation** -- the named or classified region the cell was inside when clustering ran. This tab appears **only when annotations were selected as the clustering input** (i.e. you had one or more annotations selected when you launched the run); a whole-image or project-wide run that clustered every detection does not show it, even if some cells happen to sit inside annotations. Cells outside any annotation are grouped under `(none)`. Use it to compare cluster makeup across the tissue regions or conditions you annotated -- e.g. tumor vs. stroma, or treated vs. control cores -- without leaving the results dialog. The flag and parent-annotation names are captured at run time and persist with the saved result. It exports the same way -- **Export figure + table...** here, or the `composition_pie_annotation` / `composition_table_annotation` plot kinds in the batch exporter (off by default, since most results are not annotation-input runs).
 
 ### Representative cells tab
 

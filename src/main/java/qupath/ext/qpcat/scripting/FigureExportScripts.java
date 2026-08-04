@@ -198,4 +198,21 @@ public final class FigureExportScripts {
         }
         return out;
     }
+
+    /**
+     * Every plot kind a headless call can actually produce: the matplotlib PNGs
+     * saved by the run, plus the Java-rendered cluster-composition figures and
+     * tables. This is the honest "all figures" set for a script -- unlike
+     * {@link #matplotlibKinds()} it does not silently drop composition.
+     */
+    public static Set<PlotKind> headlessKinds() {
+        Set<PlotKind> out = new LinkedHashSet<>();
+        for (PlotKind kind : PlotKind.values()) {
+            if (kind.getSource() == PlotKind.Source.MATPLOTLIB
+                    || kind.getSource() == PlotKind.Source.COMPUTED) {
+                out.add(kind);
+            }
+        }
+        return out;
+    }
 }

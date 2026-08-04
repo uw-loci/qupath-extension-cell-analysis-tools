@@ -443,8 +443,8 @@ After clustering, QP-CAT can generate:
 |--------|-------------|
 | **Interactive heatmap** | Cluster-by-marker mean expression with click-to-select |
 | **Interactive scatter** | UMAP/PCA/t-SNE plot colored by cluster, zoomable and pannable |
-| **Composition by image** | Per-image cluster counts + proportions (table + pie per image); a cluster confined to one image flags an image batch effect |
-| **Composition by annotation** | Per-parent-annotation cluster counts + proportions (shown only when annotations were selected as the clustering input) |
+| **Composition by image** | Per-image cluster counts + proportions (table + pie per image); a cluster confined to one image flags an image batch effect. Exportable as PNG + CSV from the tab or the batch exporter |
+| **Composition by annotation** | Per-parent-annotation cluster counts + proportions (shown only when annotations were selected as the clustering input). Exportable as PNG + CSV |
 | **Marker rankings** | Top differentially expressed markers per cluster (Wilcoxon rank-sum test) |
 | **Marker fingerprints** | At-a-glance cluster/channel explorer, 3 toggle views: per-cluster top markers (log2FC bars), per-cluster channels (Viewer-colored chips), and channels->clusters |
 | **PAGA graph** | Cluster connectivity/trajectory graph |
@@ -588,7 +588,7 @@ All items are under **Extensions > QP-CAT**:
 | Quick Cluster > Quick HDBSCAN | One-click HDBSCAN with defaults | Image + detections |
 | Manage Clusters... | Rename and merge cluster classifications | Image |
 | Export AnnData (.h5ad)... | Export data for external analysis tools | Image + detections |
-| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes saved matplotlib plots in one pass. See [HOW_TO_GUIDE chapter 18](documentation/HOW_TO_GUIDE.md#18-exporting-figures) | Project + at least one saved clustering result |
+| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [HOW_TO_GUIDE chapter 18](documentation/HOW_TO_GUIDE.md#18-exporting-figures) | Project + at least one saved clustering result |
 | Utilities > Python Console | View Python debug output | None |
 | Utilities > System Info... | Show version and environment details | Environment ready |
 | Utilities > Rebuild Environment | Delete and re-download Python environment | None |

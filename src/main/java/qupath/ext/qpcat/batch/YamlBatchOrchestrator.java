@@ -238,6 +238,9 @@ public final class YamlBatchOrchestrator {
                 runProjectPhenotyping(schema, rp, emitter);
             }
 
+            // Cluster-composition figures describe the result as a whole, so
+            // they are written once for the run, not once per image.
+            Set<String> emittedComposition = new LinkedHashSet<>();
             for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
                 processed++;
                 ImageOutcome out = new ImageOutcome(entry.getImageName());
@@ -253,7 +256,7 @@ public final class YamlBatchOrchestrator {
                     attempt++;
                     try {
                         runOneImage(schema, options, rp, entry, processed, totalImages,
-                                emitter, outcome, out, jointClustering);
+                                emitter, outcome, out, jointClustering, emittedComposition);
                         done = true;
                     } catch (Exception e) {
                         String msg = BatchYamlParser.asciiSafe(e.getMessage());
@@ -323,7 +326,8 @@ public final class YamlBatchOrchestrator {
                                      ProgressEmitter emitter,
                                      BatchOutcome outcome,
                                      ImageOutcome out,
-                                     boolean skipClustering) throws IOException {
+                                     boolean skipClustering,
+                                     Set<String> emittedComposition) throws IOException {
         if (options.isDryRun()) {
             emitDryRunDescription(schema, entry, index, total, emitter, skipClustering);
             return;
@@ -434,7 +438,8 @@ public final class YamlBatchOrchestrator {
         if (schema.getFigureExport() != null && schema.getFigureExport().isEnabled()) {
             BatchYamlSchema.FigureExportBlock fe = schema.getFigureExport();
             try {
-                ExportResult er = runFigureExport(fe, rp, entry, schema.getClustering());
+                ExportResult er = runFigureExport(fe, rp, entry, schema.getClustering(),
+                        emittedComposition);
                 outcome.addFiguresWritten(er.getFilesWritten());
                 emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                         ProgressEmitter.fields("image", entry.getImageName(),
@@ -710,7 +715,8 @@ public final class YamlBatchOrchestrator {
     private static ExportResult runFigureExport(BatchYamlSchema.FigureExportBlock fe,
                                                   ScopeResolver.ResolvedProject rp,
                                                   ProjectImageEntry<BufferedImage> entry,
-                                                  BatchYamlSchema.ClusteringBlock cc)
+                                                  BatchYamlSchema.ClusteringBlock cc,
+                                                  Set<String> emittedComposition)
             throws IOException {
         Map<String, Object> opts = new LinkedHashMap<>();
         opts.put("imageNames", List.of(entry.getImageName()));
@@ -733,9 +739,16 @@ public final class YamlBatchOrchestrator {
             opts.put("plotKinds", list);
         } else if (figs instanceof String s) {
             String norm = s.toLowerCase(Locale.ROOT);
-            if (norm.equals("all_matplotlib") || norm.equals("all")) {
+            if (norm.equals("all_matplotlib")) {
                 // Empty list -> exporter uses every matplotlib kind
                 opts.put("plotKinds", List.of());
+            } else if (norm.equals("all")) {
+                // "all" means everything a headless run can actually produce:
+                // the saved matplotlib PNGs AND the Java-rendered composition
+                // figures / tables. "all_matplotlib" stays PNG-only.
+                List<String> slugs = new ArrayList<>();
+                for (PlotKind k : FigureExportScripts.headlessKinds()) slugs.add(k.getSlug());
+                opts.put("plotKinds", slugs);
             } else if (norm.equals("none")) {
                 // No figures requested -- emit empty result
                 ExportResult er = new ExportResult();
@@ -771,7 +784,7 @@ public final class YamlBatchOrchestrator {
         // here; instead we replicate just the per-image export path using the
         // entries we already have. This keeps the v1 YAML batch independent of
         // QuPathGUI.getInstance().
-        return exportForImageHeadless(options, rp, entry);
+        return exportForImageHeadless(options, rp, entry, emittedComposition);
     }
 
     /**
@@ -782,7 +795,8 @@ public final class YamlBatchOrchestrator {
      */
     private static ExportResult exportForImageHeadless(ExportOptions options,
                                                          ScopeResolver.ResolvedProject rp,
-                                                         ProjectImageEntry<BufferedImage> entry)
+                                                         ProjectImageEntry<BufferedImage> entry,
+                                                         Set<String> emittedComposition)
             throws IOException {
         ExportResult result = new ExportResult();
         // Resolve saved result
@@ -801,6 +815,12 @@ public final class YamlBatchOrchestrator {
 
         for (PlotKind kind : kinds) {
             String savedKey = kind.getSavedPlotKey();
+            if (kind.getSource() == PlotKind.Source.COMPUTED) {
+                // Composition figures describe the result as a whole, so they are
+                // emitted once for the run rather than once per image; see
+                // exportCompositionsOnce below.
+                continue;
+            }
             if (kind.getSource() != PlotKind.Source.MATPLOTLIB || savedKey == null) {
                 if (kind.getSource() == PlotKind.Source.JAVAFX) {
                     result.addFailure(entry.getImageName() + ": " + kind.getSlug()
@@ -839,6 +859,22 @@ public final class YamlBatchOrchestrator {
                     result.incrementFilesWritten();
                 } catch (IOException e) {
                     result.addFailure(entry.getImageName() + ": copy failed (" + e.getMessage() + ")");
+                }
+            }
+        }
+
+        // Cluster-composition figures / tables. Rendered in Java from the saved
+        // result, so they work here with no image open and no matplotlib PNG;
+        // written once per run (the set is shared across the image loop).
+        for (PlotKind kind : kinds) {
+            if (kind.getSource() != PlotKind.Source.COMPUTED) continue;
+            for (OutputFormat fmt : options.getOutputFormats()) {
+                try {
+                    qupath.ext.qpcat.service.BatchFigureExporter.exportCompositionPlot(
+                            rp.getProject(), saved, kind, fmt, options, result,
+                            emittedComposition);
+                } catch (IOException e) {
+                    result.addFailure(kind.getSlug() + ": write failed (" + e.getMessage() + ")");
                 }
             }
         }

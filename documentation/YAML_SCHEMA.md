@@ -208,7 +208,7 @@ Dispatches into Feature B's `BatchFigureExporter`. Skipped entirely if omitted o
 |---|---|---|---|
 | `enabled` | boolean | `true` | Master switch. |
 | `output_dir` | string (path) | -- (required when enabled) | Directory to write figures into. Relative paths resolve against the first project. |
-| `figures` | string \| list[string] | `all_matplotlib` | Either `all_matplotlib`, `none`, or a list of plot-kind slugs. |
+| `figures` | string \| list[string] | `all_matplotlib` | Either `all_matplotlib` (the saved matplotlib PNGs), `all` (those **plus** the cluster-composition figures and tables), `none`, or a list of plot-kind slugs. |
 | `formats` | list[string] | `[png]` | One or more of `png`, `tiff`. |
 | `dpi` | int | `300` | Range `[72, 1200]`. |
 | `filename_pattern` | string | `{image}_{plot}.{ext}` | Tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain `{image}`, `{plot}`, `{ext}` (E012). |
@@ -221,6 +221,14 @@ Dispatches into Feature B's `BatchFigureExporter`. Skipped entirely if omitted o
 The slug `ripley` in `figure_export.figures` is shorthand that **expands to both** `ripley_k` and `ripley_l` at validation time. The expansion is deduplicated: `[ripley_k, ripley, ripley_l]` is equivalent to `[ripley_k, ripley_l]`.
 
 > **Note:** JavaFX-only plot kinds (`heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) cannot be exported headlessly and fail E011 at validation time. Drop them or use the interactive Export Figures dialog.
+
+### Cluster-composition figures
+
+`composition_pie_image`, `composition_table_image`, `composition_pie_annotation` and `composition_table_annotation` are rendered in Java from the saved result, so they export headlessly like the matplotlib slugs -- no open image and no plotting options needed at clustering time.
+
+They are written **once per run**, not once per image, because composition describes how the result's clusters split across all its images or annotations. Their `{image}` token expands to `all-images`, and the two table slugs always write `.csv` regardless of `formats`. The `_annotation` pair needs a result that was clustered on annotation input; ask for it on a whole-image result and you get a recorded failure, not a file.
+
+`figures: all` includes all four; `figures: all_matplotlib` does not.
 
 ## `on_error` (optional, string)
 

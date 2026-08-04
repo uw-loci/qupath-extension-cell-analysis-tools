@@ -40,6 +40,19 @@ public enum PlotKind {
     COOC_PAIRWISE("cooc_pairwise", "Co-occurrence (pairwise)", Source.MATPLOTLIB, true, "cooc_pairwise"),
     COOC_ONE_VS_REST("cooc_one_vs_rest", "Co-occurrence (one vs rest)", Source.MATPLOTLIB, true, "cooc_one_vs_rest"),
 
+    // ---- Cluster composition, rendered in Java from the saved result ----
+    // Everything these need (per-cell cluster labels, per-cell image ids/names,
+    // per-cell parent-annotation names) is persisted with the result, so they
+    // render from a reloaded result with no image open and no Python round-trip.
+    COMPOSITION_PIE_IMAGE("composition_pie_image", "Composition pies by image",
+            Source.COMPUTED, true, null),
+    COMPOSITION_TABLE_IMAGE("composition_table_image", "Composition table by image (CSV)",
+            Source.COMPUTED, true, null),
+    COMPOSITION_PIE_ANNOTATION("composition_pie_annotation", "Composition pies by annotation",
+            Source.COMPUTED, false, null),
+    COMPOSITION_TABLE_ANNOTATION("composition_table_annotation",
+            "Composition table by annotation (CSV)", Source.COMPUTED, false, null),
+
     // ---- JavaFX scene-graph plots (only exportable while results dialog open) ----
     HEATMAP("heatmap", "Cluster heatmap", Source.JAVAFX, false, null),
     EMBEDDING_INTERACTIVE("embedding_interactive", "Embedding scatter (interactive)", Source.JAVAFX, false, null),
@@ -50,6 +63,12 @@ public enum PlotKind {
     public enum Source {
         /** PNG persisted on disk under {@code <project>/qpcat/cluster_results/<safeName>_plots/}. */
         MATPLOTLIB,
+        /**
+         * Rendered in Java (AWT, FX-free) straight from the saved result, so it
+         * is available headlessly and from a reloaded result -- no matplotlib PNG
+         * on disk and no open results window required.
+         */
+        COMPUTED,
         /** JavaFX scene-graph node available only while the results dialog is open. */
         JAVAFX,
         /** Text-only -- not currently renderable; reserved for v1.1 (e.g. Moran's I correlogram). */
@@ -79,7 +98,7 @@ public enum PlotKind {
     /**
      * @return the key under which this plot's PNG path is stored on a
      *         {@code SavedClusteringResult.plotPaths} map; {@code null}
-     *         for plots that don't persist to disk (JAVAFX, TEXT_ONLY).
+     *         for plots that don't persist to disk (COMPUTED, JAVAFX, TEXT_ONLY).
      */
     public String getSavedPlotKey() { return savedPlotKey; }
 

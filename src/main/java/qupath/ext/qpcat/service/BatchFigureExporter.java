@@ -27,8 +27,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.stream.Stream;
 
@@ -44,8 +46,11 @@ import java.util.stream.Stream;
  * from any thread. The dialog wraps it in a daemon thread; Feature C's
  * YAML batch invokes it directly under {@code QuPath script}.
  * <p>
- * <strong>Headless plot scope.</strong> Only matplotlib-backed plots
- * are exportable from a headless call -- JavaFX plots
+ * <strong>Headless plot scope.</strong> Matplotlib-backed plots
+ * ({@link PlotKind.Source#MATPLOTLIB}, copied from the run's saved PNGs) and
+ * the Java-rendered cluster-composition figures and tables
+ * ({@link PlotKind.Source#COMPUTED}, drawn by {@link CompositionFigure} from
+ * the saved result) are both exportable from a headless call. JavaFX plots
  * ({@link PlotKind.Source#JAVAFX}) require an interactive snapshot path
  * which the GUI dialog provides as a separate code path. Plot kinds the
  * exporter cannot fulfil are recorded as failures and otherwise skipped.
@@ -107,6 +112,10 @@ public final class BatchFigureExporter {
         int totalWork = entries.size() * options.getPlotKinds().size() * options.getOutputFormats().size();
         int processed = 0;
 
+        // Composition figures are result-level; this records which have already
+        // been written so the per-image loop does not repeat them.
+        Set<String> emittedComposition = new LinkedHashSet<>();
+
         for (ProjectImageEntry<?> entry : entries) {
             if (isCancelled(progressCallback, processed, totalWork, "Scanning " + entry.getImageName())) {
                 result.setCancelled(true);
@@ -126,7 +135,8 @@ public final class BatchFigureExporter {
                         result.setCancelled(true);
                         return result;
                     }
-                    exportSingle(project, entry, saved, plot, fmt, options, result);
+                    exportSingle(project, entry, saved, plot, fmt, options, result,
+                            emittedComposition);
                 }
             }
         }
@@ -244,8 +254,25 @@ public final class BatchFigureExporter {
     private static void exportSingle(Project<?> project, ProjectImageEntry<?> entry,
                                       SavedClusteringResult saved,
                                       PlotKind plot, OutputFormat fmt,
-                                      ExportOptions options, ExportResult result) {
+                                      ExportOptions options, ExportResult result,
+                                      Set<String> emittedComposition) {
         String imageName = entry.getImageName();
+
+        // Composition figures describe the WHOLE result (how its clusters split
+        // across every image / annotation), not one image, so they are emitted
+        // once per result rather than once per image in the loop.
+        if (plot.getSource() == PlotKind.Source.COMPUTED) {
+            try {
+                exportCompositionPlot(project, saved, plot, fmt, options, result,
+                        emittedComposition);
+            } catch (IOException ioe) {
+                result.addFailure(plot.getSlug() + ": write failed (" + ioe.getMessage() + ")");
+                logger.warn("Composition export failed for {}: {}",
+                        plot.getSlug(), ioe.getMessage());
+            }
+            return;
+        }
+
         String filename = FilenameSanitizer.expand(
                 options.getFilenamePattern(),
                 imageName,
@@ -263,6 +290,7 @@ public final class BatchFigureExporter {
 
             switch (plot.getSource()) {
                 case MATPLOTLIB -> exportMatplotlibPlot(project, saved, plot, fmt, target, result);
+                case COMPUTED -> { /* handled above -- result-level, not per-image */ }
                 case JAVAFX -> {
                     if (!options.isSkipMissingPlots()) {
                         result.addFailure(imageName + " - " + plot.getSlug()
@@ -281,6 +309,148 @@ public final class BatchFigureExporter {
             logger.warn("Figure export failed for {} - {}: {}",
                     imageName, plot.getSlug(), ioe.getMessage());
         }
+    }
+
+    /**
+     * Render and write one cluster-composition output (pie figure or CSV table)
+     * for the saved result as a whole.
+     *
+     * <p>Composition is a property of the result, not of any one image, so the
+     * per-image loop would otherwise write N identical files. The
+     * {@code emittedComposition} set makes the first write win and the rest
+     * no-ops -- silently, because a repeat is expected bookkeeping, not a
+     * failure the user needs to read about N-1 times.</p>
+     *
+     * <p>Table kinds always write {@code .csv} regardless of the requested
+     * raster format, and are likewise emitted once even when both PNG and TIFF
+     * are ticked.</p>
+     *
+     * <p>Public so the YAML batch orchestrator, which cannot call
+     * {@link #exportProject} (it avoids {@code QuPathGUI.getInstance()}), reuses
+     * this exact code rather than reimplementing it.</p>
+     *
+     * @param emittedComposition run-scoped set of already-written composition
+     *                           keys; pass the same instance for every image of
+     *                           a run. May be null to disable deduplication.
+     */
+    public static void exportCompositionPlot(Project<?> project, SavedClusteringResult saved,
+                                               PlotKind plot, OutputFormat fmt,
+                                               ExportOptions options, ExportResult result,
+                                               Set<String> emittedComposition)
+            throws IOException {
+        boolean table = plot == PlotKind.COMPOSITION_TABLE_IMAGE
+                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION;
+        String ext = table ? "csv" : fmt.getExtension();
+
+        String resultName = saved != null ? saved.getName() : options.getResultName();
+        String filename = FilenameSanitizer.expand(
+                options.getFilenamePattern(),
+                // {image} is meaningless for a result-level figure; name the
+                // scope instead so the file is not mistaken for a per-image one.
+                "all-images",
+                plot.getSlug(),
+                resultName,
+                ext);
+        Path target = options.getOutputDir().resolve(filename);
+
+        String dedupeKey = String.valueOf(resultName) + '/' + plot.getSlug() + '.' + ext;
+        if (emittedComposition != null && !emittedComposition.add(dedupeKey)) {
+            return;  // already written for this result in this run
+        }
+
+        if (saved == null) {
+            result.addFailure(plot.getSlug() + ": no saved clustering result to compose from");
+            return;
+        }
+        if (!options.isOverwriteExisting() && Files.exists(target)) {
+            result.addFailure(plot.getSlug() + ": file exists ("
+                    + target.getFileName() + "); enable overwrite to replace");
+            return;
+        }
+
+        CompositionFigure figure = buildComposition(project, saved, plot, result);
+        if (figure == null) return;   // reason already recorded
+
+        if (table) {
+            Files.writeString(target, figure.toCsv(), java.nio.charset.StandardCharsets.UTF_8);
+        } else {
+            BufferedImage img = figure.render(
+                    CompositionFigure.scaleForDpi(options.getDpi()), null);
+            if (fmt == OutputFormat.PNG) {
+                if (!ImageIO.write(img, "PNG", target.toFile())) {
+                    throw new IOException("No ImageIO writer for PNG");
+                }
+            } else if (!writeWithTiffWriter(img, target)) {
+                if (!ImageIO.write(img, fmt.getImageIoFormatName(), target.toFile())) {
+                    throw new IOException("No ImageIO writer for format " + fmt.name());
+                }
+            }
+        }
+        result.incrementFilesWritten();
+        result.addBytes(Files.size(target));
+        logger.debug("Wrote composition {} ({} bytes)", target, Files.size(target));
+    }
+
+    /**
+     * Build the composition tally for one plot kind from a saved result, or
+     * {@code null} (with a recorded reason) when the saved result lacks the
+     * per-cell references the tally needs.
+     */
+    private static CompositionFigure buildComposition(Project<?> project,
+                                                       SavedClusteringResult saved,
+                                                       PlotKind plot, ExportResult result) {
+        var clustering = saved.toClusteringResult();
+        int[] labels = clustering.getClusterLabels();
+        if (labels == null || labels.length == 0) {
+            result.addFailure(plot.getSlug() + ": saved result has no cluster labels");
+            return null;
+        }
+
+        boolean byAnnotation = plot == PlotKind.COMPOSITION_PIE_ANNOTATION
+                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION;
+        String[] groups;
+        String dimension;
+        if (byAnnotation) {
+            if (!clustering.hasCellParentNames()) {
+                result.addFailure(plot.getSlug()
+                        + ": this result has no per-cell annotation names (it was not run on "
+                        + "annotation input)");
+                return null;
+            }
+            groups = clustering.getCellParentNames();
+            dimension = "Annotation";
+        } else {
+            if (!clustering.hasCellRefs()) {
+                result.addFailure(plot.getSlug()
+                        + ": this result has no per-cell image references (saved by an older version)");
+                return null;
+            }
+            groups = imageGroupsFor(project, clustering);
+            dimension = "Image";
+        }
+        return CompositionFigure.tally(labels, clustering.getNClusters(), groups, dimension);
+    }
+
+    /** Per-cell source-image names, resolving any missing name by project id. */
+    private static String[] imageGroupsFor(Project<?> project,
+                                            qupath.ext.qpcat.model.ClusteringResult clustering) {
+        Map<String, String> idToName = new LinkedHashMap<>();
+        if (project != null) {
+            for (ProjectImageEntry<?> e : project.getImageList()) {
+                idToName.put(e.getID(), e.getImageName());
+            }
+        }
+        var refs = clustering.getCellRefs();
+        String[] out = new String[refs.length];
+        for (int i = 0; i < refs.length; i++) {
+            var r = refs[i];
+            String name = r != null ? r.getImageName() : null;
+            if ((name == null || name.isBlank()) && r != null) {
+                name = idToName.get(r.getImageId());
+            }
+            out[i] = (name == null || name.isBlank()) ? "(unknown image)" : name;
+        }
+        return out;
     }
 
     private static void exportMatplotlibPlot(Project<?> project, SavedClusteringResult saved,

@@ -290,6 +290,18 @@ public class BatchFigureExportDialog {
         Label matHeader = new Label("Saved plots (matplotlib, available when clustering saved):");
         matHeader.setStyle("-fx-font-weight: bold;");
         matBox.getChildren().add(matHeader);
+        VBox compBox = new VBox(4);
+        Label compHeader = new Label(
+                "Cluster composition (rendered from the saved result -- always available):");
+        compHeader.setStyle("-fx-font-weight: bold;");
+        compBox.getChildren().add(compHeader);
+        Label compNote = new Label(
+                "One figure / table per result rather than per image: these describe how the "
+                        + "result's clusters split across images or annotations. Table kinds "
+                        + "always write .csv regardless of the raster format below.");
+        compNote.setWrapText(true);
+        compNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
+        compBox.getChildren().add(compNote);
         VBox fxBox = new VBox(4);
         Label fxHeader = new Label(
                 "Interactive plots (JavaFX, GUI-only -- not exportable in v1):");
@@ -314,6 +326,12 @@ public class BatchFigureExportDialog {
                 cb.setTooltip(tip(
                         "JavaFX-rendered plot. Not exportable in v1 -- skipped at export time. "
                                 + "Planned for v1.1 via a snapshot of the open Clustering Results dialog."));
+            } else if (plot.getSource() == PlotKind.Source.COMPUTED) {
+                cb.setTooltip(tip(
+                        "Cluster composition, drawn from the saved result itself -- the same "
+                                + "figure as the Composition tabs of the Results window. Written "
+                                + "once per result, not once per image. The 'by annotation' kinds "
+                                + "need a result that was clustered on annotation input."));
             } else {
                 cb.setTooltip(tip(
                         "Matplotlib PNG persisted by the clustering run. "
@@ -322,6 +340,7 @@ public class BatchFigureExportDialog {
             plotCheckboxes.put(plot, cb);
             switch (plot.getSource()) {
                 case MATPLOTLIB -> matBox.getChildren().add(cb);
+                case COMPUTED -> compBox.getChildren().add(cb);
                 case JAVAFX -> fxBox.getChildren().add(cb);
                 case TEXT_ONLY -> { /* skip */ }
             }
@@ -347,7 +366,7 @@ public class BatchFigureExportDialog {
         HBox actions = new HBox(6, selectAllBtn, deselectAllBtn, expectedFilesLabel);
         actions.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(8, matBox, fxBox, actions);
+        VBox box = new VBox(8, matBox, compBox, fxBox, actions);
 
         TitledPane tp = new TitledPane("Plots to export", box);
         tp.setCollapsible(true);
@@ -506,9 +525,28 @@ public class BatchFigureExportDialog {
 
     private void updateExpectedFiles() {
         int images = countSelectedImages();
-        long plots = plotCheckboxes.values().stream().filter(CheckBox::isSelected).count();
         long formats = (pngCheck.isSelected() ? 1 : 0) + (tiffCheck.isSelected() ? 1 : 0);
-        long expected = images * plots * formats;
+
+        long perImagePlots = 0;
+        long compositionFigures = 0;
+        long compositionTables = 0;
+        for (Map.Entry<PlotKind, CheckBox> e : plotCheckboxes.entrySet()) {
+            if (!e.getValue().isSelected()) continue;
+            PlotKind k = e.getKey();
+            if (k.getSource() != PlotKind.Source.COMPUTED) {
+                perImagePlots++;
+            } else if (k == PlotKind.COMPOSITION_TABLE_IMAGE
+                    || k == PlotKind.COMPOSITION_TABLE_ANNOTATION) {
+                compositionTables++;   // one .csv each, regardless of format
+            } else {
+                compositionFigures++;  // one per format, but once per result
+            }
+        }
+        // Composition is a property of the result, so it is written once for the
+        // run however many images are selected.
+        long expected = images * perImagePlots * formats
+                + compositionFigures * formats
+                + compositionTables;
         expectedFilesLabel.setText("Expected files: " + expected);
     }
 

@@ -74,6 +74,31 @@ class PlotKindTest {
     }
 
     @Test
+    void compositionKindsArePresentAndHeadlessRenderable() {
+        // Issue #12: the composition pies + table are exportable alongside the
+        // other figures. They carry no saved-plot key because nothing renders
+        // them at clustering time -- they are drawn from the saved result.
+        for (String slug : new String[]{"composition_pie_image", "composition_table_image",
+                "composition_pie_annotation", "composition_table_annotation"}) {
+            PlotKind kind = PlotKind.fromSlug(slug);
+            assertThat(kind).as("missing composition slug %s", slug).isNotNull();
+            assertThat(kind.getSource()).isEqualTo(PlotKind.Source.COMPUTED);
+            assertThat(kind.getSavedPlotKey()).isNull();
+        }
+    }
+
+    @Test
+    void compositionByImageIsOnByDefaultAndByAnnotationIsNot() {
+        // By-image applies to every result; by-annotation only to runs whose
+        // input was annotations, so ticking it by default would manufacture a
+        // failure row for most users.
+        assertThat(PlotKind.COMPOSITION_PIE_IMAGE.isDefaultEnabled()).isTrue();
+        assertThat(PlotKind.COMPOSITION_TABLE_IMAGE.isDefaultEnabled()).isTrue();
+        assertThat(PlotKind.COMPOSITION_PIE_ANNOTATION.isDefaultEnabled()).isFalse();
+        assertThat(PlotKind.COMPOSITION_TABLE_ANNOTATION.isDefaultEnabled()).isFalse();
+    }
+
+    @Test
     void featureASpatialStatsKindsArePresent() {
         // Phase 2 contract: the Feature A spatial-stats persisted PNGs are
         // exportable via dedicated PlotKind members.
