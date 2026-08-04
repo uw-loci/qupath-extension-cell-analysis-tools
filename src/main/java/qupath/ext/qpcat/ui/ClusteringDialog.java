@@ -23,7 +23,7 @@ import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
-import qupath.ext.qpcat.service.MarkerNameTokens;
+import qupath.ext.qpcat.service.MeasurementSearch;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
@@ -4193,11 +4193,10 @@ public class ClusteringDialog {
         field.setPromptText("Find a marker (e.g. CD8)");
         field.setPrefColumnCount(18);
         field.setTooltip(Tooltips.of(
-                "Show only the rows for one marker.\n\n"
-                + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
-                + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"
-                + "Ignored words: "
-                + String.join(", ", MarkerNameTokens.excludedTokensSorted())));
+                "Show only the rows whose measurement name contains this text. Matching is "
+                + "on the whole name as shown in the Marker column, so you can paste one "
+                + "straight off the screen -- for example \"Membrane: 18_Ki-67\", or just "
+                + "\"Ki-67\" to catch every compartment and statistic at once."));
 
         Button clear = new Button("Clear");
         clear.setOnAction(e -> field.clear());
@@ -4243,7 +4242,8 @@ public class ClusteringDialog {
      * <p>Filtered rather than highlighted: this is a monospace dump that can run
      * to hundreds of lines, and a highlight you have to scroll to find is not an
      * answer. The match is on the marker part of each measurement name, so
-     * "mean" and "nucleus" match nothing -- see {@link MarkerNameTokens}.</p>
+     * matching is a plain substring test on the whole name -- see
+     * {@link MeasurementSearch}.</p>
      */
     private static RankingsText formatMarkerRankings(ClusteringResult result, String query) {
         String json = result.getMarkerRankingsJson();
@@ -4267,7 +4267,7 @@ public class ClusteringDialog {
                 int before = rows;
                 for (Map<String, Object> marker : cluster.getValue()) {
                     String name = String.valueOf(marker.get("name"));
-                    if (!MarkerNameTokens.matches(name, query)) continue;
+                    if (!MeasurementSearch.matches(name, query)) continue;
                     sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
                             clusterNameForKey(result, cluster.getKey()),
                             name,

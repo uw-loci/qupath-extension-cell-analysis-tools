@@ -4,9 +4,37 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.9.10] -- 2026-08-04 -- tooltips that wrap
+## [0.9.10] -- 2026-08-04 -- searching for a marker actually finds it, and tooltips wrap
 
 ### Fixed
+
+- **"Find marker" reported no matches for a name you could see on screen**
+  ([#13](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/13)).
+  Typing `Membrane: 18_Ki-67` -- a real field in the result being searched --
+  found nothing. So did `18_Ki-67`. Only `Ki-67` or `18 Ki-67` (with a space
+  instead of the underscore) worked, neither of which is what anyone types.
+
+  The search reduced the *measurement name* to its marker, stripping compartment
+  and statistic words, but matched the *raw query* against that reduction. The
+  needle never got the same treatment as the haystack, so two things broke
+  independently: a query containing `Membrane:` could never match, and the
+  underscore was a separator in the reduction, so `18_Ki-67` missed even with no
+  filtered word in the query.
+
+  Matching is now a plain case-insensitive substring test on the whole
+  measurement name -- Ctrl-F semantics. Paste a field name off the screen and it
+  finds it.
+
+  That reduction existed for the UI originally sketched, where a marker would be
+  **picked** from a generated list and compartment words would have been noise in
+  it. The feature shipped as free-text search instead, and the same logic then
+  fought the user. `MarkerNameTokens` is gone, replaced by `MeasurementSearch`.
+
+  **Deliberate consequence:** searching `Mean` now matches every mean
+  measurement, and `Membrane` every membrane one. For a free-text box that is
+  correct -- you typed it, and the match count says how many. Search the marker
+  alone to get it across all compartments.
+
 
 - **Long tooltips stretched across the screen instead of wrapping.** A JavaFX
   `Tooltip` lays its text out on one line however long that is, and QP-CAT's

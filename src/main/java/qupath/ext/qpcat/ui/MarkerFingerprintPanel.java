@@ -21,7 +21,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
-import qupath.ext.qpcat.service.MarkerNameTokens;
+import qupath.ext.qpcat.service.MeasurementSearch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,9 +85,9 @@ public class MarkerFingerprintPanel extends BorderPane {
     private int topK = 5;
     private View view = View.MEASUREMENTS;
 
-    // Live marker search. Matched against the marker part of a measurement name
-    // (compartment / statistic words stripped by MarkerNameTokens), so "mean"
-    // deliberately matches nothing while "CD8" matches every compartment.
+    // Live marker search: a plain substring test on the whole measurement name
+    // (Ctrl-F semantics), so a name pasted off the screen matches. See
+    // MeasurementSearch for why it is NOT matched against a reduced form.
     private String query = "";
     private final Label matchLabel = new Label();
     private int matchCount = 0;
@@ -245,16 +245,11 @@ public class MarkerFingerprintPanel extends BorderPane {
         field.setPromptText("Highlight a marker (e.g. CD8)");
         field.setPrefColumnCount(18);
 
-        List<String> vocabulary = markerVocabulary();
-        String vocabText = vocabulary.isEmpty() ? "(none found)"
-                : String.join(", ", vocabulary.subList(0, Math.min(40, vocabulary.size())))
-                  + (vocabulary.size() > 40 ? ", ..." : "");
         field.setTooltip(Tooltips.of(
-                "Type part of a marker name to highlight it everywhere in this tab.\n\n"
-                + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
-                + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"
-                + "Ignored words: " + String.join(", ", MarkerNameTokens.excludedTokensSorted())
-                + "\n\nMarkers in this result: " + vocabText));
+                "Type any part of a measurement name to highlight it here. Matching is "
+                + "on the whole name as shown on the cards, so you can paste one straight "
+                + "off the screen -- for example \"Membrane: 18_Ki-67\", or just "
+                + "\"Ki-67\" to catch every compartment and statistic at once."));
 
         Button clear = new Button("Clear");
         clear.setOnAction(e -> field.clear());
@@ -273,22 +268,9 @@ public class MarkerFingerprintPanel extends BorderPane {
         return bar;
     }
 
-    /** Distinct marker names across every ranked measurement in this result. */
-    private List<String> markerVocabulary() {
-        Set<String> names = new LinkedHashSet<>();
-        for (List<Map<String, Object>> markers : rankings.values()) {
-            if (markers == null) continue;
-            for (Map<String, Object> m : markers) {
-                Object n = m.get("name");
-                if (n != null) names.add(String.valueOf(n));
-            }
-        }
-        return MarkerNameTokens.distinctMarkers(names);
-    }
-
     /** True when a measurement/channel name should be highlighted right now. */
     private boolean isHit(String name) {
-        return !query.isBlank() && MarkerNameTokens.matches(name, query);
+        return !query.isBlank() && MeasurementSearch.matches(name, query);
     }
 
     /** Report what the current search found, so a typo is obvious immediately. */
