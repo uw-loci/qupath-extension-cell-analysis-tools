@@ -175,7 +175,7 @@ public class EmbeddingScatterPanel extends VBox {
         helpLabel.setMaxWidth(Double.MAX_VALUE);
 
         canvas = new Canvas(DEFAULT_PLOT_W, DEFAULT_PLOT_H);
-        tooltip = new Tooltip();
+        tooltip = Tooltips.of();
         tooltip.setShowDelay(Duration.millis(200));
         Tooltip.install(canvas, tooltip);
 

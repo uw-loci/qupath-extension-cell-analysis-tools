@@ -106,7 +106,7 @@ public class EmbeddingDialog {
     private HBox createNormalizationSection() {
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(Normalization.values()));
         normalizationCombo.setValue(Normalization.ZSCORE);
-        normalizationCombo.setTooltip(new Tooltip(
+        normalizationCombo.setTooltip(Tooltips.of(
                 "How to scale marker values before computing the embedding:\n"
                 + "  Z-score - zero mean, unit variance (recommended)\n"
                 + "  Min-Max - scale to [0,1] range\n"
@@ -126,7 +126,7 @@ public class EmbeddingDialog {
         }
         embeddingCombo = new ComboBox<>(FXCollections.observableArrayList(methods));
         embeddingCombo.setValue(EmbeddingMethod.UMAP);
-        embeddingCombo.setTooltip(new Tooltip(
+        embeddingCombo.setTooltip(Tooltips.of(
                 "Dimensionality reduction method:\n"
                 + "  UMAP - preserves local + global structure (McInnes et al. 2018)\n"
                 + "  t-SNE - preserves local neighborhoods (van der Maaten & Hinton 2008)\n"
@@ -137,7 +137,7 @@ public class EmbeddingDialog {
         umapNeighborsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(umapNeighborsSpinner);
         umapNeighborsSpinner.setPrefWidth(80);
-        umapNeighborsSpinner.setTooltip(new Tooltip(
+        umapNeighborsSpinner.setTooltip(Tooltips.of(
                 "Number of nearest neighbors for UMAP.\n"
                 + "Range: 2-200. Default: 15.\n"
                 + "Smaller values emphasize local structure (tight clusters),\n"
@@ -148,7 +148,7 @@ public class EmbeddingDialog {
         umapMinDistSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(umapMinDistSpinner);
         umapMinDistSpinner.setPrefWidth(80);
-        umapMinDistSpinner.setTooltip(new Tooltip(
+        umapMinDistSpinner.setTooltip(Tooltips.of(
                 "Minimum distance between points in UMAP output.\n"
                 + "Range: 0.0-1.0. Default: 0.1.\n"
                 + "Smaller values create tighter, more separated clusters,\n"
@@ -160,7 +160,7 @@ public class EmbeddingDialog {
         // (e.g. "UMAP_k15" -> UMAP_k151/UMAP_k152) instead of overwriting.
         embeddingNameField = new TextField("UMAP");
         embeddingNameField.setPrefWidth(140);
-        embeddingNameField.setTooltip(new Tooltip(
+        embeddingNameField.setTooltip(Tooltips.of(
                 "Prefix for the coordinate measurements (NAME1 / NAME2).\n"
                 + "Reusing a name OVERWRITES those columns; give a unique name to keep\n"
                 + "two embeddings (e.g. different settings) side by side."));

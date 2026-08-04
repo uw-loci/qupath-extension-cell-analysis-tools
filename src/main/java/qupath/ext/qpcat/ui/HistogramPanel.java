@@ -62,7 +62,7 @@ public class HistogramPanel extends VBox {
         methodCombo.getItems().addAll("Manual", "Triangle", "GMM (Gaussian)", "Gamma");
         methodCombo.setValue("Manual");
         methodCombo.setOnAction(e -> applySelectedMethod());
-        methodCombo.setTooltip(new Tooltip(
+        methodCombo.setTooltip(Tooltips.of(
                 "Auto-thresholding method:\n"
                 + "  Manual - set threshold by hand or drag the line\n"
                 + "  Triangle - geometric method for skewed distributions\n"
@@ -79,7 +79,7 @@ public class HistogramPanel extends VBox {
         thresholdSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(thresholdSpinner);
         thresholdSpinner.setPrefWidth(90);
-        thresholdSpinner.setTooltip(new Tooltip(
+        thresholdSpinner.setTooltip(Tooltips.of(
                 "Current gate threshold value for this marker.\n"
                 + "The range adapts to the marker's data (and the normalization):\n"
                 + "  Min-Max/Percentile: 0.0-1.0 (typical gate: 0.3-0.7)\n"

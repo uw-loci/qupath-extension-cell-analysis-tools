@@ -58,7 +58,7 @@ public class MeasurementSelectionPane extends VBox {
                     @Override public String toString(Item m) { return m == null ? "" : m.name; }
                     @Override public Item fromString(String s) { return null; }
                 }));
-        list.setTooltip(new Tooltip(
+        list.setTooltip(Tooltips.of(
                 "Tick the measurements to use. Use the filter above to narrow the list;\n"
                 + "checked items stay checked even when filtered out."));
 
@@ -69,23 +69,23 @@ public class MeasurementSelectionPane extends VBox {
                     ? m -> true
                     : m -> m.name.toLowerCase().contains(q));
         });
-        filterField.setTooltip(new Tooltip(
+        filterField.setTooltip(Tooltips.of(
                 "Type to show only matching measurements. The buttons below act on the\n"
                 + "shown rows only; hidden rows keep their checks."));
 
         Button selectAll = new Button("Select All");
         selectAll.setOnAction(e -> setVisibleChecked(true));
-        selectAll.setTooltip(new Tooltip("Check all currently shown measurements."));
+        selectAll.setTooltip(Tooltips.of("Check all currently shown measurements."));
         Button selectNone = new Button("Select None");
         selectNone.setOnAction(e -> setVisibleChecked(false));
-        selectNone.setTooltip(new Tooltip("Uncheck all currently shown measurements."));
+        selectNone.setTooltip(Tooltips.of("Uncheck all currently shown measurements."));
         Button selectMean = new Button("Select 'Mean' only");
         selectMean.setOnAction(e -> {
             for (Item m : filtered) {
                 m.selected.set(m.name.contains("Mean"));
             }
         });
-        selectMean.setTooltip(new Tooltip(
+        selectMean.setTooltip(Tooltips.of(
                 "Among the currently shown measurements, check those containing 'Mean'\n"
                 + "and uncheck the rest. Hidden rows keep their checks."));
 

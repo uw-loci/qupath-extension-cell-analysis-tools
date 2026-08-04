@@ -253,7 +253,7 @@ public class ClusteringDialog {
     private HBox createNormalizationSection() {
         normalizationCombo = new ComboBox<>(FXCollections.observableArrayList(Normalization.values()));
         normalizationCombo.setValue(Normalization.ZSCORE);
-        normalizationCombo.setTooltip(new Tooltip(
+        normalizationCombo.setTooltip(Tooltips.of(
                 "How to scale marker values before clustering:\n"
                 + "  Z-score - zero mean, unit variance (recommended)\n"
                 + "  Min-Max - scale to [0,1] range\n"
@@ -268,7 +268,7 @@ public class ClusteringDialog {
     private TitledPane createEmbeddingSection() {
         embeddingCombo = new ComboBox<>(FXCollections.observableArrayList(EmbeddingMethod.values()));
         embeddingCombo.setValue(EmbeddingMethod.UMAP);
-        embeddingCombo.setTooltip(new Tooltip(
+        embeddingCombo.setTooltip(Tooltips.of(
                 "Dimensionality reduction for 2D visualization:\n"
                 + "  UMAP - preserves local + global structure (McInnes et al. 2018)\n"
                 + "  t-SNE - preserves local neighborhoods (van der Maaten & Hinton 2008)\n"
@@ -280,7 +280,7 @@ public class ClusteringDialog {
         umapNeighborsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(umapNeighborsSpinner);
         umapNeighborsSpinner.setPrefWidth(80);
-        umapNeighborsSpinner.setTooltip(new Tooltip(
+        umapNeighborsSpinner.setTooltip(Tooltips.of(
                 "Number of nearest neighbors for UMAP.\n"
                 + "Range: 2-200. Default: 15.\n"
                 + "Smaller values emphasize local structure (tight clusters),\n"
@@ -291,7 +291,7 @@ public class ClusteringDialog {
         umapMinDistSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(umapMinDistSpinner);
         umapMinDistSpinner.setPrefWidth(80);
-        umapMinDistSpinner.setTooltip(new Tooltip(
+        umapMinDistSpinner.setTooltip(Tooltips.of(
                 "Minimum distance between points in UMAP output.\n"
                 + "Range: 0.0-1.0. Default: 0.1.\n"
                 + "Smaller values create tighter, more separated clusters,\n"
@@ -306,7 +306,7 @@ public class ClusteringDialog {
         tsnePerplexitySpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(tsnePerplexitySpinner);
         tsnePerplexitySpinner.setPrefWidth(90);
-        tsnePerplexitySpinner.setTooltip(new Tooltip(
+        tsnePerplexitySpinner.setTooltip(Tooltips.of(
                 "Perplexity (typical: 5-50). The effective number of nearest neighbors\n"
                 + "for each point. Scale up slightly for larger datasets; it must always\n"
                 + "be smaller than the number of cells (it is clamped automatically if not).\n"
@@ -317,7 +317,7 @@ public class ClusteringDialog {
         tsneLearningRateSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(tsneLearningRateSpinner);
         tsneLearningRateSpinner.setPrefWidth(90);
-        tsneLearningRateSpinner.setTooltip(new Tooltip(
+        tsneLearningRateSpinner.setTooltip(Tooltips.of(
                 "Learning rate (typical: 100-1000). The gradient-descent step size.\n"
                 + "Too low (<10) bunches clusters in the center; too high disperses points\n"
                 + "randomly. scikit-learn's classic default is 200."));
@@ -326,7 +326,7 @@ public class ClusteringDialog {
         tsneIterationsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(tsneIterationsSpinner);
         tsneIterationsSpinner.setPrefWidth(90);
-        tsneIterationsSpinner.setTooltip(new Tooltip(
+        tsneIterationsSpinner.setTooltip(Tooltips.of(
                 "Iterations (typical: 1,000-5,000). The maximum number of optimization\n"
                 + "steps. Many runs converge and stop improving before this cap."));
 
@@ -334,7 +334,7 @@ public class ClusteringDialog {
         tsneEarlyExaggerationSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(tsneEarlyExaggerationSpinner);
         tsneEarlyExaggerationSpinner.setPrefWidth(90);
-        tsneEarlyExaggerationSpinner.setTooltip(new Tooltip(
+        tsneEarlyExaggerationSpinner.setTooltip(Tooltips.of(
                 "Early exaggeration (typical: 4-12). How tightly groups are packed during\n"
                 + "the initial optimization phase. Higher values push well-separated clusters\n"
                 + "further apart; lower values tend to preserve more accurate embeddings."));
@@ -343,7 +343,7 @@ public class ClusteringDialog {
         umapMetricCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "euclidean", "manhattan", "cosine", "correlation", "chebyshev"));
         umapMetricCombo.setValue("euclidean");
-        umapMetricCombo.setTooltip(new Tooltip(
+        umapMetricCombo.setTooltip(Tooltips.of(
                 "Distance metric UMAP uses to find neighbors. 'euclidean' is the default;\n"
                 + "'cosine' / 'correlation' compare profile shape rather than magnitude."));
 
@@ -352,7 +352,7 @@ public class ClusteringDialog {
         embeddingSeedSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(embeddingSeedSpinner);
         embeddingSeedSpinner.setPrefWidth(110);
-        embeddingSeedSpinner.setTooltip(new Tooltip(
+        embeddingSeedSpinner.setTooltip(Tooltips.of(
                 "Random seed for the embedding (UMAP / t-SNE / PCA) AND the stochastic\n"
                 + "clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY).\n"
                 + "Keep it fixed for reproducible layouts and cluster assignments; change\n"
@@ -367,7 +367,7 @@ public class ClusteringDialog {
                 EMBEDDING_MODE_AUTO, EMBEDDING_MODE_REPRODUCIBLE, EMBEDDING_MODE_FAST));
         embeddingModeCombo.setValue(EMBEDDING_MODE_AUTO);
         embeddingModeCombo.setPrefWidth(230);
-        embeddingModeCombo.setTooltip(new Tooltip(
+        embeddingModeCombo.setTooltip(Tooltips.of(
                 "How UMAP trades reproducibility against speed.\n\n"
                 + "Automatic (default): use the random seed below 200,000 cells, and\n"
                 + "  all CPU cores above it. Large runs finish; small ones stay exactly\n"
@@ -385,7 +385,7 @@ public class ClusteringDialog {
         embeddingNameField = new TextField(
                 ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
         embeddingNameField.setPrefWidth(130);
-        embeddingNameField.setTooltip(new Tooltip(
+        embeddingNameField.setTooltip(Tooltips.of(
                 "Prefix for the coordinate measurements (NAME1 / NAME2). Reusing a name\n"
                 + "OVERWRITES those columns; give a unique name to keep two embeddings."));
         boolean[] embNameEdited = {false};
@@ -396,7 +396,7 @@ public class ClusteringDialog {
         embeddingDimCombo = new ComboBox<>(FXCollections.observableArrayList("2D", "3D"));
         embeddingDimCombo.setValue("2D");
         embeddingDimCombo.setPrefWidth(70);
-        embeddingDimCombo.setTooltip(new Tooltip(
+        embeddingDimCombo.setTooltip(Tooltips.of(
                 "Number of embedding components written as measurements.\n"
                 + "  2D - NAME1 / NAME2 (default; unchanged behavior).\n"
                 + "  3D - NAME1 / NAME2 / NAME3 -- computes a genuine third axis\n"
@@ -502,7 +502,7 @@ public class ClusteringDialog {
                 embeddingAdvancedVisibilityUpdater.run();
             }
         });
-        algorithmCombo.setTooltip(new Tooltip(
+        algorithmCombo.setTooltip(Tooltips.of(
                 "Clustering algorithm:\n"
                 + "  Leiden - graph-based, auto-detects k (Traag et al. 2019)\n"
                 + "  KMeans - centroid-based, requires k (Lloyd 1982)\n"
@@ -520,7 +520,7 @@ public class ClusteringDialog {
         leidenNeighborsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(leidenNeighborsSpinner);
         leidenNeighborsSpinner.setPrefWidth(80);
-        leidenNeighborsSpinner.setTooltip(new Tooltip(
+        leidenNeighborsSpinner.setTooltip(Tooltips.of(
                 "Number of nearest neighbors for the k-NN graph.\n"
                 + "Range: 2-500. Default: 50.\n"
                 + "Higher values connect more distant cells, producing\n"
@@ -530,7 +530,7 @@ public class ClusteringDialog {
         leidenResolutionSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(leidenResolutionSpinner);
         leidenResolutionSpinner.setPrefWidth(80);
-        leidenResolutionSpinner.setTooltip(new Tooltip(
+        leidenResolutionSpinner.setTooltip(Tooltips.of(
                 "Controls cluster granularity for Leiden.\n"
                 + "Range: 0.01-10.0. Default: 1.0.\n"
                 + "Higher values produce more, smaller clusters.\n"
@@ -541,7 +541,7 @@ public class ClusteringDialog {
         kmeansClusterSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(kmeansClusterSpinner);
         kmeansClusterSpinner.setPrefWidth(80);
-        kmeansClusterSpinner.setTooltip(new Tooltip(
+        kmeansClusterSpinner.setTooltip(Tooltips.of(
                 "Number of clusters (k) to create.\n"
                 + "Range: 2-200. Default: 10.\n"
                 + "Must be specified in advance. If unsure, try Leiden\n"
@@ -551,7 +551,7 @@ public class ClusteringDialog {
         hdbscanMinClusterSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(hdbscanMinClusterSpinner);
         hdbscanMinClusterSpinner.setPrefWidth(80);
-        hdbscanMinClusterSpinner.setTooltip(new Tooltip(
+        hdbscanMinClusterSpinner.setTooltip(Tooltips.of(
                 "Minimum number of cells to form a cluster.\n"
                 + "Range: 2-500. Default: 15.\n"
                 + "Smaller values find more (and smaller) clusters.\n"
@@ -562,14 +562,14 @@ public class ClusteringDialog {
         aggClusterSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(aggClusterSpinner);
         aggClusterSpinner.setPrefWidth(80);
-        aggClusterSpinner.setTooltip(new Tooltip(
+        aggClusterSpinner.setTooltip(Tooltips.of(
                 "Number of clusters for agglomerative (hierarchical) clustering.\n"
                 + "Range: 2-200. Default: 10."));
 
         aggLinkageCombo = new ComboBox<>(FXCollections.observableArrayList(
                 "ward", "complete", "average", "single"));
         aggLinkageCombo.setValue("ward");
-        aggLinkageCombo.setTooltip(new Tooltip(
+        aggLinkageCombo.setTooltip(Tooltips.of(
                 "Linkage criterion for merging clusters:\n"
                 + "  ward - minimizes within-cluster variance (most common)\n"
                 + "  complete - uses max distance between cluster members\n"
@@ -580,7 +580,7 @@ public class ClusteringDialog {
         banksyLambdaSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(banksyLambdaSpinner);
         banksyLambdaSpinner.setPrefWidth(80);
-        banksyLambdaSpinner.setTooltip(new Tooltip(
+        banksyLambdaSpinner.setTooltip(Tooltips.of(
                 "Weight of spatial vs. expression information.\n"
                 + "Range: 0.0-1.0. Default: 0.2.\n"
                 + "0 = expression only, 1 = spatial only.\n"
@@ -591,7 +591,7 @@ public class ClusteringDialog {
         banksyKGeomSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(banksyKGeomSpinner);
         banksyKGeomSpinner.setPrefWidth(80);
-        banksyKGeomSpinner.setTooltip(new Tooltip(
+        banksyKGeomSpinner.setTooltip(Tooltips.of(
                 "Number of spatial nearest neighbors for BANKSY.\n"
                 + "Range: 2-200. Default: 15.\n"
                 + "Defines how many nearby cells contribute to\n"
@@ -602,7 +602,7 @@ public class ClusteringDialog {
         banksyResolutionSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(banksyResolutionSpinner);
         banksyResolutionSpinner.setPrefWidth(80);
-        banksyResolutionSpinner.setTooltip(new Tooltip(
+        banksyResolutionSpinner.setTooltip(Tooltips.of(
                 "Leiden resolution for the final BANKSY clustering step.\n"
                 + "Range: 0.01-10.0. Default: 0.7.\n"
                 + "Higher values produce more, smaller clusters."));
@@ -660,14 +660,14 @@ public class ClusteringDialog {
     private VBox createAnalysisSection() {
         generatePlotsCheck = new CheckBox("Generate analysis plots (marker ranking, PAGA, dotplot)");
         generatePlotsCheck.setSelected(true);
-        generatePlotsCheck.setTooltip(new Tooltip(
+        generatePlotsCheck.setTooltip(Tooltips.of(
                 "Generate static PNG plots for marker rankings (Wilcoxon rank-sum),\n"
                 + "a PAGA (partition-based graph abstraction) trajectory graph, dotplot,\n"
                 + "and stacked violin plots."));
 
         spatialAnalysisCheck = new CheckBox("Neighborhood enrichment + Moran's I");
         spatialAnalysisCheck.setSelected(false);
-        spatialAnalysisCheck.setTooltip(new Tooltip(
+        spatialAnalysisCheck.setTooltip(Tooltips.of(
                 "Compute spatial statistics using cell centroid coordinates:\n"
                 + "  Neighborhood enrichment - which clusters co-localize?\n"
                 + "  Moran's I - spatial autocorrelation per marker.\n"
@@ -676,7 +676,7 @@ public class ClusteringDialog {
 
         spatialSmoothingCheck = new CheckBox("Spatial feature smoothing");
         spatialSmoothingCheck.setSelected(false);
-        spatialSmoothingCheck.setTooltip(new Tooltip(
+        spatialSmoothingCheck.setTooltip(Tooltips.of(
                 "Smooth features using spatial neighbors before clustering.\n"
                 + "Each cell's features are averaged with its spatial neighbors\n"
                 + "via graph convolution on a k-nearest neighbor graph.\n"
@@ -688,7 +688,7 @@ public class ClusteringDialog {
         SpinnerUtils.commitOnFocusLoss(smoothingIterationsSpinner);
         smoothingIterationsSpinner.setPrefWidth(60);
         smoothingIterationsSpinner.setDisable(true);
-        smoothingIterationsSpinner.setTooltip(new Tooltip(
+        smoothingIterationsSpinner.setTooltip(Tooltips.of(
                 "Number of smoothing iterations.\n"
                 + "1 = average with direct neighbors only.\n"
                 + "2+ = incorporate increasingly distant neighbors.\n"
@@ -714,12 +714,12 @@ public class ClusteringDialog {
         boolean harmonypyAvailable =
                 ApposeClusteringService.getInstance().isHarmonypyAvailable();
 
-        Tooltip activeTooltip = new Tooltip(
+        Tooltip activeTooltip = Tooltips.of(
                 "Apply Harmony batch correction to remove per-image\n"
                 + "technical variation before clustering.\n"
                 + "Only available when clustering all project images.\n"
                 + "Ref: Korsunsky et al. (2019) Nature Methods");
-        Tooltip unavailableTooltip = new Tooltip(
+        Tooltip unavailableTooltip = Tooltips.of(
                 "Harmony batch correction is not installed in this\n"
                 + "Python environment. Use Utilities > Rebuild Clustering\n"
                 + "Environment to refresh, or see the QP-CAT README for\n"
@@ -759,7 +759,7 @@ public class ClusteringDialog {
         spatialGraphTypeCombo.setValue(
                 "radius".equals(pref) ? "Radius"
                 : "delaunay".equals(pref) ? "Delaunay" : "kNN");
-        spatialGraphTypeCombo.setTooltip(new Tooltip(
+        spatialGraphTypeCombo.setTooltip(Tooltips.of(
                 "Type of spatial neighbor graph. kNN connects each cell to "
                 + "its k closest neighbors;\nRadius connects all cells within "
                 + "a fixed distance; Delaunay uses the Delaunay triangulation.\n"
@@ -774,7 +774,7 @@ public class ClusteringDialog {
         spatialGraphKSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(spatialGraphKSpinner);
         spatialGraphKSpinner.setPrefWidth(80);
-        spatialGraphKSpinner.setTooltip(new Tooltip(
+        spatialGraphKSpinner.setTooltip(Tooltips.of(
                 "Number of nearest neighbors per cell (kNN graph only).\n"
                 + "Range: 2-200. Default: 15. Higher values produce smoother\n"
                 + "spatial structure but blur small features."));
@@ -787,7 +787,7 @@ public class ClusteringDialog {
         spatialGraphRadiusSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(spatialGraphRadiusSpinner);
         spatialGraphRadiusSpinner.setPrefWidth(100);
-        spatialGraphRadiusSpinner.setTooltip(new Tooltip(
+        spatialGraphRadiusSpinner.setTooltip(Tooltips.of(
                 "Maximum distance for two cells to be neighbors (Radius graph only).\n"
                 + "Pixel units of detection centroids. Leave at -1 to auto-derive\n"
                 + "(median nearest-neighbor distance x 5)."));
@@ -800,7 +800,7 @@ public class ClusteringDialog {
         spatialGraphDelaunayMaxEdgeSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeSpinner);
         spatialGraphDelaunayMaxEdgeSpinner.setPrefWidth(100);
-        spatialGraphDelaunayMaxEdgeSpinner.setTooltip(new Tooltip(
+        spatialGraphDelaunayMaxEdgeSpinner.setTooltip(Tooltips.of(
                 "Maximum allowed edge length after Delaunay triangulation;\n"
                 + "longer edges are pruned (Delaunay graph only). Leave at -1\n"
                 + "to skip pruning. Useful for tissues with large gaps."));
@@ -840,7 +840,7 @@ public class ClusteringDialog {
 
         // ---- Statistic checkboxes ----
         enableRipleyCheck = new CheckBox("Ripley K and L (point-pattern, dual plot)");
-        enableRipleyCheck.setTooltip(new Tooltip(
+        enableRipleyCheck.setTooltip(Tooltips.of(
                 "Compute Ripley's K and L functions per cluster against a Poisson null.\n"
                 + "Detects spatial clustering (curve above null) or inhibition (below).\n"
                 + "Results show as two LineCharts side by side."));
@@ -848,7 +848,7 @@ public class ClusteringDialog {
                 "Enable Ripley K and L point-pattern statistics");
 
         enableGearyCheck = new CheckBox("Geary's C (local autocorrelation)");
-        enableGearyCheck.setTooltip(new Tooltip(
+        enableGearyCheck.setTooltip(Tooltips.of(
                 "Compute Geary's C per marker as a local-pattern alternative to\n"
                 + "Moran's I. Values near 0 indicate spatial clustering;\n"
                 + "values near 2 indicate dispersion."));
@@ -856,7 +856,7 @@ public class ClusteringDialog {
                 "Enable Geary's C local spatial autocorrelation");
 
         enableCoOccPairwiseCheck = new CheckBox("Co-occurrence -- pairwise");
-        enableCoOccPairwiseCheck.setTooltip(new Tooltip(
+        enableCoOccPairwiseCheck.setTooltip(Tooltips.of(
                 "For each pair of clusters, compute the ratio of observed vs\n"
                 + "expected co-occurrence at multiple radii. Surfaces cluster pairs\n"
                 + "that systematically appear together or avoid each other."));
@@ -864,7 +864,7 @@ public class ClusteringDialog {
                 "Enable pairwise co-occurrence at multiple radii");
 
         enableCoOccOneVsRestCheck = new CheckBox("Co-occurrence -- one vs rest");
-        enableCoOccOneVsRestCheck.setTooltip(new Tooltip(
+        enableCoOccOneVsRestCheck.setTooltip(Tooltips.of(
                 "For each cluster, compute its co-occurrence against all other\n"
                 + "clusters combined. Faster than pairwise and useful when you only\n"
                 + "want to flag one cluster's spatial behavior."));
@@ -878,7 +878,7 @@ public class ClusteringDialog {
 
         // ---- Adaptive-permutation indicator ----
         permutationLabel = new Label(formatPermutationsLabel(-1));
-        permutationLabel.setTooltip(new Tooltip(
+        permutationLabel.setTooltip(Tooltips.of(
                 "Number of random permutations for significance testing.\n"
                 + "Higher = more accurate p-values, slower. Adaptive default\n"
                 + "uses 1000 for projects under 50,000 cells, 100 for 50k-500k,\n"
@@ -918,7 +918,7 @@ public class ClusteringDialog {
         pushConnectionsCheck = new CheckBox("Push graph edges to viewer");
         pushConnectionsCheck.setSelected(
                 QpcatPreferences.isSpatialPushConnectionsToViewer());
-        pushConnectionsCheck.setTooltip(new Tooltip(
+        pushConnectionsCheck.setTooltip(Tooltips.of(
                 "Push the spatial graph edges to QuPath's viewer overlay so "
                 + "you can see the connections you are computing statistics on. "
                 + "Use View -> Show object connections to toggle the overlay "
@@ -932,7 +932,7 @@ public class ClusteringDialog {
         connectionsPromptThresholdSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(connectionsPromptThresholdSpinner);
         connectionsPromptThresholdSpinner.setPrefWidth(110);
-        connectionsPromptThresholdSpinner.setTooltip(new Tooltip(
+        connectionsPromptThresholdSpinner.setTooltip(Tooltips.of(
                 "Above this edge count, QP-CAT asks for confirmation before "
                 + "pushing to the viewer. Large graphs (kNN with high k, "
                 + "dense Delaunay) can slow viewer pan and zoom. Default: "
@@ -953,7 +953,7 @@ public class ClusteringDialog {
         spatialGraphDelaunayMaxEdgeUmSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeUmSpinner);
         spatialGraphDelaunayMaxEdgeUmSpinner.setPrefWidth(100);
-        spatialGraphDelaunayMaxEdgeUmSpinner.setTooltip(new Tooltip(
+        spatialGraphDelaunayMaxEdgeUmSpinner.setTooltip(Tooltips.of(
                 "Maximum allowed edge length after Delaunay triangulation, "
                 + "in microns; longer edges are pruned. Useful for tissues "
                 + "with large gaps. Leave at -1 to skip pruning. Shown when "
@@ -979,7 +979,7 @@ public class ClusteringDialog {
         writeNodeMeasurementsCheck = new CheckBox("Write per-cell node measurements");
         writeNodeMeasurementsCheck.setSelected(
                 QpcatPreferences.isSpatialWriteNodeMeasurements());
-        writeNodeMeasurementsCheck.setTooltip(new Tooltip(
+        writeNodeMeasurementsCheck.setTooltip(Tooltips.of(
                 "After building the graph, write per-cell columns to the "
                 + "measurement table: QPCAT spatial: Num neighbors, Mean / "
                 + "Median / Max / Min distance. With Delaunay, also writes "
@@ -991,7 +991,7 @@ public class ClusteringDialog {
         writeComponentMeasurementsCheck = new CheckBox("Write component cluster measurements");
         writeComponentMeasurementsCheck.setSelected(
                 QpcatPreferences.isSpatialWriteComponentMeasurements());
-        writeComponentMeasurementsCheck.setTooltip(new Tooltip(
+        writeComponentMeasurementsCheck.setTooltip(Tooltips.of(
                 "For each graph-connected component (cells reachable from "
                 + "each other through edges), write QPCAT component: size and "
                 + "QPCAT component: mean: <X> for each existing measurement. "
@@ -1003,7 +1003,7 @@ public class ClusteringDialog {
         limitEdgesBySameClassCheck = new CheckBox("Limit edges to same class (post-hoc filter)");
         limitEdgesBySameClassCheck.setSelected(
                 QpcatPreferences.isSpatialLimitEdgesBySameClass());
-        limitEdgesBySameClassCheck.setTooltip(new Tooltip(
+        limitEdgesBySameClassCheck.setTooltip(Tooltips.of(
                 "After phenotyping, hide edges that connect cells of "
                 + "different classes. This is a post-hoc filter applied to "
                 + "the existing graph; toggling rebuilds the displayed "
@@ -1014,7 +1014,7 @@ public class ClusteringDialog {
                 "Limit graph edges to same-class neighbors, post-hoc filter");
 
         pushNowButton = new Button("Push to viewer now");
-        pushNowButton.setTooltip(new Tooltip(
+        pushNowButton.setTooltip(Tooltips.of(
                 "Rebuild the viewer overlay from the most recent "
                 + "spatial-stats result without re-running clustering. Use "
                 + "this when you opened a project that pre-dates this "
@@ -1025,7 +1025,7 @@ public class ClusteringDialog {
         boolean canPushNow = hasSavedSpatialStatsResult();
         pushNowButton.setDisable(!canPushNow);
         if (!canPushNow) {
-            pushNowButton.setTooltip(new Tooltip(
+            pushNowButton.setTooltip(Tooltips.of(
                     "No saved spatial-stats result on this image yet -- "
                     + "run clustering with the Viewer overlay enabled first."));
         }
@@ -1267,7 +1267,7 @@ public class ClusteringDialog {
         cancelButton = new Button("Cancel");
         cancelButton.setVisible(false);
         cancelButton.setManaged(false);
-        cancelButton.setTooltip(new Tooltip(
+        cancelButton.setTooltip(Tooltips.of(
                 "Stop the running clustering / spatial analysis.\n"
                 + "No measurements are written if you cancel."));
         cancelButton.setOnAction(e -> {
@@ -1758,19 +1758,19 @@ public class ClusteringDialog {
     private HBox createConfigSection() {
         Button saveBtn = new Button("Save Config...");
         saveBtn.setOnAction(e -> saveConfig());
-        saveBtn.setTooltip(new Tooltip(
+        saveBtn.setTooltip(Tooltips.of(
                 "Save the current clustering configuration (algorithm,\n"
                 + "parameters, measurements) to the project for reuse."));
 
         Button loadBtn = new Button("Load Config...");
         loadBtn.setOnAction(e -> loadConfig());
-        loadBtn.setTooltip(new Tooltip(
+        loadBtn.setTooltip(Tooltips.of(
                 "Load a previously saved clustering configuration\n"
                 + "and restore all settings in this dialog."));
 
         Button loadFileBtn = new Button("Load Config from file...");
         loadFileBtn.setOnAction(e -> loadConfigFromFile());
-        loadFileBtn.setTooltip(new Tooltip(
+        loadFileBtn.setTooltip(Tooltips.of(
                 "Load a config from any JSON file -- e.g. the '<name>_config.json'\n"
                 + "saved next to a result, to reproduce that exact run. Restores all\n"
                 + "settings here; then pick the Scope and click Run Clustering."));
@@ -2795,7 +2795,7 @@ public class ClusteringDialog {
             locationField = new TextField(infoText);
             locationField.setEditable(false);
             locationField.setStyle("-fx-background-color: transparent; -fx-border-color: transparent;");
-            locationField.setTooltip(new Tooltip(
+            locationField.setTooltip(Tooltips.of(
                     "Where this result is stored on disk, and its size.\n"
                     + "Reopen any time via Extensions > QPCAT > View Past Results."));
             HBox.setHgrow(locationField, javafx.scene.layout.Priority.ALWAYS);
@@ -2806,7 +2806,7 @@ public class ClusteringDialog {
         buttonBar.setPadding(new Insets(5, 0, 0, 0));
 
         Button saveBtn = new Button("Save a named copy...");
-        saveBtn.setTooltip(new Tooltip(
+        saveBtn.setTooltip(Tooltips.of(
                 "This result was already auto-saved with a timestamped name.\n"
                 + "Use this to save an additional, user-named copy."));
         saveBtn.setOnAction(e -> {
@@ -2839,7 +2839,7 @@ public class ClusteringDialog {
         });
 
         Button manageBtn = new Button("Manage saved results...");
-        manageBtn.setTooltip(new Tooltip(
+        manageBtn.setTooltip(Tooltips.of(
                 "View, select, and delete saved clustering results.\n"
                 + "Shows the results folder location and total size on disk."));
         manageBtn.setOnAction(e -> showManageResultsDialog(qp));
@@ -2847,7 +2847,7 @@ public class ClusteringDialog {
         // "Open results folder": the folder holds this run's result JSON, plots,
         // and the reproducibility files (<name>_config.json, <name>_RUN_INFO.txt).
         Button openFolderBtn = new Button("Open results folder");
-        openFolderBtn.setTooltip(new Tooltip(
+        openFolderBtn.setTooltip(Tooltips.of(
                 "Open the folder on disk holding this result, its plots, and the\n"
                 + "reproducibility files (<name>_config.json -- reload via Load Config\n"
                 + "from file -- and <name>_RUN_INFO.txt, a record of every parameter)."));
@@ -2862,7 +2862,7 @@ public class ClusteringDialog {
         // Disable save/manage if no project
         if (qp == null || qp.getProject() == null) {
             saveBtn.setDisable(true);
-            saveBtn.setTooltip(new Tooltip("A project must be open to save results."));
+            saveBtn.setTooltip(Tooltips.of("A project must be open to save results."));
             manageBtn.setDisable(true);
         }
 
@@ -3417,7 +3417,7 @@ public class ClusteringDialog {
         // Pre-selects the loaded result (or, for a fresh run, its auto-saved name)
         // in the manage dialog so the relabel reaches exactly the run's images.
         Button manageBtn = new Button("Rename or merge clusters...");
-        manageBtn.setTooltip(new Tooltip("Rename or merge cluster populations across the same "
+        manageBtn.setTooltip(Tooltips.of("Rename or merge cluster populations across the same "
                 + "images this result was clustered over."));
         manageBtn.setDisable(qupath == null);
         final String presetName = loadedResultName != null
@@ -3485,7 +3485,7 @@ public class ClusteringDialog {
         };
 
         Button regenBtn = new Button("Regenerate static plots");
-        regenBtn.setTooltip(new Tooltip("Rebuild the static embedding / spatial PNGs "
+        regenBtn.setTooltip(Tooltips.of("Rebuild the static embedding / spatial PNGs "
                 + "using the current cluster colors. The interactive plots already "
                 + "recolor instantly; this refreshes the saved PNG images too."));
 
@@ -3540,7 +3540,7 @@ public class ClusteringDialog {
         };
 
         Button paletteBtn = new Button("Apply palette...");
-        paletteBtn.setTooltip(new Tooltip("Recolor every cluster at once from a named "
+        paletteBtn.setTooltip(Tooltips.of("Recolor every cluster at once from a named "
                 + "color palette (viridis, tab20, ...)."));
         paletteBtn.setDisable(qupath == null);
         paletteBtn.setOnAction(e -> {
@@ -3549,7 +3549,7 @@ public class ClusteringDialog {
         });
 
         Button resetBtn = new Button("Reset to defaults");
-        resetBtn.setTooltip(new Tooltip("Restore the default (tab20) palette color for every cluster."));
+        resetBtn.setTooltip(Tooltips.of("Restore the default (tab20) palette color for every cluster."));
         resetBtn.setOnAction(e -> {
             for (int id : ids) {
                 int def = EmbeddingScatterPanel.defaultClusterRgb(id);
@@ -4192,7 +4192,7 @@ public class ClusteringDialog {
         TextField field = new TextField();
         field.setPromptText("Find a marker (e.g. CD8)");
         field.setPrefColumnCount(18);
-        field.setTooltip(new Tooltip(
+        field.setTooltip(Tooltips.of(
                 "Show only the rows for one marker.\n\n"
                 + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
                 + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"

@@ -85,7 +85,7 @@ public class ClusterHeatmapPanel extends VBox {
         titleLabel.setStyle("-fx-font-weight: bold;");
 
         canvas = new Canvas(600, 400);
-        tooltip = new Tooltip();
+        tooltip = Tooltips.of();
         tooltip.setShowDelay(Duration.millis(100));
         Tooltip.install(canvas, tooltip);
 

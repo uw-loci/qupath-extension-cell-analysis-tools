@@ -239,15 +239,15 @@ public class ClusterManagementDialog {
 
         Button renameBtn = new Button("Rename...");
         renameBtn.setOnAction(e -> renameSelected());
-        renameBtn.setTooltip(new Tooltip("Rename the selected cluster."));
+        renameBtn.setTooltip(Tooltips.of("Rename the selected cluster."));
 
         Button mergeBtn = new Button("Merge Selected");
         mergeBtn.setOnAction(e -> mergeSelected());
-        mergeBtn.setTooltip(new Tooltip("Merge two or more selected clusters into one name."));
+        mergeBtn.setTooltip(Tooltips.of("Merge two or more selected clusters into one name."));
 
         Button resetBtn = new Button("Reset");
         resetBtn.setOnAction(e -> reloadClusters());
-        resetBtn.setTooltip(new Tooltip("Discard pending edits and reload the cluster list."));
+        resetBtn.setTooltip(Tooltips.of("Discard pending edits and reload the cluster list."));
 
         // The undo for an edit you regret. Every rename/merge writes a new copy
         // and leaves the original untouched, so stepping back is just re-applying
@@ -259,7 +259,7 @@ public class ClusterManagementDialog {
 
         applyVersionBtn = new Button("Put this version on the cells");
         applyVersionBtn.setDisable(true);
-        applyVersionBtn.setTooltip(new Tooltip(
+        applyVersionBtn.setTooltip(Tooltips.of(
                 "Re-apply the SELECTED saved result's cluster names to the detections, without "
                 + "writing a new copy. This is how you step forward again after a step back, "
                 + "and how you switch the cells between any two saved versions."));
@@ -402,7 +402,7 @@ public class ClusterManagementDialog {
         stepBackBtn.setDisable(!can);
         stepBackBtn.setText(can ? "Step back to '" + activeSaved.getDerivedFrom() + "'..."
                 : "Step back...");
-        stepBackBtn.setTooltip(new Tooltip(can
+        stepBackBtn.setTooltip(Tooltips.of(can
                 ? "Re-apply '" + activeSaved.getDerivedFrom() + "' to the detections, undoing "
                   + "this edit's names on the cells. Neither saved result is deleted, so you "
                   + "can step forward again by re-applying this one."

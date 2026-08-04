@@ -739,7 +739,7 @@ public class BatchFigureExportDialog {
     // -----------------------------------------------------------------
 
     private static Tooltip tip(String text) {
-        Tooltip t = new Tooltip(text);
+        Tooltip t = Tooltips.of(text);
         t.setWrapText(true);
         t.setMaxWidth(400);
         return t;

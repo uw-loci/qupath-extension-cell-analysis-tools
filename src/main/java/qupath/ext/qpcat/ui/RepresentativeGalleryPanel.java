@@ -132,7 +132,7 @@ public class RepresentativeGalleryPanel extends VBox {
         // display, so this button re-reads the crops after the user adjusts the
         // viewer -- otherwise multichannel/fluorescence crops look raw.
         Button refreshBtn = new Button("Update from viewer");
-        refreshBtn.setTooltip(new Tooltip(
+        refreshBtn.setTooltip(Tooltips.of(
                 "Re-render the crops using the current viewer brightness, contrast,\n"
                 + "and channel settings. Adjust the image in the viewer, then click this."));
         refreshBtn.setOnAction(e -> rebuild());
@@ -157,14 +157,14 @@ public class RepresentativeGalleryPanel extends VBox {
         Label legendChannelLabel = new Label("Channels:");
 
         channelLegendCheck = new CheckBox("Show channels from Marker Rankings");
-        channelLegendCheck.setTooltip(new Tooltip(
+        channelLegendCheck.setTooltip(Tooltips.of(
                 "Append a small legend to each cluster showing the channels for its\n"
                 + "top-ranked markers, matched by channel name appearing in the\n"
                 + "measurement name. If channels or measurements were renamed so that\n"
                 + "nothing matches, no channels are shown (this never errors)."));
         channelLegendCheck.setDisable(!legendPossible);
         if (!legendPossible) {
-            channelLegendCheck.setTooltip(new Tooltip(
+            channelLegendCheck.setTooltip(Tooltips.of(
                     rankedMarkersByCluster.isEmpty()
                             ? "This result has no Marker Rankings, so no channel legend can be built."
                             : "No image is open, so channel colors are unavailable for a legend."));
@@ -283,7 +283,7 @@ public class RepresentativeGalleryPanel extends VBox {
             rows.getChildren().add(row);
         }
         rows.setPadding(new Insets(0, 4, 0, 0));
-        Tooltip.install(rows, new Tooltip(
+        Tooltip.install(rows, Tooltips.of(
                 "Top channels for this cluster, from its Marker Rankings.\n"
                 + "Matched by channel name appearing in the measurement name."));
         return rows;

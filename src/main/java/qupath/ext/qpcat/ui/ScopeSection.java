@@ -128,7 +128,7 @@ public final class ScopeSection extends VBox {
      * pool and write back.
      */
     public void setScopeTooltip(String text) {
-        Tooltip tip = new Tooltip(text);
+        Tooltip tip = Tooltips.of(text);
         scopeAllImages.setTooltip(tip);
         scopeSpecificImages.setTooltip(tip);
     }

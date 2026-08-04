@@ -111,19 +111,19 @@ public class PythonConsoleWindow {
 
         Button clearBtn = new Button("Clear");
         clearBtn.setOnAction(e -> doClear());
-        clearBtn.setTooltip(new Tooltip("Clear all console output."));
+        clearBtn.setTooltip(Tooltips.of("Clear all console output."));
 
         Button scrollBtn = new Button("Auto-scroll: ON");
         scrollBtn.setOnAction(e -> {
             autoScroll = !autoScroll;
             scrollBtn.setText("Auto-scroll: " + (autoScroll ? "ON" : "OFF"));
         });
-        scrollBtn.setTooltip(new Tooltip(
+        scrollBtn.setTooltip(Tooltips.of(
                 "Toggle automatic scrolling to the latest output."));
 
         Button saveBtn = new Button("Save Log...");
         saveBtn.setOnAction(e -> saveLogToFile());
-        saveBtn.setTooltip(new Tooltip(
+        saveBtn.setTooltip(Tooltips.of(
                 "Save the current console output to a text file."));
 
         HBox toolbar = new HBox(10, clearBtn, scrollBtn, saveBtn, lineCountLabel);

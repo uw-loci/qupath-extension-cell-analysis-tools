@@ -214,7 +214,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         chanRadio.setDisable(!haveChannels);
         chan2clusRadio.setDisable(!haveChannels);
         if (!haveChannels) {
-            Tooltip t = new Tooltip("Open one of the clustered images so QP-CAT can read "
+            Tooltip t = Tooltips.of("Open one of the clustered images so QP-CAT can read "
                     + "its channel names and colors.");
             chanRadio.setTooltip(t);
             chan2clusRadio.setTooltip(t);
@@ -249,7 +249,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         String vocabText = vocabulary.isEmpty() ? "(none found)"
                 : String.join(", ", vocabulary.subList(0, Math.min(40, vocabulary.size())))
                   + (vocabulary.size() > 40 ? ", ..." : "");
-        field.setTooltip(new Tooltip(
+        field.setTooltip(Tooltips.of(
                 "Type part of a marker name to highlight it everywhere in this tab.\n\n"
                 + "Compartment and statistic words are ignored, so \"CD8\" finds it in every\n"
                 + "compartment, and searching \"mean\" or \"nucleus\" matches nothing.\n"
@@ -399,7 +399,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             markHit(cell);
             matchCount++;
         }
-        Tooltip.install(cell, new Tooltip(markerTooltip(mName, marker)));
+        Tooltip.install(cell, Tooltips.of(markerTooltip(mName, marker)));
         return cell;
     }
 

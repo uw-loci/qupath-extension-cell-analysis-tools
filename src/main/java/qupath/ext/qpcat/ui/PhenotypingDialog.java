@@ -194,7 +194,7 @@ public class PhenotypingDialog {
 
         Button validateBtn = new Button("Validate Channels");
         validateBtn.setOnAction(e -> validateChannels());
-        validateBtn.setTooltip(new Tooltip(
+        validateBtn.setTooltip(Tooltips.of(
                 "Check that all project images have the same\n"
                 + "set of measurements. Helps catch panel mismatches."));
 
@@ -216,7 +216,7 @@ public class PhenotypingDialog {
             // the new valid range (e.g. [0,1] -> [-3,3] when switching to Z-score).
             rebuildTableColumns();
         });
-        normalizationCombo.setTooltip(new Tooltip(
+        normalizationCombo.setTooltip(Tooltips.of(
                 "How to scale marker values before applying gates:\n"
                 + "  Min-Max - scale to [0,1], gate at 0.5 = midpoint (recommended)\n"
                 + "  Z-score - center at 0, gate at 0 = mean expression\n"
@@ -228,7 +228,7 @@ public class PhenotypingDialog {
         defaultGateSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(defaultGateSpinner);
         defaultGateSpinner.setPrefWidth(80);
-        defaultGateSpinner.setTooltip(new Tooltip(
+        defaultGateSpinner.setTooltip(Tooltips.of(
                 "Default gate threshold applied to each new marker column.\n"
                 + "The valid RANGE depends on the Normalization (shown below):\n"
                 + "  Min-Max / Percentile: 0.0-1.0 (0.5 = midpoint)\n"
@@ -332,30 +332,30 @@ public class PhenotypingDialog {
         // Button bar
         Button addBtn = new Button("Add Rule");
         addBtn.setOnAction(e -> addRule());
-        addBtn.setTooltip(new Tooltip("Add a new phenotype rule row to the table."));
+        addBtn.setTooltip(Tooltips.of("Add a new phenotype rule row to the table."));
         Button removeBtn = new Button("Remove");
         removeBtn.setOnAction(e -> removeSelectedRule());
-        removeBtn.setTooltip(new Tooltip("Remove the selected phenotype rule."));
+        removeBtn.setTooltip(Tooltips.of("Remove the selected phenotype rule."));
         Button upBtn = new Button("Move Up");
         upBtn.setOnAction(e -> moveRuleUp());
-        upBtn.setTooltip(new Tooltip(
+        upBtn.setTooltip(Tooltips.of(
                 "Move the selected rule up (higher priority).\n"
                 + "Rules are matched top-to-bottom (first match wins)."));
         Button downBtn = new Button("Move Down");
         downBtn.setOnAction(e -> moveRuleDown());
-        downBtn.setTooltip(new Tooltip("Move the selected rule down (lower priority)."));
+        downBtn.setTooltip(Tooltips.of("Move the selected rule down (lower priority)."));
 
         Region spacer1 = new Region();
         HBox.setHgrow(spacer1, Priority.SOMETIMES);
 
         Button saveBtn = new Button("Save Rules...");
         saveBtn.setOnAction(e -> saveRuleSet());
-        saveBtn.setTooltip(new Tooltip(
+        saveBtn.setTooltip(Tooltips.of(
                 "Save the current rules, markers, gates, and\n"
                 + "normalization settings to the project for reuse."));
         Button loadBtn = new Button("Load Rules...");
         loadBtn.setOnAction(e -> loadRuleSet());
-        loadBtn.setTooltip(new Tooltip(
+        loadBtn.setTooltip(Tooltips.of(
                 "Load a previously saved phenotype rule set.\n"
                 + "Missing markers will be flagged with a warning."));
 
@@ -381,14 +381,14 @@ public class PhenotypingDialog {
 
         computeBtn = new Button("Compute Thresholds");
         computeBtn.setOnAction(e -> computeThresholds());
-        computeBtn.setTooltip(new Tooltip(
+        computeBtn.setTooltip(Tooltips.of(
                 "Send measurement data to Python and compute\n"
                 + "automatic thresholds using Triangle, GMM, and\n"
                 + "Gamma methods. Results are cached per normalization."));
 
         Button applyAllBtn = new Button("Apply to All Markers");
         applyAllBtn.setOnAction(e -> applyAutoThresholdsToAll());
-        applyAllBtn.setTooltip(new Tooltip(
+        applyAllBtn.setTooltip(Tooltips.of(
                 "Set each marker's gate spinner to the auto-threshold\n"
                 + "value from the currently selected method."));
 
@@ -461,7 +461,7 @@ public class PhenotypingDialog {
             // Header with full channel + statistic (so PCNA Mean vs PCNA Median
             // are distinguishable), plus the gate spinner.
             Label header = new Label(shortName);
-            header.setTooltip(new Tooltip(marker
+            header.setTooltip(Tooltips.of(marker
                     + "\n(click to view this marker's histogram)"));
             header.setMaxWidth(Double.MAX_VALUE);
             header.setWrapText(true);
@@ -476,7 +476,7 @@ public class PhenotypingDialog {
             gateSpinner.setPrefWidth(85);
             gateSpinner.setMaxWidth(85);
             gateSpinner.setStyle("-fx-font-size: 10px;");
-            gateSpinner.setTooltip(new Tooltip(
+            gateSpinner.setTooltip(Tooltips.of(
                     "Gate threshold for " + shortName + ".\n"
                     + "Valid range for " + normalizationCombo.getValue() + ": " + rangeText + ".\n"
                     + "Cells with value >= gate are 'pos', below are 'neg'.\n"

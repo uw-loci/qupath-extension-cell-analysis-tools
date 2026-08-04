@@ -126,7 +126,7 @@ public class SpatialStatsDialog {
         regionBox.setValue(REGION_WHOLE);
 
         CheckBox eachAnnotation = new CheckBox("One result per annotation (else merge per image)");
-        eachAnnotation.setTooltip(new Tooltip(
+        eachAnnotation.setTooltip(Tooltips.of(
                 "When a region other than 'Whole image' is chosen, analyze each annotation "
                 + "separately (a row per annotation) instead of merging all matching "
                 + "annotations in an image into one result."));

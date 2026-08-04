@@ -46,24 +46,24 @@ public final class GateActionBar {
         }
 
         ToggleButton gateToggle = new ToggleButton("Gate");
-        gateToggle.setTooltip(new Tooltip(
+        gateToggle.setTooltip(Tooltips.of(
                 "Draw a polygon on the plot to select cells. Click to add points,\n"
                 + "double-click (or right-click) to close, Esc to cancel."));
         Button clearBtn = new Button("Clear");
         clearBtn.setDisable(true);
-        clearBtn.setTooltip(new Tooltip("Discard the gate currently being drawn."));
+        clearBtn.setTooltip(Tooltips.of("Discard the gate currently being drawn."));
         Button clearAllBtn = new Button("Clear all");
         clearAllBtn.setDisable(true);
-        clearAllBtn.setTooltip(new Tooltip("Remove all gate outlines drawn on the plot."));
+        clearAllBtn.setTooltip(Tooltips.of("Remove all gate outlines drawn on the plot."));
         Label countLabel = new Label("0 cells gated");
         countLabel.setStyle("-fx-text-fill: #555;");
         Button selectBtn = new Button("Select in open image");
         selectBtn.setDisable(true);
-        selectBtn.setTooltip(new Tooltip(
+        selectBtn.setTooltip(Tooltips.of(
                 "Select the gated cells that belong to the image currently open in the viewer."));
         Button assignBtn = new Button("Assign class...");
         assignBtn.setDisable(true);
-        assignBtn.setTooltip(new Tooltip(
+        assignBtn.setTooltip(Tooltips.of(
                 "Assign a classification to every gated cell across all of their images,\n"
                 + "saving each. Colors the cells in QuPath and persists on reload."));
 

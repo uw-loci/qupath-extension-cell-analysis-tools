@@ -129,7 +129,7 @@ public class PlotAndGateDialog {
         // compute them (and has no parameters to tune; that lives in "Map cells
         // in 2D" / clustering, where perplexity, n_neighbors, etc. are set).
         methodCombo = new ComboBox<>();
-        methodCombo.setTooltip(new Tooltip(
+        methodCombo.setTooltip(Tooltips.of(
                 "Which existing embedding coordinates to plot. Only methods already on the\n"
                 + "current image's cells are listed. To create or tune an embedding\n"
                 + "(perplexity, n_neighbors, ...), use 'Map cells in 2D' or clustering."));

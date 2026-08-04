@@ -109,7 +109,7 @@ public final class VestExportDialog {
         ComboBox<String> samplingBox = new ComboBox<>();
         samplingBox.getItems().addAll(SAMPLING_STRATIFIED, SAMPLING_GEOSKETCH);
         samplingBox.setValue(SAMPLING_STRATIFIED);
-        samplingBox.setTooltip(new Tooltip(
+        samplingBox.setTooltip(Tooltips.of(
                 "How the budget is drawn.\n"
                 + "Stratified: fast, abundance-weighted with a per-class floor; uniform-"
                 + "random within each cluster.\n"
@@ -130,12 +130,12 @@ public final class VestExportDialog {
                 customBudget.setDisable(!isCustom(b)));
 
         Spinner<Integer> minPerClassSpinner = intSpinner(0, 100000, 30, 5);
-        minPerClassSpinner.setTooltip(new Tooltip("Minimum cells exported per cluster, "
+        minPerClassSpinner.setTooltip(Tooltips.of("Minimum cells exported per cluster, "
                 + "honored whenever that many exist -- so a huge cluster cannot squeeze "
                 + "small clusters out of the view."));
 
         Spinner<Double> cropScaleSpinner = doubleSpinner(1.0, 10.0, 3.0, 0.5, 1);
-        cropScaleSpinner.setTooltip(new Tooltip("Crop side as a multiple of each cell's "
+        cropScaleSpinner.setTooltip(Tooltips.of("Crop side as a multiple of each cell's "
                 + "bounding box (larger = more context around the cell)."));
 
         TextField dirField = new TextField();
@@ -154,7 +154,7 @@ public final class VestExportDialog {
         Spinner<Integer> neighborsSpinner = intSpinner(2, 200, 15, 1);
         Spinner<Double> minDistSpinner = doubleSpinner(0.0, 1.0, 0.1, 0.05, 2);
         Spinner<Double> perplexitySpinner = doubleSpinner(0.0, 200.0, 0.0, 5.0, 1);
-        perplexitySpinner.setTooltip(new Tooltip("t-SNE perplexity. 0 = auto from cell count."));
+        perplexitySpinner.setTooltip(Tooltips.of("t-SNE perplexity. 0 = auto from cell count."));
         Spinner<Double> pctLowSpinner = doubleSpinner(0.0, 0.5, 0.01, 0.01, 3);
         Spinner<Double> pctHighSpinner = doubleSpinner(0.5, 1.0, 0.99, 0.01, 3);
 

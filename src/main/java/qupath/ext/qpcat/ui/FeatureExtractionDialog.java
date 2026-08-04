@@ -120,7 +120,7 @@ public class FeatureExtractionDialog {
         }
         modelCombo.getSelectionModel().selectFirst();
         modelCombo.setMaxWidth(Double.MAX_VALUE);
-        modelCombo.setTooltip(new Tooltip(
+        modelCombo.setTooltip(Tooltips.of(
                 "Select a vision foundation model for feature extraction.\n"
                 + "All models have commercially-permissive licenses (Apache 2.0 or MIT).\n"
                 + "Smaller models (Hibou-B, 86M) are faster; larger models (H-optimus-0, 1.1B)\n"
@@ -148,7 +148,7 @@ public class FeatureExtractionDialog {
         tileSizeSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(tileSizeSpinner);
         tileSizeSpinner.setPrefWidth(80);
-        tileSizeSpinner.setTooltip(new Tooltip(
+        tileSizeSpinner.setTooltip(Tooltips.of(
                 "Size of the square tile extracted around each cell centroid (pixels).\n"
                 + "Default: 224 (standard for most vision models).\n"
                 + "Tiles are read at the image's native resolution."));
@@ -157,7 +157,7 @@ public class FeatureExtractionDialog {
         batchSizeSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(batchSizeSpinner);
         batchSizeSpinner.setPrefWidth(80);
-        batchSizeSpinner.setTooltip(new Tooltip(
+        batchSizeSpinner.setTooltip(Tooltips.of(
                 "Number of tiles processed per batch.\n"
                 + "Larger values use more GPU memory but are faster.\n"
                 + "Reduce if you encounter out-of-memory errors."));
@@ -176,7 +176,7 @@ public class FeatureExtractionDialog {
 
         hfTokenField = new TextField();
         hfTokenField.setPromptText("hf_xxxxxxxxxxxxxxxxxxxx");
-        hfTokenField.setTooltip(new Tooltip(
+        hfTokenField.setTooltip(Tooltips.of(
                 "HuggingFace token for accessing gated models (H-optimus-0, Virchow, Hibou).\n"
                 + "Get your token at: https://huggingface.co/settings/tokens\n"
                 + "Not needed for Midnight or DINOv2."));

@@ -4,6 +4,37 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.10] -- 2026-08-04 -- tooltips that wrap
+
+### Fixed
+
+- **Long tooltips stretched across the screen instead of wrapping.** A JavaFX
+  `Tooltip` lays its text out on one line however long that is, and QP-CAT's
+  tooltips are explanatory by design -- they carry the "why", not just the
+  "what". The reported case was the **Spatial Smoothing: Use Squidpy Graph**
+  preference: 418 characters on a single line.
+
+  Two fixes, because there are two situations:
+  - **Tooltips QP-CAT builds** (195 of them, across 26 files) now go through
+    `Tooltips.of(...)`, which sets `wrapText` and a 420 px maximum. Soft
+    wrapping, so it adapts to the actual font and a short tooltip still sits on
+    one line.
+  - **Preference descriptions** are rendered by QuPath through ControlsFX's
+    `PropertySheet`, so we never see that `Tooltip` instance and cannot set
+    `wrapText` on it. All 47 are now hard-wrapped at 72 columns via
+    `Tooltips.wrap(...)` -- inserting real newlines is the only lever available,
+    and they are honoured regardless of who built the tooltip.
+
+### Notes
+
+- `Tooltips.wrap` breaks on spaces only, so a long unbroken token -- a file path
+  or a preference key -- overflows its line rather than being split somewhere
+  that makes it wrong to copy.
+- Newlines already in the text are preserved, so the tooltips that deliberately
+  use a blank line between paragraphs keep it.
+- Wrapping is idempotent, so re-wrapping already-wrapped text does not
+  accumulate breaks.
+
 ## [0.9.9] -- 2026-08-04 -- composition figures export, renamed clusters stay renamed, six-row menu, marker search
 
 Addresses [issue #12](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/12).

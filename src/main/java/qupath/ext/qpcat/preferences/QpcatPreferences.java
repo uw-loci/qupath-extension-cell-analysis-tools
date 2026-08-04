@@ -2,6 +2,7 @@ package qupath.ext.qpcat.preferences;
 
 import javafx.beans.property.*;
 import javafx.collections.ObservableList;
+import qupath.ext.qpcat.ui.Tooltips;
 import qupath.fx.prefs.controlsfx.PropertyItemBuilder;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.gui.prefs.PathPrefs;
@@ -552,38 +553,38 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(aeKlBetaMax, Double.class)
                 .name("KL Beta Max")
                 .category(CATEGORY_VAE)
-                .description("Maximum KL divergence weight per annealing cycle (default: 0.5). "
+                .description(Tooltips.wrap("Maximum KL divergence weight per annealing cycle (default: 0.5). "
                         + "Controls reconstruction vs regularization balance. "
-                        + "Lower = better reconstruction, higher = smoother latent space. Range: 0.1-1.0.")
+                        + "Lower = better reconstruction, higher = smoother latent space. Range: 0.1-1.0."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeKlCycles, Integer.class)
                 .name("KL Annealing Cycles")
                 .category(CATEGORY_VAE)
-                .description("Number of cyclical KL annealing cycles (default: 4). "
+                .description(Tooltips.wrap("Number of cyclical KL annealing cycles (default: 4). "
                         + "More cycles = more exploration before regularization. "
-                        + "Set to 1 for monotonic annealing. Range: 1-10.")
+                        + "Set to 1 for monotonic annealing. Range: 1-10."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeKlRampFraction, Double.class)
                 .name("KL Ramp Fraction")
                 .category(CATEGORY_VAE)
-                .description("Fraction of each cycle spent ramping KL from 0 to beta_max (default: 0.8). "
-                        + "The remaining fraction holds at beta_max. Range: 0.5-1.0.")
+                .description(Tooltips.wrap("Fraction of each cycle spent ramping KL from 0 to beta_max (default: 0.8). "
+                        + "The remaining fraction holds at beta_max. Range: 0.5-1.0."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeFreeBits, Double.class)
                 .name("Free Bits (nats)")
                 .category(CATEGORY_VAE)
-                .description("Minimum KL per latent dimension to prevent posterior collapse (default: 0.25). "
-                        + "Higher = stronger anti-collapse but less smooth latent space. Range: 0.0-1.0.")
+                .description(Tooltips.wrap("Minimum KL per latent dimension to prevent posterior collapse (default: 0.25). "
+                        + "Higher = stronger anti-collapse but less smooth latent space. Range: 0.0-1.0."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aePretrainFraction, Double.class)
                 .name("Unsupervised Pre-train Fraction")
                 .category(CATEGORY_VAE)
-                .description("Fraction of epochs to train without classification loss (default: 0.1). "
-                        + "Gives the latent space structure before labels are introduced. Range: 0.0-0.5.")
+                .description(Tooltips.wrap("Fraction of epochs to train without classification loss (default: 0.1). "
+                        + "Gives the latent space structure before labels are introduced. Range: 0.0-0.5."))
                 .build());
 
         // Augmentation settings are in the dialog's collapsible section, not here.
@@ -592,37 +593,37 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(aeGradClipNorm, Double.class)
                 .name("Gradient Clip Max Norm")
                 .category(CATEGORY_VAE)
-                .description("Maximum gradient norm for clipping (default: 1.0). "
-                        + "Prevents exploding gradients. Range: 0.5-5.0.")
+                .description(Tooltips.wrap("Maximum gradient norm for clipping (default: 1.0). "
+                        + "Prevents exploding gradients. Range: 0.5-5.0."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeLrSchedulerFactor, Double.class)
                 .name("LR Scheduler Reduction Factor")
                 .category(CATEGORY_VAE)
-                .description("Factor to reduce learning rate on plateau (default: 0.5 = halve). "
-                        + "Range: 0.1-0.9.")
+                .description(Tooltips.wrap("Factor to reduce learning rate on plateau (default: 0.5 = halve). "
+                        + "Range: 0.1-0.9."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeLrSchedulerPatience, Integer.class)
                 .name("LR Scheduler Patience")
                 .category(CATEGORY_VAE)
-                .description("Epochs without improvement before reducing LR (default: 10). "
-                        + "Range: 5-50.")
+                .description(Tooltips.wrap("Epochs without improvement before reducing LR (default: 10). "
+                        + "Range: 5-50."))
                 .build());
 
         // --- Operational ---
         items.add(new PropertyItemBuilder<>(aePointMatchDistance, Integer.class)
                 .name("Point Annotation Match Distance (px)")
                 .category(CATEGORY_VAE)
-                .description("Maximum distance in pixels to match a point annotation to the nearest "
-                        + "detection (default: 50). Increase for low-resolution images or large cells.")
+                .description(Tooltips.wrap("Maximum distance in pixels to match a point annotation to the nearest "
+                        + "detection (default: 50). Increase for low-resolution images or large cells."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(aeTileBatchSize, Integer.class)
                 .name("Tile I/O Batch Size")
                 .category(CATEGORY_VAE)
-                .description("Number of tiles read/written per batch during tile-mode training (default: 500). "
-                        + "Higher values use more memory but fewer I/O operations. Range: 100-2000.")
+                .description(Tooltips.wrap("Number of tiles read/written per batch during tile-mode training (default: 500). "
+                        + "Higher values use more memory but fewer I/O operations. Range: 100-2000."))
                 .build());
 
         // --- Run Clustering ---
@@ -630,55 +631,55 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(clusterSpatialKnn, Integer.class)
                 .name("Spatial Smoothing K-NN")
                 .category(CATEGORY_CLUSTERING)
-                .description("Number of spatial neighbors for graph convolution smoothing (default: 15). "
-                        + "Higher = more smoothing across nearby cells. Range: 5-50.")
+                .description(Tooltips.wrap("Number of spatial neighbors for graph convolution smoothing (default: 15). "
+                        + "Higher = more smoothing across nearby cells. Range: 5-50."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterTsnePerplexity, Double.class)
                 .name("t-SNE Perplexity")
                 .category(CATEGORY_CLUSTERING)
-                .description("Perplexity for t-SNE embedding (default: 30). "
-                        + "Controls local vs global structure balance. Range: 5-100.")
+                .description(Tooltips.wrap("Perplexity for t-SNE embedding (default: 30). "
+                        + "Controls local vs global structure balance. Range: 5-100."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterHdbscanMinSamples, Integer.class)
                 .name("HDBSCAN Min Samples")
                 .category(CATEGORY_CLUSTERING)
-                .description("HDBSCAN min_samples parameter (default: 5). "
-                        + "Lower = more clusters found, higher = denser clusters required. Range: 1-50.")
+                .description(Tooltips.wrap("HDBSCAN min_samples parameter (default: 5). "
+                        + "Lower = more clusters found, higher = denser clusters required. Range: 1-50."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterMiniBatchSize, Integer.class)
                 .name("MiniBatch KMeans Batch Size")
                 .category(CATEGORY_CLUSTERING)
-                .description("Batch size for MiniBatch KMeans algorithm (default: 1024). "
-                        + "Larger = more accurate but slower. Range: 256-8192.")
+                .description(Tooltips.wrap("Batch size for MiniBatch KMeans algorithm (default: 1024). "
+                        + "Larger = more accurate but slower. Range: 256-8192."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterBanksyPcaDims, Integer.class)
                 .name("BANKSY PCA Dimensions")
                 .category(CATEGORY_CLUSTERING)
-                .description("Number of PCA dimensions for BANKSY spatial clustering (default: 20). "
-                        + "Higher captures more variance but slower. Range: 5-50.")
+                .description(Tooltips.wrap("Number of PCA dimensions for BANKSY spatial clustering (default: 20). "
+                        + "Higher captures more variance but slower. Range: 5-50."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterPlotDpi, Integer.class)
                 .name("Plot DPI")
                 .category(CATEGORY_CLUSTERING)
-                .description("Resolution for saved clustering plots in DPI (default: 150). "
-                        + "Higher = larger files but sharper images. Range: 72-300.")
+                .description(Tooltips.wrap("Resolution for saved clustering plots in DPI (default: 150). "
+                        + "Higher = larger files but sharper images. Range: 72-300."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterAutoRegeneratePlots, Boolean.class)
                 .name("Auto-Regenerate Static Plots on Color Change")
                 .category(CATEGORY_CLUSTERING)
-                .description("When enabled, editing a cluster color in the Results window "
+                .description(Tooltips.wrap("When enabled, editing a cluster color in the Results window "
                         + "automatically regenerates the static matplotlib PNGs (embedding "
                         + "and spatial scatter) so they match the new colors; QP-CAT shows a "
                         + "brief notice while it runs. Default off: the interactive plots "
                         + "recolor instantly, and PNG regeneration costs a short Python "
                         + "round-trip. You can always regenerate on demand with the "
-                        + "'Regenerate static plots' button.")
+                        + "'Regenerate static plots' button."))
                 .build());
 
         // --- Spatial Statistics Expansion (v1) ---
@@ -686,65 +687,65 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(spatialGraphType, String.class)
                 .name("Spatial Graph Type")
                 .category(CATEGORY_CLUSTERING)
-                .description("Graph constructor used by spatial feature smoothing and the new "
+                .description(Tooltips.wrap("Graph constructor used by spatial feature smoothing and the new "
                         + "Ripley/Geary/co-occurrence statistics. One of 'knn', 'radius', or "
                         + "'delaunay'. Default: knn. Pick in the Run Clustering dialog as well; "
-                        + "this preference is the persisted default.")
+                        + "this preference is the persisted default."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialGraphK, Integer.class)
                 .name("Spatial Graph kNN k")
                 .category(CATEGORY_CLUSTERING)
-                .description("Number of nearest neighbors when graph type is kNN (default: 15). "
+                .description(Tooltips.wrap("Number of nearest neighbors when graph type is kNN (default: 15). "
                         + "Range: 2-200. Higher values produce smoother spatial structure but "
-                        + "blur small features.")
+                        + "blur small features."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialGraphRadius, Double.class)
                 .name("Spatial Graph Radius (px)")
                 .category(CATEGORY_CLUSTERING)
-                .description("Maximum distance for two cells to be neighbors when graph type is "
+                .description(Tooltips.wrap("Maximum distance for two cells to be neighbors when graph type is "
                         + "radius (pixel units of detection centroids). -1 = auto-derive from "
-                        + "median nearest-neighbor distance.")
+                        + "median nearest-neighbor distance."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialGraphDelaunayMaxEdge, Double.class)
                 .name("Spatial Graph Delaunay Max Edge (px)")
                 .category(CATEGORY_CLUSTERING)
-                .description("Maximum allowed edge length after Delaunay triangulation; longer "
+                .description(Tooltips.wrap("Maximum allowed edge length after Delaunay triangulation; longer "
                         + "edges are pruned. -1 = keep all edges. Useful when the tissue has "
-                        + "large empty regions that should not be bridged.")
+                        + "large empty regions that should not be bridged."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialPermutations, Integer.class)
                 .name("Spatial Stats Permutations")
                 .category(CATEGORY_CLUSTERING)
-                .description("Number of random permutations for the new spatial statistics. "
+                .description(Tooltips.wrap("Number of random permutations for the new spatial statistics. "
                         + "0 = adaptive default (1000 for <= 50k cells, 100 for 50k-500k, "
-                        + "50 above). Positive values override the adaptive default.")
+                        + "50 above). Positive values override the adaptive default."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialUseSquidpyGraphForSmoothing, Boolean.class)
                 .name("Spatial Smoothing: Use Squidpy Graph")
                 .category(CATEGORY_CLUSTERING)
-                .description("Route spatial feature smoothing through squidpy's spatial_neighbors "
+                .description(Tooltips.wrap("Route spatial feature smoothing through squidpy's spatial_neighbors "
                         + "so the same graph backs both smoothing and the new statistics. "
                         + "Default: off. The v0 smoothing path uses an inline sklearn kNN graph "
                         + "with (A + I) row-normalisation; the squidpy path uses pure-A "
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
-                        + "representative project.")
+                        + "representative project."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialPersistPlots, Boolean.class)
                 .name("Spatial Stats: Save Matplotlib PNGs")
                 .category(CATEGORY_CLUSTERING)
-                .description("When enabled (default), each spatial statistic that runs "
+                .description(Tooltips.wrap("When enabled (default), each spatial statistic that runs "
                         + "(Ripley K/L, Geary's C, co-occurrence) also writes a matplotlib PNG "
                         + "into the per-result plot directory. Filenames: ripley_k_l.png, "
                         + "geary_c.png, co_occurrence_pairwise.png, co_occurrence_one_vs_rest.png. "
                         + "Required for the Multi-Figure Batch Export dialog to include these "
-                        + "plots; disable only to skip the savefig step entirely.")
+                        + "plots; disable only to skip the savefig step entirely."))
                 .build());
 
         // --- Spatial Graph Overlay (v0.3) ---
@@ -752,59 +753,59 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(spatialPushConnectionsToViewer, Boolean.class)
                 .name("Spatial Overlay: Push Connections to Viewer")
                 .category(CATEGORY_CLUSTERING)
-                .description("When enabled (default), the spatial neighbor graph is "
+                .description(Tooltips.wrap("When enabled (default), the spatial neighbor graph is "
                         + "pushed to QuPath's PathObjectConnections slot after every "
                         + "Spatial Statistics run so View -> Show object connections "
                         + "renders the edges. Disable to keep the graph internal to "
-                        + "QP-CAT.")
+                        + "QP-CAT."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialConnectionsPromptThreshold, Integer.class)
                 .name("Spatial Overlay: Prompt Above N Edges")
                 .category(CATEGORY_CLUSTERING)
-                .description("Above this undirected edge count (default 250000), "
+                .description(Tooltips.wrap("Above this undirected edge count (default 250000), "
                         + "QP-CAT prompts before pushing the spatial graph to the "
                         + "viewer. Large graphs can slow pan and zoom. Raise on a "
-                        + "fast workstation, lower on a remote-desktop session.")
+                        + "fast workstation, lower on a remote-desktop session."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialDelaunayMaxEdgeUm, Double.class)
                 .name("Spatial Overlay: Delaunay Max Edge (microns)")
                 .category(CATEGORY_CLUSTERING)
-                .description("Maximum allowed edge length after Delaunay "
+                .description(Tooltips.wrap("Maximum allowed edge length after Delaunay "
                         + "triangulation, in microns; longer edges are pruned. "
                         + "-1 = no pruning. Used when the current image has a "
                         + "pixel-size calibration; otherwise the pixel-based "
-                        + "delaunayMaxEdge preference applies.")
+                        + "delaunayMaxEdge preference applies."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialWriteNodeMeasurements, Boolean.class)
                 .name("Spatial Overlay: Write Node Measurements")
                 .category(CATEGORY_CLUSTERING)
-                .description("When enabled (default), every Spatial Statistics run "
+                .description(Tooltips.wrap("When enabled (default), every Spatial Statistics run "
                         + "writes QPCAT spatial: Num neighbors, Mean/Median/Max/Min "
                         + "distance to each cell's measurement table. With Delaunay "
-                        + "graphs, Mean/Max triangle area are also written.")
+                        + "graphs, Mean/Max triangle area are also written."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialWriteComponentMeasurements, Boolean.class)
                 .name("Spatial Overlay: Write Component Measurements")
                 .category(CATEGORY_CLUSTERING)
-                .description("Opt-in (default off). For each graph-connected "
+                .description(Tooltips.wrap("Opt-in (default off). For each graph-connected "
                         + "component, write QPCAT component: size and "
                         + "QPCAT component: mean: <X> for every existing numeric "
                         + "measurement. NOTE: graph components are NOT Leiden "
-                        + "clusters; see BEST_PRACTICES.md.")
+                        + "clusters; see BEST_PRACTICES.md."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialLimitEdgesBySameClass, Boolean.class)
                 .name("Spatial Overlay: Limit Edges to Same Class")
                 .category(CATEGORY_CLUSTERING)
-                .description("Post-hoc filter on the displayed spatial graph "
+                .description(Tooltips.wrap("Post-hoc filter on the displayed spatial graph "
                         + "(default off). Hides edges connecting cells of different "
                         + "classes. Toggle on after phenotyping to visualise "
                         + "same-type neighborhoods; toggle off to restore the full "
-                        + "graph. Does not re-run clustering.")
+                        + "graph. Does not re-run clustering."))
                 .build());
 
         // --- Run Phenotyping ---
@@ -812,36 +813,36 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(phenoHistogramBins, Integer.class)
                 .name("Histogram Bins")
                 .category(CATEGORY_PHENOTYPING)
-                .description("Number of bins for marker histograms and threshold computation (default: 50). "
-                        + "More bins = finer resolution but noisier for small datasets. Range: 20-200.")
+                .description(Tooltips.wrap("Number of bins for marker histograms and threshold computation (default: 50). "
+                        + "More bins = finer resolution but noisier for small datasets. Range: 20-200."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(phenoMinValidValues, Integer.class)
                 .name("Min Valid Values for Threshold")
                 .category(CATEGORY_PHENOTYPING)
-                .description("Minimum non-zero values per marker to compute auto-threshold (default: 10). "
-                        + "Markers with fewer values are skipped. Range: 2-100.")
+                .description(Tooltips.wrap("Minimum non-zero values per marker to compute auto-threshold (default: 10). "
+                        + "Markers with fewer values are skipped. Range: 2-100."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(phenoGmmMaxIter, Integer.class)
                 .name("GMM Max Iterations")
                 .category(CATEGORY_PHENOTYPING)
-                .description("Maximum iterations for Gaussian Mixture Model threshold fitting (default: 200). "
-                        + "Increase if GMM fails to converge. Range: 50-1000.")
+                .description(Tooltips.wrap("Maximum iterations for Gaussian Mixture Model threshold fitting (default: 200). "
+                        + "Increase if GMM fails to converge. Range: 50-1000."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(phenoGammaStdMultiplier, Double.class)
                 .name("Gamma Threshold Std Multiplier")
                 .category(CATEGORY_PHENOTYPING)
-                .description("Threshold = mode + N*std for gamma distribution method (default: 1.0). "
-                        + "Higher = stricter positive threshold. Range: 0.5-3.0.")
+                .description(Tooltips.wrap("Threshold = mode + N*std for gamma distribution method (default: 1.0). "
+                        + "Higher = stricter positive threshold. Range: 0.5-3.0."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(phenoGateMax, Double.class)
                 .name("Gate Threshold Max")
                 .category(CATEGORY_PHENOTYPING)
-                .description("Maximum value for per-marker gate threshold spinners (default: 5.0). "
-                        + "Increase if your normalized values exceed this range.")
+                .description(Tooltips.wrap("Maximum value for per-marker gate threshold spinners (default: 5.0). "
+                        + "Increase if your normalized values exceed this range."))
                 .build());
 
         // --- Extract Foundation Model Features ---
@@ -849,15 +850,15 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(fmTileSize, Integer.class)
                 .name("Tile Size")
                 .category(CATEGORY_FEATURES)
-                .description("Tile size in pixels for foundation model input (default: 224). "
-                        + "Most models expect 224. Only change if using a model with different input size.")
+                .description(Tooltips.wrap("Tile size in pixels for foundation model input (default: 224). "
+                        + "Most models expect 224. Only change if using a model with different input size."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(fmBatchSize, Integer.class)
                 .name("Batch Size")
                 .category(CATEGORY_FEATURES)
-                .description("Number of tiles per GPU batch for feature extraction (default: 32). "
-                        + "Reduce if running out of GPU memory. Range: 1-128.")
+                .description(Tooltips.wrap("Number of tiles per GPU batch for feature extraction (default: 32). "
+                        + "Reduce if running out of GPU memory. Range: 1-128."))
                 .build());
 
         // --- LLM Cluster Explainer ---
@@ -865,47 +866,47 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(llmProvider, String.class)
                 .name("Provider")
                 .category(CATEGORY_LLM)
-                .description("LLM provider used by the Cluster Explainer tab "
+                .description(Tooltips.wrap("LLM provider used by the Cluster Explainer tab "
                         + "(NONE / ANTHROPIC / OLLAMA). Pick a provider, then enter "
                         + "your API key or Ollama endpoint inside the tab itself. "
                         + "The API key is held in memory only and is never written "
-                        + "to this preferences file.")
+                        + "to this preferences file."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmAnthropicModel, String.class)
                 .name("Anthropic Model")
                 .category(CATEGORY_LLM)
-                .description("Anthropic model id used when Provider is ANTHROPIC "
-                        + "(default: claude-sonnet-4-5).")
+                .description(Tooltips.wrap("Anthropic model id used when Provider is ANTHROPIC "
+                        + "(default: claude-sonnet-4-5)."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmOllamaModel, String.class)
                 .name("Ollama Model")
                 .category(CATEGORY_LLM)
-                .description("Local Ollama model id used when Provider is OLLAMA "
-                        + "(default: llama3.1:8b). Run 'ollama pull <name>' first.")
+                .description(Tooltips.wrap("Local Ollama model id used when Provider is OLLAMA "
+                        + "(default: llama3.1:8b). Run 'ollama pull <name>' first."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmOllamaEndpoint, String.class)
                 .name("Ollama Endpoint")
                 .category(CATEGORY_LLM)
-                .description("Base URL of your local Ollama server "
-                        + "(default: http://localhost:11434).")
+                .description(Tooltips.wrap("Base URL of your local Ollama server "
+                        + "(default: http://localhost:11434)."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmTopMarkers, Integer.class)
                 .name("Top Markers Per Cluster")
                 .category(CATEGORY_LLM)
-                .description("Default number of top markers per cluster sent in the "
+                .description(Tooltips.wrap("Default number of top markers per cluster sent in the "
                         + "prompt (default: 10). The dialog clamps to the number of "
-                        + "markers actually available in the marker rankings JSON.")
+                        + "markers actually available in the marker rankings JSON."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmTimeoutSec, Integer.class)
                 .name("Request Timeout (seconds)")
                 .category(CATEGORY_LLM)
-                .description("Timeout for a single LLM HTTP request "
-                        + "(default: 60). Increase for slow local models on CPU.")
+                .description(Tooltips.wrap("Timeout for a single LLM HTTP request "
+                        + "(default: 60). Increase for slow local models on CPU."))
                 .build());
 
         // --- General ---
@@ -913,31 +914,31 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(taskMaxRetries, Integer.class)
                 .name("Task Max Retries")
                 .category(CATEGORY_GENERAL)
-                .description("Maximum retry attempts on Appose 'thread death' errors (default: 3). "
-                        + "Increase if thread death errors persist. Range: 1-10.")
+                .description(Tooltips.wrap("Maximum retry attempts on Appose 'thread death' errors (default: 3). "
+                        + "Increase if thread death errors persist. Range: 1-10."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(taskRetrySleepMs, Integer.class)
                 .name("Task Retry Sleep (ms)")
                 .category(CATEGORY_GENERAL)
-                .description("Milliseconds to wait between task retries (default: 200). "
-                        + "Increase if retries fail. Range: 100-2000.")
+                .description(Tooltips.wrap("Milliseconds to wait between task retries (default: 200). "
+                        + "Increase if retries fail. Range: 100-2000."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(shutdownTimeoutMs, Integer.class)
                 .name("Python Shutdown Timeout (ms)")
                 .category(CATEGORY_GENERAL)
-                .description("Milliseconds to wait for Python service shutdown (default: 5000). "
-                        + "Increase if Python tasks take longer to stop gracefully.")
+                .description(Tooltips.wrap("Milliseconds to wait for Python service shutdown (default: 5000). "
+                        + "Increase if Python tasks take longer to stop gracefully."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(acknowledgedBackupWarning, Boolean.class)
                 .name("Backup Warning Acknowledged")
                 .category(CATEGORY_GENERAL)
-                .description("When checked, the one-time 'back up your project before running "
+                .description(Tooltips.wrap("When checked, the one-time 'back up your project before running "
                         + "classification-changing tools' warning has been dismissed and will "
                         + "not show again. Uncheck to see the warning again the next time you "
-                        + "open a clustering / phenotyping tool.")
+                        + "open a clustering / phenotyping tool."))
                 .build());
     }
 }

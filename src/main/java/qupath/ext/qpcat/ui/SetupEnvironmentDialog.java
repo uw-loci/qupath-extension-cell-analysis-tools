@@ -49,7 +49,7 @@ public class SetupEnvironmentDialog {
 
         setupButton = new Button("Setup Environment");
         setupButton.setOnAction(e -> startSetup());
-        setupButton.setTooltip(new Tooltip(
+        setupButton.setTooltip(Tooltips.of(
                 "Download and install the Python environment with\n"
                 + "scikit-learn, scanpy, UMAP, and other dependencies.\n"
                 + "Requires internet (~1.5-2.5 GB download)."));

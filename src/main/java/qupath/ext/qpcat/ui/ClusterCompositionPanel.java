@@ -141,7 +141,7 @@ public class ClusterCompositionPanel extends BorderPane {
         // Same renderer the batch exporter uses, so a figure saved here and one
         // saved by "Export figures (batch)" are the same picture.
         Button exportBtn = new Button("Export figure + table...");
-        exportBtn.setTooltip(new Tooltip(
+        exportBtn.setTooltip(Tooltips.of(
                 "Write the combined pie figure (PNG) and the composition table (CSV) to a "
                 + "folder, plus a subfolder holding each pie as its own PNG and one shared "
                 + "legend -- so you can lay the panel out yourself. The combined figure is "
@@ -306,7 +306,7 @@ public class ClusterCompositionPanel extends BorderPane {
             d.nodeProperty().addListener((obs, oldN, newN) -> {
                 if (newN != null) {
                     newN.setStyle("-fx-pie-color: " + toHex(colorFor(cluster)) + ";");
-                    Tooltip.install(newN, new Tooltip(String.format(
+                    Tooltip.install(newN, Tooltips.of(String.format(
                             "%s: %d cells (%.1f%%)",
                             figure.clusterName(cluster), row[cluster], pct)));
                 }

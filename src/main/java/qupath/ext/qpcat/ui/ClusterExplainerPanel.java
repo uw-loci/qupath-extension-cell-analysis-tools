@@ -189,7 +189,7 @@ public class ClusterExplainerPanel {
                 Provider.NONE, Provider.ANTHROPIC, Provider.OLLAMA));
         Provider initial = parseProvider(QpcatPreferences.getLlmProvider());
         providerCombo.getSelectionModel().select(initial);
-        providerCombo.setTooltip(new Tooltip(
+        providerCombo.setTooltip(Tooltips.of(
                 "Which LLM service to call. Anthropic = remote Claude API "
                 + "(paid, requires a key). Ollama = local server "
                 + "(free, requires 'ollama serve' running)."));
@@ -201,7 +201,7 @@ public class ClusterExplainerPanel {
 
         modelCombo = new ComboBox<>();
         modelCombo.setEditable(true);
-        modelCombo.setTooltip(new Tooltip(
+        modelCombo.setTooltip(Tooltips.of(
                 "Which model the chosen provider uses. Larger models give "
                 + "better suggestions but cost more or are slower."));
         populateModelsForProvider(initial);
@@ -218,7 +218,7 @@ public class ClusterExplainerPanel {
         endpointField = new TextField(QpcatPreferences.getLlmOllamaEndpoint());
         endpointField.setPromptText("http://localhost:11434");
         endpointField.setPrefColumnCount(28);
-        endpointField.setTooltip(new Tooltip(
+        endpointField.setTooltip(Tooltips.of(
                 "URL of your local Ollama server. Default: http://localhost:11434. "
                 + "Change only if you run Ollama on another host or port."));
         endpointField.textProperty().addListener((obs, oldV, newV) -> {
@@ -230,7 +230,7 @@ public class ClusterExplainerPanel {
         apiKeyField = new PasswordField();
         apiKeyField.setPromptText("sk-ant-...");
         apiKeyField.setPrefColumnCount(40);
-        apiKeyField.setTooltip(new Tooltip(
+        apiKeyField.setTooltip(Tooltips.of(
                 "Your Anthropic API key (starts with 'sk-ant-...'). Held in "
                 + "memory only; not written to disk. Re-enter each QuPath "
                 + "session, or set QPCAT_ANTHROPIC_KEY in your environment."));
@@ -239,7 +239,7 @@ public class ClusterExplainerPanel {
         apiKeyField.textProperty().addListener((obs, oldV, newV) -> refreshState());
 
         Button clearKeyBtn = new Button("Clear");
-        clearKeyBtn.setTooltip(new Tooltip(
+        clearKeyBtn.setTooltip(Tooltips.of(
                 "Wipe the API key from memory. The field empties and the key "
                 + "cannot be sent again until you re-enter it."));
         clearKeyBtn.setAccessibleText("Clear API key from memory");
@@ -285,13 +285,13 @@ public class ClusterExplainerPanel {
         scopeRadioAll = new RadioButton("All clusters");
         scopeRadioAll.setToggleGroup(scopeGroup);
         scopeRadioAll.setSelected(true);
-        scopeRadioAll.setTooltip(new Tooltip(
+        scopeRadioAll.setTooltip(Tooltips.of(
                 "Send one prompt covering every cluster. One LLM call, all "
                 + "results at once. Cheaper per cluster and usually faster "
                 + "end-to-end."));
         scopeRadioOne = new RadioButton("Selected:");
         scopeRadioOne.setToggleGroup(scopeGroup);
-        scopeRadioOne.setTooltip(new Tooltip(
+        scopeRadioOne.setTooltip(Tooltips.of(
                 "Send a prompt for a single cluster. Useful for re-running "
                 + "with different settings or for clusters that need extra "
                 + "attention."));
@@ -304,7 +304,7 @@ public class ClusterExplainerPanel {
         if (!clusterIds.isEmpty()) {
             clusterCombo.getSelectionModel().selectFirst();
         }
-        clusterCombo.setTooltip(new Tooltip(
+        clusterCombo.setTooltip(Tooltips.of(
                 "Which cluster to explain. Disabled when 'All clusters' is "
                 + "selected."));
         scopeRadioAll.selectedProperty().addListener((obs, oldV, newV) ->
@@ -319,7 +319,7 @@ public class ClusterExplainerPanel {
         topMarkersSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(topMarkersSpinner);
         topMarkersSpinner.setPrefWidth(80);
-        topMarkersSpinner.setTooltip(new Tooltip(
+        topMarkersSpinner.setTooltip(Tooltips.of(
                 "How many top-ranked markers per cluster to include in the "
                 + "prompt. More markers give the LLM more signal but cost "
                 + "more tokens. Capped at the number of markers available "
@@ -331,7 +331,7 @@ public class ClusterExplainerPanel {
         runBtn = new Button("Run Explainer");
         runBtn.setDefaultButton(true);
         runBtn.setOnAction(e -> onRunPressed());
-        runBtn.setTooltip(new Tooltip(
+        runBtn.setTooltip(Tooltips.of(
                 "Send the prompt to the chosen provider and wait for the "
                 + "response. The dialog stays usable; the call runs on a "
                 + "background thread."));
@@ -340,7 +340,7 @@ public class ClusterExplainerPanel {
         cancelBtn = new Button("Cancel");
         cancelBtn.setDisable(true);
         cancelBtn.setOnAction(e -> onCancelPressed());
-        cancelBtn.setTooltip(new Tooltip(
+        cancelBtn.setTooltip(Tooltips.of(
                 "Stop waiting for the current LLM response. Already-spent "
                 + "tokens cannot be refunded; nothing will be applied to "
                 + "the project."));
@@ -401,7 +401,7 @@ public class ClusterExplainerPanel {
         markersCol.setPrefWidth(260);
 
         resultsTable.getColumns().addAll(clusterCol, phenotypeCol, confidenceCol, markersCol);
-        resultsTable.setTooltip(new Tooltip(
+        resultsTable.setTooltip(Tooltips.of(
                 "One row per cluster. Select a row to see the model's "
                 + "rationale below."));
         resultsTable.getSelectionModel().selectedItemProperty().addListener(
@@ -413,13 +413,13 @@ public class ClusterExplainerPanel {
         rationaleArea.setPrefRowCount(5);
         rationaleArea.setPromptText(
                 "Select a cluster row above to see the LLM's reasoning here.");
-        rationaleArea.setTooltip(new Tooltip(
+        rationaleArea.setTooltip(Tooltips.of(
                 "The LLM's free-text reasoning for the selected cluster. "
                 + "Always cross-check against the Marker Rankings tab and "
                 + "your panel knowledge."));
 
         copyTsvBtn = new Button("Copy results as TSV");
-        copyTsvBtn.setTooltip(new Tooltip(
+        copyTsvBtn.setTooltip(Tooltips.of(
                 "Copy the results table to the clipboard as tab-separated "
                 + "values, ready to paste into a spreadsheet or report."));
         copyTsvBtn.setOnAction(e -> copyTsvToClipboard());
@@ -430,7 +430,7 @@ public class ClusterExplainerPanel {
                 javafx.beans.binding.Bindings.isEmpty(tableRows));
 
         regenSelectedBtn = new Button("Regenerate selected cluster");
-        regenSelectedBtn.setTooltip(new Tooltip(
+        regenSelectedBtn.setTooltip(Tooltips.of(
                 "Re-run the explainer on the currently-selected cluster "
                 + "only. The new result replaces the old row."));
         regenSelectedBtn.setOnAction(e -> onRegenSelected());

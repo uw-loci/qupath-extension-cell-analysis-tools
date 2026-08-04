@@ -141,10 +141,10 @@ public class ProjectImageSelector extends VBox {
 
         // --- Select all / none (operate on the visible/filtered rows) ---
         Button selectAll = new Button("Select all");
-        selectAll.setTooltip(new Tooltip("Check every image currently shown (respects the filters)."));
+        selectAll.setTooltip(Tooltips.of("Check every image currently shown (respects the filters)."));
         selectAll.setOnAction(e -> setVisibleSelected(true));
         Button selectNone = new Button("Select none");
-        selectNone.setTooltip(new Tooltip("Uncheck every image currently shown (respects the filters)."));
+        selectNone.setTooltip(Tooltips.of("Uncheck every image currently shown (respects the filters)."));
         selectNone.setOnAction(e -> setVisibleSelected(false));
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);

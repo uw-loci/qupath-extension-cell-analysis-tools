@@ -269,7 +269,7 @@ public class BugReportDialog {
             Label hint = new Label("View it or add more detail here:");
             hint.setWrapText(true);
             Hyperlink link = new Hyperlink(url);
-            link.setTooltip(new Tooltip("Open the issue in your browser"));
+            link.setTooltip(Tooltips.of("Open the issue in your browser"));
             link.setOnAction(e -> QuPathGUI.openInBrowser(url));
             content.getChildren().addAll(hint, link);
         }

@@ -285,13 +285,13 @@ public class AutoencoderDialog {
         detectionsRadio = new RadioButton("All detections");
         detectionsRadio.setToggleGroup(objectTypeGroup);
         detectionsRadio.setSelected(!QpcatPreferences.isAeCellsOnly());
-        detectionsRadio.setTooltip(new Tooltip(
+        detectionsRadio.setTooltip(Tooltips.of(
                 "Train and classify all detection objects."));
 
         cellsOnlyRadio = new RadioButton("Cell objects only (nucleus + cytoplasm)");
         cellsOnlyRadio.setToggleGroup(objectTypeGroup);
         cellsOnlyRadio.setSelected(QpcatPreferences.isAeCellsOnly());
-        cellsOnlyRadio.setTooltip(new Tooltip(
+        cellsOnlyRadio.setTooltip(Tooltips.of(
                 "Train and classify only cell objects (PathCellObject)\n"
                 + "which have distinct nucleus and cytoplasm compartments."));
 
@@ -308,21 +308,21 @@ public class AutoencoderDialog {
 
         labelLockedCheck = new CheckBox("Locked annotations (region-based labeling)");
         labelLockedCheck.setSelected(QpcatPreferences.isAeLabelFromLockedAnnotations());
-        labelLockedCheck.setTooltip(new Tooltip(
+        labelLockedCheck.setTooltip(Tooltips.of(
                 "Label detections based on locked, classified annotations.\n"
                 + "All detections inside a locked annotation inherit its class.\n\n"
                 + "Workflow: draw annotation -> assign class -> lock it."));
 
         labelPointsCheck = new CheckBox("Point annotations (per-cell labeling)");
         labelPointsCheck.setSelected(QpcatPreferences.isAeLabelFromPoints());
-        labelPointsCheck.setTooltip(new Tooltip(
+        labelPointsCheck.setTooltip(Tooltips.of(
                 "Label individual cells via classified point annotations.\n"
                 + "Each point labels the nearest detection within 50 pixels.\n\n"
                 + "Workflow: select Points tool -> assign class -> click on cells."));
 
         labelDetectionsCheck = new CheckBox("Existing detection classifications");
         labelDetectionsCheck.setSelected(QpcatPreferences.isAeLabelFromDetections());
-        labelDetectionsCheck.setTooltip(new Tooltip(
+        labelDetectionsCheck.setTooltip(Tooltips.of(
                 "Use existing PathClass labels already assigned to detections.\n"
                 + "Ignores 'Cluster *' labels from prior clustering runs.\n\n"
                 + "Off by default to avoid inheriting old cluster labels."));
@@ -342,7 +342,7 @@ public class AutoencoderDialog {
         imageListView = new ListView<>();
         imageListView.setMinHeight(80);
         imageListView.setMaxHeight(120);
-        imageListView.setTooltip(new Tooltip(
+        imageListView.setTooltip(Tooltips.of(
                 "Check images to include in training or application.\n"
                 + "Multi-image training produces more robust classifiers.\n"
                 + "Uncheck training images before applying to avoid\n"
@@ -390,10 +390,10 @@ public class AutoencoderDialog {
         // Select All / Deselect All buttons
         Button selectAll = new Button("Select All");
         selectAll.setOnAction(e -> imageCheckProps.forEach(p -> p.set(true)));
-        selectAll.setTooltip(new Tooltip("Check all project images."));
+        selectAll.setTooltip(Tooltips.of("Check all project images."));
         Button deselectAll = new Button("Deselect All");
         deselectAll.setOnAction(e -> imageCheckProps.forEach(p -> p.set(false)));
-        deselectAll.setTooltip(new Tooltip("Uncheck all project images."));
+        deselectAll.setTooltip(Tooltips.of("Uncheck all project images."));
         HBox btnRow = new HBox(5, selectAll, deselectAll);
 
         return new VBox(5, heading, imageListView, btnRow);
@@ -422,7 +422,7 @@ public class AutoencoderDialog {
 
         Button autoBalanceBtn = new Button("Auto-Balance Weights");
         autoBalanceBtn.setOnAction(e -> autoBalanceWeights());
-        autoBalanceBtn.setTooltip(new Tooltip(
+        autoBalanceBtn.setTooltip(Tooltips.of(
                 "Compute inverse-frequency weights so rare classes\n"
                 + "get more influence during training. Resets any\n"
                 + "manual weight adjustments."));
@@ -450,7 +450,7 @@ public class AutoencoderDialog {
         measurementModeRadio = new RadioButton("Cell measurements");
         measurementModeRadio.setToggleGroup(inputModeGroup);
         measurementModeRadio.setSelected(!"tiles".equals(QpcatPreferences.getAeInputMode()));
-        measurementModeRadio.setTooltip(new Tooltip(
+        measurementModeRadio.setTooltip(Tooltips.of(
                 "Use per-cell measurement values as input.\n"
                 + "All checked measurements are used (intensity, morphology, etc.).\n"
                 + "Fast, works on CPU. Recommended for most cases."));
@@ -458,7 +458,7 @@ public class AutoencoderDialog {
         tileModeRadio = new RadioButton("Tile images (pixel data around each cell)");
         tileModeRadio.setToggleGroup(inputModeGroup);
         tileModeRadio.setSelected("tiles".equals(QpcatPreferences.getAeInputMode()));
-        tileModeRadio.setTooltip(new Tooltip(
+        tileModeRadio.setTooltip(Tooltips.of(
                 "Use multi-channel image tiles centered on each cell.\n"
                 + "Captures spatial morphology and texture patterns.\n"
                 + "Slower, benefits from GPU. Uses all image channels."));
@@ -466,7 +466,7 @@ public class AutoencoderDialog {
         // Measurement CheckComboBox (dropdown with checkboxes, right-click to select/deselect all)
         measurementCombo = new CheckComboBox<>();
         measurementCombo.setMaxWidth(Double.MAX_VALUE);
-        measurementCombo.setTooltip(new Tooltip(
+        measurementCombo.setTooltip(Tooltips.of(
                 "Check which measurements to use as input features.\n"
                 + "All measurement types available: intensity, morphology, texture, etc.\n"
                 + "In tile mode: checked measurements are combined with tile images\n"
@@ -513,7 +513,7 @@ public class AutoencoderDialog {
         SpinnerUtils.commitOnFocusLoss(tileSizeSpinner);
         tileSizeSpinner.setPrefWidth(80);
         tileSizeSpinner.setDisable(true);
-        tileSizeSpinner.setTooltip(new Tooltip(
+        tileSizeSpinner.setTooltip(Tooltips.of(
                 "Size of the square tile around each cell centroid (pixels).\n"
                 + "Auto-computed from 95th percentile cell size + context."));
 
@@ -523,7 +523,7 @@ public class AutoencoderDialog {
         includeMaskCheck = new CheckBox("Include cell mask channel");
         includeMaskCheck.setSelected(QpcatPreferences.isAeIncludeMask());
         includeMaskCheck.setDisable(true);
-        includeMaskCheck.setTooltip(new Tooltip(
+        includeMaskCheck.setTooltip(Tooltips.of(
                 "Append a binary mask channel (1 inside cell ROI, 0 outside).\n"
                 + "CellSighter approach (Amitay et al. 2023, Nat. Comm.)."));
 
@@ -537,7 +537,7 @@ public class AutoencoderDialog {
             if (Math.abs(dsValues[di] - savedDs) < 0.01) { dsIdx = di; break; }
         }
         downsampleCombo.getSelectionModel().select(dsIdx);
-        downsampleCombo.setTooltip(new Tooltip(
+        downsampleCombo.setTooltip(Tooltips.of(
                 "Downsample factor for tile reading.\n"
                 + "1x = full resolution, 2x = half, 4x = quarter, etc.\n"
                 + "Higher values reduce memory and speed up training\n"
@@ -570,7 +570,7 @@ public class AutoencoderDialog {
         String savedNorm = QpcatPreferences.getAeNormalization();
         int normIdx = "minmax".equals(savedNorm) ? 1 : "none".equals(savedNorm) ? 2 : 0;
         normalizationCombo.getSelectionModel().select(normIdx);
-        normalizationCombo.setTooltip(new Tooltip(
+        normalizationCombo.setTooltip(Tooltips.of(
                 "Normalization applied before training.\n"
                 + "Z-score: recommended for measurements.\n"
                 + "Min-Max: recommended for tile pixel values."));
@@ -592,13 +592,13 @@ public class AutoencoderDialog {
         latentDimSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(latentDimSpinner);
         latentDimSpinner.setPrefWidth(80);
-        latentDimSpinner.setTooltip(new Tooltip("Latent space dimensions (default: 16)."));
+        latentDimSpinner.setTooltip(Tooltips.of("Latent space dimensions (default: 16)."));
 
         epochsSpinner = new Spinner<>(10, 1000, QpcatPreferences.getAeEpochs(), 10);
         epochsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(epochsSpinner);
         epochsSpinner.setPrefWidth(80);
-        epochsSpinner.setTooltip(new Tooltip("Max training epochs (default: 100). Early stopping may stop sooner."));
+        epochsSpinner.setTooltip(Tooltips.of("Max training epochs (default: 100). Early stopping may stop sooner."));
 
         var lrFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(
                 0.00001, 0.1, QpcatPreferences.getAeLearningRate(), 0.0001);
@@ -613,35 +613,35 @@ public class AutoencoderDialog {
         learningRateSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(learningRateSpinner);
         learningRateSpinner.setPrefWidth(100);
-        learningRateSpinner.setTooltip(new Tooltip("AdamW learning rate (default: 0.001). OneCycleLR adjusts automatically."));
+        learningRateSpinner.setTooltip(Tooltips.of("AdamW learning rate (default: 0.001). OneCycleLR adjusts automatically."));
 
         batchSizeSpinner = new Spinner<>(16, 1024, QpcatPreferences.getAeBatchSize(), 32);
         batchSizeSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(batchSizeSpinner);
         batchSizeSpinner.setPrefWidth(80);
-        batchSizeSpinner.setTooltip(new Tooltip("Training batch size (default: 128)."));
+        batchSizeSpinner.setTooltip(Tooltips.of("Training batch size (default: 128)."));
 
         supervisionWeightSpinner = new Spinner<>(0.0, 10.0, QpcatPreferences.getAeSupervisionWeight(), 0.1);
         supervisionWeightSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(supervisionWeightSpinner);
         supervisionWeightSpinner.setPrefWidth(80);
-        supervisionWeightSpinner.setTooltip(new Tooltip("Classification loss weight (default: 1.0). Set to 0 for unsupervised."));
+        supervisionWeightSpinner.setTooltip(Tooltips.of("Classification loss weight (default: 1.0). Set to 0 for unsupervised."));
 
         valSplitSpinner = new Spinner<>(0.0, 0.5, QpcatPreferences.getAeValSplit(), 0.05);
         valSplitSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(valSplitSpinner);
         valSplitSpinner.setPrefWidth(80);
-        valSplitSpinner.setTooltip(new Tooltip("Validation holdout fraction (default: 0.2). Set to 0 to disable."));
+        valSplitSpinner.setTooltip(Tooltips.of("Validation holdout fraction (default: 0.2). Set to 0 to disable."));
 
         earlyStopSpinner = new Spinner<>(0, 100, QpcatPreferences.getAeEarlyStopPatience());
         earlyStopSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(earlyStopSpinner);
         earlyStopSpinner.setPrefWidth(80);
-        earlyStopSpinner.setTooltip(new Tooltip("Early stopping patience (default: 15). Set to 0 to disable."));
+        earlyStopSpinner.setTooltip(Tooltips.of("Early stopping patience (default: 15). Set to 0 to disable."));
 
         classWeightsCheck = new CheckBox("Class weighting (handle imbalanced populations)");
         classWeightsCheck.setSelected(QpcatPreferences.isAeClassWeights());
-        classWeightsCheck.setTooltip(new Tooltip("Inverse-frequency weights for rare cell types."));
+        classWeightsCheck.setTooltip(Tooltips.of("Inverse-frequency weights for rare cell types."));
 
         GridPane grid = new GridPane();
         grid.setHgap(10);
@@ -664,7 +664,7 @@ public class AutoencoderDialog {
         // --- Master enable ---
         augmentationCheck = new CheckBox("Enable data augmentation");
         augmentationCheck.setSelected(QpcatPreferences.isAeAugmentation());
-        augmentationCheck.setTooltip(new Tooltip(
+        augmentationCheck.setTooltip(Tooltips.of(
                 "Apply random perturbations during training to improve\n"
                 + "generalization and reduce overfitting. Augmentation is\n"
                 + "applied to training data only, never to validation."));
@@ -677,7 +677,7 @@ public class AutoencoderDialog {
         noiseSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(noiseSpinner);
         noiseSpinner.setPrefWidth(80);
-        noiseSpinner.setTooltip(new Tooltip(
+        noiseSpinner.setTooltip(Tooltips.of(
                 "Gaussian noise standard deviation (default: 0.02).\n"
                 + "Added to normalized feature values. Simulates measurement noise.\n"
                 + "Higher = more aggressive augmentation. Range: 0.0-0.2."));
@@ -686,7 +686,7 @@ public class AutoencoderDialog {
         scaleSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(scaleSpinner);
         scaleSpinner.setPrefWidth(80);
-        scaleSpinner.setTooltip(new Tooltip(
+        scaleSpinner.setTooltip(Tooltips.of(
                 "Per-feature random scaling range +/- (default: 0.1 = +/-10%).\n"
                 + "Simulates staining intensity variability. Range: 0.0-0.5."));
 
@@ -694,7 +694,7 @@ public class AutoencoderDialog {
         dropoutSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(dropoutSpinner);
         dropoutSpinner.setPrefWidth(80);
-        dropoutSpinner.setTooltip(new Tooltip(
+        dropoutSpinner.setTooltip(Tooltips.of(
                 "Probability of zeroing each feature (default: 0.1).\n"
                 + "Improves robustness to missing measurements. Range: 0.0-0.5."));
 
@@ -711,22 +711,22 @@ public class AutoencoderDialog {
 
         CheckBox flipHCheck = new CheckBox("Horizontal flip");
         flipHCheck.setSelected(QpcatPreferences.isAeAugFlipH());
-        flipHCheck.setTooltip(new Tooltip("Randomly mirror tiles left-right (p=0.5)."));
+        flipHCheck.setTooltip(Tooltips.of("Randomly mirror tiles left-right (p=0.5)."));
 
         CheckBox flipVCheck = new CheckBox("Vertical flip");
         flipVCheck.setSelected(QpcatPreferences.isAeAugFlipV());
-        flipVCheck.setTooltip(new Tooltip("Randomly mirror tiles top-bottom (p=0.5)."));
+        flipVCheck.setTooltip(Tooltips.of("Randomly mirror tiles top-bottom (p=0.5)."));
 
         CheckBox rot90Check = new CheckBox("Random rotation (90 deg)");
         rot90Check.setSelected(QpcatPreferences.isAeAugRotation90());
-        rot90Check.setTooltip(new Tooltip(
+        rot90Check.setTooltip(Tooltips.of(
                 "Randomly rotate tiles by 0/90/180/270 degrees.\n"
                 + "Preserves pixel alignment (no interpolation artifacts).\n"
                 + "Combined with flips, provides 8x augmentation."));
 
         CheckBox elasticCheck = new CheckBox("Elastic deformation");
         elasticCheck.setSelected(QpcatPreferences.isAeAugElastic());
-        elasticCheck.setTooltip(new Tooltip(
+        elasticCheck.setTooltip(Tooltips.of(
                 "Apply smooth random spatial deformations to tiles.\n"
                 + "Simulates tissue deformation and cell shape variability.\n"
                 + "Can slow training. Off by default."));
@@ -736,7 +736,7 @@ public class AutoencoderDialog {
         elasticAlphaSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(elasticAlphaSpinner);
         elasticAlphaSpinner.setPrefWidth(80);
-        elasticAlphaSpinner.setTooltip(new Tooltip(
+        elasticAlphaSpinner.setTooltip(Tooltips.of(
                 "Elastic deformation intensity (default: 120).\n"
                 + "Higher = stronger deformation. Range: 10-500."));
         elasticAlphaSpinner.disableProperty().bind(elasticCheck.selectedProperty().not());
@@ -755,7 +755,7 @@ public class AutoencoderDialog {
         String savedMode = QpcatPreferences.getAeAugIntensityMode();
         int modeIdx = "brightfield".equals(savedMode) ? 1 : "fluorescence".equals(savedMode) ? 2 : 0;
         intensityModeCombo.getSelectionModel().select(modeIdx);
-        intensityModeCombo.setTooltip(new Tooltip(
+        intensityModeCombo.setTooltip(Tooltips.of(
                 "Intensity augmentation mode for tile images:\n"
                 + "  None: no intensity changes\n"
                 + "  Brightfield: correlated RGB brightness/contrast/gamma jitter\n"
@@ -767,7 +767,7 @@ public class AutoencoderDialog {
         intensityAmountSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(intensityAmountSpinner);
         intensityAmountSpinner.setPrefWidth(80);
-        intensityAmountSpinner.setTooltip(new Tooltip(
+        intensityAmountSpinner.setTooltip(Tooltips.of(
                 "Intensity jitter amount (default: 0.2).\n"
                 + "Controls how much brightness/contrast varies.\n"
                 + "Higher = more aggressive color augmentation. Range: 0.0-1.0."));
@@ -777,7 +777,7 @@ public class AutoencoderDialog {
         gaussNoiseSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(gaussNoiseSpinner);
         gaussNoiseSpinner.setPrefWidth(80);
-        gaussNoiseSpinner.setTooltip(new Tooltip(
+        gaussNoiseSpinner.setTooltip(Tooltips.of(
                 "Gaussian noise std for tile pixel values (default: 0.05).\n"
                 + "Added to normalized tile data. Range: 0.0-0.5."));
 
@@ -821,7 +821,7 @@ public class AutoencoderDialog {
 
         TitledPane pane = new TitledPane("Advanced -- Augmentation", content);
         pane.setExpanded(false);
-        pane.setTooltip(new Tooltip(
+        pane.setTooltip(Tooltips.of(
                 "Configure data augmentation to improve model generalization.\n"
                 + "Measurement mode: noise, scaling, feature dropout.\n"
                 + "Tile mode: flips, rotations, elastic deformation, intensity jitter."));
@@ -839,13 +839,13 @@ public class AutoencoderDialog {
     private VBox createButtonSection() {
         trainButton = new Button("Train on Selected Images");
         trainButton.setOnAction(e -> runTraining());
-        trainButton.setTooltip(new Tooltip(
+        trainButton.setTooltip(Tooltips.of(
                 "Train the autoencoder on detections from all checked images."));
 
         applyProjectButton = new Button("Apply to Checked Images");
         applyProjectButton.setDisable(true);
         applyProjectButton.setOnAction(e -> applyToCheckedImages());
-        applyProjectButton.setTooltip(new Tooltip(
+        applyProjectButton.setTooltip(Tooltips.of(
                 "Apply the trained classifier to the checked images above.\n"
                 + "Uncheck training images first if you don't want to re-classify them.\n"
                 + "WARNING: REPLACES existing cell classifications on applied images."));
@@ -853,20 +853,20 @@ public class AutoencoderDialog {
         Button saveModelButton = new Button("Save Model...");
         saveModelButton.setDisable(true);
         saveModelButton.setOnAction(e -> saveModel());
-        saveModelButton.setTooltip(new Tooltip(
+        saveModelButton.setTooltip(Tooltips.of(
                 "Save the trained model to a file in the project folder.\n"
                 + "Can be loaded later to apply to new images."));
 
         Button loadModelButton = new Button("Load Model...");
         loadModelButton.setOnAction(e -> loadModel());
-        loadModelButton.setTooltip(new Tooltip(
+        loadModelButton.setTooltip(Tooltips.of(
                 "Load a previously saved autoencoder model.\n"
                 + "After loading, you can evaluate or apply it."));
 
         Button evaluateButton = new Button("Evaluate on Checked Images");
         evaluateButton.setDisable(true);
         evaluateButton.setOnAction(e -> evaluateModel());
-        evaluateButton.setTooltip(new Tooltip(
+        evaluateButton.setTooltip(Tooltips.of(
                 "Run inference on checked images and compare predictions\n"
                 + "against existing labels. Shows accuracy and per-class\n"
                 + "breakdown WITHOUT modifying any classifications.\n"
@@ -1131,7 +1131,7 @@ public class AutoencoderDialog {
             weightSpinner.setEditable(true);
             SpinnerUtils.commitOnFocusLoss(weightSpinner);
             weightSpinner.setPrefWidth(80);
-            weightSpinner.setTooltip(new Tooltip(
+            weightSpinner.setTooltip(Tooltips.of(
                     "Weight for class '" + className + "' (default: 1.0).\n"
                     + "Higher weight = more influence during training.\n"
                     + "Use Auto-Balance to set from class frequencies,\n"

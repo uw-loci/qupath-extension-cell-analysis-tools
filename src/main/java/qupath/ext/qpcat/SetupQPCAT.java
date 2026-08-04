@@ -1,5 +1,7 @@
 package qupath.ext.qpcat;
 
+import qupath.ext.qpcat.ui.Tooltips;
+
 import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.BooleanBinding;
@@ -725,14 +727,14 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         maxEdgeSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(maxEdgeSpinner);
         maxEdgeSpinner.setPrefWidth(110);
-        Tooltip maxEdgeTip = new Tooltip(
+        Tooltip maxEdgeTip = Tooltips.of(
                 "Maximum Delaunay edge length in " + unit + "; longer edges are pruned.\n"
                 + "Useful for tissues with large gaps. Leave at -1 to skip pruning.");
         maxEdgeSpinner.setTooltip(maxEdgeTip);
 
         CheckBox limitClass = new CheckBox("Limit edges to same class");
         limitClass.setSelected(QpcatPreferences.isSpatialLimitEdgesBySameClass());
-        limitClass.setTooltip(new Tooltip(
+        limitClass.setTooltip(Tooltips.of(
                 "Apply a post-hoc filter that hides edges connecting cells of\n"
                 + "different classes. Useful when running on already-phenotyped\n"
                 + "data; on unclassified data the filter empties the overlay."));

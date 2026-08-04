@@ -155,7 +155,7 @@ public class CellularNeighborhoodDialog {
         Label header = new Label("Cell-type column");
         header.setStyle("-fx-font-weight: bold;");
         Button refresh = new Button("Refresh");
-        refresh.setTooltip(new Tooltip(
+        refresh.setTooltip(Tooltips.of(
                 "Re-scan the current detection classifications. Click this after you run\n"
                 + "clustering or phenotyping so the new cell types are picked up."));
         refresh.setOnAction(e -> refreshClassSummary());
@@ -250,7 +250,7 @@ public class CellularNeighborhoodDialog {
         groupByCombo.getItems().addAll(metaKeys);
         groupByCombo.getSelectionModel().selectFirst();
         groupByCombo.setDisable(!multiImage || metaKeys.isEmpty());
-        groupByCombo.setTooltip(new Tooltip(
+        groupByCombo.setTooltip(Tooltips.of(
                 "For joint runs, also report neighborhood proportions per group of images,\n"
                 + "grouped by this image-metadata key (e.g. treatment or condition) -- so you\n"
                 + "can compare how neighborhood composition shifts with the biology."));
@@ -310,7 +310,7 @@ public class CellularNeighborhoodDialog {
         kSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(kSpinner);
         kSpinner.setPrefWidth(100);
-        kSpinner.setTooltip(new Tooltip(
+        kSpinner.setTooltip(Tooltips.of(
                 "How many nearest cells make up each window (the cell plus its neighbors).\n"
                 + "Larger windows capture broader tissue context but blur fine boundaries.\n"
                 + "20-30 is a common starting point (Schurch et al. used ~10)."));
@@ -319,7 +319,7 @@ public class CellularNeighborhoodDialog {
         nNeighborhoodsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(nNeighborhoodsSpinner);
         nNeighborhoodsSpinner.setPrefWidth(100);
-        nNeighborhoodsSpinner.setTooltip(new Tooltip(
+        nNeighborhoodsSpinner.setTooltip(Tooltips.of(
                 "How many neighborhoods to group the windows into (k-means).\n"
                 + "Try a few values; 6-12 is typical."));
 
@@ -330,9 +330,9 @@ public class CellularNeighborhoodDialog {
         windowKnn.setSelected(true);
         windowRadius = new RadioButton("Radius (um)");
         windowRadius.setToggleGroup(windowGroup);
-        windowKnn.setTooltip(new Tooltip(
+        windowKnn.setTooltip(Tooltips.of(
                 "Window = the k nearest cells. Density-adaptive (shrinks in dense tissue)."));
-        windowRadius.setTooltip(new Tooltip(
+        windowRadius.setTooltip(Tooltips.of(
                 "Window = every cell within a fixed physical radius (CytoMAP-style).\n"
                 + "More interpretable and density-aware; needs image pixel calibration\n"
                 + "(treated as pixels if the image is uncalibrated)."));
@@ -341,7 +341,7 @@ public class CellularNeighborhoodDialog {
         radiusSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(radiusSpinner);
         radiusSpinner.setPrefWidth(100);
-        radiusSpinner.setTooltip(new Tooltip(
+        radiusSpinner.setTooltip(Tooltips.of(
                 "Neighborhood radius in microns (50 um is a common start)."));
 
         // Show k OR radius depending on the chosen window mode.
@@ -358,7 +358,7 @@ public class CellularNeighborhoodDialog {
 
         heatmapCheck = new CheckBox("Render enrichment heatmap");
         heatmapCheck.setSelected(true);
-        heatmapCheck.setTooltip(new Tooltip(
+        heatmapCheck.setTooltip(Tooltips.of(
                 "Save a neighborhood x cell-type heatmap (log2 enrichment vs the overall\n"
                 + "cell-type frequencies) so you can read what each neighborhood is made of."));
 
@@ -385,7 +385,7 @@ public class CellularNeighborhoodDialog {
 
         cancelButton = new Button("Cancel");
         cancelButton.setDisable(true);
-        cancelButton.setTooltip(new Tooltip(
+        cancelButton.setTooltip(Tooltips.of(
                 "Stop the run. No labels are applied if you cancel before it finishes."));
         cancelButton.setOnAction(e -> {
             CellularNeighborhoodWorkflow wf = activeWorkflow;
@@ -672,7 +672,7 @@ public class CellularNeighborhoodDialog {
         }
 
         Button openFolder = new Button("Open results folder");
-        openFolder.setTooltip(new Tooltip("Open the folder with the CSV tables and heatmap PNGs."));
+        openFolder.setTooltip(Tooltips.of("Open the folder with the CSV tables and heatmap PNGs."));
         final File folder = result.getResultsDir() == null ? null : new File(result.getResultsDir());
         openFolder.setDisable(folder == null || !folder.isDirectory());
         openFolder.setOnAction(e -> openFile(folder));
