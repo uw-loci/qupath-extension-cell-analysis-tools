@@ -51,7 +51,6 @@ public final class ScopeSection extends VBox {
         ToggleGroup group = new ToggleGroup();
         scopeCurrentImage = new RadioButton("Current image");
         scopeCurrentImage.setToggleGroup(group);
-        scopeCurrentImage.setSelected(true);
         scopeAllImages = new RadioButton("All project images");
         scopeAllImages.setToggleGroup(group);
         scopeSpecificImages = new RadioButton("Specific images...");
@@ -63,6 +62,19 @@ public final class ScopeSection extends VBox {
         specificImagesLabel.setStyle("-fx-text-fill: #666;");
 
         Project<BufferedImage> project = qupath.getProject();
+        // "Current image" means nothing with no image open. Rather than refusing
+        // to show the tool at all, disable that option and start from a project
+        // scope, so the user picks the images FIRST and everything downstream
+        // (channels, measurements) is derived from what they picked.
+        boolean haveOpenImage = qupath.getImageData() != null;
+        if (!haveOpenImage) {
+            scopeCurrentImage.setDisable(true);
+            scopeCurrentImage.setText("Current image (none open)");
+            scopeCurrentImage.setTooltip(Tooltips.of(
+                    "No image is open. Choose the project images to work on instead -- "
+                    + "QP-CAT reads their channels and measurements directly."));
+        }
+
         boolean multiImage = project != null && project.getImageList().size() > 1;
         if (!multiImage) {
             scopeAllImages.setDisable(true);
@@ -72,6 +84,19 @@ public final class ScopeSection extends VBox {
             scopeSpecificImages.setText("Specific images..." + hint);
         } else {
             scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
+        }
+
+        // Initial selection: the open image when there is one, otherwise the
+        // widest project scope available. Never leave every option unselected.
+        if (haveOpenImage) {
+            scopeCurrentImage.setSelected(true);
+        } else if (project != null && !project.getImageList().isEmpty()) {
+            if (multiImage) {
+                scopeAllImages.setSelected(true);
+            } else {
+                scopeSpecificImages.setDisable(false);
+                scopeSpecificImages.setSelected(true);
+            }
         }
 
         chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
@@ -158,6 +183,12 @@ public final class ScopeSection extends VBox {
         }
         if (scopeSpecificImages.isSelected()) {
             return new ArrayList<>(selectedSubset);
+        }
+        // "Current image": with a single-image project and nothing open, that
+        // one image IS the scope -- returning null would leave callers with no
+        // images at all.
+        if (scopeCurrentImage.isDisabled() && project.getImageList().size() == 1) {
+            return new ArrayList<>(project.getImageList());
         }
         return null;  // current image
     }

@@ -1,7 +1,12 @@
 package qupath.ext.qpcat.model;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.OptionalDouble;
 
@@ -44,12 +49,20 @@ import java.util.OptionalDouble;
  */
 public final class ScalingLimits {
 
+    private static final Logger logger = LoggerFactory.getLogger(ScalingLimits.class);
+
     private ScalingLimits() {}
 
     /** Predicted peak is this fraction of RAM or more: the run cannot succeed. */
     private static final double BLOCK_RAM_FRACTION = 0.85;
     /** Predicted peak is this fraction of RAM or more: it will likely thrash. */
     private static final double WARN_RAM_FRACTION = 0.50;
+    /**
+     * On a machine whose memory we could not read, stay silent below this
+     * prediction. Any machine that can run QuPath plus the Appose Python stack
+     * has this much; below it the warning carries no information.
+     */
+    private static final double UNKNOWN_RAM_REPORT_FLOOR_GB = 4.0;
     /** Predicted runtime at or above this is refused (2 hours). */
     private static final double BLOCK_SECONDS = 7200;
     /** Predicted runtime at or above this is flagged (10 minutes). */
@@ -84,12 +97,22 @@ public final class ScalingLimits {
         public String describe() {
             StringBuilder sb = new StringBuilder(subject).append(": ").append(why);
             if (predictedPeakGb > 0)
-                sb.append(String.format(" (needs about %.0f GB)", predictedPeakGb));
+                sb.append(" (needs about ").append(formatGb(predictedPeakGb)).append(")");
             else if (predictedSeconds > 0)
                 sb.append(" (about ").append(humanDuration(predictedSeconds)).append(")");
             sb.append(" ").append(remedy);
             return sb.toString();
         }
+    }
+
+    /**
+     * Human-readable size. "%.0f GB" rendered a 0.43 GB prediction as "0 GB",
+     * which reads as a bug rather than as "small".
+     */
+    public static String formatGb(double gb) {
+        if (gb < 1.0) return String.format("%d MB", Math.max(1L, Math.round(gb * 1024)));
+        if (gb < 10.0) return String.format("%.1f GB", gb);
+        return String.format("%.0f GB", gb);
     }
 
     /** Everything the prediction depends on. Spatial fields may be left unset. */
@@ -186,7 +209,13 @@ public final class ScalingLimits {
         return 151.0 * Math.pow(nCells / 100_000.0, 2.13);
     }
 
-    /** Leiden's kNN graph, measured at 4.87 GB for 250k cells at k=50. */
+    /**
+     * Leiden peak RSS. Measured 2026-08-05 in the QP-CAT env, 20 features:
+     * 50k/k=15 0.87 GB, 50k/k=50 1.51, 100k/k=15 1.51, 100k/k=50 2.56,
+     * 200k/k=50 4.19. The stored graph is only ~21 bytes/edge; the rest is
+     * pynndescent's transient candidate arrays, which is why this scales with
+     * n_neighbors far more steeply than the final CSR would suggest.
+     */
     public static double leidenPeakGb(long nCells, int nNeighbors) {
         return BASE_GB + (double) nCells * nNeighbors * 3.52e-7;
     }
@@ -212,15 +241,93 @@ public final class ScalingLimits {
      * block.</p>
      */
     public static OptionalDouble detectRamGb() {
+        OptionalDouble v = ramFromMxBean();
+        if (v.isPresent()) return v;
+        v = ramFromProcMeminfo();
+        if (v.isPresent()) return v;
+        v = ramFromCommand();
+        if (v.isPresent()) return v;
+        logger.warn("Could not determine total system memory by any method; "
+                + "scale checks will report predictions without judging them");
+        return OptionalDouble.empty();
+    }
+
+    /**
+     * The management bean, read REFLECTIVELY rather than through an
+     * {@code instanceof com.sun.management.OperatingSystemMXBean} cast.
+     *
+     * <p>The cast is what failed in the field: the interface lives in the
+     * {@code jdk.management} module, and whether it resolves depends on the
+     * runtime image and on which classloader the extension was loaded by --
+     * neither of which is a property of the machine. The object itself still
+     * carries the method. Also tries the pre-JDK-14 name.</p>
+     */
+    private static OptionalDouble ramFromMxBean() {
         try {
-            var os = ManagementFactory.getOperatingSystemMXBean();
-            if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
-                long total = sun.getTotalMemorySize();
-                if (total > 0) return OptionalDouble.of(total / GB);
+            Object os = ManagementFactory.getOperatingSystemMXBean();
+            for (String name : new String[]{"getTotalMemorySize", "getTotalPhysicalMemorySize"}) {
+                try {
+                    var m = os.getClass().getMethod(name);
+                    m.setAccessible(true);
+                    Object result = m.invoke(os);
+                    if (result instanceof Number n && n.longValue() > 0) {
+                        return OptionalDouble.of(n.longValue() / GB);
+                    }
+                } catch (Exception ignored) {
+                    // Try the next name.
+                }
             }
         } catch (Throwable ignored) {
-            // Non-HotSpot JVM, a jlink image without jdk.management, or a
-            // restricted management interface. All mean the same thing: unknown.
+            // No management interface at all.
+        }
+        return OptionalDouble.empty();
+    }
+
+    /** Linux (including WSL): the kernel's own figure, no JDK classes involved. */
+    private static OptionalDouble ramFromProcMeminfo() {
+        Path meminfo = Path.of("/proc/meminfo");
+        if (!Files.isReadable(meminfo)) return OptionalDouble.empty();
+        try (var lines = Files.lines(meminfo)) {
+            var total = lines.filter(l -> l.startsWith("MemTotal:")).findFirst();
+            if (total.isPresent()) {
+                String[] parts = total.get().trim().split("\\s+");
+                if (parts.length >= 2) {
+                    // MemTotal is in kB.
+                    long kb = Long.parseLong(parts[1]);
+                    if (kb > 0) return OptionalDouble.of(kb * 1024.0 / GB);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read /proc/meminfo: {}", e.getMessage());
+        }
+        return OptionalDouble.empty();
+    }
+
+    /** macOS and Windows last resort: ask the OS directly. */
+    private static OptionalDouble ramFromCommand() {
+        String osName = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
+        List<String> cmd;
+        if (osName.contains("mac")) {
+            cmd = List.of("sysctl", "-n", "hw.memsize");            // bytes
+        } else if (osName.contains("win")) {
+            cmd = List.of("wmic", "ComputerSystem", "get", "TotalPhysicalMemory");
+        } else {
+            return OptionalDouble.empty();
+        }
+        try {
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            String out;
+            try (var in = p.getInputStream()) {
+                out = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            for (String tok : out.split("\\s+")) {
+                if (tok.matches("\\d{9,}")) {   // a byte count, not a header word
+                    return OptionalDouble.of(Long.parseLong(tok) / GB);
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read total memory via {}: {}", cmd.get(0), e.getMessage());
         }
         return OptionalDouble.empty();
     }
@@ -313,10 +420,17 @@ public final class ScalingLimits {
             // Unknown machine: say what the run is predicted to need and let the
             // user decide. Refusing on the strength of a number we do not have
             // would stop work the machine may handle perfectly well.
+            //
+            // Below the reporting floor, say nothing at all. This is a policy
+            // choice about when to speak -- not a claim about the machine: a
+            // prediction smaller than QuPath's own working set cannot be the
+            // thing that runs a machine out of memory, so mentioning it is pure
+            // noise. (A 13,286-cell Leiden needs ~0.4 GB and warned.)
+            if (gb < UNKNOWN_RAM_REPORT_FLOOR_GB) return;
             out.add(new Finding(Severity.WARN, subject, why,
-                    "QP-CAT could not read this machine's total memory, so it cannot tell "
-                            + "whether that fits. If the run is close to your limit, "
-                            + remedy,
+                    "QP-CAT could not read this machine's total memory, so it cannot judge "
+                            + "whether that fits -- check it against what you know this machine "
+                            + "has. If it is close to the limit, " + remedy,
                     gb, 0));
             return;
         }

@@ -664,6 +664,15 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         sb.append("JVM: ").append(System.getProperty("java.vm.name")).append(" ")
                 .append(System.getProperty("java.version")).append("\n");
         sb.append("Max heap: ").append(Runtime.getRuntime().maxMemory() / (1024 * 1024)).append(" MB\n");
+        // The scale guard judges runs against this. When it reads "not detected"
+        // the guard reports predictions without judging them -- so surfacing it
+        // here is what makes that state diagnosable instead of mysterious.
+        var totalRam = qupath.ext.qpcat.model.ScalingLimits.detectRamGb();
+        sb.append("System memory: ")
+                .append(totalRam.isPresent()
+                        ? String.format("%.1f GB", totalRam.getAsDouble())
+                        : "not detected (scale checks will report, not block)")
+                .append("\n");
 
         String javaInfo = sb.toString();
 

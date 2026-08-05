@@ -4,6 +4,57 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.12] -- 2026-08-05 -- read the machine's memory properly, and say small numbers properly
+
+### Fixed
+
+- **Memory detection failed inside QuPath even where it worked standalone.**
+  0.9.11 stopped the guard blocking against an invented number, but users still
+  saw "QP-CAT could not read this machine's total memory" on machines with
+  plenty of it. The cause was the `instanceof com.sun.management.OperatingSystemMXBean`
+  cast: that interface lives in the `jdk.management` module, and whether it
+  resolves depends on the runtime image and on which classloader loaded the
+  extension -- neither of which is a property of the machine. Verified here: the
+  shipped class returns 19.5 GB from a plain JVM on a box where QuPath reported
+  it could not read the memory at all.
+
+  Detection is now layered and no longer depends on that cast:
+  1. the management bean read **reflectively** (also trying the pre-JDK-14
+     `getTotalPhysicalMemorySize` name), so the object's own method is used
+     whether or not the interface resolves;
+  2. `/proc/meminfo` on Linux and WSL -- the kernel's own figure, no JDK classes
+     involved;
+  3. `sysctl hw.memsize` on macOS, `wmic` on Windows;
+  4. and only then "unknown", which still never blocks.
+
+- **A 0.43 GB prediction rendered as "needs about 0 GB".** Sizes below 1 GB now
+  read in MB, and single-digit GB figures keep one decimal: `440 MB`, `7.8 GB`,
+  `47 GB`.
+
+- **Every run on an unreadable machine drew a warning, however small.** A
+  13,286-cell Leiden needs about 0.4 GB and was warning about it. On a machine
+  whose memory is unknown the guard now stays silent below 4 GB -- a prediction
+  smaller than QuPath's own working set cannot be what exhausts a machine, so
+  saying so is noise. This is a policy about when to speak, not a claim about
+  the machine, and it never blocks.
+
+### Added
+
+- **System Info now reports the detected system memory**, or "not detected
+  (scale checks will report, not block)". That state was previously invisible,
+  which is why it took a user report to find it.
+
+### Changed
+
+- The Leiden memory model is now backed by measurement across five points
+  (50k/100k/200k cells at k=15 and k=50, 2026-08-05) rather than a single
+  fitted figure. The prediction was close -- 3.7 GB predicted against 4.2 GB
+  measured at 200k/k=50 -- so the coefficient stands; the measurements are
+  recorded at the call site. Worth noting the stored kNN graph is only ~21
+  bytes/edge; the memory is pynndescent's transient candidate arrays, which is
+  why peak scales with `n_neighbors` far more steeply than the final sparse
+  matrix would suggest.
+
 ## [0.9.11] -- 2026-08-05 -- never block a run against a memory figure we do not have
 
 ### Fixed

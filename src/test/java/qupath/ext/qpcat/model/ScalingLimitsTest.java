@@ -254,15 +254,36 @@ class ScalingLimitsTest {
     }
 
     @Test
+    void sizesReadSensiblyBelowOneGb() {
+        // "%.0f GB" rendered a 0.43 GB prediction as "0 GB", which reads as a
+        // bug rather than as "small". Reported from the field.
+        assertThat(ScalingLimits.formatGb(0.43)).isEqualTo("440 MB");
+        assertThat(ScalingLimits.formatGb(0.001)).isEqualTo("1 MB");
+        assertThat(ScalingLimits.formatGb(2.5)).isEqualTo("2.5 GB");
+        assertThat(ScalingLimits.formatGb(47.0)).isEqualTo("47 GB");
+    }
+
+    @Test
+    void anUnknownMachineSaysNothingAboutASmallRun() {
+        // A 13,286-cell Leiden needs ~0.4 GB. On a machine we cannot measure
+        // that is not worth a warning -- no machine running QuPath fails it.
+        List<Finding> out = new ArrayList<>();
+        ScalingLimits.addMemoryForTest(out, 0.43, java.util.OptionalDouble.empty(),
+                "Leiden on 13,286 cells", "why", "Lower n_neighbors.");
+        assertThat(out).isEmpty();
+    }
+
+    @Test
     void anUnknownMachineWarnsWithTheEstimateInsteadOfBlocking() {
         // The message has to carry the prediction and admit it cannot judge it.
         List<Finding> out = new ArrayList<>();
         ScalingLimits.addMemoryForTest(out, 7.8, java.util.OptionalDouble.empty(),
-                "Leiden on 429,536 cells", "why", "Lower n_neighbors.");
+                "Leiden on 429,536 cells", "why", "Lower n_neighbors.");   // above the floor
         assertThat(out).singleElement().satisfies(f -> {
             assertThat(f.severity()).isEqualTo(Severity.WARN);
             assertThat(f.predictedPeakGb()).isEqualTo(7.8);
             assertThat(f.remedy()).contains("could not read this machine's total memory");
+            assertThat(f.describe()).contains("7.8 GB");
         });
     }
 
