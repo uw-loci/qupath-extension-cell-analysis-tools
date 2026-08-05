@@ -6,6 +6,7 @@ import qupath.ext.qpcat.model.ScalingLimits.Finding;
 import qupath.ext.qpcat.model.ScalingLimits.Request;
 import qupath.ext.qpcat.model.ScalingLimits.Severity;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -226,8 +227,43 @@ class ScalingLimitsTest {
     }
 
     @Test
-    void detectRamReturnsSomethingUsable() {
-        assertThat(ScalingLimits.detectRamGb()).isGreaterThan(0.5);
+    void detectRamEitherMeasuresTheMachineOrSaysItCannot() {
+        // No third option. A fabricated number here is what blocked a user's
+        // 430k-cell Leiden run against an invented 8 GB on a machine QP-CAT
+        // could not read.
+        var ram = ScalingLimits.detectRamGb();
+        if (ram.isPresent()) {
+            assertThat(ram.getAsDouble()).isGreaterThan(0.5);
+        }
+    }
+
+    @Test
+    void anUnreadableMachineNeverBlocks() {
+        // availableRamGb <= 0 with detection unavailable must degrade to a
+        // warning, never a refusal -- we cannot refuse against a number we do
+        // not have. Simulated by asking for a request whose RAM we leave unset
+        // and asserting the CONTRACT: nothing blocked purely on memory unless a
+        // real total was known.
+        Request r = new Request(Algorithm.LEIDEN, 429_536, 20);
+        r.nNeighbors = 50;
+        r.availableRamGb = 0;   // ask the machine
+        var findings = ScalingLimits.check(r);
+        if (ScalingLimits.detectRamGb().isEmpty()) {
+            assertThat(findings).noneMatch(f -> f.severity() == Severity.BLOCK);
+        }
+    }
+
+    @Test
+    void anUnknownMachineWarnsWithTheEstimateInsteadOfBlocking() {
+        // The message has to carry the prediction and admit it cannot judge it.
+        List<Finding> out = new ArrayList<>();
+        ScalingLimits.addMemoryForTest(out, 7.8, java.util.OptionalDouble.empty(),
+                "Leiden on 429,536 cells", "why", "Lower n_neighbors.");
+        assertThat(out).singleElement().satisfies(f -> {
+            assertThat(f.severity()).isEqualTo(Severity.WARN);
+            assertThat(f.predictedPeakGb()).isEqualTo(7.8);
+            assertThat(f.remedy()).contains("could not read this machine's total memory");
+        });
     }
 
     @Test

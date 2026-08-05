@@ -68,11 +68,15 @@ _BLOCK_RAM_FRACTION = 0.85
 
 
 def _total_ram_gb():
-    """Physical RAM in GB, or 8.0 when it cannot be determined.
+    """Physical RAM in GB, or None when it cannot be determined.
 
     No psutil in the QP-CAT environment, so this uses sysconf on POSIX and
-    GlobalMemoryStatusEx on Windows. A wrong answer here only changes the
-    threshold, never correctness, hence the forgiving fallback.
+    GlobalMemoryStatusEx on Windows.
+
+    There is deliberately no fallback number. RAM is a physical property of the
+    user's machine; substituting a guess means skipping an analysis on the
+    strength of a figure we invented. None means unknown, and unknown never
+    skips -- see _refuse_if_too_big.
     """
     try:
         return (os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")) / 1024.0**3
@@ -101,7 +105,7 @@ def _total_ram_gb():
             return stat.ullTotalPhys / 1024.0**3
     except Exception:
         pass
-    return 8.0
+    return None
 
 
 def co_occurrence_peak_gb(n_cells, n_clusters, n_intervals):
@@ -143,6 +147,18 @@ def _cluster_sizes(adata, cluster_key):
 def _refuse_if_too_big(what, predicted_gb, remedy):
     """True when `what` must be skipped. Logs the reason either way."""
     ram = _total_ram_gb()
+    if ram is None:
+        # Unknown machine: report the prediction and run anyway. Skipping here
+        # would discard work on the basis of a number we do not have.
+        logger.warning(
+            "%s is predicted to need about %.0f GB. This machine's total memory "
+            "could not be read, so QP-CAT cannot tell whether that fits; "
+            "proceeding. %s",
+            what,
+            predicted_gb,
+            remedy,
+        )
+        return False
     if predicted_gb < ram * _BLOCK_RAM_FRACTION:
         if predicted_gb > ram * 0.5:
             logger.warning(

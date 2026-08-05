@@ -137,6 +137,7 @@ Full clustering with all configuration options.
    - **Amber box (scale warning)** = this configuration will run but may be slow or approach your machine's memory ceiling
    - **Red box (scale block)** = this configuration cannot finish on this machine; the **Run** button is disabled. The message names the problem (e.g., "Agglomerative clustering needs about 50 GB but you have 16 GB") and suggests alternatives (e.g., "Use Leiden or MiniBatch KMeans instead")
    - Both are machine-dependent -- the same config might warn on your laptop but run fine on a 512 GB server
+   - **If QP-CAT cannot read your machine's total memory**, it says so and shows only the predicted requirement, as a warning. It will never block in that case: refusing to run on the strength of a memory figure it does not have would stop work your machine may handle fine. Judge it against what you know your machine has.
    - See [Large datasets](../README.md#large-datasets-hundreds-of-thousands-to-millions-of-cells) in the README for the reasoning
 
 10. Click **Run Clustering**

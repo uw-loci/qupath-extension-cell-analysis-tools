@@ -178,11 +178,39 @@ def test_a_big_machine_admits_what_a_laptop_refuses():
         assert refuse("co-occurrence", 75.0, "remedy") is expect
 
 
-def test_total_ram_is_plausible():
+def test_an_unreadable_machine_never_skips():
+    """Unknown RAM must not discard the analysis.
+
+    _total_ram_gb returns None when it cannot read the machine. Substituting a
+    guess and skipping against it is the bug that blocked a user's clustering
+    run on the Java side; the Python guard must not repeat it.
+    """
+    logged = _RecordingLogger()
+    refuse = load_script_symbol(
+        "spatial_stats.py",
+        "_refuse_if_too_big",
+        extra_globals={
+            "logger": logged,
+            "_total_ram_gb": lambda: None,
+            "_BLOCK_RAM_FRACTION": 0.85,
+        },
+    )
+    # Even an absurd prediction proceeds when we cannot judge it.
+    assert refuse("co-occurrence", 5000.0, "Lower the cluster count.") is False
+    assert any("could not be read" in m for m in logged.warnings)
+    assert any("5000" in m or "5000.0" in m for m in logged.warnings)
+
+
+def test_total_ram_reports_none_rather_than_guessing():
     total = load_script_symbol(
         "spatial_stats.py", "_total_ram_gb", extra_globals={"os": __import__("os")}
     )
-    assert total() > 0.5
+    value = total()
+    # Either a real measurement or an honest None -- never a fabricated default.
+    assert value is None or value > 0.5
+
+
+
 
 
 class _NullLogger:
@@ -191,3 +219,13 @@ class _NullLogger:
 
     def info(self, *a, **k):
         pass
+
+
+class _RecordingLogger(_NullLogger):
+    """Captures formatted warnings so a test can assert what the user is told."""
+
+    def __init__(self):
+        self.warnings = []
+
+    def warning(self, msg, *args, **kwargs):
+        self.warnings.append(msg % args if args else msg)

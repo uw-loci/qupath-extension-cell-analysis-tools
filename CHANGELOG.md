@@ -4,6 +4,42 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.11] -- 2026-08-05 -- never block a run against a memory figure we do not have
+
+### Fixed
+
+- **The scale guard blocked runs on machines whose memory it could not read.**
+  A user was refused a 429,536-cell Leiden run with "This machine has 8 GB" --
+  8 GB being, exactly, the hardcoded number `detectRamGb()` returned when
+  detection failed. It is not a coincidence that the message matched the
+  fallback: the guard was comparing a real prediction against an invented total
+  and disabling the Run button on the result.
+
+  Detection can fail for reasons that have nothing to do with the machine --
+  `com.sun.management.OperatingSystemMXBean` is not resolvable on every packaged
+  runtime, and the failure was swallowed by a `catch (Throwable)`.
+
+  `ScalingLimits.detectRamGb()` now returns `OptionalDouble`, empty when the
+  machine cannot be read, and **there is no fallback value**. On an unreadable
+  machine the guard states the predicted requirement, says plainly that it could
+  not read the total, and **warns instead of blocking**. The same fix is applied
+  to the Python side (`spatial_stats.py`), where `_total_ram_gb()` returned 8.0
+  and a spatial analysis was then *skipped* against it -- it now returns `None`
+  and never skips on an unknown machine.
+
+### Notes
+
+- **RAM is a physical property of the user's machine, and this code should never
+  have had a default for it.** Anything that gates behaviour on a measurement
+  must distinguish "measured X" from "could not measure", because those demand
+  opposite responses: act on the number, or admit the gap and defer to the user.
+  A plausible-looking constant erases that distinction, and it is undetectable
+  from the outside -- an 8 GB reading on a 512 GB workstation looks exactly like
+  a small machine.
+- The honest patterns already in this codebase are the model: `getMicroscopeName()`
+  returns `"Unknown"`, `getGPUInfo()` returns `"Unknown (backend unavailable)"`.
+  Both say what they do not know rather than inventing an answer.
+
 ## [0.9.10] -- 2026-08-04 -- searching for a marker actually finds it, and tooltips wrap
 
 ### Fixed

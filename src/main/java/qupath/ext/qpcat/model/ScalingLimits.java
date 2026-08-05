@@ -3,6 +3,7 @@ package qupath.ext.qpcat.model;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalDouble;
 
 /**
  * Predicts whether a clustering configuration can actually run on this machine,
@@ -198,18 +199,30 @@ public final class ScalingLimits {
 
     // ---- The check ---------------------------------------------------------
 
-    /** Physical RAM on this machine in GB, or 8.0 if it cannot be determined. */
-    public static double detectRamGb() {
+    /**
+     * Physical RAM on this machine in GB, or <b>empty when it cannot be
+     * measured</b>.
+     *
+     * <p>There is deliberately no fallback number. RAM is a physical property of
+     * the user's machine; inventing a value means refusing to run against a
+     * figure we made up. That is exactly what happened on a packaged QuPath
+     * runtime where {@code com.sun.management} is not resolvable: detection fell
+     * through to a hardcoded 8 GB and blocked a 430k-cell Leiden run that the
+     * user had run before. Empty means "unknown", and unknown must never
+     * block.</p>
+     */
+    public static OptionalDouble detectRamGb() {
         try {
             var os = ManagementFactory.getOperatingSystemMXBean();
             if (os instanceof com.sun.management.OperatingSystemMXBean sun) {
                 long total = sun.getTotalMemorySize();
-                if (total > 0) return total / GB;
+                if (total > 0) return OptionalDouble.of(total / GB);
             }
         } catch (Throwable ignored) {
-            // Non-HotSpot JVM, or the management interface is restricted.
+            // Non-HotSpot JVM, a jlink image without jdk.management, or a
+            // restricted management interface. All mean the same thing: unknown.
         }
-        return 8.0;
+        return OptionalDouble.empty();
     }
 
     /**
@@ -219,7 +232,8 @@ public final class ScalingLimits {
      */
     public static List<Finding> check(Request r) {
         List<Finding> out = new ArrayList<>();
-        double ram = r.availableRamGb > 0 ? r.availableRamGb : detectRamGb();
+        OptionalDouble ram = r.availableRamGb > 0
+                ? OptionalDouble.of(r.availableRamGb) : detectRamGb();
         if (r.nCells <= 0) return out;
 
         switch (r.algorithm) {
@@ -287,15 +301,33 @@ public final class ScalingLimits {
         return findings.stream().anyMatch(f -> f.severity() == Severity.BLOCK);
     }
 
-    private static void addMemory(List<Finding> out, double gb, double ram,
+    /** Visible for tests: the unknown-machine path is the one that must not block. */
+    static void addMemoryForTest(List<Finding> out, double gb, OptionalDouble ram,
+                                 String subject, String why, String remedy) {
+        addMemory(out, gb, ram, subject, why, remedy);
+    }
+
+    private static void addMemory(List<Finding> out, double gb, OptionalDouble ram,
                                   String subject, String why, String remedy) {
-        Severity sev = gb >= ram * BLOCK_RAM_FRACTION ? Severity.BLOCK
-                : gb >= ram * WARN_RAM_FRACTION ? Severity.WARN
+        if (ram.isEmpty()) {
+            // Unknown machine: say what the run is predicted to need and let the
+            // user decide. Refusing on the strength of a number we do not have
+            // would stop work the machine may handle perfectly well.
+            out.add(new Finding(Severity.WARN, subject, why,
+                    "QP-CAT could not read this machine's total memory, so it cannot tell "
+                            + "whether that fits. If the run is close to your limit, "
+                            + remedy,
+                    gb, 0));
+            return;
+        }
+        double total = ram.getAsDouble();
+        Severity sev = gb >= total * BLOCK_RAM_FRACTION ? Severity.BLOCK
+                : gb >= total * WARN_RAM_FRACTION ? Severity.WARN
                 : Severity.OK;
         if (sev == Severity.OK) return;
         String tail = sev == Severity.BLOCK
-                ? String.format("This machine has %.0f GB.", ram)
-                : String.format("This machine has %.0f GB, so it may swap.", ram);
+                ? String.format("This machine has %.0f GB.", total)
+                : String.format("This machine has %.0f GB, so it may swap.", total);
         out.add(new Finding(sev, subject, why, tail + " " + remedy, gb, 0));
     }
 
@@ -304,7 +336,7 @@ public final class ScalingLimits {
      * worse -- and when they tie, memory, because an OOM kill is the failure the
      * user cannot recover from mid-run.
      */
-    private static void addCost(List<Finding> out, double gb, double sec, double ram,
+    private static void addCost(List<Finding> out, double gb, double sec, OptionalDouble ram,
                                 String subject, String why, String remedy) {
         List<Finding> mem = new ArrayList<>();
         addMemory(mem, gb, ram, subject, why, remedy);
