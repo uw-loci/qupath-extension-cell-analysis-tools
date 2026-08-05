@@ -23,6 +23,7 @@ import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
+import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
@@ -76,6 +77,15 @@ public class ClusteringDialog {
     // Reusable 3-way image-scope control (current / all / specific subset).
     private ScopeSection scopeSection;
     private MeasurementSelectionPane measurementPane;
+    private Label measurementStatusLabel;
+    /** Scope the measurement list was last read for; skips a repeat disk read. */
+    private String measurementScopeKey;
+    /** Guards against a slow read landing after the user has changed scope again. */
+    private long measurementLoadToken;
+    /** Detections in the image the scope read sampled; 0 until that read lands. */
+    private long scopeCellsPerImage;
+    /** Images in the current scope, for scaling the per-image count. */
+    private int scopeImageCount;
     private ComboBox<Normalization> normalizationCombo;
     private ComboBox<EmbeddingMethod> embeddingCombo;
     private ComboBox<String> embeddingDimCombo;
@@ -244,7 +254,14 @@ public class ClusteringDialog {
     private TitledPane createMeasurementSection() {
         measurementPane = new MeasurementSelectionPane();
         measurementPane.setOnSelectionChanged(this::updatePreflight);
-        TitledPane pane = new TitledPane("Measurements", measurementPane);
+        measurementStatusLabel = new Label();
+        measurementStatusLabel.setWrapText(true);
+        measurementStatusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        measurementStatusLabel.setVisible(false);
+        measurementStatusLabel.setManaged(false);
+        VBox body = new VBox(4, measurementStatusLabel, measurementPane);
+        VBox.setVgrow(measurementPane, Priority.ALWAYS);
+        TitledPane pane = new TitledPane("Measurements", body);
         pane.setExpanded(true);
         pane.setCollapsible(true);
         return pane;
@@ -735,6 +752,9 @@ public class ClusteringDialog {
             boolean all = scopeSection.isAllImages();
             batchCorrectionCheck.setDisable(!all || !harmonypyAvailable);
             if (!all) batchCorrectionCheck.setSelected(false);
+            // The images decide which measurements exist, so the list follows
+            // the scope rather than whatever image is open.
+            populateMeasurements();
         });
 
         // ---- Spatial statistics expansion (v1) ----
@@ -1445,25 +1465,45 @@ public class ClusteringDialog {
     }
 
     private List<ScalingLimits.Finding> checkScalingImpl() {
-        var imageData = qupath.getImageData();
-        if (imageData == null) return List.of();
-        long nCells = imageData.getHierarchy().getDetectionObjects().size();
+        long nCells = estimateScopeCellCount();
         if (nCells == 0) return List.of();
-
-        if (scopeSection != null && !scopeSection.isCurrentImage()) {
-            try {
-                int nImages = scopeSection.resolveEntries().size();
-                if (nImages > 1) nCells *= nImages;
-            } catch (Exception e) {
-                logger.debug("Could not resolve project scope for the scale check: {}",
-                        e.getMessage());
-            }
-        }
 
         int nFeatures = measurementPane != null ? measurementPane.getSelected().size() : 0;
         ClusteringConfig probe = buildConfig();
         return ScalingLimits.check(
                 ClusteringWorkflow.scalingRequest(nCells, nFeatures, probe));
+    }
+
+    /**
+     * Cells the configured run will process.
+     *
+     * <p>Uses the open image when that IS the scope. Otherwise it scales the
+     * per-image count by the number of selected images -- and with no image
+     * open, the per-image count comes from the last scope read rather than from
+     * a viewer that is not there.</p>
+     */
+    private long estimateScopeCellCount() {
+        var imageData = qupath.getImageData();
+        boolean currentScope = scopeSection == null || scopeSection.isCurrentImage();
+
+        if (imageData != null) {
+            long perImage = imageData.getHierarchy().getDetectionObjects().size();
+            if (currentScope || perImage == 0) return perImage;
+            try {
+                int nImages = scopeSection.resolveEntries().size();
+                return nImages > 1 ? perImage * nImages : perImage;
+            } catch (Exception e) {
+                logger.debug("Could not resolve project scope for the scale check: {}",
+                        e.getMessage());
+                return perImage;
+            }
+        }
+
+        // No image open: the count is whatever the scope read found, times the
+        // image count. Zero until that read lands, which simply means the check
+        // says nothing yet -- better than guessing a cell count.
+        return scopeCellsPerImage <= 0 ? 0
+                : scopeCellsPerImage * Math.max(1, scopeImageCount);
     }
 
     /**
@@ -1605,17 +1645,106 @@ public class ClusteringDialog {
         }
     }
 
+    /**
+     * Fill the measurement list from whatever the user has chosen to work on.
+     *
+     * <p>Measurements come from the SELECTED SCOPE, not from whichever image
+     * happens to be open. That is what lets the dialog run with no image at all:
+     * pick the images first, and the channels and measurements follow from them.
+     * Re-runs whenever the scope changes.</p>
+     *
+     * <p>The current image is the fast path -- its detections are already in
+     * memory. Any other scope means opening a project entry, which is real disk
+     * I/O, so it happens off the FX thread with the list showing its progress.</p>
+     */
     private void populateMeasurements() {
         var imageData = qupath.getImageData();
-        if (imageData == null) return;
+        boolean useOpenImage = imageData != null
+                && (scopeSection == null || scopeSection.isCurrentImage());
 
-        var detections = imageData.getHierarchy().getDetectionObjects();
-        if (detections.isEmpty()) return;
+        if (useOpenImage) {
+            var detections = imageData.getHierarchy().getDetectionObjects();
+            if (detections.isEmpty()) {
+                setMeasurementStatus("The open image has no detections. Run cell detection first.");
+                return;
+            }
+            measurementPane.setMeasurements(
+                    MeasurementExtractor.getAllMeasurements(detections), null);
+            setMeasurementStatus(null);
+            updatePreflight();
+            return;
+        }
 
-        List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
-        measurementPane.setMeasurements(allMeasurements, null);
-        updatePreflight();
+        List<ProjectImageEntry<BufferedImage>> entries =
+                scopeSection == null ? null : scopeSection.resolveEntries();
+        if (entries == null || entries.isEmpty()) {
+            setMeasurementStatus("Choose the images to cluster -- their measurements will "
+                    + "be listed here.");
+            measurementPane.setMeasurements(List.of(), null);
+            updatePreflight();
+            return;
+        }
+
+        // Same scope as last time? The read is expensive; do not repeat it.
+        String key = entries.stream().map(ProjectImageEntry::getID).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        if (key.equals(measurementScopeKey)) return;
+        measurementScopeKey = key;
+
+        setMeasurementStatus("Reading measurements from "
+                + entries.size() + " image" + (entries.size() == 1 ? "" : "s") + "...");
+        final long token = ++measurementLoadToken;
+        Thread t = new Thread(() -> {
+            List<String> found = List.of();
+            String scanned = null;
+            long cells = 0;
+            for (ProjectImageEntry<BufferedImage> entry : entries) {
+                ImageData<BufferedImage> data = null;
+                try {
+                    data = entry.readImageData();
+                    var dets = data.getHierarchy().getDetectionObjects();
+                    if (dets.isEmpty()) continue;
+                    found = MeasurementExtractor.getAllMeasurements(dets);
+                    cells = dets.size();
+                    scanned = entry.getImageName();
+                    break;   // measurement names are a property of the panel, not the slide
+                } catch (Exception e) {
+                    logger.debug("Could not read {} for measurements: {}",
+                            entry.getImageName(), e.getMessage());
+                } finally {
+                    ImageDataResources.closeQuietly(data);
+                }
+            }
+            final List<String> result = found;
+            final String from = scanned;
+            final long perImage = cells;
+            Platform.runLater(() -> {
+                // A newer scope change has superseded this read.
+                if (token != measurementLoadToken) return;
+                scopeCellsPerImage = perImage;
+                scopeImageCount = entries.size();
+                if (result.isEmpty()) {
+                    setMeasurementStatus("No detections found in the selected images. "
+                            + "Run cell detection on them first.");
+                    measurementPane.setMeasurements(List.of(), null);
+                } else {
+                    measurementPane.setMeasurements(result, null);
+                    setMeasurementStatus(from == null ? null
+                            : "Measurements read from " + from + ".");
+                }
+                updatePreflight();
+            });
+        }, "QPCAT-ReadMeasurements");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Show (or clear) a one-line note above the measurement list. */
+    private void setMeasurementStatus(String text) {
+        if (measurementStatusLabel == null) return;
+        measurementStatusLabel.setText(text == null ? "" : text);
+        measurementStatusLabel.setVisible(text != null);
+        measurementStatusLabel.setManaged(text != null);
     }
 
     /**

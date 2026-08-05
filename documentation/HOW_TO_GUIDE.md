@@ -133,6 +133,14 @@ Full clustering with all configuration options.
    - "Spatial feature smoothing" -- smooths features using spatial neighbors before clustering (see note below)
    - "Batch correction" -- applies Harmony (only for multi-image scope)
 
+> **You do not need an image open.** With a project open, launch the dialog and
+> choose the images first -- QP-CAT reads their measurements directly, so the
+> measurement list reflects what you picked rather than whatever image happened
+> to be in the viewer. "Current image" is disabled when nothing is open, and the
+> measurement list refreshes whenever you change the scope. Reading a project
+> image is real disk work, so the list shows what it is doing and stays
+> responsive while it reads.
+
 9. **Pre-flight checks** -- A box below the settings may show scale warnings or blocks:
    - **Amber box (scale warning)** = this configuration will run but may be slow or approach your machine's memory ceiling
    - **Red box (scale block)** = this configuration cannot finish on this machine; the **Run** button is disabled. The message names the problem (e.g., "Agglomerative clustering needs about 50 GB but you have 16 GB") and suggests alternatives (e.g., "Use Leiden or MiniBatch KMeans instead")

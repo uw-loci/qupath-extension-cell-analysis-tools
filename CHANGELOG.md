@@ -4,6 +4,36 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.9.13] -- 2026-08-05 -- clustering without an image open
+
+### Changed
+
+- **"Find cell populations (clustering)..." no longer requires an open image.**
+  It refused to open at all without one, which is backwards: the images decide
+  which channels and measurements exist, so choosing them is the *first* step,
+  not a precondition. With a project open the dialog now launches and asks.
+
+  - `Scope` disables **Current image** when nothing is open, says so, and starts
+    from the widest project scope available. A single-image project resolves to
+    that image rather than to nothing.
+  - The **measurement list is read from the selected scope**, not from whatever
+    image is in the viewer, and re-reads whenever the scope changes. Reading a
+    project entry is real disk I/O, so it happens off the UI thread with a
+    one-line status above the list; a superseded read is discarded rather than
+    landing late over a newer one, and an unchanged scope is not re-read.
+  - The scale pre-flight takes its cell count from the same read, so it stays
+    accurate with no image open -- and reports nothing at all until that read
+    lands, rather than guessing a count.
+  - The menu still refuses when there is neither an image nor a project with
+    images, and the "no detections" check now applies only when the open image
+    is what would actually be used.
+
+### Notes
+
+- Measurement names are a property of the panel, not of an individual slide, so
+  the scope read stops at the first selected image that has detections rather
+  than opening every one. If none of them have detections, it says so.
+
 ## [0.9.12] -- 2026-08-05 -- read the machine's memory properly, and say small numbers properly
 
 ### Fixed

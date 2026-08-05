@@ -216,11 +216,21 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // Run Clustering (main workflow)
         MenuItem runClusteringItem = new MenuItem(res.getString("menu.runClustering"));
         runClusteringItem.setOnAction(e -> {
-            if (qupath.getImageData() == null) {
-                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
+            // No open image is required. With a project open the dialog asks
+            // which images to work on and reads their measurements directly, so
+            // demanding an open image here would refuse a workflow that works.
+            boolean haveImage = qupath.getImageData() != null;
+            boolean haveProject = qupath.getProject() != null
+                    && !qupath.getProject().getImageList().isEmpty();
+            if (!haveImage && !haveProject) {
+                Dialogs.showWarningNotification(EXTENSION_NAME,
+                        "Open an image, or a project containing images, first.");
                 return;
             }
-            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
+            // Only judge detections when the open image IS what will be used;
+            // for a project scope the dialog reports what it finds per image.
+            if (haveImage && !haveProject
+                    && qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
                 Dialogs.showWarningNotification(EXTENSION_NAME,
                         "No detections found. Run cell detection first.");
                 return;
