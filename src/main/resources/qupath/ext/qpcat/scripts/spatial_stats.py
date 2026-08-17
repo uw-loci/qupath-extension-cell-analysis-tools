@@ -480,6 +480,234 @@ def _median_nn_distance(coords):
         return None
 
 
+def _csv_cell(value):
+    """Minimal CSV quoting. Area labels contain ' | ' and can contain commas."""
+    text = "" if value is None else str(value)
+    if any(ch in text for ch in [",", '"', "\n", "\r"]):
+        return '"' + text.replace('"', '""') + '"'
+    return text
+
+
+def _csv_row(values):
+    return ",".join(_csv_cell(v) for v in values)
+
+
+def build_area_summary_csv(area_ids, area_names, cluster_labels, cluster_names=None):
+    """Wide per-area summary: one row per area, one column per cluster.
+
+    This is the file a user actually opens. It answers "what is in each core"
+    -- the question that only becomes askable once areas exist -- and it is
+    deliberately separate from the cluster-level output: a cluster's marker
+    profile is a property of the CLUSTER, identical in every area, and
+    repeating it 55 times would be noise.
+
+    Columns: area, n_cells, n_clusters_present, then one fraction column per
+    cluster, then the matching count columns.
+    """
+    ids = np.asarray(area_ids, dtype=np.int64).ravel()
+    labels = np.asarray(cluster_labels).ravel()
+    if ids.shape[0] != labels.shape[0]:
+        raise ValueError(
+            "area_ids length (%d) does not match cluster label count (%d)"
+            % (ids.shape[0], labels.shape[0])
+        )
+
+    present = sorted(set(int(v) for v in labels))
+    if cluster_names is None:
+        names = {c: "Cluster %d" % c for c in present}
+    else:
+        listed = list(cluster_names)
+        names = {
+            c: (listed[c] if 0 <= c < len(listed) else "Cluster %d" % c)
+            for c in present
+        }
+
+    header = ["area", "n_cells", "n_clusters_present"]
+    header += ["%s_frac" % names[c] for c in present]
+    header += ["%s_count" % names[c] for c in present]
+    rows = [_csv_row(header)]
+
+    for area_id, idx in area_slices(ids, ids.shape[0]):
+        area_labels = labels[idx]
+        n = int(area_labels.shape[0])
+        counts = {c: int(np.count_nonzero(area_labels == c)) for c in present}
+        n_present = sum(1 for c in present if counts[c] > 0)
+        row = [area_label(area_names, area_id), n, n_present]
+        # n is never 0 -- area_slices only yields ids that occur -- so the
+        # division needs no guard, but be explicit rather than rely on it.
+        row += ["%.6f" % (counts[c] / n) if n else "" for c in present]
+        row += [counts[c] for c in present]
+        rows.append(_csv_row(row))
+
+    return "\n".join(rows) + "\n"
+
+
+def build_area_statistics_csv(per_area_by_statistic):
+    """Long-format per-area statistics.
+
+    One row per (area, statistic, key). Deliberately the same shape as the
+    CSV PostHocSpatialWorkflow already writes, so the two workflows produce
+    files that can be concatenated rather than reconciled.
+
+    `per_area_by_statistic` maps a statistic name to {area_label: result},
+    where each result is whatever that helper emitted (a JSON string or an
+    already-decoded object).
+    """
+    import json as _json
+
+    header = ["area", "statistic", "key", "value", "p_value"]
+    rows = [_csv_row(header)]
+
+    for statistic in sorted(per_area_by_statistic):
+        by_area = per_area_by_statistic[statistic] or {}
+        for area in sorted(by_area):
+            payload = by_area[area]
+            if isinstance(payload, str):
+                try:
+                    payload = _json.loads(payload)
+                except ValueError:
+                    logger.warning(
+                        "Area '%s': %s result is not valid JSON; skipped in the CSV",
+                        area,
+                        statistic,
+                    )
+                    continue
+            if not isinstance(payload, dict):
+                continue
+            p_values = payload.get("p_values") or {}
+            emitted = False
+            for key, value in sorted(p_values.items()):
+                rows.append(_csv_row([area, statistic, key, "", value]))
+                emitted = True
+            # Scalar summaries some helpers emit alongside the curves.
+            for key in ("mean", "max", "n_permutations", "graph_type"):
+                if key in payload and not isinstance(payload[key], (list, dict)):
+                    rows.append(_csv_row([area, statistic, key, payload[key], ""]))
+                    emitted = True
+            if not emitted:
+                # Record the area rather than omitting it: a missing row would
+                # read as "not measured" when it may mean "no p-values".
+                rows.append(_csv_row([area, statistic, "computed", "1", ""]))
+
+    return "\n".join(rows) + "\n"
+
+
+class _CapturingTask:
+    """Stands in for the Appose task while a helper runs on one area.
+
+    Every helper in this module reports by writing task.outputs[...] or by
+    logging and writing nothing. Handing them this instead of the real task
+    lets a per-area caller collect each area's result without changing any of
+    the statistics themselves.
+    """
+
+    def __init__(self):
+        self.outputs = {}
+
+    def update(self, *args, **kwargs):
+        pass
+
+
+def area_label(area_names, area_id):
+    """Display label for an area id, falling back to a stable synthetic name."""
+    if area_names is not None:
+        try:
+            name = list(area_names)[int(area_id)]
+            if name:
+                return str(name)
+        except (IndexError, ValueError, TypeError):
+            pass
+    return "Area %d" % int(area_id)
+
+
+def slice_adata_for_area(adata, idx, cluster_key="cluster"):
+    """Copy of `adata` holding only the cells in `idx`.
+
+    Unused cluster categories are dropped. A core that contains none of
+    cluster 7 has no Ripley curve for cluster 7, and saying so is more honest
+    than emitting an empty one -- and squidpy's per-category loops do not
+    tolerate empty categories anyway.
+    """
+    sub = adata[idx].copy()
+    if cluster_key in sub.obs.columns and hasattr(sub.obs[cluster_key], "cat"):
+        sub.obs[cluster_key] = sub.obs[cluster_key].cat.remove_unused_categories()
+    return sub
+
+
+def run_per_area(
+    fn,
+    adata,
+    area_ids,
+    area_names,
+    output_key,
+    cluster_key="cluster",
+    min_cells=0,
+    **kwargs,
+):
+    """Run a coordinate-based statistic once per independent area.
+
+    Ripley's L and co-occurrence read obsm['spatial'] directly and never
+    consult the neighbour graph (verified against squidpy 1.6.6:
+    sq.gr.ripley and sq.gr.co_occurrence take no library_key), so making the
+    GRAPH block-diagonal does nothing for them. Pooling a TMA's 55 cores into
+    one point pattern measures the layout of the array, not the biology of any
+    core -- the convex hull spans the whole slide and every inter-core gap
+    reads as dispersion.
+
+    Returns {area_label: output} for the areas that produced a result, plus a
+    list of (area_label, reason) for those that did not. Areas are processed
+    in sorted id order so a run is reproducible.
+    """
+    results = {}
+    skipped = []
+    slices = area_slices(area_ids, adata.shape[0])
+
+    # Every helper writes its PNG to one fixed filename (the names are a public
+    # contract consumed by the figure exporter), so persisting per area would
+    # leave a single file holding whichever area happened to run last -- a plot
+    # silently mislabelled as the whole run. The numbers still reach the
+    # per-area JSON and CSV.
+    kwargs = dict(kwargs)
+    kwargs["persist_plots"] = False
+    pooled_spatial = kwargs.pop("spatial_data", None)
+
+    for area_id, idx in slices:
+        label = area_label(area_names, area_id)
+        if idx.size < max(2, int(min_cells)):
+            skipped.append((label, "only %d cell(s)" % int(idx.size)))
+            continue
+        sub = slice_adata_for_area(adata, idx, cluster_key)
+        capture = _CapturingTask()
+        per_area_kwargs = dict(kwargs)
+        if pooled_spatial is not None:
+            # co-occurrence takes the coordinates separately; they must be
+            # sliced to match or it would measure this area's clusters against
+            # the whole cohort's geometry.
+            per_area_kwargs["spatial_data"] = np.asarray(pooled_spatial)[idx]
+        try:
+            fn(sub, capture, cluster_key=cluster_key, **per_area_kwargs)
+        except Exception as e:
+            logger.warning("Area '%s': %s failed (%s)", label, output_key, e)
+            skipped.append((label, str(e)))
+            continue
+        if output_key in capture.outputs:
+            results[label] = capture.outputs[output_key]
+        else:
+            skipped.append((label, "produced no result"))
+    if skipped:
+        # Name the count, not every area: a 55-core TMA would otherwise bury
+        # the log. Silence here would read as "all areas measured".
+        logger.warning(
+            "%s: %d of %d area(s) produced no result (first: %s -- %s)",
+            output_key,
+            len(skipped),
+            len(slices),
+            skipped[0][0],
+            skipped[0][1],
+        )
+    return results, skipped
+
+
 def run_ripley(
     adata,
     task,
@@ -566,6 +794,7 @@ def run_ripley(
         poisson_k = []
         poisson_l = []
         p_values = {}
+        p_value_curves = {}
 
         # squidpy stores per-cluster results under 'bins' / 'pvalues' / 'sims_stat'
         # but the exact key set varies by version. Read defensively and log
@@ -644,12 +873,62 @@ def run_ripley(
             return
 
         try:
-            # squidpy 1.6.x stores the L result as a dict {"bins", "stats"} in
-            # adata.uns (same shape as the K branch, extracted above). Handle
-            # that first so radii/curves come from L when K is unavailable.
+            # squidpy 1.6.6 shape, verified against the installed env:
+            #   uns["<cluster_key>_ripley_L"] = {
+            #       "L_stat":    DataFrame(bins, <cluster_key>, stats),
+            #       "sims_stat": DataFrame(bins, simulations, stats),
+            #       "bins":      ndarray(n_steps,),
+            #       "pvalues":   ndarray(n_clusters, n_steps),
+            #   }
+            # The key is "L_stat", not "stats". Looking only for "stats" is why
+            # every Ripley run on this squidpy produced an EMPTY payload while
+            # logging success.
+            stat_key = "%s_stat" % "L"
+            if isinstance(l_data, dict) and stat_key in l_data:
+                stat_df = l_data[stat_key]
+                bins_arr = l_data.get("bins")
+                if bins_arr is not None and not radii:
+                    radii = [float(r) for r in bins_arr]
+                cols = list(getattr(stat_df, "columns", []))
+                cluster_col = cluster_key if cluster_key in cols else None
+                for cname in cluster_names:
+                    if cluster_col is not None:
+                        sub = stat_df[stat_df[cluster_col].astype(str) == cname]
+                        l_curves.append([float(v) for v in sub["stats"]])
+                    else:
+                        l_curves.append([0.0] * len(radii))
+                if not radii and l_curves and cluster_col is not None:
+                    first = stat_df[
+                        stat_df[cluster_col].astype(str) == cluster_names[0]
+                    ]
+                    radii = [float(r) for r in first["bins"]]
+                logger.info(
+                    "Ripley L shape matched: dict(%s DataFrame) (squidpy=%s)",
+                    stat_key,
+                    getattr(sq, "__version__", "?"),
+                )
+                # pvalues is (n_clusters, n_steps) -- a curve per cluster, not a
+                # scalar. Emitted as a curve rather than collapsed: min-over-radii
+                # would be an uncorrected multiple-comparisons summary, and
+                # picking one radius would be arbitrary. Either would be a
+                # number we invented rather than one squidpy computed.
+                pv_arr = l_data.get("pvalues")
+                if pv_arr is not None:
+                    try:
+                        pv_arr = np.asarray(pv_arr)
+                        if pv_arr.ndim == 2 and pv_arr.shape[0] == len(cluster_names):
+                            p_value_curves = {
+                                cluster_names[i]: [float(v) for v in pv_arr[i]]
+                                for i in range(len(cluster_names))
+                            }
+                    except Exception as e:
+                        logger.warning("Ripley p-value curve extraction failed: %s", e)
+
             l_bins = l_data.get("bins") if isinstance(l_data, dict) else None
             l_stats = l_data.get("stats") if isinstance(l_data, dict) else None
-            if l_bins is not None and l_stats is not None:
+            if l_curves:
+                pass
+            elif l_bins is not None and l_stats is not None:
                 if not radii:
                     radii = [float(r) for r in l_bins]
                 for cname in cluster_names:
@@ -685,12 +964,34 @@ def run_ripley(
         except Exception as e:
             logger.warning("Ripley L extraction failed: %s", e)
 
-        # Pad missing curves if extraction was partial
+        # An empty extraction is an ERROR, not a null result. Padding to
+        # [0.0] * 0 and emitting the payload anyway is what let every run on
+        # squidpy 1.6.6 report "Ripley K/L computed" while returning nothing at
+        # all. The K branch already refuses to publish zero-filled curves for
+        # exactly this reason; the same rule has to apply here, or the guard is
+        # defeated one step later.
         n_r = len(radii)
+        if n_r == 0 or not any(curve for curve in l_curves):
+            observed = (
+                list(l_data.keys())
+                if isinstance(l_data, dict)
+                else (list(l_data.columns) if hasattr(l_data, "columns") else "n/a")
+            )
+            msg = (
+                "Ripley L extraction produced no curves: squidpy (%s) returned a "
+                "payload this build does not recognise (type=%s, keys=%s). No "
+                "result was written -- this is an error, not a finding of "
+                "complete spatial randomness."
+                % (getattr(sq, "__version__", "?"), type(l_data).__name__, observed)
+            )
+            logger.error(msg)
+            task.outputs["ripley_error"] = msg
+            return
+
+        # Pad the OTHER curve set only. K is genuinely optional on builds that
+        # dropped mode='K'; L is not, and is checked above.
         if not k_curves:
             k_curves = [[0.0] * n_r for _ in cluster_names]
-        if not l_curves:
-            l_curves = [[0.0] * n_r for _ in cluster_names]
 
         # Analytical Poisson null: K_poisson(r) = pi * r^2; L_poisson(r) = 0
         poisson_k = [math.pi * (r * r) for r in radii]
@@ -714,6 +1015,11 @@ def run_ripley(
             "poisson_k": poisson_k,
             "poisson_l": poisson_l,
             "p_values": p_values,
+            # Per-cluster p-value CURVE (one value per radius). squidpy reports
+            # significance per radius; collapsing it to one number per cluster
+            # would be a summary we invented, so the curve is passed through
+            # and p_values stays empty unless a build supplies real scalars.
+            "p_value_curves": p_value_curves,
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
         }

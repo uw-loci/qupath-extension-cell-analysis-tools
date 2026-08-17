@@ -1195,23 +1195,49 @@ if has_spatial and n_clusters_found > 1:
     # below and emits it via task.outputs['plot_paths'].
     plot_paths = {}
 
+    # Ripley's L and co-occurrence read the coordinates directly and never
+    # consult the neighbour graph, so making the graph block-diagonal does
+    # nothing for them -- they have to be looped per area. Geary's C, Moran's I
+    # and neighbourhood enrichment all go through the graph and are already
+    # correct once it is partitioned, so they stay pooled.
+    _per_area_stats = area_ids_list is not None and n_areas > 1
+    _ripley_by_area = None
+    _cooc_p_by_area = None
+    _cooc_o_by_area = None
+
     if pref_enable_ripley:
         _progress(
             0.86,
-            "Computing Ripley K and L (%d permutations on %d cells) "
-            "-- this can take several minutes..." % (n_perms, n_cells),
+            "Computing Ripley K and L (%d permutations on %d cells, %d area(s)) "
+            "-- this can take several minutes..." % (n_perms, n_cells, n_areas),
         )
-        _qpcat_spatial.run_ripley(
-            adata,
-            task,
-            cluster_key="cluster",
-            n_permutations=n_perms,
-            graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir,
-            plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist,
-        )
-        if _spatial_persist:
+        if _per_area_stats:
+            _ripley_by_area, _ripley_skipped = _qpcat_spatial.run_per_area(
+                _qpcat_spatial.run_ripley,
+                adata,
+                area_ids_list,
+                area_names_list,
+                "ripley",
+                cluster_key="cluster",
+                n_permutations=n_perms,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+            )
+            if _ripley_by_area:
+                task.outputs["ripley_per_area"] = _json_rep.dumps(_ripley_by_area)
+        else:
+            _qpcat_spatial.run_ripley(
+                adata,
+                task,
+                cluster_key="cluster",
+                n_permutations=n_perms,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+                persist_plots=_spatial_persist,
+            )
+        if _spatial_persist and not _per_area_stats:
             _ripley_path = os.path.join(
                 _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_RIPLEY
             )
@@ -1250,19 +1276,39 @@ if has_spatial and n_clusters_found > 1:
             "Computing co-occurrence, pairwise (%d cells) "
             "-- this can be slow..." % n_cells,
         )
-        _qpcat_spatial.run_co_occurrence(
-            adata,
-            task,
-            cluster_key="cluster",
-            mode="pairwise",
-            n_permutations=n_perms,
-            spatial_data=spatial_data,
-            graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir,
-            plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist,
-        )
-        if _spatial_persist:
+        if _per_area_stats:
+            _cooc_p_by_area, _ = _qpcat_spatial.run_per_area(
+                _qpcat_spatial.run_co_occurrence,
+                adata,
+                area_ids_list,
+                area_names_list,
+                "co_occurrence_pairwise",
+                cluster_key="cluster",
+                mode="pairwise",
+                n_permutations=n_perms,
+                spatial_data=spatial_data,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+            )
+            if _cooc_p_by_area:
+                task.outputs["co_occurrence_pairwise_per_area"] = _json_rep.dumps(
+                    _cooc_p_by_area
+                )
+        else:
+            _qpcat_spatial.run_co_occurrence(
+                adata,
+                task,
+                cluster_key="cluster",
+                mode="pairwise",
+                n_permutations=n_perms,
+                spatial_data=spatial_data,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+                persist_plots=_spatial_persist,
+            )
+        if _spatial_persist and not _per_area_stats:
             _cooc_p_path = os.path.join(
                 _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_COOC_PAIRWISE
             )
@@ -1271,19 +1317,39 @@ if has_spatial and n_clusters_found > 1:
 
     if pref_enable_co_occurrence_one_vs_rest:
         _progress(0.97, "Computing co-occurrence, one-vs-rest (%d cells)..." % n_cells)
-        _qpcat_spatial.run_co_occurrence(
-            adata,
-            task,
-            cluster_key="cluster",
-            mode="oneVsRest",
-            n_permutations=n_perms,
-            spatial_data=spatial_data,
-            graph_type=pref_spatial_graph_type,
-            plot_dir=_spatial_plot_dir,
-            plot_dpi=pref_plot_dpi,
-            persist_plots=_spatial_persist,
-        )
-        if _spatial_persist:
+        if _per_area_stats:
+            _cooc_o_by_area, _ = _qpcat_spatial.run_per_area(
+                _qpcat_spatial.run_co_occurrence,
+                adata,
+                area_ids_list,
+                area_names_list,
+                "co_occurrence_one_vs_rest",
+                cluster_key="cluster",
+                mode="oneVsRest",
+                n_permutations=n_perms,
+                spatial_data=spatial_data,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+            )
+            if _cooc_o_by_area:
+                task.outputs["co_occurrence_one_vs_rest_per_area"] = _json_rep.dumps(
+                    _cooc_o_by_area
+                )
+        else:
+            _qpcat_spatial.run_co_occurrence(
+                adata,
+                task,
+                cluster_key="cluster",
+                mode="oneVsRest",
+                n_permutations=n_perms,
+                spatial_data=spatial_data,
+                graph_type=pref_spatial_graph_type,
+                plot_dir=_spatial_plot_dir,
+                plot_dpi=pref_plot_dpi,
+                persist_plots=_spatial_persist,
+            )
+        if _spatial_persist and not _per_area_stats:
             _cooc_o_path = os.path.join(
                 _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_COOC_ONE_VS_REST
             )
@@ -1294,6 +1360,22 @@ if has_spatial and n_clusters_found > 1:
         # Surface the resolved adaptive count to the Java side so the
         # audit log row can report the value actually used.
         task.outputs["spatial_n_permutations"] = int(n_perms)
+
+    if _per_area_stats:
+        # Long-format per-area statistics, same column shape as the CSV the
+        # post-hoc spatial workflow already writes so the two can be
+        # concatenated rather than reconciled.
+        _by_statistic = {}
+        if _ripley_by_area:
+            _by_statistic["ripley"] = _ripley_by_area
+        if _cooc_p_by_area:
+            _by_statistic["co_occurrence_pairwise"] = _cooc_p_by_area
+        if _cooc_o_by_area:
+            _by_statistic["co_occurrence_one_vs_rest"] = _cooc_o_by_area
+        if _by_statistic:
+            task.outputs["areas_statistics_csv"] = (
+                _qpcat_spatial.build_area_statistics_csv(_by_statistic)
+            )
 
     # Restore numba's thread count for any subsequent task in this worker.
     if _numba_threads_saved is not None:
@@ -1526,6 +1608,24 @@ labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), labels.astype(np.int32))
 task.outputs["cluster_labels"] = labels_nd
 task.outputs["n_clusters"] = n_clusters_found
+
+# Per-area composition. Emitted whenever there is more than one area, not
+# only when spatial statistics ran: "what is in each core" is the question
+# areas make askable, and it costs one pass over the labels.
+if area_ids_list is not None and n_areas > 1:
+    try:
+        # Imported here rather than reusing _qpcat_spatial: that name only
+        # exists when spatial analysis ran, and the composition table is
+        # useful without it.
+        from spatial_stats import build_area_summary_csv
+
+        task.outputs["areas_summary_csv"] = build_area_summary_csv(
+            area_ids_list, area_names_list, labels
+        )
+    except Exception as _e:
+        # A reporting convenience must never fail a run that already produced
+        # its clusters.
+        logger.warning("Per-area summary CSV could not be built: %s", _e)
 
 # Embedding. Second dim follows the computed component count (2 or 3); the Java
 # side reads it from the NDArray shape and writes NAME1/NAME2[/NAME3].
