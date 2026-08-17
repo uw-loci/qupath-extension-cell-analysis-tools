@@ -431,6 +431,15 @@ offered measurement list is read from the currently open image, so this mismatch
 is easy to introduce across a heterogeneous project -- the warning tells you which
 images are missing what.
 
+**Additional composition views:** Beyond *by image* and *by annotation*, QP-CAT also
+offers *by area* (core-to-core comparison across independent tissue sections) and
+*by class* (cluster split across annotation classes -- e.g. Tumor vs. Stroma,
+pooled across every area). Areas decide which cells may share a spatial graph;
+class decides how the results are compared. See
+[Composition by area](HOW_TO_GUIDE.md#composition-by-area-tab) and
+[Composition by class](HOW_TO_GUIDE.md#composition-by-class-tab) for when each
+appears and how to read them.
+
 ### Iterate
 
 Clustering is rarely perfect on the first try. A typical workflow:
