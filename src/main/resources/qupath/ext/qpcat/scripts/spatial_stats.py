@@ -241,8 +241,121 @@ def adaptive_permutations(n_cells, override=0):
     return 50
 
 
+def area_slices(area_ids, n_cells=None):
+    """Partition cell indices by independent area.
+
+    Returns an ordered list of (area_id, index_array) pairs, sorted by area
+    id so a run is reproducible -- never iterate a set or a dict insertion
+    order here, because the block assembly below depends on this order.
+
+    `area_ids` of None (or a single distinct value) yields ONE slice covering
+    every cell, which is the un-partitioned case and reduces every caller
+    below to its pre-areas behaviour.
+    """
+    if area_ids is None:
+        if n_cells is None:
+            raise ValueError("area_slices needs n_cells when area_ids is None")
+        return [(0, np.arange(int(n_cells), dtype=np.int64))]
+    ids = np.asarray(area_ids, dtype=np.int64).ravel()
+    if n_cells is not None and ids.shape[0] != int(n_cells):
+        raise ValueError(
+            "area_ids length (%d) does not match n_cells (%d)"
+            % (ids.shape[0], int(n_cells))
+        )
+    return [(int(a), np.flatnonzero(ids == a)) for a in np.unique(ids)]
+
+
+def _knn_cap(k, n_block):
+    """Largest usable neighbour count for a block of n_block cells.
+
+    sklearn raises when it is asked for more neighbours than there are other
+    points, so a small area must reduce k rather than take the whole run down
+    with it. Returns 0 when the block cannot support a graph at all.
+    """
+    return max(0, min(int(k), int(n_block) - 1))
+
+
+def _build_graph_block(coords, graph_type, k, radius, delaunay_max_edge):
+    """Build (connectivities, distances) for ONE coordinate frame.
+
+    This is the single-frame logic that used to be inlined in
+    build_spatial_graph. Extracted so that the partitioned path and the
+    un-partitioned path are the SAME code with a different number of blocks,
+    rather than two implementations that can drift apart.
+    """
+    import anndata as ad
+    import scipy.sparse as sp
+    import squidpy as sq
+
+    n_block = int(coords.shape[0])
+    if n_block < 2:
+        # A one-cell area has no neighbours. An empty block is the honest
+        # answer; those cells then contribute nothing to graph-based
+        # statistics instead of borrowing a neighbour from another specimen.
+        empty = sp.csr_matrix((n_block, n_block), dtype=np.float64)
+        return empty, empty.copy()
+
+    block = ad.AnnData(X=np.zeros((n_block, 1), dtype=np.float32))
+    block.obsm["spatial"] = np.asarray(coords, dtype=np.float64)
+
+    if graph_type == "knn":
+        n_neighs = _knn_cap(k, n_block)
+        if n_neighs < 1:
+            empty = sp.csr_matrix((n_block, n_block), dtype=np.float64)
+            return empty, empty.copy()
+        sq.gr.spatial_neighbors(
+            block, coord_type="generic", n_neighs=n_neighs, delaunay=False
+        )
+    elif graph_type == "radius":
+        sq.gr.spatial_neighbors(
+            block, coord_type="generic", radius=radius, delaunay=False
+        )
+    elif graph_type == "delaunay":
+        sq.gr.spatial_neighbors(block, coord_type="generic", delaunay=True)
+        if delaunay_max_edge is not None and delaunay_max_edge > 0:
+            dists = block.obsp["spatial_distances"]
+            conn = block.obsp["spatial_connectivities"]
+            mask = dists > delaunay_max_edge
+            dists = dists.tolil()
+            conn = conn.tolil()
+            for i, j in zip(*mask.nonzero()):
+                dists[i, j] = 0
+                conn[i, j] = 0
+            block.obsp["spatial_distances"] = dists.tocsr()
+            block.obsp["spatial_connectivities"] = conn.tocsr()
+    else:
+        raise ValueError("Unknown spatial graph type: %s" % graph_type)
+
+    return block.obsp["spatial_connectivities"], block.obsp["spatial_distances"]
+
+
+def _auto_radius(coords, slices):
+    """Median within-area 1-NN distance times 5, the historical auto-radius.
+
+    Derived ONCE across all areas rather than per area: a radius is a
+    biological length scale, and letting each core pick its own would make
+    the resulting statistics incomparable between cores -- which is the whole
+    point of keeping the areas separate in the first place.
+    """
+    nn = []
+    for _area_id, idx in slices:
+        if idx.size < 2:
+            continue
+        d = _median_nn_distance(coords[idx])
+        if d is not None and d > 0:
+            nn.append(d)
+    if not nn:
+        return 50.0
+    return float(np.median(nn) * 5.0)
+
+
 def build_spatial_graph(
-    adata, graph_type="knn", k=15, radius=-1.0, delaunay_max_edge=-1.0
+    adata,
+    graph_type="knn",
+    k=15,
+    radius=-1.0,
+    delaunay_max_edge=-1.0,
+    area_ids=None,
 ):
     """Build adata.obsp['spatial_connectivities'] via squidpy.
 
@@ -250,61 +363,97 @@ def build_spatial_graph(
     radius < 0 means auto-derive from median NN distance times 5.
     delaunay_max_edge < 0 means do not prune Delaunay edges.
 
+    When `area_ids` is given, one graph is built per independent area and the
+    blocks are assembled into a single block-diagonal matrix in the original
+    cell order. No edge then joins two areas -- a distance between cells in
+    different TMA cores, tissue sections or images is not a distance through
+    tissue, so an edge across it is an invented adjacency that nothing
+    downstream can detect.
+
+    A single area reduces to exactly one block and the identity permutation,
+    so un-partitioned runs are unchanged.
+
     Returns the resolved (graph_type, effective_param) tuple for audit
     logging. On failure, logs a warning and re-raises so the caller can
     decide whether to fall back.
     """
-    import squidpy as sq
+    import scipy.sparse as sp
 
     n_cells = adata.shape[0]
-    if graph_type == "knn":
-        sq.gr.spatial_neighbors(
-            adata,
-            coord_type="generic",
-            n_neighs=min(k, max(1, n_cells - 1)),
-            delaunay=False,
+    coords = np.asarray(adata.obsm["spatial"], dtype=np.float64)
+    slices = area_slices(area_ids, n_cells)
+
+    if graph_type == "radius" and (radius is None or radius < 0):
+        radius = _auto_radius(coords, slices)
+
+    conns = []
+    dists = []
+    order = []
+    reduced_k = []
+    for area_id, idx in slices:
+        if graph_type == "knn" and _knn_cap(k, idx.size) < int(k):
+            reduced_k.append((area_id, int(idx.size), _knn_cap(k, idx.size)))
+        conn, dist = _build_graph_block(
+            coords[idx], graph_type, k, radius, delaunay_max_edge
         )
+        conns.append(conn)
+        dists.append(dist)
+        order.append(idx)
+
+    if reduced_k:
+        # One line with a count, not one per area: a 55-core TMA with several
+        # sparse cores would otherwise bury the log.
+        smallest = min(reduced_k, key=lambda r: r[2])
+        logger.warning(
+            "Spatial graph: %d area(s) had k reduced below %d to fit the area "
+            "size (smallest: area %d, %d cells, k=%d)",
+            len(reduced_k),
+            int(k),
+            smallest[0],
+            smallest[1],
+            smallest[2],
+        )
+
+    if len(slices) == 1:
+        adata.obsp["spatial_connectivities"] = conns[0]
+        adata.obsp["spatial_distances"] = dists[0]
+    else:
+        # block_diag concatenates in slice order; permute back to the original
+        # cell order so every downstream index still means the same cell.
+        concatenated = np.concatenate(order)
+        inverse = np.argsort(concatenated)
+        adata.obsp["spatial_connectivities"] = sp.block_diag(conns, format="csr")[
+            inverse, :
+        ][:, inverse]
+        adata.obsp["spatial_distances"] = sp.block_diag(dists, format="csr")[
+            inverse, :
+        ][:, inverse]
+        logger.info(
+            "Spatial graph built per area: %d areas, no edges between them",
+            len(slices),
+        )
+
+    # Mirror the metadata squidpy itself records. Nothing we call reads it
+    # today (sq.gr helpers validate adata.obsp only), but leaving the graph
+    # undescribed would make any future squidpy plotting call silently see an
+    # un-built graph.
+    adata.uns["spatial_neighbors"] = {
+        "connectivities_key": "spatial_connectivities",
+        "distances_key": "spatial_distances",
+        "params": {
+            "n_neighbors": int(k) if graph_type == "knn" else None,
+            "coord_type": "generic",
+            "radius": radius if graph_type == "radius" else None,
+            "transform": None,
+            "qpcat_n_areas": len(slices),
+        },
+    }
+
+    if graph_type == "knn":
         return ("knn", k)
     if graph_type == "radius":
-        if radius is None or radius < 0:
-            # Auto: median NN distance * 5. We need a one-shot kNN to derive it.
-            sq.gr.spatial_neighbors(
-                adata, coord_type="generic", n_neighs=2, delaunay=False
-            )
-            dists = adata.obsp["spatial_distances"]
-            try:
-                # dists is sparse; the second-nearest distance per row is the
-                # 1-NN distance after the self-loop is excluded
-                per_row = np.array(dists[dists.nonzero()]).ravel()
-                if per_row.size == 0:
-                    radius = 50.0
-                else:
-                    radius = float(np.median(per_row) * 5.0)
-            except Exception:
-                radius = 50.0
-        sq.gr.spatial_neighbors(
-            adata, coord_type="generic", radius=radius, delaunay=False
-        )
         return ("radius", radius)
-    if graph_type == "delaunay":
-        sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
-        if delaunay_max_edge is not None and delaunay_max_edge > 0:
-            # Prune long edges via the distances matrix
-            import scipy.sparse as sp
-
-            dists = adata.obsp["spatial_distances"]
-            conn = adata.obsp["spatial_connectivities"]
-            mask = dists > delaunay_max_edge
-            # Set masked entries to zero in both matrices then prune zeros
-            dists = dists.tolil()
-            conn = conn.tolil()
-            for i, j in zip(*mask.nonzero()):
-                dists[i, j] = 0
-                conn[i, j] = 0
-            adata.obsp["spatial_distances"] = dists.tocsr()
-            adata.obsp["spatial_connectivities"] = conn.tocsr()
-        return ("delaunay", delaunay_max_edge)
-    raise ValueError("Unknown spatial graph type: %s" % graph_type)
+    return ("delaunay", delaunay_max_edge)
 
 
 def _median_nn_distance(coords):
@@ -1213,7 +1362,12 @@ def emit_spatial_node_outputs(
 
 
 def build_smoothing_adjacency_squidpy(
-    spatial_data, graph_type="knn", k=15, radius=-1.0, delaunay_max_edge=-1.0
+    spatial_data,
+    graph_type="knn",
+    k=15,
+    radius=-1.0,
+    delaunay_max_edge=-1.0,
+    area_ids=None,
 ):
     """Hybrid-graph-reuse smoothing path (Phase 2 contract #2).
 
@@ -1221,6 +1375,10 @@ def build_smoothing_adjacency_squidpy(
     a row-normalised pure-A connectivity matrix (no +I diagonal). This is
     the path the smoothing rewrite uses when
     qpcat.spatial.useSquidpyGraphForSmoothing is true.
+
+    With `area_ids`, smoothing never averages a cell's features with those of
+    a cell in a different specimen -- which would be a fabricated measurement,
+    not a smoothed one.
 
     The legacy path (run_clustering.py inline) uses (A + I) row-normalised
     on a sklearn kNN graph. Numerical equivalence between the two paths
@@ -1237,6 +1395,7 @@ def build_smoothing_adjacency_squidpy(
         k=k,
         radius=radius,
         delaunay_max_edge=delaunay_max_edge,
+        area_ids=area_ids,
     )
     conn = adata_tmp.obsp["spatial_connectivities"].astype(np.float64)
     row_sums = np.array(conn.sum(axis=1)).flatten()

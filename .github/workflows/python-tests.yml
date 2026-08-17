@@ -40,6 +40,13 @@ jobs:
           python -m pip install --index-url https://download.pytorch.org/whl/cpu torch
           python -m pip install "harmonypy>=0.2.0,<2" scikit-learn
 
+      # squidpy backs the independent-areas graph tests. Without it those tests
+      # skip, and the single assertion this feature rests on -- that no graph
+      # edge joins two areas -- would never actually run anywhere automated.
+      # Pinned to the range in src/main/resources/qupath/ext/qpcat/pixi.toml.
+      - name: Install squidpy
+        run: python -m pip install "squidpy>=1.4.0" anndata
+
       - name: Run tests
         run: python -m pytest python_tests/ -v
 
