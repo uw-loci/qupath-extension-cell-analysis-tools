@@ -23,6 +23,7 @@ Inputs (injected by Appose 0.10.0):
 Outputs (via task.outputs):
   timings_json: str (JSON) -- [{"size": s, "seconds": t}, ...] for sizes that ran
 """
+
 import json
 import logging
 import time
@@ -37,6 +38,7 @@ import pandas as pd
 # real single-threaded execution so its timings are representative.
 try:
     import numba as _numba_mod
+
     _numba_mod.set_num_threads(1)
 except Exception:
     pass
@@ -85,8 +87,11 @@ results = []
 for s in sizes:
     try:
         task.update("Testing estimated time (%d cells)..." % s)
-        idx = rng.choice(n_cells, size=s, replace=False) if s < n_cells \
+        idx = (
+            rng.choice(n_cells, size=s, replace=False)
+            if s < n_cells
             else np.arange(n_cells)
+        )
         sub = data[idx]
         sub_coords = coords[idx]
         df = pd.DataFrame(sub, columns=marker_names)
@@ -99,63 +104,101 @@ for s in sizes:
         # label COUNT, not the actual assignment.
         k = max(2, min(8, s // 50)) if s >= 100 else 2
         adata.obs["cluster"] = pd.Categorical(
-            [str(int(x)) for x in rng.randint(0, k, size=s)])
+            [str(int(x)) for x in rng.randint(0, k, size=s)]
+        )
 
         n_perms = ss.adaptive_permutations(n_cells, override=perms_override)
 
         t0 = time.perf_counter()
-        ss.build_spatial_graph(adata, graph_type=graph_type, k=graph_k,
-                               radius=graph_radius,
-                               delaunay_max_edge=graph_delaunay)
+        ss.build_spatial_graph(
+            adata,
+            graph_type=graph_type,
+            k=graph_k,
+            radius=graph_radius,
+            delaunay_max_edge=graph_delaunay,
+        )
         if en_spatial:
             try:
-                sq.gr.nhood_enrichment(adata, cluster_key="cluster",
-                                       **ss._safe_kwargs(sq.gr.nhood_enrichment,
-                                                         numba_parallel=False,
-                                                         n_jobs=1,
-                                                         show_progress_bar=False,
-                                                         seed=0))
+                sq.gr.nhood_enrichment(
+                    adata,
+                    cluster_key="cluster",
+                    **ss._safe_kwargs(
+                        sq.gr.nhood_enrichment,
+                        numba_parallel=False,
+                        n_jobs=1,
+                        show_progress_bar=False,
+                        seed=0,
+                    )
+                )
             except Exception as e:
                 logger.warning("probe nhood failed: %s", e)
             try:
-                sq.gr.spatial_autocorr(adata, mode="moran",
-                                       **ss._safe_kwargs(sq.gr.spatial_autocorr,
-                                                         n_jobs=1,
-                                                         show_progress_bar=False,
-                                                         seed=0))
+                sq.gr.spatial_autocorr(
+                    adata,
+                    mode="moran",
+                    **ss._safe_kwargs(
+                        sq.gr.spatial_autocorr,
+                        n_jobs=1,
+                        show_progress_bar=False,
+                        seed=0,
+                    )
+                )
             except Exception as e:
                 logger.warning("probe moran failed: %s", e)
         if en_ripley:
             try:
-                ss.run_ripley(adata, task, cluster_key="cluster",
-                              n_permutations=n_perms, graph_type=graph_type,
-                              plot_dir=None, persist_plots=False)
+                ss.run_ripley(
+                    adata,
+                    task,
+                    cluster_key="cluster",
+                    n_permutations=n_perms,
+                    graph_type=graph_type,
+                    plot_dir=None,
+                    persist_plots=False,
+                )
             except Exception as e:
                 logger.warning("probe ripley failed: %s", e)
         if en_geary:
             try:
-                ss.run_geary_c(adata, task, n_permutations=n_perms,
-                               measurements=list(marker_names),
-                               graph_type=graph_type, plot_dir=None,
-                               persist_plots=False)
+                ss.run_geary_c(
+                    adata,
+                    task,
+                    n_permutations=n_perms,
+                    measurements=list(marker_names),
+                    graph_type=graph_type,
+                    plot_dir=None,
+                    persist_plots=False,
+                )
             except Exception as e:
                 logger.warning("probe geary failed: %s", e)
         if en_cooc_p:
             try:
-                ss.run_co_occurrence(adata, task, cluster_key="cluster",
-                                     mode="pairwise", n_permutations=n_perms,
-                                     spatial_data=sub_coords,
-                                     graph_type=graph_type, plot_dir=None,
-                                     persist_plots=False)
+                ss.run_co_occurrence(
+                    adata,
+                    task,
+                    cluster_key="cluster",
+                    mode="pairwise",
+                    n_permutations=n_perms,
+                    spatial_data=sub_coords,
+                    graph_type=graph_type,
+                    plot_dir=None,
+                    persist_plots=False,
+                )
             except Exception as e:
                 logger.warning("probe cooc pairwise failed: %s", e)
         if en_cooc_o:
             try:
-                ss.run_co_occurrence(adata, task, cluster_key="cluster",
-                                     mode="oneVsRest", n_permutations=n_perms,
-                                     spatial_data=sub_coords,
-                                     graph_type=graph_type, plot_dir=None,
-                                     persist_plots=False)
+                ss.run_co_occurrence(
+                    adata,
+                    task,
+                    cluster_key="cluster",
+                    mode="oneVsRest",
+                    n_permutations=n_perms,
+                    spatial_data=sub_coords,
+                    graph_type=graph_type,
+                    plot_dir=None,
+                    persist_plots=False,
+                )
             except Exception as e:
                 logger.warning("probe cooc one-vs-rest failed: %s", e)
         dt = time.perf_counter() - t0
@@ -167,8 +210,7 @@ for s in sizes:
 # Extrapolate to the full cell count. Fit a power law (time ~ a * n^b) on the
 # probe points in log-log space; fall back to linear scaling from a single point.
 estimate_seconds = None
-pts = [(r["size"], r["seconds"]) for r in results
-       if r["seconds"] > 0 and r["size"] > 0]
+pts = [(r["size"], r["seconds"]) for r in results if r["seconds"] > 0 and r["size"] > 0]
 if len(pts) >= 2:
     xs = np.log(np.array([p[0] for p in pts], dtype=float))
     ys = np.log(np.array([p[1] for p in pts], dtype=float))
@@ -181,5 +223,9 @@ elif len(pts) == 1:
 task.outputs["timings_json"] = json.dumps(results)
 task.outputs["estimate_seconds"] = json.dumps(estimate_seconds)
 task.outputs["full_cells"] = int(n_cells)
-logger.info("Spatial-time probe complete: %d point(s), estimate=%s s for %d cells",
-            len(results), str(estimate_seconds), n_cells)
+logger.info(
+    "Spatial-time probe complete: %d point(s), estimate=%s s for %d cells",
+    len(results),
+    str(estimate_seconds),
+    n_cells,
+)
