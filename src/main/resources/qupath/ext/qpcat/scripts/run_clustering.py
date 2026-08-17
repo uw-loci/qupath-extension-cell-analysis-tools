@@ -156,6 +156,32 @@ try:
 except NameError:
     image_names_list = None
 
+# Per-cell independent-area id. An area is a piece of tissue physically
+# separate from every other piece -- a TMA core, one of several sections on a
+# slide, an image. No spatial graph may join two of them: the distance between
+# a cell in one core and a cell in the next is not a distance through tissue.
+# None means "one area", which is the pre-areas behaviour.
+try:
+    area_ids_list = list(area_ids)
+except NameError:
+    area_ids_list = None
+try:
+    area_names_list = list(area_names)
+except NameError:
+    area_names_list = None
+
+if area_ids_list is not None and len(area_ids_list) != n_cells:
+    # Refuse rather than degrade to None. Silently dropping the ids would
+    # rebuild the joined graph this exists to prevent, and the result would
+    # look entirely normal.
+    raise ValueError(
+        "area_ids length (%d) does not match the cell count (%d)"
+        % (len(area_ids_list), n_cells)
+    )
+n_areas = len(set(area_ids_list)) if area_ids_list is not None else 1
+if n_areas > 1:
+    logger.info("Independent areas: %d (spatial graphs are built per area)", n_areas)
+
 # Read preference-backed defaults (injected from Java QpcatPreferences)
 try:
     pref_spatial_knn = spatial_knn
@@ -309,7 +335,6 @@ except NameError:
 
 if do_spatial_smoothing and has_spatial_coords:
     task.update("Applying spatial feature smoothing...")
-    import scipy.sparse as sp
 
     n = len(spatial_data)
 
@@ -338,6 +363,7 @@ if do_spatial_smoothing and has_spatial_coords:
             k=pref_spatial_graph_k,
             radius=pref_spatial_graph_radius,
             delaunay_max_edge=pref_spatial_graph_delaunay_max_edge,
+            area_ids=area_ids_list,
         )
         logger.info(
             "Spatial smoothing using squidpy graph (%s, pure-A row-normalised)",
@@ -345,23 +371,22 @@ if do_spatial_smoothing and has_spatial_coords:
         )
     else:
         # Legacy path - sklearn kNN with (A + I) row-normalisation.
-        # This path is byte-stable with respect to prior QP-CAT releases.
-        from sklearn.neighbors import NearestNeighbors
-
-        k = min(pref_spatial_knn, n - 1)
-        nn = NearestNeighbors(n_neighbors=k, metric="euclidean")
-        nn.fit(spatial_data)
-        distances, indices = nn.kneighbors(spatial_data)
-
-        # Build row-normalized adjacency matrix (A + I)
-        rows = np.repeat(np.arange(n), k)
-        cols = indices.ravel()
-        adj = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
-        adj = adj + sp.eye(n)
-        row_sums = np.array(adj.sum(axis=1)).flatten()
-        adj_norm = sp.diags(1.0 / row_sums) @ adj
+        # This path is byte-stable with respect to prior QP-CAT releases
+        # whenever there is a single area.
+        try:
+            from spatial_stats import build_smoothing_adjacency_sklearn
+        except ImportError as _e:
+            raise RuntimeError(
+                "spatial_stats module is not available -- the QP-CAT analysis "
+                "environment was not initialized with it. Rebuild the analysis "
+                "environment (Utilities > Rebuild) and try again."
+            ) from _e
+        adj_norm = build_smoothing_adjacency_sklearn(
+            spatial_data, k=pref_spatial_knn, area_ids=area_ids_list
+        )
         logger.info(
-            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)", k
+            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)",
+            min(pref_spatial_knn, n - 1),
         )
 
     smoothed = df_norm.values.copy()
@@ -1011,8 +1036,13 @@ if has_spatial and n_clusters_found > 1:
             k=pref_spatial_graph_k,
             radius=pref_spatial_graph_radius,
             delaunay_max_edge=pref_spatial_graph_delaunay_max_edge,
+            area_ids=area_ids_list,
         )
-        logger.info("Spatial neighbor graph built (%s)", pref_spatial_graph_type)
+        logger.info(
+            "Spatial neighbor graph built (%s, %d area(s))",
+            pref_spatial_graph_type,
+            n_areas,
+        )
         task.outputs["spatial_graph_type"] = pref_spatial_graph_type
 
         # v0.3 spatial graph overlay: emit edge COO + optional per-cell

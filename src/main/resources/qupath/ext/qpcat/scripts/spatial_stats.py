@@ -1401,3 +1401,69 @@ def build_smoothing_adjacency_squidpy(
     row_sums = np.array(conn.sum(axis=1)).flatten()
     row_sums[row_sums == 0] = 1.0
     return sp.diags(1.0 / row_sums) @ conn
+
+
+def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
+    """Legacy smoothing adjacency: sklearn kNN, (A + I) row-normalised.
+
+    This is the path that is byte-stable with respect to prior QP-CAT
+    releases, lifted out of run_clustering.py so it can be tested at all --
+    inline script bodies are unreachable by the AST loader the tests use.
+
+    With `area_ids`, neighbours are found within each area only. Smoothing a
+    cell's features with those of a cell in a different specimen does not
+    produce a smoothed measurement, it produces a fabricated one.
+
+    A single area reproduces the previous behaviour exactly.
+    """
+    import scipy.sparse as sp
+    from sklearn.neighbors import NearestNeighbors
+
+    coords = np.asarray(spatial_data)
+    n = coords.shape[0]
+    slices = area_slices(area_ids, n)
+
+    rows = []
+    cols = []
+    reduced = []
+    for area_id, idx in slices:
+        n_area = idx.size
+        if n_area < 2:
+            # No neighbours to average with; the (A + I) identity term below
+            # leaves the cell's own features untouched, which is the honest
+            # answer for an isolated cell.
+            continue
+        k_area = max(1, min(int(k), n_area - 1))
+        if k_area < int(k):
+            reduced.append((area_id, n_area, k_area))
+        nn = NearestNeighbors(n_neighbors=k_area, metric="euclidean")
+        nn.fit(coords[idx])
+        _distances, indices = nn.kneighbors(coords[idx])
+        # Map block-local neighbour indices back to global cell indices.
+        rows.append(np.repeat(idx, k_area))
+        cols.append(idx[indices.ravel()])
+
+    if reduced:
+        smallest = min(reduced, key=lambda r: r[2])
+        logger.warning(
+            "Spatial smoothing: %d area(s) had k reduced below %d to fit the "
+            "area size (smallest: area %d, %d cells, k=%d)",
+            len(reduced),
+            int(k),
+            smallest[0],
+            smallest[1],
+            smallest[2],
+        )
+
+    if rows:
+        row_idx = np.concatenate(rows)
+        col_idx = np.concatenate(cols)
+    else:
+        row_idx = np.zeros(0, dtype=np.int64)
+        col_idx = np.zeros(0, dtype=np.int64)
+
+    adj = sp.csr_matrix((np.ones(len(row_idx)), (row_idx, col_idx)), shape=(n, n))
+    adj = adj + sp.eye(n)
+    row_sums = np.array(adj.sum(axis=1)).flatten()
+    row_sums[row_sums == 0] = 1.0
+    return sp.diags(1.0 / row_sums) @ adj

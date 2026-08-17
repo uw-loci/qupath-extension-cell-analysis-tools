@@ -157,6 +157,21 @@ try:
     g_radius = float(graph_radius)
 except NameError:
     g_radius = -1.0
+
+# Optional per-cell independent-area ids. The post-hoc workflow normally
+# splits into windows BEFORE calling this task, so there is usually one area
+# per call and this stays None. It is accepted anyway so that this script and
+# run_clustering.py cannot drift into partitioning the graph differently.
+try:
+    sa_area_ids = list(area_ids)
+    if len(sa_area_ids) != n_cells:
+        raise ValueError(
+            "area_ids length (%d) does not match the cell count (%d)"
+            % (len(sa_area_ids), n_cells)
+        )
+except NameError:
+    sa_area_ids = None
+
 try:
     g_delaunay = float(graph_delaunay_max_edge)
 except NameError:
@@ -213,7 +228,12 @@ logger.info("AnnData built: %d cells, %d classes", n_cells, n_label_classes)
 # 3. Spatial neighbor graph
 _update("Building spatial neighbor graph (%s)..." % g_type)
 _spatial.build_spatial_graph(
-    adata, graph_type=g_type, k=g_k, radius=g_radius, delaunay_max_edge=g_delaunay
+    adata,
+    graph_type=g_type,
+    k=g_k,
+    radius=g_radius,
+    delaunay_max_edge=g_delaunay,
+    area_ids=sa_area_ids,
 )
 task.outputs["spatial_graph_type"] = g_type
 

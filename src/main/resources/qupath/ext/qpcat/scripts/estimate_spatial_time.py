@@ -47,6 +47,20 @@ data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 coords = spatial_coords.ndarray().copy()
 n_cells, n_markers = data.shape
 
+# Per-cell independent-area ids, if the run will use them. The probe MUST see
+# them: a graph built per area is a different graph -- cheaper, and with a
+# different neighbour structure -- so timing an un-partitioned graph would
+# estimate a run that is not the one about to happen.
+try:
+    probe_area_ids = np.asarray(list(area_ids), dtype=np.int64)
+    if probe_area_ids.shape[0] != n_cells:
+        raise ValueError(
+            "area_ids length (%d) does not match the cell count (%d)"
+            % (probe_area_ids.shape[0], n_cells)
+        )
+except NameError:
+    probe_area_ids = None
+
 try:
     sizes = [int(s) for s in probe_sizes]
 except NameError:
@@ -110,12 +124,16 @@ for s in sizes:
         n_perms = ss.adaptive_permutations(n_cells, override=perms_override)
 
         t0 = time.perf_counter()
+        # Subset the area ids alongside the cells, so the probe partitions the
+        # sample the same way the real run will partition the whole set.
+        sub_area_ids = None if probe_area_ids is None else probe_area_ids[idx]
         ss.build_spatial_graph(
             adata,
             graph_type=graph_type,
             k=graph_k,
             radius=graph_radius,
             delaunay_max_edge=graph_delaunay,
+            area_ids=sub_area_ids,
         )
         if en_spatial:
             try:

@@ -339,6 +339,75 @@ def test_a_one_cell_area_yields_an_empty_block_rather_than_raising():
     _assert_no_cross_edges(adata.obsp["spatial_connectivities"], area_ids)
 
 
+# --- Legacy sklearn smoothing path ---------------------------------------
+#
+# This was inline in run_clustering.py, where the AST loader could not reach
+# it, so it had no tests at all. It bypasses the squidpy graph entirely and
+# needed its own partitioning.
+
+
+def _smoothing_sklearn():
+    return load_script_symbol(
+        SCRIPT,
+        "build_smoothing_adjacency_sklearn",
+        {"np": np, "logger": _Logger(), "area_slices": _pure("area_slices")},
+    )
+
+
+@requires("sklearn")
+def test_smoothing_never_averages_across_areas():
+    fn = _smoothing_sklearn()
+    # Two blobs; k large enough that a joined kNN would reach across.
+    coords = np.vstack(
+        [
+            np.random.RandomState(9).rand(5, 2),
+            np.random.RandomState(10).rand(5, 2) + 900,
+        ]
+    )
+    area_ids = [0] * 5 + [1] * 5
+    adj = fn(coords, k=8, area_ids=area_ids)
+    _assert_no_cross_edges(adj, area_ids)
+
+
+@requires("sklearn")
+def test_smoothing_single_area_is_bit_identical_to_the_legacy_formula():
+    """The legacy path is the one existing projects reproduce against, so a
+    single area must reproduce it exactly -- not merely closely."""
+    import scipy.sparse as legacy_sp
+    from sklearn.neighbors import NearestNeighbors
+
+    coords = np.random.RandomState(11).rand(25, 2) * 50
+    k_pref = 6
+
+    # The formula exactly as it stood inline in run_clustering.py.
+    n = len(coords)
+    k = min(k_pref, n - 1)
+    nn = NearestNeighbors(n_neighbors=k, metric="euclidean")
+    nn.fit(coords)
+    _d, indices = nn.kneighbors(coords)
+    rows = np.repeat(np.arange(n), k)
+    cols = indices.ravel()
+    adj = legacy_sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
+    adj = adj + legacy_sp.eye(n)
+    row_sums = np.array(adj.sum(axis=1)).flatten()
+    expected = (legacy_sp.diags(1.0 / row_sums) @ adj).toarray()
+
+    actual = _smoothing_sklearn()(coords, k=k_pref, area_ids=None).toarray()
+    np.testing.assert_array_equal(actual, expected)
+
+
+@requires("sklearn")
+def test_smoothing_leaves_a_lone_cell_holding_its_own_features():
+    fn = _smoothing_sklearn()
+    coords = np.vstack([np.random.RandomState(12).rand(5, 2), [[900.0, 900.0]]])
+    area_ids = [0] * 5 + [1]
+    adj = fn(coords, k=4, area_ids=area_ids).toarray()
+    # Row 5 is the identity term alone: the cell keeps its own values rather
+    # than being averaged with a cell from the other specimen.
+    assert adj[5, 5] == 1.0
+    assert adj[5, :5].sum() == 0
+
+
 def _real_builder():
     """build_spatial_graph with the REAL block builder and helpers."""
     median_nn = load_script_symbol(SCRIPT, "_median_nn_distance", {"np": np})
