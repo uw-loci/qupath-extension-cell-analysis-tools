@@ -2663,23 +2663,30 @@ public class ClusteringDialog {
                 }
                 imageGroups[i] = (name == null || name.isBlank()) ? "(unknown image)" : name;
             }
-            ClusterCompositionPanel byImage = new ClusterCompositionPanel(
-                    result.getClusterLabels(), result.getNClusters(), imageGroups,
-                    "Image", clusterColorFn, result.clusterNameFn());
-            Tab imgTab = new Tab("Composition by image", wrapWithGuide(byImage,
-                    "Cluster counts and proportions per source image.\n"
-                    + "Each row of the table is one image; the pie charts show the same "
-                    + "proportions visually. Use the Counts / Row % toggle and Copy table "
-                    + "for the raw numbers.\n"
-                    + "IMPORTANT: if each cluster appears in only ONE image, the clustering "
-                    + "separated cells by image rather than by cell phenotype -- a batch "
-                    + "effect. Biologically meaningful clusters should span multiple images. "
-                    + "Consider per-image differences in staining/exposure, and enable "
-                    + "Batch correction (Harmony) on the next run.",
-                    "composition-by-image-tab"));
-            imgTab.setClosable(false);
-            tabPane.getTabs().add(imgTab);
-            colorRefreshers.add(byImage::refreshColors);
+            // Only when there is something to compare. A single-image run would
+            // give one row restating the overall composition -- a tab that
+            // exists but says nothing is worse than no tab, because it reads
+            // as though the analysis found nothing to report.
+            long distinctImages = java.util.Arrays.stream(imageGroups).distinct().count();
+            if (distinctImages >= 2) {
+                ClusterCompositionPanel byImage = new ClusterCompositionPanel(
+                        result.getClusterLabels(), result.getNClusters(), imageGroups,
+                        "Image", clusterColorFn, result.clusterNameFn());
+                Tab imgTab = new Tab("Composition by image", wrapWithGuide(byImage,
+                        "Cluster counts and proportions per source image.\n"
+                        + "Each row of the table is one image; the pie charts show the same "
+                        + "proportions visually. Use the Counts / Row % toggle and Copy table "
+                        + "for the raw numbers.\n"
+                        + "IMPORTANT: if each cluster appears in only ONE image, the clustering "
+                        + "separated cells by image rather than by cell phenotype -- a batch "
+                        + "effect. Biologically meaningful clusters should span multiple images. "
+                        + "Consider per-image differences in staining/exposure, and enable "
+                        + "Batch correction (Harmony) on the next run.",
+                        "composition-by-image-tab"));
+                imgTab.setClosable(false);
+                tabPane.getTabs().add(imgTab);
+                colorRefreshers.add(byImage::refreshColors);
+            }
 
             // "By annotation" only when annotations were selected as the clustering
             // input (not merely when some cells happen to sit inside an annotation).

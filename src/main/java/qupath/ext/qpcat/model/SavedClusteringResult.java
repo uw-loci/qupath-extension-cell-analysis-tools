@@ -41,6 +41,14 @@ public class SavedClusteringResult {
                                         // "Composition by image" tab reads
                                         // friendly labels after reload; older
                                         // saves lack this (null -> id fallback).
+    // Per-cell annotation CLASS (never the object name) and independent-area
+    // label. Persisted so the batch figure exporter can render the
+    // "by class" / "by area" composition figures from a saved result, exactly
+    // as it already does for image and annotation. Additive and null-tolerant:
+    // results saved before these existed simply omit them.
+    private String[] cellParentClasses;
+    private String[] cellAreaNames;
+
     private String[] cellParentNames;   // per-cell parent-annotation name;
                                         // null on older saves and for cells not
                                         // inside an annotation. Drives the
@@ -162,6 +170,12 @@ public class SavedClusteringResult {
 
     public String[] getCellParentNames() { return cellParentNames; }
     public void setCellParentNames(String[] v) { this.cellParentNames = v; }
+
+    public String[] getCellParentClasses() { return cellParentClasses; }
+    public void setCellParentClasses(String[] v) { this.cellParentClasses = v; }
+
+    public String[] getCellAreaNames() { return cellAreaNames; }
+    public void setCellAreaNames(String[] v) { this.cellAreaNames = v; }
 
     public boolean isAnnotationInput() { return annotationInput; }
     public void setAnnotationInput(boolean v) { this.annotationInput = v; }
@@ -316,6 +330,14 @@ public class SavedClusteringResult {
             saved.setCellParentNames(result.getCellParentNames());
         }
         saved.setAnnotationInput(result.isAnnotationInput());
+        // Only stored when they can say something: two or more classes, or a
+        // partition that actually split the run.
+        if (result.hasCellParentClasses()) {
+            saved.setCellParentClasses(result.getCellParentClasses());
+        }
+        if (result.getAreaCount() >= 2) {
+            saved.setCellAreaNames(result.getCellAreaNames());
+        }
 
         // Custom cluster names survive a re-save, so a renamed result that is
         // saved again under a new name does not silently revert to "Cluster N".
@@ -375,6 +397,12 @@ public class SavedClusteringResult {
         }
         if (cellParentNames != null) {
             result.setCellParentNames(cellParentNames);
+        }
+        if (cellParentClasses != null) {
+            result.setCellParentClasses(cellParentClasses);
+        }
+        if (cellAreaNames != null) {
+            result.setCellAreaNames(cellAreaNames);
         }
         // Custom names from a rename / merge. Without this the reopened results
         // window relabels everything back to "Cluster N" even though the names

@@ -52,6 +52,14 @@ public enum PlotKind {
             Source.COMPUTED, false, null),
     COMPOSITION_TABLE_ANNOTATION("composition_table_annotation",
             "Composition table by annotation (CSV)", Source.COMPUTED, false, null),
+    COMPOSITION_PIE_AREA("composition_pie_area", "Composition pies by area",
+            Source.COMPUTED, false, null),
+    COMPOSITION_TABLE_AREA("composition_table_area",
+            "Composition table by area (CSV)", Source.COMPUTED, false, null),
+    COMPOSITION_PIE_CLASS("composition_pie_class", "Composition pies by class",
+            Source.COMPUTED, false, null),
+    COMPOSITION_TABLE_CLASS("composition_table_class",
+            "Composition table by class (CSV)", Source.COMPUTED, false, null),
 
     // ---- JavaFX scene-graph plots (only exportable while results dialog open) ----
     HEATMAP("heatmap", "Cluster heatmap", Source.JAVAFX, false, null),

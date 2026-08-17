@@ -339,7 +339,9 @@ public final class BatchFigureExporter {
                                                Set<String> emittedComposition)
             throws IOException {
         boolean table = plot == PlotKind.COMPOSITION_TABLE_IMAGE
-                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION;
+                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION
+                || plot == PlotKind.COMPOSITION_TABLE_AREA
+                || plot == PlotKind.COMPOSITION_TABLE_CLASS;
         String ext = table ? "csv" : fmt.getExtension();
 
         String resultName = saved != null ? saved.getName() : options.getResultName();
@@ -406,11 +408,13 @@ public final class BatchFigureExporter {
             return null;
         }
 
-        boolean byAnnotation = plot == PlotKind.COMPOSITION_PIE_ANNOTATION
-                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION;
+        // Each grouping axis is conditional: a result that cannot support it
+        // records a FAILURE naming the reason rather than writing an empty or
+        // misleading figure.
         String[] groups;
         String dimension;
-        if (byAnnotation) {
+        if (plot == PlotKind.COMPOSITION_PIE_ANNOTATION
+                || plot == PlotKind.COMPOSITION_TABLE_ANNOTATION) {
             if (!clustering.hasCellParentNames()) {
                 result.addFailure(plot.getSlug()
                         + ": this result has no per-cell annotation names (it was not run on "
@@ -419,6 +423,25 @@ public final class BatchFigureExporter {
             }
             groups = clustering.getCellParentNames();
             dimension = "Annotation";
+        } else if (plot == PlotKind.COMPOSITION_PIE_CLASS
+                || plot == PlotKind.COMPOSITION_TABLE_CLASS) {
+            if (!clustering.hasCellParentClasses()) {
+                result.addFailure(plot.getSlug()
+                        + ": this result has fewer than two annotation classes, so a "
+                        + "by-class split would be one row restating the whole result");
+                return null;
+            }
+            groups = clustering.getCellParentClasses();
+            dimension = "Class";
+        } else if (plot == PlotKind.COMPOSITION_PIE_AREA
+                || plot == PlotKind.COMPOSITION_TABLE_AREA) {
+            if (clustering.getAreaCount() < 2) {
+                result.addFailure(plot.getSlug()
+                        + ": this result was not split into independent areas");
+                return null;
+            }
+            groups = clustering.getCellAreaNames();
+            dimension = "Area";
         } else {
             if (!clustering.hasCellRefs()) {
                 result.addFailure(plot.getSlug()

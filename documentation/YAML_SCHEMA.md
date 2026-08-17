@@ -269,11 +269,21 @@ The slug `ripley` in `figure_export.figures` is shorthand that **expands to both
 
 ### Cluster-composition figures
 
-`composition_pie_image`, `composition_table_image`, `composition_pie_annotation` and `composition_table_annotation` are rendered in Java from the saved result, so they export headlessly like the matplotlib slugs -- no open image and no plotting options needed at clustering time.
+The eight `composition_*` slugs are rendered in Java from the saved result, so they export headlessly like the matplotlib slugs -- no open image and no plotting options needed at clustering time. They come in four pie/table pairs, one per grouping axis: `_image`, `_annotation`, `_area` and `_class`.
 
-They are written **once per run**, not once per image, because composition describes how the result's clusters split across all its images or annotations. Their `{image}` token expands to `all-images`, and the two table slugs always write `.csv` regardless of `formats`. The `_annotation` pair needs a result that was clustered on annotation input; ask for it on a whole-image result and you get a recorded failure, not a file.
+They are written **once per run**, not once per image, because composition describes how the result's clusters split across all its images, annotations, areas or classes. Their `{image}` token expands to `all-images`, and the four table slugs always write `.csv` regardless of `formats`.
 
-`figures: all` includes all four; `figures: all_matplotlib` does not.
+Each pair is conditional, and asking for one a result cannot support gives a recorded **failure naming the reason**, not a silent empty file:
+
+| Pair | Needs |
+|---|---|
+| `_image` | per-cell image references (any result saved by a current version) |
+| `_annotation` | a result clustered on annotation INPUT (keyed on the annotation's name) |
+| `_area` | a run split into 2 or more [independent areas](#independent-areas-clusteringarea_levels) |
+| `_class` | 2 or more annotation classes present (keyed on the CLASS, so it stays readable however many named regions there are) |
+
+
+`figures: all` includes all eight; `figures: all_matplotlib` does not.
 
 ## `on_error` (optional, string)
 

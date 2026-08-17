@@ -536,7 +536,9 @@ public class BatchFigureExportDialog {
             if (k.getSource() != PlotKind.Source.COMPUTED) {
                 perImagePlots++;
             } else if (k == PlotKind.COMPOSITION_TABLE_IMAGE
-                    || k == PlotKind.COMPOSITION_TABLE_ANNOTATION) {
+                    || k == PlotKind.COMPOSITION_TABLE_ANNOTATION
+                    || k == PlotKind.COMPOSITION_TABLE_AREA
+                    || k == PlotKind.COMPOSITION_TABLE_CLASS) {
                 compositionTables++;   // one .csv each, regardless of format
             } else {
                 compositionFigures++;  // one per format, but once per result
