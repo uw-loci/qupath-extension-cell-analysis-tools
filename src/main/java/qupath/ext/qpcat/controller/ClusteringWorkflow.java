@@ -35,6 +35,7 @@ import com.google.gson.reflect.TypeToken;
 
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -876,6 +877,7 @@ public class ClusteringWorkflow {
             // Reproducibility artifacts: the exact config (re-loadable in the
             // dialog) + a human-readable run record next to the result.
             ClusteringRunRecord.write(resultsDir, savedName, config, result, scopeLabel);
+            writeAreaCsvs(resultsDir, savedName, result);
 
             OperationLogger.getInstance().logEvent("RESULTS AUTO-SAVED",
                     "Saved '" + savedName + "' (" + result.getNClusters() + " clusters, "
@@ -883,6 +885,38 @@ public class ClusteringWorkflow {
                     + "; " + scopeCount + " result(s) for scope '" + scopeLabel + "'");
         } catch (Exception e) {
             logger.warn("Auto-save of clustering result failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Writes the per-area spreadsheets next to the saved result, when the run
+     * produced them (i.e. it had more than one independent area).
+     * <p>
+     * These are the files a user opens to compare cores. They sit beside
+     * {@code <name>.json} and {@code <name>_config.json} rather than in a temp
+     * directory, because a per-area table is a result, not a diagnostic.
+     * <p>
+     * Best-effort: a reporting artifact must never fail a run that already
+     * produced its clusters. Failures are logged with the path so the user can
+     * see which file is missing rather than wondering whether the analysis ran.
+     */
+    private void writeAreaCsvs(Path resultsDir, String savedName, ClusteringResult result) {
+        writeCsvIfPresent(resultsDir, savedName + "_areas_summary.csv",
+                result.getAreasSummaryCsv());
+        writeCsvIfPresent(resultsDir, savedName + "_areas_statistics.csv",
+                result.getAreasStatisticsCsv());
+    }
+
+    private void writeCsvIfPresent(Path dir, String fileName, String content) {
+        if (content == null || content.isBlank()) {
+            return;
+        }
+        Path target = dir.resolve(fileName);
+        try {
+            Files.writeString(target, content, StandardCharsets.UTF_8);
+            logger.info("Wrote per-area table {}", target);
+        } catch (IOException e) {
+            logger.warn("Could not write per-area table {}: {}", target, e.getMessage());
         }
     }
 
@@ -1857,6 +1891,16 @@ public class ClusteringWorkflow {
                 result.setSpatialAutocorrJson(
                         (String) task.outputs.get("spatial_autocorr"));
                 logger.info("Received spatial autocorrelation results");
+            }
+
+            // Per-area spreadsheets. Carried on the result only so
+            // autoSaveResult can write them next to the other artifacts.
+            if (task.outputs.containsKey("areas_summary_csv")) {
+                result.setAreasSummaryCsv((String) task.outputs.get("areas_summary_csv"));
+            }
+            if (task.outputs.containsKey("areas_statistics_csv")) {
+                result.setAreasStatisticsCsv(
+                        (String) task.outputs.get("areas_statistics_csv"));
             }
 
             // ---- Spatial stats expansion (v1) outputs ----

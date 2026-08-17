@@ -250,6 +250,22 @@ public class ClusteringResult {
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
     public boolean hasSpatialAutocorr() { return spatialAutocorrJson != null; }
 
+    // ---- Independent areas ----
+    // Ready-to-write CSV text produced by the Python side. Held here only long
+    // enough to be written next to the saved result; deliberately NOT part of
+    // the persisted SavedClusteringResult schema, since the files themselves
+    // are the artifact.
+    private String areasSummaryCsv;
+    private String areasStatisticsCsv;
+
+    /** Wide per-area composition table: one row per area. */
+    public String getAreasSummaryCsv() { return areasSummaryCsv; }
+    public void setAreasSummaryCsv(String csv) { this.areasSummaryCsv = csv; }
+
+    /** Long per-area spatial statistics: one row per area, statistic and key. */
+    public String getAreasStatisticsCsv() { return areasStatisticsCsv; }
+    public void setAreasStatisticsCsv(String csv) { this.areasStatisticsCsv = csv; }
+
     // ==================== Spatial Stats Expansion (v1) ====================
     //
     // Optional results for the v1 spatial-statistics surface: Ripley K/L,
