@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.GearyCResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -107,8 +109,15 @@ public class PostHocSpatialWorkflow {
 
         // Region / window definition.
         public boolean useSelectedAnnotations;   // current image only: use the selected annotations
-        public String windowClass;               // annotation class defining windows (null/blank = whole image)
-        public boolean perAnnotation;            // each annotation separately (else merge per image)
+        /**
+         * Ordered independent-area levels, outermost first. Empty / images-only
+         * means one window per image. Replaces the older windowClass +
+         * perAnnotation pair: those could only express "split by one annotation
+         * class", never "split by TMA core" or a nested path, and they were a
+         * second, subtly different definition of the same idea the clustering
+         * workflow already had.
+         */
+        public List<AreaLevelSpec> areaLevels;
         public Set<String> excludeClasses = new LinkedHashSet<>();  // annotation classes to exclude
 
         // Graph.
@@ -446,17 +455,40 @@ public class PostHocSpatialWorkflow {
             }
         }
 
+        // Independent areas take precedence: they are the shared definition of
+        // "a piece of tissue analysed on its own", used identically by the
+        // clustering and cellular-neighborhood workflows. Each area becomes one
+        // window with its own graph, permutation null and class-index space.
+        if (AreaLevelSpec.hasSubImageLevels(opts.areaLevels)) {
+            List<PathObject> cells = new ArrayList<>(hierarchy.getDetectionObjects());
+            cells.removeAll(excluded);
+            cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
+            AreaResolver.AreaAssignment areas = AreaResolver.resolve(
+                    cells, (int[]) null, List.of(t.imageName), opts.areaLevels);
+
+            List<List<PathObject>> byArea = new ArrayList<>();
+            for (int i = 0; i < areas.getAreaCount(); i++) {
+                byArea.add(new ArrayList<>());
+            }
+            int[] ids = areas.getAreaIds();
+            for (int i = 0; i < cells.size(); i++) {
+                byArea.get(ids[i]).add(cells.get(i));
+            }
+
+            List<Window> areaWindows = new ArrayList<>();
+            for (int i = 0; i < areas.getAreaCount(); i++) {
+                areaWindows.add(new Window(t.imageName, t.entryId, pxUm,
+                        areas.getAreaNames().get(i), null, byArea.get(i)));
+            }
+            return areaWindows;
+        }
+
         // Source annotations that define the windows (null = whole image).
         List<PathObject> sourceAnnos = null;
         if (opts.useSelectedAnnotations) {
             sourceAnnos = hierarchy.getSelectionModel().getSelectedObjects().stream()
                     .filter(PathObject::isAnnotation).toList();
             if (sourceAnnos.isEmpty()) sourceAnnos = null;  // fall back to whole image
-        } else if (opts.windowClass != null && !opts.windowClass.isBlank()) {
-            sourceAnnos = hierarchy.getAnnotationObjects().stream()
-                    .filter(a -> a.getPathClass() != null
-                            && opts.windowClass.equals(a.getPathClass().toString()))
-                    .toList();
         }
 
         List<Window> windows = new ArrayList<>();
@@ -465,29 +497,23 @@ public class PostHocSpatialWorkflow {
             cells.removeAll(excluded);
             cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
             windows.add(new Window(t.imageName, t.entryId, pxUm, "whole image", null, cells));
-        } else if (opts.perAnnotation) {
+        } else {
+            // Explicitly selected annotations: one window per selected object,
+            // which is what a user who hand-picked regions expects.
             int n = 0;
             for (PathObject a : sourceAnnos) {
                 n++;
-                List<PathObject> cells = new ArrayList<>(hierarchy.getAllDetectionsForROI(a.getROI()));
+                List<PathObject> cells =
+                        new ArrayList<>(hierarchy.getAllDetectionsForROI(a.getROI()));
                 cells.removeAll(excluded);
                 cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
                 String label = a.getName() != null && !a.getName().isBlank()
                         ? a.getName()
-                        : (a.getPathClass() != null ? a.getPathClass().toString() : "region") + " #" + n;
+                        : (a.getPathClass() != null ? a.getPathClass().toString() : "region")
+                                + " #" + n;
                 String cls = a.getPathClass() != null ? a.getPathClass().toString() : null;
                 windows.add(new Window(t.imageName, t.entryId, pxUm, label, cls, cells));
             }
-        } else {
-            LinkedHashSet<PathObject> cells = new LinkedHashSet<>();
-            for (PathObject a : sourceAnnos) {
-                cells.addAll(hierarchy.getAllDetectionsForROI(a.getROI()));
-            }
-            cells.removeAll(excluded);
-            String label = opts.useSelectedAnnotations ? "selected annotations"
-                    : "class: " + opts.windowClass;
-            windows.add(new Window(t.imageName, t.entryId, pxUm, label, opts.windowClass,
-                    DetectionSelector.filterToCellsWhenPresent(cells, t.imageName)));
         }
         return windows;
     }

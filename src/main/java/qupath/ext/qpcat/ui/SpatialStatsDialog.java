@@ -120,20 +120,18 @@ public class SpatialStatsDialog {
                 && excludeBoxes.stream().anyMatch(CheckBox::isSelected));
         excludeTitled.setAnimated(false);
 
-        // Region options: whole image, selected annotations (current only), or one
-        // per annotation CLASS (works across every image in the scope by class name).
-        for (String cn : annoClasses) regionBox.getItems().add("Class: " + cn);
         regionBox.setValue(REGION_WHOLE);
 
-        CheckBox eachAnnotation = new CheckBox("One result per annotation (else merge per image)");
-        eachAnnotation.setTooltip(Tooltips.of(
-                "When a region other than 'Whole image' is chosen, analyze each annotation "
-                + "separately (a row per annotation) instead of merging all matching "
-                + "annotations in an image into one result."));
+        // Splitting by annotation is now expressed through the shared
+        // Independent areas control, which every QP-CAT spatial workflow uses.
+        // The old "Class: X" combo entries plus a merge-or-not checkbox could
+        // only say "split by one annotation class" -- never "split by TMA
+        // core", and never a nested path -- and were a second, subtly
+        // different definition of the same idea.
+        IndependentAreasSection areasSection = new IndependentAreasSection(qupath);
+        areasSection.applyAutoDetectedDefault();
 
         Runnable syncRegion = () -> {
-            boolean wholeImage = REGION_WHOLE.equals(regionBox.getValue());
-            eachAnnotation.setDisable(wholeImage);
             // "Selected annotations" only applies to the current image.
             boolean selected = REGION_SELECTED.equals(regionBox.getValue());
             if (selected && !scope.isCurrentImage()) {
@@ -216,7 +214,7 @@ public class SpatialStatsDialog {
                 labelSourceInfo,
                 scope,
                 regionRow,
-                eachAnnotation,
+                areasSection,
                 excludeTitled,
                 new Separator(),
                 new Label("Spatial neighbor graph:"),
@@ -254,10 +252,8 @@ public class SpatialStatsDialog {
             String region = regionBox.getValue();
             if (REGION_SELECTED.equals(region)) {
                 opts.useSelectedAnnotations = true;
-            } else if (region != null && region.startsWith("Class: ")) {
-                opts.windowClass = region.substring("Class: ".length());
             }
-            opts.perAnnotation = eachAnnotation.isSelected() && !REGION_WHOLE.equals(region);
+            opts.areaLevels = areasSection.getAreaLevels();
             for (CheckBox cb : excludeBoxes) if (cb.isSelected()) opts.excludeClasses.add(cb.getText());
             opts.graphType = graphType.getValue();
             opts.graphK = kSpin.getValue();
