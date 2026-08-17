@@ -1643,6 +1643,32 @@ key -- e.g. `treatment` or `condition` -- and additionally reports the mean
 neighborhood proportions per group, for comparing composition across conditions.
 Leave it at *(no grouping)* to skip.
 
+### Independent areas
+
+Cells in different pieces of tissue are never neighbors -- a cell in one TMA core
+is not a neighbor of a cell in the next core, even if they are in the same image.
+By default, the **image is the area** -- cells stay separate across images, but
+all cells within an image can share a spatial window.
+
+You can partition cells **below** the image level by configuring **Independent areas**.
+Each area gets its own spatial windows (no window ever crosses an area boundary),
+and the cohort tables automatically group results per area instead of per image.
+
+**When to use:** tissue samples with multiple independent regions in one file --
+a TMA with many cores scanned in a single image, or a multi-section slide.
+
+**How to configure:**
+1. Expand the **Independent areas** section in the dialog.
+2. Click **Add level** to define one or more partitioning levels (e.g., `Tissue`
+   annotations to separate cores or sections).
+3. The preview shows how many areas were found and if any cells lack an
+   assignment. Empty areas are skipped; sparse areas are handled (spatial graph
+   parameters are capped per area so one small core does not reduce k for the rest).
+4. For a **joint** run across multiple images, the same area levels are applied to
+   every image. Cells match an area by traversing their annotation ancestry, so a
+   cell inside a `Tissue` annotation becomes part of that tissue's area even if
+   your images have different tissue objects.
+
 ### Step-by-step
 
 1. Run clustering or phenotyping first so cells are classified -- across **all**
@@ -1651,17 +1677,19 @@ Leave it at *(no grouping)* to skip.
    lists the types you expect. If you just (re)classified, click **Refresh**.
 3. Pick the **Scope** (Current image / All project images / Specific images).
    For a cohort, optionally set **Group images by** a metadata key.
-4. **Window by** -- how each cell's window is defined:
+4. Optionally configure **Independent areas** if your images have multiple tissue
+   sections or cores in one file.
+5. **Window by** -- how each cell's window is defined:
    - **Nearest neighbors (k)**: the k nearest cells. Density-adaptive (the window
      shrinks in dense tissue). 20-30 is a common start; Schurch et al. used ~10.
    - **Radius (um)**: every cell within a fixed physical radius (the CytoMAP-style
      neighborhood -- more interpretable and density-aware). 50 um is a common
      start. Needs image pixel calibration; an uncalibrated image treats the radius
      as pixels (converted per image, so differing pixel sizes are handled).
-5. **Number of neighborhoods** -- how many CNs to group the windows into
+6. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
-6. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
-7. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
+7. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
+8. Click **Find neighborhoods**. A progress bar and WAIT cursor show while it
    runs; **Cancel** stops it -- if you cancel before it finishes, **nothing
    is written**.
 
@@ -1698,13 +1726,16 @@ offers to open it; for a joint run it lands in the results folder.
 When the joint run finishes, a results dialog shows:
 
 - **Per-sample neighborhood proportions** -- a table (and `cn_per_sample_proportions.csv`)
-  giving, for each image, the fraction of its cells in each CN. This is the table
-  you compare across samples: "CN 2 is 8% of the control but 31% of the treated
-  slide." A `cn_per_sample_proportions.png` heatmap (image x CN) visualizes it.
+  giving, for each sample (image or independent area, depending on configuration), the
+  fraction of its cells in each CN. When areas are configured, rows are areas instead
+  of images. This is the table you compare across samples: "CN 2 is 8% of the control
+  but 31% of the treated slide" (or "8% of core 1 but 31% of core 2"). A
+  `cn_per_sample_proportions.png` heatmap visualizes it (sample x CN).
 - **Per-group neighborhood proportions** (only when you set **Group images by**) --
   the same proportions pooled per metadata group, plus `cn_per_group_proportions.csv`
   and a `cn_per_group_proportions.png` heatmap (group x CN), for a direct
-  condition-vs-condition comparison.
+  condition-vs-condition comparison. When areas are configured, grouping is applied
+  to the underlying images, then areas are pooled within each group.
 - **Neighborhood adjacency enrichment** -- a CN x CN table (and
   `cn_neighborhood_adjacency.csv` + heatmap) of how often neighborhoods border
   each other, as **log2(observed/expected)** computed from the cell

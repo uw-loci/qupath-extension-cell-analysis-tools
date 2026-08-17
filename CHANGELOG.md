@@ -4,6 +4,72 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **Independent areas.** An *area* is a piece of tissue physically separate from
+  every other piece: a TMA core, one of several sections on a slide, an image. No
+  spatial graph is now ever built across two areas. Configure them in the
+  **Independent areas** block of the Clustering dialog's *Spatial statistics*
+  section, or in the Cellular Neighborhoods dialog; a live preview reports the
+  resolved area count and any unassigned cells before the run starts. A dearrayed
+  TMA defaults to one area per core. Also available headless as
+  `clustering.area_levels` in the batch YAML.
+
+  Areas are keyed on the annotation **object**, not its class -- three sections on
+  one slide commonly share a single `Tissue` class, and grouping by class would
+  merge them back together. Levels read outermost-first, and everything below the
+  deepest level stays together: with `Images > TMA cores`, Tumor and Stroma inside
+  a core still share a graph, so the interface between them is preserved.
+
+- **Per-area output.** `<name>_areas_summary.csv` (wide: one row per area, cluster
+  fraction and count per column) and `<name>_areas_statistics.csv` (long: one row
+  per area / statistic / key) are written next to the saved result. Cluster-level
+  measurements stay global and are reported once -- a cluster's marker profile is a
+  property of the cluster, not of an area.
+
+- **Harmony batch key.** Choose whether Harmony corrects over images (the default
+  and previous behaviour) or over independent areas, so a TMA inside a *single*
+  image can be corrected core by core. Batch correction is no longer restricted to
+  the "All project images" scope.
+
+### Fixed
+
+- **Spatial graphs joined physically separate tissue.** Every spatial method --
+  BANKSY, spatial feature smoothing, Ripley's L, co-occurrence, Moran's I, Geary's
+  C, neighbourhood enrichment -- built one graph over one flat coordinate array.
+  Cells in different TMA cores or sections became neighbours whenever their pixel
+  coordinates happened to be close. **Across images the failure was total:**
+  centroids were concatenated with no offset, so (100,100) in one image was
+  coincident with (100,100) in another. Measured on two blobs 1000 units apart, an
+  un-partitioned kNN graph built 40 cross-blob edges out of a possible 90.
+
+- **Ripley's L returned empty results and reported success.** On the pinned
+  squidpy 1.6.6 the L payload is stored under `L_stat`, not `stats`, so every
+  curve came back empty; a zero-padding step then emitted a well-formed result
+  while logging "Ripley K/L computed". **Anyone who ran Ripley on this version got
+  nothing and was not told.** An empty extraction is now an error. p-values are
+  reported as per-cluster curves, since squidpy computes significance per radius
+  and collapsing that to one number per cluster would be a summary we invented.
+
+- **BANKSY `k_geom` was capped incorrectly.** BANKSY requests `k_geom * (m + 1)`
+  neighbours internally, so the real bound is `2 * k_geom <= n - 1`. A 20-cell run
+  with the default `k_geom` raised inside scikit-learn. Now capped correctly, and
+  per area.
+
+- **A BANKSY `lambda` of `0` or `1` produced no clusters.** Passed as an integer it
+  was silently skipped, surfacing one step later as "BANKSY did not produce cluster
+  labels".
+
+- **Cellular Neighborhoods windowed per image.** A cell in the next core counted
+  toward a cell's local mixture, and on a single-image TMA the per-sample
+  proportions table had one row for the whole slide.
+
+- **Spatial scaling limits over-predicted.** Ripley and co-occurrence run once per
+  area, so their cost is set by the largest area, not the cohort. The guard now
+  keys on that and no longer refuses runs that comfortably fit.
+
 ## [0.9.13] -- 2026-08-05 -- clustering without an image open
 
 ### Changed
