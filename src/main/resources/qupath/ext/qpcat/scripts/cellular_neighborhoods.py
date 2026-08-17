@@ -66,6 +66,7 @@ Outputs (via task.outputs):
   region_adjacency_json: str (JSON) -- {n_cn, matrix[CN][CN]} row-normalized
   region_adjacency_heatmap_path: str -- CN x CN adjacency heatmap PNG, or ""
 """
+
 import logging
 import json
 import os
@@ -91,8 +92,10 @@ logger.info("Cellular neighborhoods: %d cells", n_cells)
 
 labels_in = np.asarray(cell_type_labels, dtype=np.int64)
 if labels_in.shape[0] != n_cells:
-    raise ValueError("cell_type_labels length (%d) != number of cells (%d)"
-                     % (labels_in.shape[0], n_cells))
+    raise ValueError(
+        "cell_type_labels length (%d) != number of cells (%d)"
+        % (labels_in.shape[0], n_cells)
+    )
 
 names = list(class_names)
 
@@ -133,8 +136,11 @@ except NameError:
 try:
     image_ids_arr = np.asarray(image_ids, dtype=np.int64)
     if image_ids_arr.shape[0] != n_cells:
-        logger.warning("image_ids length (%d) != n_cells (%d); ignoring",
-                       image_ids_arr.shape[0], n_cells)
+        logger.warning(
+            "image_ids length (%d) != n_cells (%d); ignoring",
+            image_ids_arr.shape[0],
+            n_cells,
+        )
         image_ids_arr = None
 except NameError:
     image_ids_arr = None
@@ -178,6 +184,7 @@ def _radius_px_for(image_index):
         ps = 1.0
     return radius_um / ps
 
+
 # n_cn cannot exceed the number of cells; k handled per-image below.
 n_cn = max(1, min(n_cn, n_cells))
 
@@ -188,11 +195,16 @@ if image_ids_arr is not None:
 else:
     unique_images = np.array([0])
     multi_image = False
-logger.info("k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_images=%d, multi_image=%s",
-            k, n_cn, n_classes, unique_images.shape[0], multi_image)
+logger.info(
+    "k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_images=%d, multi_image=%s",
+    k,
+    n_cn,
+    n_classes,
+    unique_images.shape[0],
+    multi_image,
+)
 
 from sklearn.neighbors import NearestNeighbors
-
 
 # Per-image neighbor-graph cache. The windowing pass (composition) and the
 # region-adjacency pass share ONE NearestNeighbors fit per image (P3): the knn
@@ -241,7 +253,7 @@ def _composition_from_neighbors(kind, neigh_struct, block_labels):
         for i in range(n_block):
             idxs = neigh[i]
             if idxs.size == 0:
-                comp[i, block_labels[i]] = 1.0   # isolated cell -> self-only window
+                comp[i, block_labels[i]] = 1.0  # isolated cell -> self-only window
                 continue
             cc = np.bincount(block_labels[idxs], minlength=n_classes).astype(np.float64)
             comp[i, :] = cc / float(idxs.size)
@@ -249,7 +261,7 @@ def _composition_from_neighbors(kind, neigh_struct, block_labels):
     # knn: window = first k columns of the (k+1)-fit index, self included.
     idx = neigh_struct
     kc = max(1, min(k, n_block))
-    neighbor_labels = block_labels[idx[:, :kc]]   # (n_block, kc)
+    neighbor_labels = block_labels[idx[:, :kc]]  # (n_block, kc)
     for c in range(n_classes):
         comp[:, c] = np.count_nonzero(neighbor_labels == c, axis=1) / float(kc)
     return comp
@@ -267,16 +279,21 @@ def _composition_for_block(img_key, block_coords, block_labels, radius_px=None):
 radius_mode = (win_mode == "radius") and radius_um > 0
 composition = np.zeros((n_cells, n_classes), dtype=np.float64)
 if multi_image:
-    _update("Building per-image spatial windows (%s) across %d images..."
-            % (("radius=%.1fum" % radius_um) if radius_mode else ("k=%d" % k),
-               unique_images.shape[0]))
+    _update(
+        "Building per-image spatial windows (%s) across %d images..."
+        % (
+            ("radius=%.1fum" % radius_um) if radius_mode else ("k=%d" % k),
+            unique_images.shape[0],
+        )
+    )
     for img in unique_images:
         sel = np.flatnonzero(image_ids_arr == img)
         if sel.size == 0:
             continue
         r_px = _radius_px_for(int(img)) if radius_mode else None
         composition[sel, :] = _composition_for_block(
-            int(img), coords[sel, :], labels_arr[sel], radius_px=r_px)
+            int(img), coords[sel, :], labels_arr[sel], radius_px=r_px
+        )
 else:
     if radius_mode:
         _update("Building spatial windows (radius=%.1f um)..." % radius_um)
@@ -313,12 +330,14 @@ eps = 1e-6
 enrichment = np.log2((mean_comp + eps) / (global_freq[None, :] + eps))
 
 
-def _save_heatmap(matrix, row_labels, col_labels, title, cbar_label,
-                  cmap, vmin, vmax, fname):
+def _save_heatmap(
+    matrix, row_labels, col_labels, title, cbar_label, cmap, vmin, vmax, fname
+):
     """Write a labelled heatmap PNG; returns the path or "" on failure."""
     try:
         os.makedirs(out_dir, exist_ok=True)
         import matplotlib
+
         matplotlib.use("Agg")  # belt-and-braces; init already sets this
         import matplotlib.pyplot as plt
 
@@ -355,9 +374,16 @@ if want_heatmap and out_dir:
         vmax = 1.0
     cn_row_labels = ["CN %d (n=%d)" % (cn, counts[str(cn)]) for cn in range(n_cn)]
     heatmap_path = _save_heatmap(
-        enrichment, cn_row_labels, names,
+        enrichment,
+        cn_row_labels,
+        names,
         "Cellular-neighborhood enrichment (log2 vs overall)",
-        "log2 fold enrichment", "RdBu_r", -vmax, vmax, "cn_enrichment.png")
+        "log2 fold enrichment",
+        "RdBu_r",
+        -vmax,
+        vmax,
+        "cn_enrichment.png",
+    )
 
 # 7. Multi-image (cohort) summaries: per-sample CN proportions + per-group means.
 per_sample_json = ""
@@ -384,28 +410,35 @@ if multi_image:
     else:
         sample_labels = ["image %d" % int(i) for i in img_order]
 
-    per_sample_json = json.dumps({
-        "image_names": sample_labels,
-        "n_neighborhoods": n_cn,
-        "proportions": sample_props.tolist(),
-        "counts": sample_counts.tolist(),
-    })
+    per_sample_json = json.dumps(
+        {
+            "image_names": sample_labels,
+            "n_neighborhoods": n_cn,
+            "proportions": sample_props.tolist(),
+            "counts": sample_counts.tolist(),
+        }
+    )
 
     if want_heatmap and out_dir:
         per_sample_heatmap_path = _save_heatmap(
-            sample_props, sample_labels,
+            sample_props,
+            sample_labels,
             ["CN %d" % cn for cn in range(n_cn)],
             "Per-sample neighborhood proportions",
-            "fraction of image's cells", "viridis", 0.0,
+            "fraction of image's cells",
+            "viridis",
+            0.0,
             float(sample_props.max()) if sample_props.size else 1.0,
-            "cn_per_sample_proportions.png")
+            "cn_per_sample_proportions.png",
+        )
 
     # Work "B": per-group mean proportions for condition/treatment comparison.
     if group_labels_arr is not None and group_labels_arr.shape[0] >= n_images:
         _update("Summarizing per-group neighborhood proportions...")
         # group_labels is per IMAGE index, aligned to img_order rows.
-        grp_for_row = np.array([int(group_labels_arr[int(i)]) for i in img_order],
-                               dtype=np.int64)
+        grp_for_row = np.array(
+            [int(group_labels_arr[int(i)]) for i in img_order], dtype=np.int64
+        )
         unique_groups = np.unique(grp_for_row[grp_for_row >= 0])
         if unique_groups.size >= 1:
             grp_props = np.zeros((unique_groups.shape[0], n_cn), dtype=np.float64)
@@ -418,23 +451,32 @@ if multi_image:
                 tot = max(1.0, pooled.sum())
                 grp_props[gi, :] = pooled / tot
                 if grp_names is not None and int(g) < len(grp_names):
-                    grp_labels_out.append("%s (n=%d)" % (str(grp_names[int(g)]),
-                                                          member_rows.size))
+                    grp_labels_out.append(
+                        "%s (n=%d)" % (str(grp_names[int(g)]), member_rows.size)
+                    )
                 else:
-                    grp_labels_out.append("group %d (n=%d)" % (int(g), member_rows.size))
-            group_json = json.dumps({
-                "group_names": grp_labels_out,
-                "n_neighborhoods": n_cn,
-                "proportions": grp_props.tolist(),
-            })
+                    grp_labels_out.append(
+                        "group %d (n=%d)" % (int(g), member_rows.size)
+                    )
+            group_json = json.dumps(
+                {
+                    "group_names": grp_labels_out,
+                    "n_neighborhoods": n_cn,
+                    "proportions": grp_props.tolist(),
+                }
+            )
             if want_heatmap and out_dir:
                 group_heatmap_path = _save_heatmap(
-                    grp_props, grp_labels_out,
+                    grp_props,
+                    grp_labels_out,
                     ["CN %d" % cn for cn in range(n_cn)],
                     "Per-group neighborhood proportions",
-                    "fraction of group's cells", "viridis", 0.0,
+                    "fraction of group's cells",
+                    "viridis",
+                    0.0,
                     float(grp_props.max()) if grp_props.size else 1.0,
-                    "cn_per_group_proportions.png")
+                    "cn_per_group_proportions.png",
+                )
 
 # 7b. Region adjacency: how often neighborhoods border each other. For each
 # within-image spatial edge whose endpoints sit in different neighborhoods, tally
@@ -465,8 +507,9 @@ def _region_adjacency():
     adj = np.zeros((n_cn, n_cn), dtype=np.float64)
     imgs = unique_images if multi_image else np.array([0])
     for img in imgs:
-        sel = (np.flatnonzero(image_ids_arr == img) if multi_image
-               else np.arange(n_cells))
+        sel = (
+            np.flatnonzero(image_ids_arr == img) if multi_image else np.arange(n_cells)
+        )
         if sel.size < 2:
             continue
         lab = cn_labels[sel].astype(np.int64)
@@ -478,14 +521,15 @@ def _region_adjacency():
             end = min(start + block, n_sel)
             if kind == "radius":
                 rows = neigh_struct[start:end]
-                counts = np.fromiter((a.size for a in rows), dtype=np.int64,
-                                     count=end - start)
+                counts = np.fromiter(
+                    (a.size for a in rows), dtype=np.int64, count=end - start
+                )
                 if counts.sum() == 0:
                     continue
                 dst = np.concatenate([a for a in rows]).astype(np.int64)
                 src = np.repeat(np.arange(start, end, dtype=np.int64), counts)
             else:
-                sub = neigh_struct[start:end, 1:]   # drop self column
+                sub = neigh_struct[start:end, 1:]  # drop self column
                 kk = sub.shape[1]
                 if kk == 0:
                     continue
@@ -514,12 +558,16 @@ try:
             ratio = adj / expected
             mask = np.isfinite(ratio) & (ratio > 0)
             enrich[mask] = np.log2(ratio[mask])
-    region_adjacency_json = json.dumps({
-        "n_cn": n_cn,
-        "metric": "log2_observed_over_expected",
-        "matrix": [[None if not np.isfinite(v) else float(v) for v in row]
-                   for row in enrich],
-    })
+    region_adjacency_json = json.dumps(
+        {
+            "n_cn": n_cn,
+            "metric": "log2_observed_over_expected",
+            "matrix": [
+                [None if not np.isfinite(v) else float(v) for v in row]
+                for row in enrich
+            ],
+        }
+    )
     if want_heatmap and out_dir:
         # Mask the diagonal (within-CN contact always dominates) so off-diagonal
         # structure is visible; diverging colormap centered at 0.
@@ -530,11 +578,16 @@ try:
         if not np.isfinite(amax) or amax <= 0:
             amax = 1.0
         region_adjacency_heatmap_path = _save_heatmap(
-            disp, ["CN %d" % cn for cn in range(n_cn)],
+            disp,
+            ["CN %d" % cn for cn in range(n_cn)],
             ["CN %d" % cn for cn in range(n_cn)],
             "Neighborhood adjacency enrichment (log2 obs/exp, diagonal hidden)",
-            "log2 observed / expected", "RdBu_r", -amax, amax,
-            "cn_neighborhood_adjacency.png")
+            "log2 observed / expected",
+            "RdBu_r",
+            -amax,
+            amax,
+            "cn_neighborhood_adjacency.png",
+        )
 except Exception as e:
     logger.warning("Neighborhood adjacency failed: %s", e)
 
@@ -546,9 +599,11 @@ task.outputs["neighborhood_labels"] = labels_nd
 task.outputs["n_neighborhoods"] = n_cn
 task.outputs["neighborhood_counts"] = json.dumps(counts)
 task.outputs["composition_json"] = json.dumps(
-    {"class_names": names, "mean_composition": mean_comp.tolist()})
+    {"class_names": names, "mean_composition": mean_comp.tolist()}
+)
 task.outputs["enrichment_json"] = json.dumps(
-    {"class_names": names, "log2_enrichment": enrichment.tolist()})
+    {"class_names": names, "log2_enrichment": enrichment.tolist()}
+)
 task.outputs["heatmap_path"] = heatmap_path
 task.outputs["per_sample_proportions_json"] = per_sample_json
 task.outputs["per_sample_heatmap_path"] = per_sample_heatmap_path
