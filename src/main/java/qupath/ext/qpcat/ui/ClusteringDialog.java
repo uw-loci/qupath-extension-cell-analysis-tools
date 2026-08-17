@@ -138,6 +138,14 @@ public class ClusteringDialog {
     // Independent areas: which cells may share a spatial graph at all.
     private IndependentAreasSection areasSection;
 
+    /**
+     * Row cap for the "Composition by area" tab. A partition can legitimately
+     * produce thousands of areas; a table with a row each is unusable, and the
+     * per-area CSV is the right tool at that scale. 200 comfortably covers a
+     * full TMA.
+     */
+    private static final int MAX_AREA_TABLE_ROWS = 200;
+
     private static final String BATCH_KEY_IMAGES_LABEL = "Images";
     private static final String BATCH_KEY_AREAS_LABEL = "Independent areas";
 
@@ -2613,11 +2621,21 @@ public class ClusteringDialog {
 
         // Composition tabs -- simplified per-group cluster breakdowns (counts,
         // proportions, one pie per group). Inserted at the FRONT so they are the
-        // first tabs shown. "By image" always appears when we have per-cell image
-        // references; "By annotation" only when annotations were actually
-        // selected as the clustering input. A cluster confined to a single group
-        // here is the tell-tale of an image/region batch effect rather than a
-        // shared phenotype.
+        // first tabs shown. A cluster confined to a single group here is the
+        // tell-tale of an image/region batch effect rather than a shared
+        // phenotype.
+        //
+        // Four grouping axes, each appearing only when it can say something:
+        //   by image      - always, given per-cell image references
+        //   by area       - when a partition produced 2..MAX_AREA_TABLE_ROWS areas
+        //   by class      - when >= 2 annotation classes are present
+        //   by annotation - only when annotations were the clustering INPUT
+        //
+        // Area and class are complements, not alternatives: areas decide which
+        // cells may share a spatial GRAPH, class decides how the results are
+        // COMPARED. Compartments inside one area (Tumor / Stroma in a core) are
+        // deliberately not separated spatially, so "by class" is where they are
+        // read apart.
         if (result.hasCellRefs()) {
             final ClusteringResult colorResult = result;
             java.util.function.IntFunction<Color> clusterColorFn = id -> {
@@ -2680,6 +2698,66 @@ public class ClusteringDialog {
                 annTab.setClosable(false);
                 tabPane.getTabs().add(annTab);
                 colorRefreshers.add(byAnnotation::refreshColors);
+            }
+
+            // "By class" reads the compartments a partition deliberately did
+            // NOT separate. With areas set per TMA core, Tumor and Stroma share
+            // a graph -- they are continuous tissue and the interface between
+            // them is usually the point -- but their cluster makeup is still
+            // worth comparing, pooled across every core.
+            //
+            // Keyed on the annotation CLASS, never its name: a name is
+            // per-object, so a slide with hundreds of named regions would make
+            // that table unreadable. A class is a category, so this stays a
+            // handful of rows however many regions there are.
+            if (result.hasCellParentClasses()) {
+                ClusterCompositionPanel byClass = new ClusterCompositionPanel(
+                        result.getClusterLabels(), result.getNClusters(),
+                        result.getCellParentClasses(), "Class", clusterColorFn,
+                        result.clusterNameFn());
+                Tab classTab = new Tab("Composition by class", wrapWithGuide(byClass,
+                        "Cluster counts and proportions per annotation CLASS -- the "
+                        + "classified region each cell sits in (Tumor, Stroma, ...), "
+                        + "pooled across every image and every independent area.\n"
+                        + "This is the counterpart to Independent areas: areas decide "
+                        + "which cells may share a spatial graph, this decides how the "
+                        + "results are compared. Compartments inside one area are "
+                        + "deliberately NOT separated spatially, so this is where you "
+                        + "read them apart.\n"
+                        + "Cells with no classified annotation ancestor are grouped "
+                        + "under \"(none)\".",
+                        "composition-by-class-tab"));
+                classTab.setClosable(false);
+                tabPane.getTabs().add(classTab);
+                colorRefreshers.add(byClass::refreshColors);
+            }
+
+            // "By area" -- one row per independent area. Bounded: a partition
+            // can legitimately produce thousands of areas, and a table with a
+            // row each would be unusable. Above the cap the per-area CSV
+            // written next to the result is the right tool, and the guide text
+            // says so rather than leaving the tab silently missing.
+            int areaCount = result.getAreaCount();
+            if (areaCount >= 2 && areaCount <= MAX_AREA_TABLE_ROWS) {
+                ClusterCompositionPanel byArea = new ClusterCompositionPanel(
+                        result.getClusterLabels(), result.getNClusters(),
+                        result.getCellAreaNames(), "Area", clusterColorFn,
+                        result.clusterNameFn());
+                Tab areaTab = new Tab("Composition by area", wrapWithGuide(byArea,
+                        "Cluster counts and proportions per independent area -- one row "
+                        + "per TMA core, tissue section, or whatever the area levels "
+                        + "resolved to.\n"
+                        + "This is the core-to-core comparison: 'CN 2 is 8% of core A-1 "
+                        + "but 31% of A-4'. The same numbers are also written to "
+                        + "<result>_areas_summary.csv next to the saved result.",
+                        "composition-by-area-tab"));
+                areaTab.setClosable(false);
+                tabPane.getTabs().add(areaTab);
+                colorRefreshers.add(byArea::refreshColors);
+            } else if (areaCount > MAX_AREA_TABLE_ROWS) {
+                logger.info("Composition by area tab omitted: {} areas exceeds the {}-row "
+                        + "table limit; use the areas_summary.csv written next to the result",
+                        areaCount, MAX_AREA_TABLE_ROWS);
             }
         }
 
@@ -3052,10 +3130,11 @@ public class ClusteringDialog {
             manageBtn.setDisable(true);
         }
 
-        // Lead with the at-a-glance tabs: Composition by image, then the two
-        // marker tabs, then everything else. Composition by annotation (rare)
-        // stays adjacent to Composition by image when present.
-        reorderLeadingTabs(tabPane, "Composition by image", "Composition by annotation",
+        // Lead with the at-a-glance tabs: the composition views first (image,
+        // area, class), then the two marker tabs, then everything else.
+        // Composition by annotation (rare) stays adjacent to them when present.
+        reorderLeadingTabs(tabPane, "Composition by image", "Composition by area",
+                "Composition by class", "Composition by annotation",
                 "Marker Fingerprints", "Marker Rankings");
         tabPane.getSelectionModel().selectFirst();
 

@@ -1341,6 +1341,25 @@ Use it as a fast sanity check on a project-wide run. Biologically meaningful clu
 
 The same table + pie-chart view as [Composition by image](#composition-by-image-tab), but grouped by each cell's **parent annotation** -- the named or classified region the cell was inside when clustering ran. This tab appears **only when annotations were selected as the clustering input** (i.e. you had one or more annotations selected when you launched the run); a whole-image or project-wide run that clustered every detection does not show it, even if some cells happen to sit inside annotations. Cells outside any annotation are grouped under `(none)`. Use it to compare cluster makeup across the tissue regions or conditions you annotated -- e.g. tumor vs. stroma, or treated vs. control cores -- without leaving the results dialog. The flag and parent-annotation names are captured at run time and persist with the saved result. It exports the same way -- **Export figure + table...** here, or the `composition_pie_annotation` / `composition_table_annotation` plot kinds in the batch exporter (off by default, since most results are not annotation-input runs).
 
+### Composition by area tab
+
+The same table + pie-chart view, grouped by **independent area** -- one row per TMA core, tissue section, or whatever the configured area levels resolved to. This is the core-to-core comparison: *"cluster 2 is 8% of core A-1 but 31% of A-4."*
+
+Appears when a run resolved between 2 and 200 areas. Above that the table would have more rows than anyone can read, so it is omitted and the same numbers are written to `<result>_areas_summary.csv` next to the saved result (a run log line says so rather than leaving the tab silently missing).
+
+### Composition by class tab
+
+Grouped by the **annotation class** each cell sits in -- Tumor, Stroma, and so on -- pooled across every image and every independent area. Appears whenever at least two classes are present.
+
+This is the counterpart to [Independent areas](#independent-areas): **areas decide which cells may share a spatial graph; class decides how the results are compared.** Compartments inside one area are deliberately *not* separated spatially -- Tumor and Stroma in a core are continuous tissue, and the interface between them is usually the thing being measured -- so this tab is where you read them apart.
+
+Two details worth knowing:
+
+- It keys on the **class**, never the annotation's name. A name is per-object, so a slide with hundreds of named regions would produce hundreds of rows; a class is a category, so this stays a handful of rows however many regions there are. (The older *Composition by annotation* tab keys on the name, which is why it only appears for annotation-input runs.)
+- It walks the whole ancestor chain, so a cell inside an *unclassified* sub-region of a Tumor annotation still counts as Tumor.
+
+Cells with no classified annotation ancestor are grouped under `(none)`.
+
 ### Representative cells tab
 
 Per-cluster gallery of image crops of the most typical cells. For each cluster, cells are ranked by distance to the cluster center and the closest few are shown as thumbnails, with the **medoid** (the single closest real cell) outlined. Click any thumbnail to open its image and center on the cell. **Save montages** writes one horizontal PNG strip per cluster next to the other result plots (`<project>/qpcat/cluster_results/<name>_plots/cluster_<c>_representatives.png`).

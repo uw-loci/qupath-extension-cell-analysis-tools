@@ -258,6 +258,44 @@ public class ClusteringResult {
     private String areasSummaryCsv;
     private String areasStatisticsCsv;
 
+    /**
+     * Per-cell parent-annotation CLASS (never the object name), index-aligned
+     * with the cluster labels. Null entries mean "no classified annotation
+     * ancestor". Drives the "Composition by class" tab; not persisted, because
+     * the tab only exists while the live result is open.
+     */
+    private String[] cellParentClasses;
+
+    /** Per-cell independent-area display name. Same lifetime as the above. */
+    private String[] cellAreaNames;
+
+    public String[] getCellParentClasses() { return cellParentClasses; }
+    public void setCellParentClasses(String[] classes) { this.cellParentClasses = classes; }
+
+    /** True when at least two distinct classes are present, so a split is meaningful. */
+    public boolean hasCellParentClasses() {
+        return distinctNonNull(cellParentClasses) >= 2;
+    }
+
+    public String[] getCellAreaNames() { return cellAreaNames; }
+    public void setCellAreaNames(String[] names) { this.cellAreaNames = names; }
+
+    /** Distinct area count, or 0 when areas were not resolved. */
+    public int getAreaCount() { return distinctNonNull(cellAreaNames); }
+
+    private static int distinctNonNull(String[] values) {
+        if (values == null) {
+            return 0;
+        }
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String v : values) {
+            if (v != null) {
+                seen.add(v);
+            }
+        }
+        return seen.size();
+    }
+
     /** Wide per-area composition table: one row per area. */
     public String getAreasSummaryCsv() { return areasSummaryCsv; }
     public void setAreasSummaryCsv(String csv) { this.areasSummaryCsv = csv; }

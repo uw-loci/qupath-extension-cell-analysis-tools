@@ -345,6 +345,9 @@ public class ClusteringWorkflow {
         }
         result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
         result.setCellParentNames(buildParentNames(extraction));
+        // The compartments a partition did NOT separate, e.g. Tumor / Stroma
+        // inside a TMA core, pooled across every area.
+        result.setCellParentClasses(buildParentClassNames(extraction));
         result.setAnnotationInput(annotationInput);
 
         // Apply results back to QuPath
@@ -518,6 +521,51 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Per-cell parent-annotation CLASS, index-aligned with the extraction's
+     * detection order. Null for a cell with no classified annotation ancestor.
+     * <p>
+     * Deliberately different from {@link #buildParentNames}, which prefers the
+     * annotation's NAME. A name is per-object, so on a slide with hundreds of
+     * named regions that grouping has hundreds of rows and is unreadable. A
+     * class is a category, so this stays bounded by the number of classes --
+     * usually two or three.
+     * <p>
+     * This is the axis that reads the compartments a partition deliberately did
+     * NOT separate: with areas set to one per TMA core, Tumor and Stroma share
+     * a graph (they are continuous tissue), but their cluster makeup is still
+     * worth comparing, pooled across every core.
+     */
+    private String[] buildParentClassNames(MeasurementExtractor.ExtractionResult extraction) {
+        List<PathObject> detections = extraction.getDetections();
+        String[] names = new String[detections.size()];
+        for (int i = 0; i < detections.size(); i++) {
+            names[i] = nearestAnnotationClass(detections.get(i));
+        }
+        return names;
+    }
+
+    /**
+     * Class of the nearest classified annotation ancestor, or null when there
+     * is none. Walks the whole chain rather than checking one level: a cell
+     * inside an unclassified sub-region of a classified one still belongs to
+     * that classified region.
+     */
+    private static String nearestAnnotationClass(PathObject det) {
+        PathObject parent = det.getParent();
+        while (parent != null && !parent.isRootObject()) {
+            if (parent.isAnnotation()) {
+                PathClass pc = parent.getPathClass();
+                if (pc != null && pc != PathClass.getNullClass()
+                        && pc.toString() != null && !pc.toString().isBlank()) {
+                    return pc.toString();
+                }
+            }
+            parent = parent.getParent();
+        }
+        return null;
+    }
+
+    /**
      * Friendly grouping name for a detection's parent annotation: the
      * annotation's name if set, else its classification, else a generic
      * "Annotation" label. Returns null when the parent is the image root
@@ -673,6 +721,9 @@ public class ClusteringWorkflow {
         // ProjectImageEntry, so no fallback id/name is needed.
         result.setCellRefs(buildCellRefs(extraction, null, null));
         result.setCellParentNames(buildParentNames(extraction));
+        // The compartments a partition did NOT separate, e.g. Tumor / Stroma
+        // inside a TMA core, pooled across every area.
+        result.setCellParentClasses(buildParentClassNames(extraction));
 
         // Apply results back per-image and save
         reportPhase(progressCallback, "apply", "Applying results to project images...");
@@ -1915,6 +1966,16 @@ public class ClusteringWorkflow {
 
             // Per-area spreadsheets. Carried on the result only so
             // autoSaveResult can write them next to the other artifacts.
+            if (areas != null) {
+                // Per-cell area label, for the "Composition by area" tab. Held
+                // in memory only; the CSV on disk is the durable artifact.
+                String[] perCellArea = new String[nCells];
+                int[] areaIds = areas.getAreaIds();
+                for (int i = 0; i < nCells && i < areaIds.length; i++) {
+                    perCellArea[i] = areas.getAreaNames().get(areaIds[i]);
+                }
+                result.setCellAreaNames(perCellArea);
+            }
             if (task.outputs.containsKey("areas_summary_csv")) {
                 result.setAreasSummaryCsv((String) task.outputs.get("areas_summary_csv"));
             }
