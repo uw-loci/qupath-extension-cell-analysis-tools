@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.model;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +148,28 @@ public class ClusteringConfig {
     // attached PathObjectConnections; toggling rebuilds the visible group.
     private boolean limitEdgesBySameClass = false;
 
+    // ---- Independent areas ----
+    // Ordered hierarchy levels, outermost first, that split cells into
+    // physically separate analysis areas. No spatial graph is ever built
+    // across two areas. Null / empty means images-only, i.e. the behaviour
+    // before this existed.
+    private List<AreaLevelSpec> areaLevels;
+
+    /**
+     * Which grouping Harmony corrects over: {@code "images"} (the default and
+     * the historical behaviour) or {@code "areas"}.
+     * <p>
+     * Kept separate from {@link #areaLevels} on purpose. Splitting the spatial
+     * graph by TMA core is a statement about geometry and is essentially always
+     * right; treating each core as a batch is a statement about technical
+     * variation and is a judgement call -- 55 batches of a few thousand cells
+     * can over-correct real biology away.
+     */
+    private String batchKey = BATCH_KEY_IMAGES;
+
+    public static final String BATCH_KEY_IMAGES = "images";
+    public static final String BATCH_KEY_AREAS = "areas";
+
     public ClusteringConfig() {
         // Set sensible defaults
         algorithmParams.put("n_neighbors", 50);
@@ -180,6 +203,49 @@ public class ClusteringConfig {
     /** @see #embeddingExecutionMode */
     public void setEmbeddingExecutionMode(String mode) {
         this.embeddingExecutionMode = (mode == null || mode.isBlank()) ? "auto" : mode;
+    }
+
+    /**
+     * Ordered independent-area levels, outermost first. Never null: a config
+     * saved before this field existed loads with images-only, which is the
+     * behaviour it was saved under.
+     *
+     * @see #areaLevels
+     */
+    public List<AreaLevelSpec> getAreaLevels() {
+        return (areaLevels == null || areaLevels.isEmpty())
+                ? AreaLevelSpec.imagesOnly() : areaLevels;
+    }
+
+    /** @see #areaLevels */
+    public void setAreaLevels(List<AreaLevelSpec> levels) {
+        this.areaLevels = (levels == null || levels.isEmpty())
+                ? null : new ArrayList<>(levels);
+    }
+
+    /**
+     * True when the configured levels can split cells below the image level.
+     * Images-only cannot, so it is not worth resolving or shipping.
+     */
+    public boolean hasSubImageAreaLevels() {
+        for (AreaLevelSpec spec : getAreaLevels()) {
+            if (spec.getLevel() != AreaLevel.IMAGES) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** @see #batchKey */
+    public String getBatchKey() {
+        return BATCH_KEY_AREAS.equalsIgnoreCase(batchKey)
+                ? BATCH_KEY_AREAS : BATCH_KEY_IMAGES;
+    }
+
+    /** @see #batchKey */
+    public void setBatchKey(String key) {
+        this.batchKey = BATCH_KEY_AREAS.equalsIgnoreCase(key)
+                ? BATCH_KEY_AREAS : BATCH_KEY_IMAGES;
     }
 
     public List<String> getSelectedMeasurements() { return selectedMeasurements; }

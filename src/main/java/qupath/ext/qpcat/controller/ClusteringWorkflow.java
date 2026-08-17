@@ -14,6 +14,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
@@ -484,6 +485,35 @@ public class ClusteringWorkflow {
             names[i] = parentGroupName(detections.get(i));
         }
         return names;
+    }
+
+    /**
+     * Resolves independent analysis areas for an extraction, or null when the
+     * configured levels cannot split anything below the image level.
+     * <p>
+     * Returning null rather than a single-area assignment is deliberate: it
+     * keeps {@code area_ids} off the wire entirely for ordinary
+     * single-section runs, so those take byte-for-byte the same Python path
+     * as before this feature existed.
+     * <p>
+     * Note this is NOT {@link #buildParentNames}. That reads a cell's
+     * immediate parent and feeds "Composition by annotation", where the
+     * innermost compartment is what the user wants. An area is the opposite
+     * end of the chain -- the outermost physically separate unit -- and
+     * sharing code between the two would guarantee one of them is wrong.
+     */
+    private AreaResolver.AreaAssignment resolveAreas(
+            MeasurementExtractor.ExtractionResult extraction, ClusteringConfig config) {
+        if (!config.hasSubImageAreaLevels()) {
+            return null;
+        }
+        List<String> imageNames = new ArrayList<>();
+        for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+            imageNames.add(segmentImageName(seg));
+        }
+        return AreaResolver.resolve(
+                extraction.getDetections(), extraction.getImageSegments(),
+                imageNames, config.getAreaLevels());
     }
 
     /**
@@ -1411,6 +1441,19 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdgePixels(config));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
 
+        // The probe must partition exactly as the run will. A per-area graph is
+        // a different graph -- cheaper, and with a different neighbour
+        // structure -- so timing an un-partitioned one would estimate a run
+        // that is not the one about to happen, and over-estimate it.
+        AreaResolver.AreaAssignment probeAreas = resolveAreas(extraction, config);
+        if (probeAreas != null) {
+            List<Integer> areaIdList = new ArrayList<>(nCells);
+            for (int id : probeAreas.getAreaIds()) {
+                areaIdList.add(id);
+            }
+            inputs.put("area_ids", areaIdList);
+        }
+
         // Both NDArrays are shared-memory segments; they must be closed or the
         // segment stays mapped for the JVM's lifetime. At 1M cells x 40 markers
         // that is ~336 MB leaked per spatial-enabled run. Every sibling task
@@ -1548,14 +1591,27 @@ public class ClusteringWorkflow {
             }
         }
 
-        // Compute batch labels for multi-image batch correction
+        // Independent areas: which cells may share a spatial graph at all.
+        AreaResolver.AreaAssignment areas = resolveAreas(extraction, config);
+
+        // Compute batch labels for batch correction. Images is the default and
+        // the historical behaviour; areas lets a 55-core TMA in a single image
+        // be corrected core-by-core, which per-image labels cannot express.
         List<Integer> batchLabels = null;
-        if (config.isEnableBatchCorrection() && extraction.isMultiImage()) {
-            batchLabels = new ArrayList<>();
-            for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
-                MeasurementExtractor.ImageSegment seg = extraction.getImageSegments().get(segIdx);
-                for (int i = 0; i < seg.getCount(); i++) {
-                    batchLabels.add(segIdx);
+        if (config.isEnableBatchCorrection()) {
+            if (ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey()) && areas != null) {
+                batchLabels = new ArrayList<>(nCells);
+                for (int id : areas.getAreaIds()) {
+                    batchLabels.add(id);
+                }
+            } else if (extraction.isMultiImage()) {
+                batchLabels = new ArrayList<>();
+                for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
+                    MeasurementExtractor.ImageSegment seg =
+                            extraction.getImageSegments().get(segIdx);
+                    for (int i = 0; i < seg.getCount(); i++) {
+                        batchLabels.add(segIdx);
+                    }
                 }
             }
         }
@@ -1605,6 +1661,19 @@ public class ClusteringWorkflow {
             }
             inputs.put("image_labels", imageLabels);
             inputs.put("image_names", imageNames);
+        }
+
+        // Independent-area ids. Every spatial consumer on the Python side
+        // partitions on these, so no neighbour edge crosses a boundary that
+        // tissue does not. Omitted when the levels cannot split anything,
+        // which keeps single-section runs on exactly the previous path.
+        if (areas != null) {
+            List<Integer> areaIdList = new ArrayList<>(nCells);
+            for (int id : areas.getAreaIds()) {
+                areaIdList.add(id);
+            }
+            inputs.put("area_ids", areaIdList);
+            inputs.put("area_names", areas.getAreaNames());
         }
 
         // Preference-backed defaults (overridable via QP-CAT preferences UI)
