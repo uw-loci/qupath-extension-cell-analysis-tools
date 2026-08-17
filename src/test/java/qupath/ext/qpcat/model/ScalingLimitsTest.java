@@ -293,4 +293,88 @@ class ScalingLimitsTest {
         assertThat(ScalingLimits.humanDuration(600)).isEqualTo("10 minutes");
         assertThat(ScalingLimits.humanDuration(20_370)).isEqualTo("5.7 hours");
     }
+
+    // ---- Independent areas change what the spatial statistics cost ---------
+
+    /**
+     * Ripley and co-occurrence run once per area, so their peak is set by the
+     * largest area. Keying them on the cohort total predicts an allocation
+     * that never happens -- and refuses runs that comfortably fit, which is
+     * the wrong failure for a guard whose whole job is to protect a long run.
+     */
+    @Test
+    void areasReduceThePredictedCoOccurrenceCost() {
+        ScalingLimits.Request pooled = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 550_000, 20);
+        pooled.coOccurrence = true;
+        pooled.nClusters = 20;
+        pooled.availableRamGb = 32;
+
+        ScalingLimits.Request byArea = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 550_000, 20);
+        byArea.coOccurrence = true;
+        byArea.nClusters = 20;
+        byArea.availableRamGb = 32;
+        byArea.largestAreaCells = 10_000;   // a 55-core TMA
+
+        // Pooled is blocked on 32 GB; per-area is not.
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(pooled))).isTrue();
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(byArea))).isFalse();
+    }
+
+    @Test
+    void areasReduceThePredictedRipleyCost() {
+        ScalingLimits.Request pooled = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 600_000, 20);
+        pooled.ripley = true;
+        pooled.nClusters = 4;
+        pooled.availableRamGb = 32;
+
+        ScalingLimits.Request byArea = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 600_000, 20);
+        byArea.ripley = true;
+        byArea.nClusters = 4;
+        byArea.availableRamGb = 32;
+        byArea.largestAreaCells = 12_000;
+
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(pooled))).isTrue();
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(byArea))).isFalse();
+    }
+
+    @Test
+    void aMeasuredClusterIsCappedByTheAreaItIsMeasuredIn() {
+        // A cohort-wide cluster of 400k cells cannot put 400k cells in one
+        // 10k-cell core, so the Ripley estimate must not assume it does.
+        ScalingLimits.Request r = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 550_000, 20);
+        r.ripley = true;
+        r.largestClusterSize = 400_000;
+        r.largestAreaCells = 10_000;
+        r.availableRamGb = 32;
+
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(r))).isFalse();
+    }
+
+    @Test
+    void aSingleAreaIsJudgedExactlyAsBefore() {
+        // largestAreaCells = 0 means "one area"; the prediction must be
+        // identical to the pre-areas behaviour or this silently loosens the
+        // guard for every existing user.
+        ScalingLimits.Request before = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 300_000, 20);
+        before.coOccurrence = true;
+        before.ripley = true;
+        before.availableRamGb = 16;
+
+        ScalingLimits.Request after = new ScalingLimits.Request(
+                ClusteringConfig.Algorithm.LEIDEN, 300_000, 20);
+        after.coOccurrence = true;
+        after.ripley = true;
+        after.availableRamGb = 16;
+        after.largestAreaCells = 300_000;   // one area covering everything
+
+        assertThat(ScalingLimits.check(after)).hasSameSizeAs(ScalingLimits.check(before));
+        assertThat(ScalingLimits.isBlocked(ScalingLimits.check(after)))
+                .isEqualTo(ScalingLimits.isBlocked(ScalingLimits.check(before)));
+    }
 }

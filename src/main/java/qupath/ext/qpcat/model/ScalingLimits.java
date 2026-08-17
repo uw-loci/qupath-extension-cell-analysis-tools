@@ -127,6 +127,17 @@ public final class ScalingLimits {
         public boolean clusterCountIsExact = false;
         /** Largest single cluster; 0 means "assume balanced". */
         public long largestClusterSize = 0;
+        /**
+         * Cells in the largest INDEPENDENT AREA; 0 means "one area", i.e. the
+         * whole run.
+         * <p>
+         * Ripley's L and co-occurrence run once per area, so their cost is set
+         * by the biggest area rather than by the cohort. On a 55-core TMA that
+         * is roughly a fiftieth of the total, and co-occurrence's model is
+         * linear in the cell count -- keying it on the total predicts an
+         * allocation that never happens and refuses runs that comfortably fit.
+         */
+        public long largestAreaCells = 0;
         public boolean ripley = false;
         public boolean coOccurrence = false;
         public int coOccurrenceIntervals = DEFAULT_COOC_INTERVALS;
@@ -220,10 +231,31 @@ public final class ScalingLimits {
         return BASE_GB + (double) nCells * nNeighbors * 3.52e-7;
     }
 
-    /** Largest cluster, assuming roughly balanced clusters when unknown. */
+    /**
+     * Cells the per-area spatial statistics actually process at once: the
+     * largest independent area, or the whole run when there is only one.
+     */
+    private static long spatialUnitCells(Request r) {
+        return r.largestAreaCells > 0 ? Math.min(r.largestAreaCells, r.nCells) : r.nCells;
+    }
+
+    /**
+     * Largest cluster, assuming roughly balanced clusters when unknown.
+     * <p>
+     * With independent areas the relevant figure is the largest cluster
+     * <i>within one area</i>, because Ripley runs per area. When the true
+     * per-area cluster size is unknown it is estimated from the largest area
+     * rather than the cohort -- otherwise a 55-core TMA is judged as though
+     * every core's cluster held every cell of that cluster on the slide.
+     */
     private static long assumedLargestCluster(Request r) {
-        if (r.largestClusterSize > 0) return r.largestClusterSize;
-        return (long) Math.ceil((double) r.nCells / Math.max(1, r.nClusters));
+        long unit = spatialUnitCells(r);
+        if (r.largestClusterSize > 0) {
+            // A measured cohort-wide cluster cannot be bigger than the area it
+            // is measured in once the run is partitioned.
+            return Math.min(r.largestClusterSize, unit);
+        }
+        return (long) Math.ceil((double) unit / Math.max(1, r.nClusters));
     }
 
     // ---- The check ---------------------------------------------------------
@@ -376,13 +408,20 @@ public final class ScalingLimits {
         }
 
         if (r.coOccurrence) {
-            double gb = coOccurrencePeakGb(r.nCells, r.nClusters, r.coOccurrenceIntervals);
+            // Per area, not per run: co-occurrence is computed once per
+            // independent area, so the peak is set by the biggest one.
+            long unit = spatialUnitCells(r);
+            double gb = coOccurrencePeakGb(unit, r.nClusters, r.coOccurrenceIntervals);
+            // Time, unlike memory, still accumulates across areas.
             double sec = coOccurrenceSeconds(r.nCells);
             String basis = r.clusterCountIsExact
                     ? r.nClusters + " clusters"
                     : "an assumed " + r.nClusters + " clusters";
+            String scope = unit == r.nCells
+                    ? fmt(r.nCells) + " cells"
+                    : fmt(unit) + " cells in the largest area";
             addCost(out, gb, sec, ram,
-                    "Co-occurrence on " + fmt(r.nCells) + " cells (" + basis + ")",
+                    "Co-occurrence on " + scope + " (" + basis + ")",
                     "co-occurrence allocates one counter per cell per distance interval per "
                             + "CLUSTER PAIR, and compares every cell against every other one",
                     "Turn off co-occurrence, or reduce the number of clusters. Neighbourhood "

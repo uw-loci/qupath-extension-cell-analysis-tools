@@ -1554,10 +1554,14 @@ public class ClusteringWorkflow {
      * finds out in seconds rather than after an overnight hang or an OOM kill
      * that takes QuPath down with it.
      */
-    private void enforceScalingLimits(int nCells, int nFeatures, ClusteringConfig config)
+    private void enforceScalingLimits(int nCells, int nFeatures, ClusteringConfig config,
+                                      AreaResolver.AreaAssignment areas)
             throws IOException {
-        List<ScalingLimits.Finding> findings =
-                ScalingLimits.check(scalingRequest(nCells, nFeatures, config));
+        ScalingLimits.Request request = scalingRequest(nCells, nFeatures, config);
+        if (areas != null) {
+            request.largestAreaCells = areas.getLargestAreaSize();
+        }
+        List<ScalingLimits.Finding> findings = ScalingLimits.check(request);
         for (var f : findings) {
             if (f.severity() == ScalingLimits.Severity.WARN)
                 logger.warn("Scaling caution -- {}", f.describe());
@@ -1587,11 +1591,17 @@ public class ClusteringWorkflow {
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
 
+        // Independent areas: which cells may share a spatial graph at all.
+        // Resolved BEFORE the scaling check, because Ripley and co-occurrence
+        // run once per area -- judging them against the cohort total would
+        // refuse runs that comfortably fit.
+        AreaResolver.AreaAssignment areas = resolveAreas(extraction, config);
+
         // Refuse configurations that cannot finish on this machine BEFORE any
         // shared memory is allocated or Python is handed the data. This is the
         // one chokepoint every entry point reaches -- GUI single-image, GUI
         // project, and the headless YAML batch all arrive here.
-        enforceScalingLimits(nCells, nMeasurements, config);
+        enforceScalingLimits(nCells, nMeasurements, config, areas);
 
         // Create NDArray for measurement data (input -- closed after task completes)
         NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
@@ -1624,9 +1634,6 @@ public class ClusteringWorkflow {
                 spatialBuf.put(centroids[i]);
             }
         }
-
-        // Independent areas: which cells may share a spatial graph at all.
-        AreaResolver.AreaAssignment areas = resolveAreas(extraction, config);
 
         // Compute batch labels for batch correction. Images is the default and
         // the historical behaviour; areas lets a 55-core TMA in a single image
