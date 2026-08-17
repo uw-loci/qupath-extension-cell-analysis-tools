@@ -8,6 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Composition by area and Composition by class tabs.** The clustering Results
+  window gains two new composition tabs alongside the existing "by image" and "by
+  annotation" views:
+  - **Composition by area**: one row per independent area (TMA core, tissue section,
+    image) -- the core-to-core comparison showing how cluster makeup varies across
+    physically separate regions. Appears when a run resolves 2-200 areas; above that
+    the numbers are written to `<result>_areas_summary.csv` instead.
+  - **Composition by class**: clusters grouped by annotation **class** (Tumor,
+    Stroma, ...) pooled across every image and area -- the way to read apart
+    compartments that share a spatial graph. Appears whenever at least two classes
+    are present. Keyed on class, never annotation name, so the table stays readable
+    however many named regions there are.
+
+  These complement the independent areas feature: areas decide which cells may
+  share a spatial graph; class decides how the results are compared.
+
 - **Independent areas.** An *area* is a piece of tissue physically separate from
   every other piece: a TMA core, one of several sections on a slide, an image. No
   spatial graph is now ever built across two areas. Configure them in the
