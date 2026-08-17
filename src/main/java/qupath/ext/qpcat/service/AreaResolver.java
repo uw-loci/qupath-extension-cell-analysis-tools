@@ -5,10 +5,13 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.PathObjectTools;
 import qupath.lib.objects.classes.PathClass;
+import qupath.lib.objects.hierarchy.PathObjectHierarchy;
+import qupath.lib.objects.hierarchy.TMAGrid;
+import qupath.lib.roi.interfaces.ROI;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -139,6 +142,7 @@ public final class AreaResolver {
     public static AreaAssignment resolve(List<PathObject> detections,
                                          int[] imageIndexPerCell,
                                          List<String> imageNames,
+                                         List<PathObjectHierarchy> hierarchies,
                                          List<AreaLevelSpec> levels) {
         int n = detections == null ? 0 : detections.size();
         List<AreaLevelSpec> rows = normalizeLevels(levels);
@@ -158,21 +162,38 @@ public final class AreaResolver {
         List<Boolean> areaUnassigned = new ArrayList<>();
         List<Integer> areaSizes = new ArrayList<>();
 
+        // One containment map per (image, level). Built by asking the hierarchy
+        // which detections fall inside each candidate region -- NOT by walking
+        // parent links. See the class javadoc for why.
+        List<List<Map<PathObject, PathObject>>> byImageAndLevel =
+                buildContainmentMaps(hierarchies, subLevels);
+
         for (int i = 0; i < n; i++) {
             PathObject det = detections.get(i);
             int imageIndex = (imageIndexPerCell != null && i < imageIndexPerCell.length)
                     ? imageIndexPerCell[i] : 0;
             String imageName = imageName(imageNames, imageIndex);
 
-            Resolution res = resolveOne(det, subLevels);
+            List<Map<PathObject, PathObject>> levelMaps =
+                    imageIndex < byImageAndLevel.size() ? byImageAndLevel.get(imageIndex) : null;
 
             StringBuilder key = new StringBuilder().append(imageIndex);
             StringBuilder label = new StringBuilder(imageName);
-            for (PathObject ancestor : res.ancestors) {
-                key.append('/').append(ancestor.getID());
-                label.append(" | ").append(displayLabel(ancestor));
+            boolean unresolved = false;
+            if (levelMaps != null) {
+                for (Map<PathObject, PathObject> levelMap : levelMaps) {
+                    PathObject region = levelMap.get(det);
+                    if (region == null) {
+                        unresolved = true;
+                        break;
+                    }
+                    key.append('/').append(region.getID());
+                    label.append(" | ").append(displayLabel(region));
+                }
+            } else if (!subLevels.isEmpty()) {
+                unresolved = true;
             }
-            if (res.unresolved) {
+            if (unresolved) {
                 key.append("/!unassigned");
                 label.append(" | ").append(UNASSIGNED);
             }
@@ -184,7 +205,7 @@ public final class AreaResolver {
                 keyToId.put(areaKey, id);
                 areaNames.add(label.toString());
                 areaImageNames.add(imageName);
-                areaUnassigned.add(res.unresolved);
+                areaUnassigned.add(unresolved);
                 areaSizes.add(0);
             }
             areaIds[i] = id;
@@ -207,9 +228,9 @@ public final class AreaResolver {
         if (unassignedCells > 0) {
             // Warn once with a count, not once per area. These cells still
             // cluster; they simply never share a graph with a resolved area.
-            logger.warn("{} cell(s) resolved no ancestor at the configured area level(s) and "
-                            + "were placed in their own area(s); check the level selection if "
-                            + "this is unexpected",
+            logger.warn("{} cell(s) fall inside no region at the configured area level(s) and "
+                            + "were placed in their own area(s); check the level selection, and "
+                            + "that the regions actually cover those cells",
                     unassignedCells);
         }
         logger.info("Independent areas: {}", assignment.describe());
@@ -224,6 +245,7 @@ public final class AreaResolver {
     public static AreaAssignment resolve(List<PathObject> detections,
                                          List<MeasurementExtractor.ImageSegment> segments,
                                          List<String> imageNames,
+                                         List<PathObjectHierarchy> hierarchies,
                                          List<AreaLevelSpec> levels) {
         int n = detections == null ? 0 : detections.size();
         int[] imageIndexPerCell = new int[n];
@@ -235,52 +257,91 @@ public final class AreaResolver {
                 }
             }
         }
-        return resolve(detections, imageIndexPerCell, imageNames, levels);
-    }
-
-    /** Ancestors matched for one cell, plus whether a level failed to resolve. */
-    private static final class Resolution {
-        final List<PathObject> ancestors = new ArrayList<>();
-        boolean unresolved;
+        return resolve(detections, imageIndexPerCell, imageNames, hierarchies, levels);
     }
 
     /**
-     * Walks a cell's ancestor chain root-first and matches the level rows in
-     * order, so each level's ancestor is a descendant of the previous level's.
+     * For each image, and each level, a map of detection -> containing region.
      * <p>
-     * On the first level that matches nothing the walk stops and the cell is
-     * marked unresolved. It is then bucketed against the deepest ancestor it
-     * DID resolve -- a cell inside core A-1 but outside any Tissue annotation
-     * becomes "A-1 | unassigned", never merged across cores.
+     * Containment is asked of the hierarchy ({@code getAllDetectionsForROI},
+     * which uses detection CENTROIDS), never inferred from parent links. This
+     * is strictly read-only: nothing is reparented and no hierarchy is
+     * resolved. A user's hierarchy is theirs, and we do not know why it is
+     * shaped the way they left it.
      */
-    private static Resolution resolveOne(PathObject det, List<AreaLevelSpec> subLevels) {
-        Resolution res = new Resolution();
-        if (subLevels.isEmpty()) {
-            return res;
+    private static List<List<Map<PathObject, PathObject>>> buildContainmentMaps(
+            List<PathObjectHierarchy> hierarchies, List<AreaLevelSpec> subLevels) {
+        List<List<Map<PathObject, PathObject>>> out = new ArrayList<>();
+        if (hierarchies == null || subLevels.isEmpty()) {
+            return out;
         }
-        // Root-first, ending with the detection itself (PathObjectTools:907).
-        List<PathObject> chain = PathObjectTools.getAncestorList(det);
-        int pos = 0;
-        for (AreaLevelSpec row : subLevels) {
-            int found = -1;
-            for (int j = pos; j < chain.size(); j++) {
-                PathObject candidate = chain.get(j);
-                if (candidate == det) {
-                    break;  // the cell itself is never its own area
-                }
-                if (matches(candidate, row)) {
-                    found = j;
-                    break;
-                }
+        for (PathObjectHierarchy hierarchy : hierarchies) {
+            List<Map<PathObject, PathObject>> perLevel = new ArrayList<>();
+            for (AreaLevelSpec row : subLevels) {
+                perLevel.add(containmentForLevel(hierarchy, row));
             }
-            if (found < 0) {
-                res.unresolved = true;
-                return res;
-            }
-            res.ancestors.add(chain.get(found));
-            pos = found + 1;
+            out.add(perLevel);
         }
-        return res;
+        return out;
+    }
+
+    /** detection -> containing region, for one level of one image. */
+    private static Map<PathObject, PathObject> containmentForLevel(
+            PathObjectHierarchy hierarchy, AreaLevelSpec row) {
+        Map<PathObject, PathObject> map = new HashMap<>();
+        if (hierarchy == null) {
+            return map;
+        }
+        for (PathObject region : candidateRegions(hierarchy, row)) {
+            ROI roi = region.getROI();
+            if (roi == null || roi.isEmpty() || !roi.isArea()) {
+                continue;
+            }
+            for (PathObject det : hierarchy.getAllDetectionsForROI(roi)) {
+                // First match wins. Candidates are in a deterministic order, so
+                // a cell inside two overlapping regions of the same level lands
+                // in the same one on every run.
+                map.putIfAbsent(det, region);
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Regions that define one level, in a deterministic order.
+     * <p>
+     * Missing TMA cores are INCLUDED: "missing" is a quality flag, and any
+     * cells detected inside such a core are still real objects that have to go
+     * somewhere. Dropping them here would silently shrink the analysis.
+     */
+    private static List<PathObject> candidateRegions(PathObjectHierarchy hierarchy,
+                                                     AreaLevelSpec row) {
+        switch (row.getLevel()) {
+            case TMA_CORES -> {
+                TMAGrid grid = hierarchy.getTMAGrid();
+                if (grid == null) {
+                    return List.of();
+                }
+                // Grid order (A-1, A-2, ...) is both deterministic and the
+                // order a user reads the slide in.
+                return new ArrayList<>(grid.getTMACoreList());
+            }
+            case ANNOTATIONS -> {
+                List<PathObject> annotations = new ArrayList<>();
+                for (PathObject a : hierarchy.getAnnotationObjects()) {
+                    if (matches(a, row)) {
+                        annotations.add(a);
+                    }
+                }
+                // getAnnotationObjects() has no defined order; sort so overlap
+                // resolution and area numbering are reproducible.
+                annotations.sort(Comparator.comparing(a -> String.valueOf(a.getID())));
+                return annotations;
+            }
+            default -> {
+                return List.of();
+            }
+        }
     }
 
     private static boolean matches(PathObject candidate, AreaLevelSpec row) {

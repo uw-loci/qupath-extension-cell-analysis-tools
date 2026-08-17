@@ -464,7 +464,8 @@ public class PostHocSpatialWorkflow {
             cells.removeAll(excluded);
             cells = DetectionSelector.filterToCellsWhenPresent(cells, t.imageName);
             AreaResolver.AreaAssignment areas = AreaResolver.resolve(
-                    cells, (int[]) null, List.of(t.imageName), opts.areaLevels);
+                    cells, (int[]) null, List.of(t.imageName),
+                    List.of(hierarchy), opts.areaLevels);
 
             List<List<PathObject>> byArea = new ArrayList<>();
             for (int i = 0; i < areas.getAreaCount(); i++) {

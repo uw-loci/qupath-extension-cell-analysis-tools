@@ -290,7 +290,8 @@ public final class IndependentAreasSection extends VBox {
             }
             detections = DetectionSelector.filterToCellsWhenPresent(detections, imageName());
             AreaResolver.AreaAssignment areas = AreaResolver.resolve(
-                    detections, (int[]) null, List.of(imageName()), levels);
+                    detections, (int[]) null, List.of(imageName()),
+                    List.of(imageData.getHierarchy()), levels);
             StringBuilder sb = new StringBuilder("Current image: ").append(areas.describe());
             if (areas.isSingleArea()) {
                 sb.append(". Nothing is split -- check the level and class selection.");

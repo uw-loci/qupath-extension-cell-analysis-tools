@@ -254,7 +254,8 @@ public class CellularNeighborhoodWorkflow {
                     executeTask(detections, typeLabels, classNames, kNeighbors,
                             nNeighborhoods, seed, generateHeatmap, heatmapDirFinal,
                             radiusMode, radiusMicrons, new double[]{pxUm},
-                            areaLevels, imageNameOf(imageData), progress));
+                            areaLevels, imageNameOf(imageData), imageData.getHierarchy(),
+                            progress));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -502,8 +503,12 @@ public class CellularNeighborhoodWorkflow {
         }
         AreaResolver.AreaAssignment cohortAreas = null;
         if (AreaLevelSpec.hasSubImageLevels(areaLevels)) {
+            List<PathObjectHierarchy> hierarchies = new ArrayList<>(loaded.size());
+            for (LoadedImage li : loaded) {
+                hierarchies.add(li.imageData.getHierarchy());
+            }
             cohortAreas = AreaResolver.resolve(
-                    allDetections, imageIds, imageNames, areaLevels);
+                    allDetections, imageIds, imageNames, hierarchies, areaLevels);
         }
         final int[] areaIdsF = cohortAreas == null ? null : cohortAreas.getAreaIds();
         final List<String> areaNamesF = cohortAreas == null
@@ -693,12 +698,13 @@ public class CellularNeighborhoodWorkflow {
                                             double[] pixelSizesUm,
                                             List<AreaLevelSpec> areaLevels,
                                             String imageName,
+                                            PathObjectHierarchy hierarchy,
                                             Consumer<String> progress) throws IOException {
         double[][] centroids = MeasurementExtractor.extractCentroids(detections);
         // A single image can still hold several independent areas -- a TMA, or
         // a slide carrying more than one section -- so this resolves them even
         // though there is only one image.
-        AreaResolver.AreaAssignment areas = resolveAreas(detections, areaLevels, imageName);
+        AreaResolver.AreaAssignment areas = resolveAreas(detections, areaLevels, imageName, hierarchy);
         return runCnTask(centroids, typeLabels, classNames, kNeighbors, nNeighborhoods,
                 seed, generateHeatmap, heatmapDir, null, null, null, null,
                 radiusMode, radiusMicrons, pixelSizesUm,
@@ -715,12 +721,14 @@ public class CellularNeighborhoodWorkflow {
      * ordinary single-section run takes exactly the previous Python path.
      */
     private static AreaResolver.AreaAssignment resolveAreas(
-            List<PathObject> detections, List<AreaLevelSpec> areaLevels, String imageName) {
+            List<PathObject> detections, List<AreaLevelSpec> areaLevels,
+            String imageName, PathObjectHierarchy hierarchy) {
         if (areaLevels == null || !AreaLevelSpec.hasSubImageLevels(areaLevels)) {
             return null;
         }
         return AreaResolver.resolve(detections, (int[]) null,
-                List.of(imageName == null ? "Current image" : imageName), areaLevels);
+                List.of(imageName == null ? "Current image" : imageName),
+                List.of(hierarchy), areaLevels);
     }
 
     /** Best-effort display name for an open image. */

@@ -512,12 +512,14 @@ public class ClusteringWorkflow {
             return null;
         }
         List<String> imageNames = new ArrayList<>();
+        List<PathObjectHierarchy> hierarchies = new ArrayList<>();
         for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
             imageNames.add(segmentImageName(seg));
+            hierarchies.add(segmentHierarchy(seg));
         }
         return AreaResolver.resolve(
                 extraction.getDetections(), extraction.getImageSegments(),
-                imageNames, config.getAreaLevels());
+                imageNames, hierarchies, config.getAreaLevels());
     }
 
     /**
@@ -563,6 +565,22 @@ public class ClusteringWorkflow {
             parent = parent.getParent();
         }
         return null;
+    }
+
+    /**
+     * Hierarchy for a segment, or null when the segment carries no ImageData
+     * (the single-image path builds segments with nulls, so the caller's open
+     * image is used instead).
+     */
+    @SuppressWarnings("unchecked")
+    private PathObjectHierarchy segmentHierarchy(MeasurementExtractor.ImageSegment seg) {
+        Object data = seg.getImageData();
+        if (data instanceof ImageData<?> imageData) {
+            return imageData.getHierarchy();
+        }
+        ImageData<BufferedImage> open = qupath != null
+                ? (ImageData<BufferedImage>) qupath.getImageData() : null;
+        return open != null ? open.getHierarchy() : null;
     }
 
     /**
