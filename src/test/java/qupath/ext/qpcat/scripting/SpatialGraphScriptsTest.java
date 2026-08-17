@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Phase 2 invariants for the {@link SpatialGraphScripts} option-map
@@ -85,5 +86,83 @@ class SpatialGraphScriptsTest {
         opts.put("k", 30);
         Map<String, Object> resolved = SpatialGraphScripts.buildGraph(opts);
         assertThat(resolved.get("k")).isEqualTo(30);
+    }
+
+
+    // ---- Independent areas ------------------------------------------------
+
+    @Test
+    void areasNormaliseToCanonicalLevelMaps() {
+        var opts = new java.util.LinkedHashMap<String, Object>();
+        opts.put("areas", java.util.List.of(
+                java.util.Map.of("level", "TMA Cores"),
+                java.util.Map.of("level", "annotations", "classes", java.util.List.of("Tissue"))));
+
+        Map<String, Object> resolved = SpatialGraphScripts.buildGraph(opts);
+
+        @SuppressWarnings("unchecked")
+        var areas = (java.util.List<Map<String, Object>>) resolved.get("areas");
+        assertThat(areas).hasSize(2);
+        assertThat(areas.get(0)).containsEntry("level", "tma_cores");
+        assertThat(areas.get(1)).containsEntry("level", "annotations");
+        assertThat(areas.get(1).get("classes")).isEqualTo(java.util.List.of("Tissue"));
+    }
+
+    @Test
+    void annotationClassesAliasIsAccepted() {
+        var areas = SpatialGraphScripts.normaliseAreas(java.util.List.of(
+                java.util.Map.of("level", "annotations",
+                        "annotationClasses", java.util.List.of("Tissue", "Region"))));
+        assertThat(areas.get(0).get("classes")).isEqualTo(java.util.List.of("Tissue", "Region"));
+    }
+
+    @Test
+    void aMissingClassesListMeansAnyAnnotation() {
+        var areas = SpatialGraphScripts.normaliseAreas(
+                java.util.List.of(java.util.Map.of("level", "annotations")));
+        assertThat(areas.get(0).get("classes")).isEqualTo(java.util.List.of());
+    }
+
+    /**
+     * An unknown level THROWS rather than falling back. A script that asked to
+     * split by cores and silently got one area would produce a plausible,
+     * wrong result with nothing to indicate it -- unlike the other keys on
+     * this facade, where a bad value only changes a graph parameter.
+     */
+    @Test
+    void anUnknownLevelThrowsRatherThanFallingBack() {
+        assertThatThrownBy(() -> SpatialGraphScripts.normaliseAreas(
+                java.util.List.of(java.util.Map.of("level", "cores"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("tma_cores");
+    }
+
+    @Test
+    void listingImagesThrowsBecauseItIsImplicit() {
+        assertThatThrownBy(() -> SpatialGraphScripts.normaliseAreas(
+                java.util.List.of(java.util.Map.of("level", "images"))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("implicit");
+    }
+
+    @Test
+    void aMissingLevelKeyThrows() {
+        assertThatThrownBy(() -> SpatialGraphScripts.normaliseAreas(
+                java.util.List.of(java.util.Map.of("classes", java.util.List.of("Tissue")))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("level");
+    }
+
+    @Test
+    void aNonListAreasValueThrows() {
+        assertThatThrownBy(() -> SpatialGraphScripts.normaliseAreas("tma_cores"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("list of maps");
+    }
+
+    @Test
+    void areasAreAbsentByDefaultSoNothingIsPartitioned() {
+        assertThat(SpatialGraphScripts.buildGraph()).doesNotContainKey("areas");
+        assertThat(SpatialGraphScripts.normaliseAreas(null)).isEmpty();
     }
 }

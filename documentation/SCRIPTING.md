@@ -50,8 +50,38 @@ Static facade for graph construction. Returns a `Map<String, Object>` describing
 | `k` | int | 15 | kNN only. Number of nearest neighbors per cell. |
 | `radius` | double | -1 (auto) | Radius only. Pixel units of detection centroids. -1 = auto-derive from median nearest-neighbor distance times 5. |
 | `maxEdge` | double | -1 (no pruning) | Delaunay only. Drop edges longer than this (pixel units). -1 = keep all. |
+| `areas` | List\<Map\> | absent (one area per image) | Independent areas -- see below. No graph edge ever joins two areas. |
 
-**Returns:** the canonical options map with the four keys above. Pass it to `SpatialStatsScripts` methods as the `graphHandle` argument so every statistic references the same neighborhood definition.
+**Returns:** the canonical options map. Pass it to `SpatialStatsScripts` methods as the `graphHandle` argument so every statistic references the same neighborhood definition.
+
+#### `areas` -- independent areas
+
+An *area* is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. Cells in different areas are never neighbours, because the distance between them is not a distance through tissue.
+
+Each entry is `[level: ..., classes: [...]]`, outermost first. `images` is always the outermost level and is **implicit** -- listing it is an error, because accepting it would imply the ordering is yours to choose.
+
+| Key | Type | Notes |
+|---|---|---|
+| `level` | String | Required. `"tma_cores"` or `"annotations"`. |
+| `classes` | List\<String\> | `annotations` only. Which classes mark a boundary; omit for any annotation. `annotationClasses` is accepted as an alias. |
+
+```groovy
+// One area per TMA core. Tumor / Stroma annotations INSIDE a core stay
+// together -- they are continuous tissue, and the interface between them is
+// usually the thing being measured.
+def graph = SpatialGraphScripts.buildGraph([
+    type:  "knn",
+    k:     15,
+    areas: [[level: "tma_cores"]]
+])
+
+// Several tissue sections on one slide.
+def graph2 = SpatialGraphScripts.buildGraph([
+    areas: [[level: "annotations", classes: ["Tissue"]]]
+])
+```
+
+Unlike the other keys, an unknown `level` **throws** rather than falling back to a default. A script that asked to split by cores and silently got one area would produce a plausible, wrong result with nothing to indicate it.
 
 **Example:**
 
@@ -65,7 +95,9 @@ def graph = SpatialGraphScripts.buildGraph([
 
 ### `buildGraph() -> Map<String, Object>`
 
-Convenience overload returning the literal-default map (kNN, k = 15, radius = -1, maxEdge = -1). Equivalent to `buildGraph([:])`.
+Convenience overload returning the literal-default map (kNN, k = 15, radius = -1, maxEdge = -1, no areas). Equivalent to `buildGraph([:])`.
+
+> **These facades stage parameters; they do not execute.** As the class javadoc says, the graph is built Python-side as part of `run_clustering`. To actually RUN an analysis from a script -- with areas or without -- use the headless YAML batch (`YamlBatchScripts.runBatch`) with `clustering.area_levels`; see [YAML_SCHEMA.md](YAML_SCHEMA.md). The `spatial_stats` YAML block runs inline with clustering, so it inherits the same areas.
 
 ## SpatialStatsScripts
 

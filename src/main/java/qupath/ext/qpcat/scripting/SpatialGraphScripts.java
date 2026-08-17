@@ -3,7 +3,9 @@ package qupath.ext.qpcat.scripting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -86,6 +88,7 @@ public final class SpatialGraphScripts {
                         readDouble(value, (Double) resolved.get("radius")));
                 case "maxEdge" -> resolved.put("maxEdge",
                         readDouble(value, (Double) resolved.get("maxEdge")));
+                case "areas" -> resolved.put("areas", normaliseAreas(value));
                 default -> logger.warn(
                         "[spatial-graph] Ignoring unrecognised option key '{}'", key);
             }
@@ -99,6 +102,68 @@ public final class SpatialGraphScripts {
      */
     public static Map<String, Object> buildGraph() {
         return buildGraph(null);
+    }
+
+    /**
+     * Normalise the {@code areas} option into a canonical list of level maps.
+     * <p>
+     * Each entry is {@code [level: "tma_cores"|"annotations", classes: [...]]}.
+     * {@code images} is rejected rather than accepted-and-ignored: it is
+     * always the outermost level and is implicit, so accepting it in the list
+     * would imply the ordering is the caller's to choose.
+     * <p>
+     * An unrecognised level name throws rather than falling back. A script
+     * that asked to split by cores and silently got one area would produce a
+     * plausible, wrong result with nothing to indicate it.
+     *
+     * @throws IllegalArgumentException on a malformed or unknown level
+     */
+    @SuppressWarnings("unchecked")
+    public static List<Map<String, Object>> normaliseAreas(Object raw) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (raw == null) return out;
+        if (!(raw instanceof List<?> list)) {
+            throw new IllegalArgumentException(
+                    "areas must be a list of maps, e.g. [[level: 'tma_cores']]; got "
+                            + raw.getClass().getSimpleName());
+        }
+        for (int i = 0; i < list.size(); i++) {
+            Object item = list.get(i);
+            String path = "areas[" + i + "]";
+            if (!(item instanceof Map<?, ?> map)) {
+                throw new IllegalArgumentException(
+                        path + " must be a map, e.g. [level: 'annotations', classes: ['Tissue']]");
+            }
+            Object levelRaw = map.get("level");
+            if (levelRaw == null) {
+                throw new IllegalArgumentException(path + " is missing the required 'level' key");
+            }
+            String level = levelRaw.toString().trim().toLowerCase().replace(' ', '_');
+            if ("images".equals(level)) {
+                throw new IllegalArgumentException(
+                        path + ": 'images' is always the outermost level and is implicit; "
+                                + "list only the levels below it (tma_cores, annotations)");
+            }
+            if (!"tma_cores".equals(level) && !"annotations".equals(level)) {
+                throw new IllegalArgumentException(
+                        path + ": expected one of [tma_cores, annotations], got '" + level + "'");
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("level", level);
+            Object classes = map.containsKey("classes")
+                    ? map.get("classes") : map.get("annotationClasses");
+            List<String> classList = new ArrayList<>();
+            if (classes instanceof List<?> cl) {
+                for (Object c : cl) {
+                    if (c != null) classList.add(c.toString());
+                }
+            } else if (classes != null) {
+                classList.add(classes.toString());
+            }
+            entry.put("classes", classList);
+            out.add(entry);
+        }
+        return out;
     }
 
     /** Visible for testing. Normalise the graph-type token. */

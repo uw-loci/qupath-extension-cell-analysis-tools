@@ -956,6 +956,19 @@ public class ClusteringWorkflow {
             lines.add("// Algorithm: " + algo + "  params: " + paramsStr);
             lines.add("// Normalization: " + config.getNormalization().getId()
                     + "  Embedding: " + config.getEmbeddingMethod().getId());
+            if (config.hasSubImageAreaLevels()) {
+                // Only recorded when it changes anything. A partitioned graph
+                // yields different clusters from one built across a whole
+                // slide, so re-running without this does NOT reproduce the run.
+                StringBuilder areaLine = new StringBuilder("// Independent areas: ");
+                boolean first = true;
+                for (var spec : config.getAreaLevels()) {
+                    if (!first) areaLine.append(" > ");
+                    areaLine.append(spec.toString());
+                    first = false;
+                }
+                lines.add(areaLine.toString());
+            }
             lines.add("// Result: " + result.getNClusters() + " clusters, "
                     + result.getNCells() + " cells"
                     + (crossImage ? " across " + nImages + " images" : ""));

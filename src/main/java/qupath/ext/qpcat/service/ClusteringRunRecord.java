@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.service;
 
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
@@ -92,7 +93,16 @@ public final class ClusteringRunRecord {
             sb.append("  ").append(mapToString(config.getEmbeddingParams()));
         }
         sb.append('\n');
-        sb.append("Batch correction : ").append(config.isEnableBatchCorrection()).append('\n');
+        sb.append("Batch correction : ").append(config.isEnableBatchCorrection());
+        if (config.isEnableBatchCorrection()) {
+            sb.append("  (batch key: ").append(config.getBatchKey()).append(')');
+        }
+        sb.append('\n');
+        // Independent areas change the RESULT, not just the runtime: a graph
+        // partitioned per TMA core produces different clusters from one built
+        // across the whole slide. A record that omitted them would describe a
+        // run nobody could reproduce.
+        sb.append("Independent areas: ").append(describeAreaLevels(config)).append('\n');
         sb.append("Spatial smoothing: ").append(config.isEnableSpatialSmoothing());
         if (config.isEnableSpatialSmoothing()) {
             sb.append("  (").append(config.getSpatialSmoothingIterations()).append(" iter, graph: ")
@@ -141,6 +151,27 @@ public final class ClusteringRunRecord {
         sb.append("InstanSeg does), but a naive re-run would silently re-cluster a single image\n");
         sb.append("when the original was multi-image, producing different labels. Reproduce\n");
         sb.append("deliberately via routes 1-3 above; for servers use route 3 (YAML batch).\n");
+        return sb.toString();
+    }
+
+    /**
+     * Human-readable description of the independent-area levels, e.g.
+     * {@code "images > TMA cores > Annotations [Tissue]"}. Always names the
+     * implicit images level, so the record shows the whole partition rather
+     * than only the part the user configured.
+     */
+    private static String describeAreaLevels(ClusteringConfig config) {
+        List<AreaLevelSpec> levels = config.getAreaLevels();
+        if (!config.hasSubImageAreaLevels()) {
+            return "images only (one area per image; cells within an image share a graph)";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (AreaLevelSpec spec : levels) {
+            if (sb.length() > 0) {
+                sb.append(" > ");
+            }
+            sb.append(spec.toString());
+        }
         return sb.toString();
     }
 
