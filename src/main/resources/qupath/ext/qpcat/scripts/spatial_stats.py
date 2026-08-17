@@ -1403,6 +1403,144 @@ def build_smoothing_adjacency_squidpy(
     return sp.diags(1.0 / row_sums) @ conn
 
 
+def banksy_k_cap(k_geom, n_block, max_m=1):
+    """Largest usable k_geom for a block of n_block cells.
+
+    banksy's generate_spatial_weights_fixed_nbrs asks sklearn for
+    `num_neighbours * (m + 1)` neighbours (banksy/main.py:158), so with
+    max_m=1 the real constraint is 2*k <= n-1, NOT k <= n-1. The old global
+    cap used the latter, which is why a 20-cell run with k_geom=15 raised
+    inside sklearn rather than being clamped.
+
+    Returns 0 when the block cannot support a graph at all.
+    """
+    return max(0, min(int(k_geom), (int(n_block) - 1) // (int(max_m) + 1)))
+
+
+def build_banksy_weights(
+    spatial_data,
+    k_geom=15,
+    area_ids=None,
+    max_m=1,
+    nbr_weight_decay="scaled_gaussian",
+):
+    """Per-area BANKSY neighbour weights, assembled block-diagonally.
+
+    Returns a banksy_dict shaped exactly as initialize_banksy's output --
+    {decay: {"weights": {m: csr}}} -- so the rest of the BANKSY pipeline
+    (generate_banksy_matrix -> pca_umap -> run_Leiden_partition) runs
+    UNCHANGED on the full cell set.
+
+    That is the whole point of cutting the seam here. Running all of BANKSY
+    per area would give each area its own Leiden partition, and cluster 3 in
+    one core would then be unrelated to cluster 3 in the next -- destroying
+    the cross-area comparison the partitioning exists to make possible. Only
+    the neighbour graph is per area; clustering stays global.
+
+    It also leaves concatenate_all's z-score global (banksy/main.py:348).
+    Reassembling per-area augmented MATRICES instead would z-score each area
+    separately, silently regressing out per-core mean expression -- an
+    undeclared batch correction that would make "this cluster is CD8-high"
+    mean "high relative to its own core".
+
+    A single area yields one block and the identity permutation, so the
+    result is what initialize_banksy would have produced on its own.
+    """
+    import contextlib
+
+    import anndata as ad
+    import scipy.sparse as sp
+    from banksy.initialize_banksy import initialize_banksy
+
+    coords = np.asarray(spatial_data, dtype=np.float64)
+    n = coords.shape[0]
+    slices = area_slices(area_ids, n)
+
+    blocks = {m: [] for m in range(int(max_m) + 1)}
+    order = []
+    reduced = []
+    degenerate = []
+
+    for area_id, idx in slices:
+        n_area = int(idx.size)
+        order.append(idx)
+        k_area = banksy_k_cap(k_geom, n_area, max_m)
+        if k_area < 1:
+            # Too few cells for any neighbour graph. An all-zero block means
+            # these cells contribute no neighbourhood term and cluster on
+            # their own expression -- the honest answer for a 2-cell core.
+            # Dropping them instead would misalign every downstream index,
+            # because labels map back positionally on the Java side.
+            degenerate.append((area_id, n_area))
+            for m in range(int(max_m) + 1):
+                dtype = np.float64 if m == 0 else np.complex128
+                blocks[m].append(sp.csr_matrix((n_area, n_area), dtype=dtype))
+            continue
+        if k_area < int(k_geom):
+            reduced.append((area_id, n_area, k_area))
+
+        block = ad.AnnData(X=np.zeros((n_area, 1), dtype=np.float32))
+        block.obsm["spatial"] = coords[idx]
+        block.obs["x"] = coords[idx, 0]
+        block.obs["y"] = coords[idx, 1]
+
+        # banksy prints diagnostics to stdout, which is also Appose's protocol
+        # channel; on a full pipe that can stall the worker.
+        with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
+            banksy_dict = initialize_banksy(
+                block,
+                ("x", "y", "spatial"),
+                num_neighbours=k_area,
+                nbr_weight_decay=nbr_weight_decay,
+                max_m=int(max_m),
+                plt_edge_hist=False,
+                plt_nbr_weights=False,
+                plt_agf_angles=False,
+                plt_theta=False,
+            )
+        weights = banksy_dict[nbr_weight_decay]["weights"]
+        for m in range(int(max_m) + 1):
+            blocks[m].append(sp.csr_matrix(weights[m]))
+
+    if reduced:
+        smallest = min(reduced, key=lambda r: r[2])
+        logger.warning(
+            "BANKSY: %d area(s) had k_geom reduced below %d to fit the area size "
+            "(smallest: area %d, %d cells, k_geom=%d)",
+            len(reduced),
+            int(k_geom),
+            smallest[0],
+            smallest[1],
+            smallest[2],
+        )
+    if degenerate:
+        logger.warning(
+            "BANKSY: %d area(s) have too few cells for a neighbour graph and were "
+            "clustered on their own expression only (smallest has %d cell(s)); "
+            "their results are not spatially informed",
+            len(degenerate),
+            min(d[1] for d in degenerate),
+        )
+
+    concatenated = np.concatenate(order) if order else np.zeros(0, dtype=np.int64)
+    inverse = np.argsort(concatenated)
+    assembled = {}
+    for m in range(int(max_m) + 1):
+        if len(blocks[m]) == 1:
+            assembled[m] = blocks[m][0]
+        else:
+            assembled[m] = sp.block_diag(blocks[m], format="csr")[inverse, :][
+                :, inverse
+            ]
+
+    if len(slices) > 1:
+        logger.info(
+            "BANKSY neighbour graph built per area: %d areas, no edges between them",
+            len(slices),
+        )
+    return {nbr_weight_decay: {"weights": assembled}}
+
+
 def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
     """Legacy smoothing adjacency: sklearn kNN, (A + I) row-normalised.
 

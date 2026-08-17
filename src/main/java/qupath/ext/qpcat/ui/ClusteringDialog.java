@@ -133,6 +133,13 @@ public class ClusteringDialog {
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
     private CheckBox batchCorrectionCheck;
+    private ComboBox<String> batchKeyCombo;
+
+    // Independent areas: which cells may share a spatial graph at all.
+    private IndependentAreasSection areasSection;
+
+    private static final String BATCH_KEY_IMAGES_LABEL = "Images";
+    private static final String BATCH_KEY_AREAS_LABEL = "Independent areas";
 
     // Spatial Statistics Expansion (v1) controls
     private ComboBox<String> spatialGraphTypeCombo;
@@ -743,25 +750,62 @@ public class ClusteringDialog {
                 + "the platform support matrix.");
         batchCorrectionCheck.setTooltip(harmonypyAvailable ? activeTooltip : unavailableTooltip);
 
-        // Enable batch correction only when (a) "All project images" is
-        // selected AND (b) the harmonypy probe succeeded at init time.
-        // If harmonypy is missing we keep the checkbox visibly disabled
-        // even when scope changes, so the user can see the feature exists
-        // but understands it is currently unusable.
-        scopeSection.addScopeChangeListener(() -> {
-            boolean all = scopeSection.isAllImages();
-            batchCorrectionCheck.setDisable(!all || !harmonypyAvailable);
-            if (!all) batchCorrectionCheck.setSelected(false);
-            // The images decide which measurements exist, so the list follows
-            // the scope rather than whatever image is open.
-            populateMeasurements();
-        });
+        // What Harmony corrects over. Images is the historical behaviour;
+        // areas lets a TMA inside ONE image be corrected core-by-core, which
+        // per-image labels cannot express at all.
+        batchKeyCombo = new ComboBox<>();
+        batchKeyCombo.getItems().addAll(BATCH_KEY_IMAGES_LABEL, BATCH_KEY_AREAS_LABEL);
+        batchKeyCombo.setValue(BATCH_KEY_IMAGES_LABEL);
+        batchKeyCombo.setTooltip(Tooltips.of(
+                "Which grouping Harmony treats as a batch.\n\n"
+                + "Images: one batch per image (the default).\n\n"
+                + "Independent areas: one batch per area, so a 55-core TMA in a single "
+                + "image can be corrected core by core.\n\n"
+                + "This is a separate decision from splitting the spatial graph. "
+                + "Splitting the graph by core is about geometry and is almost always "
+                + "right; treating each core as a batch is about technical variation, "
+                + "and with small cores it can correct real biology away."));
+        HBox batchKeyRow = new HBox(8, tipLabel("Batch key:", batchKeyCombo), batchKeyCombo);
+        batchKeyRow.setAlignment(Pos.CENTER_LEFT);
+        batchKeyRow.setPadding(new Insets(0, 0, 0, 20));
+        batchKeyRow.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
+        batchKeyRow.managedProperty().bind(batchCorrectionCheck.selectedProperty());
 
         // ---- Spatial statistics expansion (v1) ----
         TitledPane spatialStatsPane = createSpatialStatsPane();
 
+        // Enable batch correction when (a) harmonypy is present AND (b) there
+        // is more than one batch to correct over -- either several images, or
+        // independent areas within one image. Before areas existed only the
+        // first was possible, so the gate was scope-only.
+        // If harmonypy is missing we keep the checkbox visibly disabled even
+        // when scope changes, so the user can see the feature exists but
+        // understands it is currently unusable.
+        Runnable refreshBatchGate = () -> {
+            boolean severalImages = scopeSection.isAllImages();
+            boolean severalAreas = areasSection != null
+                    && areasSection.hasSubImageLevels();
+            boolean usable = harmonypyAvailable && (severalImages || severalAreas);
+            batchCorrectionCheck.setDisable(!usable);
+            if (!usable) {
+                batchCorrectionCheck.setSelected(false);
+            }
+            if (!severalAreas) {
+                batchKeyCombo.setValue(BATCH_KEY_IMAGES_LABEL);
+            }
+            batchKeyCombo.setDisable(!severalAreas);
+        };
+        scopeSection.addScopeChangeListener(() -> {
+            refreshBatchGate.run();
+            // The images decide which measurements exist, so the list follows
+            // the scope rather than whatever image is open.
+            populateMeasurements();
+        });
+        areasSection.addChangeListener(refreshBatchGate);
+        refreshBatchGate.run();
+
         VBox box = new VBox(5, generatePlotsCheck, spatialAnalysisCheck,
-                smoothingRow, batchCorrectionCheck, spatialStatsPane);
+                smoothingRow, batchCorrectionCheck, batchKeyRow, spatialStatsPane);
         return box;
     }
 
@@ -919,8 +963,14 @@ public class ClusteringDialog {
         // ---- v0.3 Viewer overlay + measurements block ----
         VBox overlayBlock = createViewerOverlayBlock();
 
-        VBox content = new VBox(6, graphBox, statsBox, permutationLabel, banksyNote,
-                overlayBlock);
+        // ---- Independent areas ----
+        // Sits above the graph constructor because it decides which cells may
+        // be joined at all; the constructor only decides how.
+        areasSection = new IndependentAreasSection(qupath);
+        areasSection.applyAutoDetectedDefault();
+
+        VBox content = new VBox(6, areasSection, new Separator(), graphBox, statsBox,
+                permutationLabel, banksyNote, overlayBlock);
 
         TitledPane pane = new TitledPane("Spatial statistics", content);
         pane.setExpanded(false);
@@ -1775,6 +1825,9 @@ public class ClusteringDialog {
         config.setEnableSpatialSmoothing(spatialSmoothingCheck.isSelected());
         config.setSpatialSmoothingIterations(smoothingIterationsSpinner.getValue());
         config.setEnableBatchCorrection(batchCorrectionCheck.isSelected());
+        config.setAreaLevels(areasSection.getAreaLevels());
+        config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
+                ? ClusteringConfig.BATCH_KEY_AREAS : ClusteringConfig.BATCH_KEY_IMAGES);
 
         // Spatial statistics expansion (v1)
         String graphTypeLabel = spatialGraphTypeCombo.getValue();
@@ -2116,6 +2169,10 @@ public class ClusteringDialog {
         spatialSmoothingCheck.setSelected(config.isEnableSpatialSmoothing());
         smoothingIterationsSpinner.getValueFactory().setValue(config.getSpatialSmoothingIterations());
         batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
+        areasSection.setAreaLevels(config.getAreaLevels());
+        batchKeyCombo.setValue(
+                ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey())
+                        ? BATCH_KEY_AREAS_LABEL : BATCH_KEY_IMAGES_LABEL);
 
         // Spatial statistics expansion (v1) -- the saved-config schema may
         // pre-date these fields; the ClusteringConfig defaults cover that case.

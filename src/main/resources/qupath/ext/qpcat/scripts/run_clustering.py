@@ -689,12 +689,23 @@ elif algorithm == "banksy":
     # caused the ImportError). We drive the documented pipeline directly, which
     # also avoids run_banksy_multiparam's mandatory matplotlib plotting.
     import anndata as ad
-    from banksy.initialize_banksy import initialize_banksy
     from banksy.embed_banksy import generate_banksy_matrix
     from banksy_utils.umap_pca import pca_umap
     from banksy.cluster_methods import run_Leiden_partition
 
-    lambda_param = algorithm_params.get("lambda_param", 0.2)
+    try:
+        from spatial_stats import banksy_k_cap, build_banksy_weights
+    except ImportError as _e:
+        raise RuntimeError(
+            "spatial_stats module is not available -- the QP-CAT analysis "
+            "environment was not initialized with it. Rebuild the analysis "
+            "environment (Utilities > Rebuild) and try again."
+        ) from _e
+
+    # float(), not int. run_Leiden_partition skips any lambda key that is not a
+    # float, so a JSON 0 or 1 yields an empty results_df and surfaces one step
+    # later as "BANKSY did not produce cluster labels".
+    lambda_param = float(algorithm_params.get("lambda_param", 0.2))
     k_geom = algorithm_params.get("k_geom", 15)
     resolution = algorithm_params.get("resolution", 0.7)
     pca_dims = algorithm_params.get("pca_dims", pref_banksy_pca_dims)
@@ -702,7 +713,9 @@ elif algorithm == "banksy":
     # Cap parameters to what the dataset supports (BANKSY errors otherwise on
     # small cell counts or few markers). The BANKSY matrix has (max_m+1) blocks
     # of n_markers columns (max_m=1 here), so PCA dims cannot exceed ~2*n_markers.
-    k_geom = max(2, min(int(k_geom), n_cells - 1))
+    # banksy asks sklearn for k_geom * (m + 1) neighbours, so the real bound is
+    # 2*k_geom <= n-1; the per-area builder applies the same cap per area.
+    k_geom = max(2, banksy_k_cap(k_geom, n_cells, max_m=1))
     capped_pca = max(2, min(int(pca_dims), n_cells - 1, 2 * n_markers))
     if capped_pca != pca_dims:
         logger.warning(
@@ -719,15 +732,15 @@ elif algorithm == "banksy":
         pca_dims,
     )
 
-    # Build AnnData with expression and spatial coordinates. BANKSY's coord_keys
-    # is (x_obs_col, y_obs_col, spatial_obsm_key); initialize_banksy reads the
-    # coordinates from adata.obsm[coord_keys[2]].
+    # Expression AnnData for the augmented-matrix step. The coordinates are not
+    # read from here any more -- build_banksy_weights owns the neighbour graph
+    # and hands back the same {decay: {"weights": ...}} structure
+    # initialize_banksy would have produced.
     adata_banksy = ad.AnnData(X=df_norm.values.astype(np.float32))
     adata_banksy.var_names = pd.Index(list(marker_names))
     adata_banksy.obsm["spatial"] = spatial_data
     adata_banksy.obs["x"] = spatial_data[:, 0]
     adata_banksy.obs["y"] = spatial_data[:, 1]
-    coord_keys = ("x", "y", "spatial")
 
     # BANKSY prints a large volume of diagnostics via print() -> sys.stdout,
     # which is ALSO Appose's protocol channel. Those lines surface as
@@ -735,20 +748,22 @@ elif algorithm == "banksy":
     # stdout for the duration of each BANKSY call. task.update() stays OUTSIDE
     # the redirect so progress messages still reach the protocol channel.
     _progress(
-        0.46, "BANKSY: initializing spatial neighbor graph (%d cells)..." % n_cells
+        0.46,
+        "BANKSY: initializing spatial neighbor graph (%d cells, %d area(s))..."
+        % (n_cells, n_areas),
     )
-    with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
-        banksy_dict = initialize_banksy(
-            adata_banksy,
-            coord_keys,
-            num_neighbours=k_geom,
-            nbr_weight_decay="scaled_gaussian",
-            max_m=1,
-            plt_edge_hist=False,
-            plt_nbr_weights=False,
-            plt_agf_angles=False,
-            plt_theta=False,
-        )
+    # Neighbour weights are built PER AREA and assembled block-diagonally, so a
+    # cell's spatial context never includes a cell from another core, section
+    # or image. Everything after this runs on the full cell set, which keeps
+    # one global Leiden partition and therefore cluster labels that mean the
+    # same thing in every area.
+    banksy_dict = build_banksy_weights(
+        spatial_data,
+        k_geom=k_geom,
+        area_ids=area_ids_list,
+        max_m=1,
+        nbr_weight_decay="scaled_gaussian",
+    )
 
     _progress(0.49, "BANKSY: building spatially-augmented feature matrix...")
     with open(os.devnull, "w") as _devnull, contextlib.redirect_stdout(_devnull):
