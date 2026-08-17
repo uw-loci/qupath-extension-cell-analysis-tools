@@ -2033,14 +2033,41 @@ key, so they are analyzed as the single population the merge made them.
 scope control). Every image in the scope is analyzed independently.
 
 **Regions (analysis windows).**
-- *Whole image* -- all cells per image.
-- *Class: <name>* -- cells inside annotations of that class, in every image (by
-  class name). Turn on **"One result per annotation"** to analyze each annotation
-  separately (a row per annotation); leave it off to merge a class's annotations
-  per image.
-- *Selected annotations (current image)* -- ad hoc, for the open image only.
+
+The dialog uses the shared **Independent areas** control (the same one used by
+the clustering and neighborhood workflows) to partition cells into separately-analyzed
+pieces. Two modes:
+
+- *Independent areas configured* -- the hierarchy levels you specify (e.g., TMA cores,
+  tissue sections) partition the cells. Each area gets its own window and spatial graph.
+  No graph ever crosses an area boundary. See the *Independent areas* section below.
+- *No independent areas* -- whole-image mode: all cells per image. Or use **Selected
+  annotations (current image)** for ad hoc analysis of a particular annotation from the
+  open image.
+
 Annotations are windows **only** -- detections are never reparented, so a cell can
 belong to several windows. Unclassified (null-class) cells are excluded.
+
+**Independent areas.**
+
+By default, each image is analyzed as one piece. You can partition cells **below**
+the image level by configuring **Independent areas**. Each area gets its own spatial
+graph (no graph ever crosses an area boundary), and the results table groups outputs
+per area instead of per image. When to use this:
+
+- **TMA slides:** separate each core into its own window.
+- **Multi-section slides:** each tissue section analyzed independently.
+
+To configure:
+
+1. Expand the **Independent areas** section.
+2. Click **Add level** to define one partitioning level (e.g., `Tissue` annotations
+   to mark cores or sections).
+3. The preview shows how many areas were found and flags any cells with no assignment.
+   Empty areas are skipped; sparse areas are handled (spatial graph parameters are
+   capped per area so one small core does not reduce k for the rest).
+4. For multi-image scope, the same area levels are applied to every image. Cells match
+   an area by their annotation ancestry.
 
 **Exclusions.** Under "Exclude cells inside annotation classes", tick classes
 (e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.
