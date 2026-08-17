@@ -157,6 +157,37 @@ try:
 except NameError:
     grp_names = None
 
+# Independent areas. An area is a piece of tissue physically separate from
+# every other piece -- a TMA core, one of several sections on a slide, an
+# image. Windows are built within an area and never across one, because a
+# neighbour in another core is not a neighbour.
+#
+# Absent, the image IS the area, which is the previous behaviour and still
+# correct -- just the coarsest possible partition.
+try:
+    area_ids_arr = np.asarray(area_ids, dtype=np.int64)
+    if area_ids_arr.shape[0] != n_cells:
+        raise ValueError(
+            "area_ids length (%d) does not match the cell count (%d)"
+            % (area_ids_arr.shape[0], n_cells)
+        )
+except NameError:
+    area_ids_arr = None
+try:
+    area_names_list = list(area_names)
+except NameError:
+    area_names_list = None
+
+# The unit every window and every per-sample row is keyed on.
+if area_ids_arr is not None:
+    sample_ids_arr = area_ids_arr
+    sample_names_list = area_names_list
+    sample_kind = "area"
+else:
+    sample_ids_arr = image_ids_arr
+    sample_names_list = img_names
+    sample_kind = "image"
+
 # Window definition: "knn" (default) or "radius" (physical microns). For radius
 # mode, pixel_sizes_um gives the per-image um/px so the radius converts to pixels
 # per block (pixel size may differ across images).
@@ -188,20 +219,21 @@ def _radius_px_for(image_index):
 # n_cn cannot exceed the number of cells; k handled per-image below.
 n_cn = max(1, min(n_cn, n_cells))
 
-# Distinct source images (joint mode requires >1 to mean anything).
-if image_ids_arr is not None:
-    unique_images = np.unique(image_ids_arr)
-    multi_image = unique_images.shape[0] > 1
+# Distinct analysis units -- areas when supplied, otherwise images.
+if sample_ids_arr is not None:
+    unique_samples = np.unique(sample_ids_arr)
+    multi_sample = unique_samples.shape[0] > 1
 else:
-    unique_images = np.array([0])
-    multi_image = False
+    unique_samples = np.array([0])
+    multi_sample = False
 logger.info(
-    "k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_images=%d, multi_image=%s",
+    "k_neighbors=%d, n_neighborhoods=%d, n_classes=%d, n_%ss=%d, multi=%s",
     k,
     n_cn,
     n_classes,
-    unique_images.shape[0],
-    multi_image,
+    sample_kind,
+    unique_samples.shape[0],
+    multi_sample,
 )
 
 from sklearn.neighbors import NearestNeighbors
@@ -278,21 +310,27 @@ def _composition_for_block(img_key, block_coords, block_labels, radius_px=None):
 # in single-image mode this is one block over all cells.
 radius_mode = (win_mode == "radius") and radius_um > 0
 composition = np.zeros((n_cells, n_classes), dtype=np.float64)
-if multi_image:
+if multi_sample:
     _update(
-        "Building per-image spatial windows (%s) across %d images..."
+        "Building per-%s spatial windows (%s) across %d %ss..."
         % (
+            sample_kind,
             ("radius=%.1fum" % radius_um) if radius_mode else ("k=%d" % k),
-            unique_images.shape[0],
+            unique_samples.shape[0],
+            sample_kind,
         )
     )
-    for img in unique_images:
-        sel = np.flatnonzero(image_ids_arr == img)
+    for unit in unique_samples:
+        sel = np.flatnonzero(sample_ids_arr == unit)
         if sel.size == 0:
             continue
-        r_px = _radius_px_for(int(img)) if radius_mode else None
+        # Pixel size is a property of the IMAGE, so look it up via any cell in
+        # this area -- every cell in an area shares an image by construction,
+        # because images are always the outermost area level.
+        img_idx = int(image_ids_arr[sel[0]]) if image_ids_arr is not None else 0
+        r_px = _radius_px_for(img_idx) if radius_mode else None
         composition[sel, :] = _composition_for_block(
-            int(img), coords[sel, :], labels_arr[sel], radius_px=r_px
+            int(unit), coords[sel, :], labels_arr[sel], radius_px=r_px
         )
 else:
     if radius_mode:
@@ -390,29 +428,36 @@ per_sample_json = ""
 per_sample_heatmap_path = ""
 group_json = ""
 group_heatmap_path = ""
-if multi_image:
-    _update("Summarizing per-sample neighborhood proportions...")
-    n_images = unique_images.shape[0]
-    # Map the (possibly sparse) image ids to 0..n_images-1 row order.
-    img_order = list(unique_images)
-    sample_counts = np.zeros((n_images, n_cn), dtype=np.int64)
-    for r, img in enumerate(img_order):
-        sel = image_ids_arr == img
-        cn_for_img = cn_labels[sel]
+if multi_sample:
+    _update("Summarizing per-%s neighborhood proportions..." % sample_kind)
+    n_samples = unique_samples.shape[0]
+    # Map the (possibly sparse) unit ids to 0..n_samples-1 row order.
+    img_order = list(unique_samples)
+    sample_counts = np.zeros((n_samples, n_cn), dtype=np.int64)
+    for r, unit in enumerate(img_order):
+        sel = sample_ids_arr == unit
+        cn_for_unit = cn_labels[sel]
         for cn in range(n_cn):
-            sample_counts[r, cn] = int(np.count_nonzero(cn_for_img == cn))
+            sample_counts[r, cn] = int(np.count_nonzero(cn_for_unit == cn))
     row_totals = sample_counts.sum(axis=1, keepdims=True).astype(np.float64)
     row_totals[row_totals == 0] = 1.0
     sample_props = sample_counts / row_totals
 
-    if img_names is not None and len(img_names) >= int(max(img_order)) + 1:
-        sample_labels = [str(img_names[int(i)]) for i in img_order]
+    if (
+        sample_names_list is not None
+        and len(sample_names_list) >= int(max(img_order)) + 1
+    ):
+        sample_labels = [str(sample_names_list[int(i)]) for i in img_order]
     else:
-        sample_labels = ["image %d" % int(i) for i in img_order]
+        sample_labels = ["%s %d" % (sample_kind, int(i)) for i in img_order]
 
     per_sample_json = json.dumps(
         {
+            # Key kept for the existing Java reader. The values are area labels
+            # when areas are configured, which sample_kind states explicitly so a
+            # consumer is never left guessing what a row is.
             "image_names": sample_labels,
+            "sample_kind": sample_kind,
             "n_neighborhoods": n_cn,
             "proportions": sample_props.tolist(),
             "counts": sample_counts.tolist(),
@@ -433,11 +478,25 @@ if multi_image:
         )
 
     # Work "B": per-group mean proportions for condition/treatment comparison.
-    if group_labels_arr is not None and group_labels_arr.shape[0] >= n_images:
+    # group_labels is indexed per IMAGE (an experimental condition read from
+    # image metadata), while the rows above may now be AREAS. Map each row back
+    # through its image so a per-core row still lands in its slide's group;
+    # indexing group_labels with an area id would silently read another
+    # image's condition.
+    row_image_index = []
+    for unit in img_order:
+        if sample_kind == "area" and image_ids_arr is not None:
+            member = np.flatnonzero(sample_ids_arr == unit)
+            row_image_index.append(int(image_ids_arr[member[0]]))
+        else:
+            row_image_index.append(int(unit))
+
+    if group_labels_arr is not None and (
+        group_labels_arr.shape[0] > max(row_image_index)
+    ):
         _update("Summarizing per-group neighborhood proportions...")
-        # group_labels is per IMAGE index, aligned to img_order rows.
         grp_for_row = np.array(
-            [int(group_labels_arr[int(i)]) for i in img_order], dtype=np.int64
+            [int(group_labels_arr[i]) for i in row_image_index], dtype=np.int64
         )
         unique_groups = np.unique(grp_for_row[grp_for_row >= 0])
         if unique_groups.size >= 1:
@@ -505,16 +564,25 @@ def _region_adjacency():
     # of cells do not risk an OOM in the Appose worker).
     block = 100000
     adj = np.zeros((n_cn, n_cn), dtype=np.float64)
-    imgs = unique_images if multi_image else np.array([0])
-    for img in imgs:
+    # Region adjacency is a neighbour count, so it partitions on the same unit
+    # as the windows: two CNs in different cores are not adjacent.
+    units = unique_samples if multi_sample else np.array([0])
+    for unit in units:
         sel = (
-            np.flatnonzero(image_ids_arr == img) if multi_image else np.arange(n_cells)
+            np.flatnonzero(sample_ids_arr == unit)
+            if multi_sample
+            else np.arange(n_cells)
         )
         if sel.size < 2:
             continue
         lab = cn_labels[sel].astype(np.int64)
-        r_px = _radius_px_for(int(img)) if radius_mode else None
-        kind, neigh_struct = _image_neighbors(int(img), coords[sel], r_px)
+        img_idx = (
+            int(image_ids_arr[sel[0]])
+            if (multi_sample and image_ids_arr is not None)
+            else 0
+        )
+        r_px = _radius_px_for(img_idx) if radius_mode else None
+        kind, neigh_struct = _image_neighbors(int(unit), coords[sel], r_px)
         flat = np.zeros(n_cn * n_cn, dtype=np.int64)
         n_sel = sel.size
         for start in range(0, n_sel, block):

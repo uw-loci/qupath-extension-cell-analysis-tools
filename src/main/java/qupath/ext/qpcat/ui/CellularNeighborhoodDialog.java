@@ -87,6 +87,7 @@ public class CellularNeighborhoodDialog {
     private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
 
     private volatile CellularNeighborhoodWorkflow activeWorkflow;
+    private IndependentAreasSection areasSection;
 
     public CellularNeighborhoodDialog(QuPathGUI qupath) {
         this.qupath = qupath;
@@ -110,6 +111,8 @@ public class CellularNeighborhoodDialog {
                 createCellTypeSection(),
                 new Separator(),
                 createScopeSection(),
+                new Separator(),
+                createAreasSection(),
                 new Separator(),
                 createSettingsSection(),
                 new Separator(),
@@ -149,6 +152,17 @@ public class CellularNeighborhoodDialog {
         body.setWrapText(true);
         VBox box = new VBox(4, title, body);
         return box;
+    }
+
+    /**
+     * Independent areas. A window is built within an area and never across
+     * one: a cell in the next TMA core is not a neighbour, so counting it in
+     * a composition vector invents a mixture the tissue does not contain.
+     */
+    private VBox createAreasSection() {
+        areasSection = new IndependentAreasSection(qupath);
+        areasSection.applyAutoDetectedDefault();
+        return areasSection;
     }
 
     private VBox createCellTypeSection() {
@@ -495,6 +509,7 @@ public class CellularNeighborhoodDialog {
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnResult result =
                         workflow.run(k, nCn, 0, heatmap, radiusMode, radiusMicrons,
+                                areasSection.getAreaLevels(),
                                 progress);
 
                 Platform.runLater(() -> {
@@ -543,7 +558,8 @@ public class CellularNeighborhoodDialog {
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnProjectResult result =
                         workflow.runProject(entries, k, nCn, 0, heatmap, groupKey,
-                                radiusMode, radiusMicrons, progress);
+                                radiusMode, radiusMicrons,
+                                areasSection.getAreaLevels(), progress);
 
                 Platform.runLater(() -> {
                     setRunActive(false);

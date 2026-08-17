@@ -5,7 +5,9 @@ import org.apposed.appose.Service.ResponseType;
 import org.apposed.appose.Service.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -190,6 +192,7 @@ public class CellularNeighborhoodWorkflow {
      */
     public CnResult run(int kNeighbors, int nNeighborhoods, int seed,
                         boolean generateHeatmap, boolean radiusMode, double radiusMicrons,
+                        List<AreaLevelSpec> areaLevels,
                         Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
@@ -250,7 +253,8 @@ public class CellularNeighborhoodWorkflow {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     executeTask(detections, typeLabels, classNames, kNeighbors,
                             nNeighborhoods, seed, generateHeatmap, heatmapDirFinal,
-                            radiusMode, radiusMicrons, new double[]{pxUm}, progress));
+                            radiusMode, radiusMicrons, new double[]{pxUm},
+                            areaLevels, imageNameOf(imageData), progress));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -363,6 +367,7 @@ public class CellularNeighborhoodWorkflow {
                                       int kNeighbors, int nNeighborhoods, int seed,
                                       boolean generateHeatmap, String groupMetadataKey,
                                       boolean radiusMode, double radiusMicrons,
+                                      List<AreaLevelSpec> areaLevels,
                                       Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
         cancelled = false;
@@ -488,6 +493,22 @@ public class CellularNeighborhoodWorkflow {
         // 6. Run the joint Python task.
         report(progress, "Sending " + totalCells + " cells from " + loaded.size()
                 + " images to Python...");
+        // Independent areas across the whole cohort. Built from the SAME
+        // concatenated detection order the coords were built from, so
+        // areaIds[i] describes coords[i] by construction.
+        List<PathObject> allDetections = new ArrayList<>(totalCells);
+        for (LoadedImage li : loaded) {
+            allDetections.addAll(li.detections);
+        }
+        AreaResolver.AreaAssignment cohortAreas = null;
+        if (AreaLevelSpec.hasSubImageLevels(areaLevels)) {
+            cohortAreas = AreaResolver.resolve(
+                    allDetections, imageIds, imageNames, areaLevels);
+        }
+        final int[] areaIdsF = cohortAreas == null ? null : cohortAreas.getAreaIds();
+        final List<String> areaNamesF = cohortAreas == null
+                ? null : cohortAreas.getAreaNames();
+
         final int[] groupLabelsF = groupLabels;
         final List<String> groupNamesF = groupNames;
         Map<String, Object> resultMap;
@@ -496,7 +517,7 @@ public class CellularNeighborhoodWorkflow {
                     runCnTask(coords, typeLabels, classNames, kNeighbors, nNeighborhoods,
                             seed, generateHeatmap, resultsDir, imageIds, imageNames,
                             groupLabelsF, groupNamesF, radiusMode, radiusMicrons, pixelSizes,
-                            progress));
+                            areaIdsF, areaNamesF, progress));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -670,11 +691,47 @@ public class CellularNeighborhoodWorkflow {
                                             boolean generateHeatmap, Path heatmapDir,
                                             boolean radiusMode, double radiusMicrons,
                                             double[] pixelSizesUm,
+                                            List<AreaLevelSpec> areaLevels,
+                                            String imageName,
                                             Consumer<String> progress) throws IOException {
         double[][] centroids = MeasurementExtractor.extractCentroids(detections);
+        // A single image can still hold several independent areas -- a TMA, or
+        // a slide carrying more than one section -- so this resolves them even
+        // though there is only one image.
+        AreaResolver.AreaAssignment areas = resolveAreas(detections, areaLevels, imageName);
         return runCnTask(centroids, typeLabels, classNames, kNeighbors, nNeighborhoods,
                 seed, generateHeatmap, heatmapDir, null, null, null, null,
-                radiusMode, radiusMicrons, pixelSizesUm, progress);
+                radiusMode, radiusMicrons, pixelSizesUm,
+                areas == null ? null : areas.getAreaIds(),
+                areas == null ? null : areas.getAreaNames(),
+                progress);
+    }
+
+    /**
+     * Resolves independent areas for a single image's detections, or null when
+     * the configured levels cannot split below the image level.
+     * <p>
+     * Returning null keeps {@code area_ids} off the wire entirely, so an
+     * ordinary single-section run takes exactly the previous Python path.
+     */
+    private static AreaResolver.AreaAssignment resolveAreas(
+            List<PathObject> detections, List<AreaLevelSpec> areaLevels, String imageName) {
+        if (areaLevels == null || !AreaLevelSpec.hasSubImageLevels(areaLevels)) {
+            return null;
+        }
+        return AreaResolver.resolve(detections, (int[]) null,
+                List.of(imageName == null ? "Current image" : imageName), areaLevels);
+    }
+
+    /** Best-effort display name for an open image. */
+    private static String imageNameOf(ImageData<BufferedImage> imageData) {
+        try {
+            String name = imageData.getServer().getMetadata().getName();
+            if (name != null && !name.isBlank()) return name;
+        } catch (Exception ignored) {
+            // fall through
+        }
+        return "Current image";
     }
 
     /** Averaged pixel size in microns, or 1.0 if the image is uncalibrated. */
@@ -709,6 +766,7 @@ public class CellularNeighborhoodWorkflow {
                                           int[] groupLabels, List<String> groupNames,
                                           boolean radiusMode, double radiusMicrons,
                                           double[] pixelSizesUm,
+                                          int[] areaIds, List<String> areaNames,
                                           Consumer<String> progress) throws IOException {
         int nCells = coords.length;
 
@@ -723,6 +781,15 @@ public class CellularNeighborhoodWorkflow {
         for (int v : typeLabels) labelsList.add(v);
 
         Map<String, Object> inputs = new java.util.HashMap<>();
+        if (areaIds != null) {
+            // Windows, region adjacency and the per-sample rows all key on
+            // this. Absent, the image is the area -- the previous behaviour,
+            // and still correct, just the coarsest possible partition.
+            List<Integer> areaIdList = new ArrayList<>(areaIds.length);
+            for (int v : areaIds) areaIdList.add(v);
+            inputs.put("area_ids", areaIdList);
+            if (areaNames != null) inputs.put("area_names", areaNames);
+        }
         inputs.put("spatial_coords", spatialNd);
         inputs.put("cell_type_labels", labelsList);
         inputs.put("class_names", classNames);

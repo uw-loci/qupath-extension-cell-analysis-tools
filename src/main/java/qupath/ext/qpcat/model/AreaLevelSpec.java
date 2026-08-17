@@ -68,6 +68,22 @@ public class AreaLevelSpec {
         return getAnnotationClasses().isEmpty();
     }
 
+    /**
+     * True when the list can split cells below the image level. Images-only
+     * cannot, so it is not worth resolving or shipping.
+     */
+    public static boolean hasSubImageLevels(List<AreaLevelSpec> levels) {
+        if (levels == null) {
+            return false;
+        }
+        for (AreaLevelSpec spec : levels) {
+            if (spec != null && spec.getLevel() != AreaLevel.IMAGES) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** The default configuration: split by image only, i.e. today's behaviour. */
     public static List<AreaLevelSpec> imagesOnly() {
         List<AreaLevelSpec> levels = new ArrayList<>();
