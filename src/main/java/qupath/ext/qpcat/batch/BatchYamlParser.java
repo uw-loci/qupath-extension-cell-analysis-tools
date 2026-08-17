@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.batch;
 
+import qupath.ext.qpcat.model.AreaLevel;
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -59,7 +61,11 @@ public final class BatchYamlParser {
             "random_seed", "result_name",
             "measurements", "spatial_smoothing", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
-            "banksy_lambda", "banksy_k_geom", "joint"));
+            "banksy_lambda", "banksy_k_geom", "joint",
+            "area_levels", "batch_key"));
+
+    private static final Set<String> KNOWN_AREA_LEVEL = new HashSet<>(Arrays.asList(
+            "level", "annotation_classes"));
 
     private static final Set<String> KNOWN_PHENOTYPING = new HashSet<>(Arrays.asList(
             "enabled", "rules", "llm_explainer"));
@@ -276,6 +282,27 @@ public final class BatchYamlParser {
                 case "banksy_lambda" -> c.setBanksyLambda(asDoubleObj(value));
                 case "banksy_k_geom" -> c.setBanksyKGeom(asIntObj(value));
                 case "joint" -> c.setJoint(asBool(value, false));
+                case "batch_key" -> c.setBatchKey(asString(value));
+                case "area_levels" -> {
+                    if (value instanceof List<?> list) {
+                        List<AreaLevelSpec> levels = new ArrayList<>();
+                        for (int idx = 0; idx < list.size(); idx++) {
+                            Object o = list.get(idx);
+                            if (o instanceof Map<?, ?> levelMap) {
+                                levels.add(parseAreaLevel(
+                                        (Map<String, Object>) levelMap, idx, issues));
+                            } else {
+                                issues.add(ValidationIssue.error("E003",
+                                        "clustering.area_levels[" + idx + "]",
+                                        "expected mapping, got " + safeTypeName(o)));
+                            }
+                        }
+                        c.setAreaLevels(levels);
+                    } else if (value != null) {
+                        issues.add(ValidationIssue.error("E003", "clustering.area_levels",
+                                "expected list, got " + safeTypeName(value)));
+                    }
+                }
                 default -> {}
             }
         }
@@ -319,6 +346,55 @@ public final class BatchYamlParser {
             }
         }
         return p;
+    }
+
+    /**
+     * One {@code clustering.area_levels[]} entry.
+     * <p>
+     * {@code images} is rejected here rather than silently accepted: it is the
+     * implicit outermost level and listing it would read as though the order
+     * mattered, when in fact only the levels BELOW it are configurable.
+     */
+    private static AreaLevelSpec parseAreaLevel(
+            Map<String, Object> map, int index, List<ValidationIssue> issues) {
+        AreaLevelSpec spec = new AreaLevelSpec();
+        String base = "clustering.area_levels[" + index + "]";
+        if (map == null) return spec;
+        boolean sawLevel = false;
+        for (Map.Entry<String, Object> e : map.entrySet()) {
+            String key = e.getKey();
+            Object value = e.getValue();
+            if (!KNOWN_AREA_LEVEL.contains(key)) {
+                issues.add(ValidationIssue.error("E002", base + "." + key,
+                        "unknown field. Did you mean '"
+                                + suggest(key, KNOWN_AREA_LEVEL) + "'?"));
+                continue;
+            }
+            switch (key) {
+                case "level" -> {
+                    sawLevel = true;
+                    String raw = asString(value);
+                    if ("tma_cores".equalsIgnoreCase(raw)) {
+                        spec.setLevel(AreaLevel.TMA_CORES);
+                    } else if ("annotations".equalsIgnoreCase(raw)) {
+                        spec.setLevel(AreaLevel.ANNOTATIONS);
+                    } else if ("images".equalsIgnoreCase(raw)) {
+                        issues.add(ValidationIssue.error("E005", base + ".level",
+                                "'images' is always the outermost level and is implicit; "
+                                + "list only the levels below it (tma_cores, annotations)"));
+                    } else {
+                        issues.add(ValidationIssue.error("E005", base + ".level",
+                                "expected one of [tma_cores, annotations], got '" + raw + "'"));
+                    }
+                }
+                case "annotation_classes" -> spec.setAnnotationClasses(asStringList(value));
+                default -> { }
+            }
+        }
+        if (!sawLevel) {
+            issues.add(ValidationIssue.error("E001", base + ".level", "required field"));
+        }
+        return spec;
     }
 
     private static BatchYamlSchema.PhenotypeRuleEntry parseRule(

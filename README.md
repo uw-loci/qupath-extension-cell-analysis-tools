@@ -145,12 +145,13 @@ Select "All project images" scope in the clustering dialog to cluster detections
 
 ### Batch correction (Harmony)
 
-QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python port of [Harmony](https://github.com/immunogenomics/harmony), Korsunsky et al. 2019, *Nature Methods*) to remove per-image technical variation before clustering. This is essential for multi-image / multi-batch projects where each slide carries its own staining intensity profile.
+QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python port of [Harmony](https://github.com/immunogenomics/harmony), Korsunsky et al. 2019, *Nature Methods*) to remove technical variation before clustering. When enabled, you choose the grouping level: **Images** (multi-slide projects with per-slide batch effects) or **Independent areas** (TMA core-by-core or section-by-section variation within a single image).
 
 **When the checkbox is enabled in the Clustering dialog:**
 
-- Scope is set to "All project images" (single-image mode has no batches to correct), AND
+- Either multiple images are selected (Scope: "All project images"), OR independent areas are configured (Spatial statistics > Independent areas > add levels), AND
 - The harmonypy package was successfully imported when the QP-CAT Python environment started.
+- A **"Batch key" dropdown** appears below the checkbox to choose the grouping level.
 
 **When the checkbox is grayed out:**
 
@@ -256,9 +257,11 @@ The chosen value shows next to the result and is recorded in the audit log. Over
 
 [BANKSY](https://github.com/prabhakarlab/Banksy_py) integrates spatial neighborhood information directly into the clustering algorithm. It augments each cell's expression profile with a weighted average of its spatial neighbors' expression, then clusters on the combined representation.
 
+**Independent areas:** When you configure independent areas in the Spatial statistics section (e.g., per-TMA-core or per-tissue-section), BANKSY builds its neighbor graph **per area** -- cells in one TMA core never influence cells in another, even if they are in the same image. The global Leiden clustering step that follows still sees the full cell set, so cluster IDs remain comparable across areas. This prevents artificial adjacency between separate pieces of tissue.
+
 Parameters:
 - **lambda** (0-1): Weight of spatial vs. expression information (0.2 is a good starting point)
-- **k_geom**: Number of spatial nearest neighbors
+- **k_geom**: Number of spatial nearest neighbors. The algorithm requests `k_geom * (max_m + 1)` neighbors internally, so with default `max_m=1` the effective k is doubled. QP-CAT automatically caps k_geom to fit each area's cell count.
 - **resolution**: Leiden resolution for the final clustering step
 
 ### Spatial Feature Smoothing

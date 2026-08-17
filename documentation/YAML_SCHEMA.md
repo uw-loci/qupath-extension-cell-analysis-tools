@@ -119,6 +119,8 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. |
+| `batch_key` | `images` \| `areas` | `images` | What Harmony treats as a batch. `areas` requires `area_levels`. See *Independent areas* below. |
+| `area_levels` | list[object] | -- (one area per image) | Hierarchy levels that split cells into physically separate areas, so no spatial graph crosses a boundary. See *Independent areas* below. |
 | `joint` | boolean | `false` | Cluster all of a project's resolved images **jointly** in one run (globally consistent cluster IDs across images), like the GUI "All / Specific images" scope. `false` = cluster each image **independently**. |
 
 > **Note:** `clustering.mode: reuse_saved` skips re-clustering -- recommended for figure regeneration after paper revisions when cluster IDs must stay stable.
@@ -132,6 +134,49 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 > to cluster a chosen **subset** jointly. With `joint: true` the combined result is
 > saved once under `result_name` (default `yaml_joint`) and labels are written back
 > to each image; `joint` is ignored for `mode: reuse_saved`.
+
+### Independent areas (`clustering.area_levels`)
+
+An **area** is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. No spatial graph -- BANKSY, spatial smoothing, Ripley's L, co-occurrence, Moran's I -- is ever built across two areas, because the distance between a cell in one core and a cell in the next is not a distance through tissue.
+
+Without `area_levels` there is **one area per image**: cells from different images stay separate, but every cell within an image may share a graph with every other.
+
+Levels read **outermost first**, and `images` is implicit -- it is always the outermost level and listing it is an error. Everything **below** the last level stays in one area:
+
+| Key | Type | Notes |
+|---|---|---|
+| `level` | `tma_cores` \| `annotations` | Required. |
+| `annotation_classes` | list[string] | `annotations` only. Which classes mark a boundary; omit or leave empty to treat any annotation as one. |
+
+Areas are keyed on the annotation **object**, not its class -- three tissue sections on one slide usually share a single `Tissue` class, and grouping by class would merge them straight back together.
+
+```yaml
+# A 55-core TMA in one image: cluster jointly, but keep each core's
+# spatial graph separate and correct batch effects core by core.
+clustering:
+  type: banksy
+  batch_correction: true
+  batch_key: areas
+  area_levels:
+    - level: tma_cores
+```
+
+```yaml
+# Several tissue sections on one slide, each with Tumor / Stroma inside.
+# Tumor and Stroma stay TOGETHER within a section -- they are continuous
+# tissue, and the interface between them is usually the thing being measured.
+clustering:
+  type: leiden
+  area_levels:
+    - level: annotations
+      annotation_classes: [Tissue]
+```
+
+> **Choosing a level.** Both extremes fail silently. Too deep (splitting on Tumor / Stroma) invents boundaries inside one specimen and deletes the interface between them; too shallow (images only) invents adjacency between separate specimens. Neither shows up in the output as anything but plausible clusters. The GUI's *Independent areas* control previews the resolved area count and any unassigned cells before the run; a headless run reports the same counts in the log.
+
+> **Cells with no ancestor at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest ancestor they did resolve (`A-1 | unassigned`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
+
+> **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighbourhood term rather than borrowing neighbours from another specimen; cells are never dropped.
 
 ## `phenotyping` (optional, object)
 

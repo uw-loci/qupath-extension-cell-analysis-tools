@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.batch;
 
+import qupath.ext.qpcat.model.AreaLevelSpec;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -156,6 +158,23 @@ public final class BatchYamlSchema {
 
         public boolean isJoint() { return joint; }
         public void setJoint(boolean joint) { this.joint = joint; }
+
+        // Ordered independent-area levels below the implicit Images level.
+        // Empty / absent means one area per image, i.e. cells within an image
+        // may all share a spatial graph.
+        private List<AreaLevelSpec> areaLevels = new ArrayList<>();
+
+        // "images" (default) or "areas" -- what Harmony treats as a batch.
+        private String batchKey;
+
+        public List<AreaLevelSpec> getAreaLevels() { return areaLevels; }
+        public void setAreaLevels(List<AreaLevelSpec> areaLevels) {
+            this.areaLevels = areaLevels == null
+                    ? new ArrayList<>() : new ArrayList<>(areaLevels);
+        }
+
+        public String getBatchKey() { return batchKey; }
+        public void setBatchKey(String batchKey) { this.batchKey = batchKey; }
 
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }

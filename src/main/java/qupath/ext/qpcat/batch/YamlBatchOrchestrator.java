@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.batch;
 
+import qupath.ext.qpcat.model.AreaLevel;
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
@@ -570,7 +572,12 @@ public final class YamlBatchOrchestrator {
                     ProgressEmitter.fields("step", "clustering",
                             "type", String.valueOf(c.getType()),
                             "resolution", String.valueOf(c.getResolution()),
-                            "embedding", String.valueOf(c.getEmbedding())),
+                            "embedding", String.valueOf(c.getEmbedding()),
+                            // How the spatial graph is partitioned changes the
+                            // result, so a dry run has to show it.
+                            "area_levels", describeAreaLevels(c),
+                            "batch_key", c.getBatchKey() == null
+                                    ? "images" : c.getBatchKey()),
                     null);
         }
         if (schema.getPhenotyping() != null && schema.getPhenotyping().isEnabled()) {
@@ -601,6 +608,27 @@ public final class YamlBatchOrchestrator {
     }
 
     // ---------------- Clustering config translation ----------------
+
+    /**
+     * Compact description of the configured area levels for the dry-run row,
+     * e.g. {@code "images>tma_cores>annotations[Tissue]"}. Always names the
+     * implicit images level so the dry run shows the real partition rather
+     * than only the part the YAML spelled out.
+     */
+    private static String describeAreaLevels(BatchYamlSchema.ClusteringBlock c) {
+        if (c.getAreaLevels() == null || c.getAreaLevels().isEmpty()) {
+            return "images";
+        }
+        StringBuilder sb = new StringBuilder("images");
+        for (AreaLevelSpec spec : c.getAreaLevels()) {
+            sb.append('>').append(spec.getLevel().getId());
+            if (spec.getLevel() == AreaLevel.ANNOTATIONS && !spec.matchesAnyClass()) {
+                sb.append('[').append(String.join(",", spec.getAnnotationClasses()))
+                        .append(']');
+            }
+        }
+        return sb.toString();
+    }
 
     private static ClusteringConfig buildClusteringConfig(
             BatchYamlSchema.ClusteringBlock cc,
@@ -655,6 +683,19 @@ public final class YamlBatchOrchestrator {
         }
         if (cc.getBatchCorrection() != null) {
             config.setEnableBatchCorrection(cc.getBatchCorrection());
+        }
+
+        // Independent areas. The implicit Images level is prepended here rather
+        // than being spelled out in the YAML, because it is not optional --
+        // cells from different images can never share a spatial graph.
+        if (cc.getAreaLevels() != null && !cc.getAreaLevels().isEmpty()) {
+            List<AreaLevelSpec> levels = new ArrayList<>();
+            levels.add(new AreaLevelSpec(AreaLevel.IMAGES));
+            levels.addAll(cc.getAreaLevels());
+            config.setAreaLevels(levels);
+        }
+        if (cc.getBatchKey() != null && !cc.getBatchKey().isBlank()) {
+            config.setBatchKey(cc.getBatchKey());
         }
 
         // Spatial-stats expansion (mirrors ClusteringDialog wiring)

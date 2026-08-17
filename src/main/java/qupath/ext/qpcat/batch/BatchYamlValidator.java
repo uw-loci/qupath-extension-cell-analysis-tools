@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.batch;
 
+import qupath.ext.qpcat.model.AreaLevel;
+import qupath.ext.qpcat.model.AreaLevelSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.PlotKind;
@@ -257,6 +259,50 @@ public final class BatchYamlValidator {
                 r.add(ValidationIssue.error("E004", "clustering.pca_n_components",
                         "value " + n + " must be >= 2"));
             }
+        }
+
+        validateAreaLevels(c, r);
+    }
+
+    /**
+     * Independent-area checks. Structural errors on each entry are raised by
+     * the parser; these are the cross-field ones it cannot see.
+     */
+    private static void validateAreaLevels(BatchYamlSchema.ClusteringBlock c,
+                                           ValidationResult r) {
+        String batchKey = c.getBatchKey();
+        boolean hasLevels = c.getAreaLevels() != null && !c.getAreaLevels().isEmpty();
+
+        if (batchKey != null && !batchKey.isBlank()) {
+            if (!"images".equalsIgnoreCase(batchKey) && !"areas".equalsIgnoreCase(batchKey)) {
+                r.add(ValidationIssue.error("E005", "clustering.batch_key",
+                        "expected one of [images, areas], got '" + batchKey + "'"));
+            } else if ("areas".equalsIgnoreCase(batchKey) && !hasLevels) {
+                // Silently falling back to per-image batches would correct over
+                // a grouping the file never asked for.
+                r.add(ValidationIssue.error("E001", "clustering.area_levels",
+                        "required when batch_key is 'areas' -- there are no areas to "
+                        + "treat as batches without it"));
+            }
+            if (!Boolean.TRUE.equals(c.getBatchCorrection())
+                    && "areas".equalsIgnoreCase(batchKey)) {
+                r.add(ValidationIssue.warning("W005", "clustering.batch_key",
+                        "ignored because batch_correction is not enabled"));
+            }
+        }
+
+        // A repeated annotations level with no class filter can never resolve
+        // twice: the first match consumes the only boundary the chain offers.
+        int annotationsWithoutClasses = 0;
+        for (AreaLevelSpec spec : c.getAreaLevels()) {
+            if (spec.getLevel() == AreaLevel.ANNOTATIONS && spec.matchesAnyClass()) {
+                annotationsWithoutClasses++;
+            }
+        }
+        if (annotationsWithoutClasses > 1) {
+            r.add(ValidationIssue.warning("W006", "clustering.area_levels",
+                    "more than one 'annotations' level has no annotation_classes filter; "
+                    + "each nested level needs its own classes to be distinguishable"));
         }
     }
 
