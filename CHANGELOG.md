@@ -52,6 +52,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Areas were resolved from parent links, which cannot be trusted.** Membership was
+  found by walking each cell's `getParent()` chain. On a project where cell detection
+  ran before dearraying -- or whose hierarchy the user has edited since -- every cell
+  is parented to the root, so a 12-core TMA resolved to **one** area with every cell
+  reported unassigned, on completely well-formed data. Areas and the by-class grouping
+  are now matched **geometrically** (the cell's centroid falls inside the region), and
+  the same slide resolves to 12 areas. QP-CAT never reparents objects and never calls
+  `resolveHierarchy()`; it only reads.
+
 - **Spatial graphs joined physically separate tissue.** Every spatial method --
   BANKSY, spatial feature smoothing, Ripley's L, co-occurrence, Moran's I, Geary's
   C, neighbourhood enrichment -- built one graph over one flat coordinate array.

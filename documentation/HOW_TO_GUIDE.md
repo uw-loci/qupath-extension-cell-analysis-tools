@@ -1356,7 +1356,7 @@ This is the counterpart to [Independent areas](#independent-areas): **areas deci
 Two details worth knowing:
 
 - It keys on the **class**, never the annotation's name. A name is per-object, so a slide with hundreds of named regions would produce hundreds of rows; a class is a category, so this stays a handful of rows however many regions there are. (The older *Composition by annotation* tab keys on the name, which is why it only appears for annotation-input runs.)
-- It walks the whole ancestor chain, so a cell inside an *unclassified* sub-region of a Tumor annotation still counts as Tumor.
+- Membership is geometric (the cell's centroid falls inside the annotation), not based on parent links, and the **innermost** classified annotation wins -- a cell inside a Tumor annotation that itself sits inside Tissue reads as Tumor.
 
 Cells with no classified annotation ancestor are grouped under `(none)`.
 
@@ -1684,9 +1684,11 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
    assignment. Empty areas are skipped; sparse areas are handled (spatial graph
    parameters are capped per area so one small core does not reduce k for the rest).
 4. For a **joint** run across multiple images, the same area levels are applied to
-   every image. Cells match an area by traversing their annotation ancestry, so a
-   cell inside a `Tissue` annotation becomes part of that tissue's area even if
-   your images have different tissue objects.
+   every image. A cell belongs to an area if it **falls inside** that region --
+   matched geometrically, from the cell's centroid, not from the object
+   hierarchy. Parent links are not used, so this works even if cell detection
+   ran before the cores or annotations existed, or the hierarchy has been
+   edited since. QP-CAT never modifies your hierarchy to make this work.
 
 ### Step-by-step
 
@@ -2085,8 +2087,9 @@ To configure:
 3. The preview shows how many areas were found and flags any cells with no assignment.
    Empty areas are skipped; sparse areas are handled (spatial graph parameters are
    capped per area so one small core does not reduce k for the rest).
-4. For multi-image scope, the same area levels are applied to every image. Cells match
-   an area by their annotation ancestry.
+4. For multi-image scope, the same area levels are applied to every image. A cell
+   belongs to an area if it **falls inside** that region -- matched geometrically
+   from its centroid, never from parent links, and always read-only.
 
 **Exclusions.** Under "Exclude cells inside annotation classes", tick classes
 (e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.

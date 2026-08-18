@@ -174,7 +174,9 @@ clustering:
 
 > **Choosing a level.** Both extremes fail silently. Too deep (splitting on Tumor / Stroma) invents boundaries inside one specimen and deletes the interface between them; too shallow (images only) invents adjacency between separate specimens. Neither shows up in the output as anything but plausible clusters. The GUI's *Independent areas* control previews the resolved area count and any unassigned cells before the run; a headless run reports the same counts in the log.
 
-> **Cells with no ancestor at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest ancestor they did resolve (`A-1 | unassigned`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
+> **How a cell is matched to an area.** Geometrically: the cell's centroid falls inside the region. Parent links are NOT used, so this works on a project where cell detection ran before dearraying, or whose hierarchy has since been edited. QP-CAT never reparents objects or resolves your hierarchy -- it only reads.
+
+> **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | unassigned`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
 
 > **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighbourhood term rather than borrowing neighbours from another specimen; cells are never dropped.
 

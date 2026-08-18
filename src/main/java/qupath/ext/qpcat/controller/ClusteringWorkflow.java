@@ -41,6 +41,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -540,31 +541,43 @@ public class ClusteringWorkflow {
     private String[] buildParentClassNames(MeasurementExtractor.ExtractionResult extraction) {
         List<PathObject> detections = extraction.getDetections();
         String[] names = new String[detections.size()];
-        for (int i = 0; i < detections.size(); i++) {
-            names[i] = nearestAnnotationClass(detections.get(i));
-        }
-        return names;
-    }
 
-    /**
-     * Class of the nearest classified annotation ancestor, or null when there
-     * is none. Walks the whole chain rather than checking one level: a cell
-     * inside an unclassified sub-region of a classified one still belongs to
-     * that classified region.
-     */
-    private static String nearestAnnotationClass(PathObject det) {
-        PathObject parent = det.getParent();
-        while (parent != null && !parent.isRootObject()) {
-            if (parent.isAnnotation()) {
-                PathClass pc = parent.getPathClass();
+        // Resolved by GEOMETRY, for the same reason areas are: parent links
+        // cannot be trusted. On a hierarchy where detection ran before the
+        // annotations were drawn, every cell is parented to the root, and an
+        // ancestor walk would report no class for any of them -- so the
+        // by-class tab and export would silently never appear.
+        Map<PathObject, String> byGeometry = new HashMap<>();
+        for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+            PathObjectHierarchy hierarchy = segmentHierarchy(seg);
+            if (hierarchy == null) {
+                continue;
+            }
+            List<PathObject> classified = new ArrayList<>();
+            for (PathObject a : hierarchy.getAnnotationObjects()) {
+                PathClass pc = a.getPathClass();
                 if (pc != null && pc != PathClass.getNullClass()
+                        && a.getROI() != null && a.getROI().isArea()
                         && pc.toString() != null && !pc.toString().isBlank()) {
-                    return pc.toString();
+                    classified.add(a);
                 }
             }
-            parent = parent.getParent();
+            // Largest first, so a smaller nested annotation overwrites and the
+            // INNERMOST class wins -- a cell in Tumor inside Tissue reads as
+            // Tumor, which is what "nearest" meant.
+            classified.sort(Comparator.comparingDouble(
+                    (PathObject a) -> a.getROI().getArea()).reversed());
+            for (PathObject a : classified) {
+                for (PathObject det : hierarchy.getAllDetectionsForROI(a.getROI())) {
+                    byGeometry.put(det, a.getPathClass().toString());
+                }
+            }
         }
-        return null;
+
+        for (int i = 0; i < detections.size(); i++) {
+            names[i] = byGeometry.get(detections.get(i));
+        }
+        return names;
     }
 
     /**
