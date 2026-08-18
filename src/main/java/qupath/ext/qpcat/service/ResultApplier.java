@@ -5,8 +5,10 @@ import org.slf4j.LoggerFactory;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -80,6 +82,14 @@ public class ResultApplier {
         // concatenation and PathClass.fromString lookup inside the loop costs one
         // of each per cell -- at a million cells that is a million throwaway
         // strings and map lookups for what is a handful of distinct classes.
+        Set<String> replaced = existingClassifications(detections);
+        if (!replaced.isEmpty()) {
+            logger.warn("Replacing existing classification(s) on {} detection(s): {}. Cluster "
+                            + "labels are written as the PathClass, so any earlier "
+                            + "classification on these cells is overwritten.",
+                    detections.size(), String.join(", ", replaced));
+        }
+
         Map<Integer, PathClass> byLabel = new HashMap<>();
         Set<String> seeded = new HashSet<>();
         for (int i = 0; i < detections.size(); i++) {
@@ -99,6 +109,73 @@ public class ResultApplier {
                 byLabel.put(label, pc);
             }
             det.setPathClass(pc);
+        }
+    }
+
+
+    // ---- Overwrite guards -------------------------------------------------
+    //
+    // Adding measurements is the product; QUIETLY REPLACING data QP-CAT did not
+    // create is not. Neither probe changes anything -- they read, and the caller
+    // logs. Refusing outright would break the legitimate case of re-running
+    // clustering over its own previous output, which is why these warn instead.
+
+    /**
+     * Which of {@code names} already carry a value on at least one detection.
+     * <p>
+     * Embedding columns are written under generic names ("UMAP1", "PCA1",
+     * "tSNE1"), so they can collide with a previous run, another extension, or
+     * the user's own script. Read-only.
+     */
+    public static List<String> preexistingMeasurements(List<PathObject> detections,
+                                                       String... names) {
+        List<String> found = new ArrayList<>();
+        if (detections == null || names == null) {
+            return found;
+        }
+        for (String name : names) {
+            for (PathObject det : detections) {
+                if (det.getMeasurements().containsKey(name)) {
+                    found.add(name);
+                    break;
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * Distinct classifications already on these detections, which applying
+     * cluster labels will replace. Read-only.
+     * <p>
+     * No attempt is made to tell "ours" from "theirs": a renamed or merged
+     * result carries arbitrary names, so any such test would be wrong exactly
+     * when it mattered. The caller reports what is there and lets the user
+     * judge -- seeing "Cluster 0, Cluster 1" is obviously a re-run, seeing
+     * "Tumor, Stroma" is a warning worth reading.
+     */
+    public static Set<String> existingClassifications(List<PathObject> detections) {
+        Set<String> names = new LinkedHashSet<>();
+        if (detections == null) {
+            return names;
+        }
+        for (PathObject det : detections) {
+            PathClass pc = det.getPathClass();
+            if (pc != null && pc != PathClass.getNullClass()) {
+                names.add(pc.toString());
+            }
+        }
+        return names;
+    }
+
+    /** Logs a warning naming any measurement keys about to be replaced. */
+    private static void warnOnMeasurementOverwrite(List<PathObject> detections, String[] names) {
+        List<String> clash = preexistingMeasurements(detections, names);
+        if (!clash.isEmpty()) {
+            logger.warn("Overwriting {} existing measurement column(s): {}. If these came from "
+                            + "another tool or an earlier run you wanted to keep, re-run with a "
+                            + "custom embedding name so the new columns get their own prefix.",
+                    clash.size(), String.join(", ", clash));
         }
     }
 
@@ -185,6 +262,8 @@ public class ResultApplier {
         for (int c = 0; c < nComponents; c++) {
             names[c] = prefix + (c + 1);
         }
+
+        warnOnMeasurementOverwrite(detections, names);
 
         for (int i = 0; i < detections.size(); i++) {
             var ml = detections.get(i).getMeasurementList();
