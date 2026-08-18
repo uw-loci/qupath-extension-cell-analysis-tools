@@ -57,6 +57,7 @@ public final class IndependentAreasSection extends VBox {
     private final VBox rowBox = new VBox(4);
     private final List<LevelRow> rows = new ArrayList<>();
     private final Label previewLabel = new Label();
+    private final Label heading = new Label("Independent areas:");
     private final List<Runnable> changeListeners = new ArrayList<>();
 
     public IndependentAreasSection(QuPathGUI qupath) {
@@ -64,7 +65,6 @@ public final class IndependentAreasSection extends VBox {
         setSpacing(6);
         setPadding(new Insets(8, 0, 4, 0));
 
-        Label heading = new Label("Independent areas:");
         heading.setTooltip(Tooltips.of(
                 "Split cells into physically separate areas. No spatial graph -- BANKSY, "
                 + "smoothing, Ripley, co-occurrence -- is ever built across two areas, "
@@ -100,11 +100,23 @@ public final class IndependentAreasSection extends VBox {
         refreshPreview();
     }
 
+    /**
+     * Hides the internal heading, for a host that already titles the section
+     * (a TitledPane). Kept as an option rather than dropping the heading
+     * outright, because the dialogs that mount this bare in a scrolling column
+     * have nothing else naming it.
+     */
+    public void setHeadingVisible(boolean visible) {
+        setShown(heading, visible);
+    }
+
     /** One editable level row: a level combo, an optional class picker, a remove button. */
     private final class LevelRow {
         private final HBox node;
         private final ComboBox<AreaLevel> levelCombo = new ComboBox<>();
         private final CheckComboBox<String> classPicker = new CheckComboBox<>();
+        private final Label classLabel;
+        private final Label emptyClassesLabel;
 
         LevelRow(AreaLevel initial) {
             levelCombo.getItems().addAll(ADDABLE);
@@ -116,10 +128,17 @@ public final class IndependentAreasSection extends VBox {
                     + "sections on one slide usually share a single 'Tissue' class, and "
                     + "grouping by class would merge them straight back together."));
 
+            classPicker.setTitle("Any class");
             classPicker.setTooltip(Tooltips.of(
-                    "Which annotation classes mark an area boundary. Leave everything "
-                    + "unticked to treat any annotation as a boundary."));
-            classPicker.getItems().setAll(annotationClassesInScope());
+                    "Which annotation classes mark an area boundary -- e.g. tick 'Tissue' "
+                    + "to make each Tissue annotation its own area. Leave everything "
+                    + "unticked to treat ANY annotation as a boundary.\n\n"
+                    + "Areas are keyed on the annotation OBJECT, so three separate "
+                    + "'Tissue' annotations are three areas, not one."));
+
+            classLabel = new Label("classes:");
+            emptyClassesLabel = new Label("(none in this image or project)");
+            emptyClassesLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 40%);");
 
             Button remove = new Button("-");
             remove.setTooltip(Tooltips.of("Remove this level"));
@@ -129,11 +148,14 @@ public final class IndependentAreasSection extends VBox {
                 fireChanged();
             });
 
-            node = new HBox(8, new Label(), levelCombo, classPicker, remove);
+            node = new HBox(8, new Label(), levelCombo, classLabel, classPicker,
+                    emptyClassesLabel, remove);
             node.setAlignment(Pos.CENTER_LEFT);
 
+            refreshClasses();
+
             levelCombo.valueProperty().addListener((o, a, b) -> {
-                updateClassPickerVisibility();
+                refreshClasses();
                 fireChanged();
             });
             classPicker.getCheckModel().getCheckedItems()
@@ -143,8 +165,36 @@ public final class IndependentAreasSection extends VBox {
 
         private void updateClassPickerVisibility() {
             boolean show = levelCombo.getValue() == AreaLevel.ANNOTATIONS;
-            classPicker.setVisible(show);
-            classPicker.setManaged(show);
+            boolean empty = classPicker.getItems().isEmpty();
+            setShown(classLabel, show);
+            setShown(classPicker, show && !empty);
+            // An empty dropdown next to "Annotations" reads as a broken control.
+            // Say why it is empty instead.
+            setShown(emptyClassesLabel, show && empty);
+        }
+
+        /**
+         * Reloads the class list, keeping whatever is still tickable ticked.
+         * <p>
+         * Called every time the picker is shown, not once when the row is
+         * built: a user routinely opens this dialog, notices they have not
+         * drawn or classified the regions yet, does it, and comes back. A list
+         * captured at construction is empty forever in that sequence, which
+         * looks exactly like the feature not existing.
+         */
+        void refreshClasses() {
+            List<String> checked = new ArrayList<>(classPicker.getCheckModel().getCheckedItems());
+            List<String> available = annotationClassesInScope();
+            if (!available.equals(classPicker.getItems())) {
+                classPicker.getCheckModel().clearChecks();
+                classPicker.getItems().setAll(available);
+                for (String cls : checked) {
+                    if (available.contains(cls)) {
+                        classPicker.getCheckModel().check(cls);
+                    }
+                }
+            }
+            updateClassPickerVisibility();
         }
 
         void setIndexLabel(int oneBased) {
@@ -162,6 +212,7 @@ public final class IndependentAreasSection extends VBox {
 
         void applySpec(AreaLevelSpec spec) {
             levelCombo.setValue(spec.getLevel());
+            refreshClasses();
             classPicker.getCheckModel().clearChecks();
             for (String cls : spec.getAnnotationClasses()) {
                 if (classPicker.getItems().contains(cls)) {
@@ -313,6 +364,14 @@ public final class IndependentAreasSection extends VBox {
         return hierarchy.getTMAGrid() != null && hierarchy.getTMAGrid().nCores() > 0;
     }
 
+    /**
+     * Classes that can mark an area boundary: those actually on annotations in
+     * the open image FIRST, then the rest of the project's class list.
+     * <p>
+     * The project list matters for a multi-image run, where the boundary class
+     * may not exist in whichever image happens to be open -- offering only the
+     * current image's classes made those runs unconfigurable.
+     */
     private List<String> annotationClassesInScope() {
         Set<String> names = new LinkedHashSet<>();
         ImageData<BufferedImage> imageData = currentImageData();
@@ -324,7 +383,35 @@ public final class IndependentAreasSection extends VBox {
                 }
             }
         }
+        if (qupath != null) {
+            try {
+                for (PathClass pc : qupath.getAvailablePathClasses()) {
+                    if (pc != null && pc != PathClass.getNullClass()
+                            && pc.toString() != null && !pc.toString().isBlank()) {
+                        names.add(pc.toString());
+                    }
+                }
+            } catch (Exception e) {
+                logger.debug("Could not read the project class list: {}", e.getMessage());
+            }
+        }
         return new ArrayList<>(names);
+    }
+
+    private static void setShown(javafx.scene.Node node, boolean shown) {
+        node.setVisible(shown);
+        node.setManaged(shown);
+    }
+
+    /**
+     * Re-reads the annotation classes and the preview. Call when the dialog's
+     * scope changes or the user may have edited the hierarchy since it opened.
+     */
+    public void refresh() {
+        for (LevelRow row : rows) {
+            row.refreshClasses();
+        }
+        refreshPreview();
     }
 
     @SuppressWarnings("unchecked")

@@ -73,6 +73,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The Independent areas control was effectively hidden in the clustering dialog,
+  and its annotation-class picker could never populate.** Two separate problems with
+  the same symptom -- no way to choose which annotation classes mark an area:
+  - The control lived inside the *Spatial statistics* pane, which opens collapsed. It
+    governs BANKSY, spatial smoothing and the Harmony batch key as well, so naming its
+    home after one of the things it affects buried it. It is now its own **Independent
+    areas** section, expanded automatically when a dearrayed TMA is detected -- the case
+    where the default silently changes the result.
+  - The class list was read once when a level row was built, and only from the open
+    image. Opening the dialog, noticing the regions are not classified yet, classifying
+    them and coming back therefore left an empty dropdown forever. The list now refreshes
+    whenever the picker is shown or the scope changes, includes the project's class list
+    (so a multi-image run can select a class absent from whichever image is open), is
+    labelled `classes:`, and says `(none in this image or project)` instead of rendering
+    as an empty control.
+
 - **Scope options were unreadable in a single-image project.** The reason an option
   was unavailable ("requires project with multiple images") was appended to the radio
   button's own label. Radio text lays out on one line, so at the clustering dialog's

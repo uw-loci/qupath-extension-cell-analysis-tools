@@ -205,7 +205,11 @@ public class CellularNeighborhoodDialog {
                 "QPCAT - Select images for cellular neighborhoods");
         // Re-evaluate the Run button whenever the scope changes (a project scope
         // does not depend on the current image's class count).
-        scopeSection.addScopeChangeListener(this::updateRunEnabled);
+        scopeSection.addScopeChangeListener(() -> {
+            updateRunEnabled();
+            // The area classes and the preview count follow the scope.
+            if (areasSection != null) areasSection.refresh();
+        });
 
         Project<BufferedImage> project = qupath.getProject();
         boolean multiImage = project != null && project.getImageList().size() > 1;

@@ -160,7 +160,7 @@ QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python 
 
 **When the checkbox is enabled in the Clustering dialog:**
 
-- Either multiple images are selected (Scope: "All project images"), OR independent areas are configured (Spatial statistics > Independent areas > add levels), AND
+- Either multiple images are selected (Scope: "All project images"), OR independent areas are configured (Independent areas > Add level), AND
 - The harmonypy package was successfully imported when the QP-CAT Python environment started.
 - A **"Batch key" dropdown** appears below the checkbox to choose the grouping level.
 
@@ -268,7 +268,7 @@ The chosen value shows next to the result and is recorded in the audit log. Over
 
 [BANKSY](https://github.com/prabhakarlab/Banksy_py) integrates spatial neighborhood information directly into the clustering algorithm. It augments each cell's expression profile with a weighted average of its spatial neighbors' expression, then clusters on the combined representation.
 
-**Independent areas:** When you configure independent areas in the Spatial statistics section (e.g., per-TMA-core or per-tissue-section), BANKSY builds its neighbor graph **per area** -- cells in one TMA core never influence cells in another, even if they are in the same image. The global Leiden clustering step that follows still sees the full cell set, so cluster IDs remain comparable across areas. This prevents artificial adjacency between separate pieces of tissue.
+**Independent areas:** When you configure independent areas in the **Independent areas** section (e.g., per-TMA-core or per-tissue-section), BANKSY builds its neighbor graph **per area** -- cells in one TMA core never influence cells in another, even if they are in the same image. The global Leiden clustering step that follows still sees the full cell set, so cluster IDs remain comparable across areas. This prevents artificial adjacency between separate pieces of tissue.
 
 Parameters:
 - **lambda** (0-1): Weight of spatial vs. expression information (0.2 is a good starting point)

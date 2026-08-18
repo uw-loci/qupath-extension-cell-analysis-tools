@@ -780,7 +780,13 @@ public class ClusteringDialog {
         batchKeyRow.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
         batchKeyRow.managedProperty().bind(batchCorrectionCheck.selectedProperty());
 
-        // ---- Spatial statistics expansion (v1) ----
+        // ---- Independent areas + spatial statistics expansion (v1) ----
+        // Areas get their OWN top-level pane rather than living inside Spatial
+        // statistics. They decide which cells may share a graph at all, which
+        // governs BANKSY, spatial smoothing and the Harmony batch key -- not
+        // only the statistics. Buried inside a collapsed pane named after one
+        // of the things it affects, the control read as missing.
+        TitledPane areasPane = createIndependentAreasPane();
         TitledPane spatialStatsPane = createSpatialStatsPane();
 
         // Enable batch correction when (a) harmonypy is present AND (b) there
@@ -809,13 +815,39 @@ public class ClusteringDialog {
             // The images decide which measurements exist, so the list follows
             // the scope rather than whatever image is open.
             populateMeasurements();
+            // Same for the area classes and the preview count.
+            if (areasSection != null) areasSection.refresh();
         });
         areasSection.addChangeListener(refreshBatchGate);
         refreshBatchGate.run();
 
         VBox box = new VBox(5, generatePlotsCheck, spatialAnalysisCheck,
-                smoothingRow, batchCorrectionCheck, batchKeyRow, spatialStatsPane);
+                smoothingRow, batchCorrectionCheck, batchKeyRow,
+                areasPane, spatialStatsPane);
         return box;
+    }
+
+    /**
+     * "Independent areas" as its own titled section: which cells may share a
+     * spatial graph at all.
+     * <p>
+     * Starts EXPANDED when the auto-detect found something to split on -- a
+     * dearrayed TMA -- because that is the case where the default silently
+     * changes the result, and a collapsed pane would hide that it did.
+     */
+    private TitledPane createIndependentAreasPane() {
+        areasSection = new IndependentAreasSection(qupath);
+        areasSection.applyAutoDetectedDefault();
+        areasSection.setHeadingVisible(false);   // the pane's title already says it
+
+        TitledPane pane = new TitledPane("Independent areas", areasSection);
+        pane.setCollapsible(true);
+        pane.setExpanded(areasSection.hasSubImageLevels());
+        pane.setTooltip(Tooltips.of(
+                "Split cells into physically separate areas -- one per TMA core, per "
+                + "tissue section, or per annotation of a chosen class. No spatial "
+                + "graph is ever built across two areas."));
+        return pane;
     }
 
     /**
@@ -972,13 +1004,7 @@ public class ClusteringDialog {
         // ---- v0.3 Viewer overlay + measurements block ----
         VBox overlayBlock = createViewerOverlayBlock();
 
-        // ---- Independent areas ----
-        // Sits above the graph constructor because it decides which cells may
-        // be joined at all; the constructor only decides how.
-        areasSection = new IndependentAreasSection(qupath);
-        areasSection.applyAutoDetectedDefault();
-
-        VBox content = new VBox(6, areasSection, new Separator(), graphBox, statsBox,
+        VBox content = new VBox(6, graphBox, statsBox,
                 permutationLabel, banksyNote, overlayBlock);
 
         TitledPane pane = new TitledPane("Spatial statistics", content);

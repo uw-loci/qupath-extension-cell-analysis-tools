@@ -140,6 +140,7 @@ public class SpatialStatsDialog {
         };
         regionBox.valueProperty().addListener((o, a, b) -> syncRegion.run());
         scope.addScopeChangeListener(syncRegion);
+        scope.addScopeChangeListener(areasSection::refresh);
         syncRegion.run();
 
         HBox regionRow = new HBox(8, new Label("Analysis regions:"), regionBox);
