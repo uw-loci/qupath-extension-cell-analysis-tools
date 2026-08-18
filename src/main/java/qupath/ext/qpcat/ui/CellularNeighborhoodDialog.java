@@ -78,13 +78,8 @@ public class CellularNeighborhoodDialog {
     private Spinner<Double> radiusSpinner;
 
     // Scope (Current / All / Specific images) + group-by metadata key (cohort).
-    private RadioButton scopeCurrentImage;
-    private RadioButton scopeAllImages;
-    private RadioButton scopeSpecificImages;
-    private Button chooseImagesButton;
-    private Label specificImagesLabel;
+    private ScopeSection scopeSection;
     private ComboBox<String> groupByCombo;
-    private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
 
     private volatile CellularNeighborhoodWorkflow activeWorkflow;
     private IndependentAreasSection areasSection;
@@ -203,48 +198,17 @@ public class CellularNeighborhoodDialog {
         explain.setWrapText(true);
         explain.setStyle("-fx-text-fill: #555;");
 
-        ToggleGroup scopeGroup = new ToggleGroup();
-        scopeCurrentImage = new RadioButton("Current image");
-        scopeCurrentImage.setToggleGroup(scopeGroup);
-        scopeCurrentImage.setSelected(true);
-        scopeAllImages = new RadioButton("All project images");
-        scopeAllImages.setToggleGroup(scopeGroup);
-        scopeSpecificImages = new RadioButton("Specific images...");
-        scopeSpecificImages.setToggleGroup(scopeGroup);
-
-        chooseImagesButton = new Button("Choose images...");
-        chooseImagesButton.setOnAction(e -> openImageChooser());
-        specificImagesLabel = new Label("(none chosen)");
-        specificImagesLabel.setStyle("-fx-text-fill: #666;");
+        // The shared control, not a fourth copy of it. This dialog carried its
+        // own transcription of the scope block, which is why the layout bug
+        // that ellipsized every radio label to "..." had to be fixed twice.
+        scopeSection = new ScopeSection(qupath,
+                "QPCAT - Select images for cellular neighborhoods");
+        // Re-evaluate the Run button whenever the scope changes (a project scope
+        // does not depend on the current image's class count).
+        scopeSection.addScopeChangeListener(this::updateRunEnabled);
 
         Project<BufferedImage> project = qupath.getProject();
         boolean multiImage = project != null && project.getImageList().size() > 1;
-        if (!multiImage) {
-            scopeAllImages.setDisable(true);
-            scopeSpecificImages.setDisable(true);
-            String hint = " (requires project with multiple images)";
-            scopeAllImages.setText("All project images" + hint);
-            scopeSpecificImages.setText("Specific images..." + hint);
-        } else {
-            scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
-        }
-
-        chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
-        scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
-            if (now && selectedSubset.isEmpty()) {
-                openImageChooser();
-            }
-        });
-        // Re-evaluate the Run button whenever the scope changes (a project scope
-        // does not depend on the current image's class count).
-        scopeGroup.selectedToggleProperty().addListener((obs, was, now) -> updateRunEnabled());
-
-        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
-                scopeSpecificImages);
-        radios.setAlignment(Pos.CENTER_LEFT);
-        HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
-        chooseRow.setAlignment(Pos.CENTER_LEFT);
-        chooseRow.setPadding(new Insets(0, 0, 0, 55));
 
         // Group-by metadata key (cohort comparison; work "B"). Only meaningful
         // for joint runs -- ignored under "Current image".
@@ -276,43 +240,12 @@ public class CellularNeighborhoodDialog {
             groupRow.getChildren().add(none);
         }
 
-        return new VBox(6, header, explain, radios, chooseRow, groupRow);
-    }
-
-    /** Open the reusable subset picker and store the chosen entries. */
-    private void openImageChooser() {
-        Project<BufferedImage> project = qupath.getProject();
-        if (project == null) {
-            Dialogs.showWarningNotification("QPCAT", "No project is open.");
-            return;
-        }
-        ProjectImageSelector.showDialog(owner, project,
-                "QPCAT - Select images for cellular neighborhoods",
-                selectedSubset.isEmpty() ? null : selectedSubset)
-            .ifPresent(chosen -> {
-                selectedSubset.clear();
-                selectedSubset.addAll(chosen);
-                updateSpecificImagesLabel();
-            });
-    }
-
-    private void updateSpecificImagesLabel() {
-        int n = selectedSubset.size();
-        specificImagesLabel.setText(n == 0 ? "(none chosen)"
-                : n + " image" + (n == 1 ? "" : "s") + " chosen");
+        return new VBox(6, header, explain, scopeSection, groupRow);
     }
 
     /** Resolve the project images for the chosen scope, or null for current-image. */
     private List<ProjectImageEntry<BufferedImage>> resolveScopeEntries() {
-        Project<BufferedImage> project = qupath.getProject();
-        if (project == null) return null;
-        if (scopeAllImages != null && scopeAllImages.isSelected()) {
-            return new ArrayList<>(project.getImageList());
-        }
-        if (scopeSpecificImages != null && scopeSpecificImages.isSelected()) {
-            return new ArrayList<>(selectedSubset);
-        }
-        return null;
+        return scopeSection == null ? null : scopeSection.resolveEntries();
     }
 
     private GridPane createSettingsSection() {
@@ -468,8 +401,8 @@ public class CellularNeighborhoodDialog {
      */
     private void updateRunEnabled() {
         if (runButton == null) return;
-        boolean projectScope = (scopeAllImages != null && scopeAllImages.isSelected())
-                || (scopeSpecificImages != null && scopeSpecificImages.isSelected());
+        boolean projectScope = scopeSection != null
+                && (scopeSection.isAllImages() || scopeSection.isSpecificImages());
         runButton.setDisable(!projectScope && currentImageClassCount() < 2);
     }
 
@@ -483,7 +416,7 @@ public class CellularNeighborhoodDialog {
         List<ProjectImageEntry<BufferedImage>> scopeEntries = resolveScopeEntries();
         if (scopeEntries != null) {
             // Project (joint) scope.
-            if (scopeSpecificImages.isSelected() && scopeEntries.isEmpty()) {
+            if (scopeSection.isSpecificButEmpty()) {
                 Dialogs.showWarningNotification("QPCAT",
                         "No images chosen. Click 'Choose images...' first.");
                 return;
@@ -602,13 +535,7 @@ public class CellularNeighborhoodDialog {
         if (windowKnn != null) windowKnn.setDisable(active);
         if (windowRadius != null) windowRadius.setDisable(active);
         if (radiusSpinner != null) radiusSpinner.setDisable(active);
-        if (scopeCurrentImage != null) scopeCurrentImage.setDisable(active);
-        if (scopeAllImages != null) {
-            scopeAllImages.setDisable(active || scopeAllImages.getText().contains("requires"));
-        }
-        if (scopeSpecificImages != null) {
-            scopeSpecificImages.setDisable(active || scopeSpecificImages.getText().contains("requires"));
-        }
+        if (scopeSection != null) scopeSection.setControlsDisabled(active);
         if (groupByCombo != null) groupByCombo.setDisable(active || groupByCombo.getItems().size() <= 1);
         progressBar.setVisible(active);
         progressBar.setProgress(active ? ProgressBar.INDETERMINATE_PROGRESS : 0);

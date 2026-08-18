@@ -7,6 +7,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import qupath.fx.dialogs.Dialogs;
@@ -37,6 +38,11 @@ public final class ScopeSection extends VBox {
     private final RadioButton scopeSpecificImages;
     private final Button chooseImagesButton;
     private final Label specificImagesLabel;
+    private final Label unavailableHint = new Label();
+    /** Structural unavailability, so a run-finished re-enable cannot undo it. */
+    private boolean currentImageUnavailable;
+    private boolean allImagesUnavailable;
+    private boolean specificImagesUnavailable;
     private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
 
     /**
@@ -69,7 +75,6 @@ public final class ScopeSection extends VBox {
         boolean haveOpenImage = qupath.getImageData() != null;
         if (!haveOpenImage) {
             scopeCurrentImage.setDisable(true);
-            scopeCurrentImage.setText("Current image (none open)");
             scopeCurrentImage.setTooltip(Tooltips.of(
                     "No image is open. Choose the project images to work on instead -- "
                     + "QP-CAT reads their channels and measurements directly."));
@@ -79,9 +84,11 @@ public final class ScopeSection extends VBox {
         if (!multiImage) {
             scopeAllImages.setDisable(true);
             scopeSpecificImages.setDisable(true);
-            String hint = " (requires project with multiple images)";
-            scopeAllImages.setText("All project images" + hint);
-            scopeSpecificImages.setText("Specific images..." + hint);
+            Tooltip tip = Tooltips.of(
+                    "This project has fewer than two images, so there is nothing to run "
+                    + "across. Add images to the project to enable a multi-image run.");
+            scopeAllImages.setTooltip(tip);
+            scopeSpecificImages.setTooltip(tip);
         } else {
             scopeAllImages.setText("All project images (" + project.getImageList().size() + ")");
         }
@@ -99,6 +106,34 @@ public final class ScopeSection extends VBox {
             }
         }
 
+        // Read the structural state AFTER the selection logic, which re-enables
+        // "Specific images..." for a one-image project with nothing open.
+        currentImageUnavailable = scopeCurrentImage.isDisable();
+        allImagesUnavailable = scopeAllImages.isDisable();
+        specificImagesUnavailable = scopeSpecificImages.isDisable();
+
+        // WHY a disabled option is disabled, on its own wrapped line rather
+        // than appended to the radio labels. Radio text lays out on ONE line:
+        // a parenthetical long enough to explain itself pushed the row past the
+        // dialog's 550px content width, and JavaFX resolved that by ellipsizing
+        // the labels to "..." -- so every option became unreadable in order to
+        // explain one of them.
+        List<String> reasons = new ArrayList<>();
+        if (currentImageUnavailable) {
+            reasons.add("\"Current image\" needs an image open");
+        }
+        if (allImagesUnavailable || specificImagesUnavailable) {
+            reasons.add("a multi-image scope needs a project with two or more images");
+        }
+        if (reasons.isEmpty()) {
+            unavailableHint.setVisible(false);
+            unavailableHint.setManaged(false);
+        } else {
+            unavailableHint.setText("Unavailable here: " + String.join("; ", reasons) + ".");
+        }
+        unavailableHint.setWrapText(true);
+        unavailableHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
         chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
         scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {
             if (now && selectedSubset.isEmpty()) {
@@ -106,13 +141,15 @@ public final class ScopeSection extends VBox {
             }
         });
 
-        HBox radios = new HBox(15, new Label("Scope:"), scopeCurrentImage, scopeAllImages,
-                scopeSpecificImages);
+        // FlowPane, not HBox: a narrow dialog wraps the options onto a second
+        // line instead of squeezing them until their labels ellipsize away.
+        FlowPane radios = new FlowPane(15, 4, new Label("Scope:"), scopeCurrentImage,
+                scopeAllImages, scopeSpecificImages);
         radios.setAlignment(Pos.CENTER_LEFT);
         HBox chooseRow = new HBox(8, chooseImagesButton, specificImagesLabel);
         chooseRow.setAlignment(Pos.CENTER_LEFT);
         chooseRow.setPadding(new Insets(0, 0, 0, 55));
-        getChildren().addAll(radios, chooseRow);
+        getChildren().addAll(radios, chooseRow, unavailableHint);
     }
 
     private void openImageChooser() {
@@ -154,8 +191,29 @@ public final class ScopeSection extends VBox {
      */
     public void setScopeTooltip(String text) {
         Tooltip tip = Tooltips.of(text);
-        scopeAllImages.setTooltip(tip);
-        scopeSpecificImages.setTooltip(tip);
+        // Never overwrite the "why is this disabled" tooltip with a description
+        // of what the option would do -- the reason it cannot be used is the
+        // more useful of the two, and it is the only place that reason lives
+        // besides the hint line.
+        if (!scopeAllImages.isDisable()) {
+            scopeAllImages.setTooltip(tip);
+        }
+        if (!scopeSpecificImages.isDisable()) {
+            scopeSpecificImages.setTooltip(tip);
+        }
+    }
+
+    /**
+     * Enables or disables every scope control, e.g. while a run is in flight.
+     * <p>
+     * Options that are unavailable for a structural reason -- no image open, a
+     * single-image project -- STAY disabled when re-enabled, so finishing a run
+     * cannot hand the user an option that was never valid.
+     */
+    public void setControlsDisabled(boolean disabled) {
+        scopeCurrentImage.setDisable(disabled || currentImageUnavailable);
+        scopeAllImages.setDisable(disabled || allImagesUnavailable);
+        scopeSpecificImages.setDisable(disabled || specificImagesUnavailable);
     }
 
     /** True when "Specific images..." is selected but nothing has been chosen. */

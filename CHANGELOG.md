@@ -73,6 +73,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Scope options were unreadable in a single-image project.** The reason an option
+  was unavailable ("requires project with multiple images") was appended to the radio
+  button's own label. Radio text lays out on one line, so at the clustering dialog's
+  550px content width JavaFX ellipsized every label to `...` -- the options became
+  unreadable in order to explain one of them. The reason now lives on its own wrapped
+  hint line and in a tooltip, and the row wraps instead of squeezing. Affects every
+  dialog with a scope control: clustering, phenotyping, cellular neighborhoods,
+  post-hoc spatial statistics, cluster management, plot and gate.
+
+- **"Select All" in the measurement picker was very slow.** Each row toggled fired the
+  selection callback, and that callback runs the pre-flight: it counts every detection
+  in the image and re-probes system RAM. Selecting all of a 60-marker panel therefore
+  ran 60 full pre-flights. Bulk operations (Select All / Select None / Select 'Mean',
+  and restoring a saved selection) now fire one event at the end, and the RAM figure is
+  measured once per session instead of once per edit -- it is a property of the machine,
+  and on Windows the last-resort probe spawns a `wmic` process. Restoring a saved
+  configuration now also refreshes the pre-flight, which it previously never did.
+
+- **The Cellular Neighborhoods dialog carried its own copy of the scope control.**
+  It now uses the shared `ScopeSection` like every other dialog, so the layout fix
+  above only had to be made once. Its run-in-progress disable also no longer decides
+  which options to re-enable by string-matching the radio button's label text.
+
 - **Areas were resolved from parent links, which cannot be trusted.** Membership was
   found by walking each cell's `getParent()` chain. On a project where cell detection
   ran before dearraying -- or whose hierarchy the user has edited since -- every cell

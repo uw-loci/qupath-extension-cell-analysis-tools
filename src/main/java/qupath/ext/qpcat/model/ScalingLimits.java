@@ -273,6 +273,25 @@ public final class ScalingLimits {
      * block.</p>
      */
     public static OptionalDouble detectRamGb() {
+        OptionalDouble cached = cachedRamGb;
+        if (cached != null) {
+            return cached;
+        }
+        OptionalDouble measured = measureRamGb();
+        cachedRamGb = measured;
+        return measured;
+    }
+
+    /**
+     * Memoized because installed RAM does not change while QuPath is running,
+     * and the last-resort probe SPAWNS A PROCESS ({@code wmic} on Windows,
+     * {@code sysctl} on macOS). The pre-flight runs on every dialog edit, so an
+     * unmemoized probe put a process launch behind each one. It also stops the
+     * "could not determine" warning repeating once per keystroke.
+     */
+    private static volatile OptionalDouble cachedRamGb;
+
+    private static OptionalDouble measureRamGb() {
         OptionalDouble v = ramFromMxBean();
         if (v.isPresent()) return v;
         v = ramFromProcMeminfo();

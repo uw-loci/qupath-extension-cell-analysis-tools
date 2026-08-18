@@ -46,6 +46,14 @@ public class MeasurementSelectionPane extends VBox {
     private final TextField filterField = new TextField();
     private final ListView<Item> list = new ListView<>();
     private Runnable onSelectionChanged;
+    /**
+     * Depth of an in-progress bulk change. The selection callback drives a
+     * pre-flight that counts detections and sizes the run, so firing it once
+     * per row turns "Select All" over a 60-marker panel into 60 full
+     * re-computations -- visible as seconds of lag on a large image. Bulk
+     * operations raise this, change every row, then fire ONCE.
+     */
+    private int bulkDepth;
 
     public MeasurementSelectionPane() {
         super(5);
@@ -80,11 +88,11 @@ public class MeasurementSelectionPane extends VBox {
         selectNone.setOnAction(e -> setVisibleChecked(false));
         selectNone.setTooltip(Tooltips.of("Uncheck all currently shown measurements."));
         Button selectMean = new Button("Select 'Mean' only");
-        selectMean.setOnAction(e -> {
+        selectMean.setOnAction(e -> inBulk(() -> {
             for (Item m : filtered) {
                 m.selected.set(m.name.contains("Mean"));
             }
-        });
+        }));
         selectMean.setTooltip(Tooltips.of(
                 "Among the currently shown measurements, check those containing 'Mean'\n"
                 + "and uncheck the rest. Hidden rows keep their checks."));
@@ -94,32 +102,54 @@ public class MeasurementSelectionPane extends VBox {
     }
 
     private void setVisibleChecked(boolean checked) {
-        for (Item m : filtered) {
-            m.selected.set(checked);
+        inBulk(() -> {
+            for (Item m : filtered) {
+                m.selected.set(checked);
+            }
+        });
+    }
+
+    /**
+     * Runs a multi-row change as ONE selection event.
+     * <p>
+     * The individual {@code selected} properties still fire, so the checkbox
+     * cells repaint as they always did -- only the expensive downstream
+     * callback is coalesced.
+     */
+    private void inBulk(Runnable change) {
+        bulkDepth++;
+        try {
+            change.run();
+        } finally {
+            bulkDepth--;
         }
+        fireChanged();
     }
 
     /** Replace the list of measurements; {@code defaultSelected} pre-checks matching ones. */
     public void setMeasurements(List<String> names, Predicate<String> defaultSelected) {
-        items.clear();
-        for (String name : names) {
-            Item m = new Item(name);
-            if (defaultSelected != null && defaultSelected.test(name)) {
-                m.selected.set(true);
+        inBulk(() -> {
+            items.clear();
+            for (String name : names) {
+                Item m = new Item(name);
+                if (defaultSelected != null && defaultSelected.test(name)) {
+                    m.selected.set(true);
+                }
+                m.selected.addListener((o, a, b) -> fireChanged());
+                items.add(m);
             }
-            m.selected.addListener((o, a, b) -> fireChanged());
-            items.add(m);
-        }
-        filterField.clear();
-        fireChanged();
+            filterField.clear();
+        });
     }
 
     /** Set the exact checked set (used to restore a prior selection). */
     public void setSelected(Collection<String> names) {
         Set<String> want = new HashSet<>(names);
-        for (Item m : items) {
-            m.selected.set(want.contains(m.name));
-        }
+        inBulk(() -> {
+            for (Item m : items) {
+                m.selected.set(want.contains(m.name));
+            }
+        });
     }
 
     /** Names of all checked measurements (including any currently filtered out). */
@@ -146,6 +176,9 @@ public class MeasurementSelectionPane extends VBox {
     }
 
     private void fireChanged() {
+        if (bulkDepth > 0) {
+            return;     // one event at the end of the bulk change, not one per row
+        }
         if (onSelectionChanged != null) {
             try { onSelectionChanged.run(); } catch (Exception ignore) { /* UI sink */ }
         }
