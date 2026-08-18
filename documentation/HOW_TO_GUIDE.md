@@ -1684,6 +1684,9 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
 3. The preview shows how many areas were found and if any cells lack an
    assignment. Empty areas are skipped; sparse areas are handled (spatial graph
    parameters are capped per area so one small core does not reduce k for the rest).
+   **TMA cores flagged missing are skipped too**, and the preview says how many --
+   so a ragged grid does not fill the export with blank rows. Detections inside a
+   missing core are still analysed, but land in `unassigned`.
 4. For a **joint** run across multiple images, the same area levels are applied to
    every image. A cell belongs to an area if it **falls inside** that region --
    matched geometrically, from the cell's centroid, not from the object
@@ -2088,6 +2091,9 @@ To configure:
 3. The preview shows how many areas were found and flags any cells with no assignment.
    Empty areas are skipped; sparse areas are handled (spatial graph parameters are
    capped per area so one small core does not reduce k for the rest).
+   **TMA cores flagged missing are skipped too**, and the preview says how many --
+   so a ragged grid does not fill the export with blank rows. Detections inside a
+   missing core are still analysed, but land in `unassigned`.
 4. For multi-image scope, the same area levels are applied to every image. A cell
    belongs to an area if it **falls inside** that region -- matched geometrically
    from its centroid, never from parent links, and always read-only.

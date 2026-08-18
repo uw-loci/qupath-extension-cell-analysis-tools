@@ -2007,6 +2007,7 @@ public class ClusteringWorkflow {
                     perCellArea[i] = areas.getAreaNames().get(areaIds[i]);
                 }
                 result.setCellAreaNames(perCellArea);
+                result.setAreaResolutionSummary(areas.describe());
             }
             if (task.outputs.containsKey("areas_summary_csv")) {
                 result.setAreasSummaryCsv((String) task.outputs.get("areas_summary_csv"));

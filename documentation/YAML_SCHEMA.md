@@ -178,6 +178,11 @@ clustering:
 
 > **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | unassigned`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
 
+> **TMA cores flagged missing are skipped.** A dearrayed grid is rectangular, so a slide with a ragged edge carries cores that hold no tissue at all; the dearrayer flags those, and you can flag more by hand on a core that is folded, torn, or otherwise out of scope. Those cores are not areas, and produce no row in any per-area output -- one blank row per core, per statistic, is what turns a 55-core spreadsheet into one that has to be filtered before it can be read.
+>
+> Any detections that *do* sit inside a missing core are still analysed -- cluster labels map back to objects by position, so cells are never dropped -- but they fall into the image's `unassigned` area and are pooled there, so their own spatial statistics are not meaningful. That is the right outcome for cells you have already declared out of scope. The preview line and the run log both state how many cores were skipped: a large skip count next to a large unassigned count means the dearraying, not the analysis, is what needs attention.
+
+
 > **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighbourhood term rather than borrowing neighbours from another specimen; cells are never dropped.
 
 ## `phenotyping` (optional, object)

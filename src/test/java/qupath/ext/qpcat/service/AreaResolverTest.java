@@ -56,7 +56,17 @@ class AreaResolverTest {
 
         /** Adds a dearrayed-style core. NOT parented to anything. */
         TMACoreObject core(String name, double cx, double cy, double diameter) {
-            TMACoreObject c = PathObjects.createTMACoreObject(cx, cy, diameter, false);
+            return core(name, cx, cy, diameter, false);
+        }
+
+        /** As above, with the dearrayer's "no tissue here" flag set. */
+        TMACoreObject missingCore(String name, double cx, double cy, double diameter) {
+            return core(name, cx, cy, diameter, true);
+        }
+
+        private TMACoreObject core(String name, double cx, double cy, double diameter,
+                                   boolean missing) {
+            TMACoreObject c = PathObjects.createTMACoreObject(cx, cy, diameter, missing);
             c.setName(name);
             cores.add(c);
             return c;
@@ -94,6 +104,18 @@ class AreaResolverTest {
      * inscribed square.
      */
     private static Slide twoCoreSlide(int tumorCells, int stromaCells) {
+        Slide s = twoCoreSlideUngridded(tumorCells, stromaCells);
+        s.grid(2);
+        return s;
+    }
+
+    /**
+     * As above, but the grid is not published yet, so a test can add more cores
+     * first. {@code setTMAGrid} is called exactly once per slide -- publishing
+     * twice would be a second write to the hierarchy, which is precisely what
+     * this resolver promises never to do.
+     */
+    private static Slide twoCoreSlideUngridded(int tumorCells, int stromaCells) {
         Slide s = new Slide();
         double d = 400;
         for (int c = 0; c < 2; c++) {
@@ -107,7 +129,6 @@ class AreaResolverTest {
             s.cellsIn(ox + 5, oy + 5, side / 2 - 10, tumorCells);
             s.cellsIn(ox + side / 2 + 5, oy + 5, side / 2 - 10, stromaCells);
         }
-        s.grid(2);
         return s;
     }
 
@@ -226,6 +247,85 @@ class AreaResolverTest {
                 s.resolve(new AreaLevelSpec(AreaLevel.TMA_CORES));
 
         assertThat(areas.getUnassignedCellCount()).isEqualTo(4);
+    }
+
+    // --- Cores flagged missing ----------------------------------------------
+
+    /**
+     * The export-size question. A dearrayed grid is rectangular, so a slide
+     * with a ragged edge carries cores that hold nothing at all. Those must
+     * never reach the output: one blank row per core, per statistic, is how a
+     * 55-core TMA turns a readable spreadsheet into one that has to be
+     * filtered before it can be looked at.
+     */
+    @Test
+    void emptyMissingCoresAddNoRows() {
+        Slide s = twoCoreSlideUngridded(3, 2);
+        for (int i = 0; i < 6; i++) {
+            s.missingCore("B-" + (i + 1), 100 + i * 600.0, 900, 400);
+        }
+        s.grid(2);
+
+        AreaResolver.AreaAssignment areas =
+                s.resolve(new AreaLevelSpec(AreaLevel.TMA_CORES));
+
+        assertThat(areas.getAreaCount()).isEqualTo(2);
+        assertThat(areas.getUnassignedCellCount()).isZero();
+        assertThat(areas.getMissingCoresSkipped()).isEqualTo(6);
+    }
+
+    /**
+     * A core flagged missing that nonetheless holds detections -- debris, or a
+     * hand-flagged core the user wants out of the analysis. It is not an area,
+     * but its cells are NOT dropped: labels map back positionally on the Java
+     * side, so a shortened array would be a silent misalignment.
+     */
+    @Test
+    void cellsInsideAMissingCoreAreExcludedFromAreasButNeverDropped() {
+        Slide s = twoCoreSlideUngridded(3, 2);
+        s.missingCore("B-1", 200, 900, 400);
+        s.cellsIn(150, 850, 100, 4);
+        s.grid(2);
+
+        AreaResolver.AreaAssignment areas =
+                s.resolve(new AreaLevelSpec(AreaLevel.TMA_CORES));
+
+        // Two real cores plus ONE pooled unassigned area -- not one per core.
+        assertThat(areas.getAreaCount()).isEqualTo(3);
+        assertThat(areas.getUnassignedCellCount()).isEqualTo(4);
+        assertThat(areas.getMissingCoresSkipped()).isEqualTo(1);
+
+        int total = 0;
+        for (int size : areas.getAreaSizes()) {
+            total += size;
+        }
+        assertThat(total).isEqualTo(s.cells.size());
+        assertThat(areas.getAreaIds()).hasSize(s.cells.size());
+    }
+
+    /** The preview line has to state it, or the exclusion is invisible. */
+    @Test
+    void describeReportsSkippedMissingCores() {
+        Slide s = twoCoreSlideUngridded(2, 1);
+        s.missingCore("B-1", 200, 900, 400);
+        s.grid(2);
+
+        assertThat(s.resolve(new AreaLevelSpec(AreaLevel.TMA_CORES)).describe())
+                .contains("1 core(s) flagged missing skipped");
+    }
+
+    /** No core level in play, so nothing is said about cores. */
+    @Test
+    void missingCoresAreNotCountedWhenNoTmaLevelIsSelected() {
+        Slide s = twoCoreSlideUngridded(2, 1);
+        s.missingCore("B-1", 200, 900, 400);
+        s.grid(2);
+
+        AreaResolver.AreaAssignment areas =
+                s.resolve(new AreaLevelSpec(AreaLevel.ANNOTATIONS, List.of("Tissue")));
+
+        assertThat(areas.getMissingCoresSkipped()).isZero();
+        assertThat(areas.describe()).doesNotContain("missing");
     }
 
     // --- Images level --------------------------------------------------------

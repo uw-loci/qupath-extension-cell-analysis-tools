@@ -103,6 +103,10 @@ public final class ClusteringRunRecord {
         // across the whole slide. A record that omitted them would describe a
         // run nobody could reproduce.
         sb.append("Independent areas: ").append(describeAreaLevels(config)).append('\n');
+        if (result != null && result.getAreaResolutionSummary() != null) {
+            sb.append("      resolved to : ").append(result.getAreaResolutionSummary())
+                    .append('\n');
+        }
         sb.append("Spatial smoothing: ").append(config.isEnableSpatialSmoothing());
         if (config.isEnableSpatialSmoothing()) {
             sb.append("  (").append(config.getSpatialSmoothingIterations()).append(" iter, graph: ")

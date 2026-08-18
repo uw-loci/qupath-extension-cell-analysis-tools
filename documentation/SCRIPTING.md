@@ -50,7 +50,7 @@ Static facade for graph construction. Returns a `Map<String, Object>` describing
 | `k` | int | 15 | kNN only. Number of nearest neighbors per cell. |
 | `radius` | double | -1 (auto) | Radius only. Pixel units of detection centroids. -1 = auto-derive from median nearest-neighbor distance times 5. |
 | `maxEdge` | double | -1 (no pruning) | Delaunay only. Drop edges longer than this (pixel units). -1 = keep all. |
-| `areas` | List\<Map\> | absent (one area per image) | Independent areas -- see below. No graph edge ever joins two areas. |
+| `areas` | List\<Map\> | absent (one area per image) | Independent areas -- see below. No graph edge ever joins two areas. TMA cores flagged missing are not areas. |
 
 **Returns:** the canonical options map. Pass it to `SpatialStatsScripts` methods as the `graphHandle` argument so every statistic references the same neighborhood definition.
 

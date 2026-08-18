@@ -48,6 +48,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   stay global and are reported once -- a cluster's marker profile is a property of the
   cluster, not of an area.
 
+- **TMA cores flagged missing are excluded from areas.** A dearrayed grid is
+  rectangular, so a slide with a ragged edge carries cores holding no tissue; the
+  dearrayer flags those, and a user can flag more by hand on a folded or torn core.
+  Those cores are no longer areas and produce no row in `<name>_areas_summary.csv`
+  or `<name>_areas_statistics.csv` -- one blank row per core, per statistic, is
+  what turns a 55-core spreadsheet into one that has to be filtered before it can
+  be read. Detections inside a missing core are still analysed (labels map back by
+  position, so cells are never dropped) but fall into the image's `unassigned`
+  area. The dialog preview, the run log and the run record all state how many
+  cores were skipped, so a mis-dearrayed slide is visible rather than silent.
+
 - **Harmony batch key.** Choose whether Harmony corrects over images (the default
   and previous behaviour) or over independent areas, so a TMA inside a *single*
   image can be corrected core by core. Batch correction is no longer restricted to

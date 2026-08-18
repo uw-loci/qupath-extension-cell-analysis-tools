@@ -283,6 +283,20 @@ public class ClusteringResult {
     /** Distinct area count, or 0 when areas were not resolved. */
     public int getAreaCount() { return distinctNonNull(cellAreaNames); }
 
+    /**
+     * One-line account of how the partition resolved -- area count, cells that
+     * fell outside every region, TMA cores skipped as missing. Null when the
+     * run was not partitioned below the image level.
+     * <p>
+     * Kept so the run record can state it. A per-area export that is short of
+     * the grid is otherwise unexplainable months later: the reader cannot tell
+     * a deliberate exclusion from a bug, and the log that said so is gone.
+     */
+    private String areaResolutionSummary;
+
+    public String getAreaResolutionSummary() { return areaResolutionSummary; }
+    public void setAreaResolutionSummary(String s) { this.areaResolutionSummary = s; }
+
     private static int distinctNonNull(String[] values) {
         if (values == null) {
             return 0;

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.lib.objects.PathObject;
+import qupath.lib.objects.TMACoreObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.objects.hierarchy.TMAGrid;
@@ -62,15 +63,18 @@ public final class AreaResolver {
         private final List<String> areaTypes;
         private final int[] areaSizes;
         private final boolean[] areaIsUnassigned;
+        private final int missingCoresSkipped;
 
         AreaAssignment(int[] areaIds, List<String> areaNames, List<String> areaImageNames,
-                       List<String> areaTypes, int[] areaSizes, boolean[] areaIsUnassigned) {
+                       List<String> areaTypes, int[] areaSizes, boolean[] areaIsUnassigned,
+                       int missingCoresSkipped) {
             this.areaIds = areaIds;
             this.areaNames = areaNames;
             this.areaImageNames = areaImageNames;
             this.areaTypes = areaTypes;
             this.areaSizes = areaSizes;
             this.areaIsUnassigned = areaIsUnassigned;
+            this.missingCoresSkipped = missingCoresSkipped;
         }
 
         /** Dense area id per cell, aligned to the input detection order. */
@@ -93,6 +97,16 @@ public final class AreaResolver {
 
         /** Cell count per area id. */
         public int[] getAreaSizes() { return areaSizes; }
+
+        /**
+         * TMA cores flagged missing that were excluded from the partition.
+         * <p>
+         * Reported rather than swallowed: the dearrayer sets this flag
+         * automatically from a tissue threshold and does get it wrong, so a
+         * large count next to a large unassigned count is the signal that the
+         * dearraying, not the analysis, is what needs attention.
+         */
+        public int getMissingCoresSkipped() { return missingCoresSkipped; }
 
         public int getAreaCount() { return areaNames.size(); }
 
@@ -135,6 +149,10 @@ public final class AreaResolver {
             int unassigned = getUnassignedCellCount();
             if (unassigned > 0) {
                 sb.append(String.format("; %,d cell(s) unassigned", unassigned));
+            }
+            if (missingCoresSkipped > 0) {
+                sb.append(String.format("; %,d core(s) flagged missing skipped",
+                        missingCoresSkipped));
             }
             return sb.toString();
         }
@@ -179,6 +197,7 @@ public final class AreaResolver {
         // parent links. See the class javadoc for why.
         List<List<Map<PathObject, PathObject>>> byImageAndLevel =
                 buildContainmentMaps(hierarchies, subLevels);
+        int missingCores = countMissingCores(hierarchies, subLevels);
 
         for (int i = 0; i < n; i++) {
             PathObject det = detections.get(i);
@@ -239,7 +258,12 @@ public final class AreaResolver {
         }
 
         AreaAssignment assignment = new AreaAssignment(
-                areaIds, areaNames, areaImageNames, areaTypes, sizes, unassigned);
+                areaIds, areaNames, areaImageNames, areaTypes, sizes, unassigned, missingCores);
+
+        if (missingCores > 0) {
+            logger.info("Skipped {} TMA core(s) flagged missing; any detections inside them are "
+                            + "reported under '{}'", missingCores, UNASSIGNED);
+        }
 
         int unassignedCells = assignment.getUnassignedCellCount();
         if (unassignedCells > 0) {
@@ -346,9 +370,20 @@ public final class AreaResolver {
     /**
      * Regions that define one level, in a deterministic order.
      * <p>
-     * Missing TMA cores are INCLUDED: "missing" is a quality flag, and any
-     * cells detected inside such a core are still real objects that have to go
-     * somewhere. Dropping them here would silently shrink the analysis.
+     * TMA cores flagged {@code missing} are EXCLUDED. That flag is the user's
+     * explicit "this core is not part of the analysis" -- set by the dearrayer
+     * where it found no tissue, or by hand on a folded or damaged core -- and a
+     * core with no tissue contributes nothing but an empty row per statistic to
+     * every export.
+     * <p>
+     * Excluding the core does NOT drop its cells: labels are mapped back
+     * positionally on the Java side, so a shortened array would be a silent
+     * misalignment rather than a clean failure. Any detections inside a missing
+     * core instead fall through to the image's {@code unassigned} area, and are
+     * counted in both the log and the dialog preview. They are pooled there
+     * with every other unassigned cell, so their own spatial statistics are not
+     * meaningful -- which is the correct outcome for cells the user has already
+     * declared out of scope.
      */
     private static List<PathObject> candidateRegions(PathObjectHierarchy hierarchy,
                                                      AreaLevelSpec row) {
@@ -360,7 +395,13 @@ public final class AreaResolver {
                 }
                 // Grid order (A-1, A-2, ...) is both deterministic and the
                 // order a user reads the slide in.
-                return new ArrayList<>(grid.getTMACoreList());
+                List<PathObject> cores = new ArrayList<>();
+                for (TMACoreObject core : grid.getTMACoreList()) {
+                    if (core != null && !core.isMissing()) {
+                        cores.add(core);
+                    }
+                }
+                return cores;
             }
             case ANNOTATIONS -> {
                 List<PathObject> annotations = new ArrayList<>();
@@ -380,10 +421,40 @@ public final class AreaResolver {
         }
     }
 
+    /**
+     * How many TMA cores {@link #candidateRegions} excluded as missing, across
+     * every image -- but only when a TMA level is actually in play, so a run
+     * that never partitions by core never reports a number about cores.
+     */
+    private static int countMissingCores(List<PathObjectHierarchy> hierarchies,
+                                         List<AreaLevelSpec> subLevels) {
+        boolean wantsCores = false;
+        for (AreaLevelSpec row : subLevels) {
+            wantsCores |= row.getLevel() == AreaLevel.TMA_CORES;
+        }
+        if (!wantsCores || hierarchies == null) {
+            return 0;
+        }
+        int missing = 0;
+        for (PathObjectHierarchy hierarchy : hierarchies) {
+            TMAGrid grid = hierarchy == null ? null : hierarchy.getTMAGrid();
+            if (grid == null) {
+                continue;
+            }
+            for (TMACoreObject core : grid.getTMACoreList()) {
+                if (core != null && core.isMissing()) {
+                    missing++;
+                }
+            }
+        }
+        return missing;
+    }
+
     private static boolean matches(PathObject candidate, AreaLevelSpec row) {
         switch (row.getLevel()) {
             case TMA_CORES:
-                return candidate.isTMACore();
+                return candidate.isTMACore()
+                        && !(candidate instanceof TMACoreObject core && core.isMissing());
             case ANNOTATIONS:
                 if (!candidate.isAnnotation()) {
                     return false;
