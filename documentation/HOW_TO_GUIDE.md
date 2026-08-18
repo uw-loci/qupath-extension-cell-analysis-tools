@@ -149,6 +149,7 @@ Full clustering with all configuration options.
    - See [Large datasets](../README.md#large-datasets-hundreds-of-thousands-to-millions-of-cells) in the README for the reasoning
 
 10. Click **Run Clustering**
+    - If any detections already have classifications, a confirmation dialog appears. Cluster labels are written as classifications, so any existing labels will be **REPLACED**. For the current image the dialog counts the affected detections and lists the classes being replaced -- seeing `Cluster 0, Cluster 1` means you are re-running over your own output, while `Tumor, Stroma` is worth stopping for. For a project scope it states the consequence without a count, since counting would mean opening every image just to write a dialog. Confirm to proceed.
 11. View results in the results dialog (heatmap, scatter plot, marker rankings, plots)
 
 ![Clustering results dialog showing the cluster-by-marker heatmap, with tabs for UMAP, marker rankings, dotplot, matrix plot, PAGA trajectory, stacked violin, and embedding plot](images/cluster-marker-heatmap.png)

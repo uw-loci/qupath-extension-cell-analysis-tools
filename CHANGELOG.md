@@ -39,16 +39,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   deepest level stays together: with `Images > TMA cores`, Tumor and Stroma inside
   a core still share a graph, so the interface between them is preserved.
 
-- **Per-area output.** `<name>_areas_summary.csv` (wide: one row per area, cluster
-  fraction and count per column) and `<name>_areas_statistics.csv` (long: one row
-  per area / statistic / key) are written next to the saved result. Cluster-level
-  measurements stay global and are reported once -- a cluster's marker profile is a
-  property of the cluster, not of an area.
+- **Per-area output.** `<name>_areas_summary.csv` (wide: one row per area with columns
+  for area name, area type, cell count, cluster count, then cluster fraction and count
+  per column) and `<name>_areas_statistics.csv` (long: one row per area / statistic / key)
+  are written next to the saved result. Area types are named from the deepest resolution
+  level ("Image", "TMA Core", "Annotation-<class>") so a name alone is not
+  self-describing once a project mixes cores and annotations. Cluster-level measurements
+  stay global and are reported once -- a cluster's marker profile is a property of the
+  cluster, not of an area.
 
 - **Harmony batch key.** Choose whether Harmony corrects over images (the default
   and previous behaviour) or over independent areas, so a TMA inside a *single*
   image can be corrected core by core. Batch correction is no longer restricted to
   the "All project images" scope.
+
+- **Confirm before replacing classifications.** When running **Find cell populations
+  (clustering)...**, if detections already have classifications, a confirmation dialog
+  appears. For the current image it counts them and lists the classes being replaced; for a project scope it states the consequence without a count.
+  Cluster labels are written as classifications, so any prior label (from phenotyping,
+  a previous clustering run, or hand-drawn classification) will be overwritten. The
+  dialog lets you confirm or cancel before proceeding.
 
 ### Fixed
 

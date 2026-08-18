@@ -467,7 +467,7 @@ After clustering, QP-CAT can generate:
 | **Dotplot** | Fraction expressing + mean expression per cluster per marker |
 | **Stacked violin** | Expression distributions per cluster |
 | **Spatial scatter** | Cell positions colored by cluster (when spatial analysis enabled) |
-| **Per-area composition** | `<name>_areas_summary.csv` -- wide table, one row per area, cluster fraction and count per column (when independent areas are configured). Written next to the saved result. |
+| **Per-area composition** | `<name>_areas_summary.csv` -- wide table, one row per area with columns: area name, area type (Image / TMA Core / Annotation-<class>), cell count, cluster count, then cluster fraction and count per column (when independent areas are configured). Written next to the saved result. |
 | **Per-area spatial statistics** | `<name>_areas_statistics.csv` -- long table, one row per area / statistic / key (when independent areas are configured). Same column shape as the post-hoc spatial stats CSV, so the two concatenate. |
 
 ![Interactive UMAP scatter plot, one point per cell colored by cluster assignment](documentation/images/umap-scatter.png)
