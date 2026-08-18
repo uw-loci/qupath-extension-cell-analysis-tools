@@ -310,6 +310,49 @@ def _composition_for_block(img_key, block_coords, block_labels, radius_px=None):
 # in single-image mode this is one block over all cells.
 radius_mode = (win_mode == "radius") and radius_um > 0
 composition = np.zeros((n_cells, n_classes), dtype=np.float64)
+
+
+def build_composition_per_unit(
+    composition,
+    coords,
+    labels_arr,
+    sample_ids_arr,
+    unique_samples,
+    image_ids_arr,
+    block_fn,
+    radius_px_fn=None,
+):
+    """Fill `composition` a window at a time, one analysis unit at a time.
+
+    A unit is an independent area when areas are configured, otherwise an
+    image. Windows are built WITHIN a unit and never across one: a cell in the
+    next TMA core is not a neighbour, so counting it would put a mixture in the
+    composition vector that the tissue does not contain.
+
+    Lifted out of the script body so it can be unit-tested at all -- the test
+    loader pulls top-level functions out of this source with `ast`, and cannot
+    reach loose script code. `block_fn` and `radius_px_fn` are injected for the
+    same reason.
+
+    Returns the list of (unit id, cell count) actually processed.
+    """
+    processed = []
+    for unit in unique_samples:
+        sel = np.flatnonzero(sample_ids_arr == unit)
+        if sel.size == 0:
+            continue
+        # Pixel size is a property of the IMAGE, not the area, so it is looked
+        # up through any cell in this unit -- every cell in an area shares an
+        # image by construction, because images are always the outermost level.
+        img_idx = int(image_ids_arr[sel[0]]) if image_ids_arr is not None else 0
+        r_px = radius_px_fn(img_idx) if radius_px_fn is not None else None
+        composition[sel, :] = block_fn(
+            int(unit), coords[sel, :], labels_arr[sel], radius_px=r_px
+        )
+        processed.append((int(unit), int(sel.size)))
+    return processed
+
+
 if multi_sample:
     _update(
         "Building per-%s spatial windows (%s) across %d %ss..."
@@ -320,18 +363,16 @@ if multi_sample:
             sample_kind,
         )
     )
-    for unit in unique_samples:
-        sel = np.flatnonzero(sample_ids_arr == unit)
-        if sel.size == 0:
-            continue
-        # Pixel size is a property of the IMAGE, so look it up via any cell in
-        # this area -- every cell in an area shares an image by construction,
-        # because images are always the outermost area level.
-        img_idx = int(image_ids_arr[sel[0]]) if image_ids_arr is not None else 0
-        r_px = _radius_px_for(img_idx) if radius_mode else None
-        composition[sel, :] = _composition_for_block(
-            int(unit), coords[sel, :], labels_arr[sel], radius_px=r_px
-        )
+    build_composition_per_unit(
+        composition,
+        coords,
+        labels_arr,
+        sample_ids_arr,
+        unique_samples,
+        image_ids_arr,
+        _composition_for_block,
+        radius_px_fn=_radius_px_for if radius_mode else None,
+    )
 else:
     if radius_mode:
         _update("Building spatial windows (radius=%.1f um)..." % radius_um)

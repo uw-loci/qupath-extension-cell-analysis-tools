@@ -480,6 +480,22 @@ def _median_nn_distance(coords):
         return None
 
 
+def area_type(area_types, area_id):
+    """Type label for an area id, defaulting to "Image".
+
+    Absent types mean the run was not partitioned below the image level, which
+    is exactly when every area IS an image.
+    """
+    if area_types is not None:
+        try:
+            value = list(area_types)[int(area_id)]
+            if value:
+                return str(value)
+        except (IndexError, ValueError, TypeError):
+            pass
+    return "Image"
+
+
 def _csv_cell(value):
     """Minimal CSV quoting. Area labels contain ' | ' and can contain commas."""
     text = "" if value is None else str(value)
@@ -492,7 +508,9 @@ def _csv_row(values):
     return ",".join(_csv_cell(v) for v in values)
 
 
-def build_area_summary_csv(area_ids, area_names, cluster_labels, cluster_names=None):
+def build_area_summary_csv(
+    area_ids, area_names, cluster_labels, cluster_names=None, area_types=None
+):
     """Wide per-area summary: one row per area, one column per cluster.
 
     This is the file a user actually opens. It answers "what is in each core"
@@ -501,8 +519,12 @@ def build_area_summary_csv(area_ids, area_names, cluster_labels, cluster_names=N
     profile is a property of the CLUSTER, identical in every area, and
     repeating it 55 times would be noise.
 
-    Columns: area, n_cells, n_clusters_present, then one fraction column per
-    cluster, then the matching count columns.
+    Columns: area, type, n_cells, n_clusters_present, then one fraction column
+    per cluster, then the matching count columns.
+
+    `type` says WHAT each area is -- "Image", "TMA Core", "Annotation-Tumor" --
+    because a name alone is not self-describing once a project mixes cores and
+    annotations, and "A-1" tells a reader nothing on its own.
     """
     ids = np.asarray(area_ids, dtype=np.int64).ravel()
     labels = np.asarray(cluster_labels).ravel()
@@ -522,7 +544,7 @@ def build_area_summary_csv(area_ids, area_names, cluster_labels, cluster_names=N
             for c in present
         }
 
-    header = ["area", "n_cells", "n_clusters_present"]
+    header = ["area", "type", "n_cells", "n_clusters_present"]
     header += ["%s_frac" % names[c] for c in present]
     header += ["%s_count" % names[c] for c in present]
     rows = [_csv_row(header)]
@@ -532,7 +554,12 @@ def build_area_summary_csv(area_ids, area_names, cluster_labels, cluster_names=N
         n = int(area_labels.shape[0])
         counts = {c: int(np.count_nonzero(area_labels == c)) for c in present}
         n_present = sum(1 for c in present if counts[c] > 0)
-        row = [area_label(area_names, area_id), n, n_present]
+        row = [
+            area_label(area_names, area_id),
+            area_type(area_types, area_id),
+            n,
+            n_present,
+        ]
         # n is never 0 -- area_slices only yields ids that occur -- so the
         # division needs no guard, but be explicit rather than rely on it.
         row += ["%.6f" % (counts[c] / n) if n else "" for c in present]

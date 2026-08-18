@@ -59,14 +59,16 @@ public final class AreaResolver {
         private final int[] areaIds;
         private final List<String> areaNames;
         private final List<String> areaImageNames;
+        private final List<String> areaTypes;
         private final int[] areaSizes;
         private final boolean[] areaIsUnassigned;
 
         AreaAssignment(int[] areaIds, List<String> areaNames, List<String> areaImageNames,
-                       int[] areaSizes, boolean[] areaIsUnassigned) {
+                       List<String> areaTypes, int[] areaSizes, boolean[] areaIsUnassigned) {
             this.areaIds = areaIds;
             this.areaNames = areaNames;
             this.areaImageNames = areaImageNames;
+            this.areaTypes = areaTypes;
             this.areaSizes = areaSizes;
             this.areaIsUnassigned = areaIsUnassigned;
         }
@@ -79,6 +81,15 @@ public final class AreaResolver {
 
         /** Source image name per area id. */
         public List<String> getAreaImageNames() { return areaImageNames; }
+
+        /**
+         * What KIND of thing each area is: {@code "Image"}, {@code "TMA Core"},
+         * or {@code "Annotation-<class>"}. Named from the DEEPEST level the
+         * area resolved at, which is the level that actually decided its
+         * extent. Reported alongside the name because "A-1" and "Tumor" are
+         * not self-describing once a project mixes cores and annotations.
+         */
+        public List<String> getAreaTypes() { return areaTypes; }
 
         /** Cell count per area id. */
         public int[] getAreaSizes() { return areaSizes; }
@@ -159,6 +170,7 @@ public final class AreaResolver {
         Map<String, Integer> keyToId = new LinkedHashMap<>();
         List<String> areaNames = new ArrayList<>();
         List<String> areaImageNames = new ArrayList<>();
+        List<String> areaTypes = new ArrayList<>();
         List<Boolean> areaUnassigned = new ArrayList<>();
         List<Integer> areaSizes = new ArrayList<>();
 
@@ -180,15 +192,19 @@ public final class AreaResolver {
             StringBuilder key = new StringBuilder().append(imageIndex);
             StringBuilder label = new StringBuilder(imageName);
             boolean unresolved = false;
+            // The deepest level that actually matched decides the area's extent,
+            // so that is the level its type is named from.
+            String type = AreaLevel.IMAGES.getDisplayName();
             if (levelMaps != null) {
-                for (Map<PathObject, PathObject> levelMap : levelMaps) {
-                    PathObject region = levelMap.get(det);
+                for (int level = 0; level < levelMaps.size(); level++) {
+                    PathObject region = levelMaps.get(level).get(det);
                     if (region == null) {
                         unresolved = true;
                         break;
                     }
                     key.append('/').append(region.getID());
                     label.append(" | ").append(displayLabel(region));
+                    type = typeLabel(subLevels.get(level), region);
                 }
             } else if (!subLevels.isEmpty()) {
                 unresolved = true;
@@ -205,6 +221,7 @@ public final class AreaResolver {
                 keyToId.put(areaKey, id);
                 areaNames.add(label.toString());
                 areaImageNames.add(imageName);
+                areaTypes.add(type);
                 areaUnassigned.add(unresolved);
                 areaSizes.add(0);
             }
@@ -222,7 +239,7 @@ public final class AreaResolver {
         }
 
         AreaAssignment assignment = new AreaAssignment(
-                areaIds, areaNames, areaImageNames, sizes, unassigned);
+                areaIds, areaNames, areaImageNames, areaTypes, sizes, unassigned);
 
         int unassignedCells = assignment.getUnassignedCellCount();
         if (unassignedCells > 0) {
@@ -283,6 +300,25 @@ public final class AreaResolver {
             out.add(perLevel);
         }
         return out;
+    }
+
+    /**
+     * Type name for an area resolved at {@code row}: "TMA Core", or
+     * "Annotation-&lt;class&gt;" naming the class that actually matched (which
+     * may be one of several the level allows, so it is read from the region
+     * rather than from the level's filter).
+     */
+    private static String typeLabel(AreaLevelSpec row, PathObject region) {
+        if (row.getLevel() == AreaLevel.TMA_CORES) {
+            return "TMA Core";
+        }
+        if (row.getLevel() == AreaLevel.ANNOTATIONS) {
+            PathClass pc = region.getPathClass();
+            String cls = (pc != null && pc.toString() != null && !pc.toString().isBlank())
+                    ? pc.toString() : "unclassified";
+            return "Annotation-" + cls;
+        }
+        return row.getLevel().getDisplayName();
     }
 
     /** detection -> containing region, for one level of one image. */

@@ -1810,6 +1810,7 @@ public class ClusteringWorkflow {
             }
             inputs.put("area_ids", areaIdList);
             inputs.put("area_names", areas.getAreaNames());
+            inputs.put("area_types", areas.getAreaTypes());
         }
 
         // Preference-backed defaults (overridable via QP-CAT preferences UI)

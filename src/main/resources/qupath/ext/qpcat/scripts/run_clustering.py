@@ -169,6 +169,10 @@ try:
     area_names_list = list(area_names)
 except NameError:
     area_names_list = None
+try:
+    area_types_list = list(area_types)
+except NameError:
+    area_types_list = None
 
 if area_ids_list is not None and len(area_ids_list) != n_cells:
     # Refuse rather than degrade to None. Silently dropping the ids would
@@ -1620,7 +1624,7 @@ if area_ids_list is not None and n_areas > 1:
         from spatial_stats import build_area_summary_csv
 
         task.outputs["areas_summary_csv"] = build_area_summary_csv(
-            area_ids_list, area_names_list, labels
+            area_ids_list, area_names_list, labels, area_types=area_types_list
         )
     except Exception as _e:
         # A reporting convenience must never fail a run that already produced

@@ -40,6 +40,7 @@ import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
+import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
@@ -2230,6 +2231,62 @@ public class ClusteringDialog {
         return MeasurementExtractor.getAllMeasurements(dets).contains(prefix + "1");
     }
 
+
+    /**
+     * Confirms replacing existing classifications, or returns true when there
+     * is nothing to replace.
+     * <p>
+     * For a project scope the images are not opened just to count -- that would
+     * mean reading every image to write a dialog -- so the prompt states the
+     * consequence without a count, exactly as the phenotyping dialog does.
+     * For the current image the count is cheap and worth showing, because
+     * "1,203 of 45,000" reads very differently from "45,000 of 45,000".
+     */
+    private boolean confirmClassificationOverwrite(
+            List<ProjectImageEntry<BufferedImage>> subsetEntries) {
+        boolean projectScope = scopeSection.isAllImages() || subsetEntries != null;
+        if (projectScope) {
+            int n = subsetEntries != null ? subsetEntries.size()
+                    : (qupath.getProject() != null ? qupath.getProject().getImageList().size() : 0);
+            return Dialogs.showConfirmDialog("QPCAT - replace classifications?",
+                    "Cluster " + n + " project image(s)?\n\n"
+                    + "Cluster labels are written as each cell's classification, so any "
+                    + "existing classification in these images will be REPLACED and the "
+                    + "results saved back to each image. This cannot be undone.");
+        }
+
+        var imageData = qupath.getImageData();
+        if (imageData == null) {
+            return true;
+        }
+        var dets = imageData.getHierarchy().getDetectionObjects();
+        long classified = dets.stream()
+                .filter(d -> d.getPathClass() != null
+                        && d.getPathClass() != PathClass.getNullClass())
+                .count();
+        if (classified == 0) {
+            return true;
+        }
+        // Name the classes being replaced. "Cluster 0, Cluster 1" is obviously a
+        // re-run; "Tumor, Stroma" is the case worth stopping for.
+        var names = new java.util.LinkedHashSet<String>();
+        for (PathObject d : dets) {
+            PathClass pc = d.getPathClass();
+            if (pc != null && pc != PathClass.getNullClass()) {
+                names.add(pc.toString());
+                if (names.size() >= 6) break;
+            }
+        }
+        String shown = String.join(", ", names);
+        if (names.size() >= 6) {
+            shown += ", ...";
+        }
+        return Dialogs.showConfirmDialog("QPCAT - replace classifications?",
+                String.format("%,d of %,d detections already have a classification (%s).%n%n"
+                        + "Cluster labels are written as the classification, so these will be "
+                        + "REPLACED. Continue?", classified, dets.size(), shown));
+    }
+
     private void runClustering() {
         ClusteringConfig config = buildConfig();
         if (config == null) return;
@@ -2246,6 +2303,15 @@ public class ClusteringDialog {
             subsetEntries = scopeSection.resolveEntries();
         } else {
             subsetEntries = null;
+        }
+
+        // Warn before replacing existing classifications. Cluster labels are
+        // written as the PathClass, so ANY earlier classification on these
+        // cells -- a previous clustering run, phenotyping, a hand-drawn
+        // classifier -- is overwritten. Mirrors the same confirmation the
+        // phenotyping dialog has always shown, which clustering lacked.
+        if (!confirmClassificationOverwrite(subsetEntries)) {
+            return;
         }
 
         // Warn before overwriting existing embedding coordinate columns.

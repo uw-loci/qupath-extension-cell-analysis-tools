@@ -40,6 +40,7 @@ def _summary_builder():
         "logger": _Logger(),
         "area_slices": load_script_symbol(SCRIPT, "area_slices", {"np": np}),
         "area_label": load_script_symbol(SCRIPT, "area_label", {"np": np}),
+        "area_type": load_script_symbol(SCRIPT, "area_type", {"np": np}),
         "_csv_cell": load_script_symbol(SCRIPT, "_csv_cell", {"np": np}),
     }
     ns["_csv_row"] = load_script_symbol(SCRIPT, "_csv_row", ns)
@@ -68,8 +69,9 @@ def test_summary_has_one_row_per_area():
     )
     rows = _rows(csv)
     assert len(rows) == 3  # header + 2 areas
-    assert rows[1].startswith("slide | A-1,3,2")
-    assert rows[2].startswith("slide | A-2,2,1")
+    # area, type, n_cells, n_clusters_present
+    assert rows[1].startswith("slide | A-1,Image,3,2")
+    assert rows[2].startswith("slide | A-2,Image,2,1")
 
 
 def test_summary_fractions_are_within_the_area_not_the_cohort():
@@ -98,7 +100,8 @@ def test_summary_counts_sum_to_the_area_cell_count():
     count_cols = [i for i, h in enumerate(header) if h.endswith("_count")]
     for row in rows[1:]:
         cells = row.split(",")
-        assert sum(int(cells[i]) for i in count_cols) == int(cells[1])
+        n_cells_col = header.index("n_cells")
+        assert sum(int(cells[i]) for i in count_cols) == int(cells[n_cells_col])
 
 
 def test_summary_includes_clusters_absent_from_an_area_as_zero():
@@ -126,6 +129,28 @@ def test_area_labels_containing_commas_are_quoted():
         area_ids=[0], area_names=["slide, block 2 | A-1"], cluster_labels=[0]
     )
     assert '"slide, block 2 | A-1"' in csv
+
+
+def test_type_column_names_what_each_area_is():
+    # A name alone is not self-describing once a project mixes cores and
+    # annotations -- "A-1" tells a reader nothing on its own.
+    csv = _summary_builder()(
+        area_ids=[0, 1],
+        area_names=["slide | A-1", "slide | Tumor"],
+        cluster_labels=[0, 1],
+        area_types=["TMA Core", "Annotation-Tumor"],
+    )
+    rows = _rows(csv)
+    assert rows[0].split(",")[1] == "type"
+    assert rows[1].split(",")[1] == "TMA Core"
+    assert rows[2].split(",")[1] == "Annotation-Tumor"
+
+
+def test_type_defaults_to_image_when_absent():
+    # No types means the run was not partitioned below the image level, which
+    # is exactly when every area IS an image.
+    csv = _summary_builder()(area_ids=[0], area_names=None, cluster_labels=[0])
+    assert _rows(csv)[1].split(",")[1] == "Image"
 
 
 def test_summary_refuses_a_length_mismatch():
