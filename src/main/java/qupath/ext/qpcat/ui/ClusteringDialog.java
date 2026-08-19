@@ -1662,8 +1662,9 @@ public class ClusteringDialog {
                     addMethodInfo(
                             "Partitions cells into k clusters around centroids. Fast, but assumes "
                             + "round, equal-size clusters and is sensitive to initialisation "
-                            + "(QP-CAT runs 10 inits). Choose k with elbow/silhouette/gap methods "
-                            + "and expect them to disagree; re-run with different seeds to confirm "
+                            + "(QP-CAT runs 10 inits). QP-CAT does not compute elbow, silhouette "
+                            + "or gap statistics for you -- pick k by running a few values and "
+                            + "comparing the results, and re-run with different seeds to confirm "
                             + "stability.",
                             "caution-kmeans");
                 }

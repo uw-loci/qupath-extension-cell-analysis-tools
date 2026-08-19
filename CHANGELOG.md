@@ -73,6 +73,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Two in-app "Documentation" links pointed at sections that do not exist.** Both
+  Cellular Neighborhoods links used `#22-cellular-neighborhoods` while the heading's
+  anchor is `#22-finding-cellular-neighborhoods-spatial-niches`. A dead anchor does
+  not fail or log -- GitHub just serves the top of a 2,200-line page -- so a new test
+  now checks every in-app documentation link against the shipped guide.
+
+- **The KMeans note recommended methods QP-CAT does not provide.** It said to choose
+  k with "elbow/silhouette/gap methods" next to a dialog whose only KMeans control is
+  `n_clusters`. The tooltip and BEST_PRACTICES now say plainly that QP-CAT does not
+  compute those statistics and what to do instead. (Providing them is tracked in
+  `claude-reports/TODO_LIST.md`.)
+
+- **The post-hoc spatial dialog explained none of its statistics.** The clustering
+  dialog has a tooltip for every statistic and graph constructor; the dialog offering
+  the same six statistics had none. The wording now lives in one shared place, used by
+  both, so they cannot drift into describing the same statistic differently.
+
 - **"Select 'Mean' only" selected nothing, and Quick Cluster refused to start.**
   Both matched the literal string `Mean`, but QuPath's own cell measurements are
   lower case (`Nucleus: DAPI mean`) -- so on a standard project the button checked

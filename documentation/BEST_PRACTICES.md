@@ -208,9 +208,12 @@ express gradients. There is no single correct **resolution** -- sweep it; the ne
 
 <a name="caution-kmeans"></a>
 **KMeans** -- Partitions cells into k clusters around centroids. Fast, but assumes round,
-equal-size clusters and is sensitive to initialisation (QP-CAT runs 10 inits). Choose k with the
-elbow/silhouette/gap methods and expect them to disagree; re-run with different seeds to confirm
-stability. (Fu & Perry 2017.)
+equal-size clusters and is sensitive to initialisation (QP-CAT runs 10 inits). **QP-CAT does not
+compute elbow, silhouette or gap statistics** -- the algorithm exposes `n_clusters` and nothing
+else, so choosing k means running a few values and comparing the results (the Heatmap and Marker
+Rankings tabs are the quickest read). Those methods are worth knowing about and are described in
+the reference below; expect them to disagree with each other. Re-run with different seeds to
+confirm stability. (Fu & Perry 2017.)
 
 <a name="caution-minibatch-kmeans"></a>
 **MiniBatch KMeans** -- Approximates KMeans on small random batches: much faster, slightly

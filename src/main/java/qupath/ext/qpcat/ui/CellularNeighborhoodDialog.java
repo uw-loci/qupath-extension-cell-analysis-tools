@@ -102,7 +102,7 @@ public class CellularNeighborhoodDialog {
         content.setPrefWidth(620);
         content.getChildren().addAll(
                 createIntroBanner(),
-                QpcatDocLinks.linkBar("22-cellular-neighborhoods"),
+                QpcatDocLinks.linkBar("22-finding-cellular-neighborhoods-spatial-niches"),
                 createCellTypeSection(),
                 new Separator(),
                 createScopeSection(),
@@ -624,7 +624,8 @@ public class CellularNeighborhoodDialog {
         openFolder.setDisable(folder == null || !folder.isDirectory());
         openFolder.setOnAction(e -> openFile(folder));
         HBox actions = new HBox(8, openFolder,
-                QpcatDocLinks.howToGuide("How-To: Cellular neighborhoods", "22-cellular-neighborhoods"));
+                QpcatDocLinks.howToGuide("How-To: Cellular neighborhoods",
+                        "22-finding-cellular-neighborhoods-spatial-niches"));
         actions.setAlignment(Pos.CENTER_LEFT);
         box.getChildren().add(actions);
 

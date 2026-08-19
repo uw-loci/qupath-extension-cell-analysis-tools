@@ -206,6 +206,17 @@ public class SpatialStatsDialog {
         cRipley.setSelected(true);
         cNhood.setSelected(true);
 
+        // Same statistics as the clustering dialog offers, so the same
+        // explanations -- held in one place rather than transcribed.
+        cRipley.setTooltip(Tooltips.of(SpatialStatTooltips.RIPLEY));
+        cCoocP.setTooltip(Tooltips.of(SpatialStatTooltips.COOC_PAIRWISE));
+        cCoocO.setTooltip(Tooltips.of(SpatialStatTooltips.COOC_ONE_VS_REST));
+        cNhood.setTooltip(Tooltips.of(SpatialStatTooltips.NHOOD_ENRICHMENT));
+        cGeary.setTooltip(Tooltips.of(SpatialStatTooltips.GEARY));
+        cMoran.setTooltip(Tooltips.of(SpatialStatTooltips.MORAN));
+        graphType.setTooltip(Tooltips.of(SpatialStatTooltips.GRAPH_TYPE));
+        labelSourceBox.setTooltip(Tooltips.of(SpatialStatTooltips.LABEL_SOURCE));
+
         VBox statsBox = new VBox(4, cRipley, cCoocP, cCoocO, cNhood, cGeary, cMoran);
 
         // --- layout ---
