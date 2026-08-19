@@ -60,3 +60,12 @@ did not, and no test of our own code could have caught it. See
 
 - ASCII-only in logs / internal strings (Windows cp1252). Use `qupath.fx.dialogs.Dialogs`.
 - No `_legacy` / parallel code paths.
+
+## In-app bug reporter
+
+This extension ships a "Report a Bug..." menu item (`service/BugReportService.java` +
+`ui/BugReportDialog.java`). It is one of **three** near-identical copies across the monorepo with
+no shared code, so **a change here almost certainly belongs in the other two as well**. Before
+touching the scrubber, the payload, or the artifact set, read the contract and the change protocol
+in `claude-reports/design/2026-08-19_bug-reporter-architecture.md` (invariants INV-1..INV-8).
+User-submitted reports become public GitHub issues -- redaction is a privacy surface.

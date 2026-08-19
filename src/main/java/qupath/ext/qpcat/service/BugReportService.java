@@ -18,6 +18,7 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.SetupQPCAT;
@@ -91,11 +92,14 @@ public class BugReportService {
 
     /** Multi-line system-info block (extension/QuPath/Java/OS versions). */
     public static String gatherSysInfo() {
-        return "Extension: " + EXTENSION_LABEL + " " + getExtensionVersion() + "\n"
+        // Scrubbed like every other auto-collected artifact (INV-2). It carries
+        // no path today, but this block is edited far from the scrubber and
+        // must not silently become a leak.
+        return scrubPaths("Extension: " + EXTENSION_LABEL + " " + getExtensionVersion() + "\n"
                 + "QuPath: " + GeneralTools.getVersion() + "\n"
                 + "Java: " + System.getProperty("java.version") + "\n"
                 + "OS: " + System.getProperty("os.name") + " " + System.getProperty("os.version")
-                + " (" + System.getProperty("os.arch") + ")";
+                + " (" + System.getProperty("os.arch") + ")");
     }
 
     /**
@@ -179,21 +183,62 @@ public class BugReportService {
 
     /**
      * Replaces the user's home directory with {@code ~} so reports don't leak a
-     * username. Only applied to the copy bundled for submission.
+     * username. Only applied to the copy bundled for submission -- never to the
+     * on-screen log.
+     *
+     * <p>Only the home directory is redacted. Non-home paths (lab shares,
+     * install directories, C:\ProgramData) carry no user identity and are often
+     * the most diagnostic part of a log, so they are left intact.</p>
      */
     static String scrubPaths(String text) {
-        if (text == null || text.isEmpty()) {
+        return scrubPaths(
+                text,
+                System.getProperty("user.home"),
+                System.getProperty("os.name", "").toLowerCase().contains("win"));
+    }
+
+    /**
+     * Platform-injected core of {@link #scrubPaths(String)}, so the Windows
+     * behaviour is testable from Linux.
+     *
+     * <p>On Windows the same home path reaches a log in several separator forms,
+     * and a literal match catches only the first: the filesystem form
+     * ({@code C:\Users\alice}); the repr'd form Python emits for any list, dict
+     * or {@code %r} in a log line, which doubles every backslash
+     * ({@code C:\\Users\\alice}); and the forward-slash form from URIs and
+     * normalizing APIs ({@code file:/C:/Users/alice}). Matching single
+     * backslashes only redacts some lines of a log while leaking the username on
+     * the ones between them. So the home path is split on the native separator
+     * and rejoined with a separator class admitting one or two characters of
+     * either slash, matched case-insensitively -- Windows filesystems are
+     * case-insensitive and the casing varies within one process.</p>
+     *
+     * <p>Unix and macOS keep the plain substring replace: there is no separator
+     * ambiguity there, so a regex would only add ways to be wrong.</p>
+     */
+    static String scrubPaths(String text, String home, boolean windows) {
+        if (text == null || text.isEmpty() || home == null || home.isEmpty()) {
             return text;
         }
-        String home = System.getProperty("user.home");
-        if (home == null || home.isEmpty()) {
+        if (!windows) {
+            return text.replace(home, "~");
+        }
+        StringBuilder pattern = new StringBuilder();
+        for (String part : home.split("\\\\")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            if (pattern.length() > 0) {
+                pattern.append("[\\\\/]{1,2}");
+            }
+            pattern.append(Pattern.quote(part));
+        }
+        if (pattern.length() == 0) {
             return text;
         }
-        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
-        if (windows) {
-            return text.replaceAll("(?i)" + java.util.regex.Pattern.quote(home), "~");
-        }
-        return text.replace(home, "~");
+        return Pattern.compile(pattern.toString(), Pattern.CASE_INSENSITIVE)
+                .matcher(text)
+                .replaceAll("~");
     }
 
     /**
