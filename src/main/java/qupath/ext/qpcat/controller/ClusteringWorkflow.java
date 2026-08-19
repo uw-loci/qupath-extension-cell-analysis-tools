@@ -4457,7 +4457,17 @@ public class ClusteringWorkflow {
         if (e instanceof ProjectImageEntry<?> pe && pe.getImageName() != null) {
             return pe.getImageName();
         }
-        return "image";
+        // A current-image run carries no project entry, so this used to fall
+        // straight through to the literal "image" -- which is what every area
+        // label and every CSV row was then prefixed with. The open ImageData
+        // knows its own name; ask it before giving up.
+        if (seg.getImageData() instanceof ImageData<?> data && data.getServer() != null) {
+            String name = data.getServer().getMetadata().getName();
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+        }
+        return "Current image";
     }
 
     /** Show ONE spatial-graph summary (per-image averages + run mean) on the FX thread. */

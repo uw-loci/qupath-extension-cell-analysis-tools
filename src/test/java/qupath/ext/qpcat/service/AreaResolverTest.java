@@ -144,7 +144,8 @@ class AreaResolverTest {
         assertThat(areas.getAreaCount()).isEqualTo(2);
         // 3 tumor + 2 stroma cells of core A-1 land in ONE area, not two.
         assertThat(areas.getAreaIds()).containsExactly(0, 0, 0, 0, 0, 1, 1, 1, 1, 1);
-        assertThat(areas.getAreaNames()).containsExactly("slide.svs | A-1", "slide.svs | A-2");
+        // One image, so the constant image token is not repeated on every row.
+        assertThat(areas.getAreaNames()).containsExactly("A-1", "A-2");
         assertThat(areas.getAreaSizes()).containsExactly(5, 5);
         assertThat(areas.getUnassignedCellCount()).isZero();
     }
@@ -181,7 +182,7 @@ class AreaResolverTest {
         assertThat(areas.getAreaSizes()).containsExactlyInAnyOrder(3, 2);
         // Same label, so both are numbered rather than indistinguishable.
         assertThat(areas.getAreaNames())
-                .allMatch(n -> n.startsWith("slide.svs | Tissue #"));
+                .allMatch(n -> n.startsWith("Tissue #"));
     }
 
     @Test
@@ -218,7 +219,7 @@ class AreaResolverTest {
                 new AreaLevelSpec(AreaLevel.ANNOTATIONS, List.of("Tumor", "Stroma")));
 
         assertThat(areas.getAreaCount()).isEqualTo(4);
-        assertThat(areas.getAreaNames().get(0)).startsWith("slide.svs | A-1 | ");
+        assertThat(areas.getAreaNames().get(0)).startsWith("A-1 | ");
     }
 
     // --- Unassigned cells ----------------------------------------------------
@@ -326,6 +327,34 @@ class AreaResolverTest {
 
         assertThat(areas.getMissingCoresSkipped()).isZero();
         assertThat(areas.describe()).doesNotContain("missing");
+    }
+
+    // --- Area labels ---------------------------------------------------------
+
+    /**
+     * The image token earns its place only when it distinguishes something.
+     * A 39-area single-image TMA otherwise reads "image | A-1 | Normal" on
+     * every row, where two thirds of the label is constant.
+     */
+    @Test
+    void theImageIsNamedInTheLabelOnlyWhenThereIsMoreThanOne() {
+        Slide one = twoCoreSlide(2, 0);
+        assertThat(one.resolve(new AreaLevelSpec(AreaLevel.TMA_CORES)).getAreaNames())
+                .containsExactly("A-1", "A-2");
+
+        // The same slide read as two images: now the token separates them.
+        Slide two = twoCoreSlide(2, 0);
+        int[] imageIndex = new int[two.cells.size()];
+        for (int i = two.cells.size() / 2; i < imageIndex.length; i++) {
+            imageIndex[i] = 1;
+        }
+        AreaResolver.AreaAssignment areas = AreaResolver.resolve(
+                two.cells, imageIndex, List.of("a.svs", "b.svs"),
+                List.of(two.hierarchy, two.hierarchy),
+                List.of(new AreaLevelSpec(AreaLevel.IMAGES),
+                        new AreaLevelSpec(AreaLevel.TMA_CORES)));
+        assertThat(areas.getAreaNames()).allMatch(n -> n.startsWith("a.svs | ")
+                || n.startsWith("b.svs | "));
     }
 
     // --- Images level --------------------------------------------------------

@@ -73,6 +73,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Area labels read `image | A-1 | ...` instead of naming the image.** A
+  current-image run carries no project entry, and the image-name helper fell
+  straight through to the literal string `"image"` -- so every area label, every
+  pie-chart caption and every CSV row was prefixed with it. It now asks the open
+  image for its own name. Separately, the image token is dropped from the label
+  when the run covers only one image: it is still the outermost level and still
+  part of the area's identity, but repeating one constant token across 39 rows
+  costs a third of the label and distinguishes nothing.
+
 - **The Independent areas control was effectively hidden in the clustering dialog,
   and its annotation-class picker could never populate.** Two separate problems with
   the same symptom -- no way to choose which annotation classes mark an area:

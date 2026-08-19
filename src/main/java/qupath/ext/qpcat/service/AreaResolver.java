@@ -184,6 +184,12 @@ public final class AreaResolver {
             }
         }
 
+        // A single-image run repeats one constant token on every row -- 39
+        // areas all reading "image | A-1 | ...". The image is still the
+        // outermost level and still part of the KEY; it is only dropped from
+        // the display label, and only when it cannot distinguish anything.
+        boolean labelWithImage = subLevels.isEmpty() || countImages(imageIndexPerCell, n) > 1;
+
         int[] areaIds = new int[n];
         Map<String, Integer> keyToId = new LinkedHashMap<>();
         List<String> areaNames = new ArrayList<>();
@@ -209,7 +215,7 @@ public final class AreaResolver {
                     imageIndex < byImageAndLevel.size() ? byImageAndLevel.get(imageIndex) : null;
 
             StringBuilder key = new StringBuilder().append(imageIndex);
-            StringBuilder label = new StringBuilder(imageName);
+            StringBuilder label = new StringBuilder(labelWithImage ? imageName : "");
             boolean unresolved = false;
             // The deepest level that actually matched decides the area's extent,
             // so that is the level its type is named from.
@@ -222,7 +228,7 @@ public final class AreaResolver {
                         break;
                     }
                     key.append('/').append(region.getID());
-                    label.append(" | ").append(displayLabel(region));
+                    appendPart(label, displayLabel(region));
                     type = typeLabel(subLevels.get(level), region);
                 }
             } else if (!subLevels.isEmpty()) {
@@ -230,7 +236,7 @@ public final class AreaResolver {
             }
             if (unresolved) {
                 key.append("/!unassigned");
-                label.append(" | ").append(UNASSIGNED);
+                appendPart(label, UNASSIGNED);
             }
 
             String areaKey = key.toString();
@@ -506,6 +512,26 @@ public final class AreaResolver {
                 labels.set(i, label + " #" + nth);
             }
         }
+    }
+
+    /** Appends one " | "-separated component, with no leading separator. */
+    private static void appendPart(StringBuilder label, String part) {
+        if (label.length() > 0) {
+            label.append(" | ");
+        }
+        label.append(part);
+    }
+
+    /** Distinct source images across the detection list. */
+    private static int countImages(int[] imageIndexPerCell, int n) {
+        if (imageIndexPerCell == null || n == 0) {
+            return 1;
+        }
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < n && i < imageIndexPerCell.length; i++) {
+            seen.add(imageIndexPerCell[i]);
+        }
+        return Math.max(1, seen.size());
     }
 
     private static String imageName(List<String> imageNames, int index) {
