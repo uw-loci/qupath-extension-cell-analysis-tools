@@ -2823,8 +2823,11 @@ public class ClusteringDialog {
                         + "results are compared. Compartments inside one area are "
                         + "deliberately NOT separated spatially, so this is where you "
                         + "read them apart.\n"
-                        + "Cells with no classified annotation ancestor are grouped "
-                        + "under \"(none)\".",
+                        + "\"(none)\" is not one of your classes: it is cells sitting "
+                        + "inside no classified annotation at all -- typically inside a "
+                        + "TMA core but in a gap the region-detection step left "
+                        + "unannotated. It is the same set of cells the Composition by "
+                        + "area tab shows as \"(unassigned)\".",
                         "composition-by-class-tab"));
                 classTab.setClosable(false);
                 tabPane.getTabs().add(classTab);
@@ -2848,7 +2851,12 @@ public class ClusteringDialog {
                         + "resolved to.\n"
                         + "This is the core-to-core comparison: 'CN 2 is 8% of core A-1 "
                         + "but 31% of A-4'. The same numbers are also written to "
-                        + "<result>_areas_summary.csv next to the saved result.",
+                        + "<result>_areas_summary.csv next to the saved result.\n"
+                        + "'(unassigned)' is not one of your classes: it is cells that "
+                        + "fell inside no region at the level you chose -- e.g. inside a "
+                        + "core but outside every annotation in it. It is scoped to the "
+                        + "deepest level that DID match, so such cells are never pooled "
+                        + "across cores.",
                         "composition-by-area-tab"));
                 areaTab.setClosable(false);
                 tabPane.getTabs().add(areaTab);

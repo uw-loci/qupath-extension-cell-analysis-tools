@@ -73,6 +73,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **QP-CAT's own "no region" label was indistinguishable from a user's class.**
+  The area label for cells matching no region was the bare word `unassigned`, which
+  sat in the same column as real annotation classes -- next to a pixel classifier's
+  `Unclassified` output the only difference was a capital letter. It is now
+  `(unassigned)`, parenthesised so it reads as ours, and both the Composition by area
+  and Composition by class tabs now say what it means: cells inside no region at the
+  chosen level, typically inside a TMA core but in a gap the region-detection step
+  left unannotated. (Composition by class shows the same cells as `(none)`.)
+
 - **Area labels read `image | A-1 | ...` instead of naming the image.** A
   current-image run carries no project entry, and the image-name helper fell
   straight through to the literal string `"image"` -- so every area label, every

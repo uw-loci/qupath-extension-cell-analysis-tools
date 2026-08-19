@@ -50,8 +50,15 @@ public final class AreaResolver {
 
     private static final Logger logger = LoggerFactory.getLogger(AreaResolver.class);
 
-    /** Suffix used for cells that resolve no ancestor at a declared level. */
-    public static final String UNASSIGNED = "unassigned";
+    /**
+     * Label component for cells that resolve no region at a declared level.
+     * <p>
+     * PARENTHESISED so it cannot be mistaken for one of the user's own
+     * annotation classes. It sits in the same column as those names -- next to
+     * a real class called "Unclassified" it was indistinguishable except by
+     * capitalisation, which is not a distinction anyone should have to notice.
+     */
+    public static final String UNASSIGNED = "(unassigned)";
 
     private AreaResolver() {}
 
