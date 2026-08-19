@@ -19,7 +19,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 6. [Rule-Based Phenotyping](#6-rule-based-phenotyping)
 7. [Using Auto-Thresholding](#7-using-auto-thresholding)
 8. [Removed features](#8-removed-features)
-10. [Explaining Clusters with an LLM (Beta)](#10-explaining-clusters-with-an-llm-beta)
+10. [Explaining Clusters with an LLM [Experimental]](#10-explaining-clusters-with-an-llm-experimental)
 11. [Managing Clusters (Rename/Merge)](#11-managing-clusters-renamemerge)
 12. [Autoencoder Cell Classifier](#12-autoencoder-cell-classifier)
 13. [Exporting AnnData](#13-exporting-anndata)
@@ -39,6 +39,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 27. [Spatial statistics on existing clusters (ROI-scoped)](#27-spatial-statistics-on-existing-clusters-roi-scoped)
 28. [Applying a saved result to detections](#28-applying-a-saved-result-to-detections)
 29. [Viewing clusters in 3D with VEST](#29-viewing-clusters-in-3d-with-vest)
+30. [Reporting a bug](#30-reporting-a-bug)
 
 ---
 
@@ -455,7 +456,7 @@ Get a plain-English phenotype suggestion for each cluster, with rationale citing
 > **This feature has never been successfully run end-to-end by the QP-CAT developers.**
 > "Experimental" here does not mean "works, but the output is unvalidated" -- it means the
 > path has not been exercised against a live provider at all. Expect to hit problems no one
-> has hit yet, and please [report them](#reporting-a-bug) if you do. Everything below
+> has hit yet, and please [report them](#30-reporting-a-bug) if you do. Everything below
 > describes the intended design, not observed behaviour.
 
 The prompt template, output JSON shape, and audit-log row format may also change.
@@ -1348,9 +1349,13 @@ The same table + pie-chart view, grouped by **independent area** -- one row per 
 
 Appears when a run resolved between 2 and 200 areas. Above that the table would have more rows than anyone can read, so it is omitted and the same numbers are written to `<result>_areas_summary.csv` next to the saved result (a run log line says so rather than leaving the tab silently missing).
 
+A row labelled **`(unassigned)`** is not one of your classes. It is cells that fell inside no region at the level you chose -- typically inside a TMA core but in a gap the region-detection step left unannotated. It is scoped to the deepest level that *did* match (`A-1 | (unassigned)`), so such cells are never pooled across cores. The same cells appear on the Composition by class tab as `(none)`; if those two counts ever disagree, an area level is filtering out annotations that still exist.
+
 ### Composition by class tab
 
 Grouped by the **annotation class** each cell sits in -- Tumor, Stroma, and so on -- pooled across every image and every independent area. Appears whenever at least two classes are present.
+
+Cells inside no classified annotation at all are grouped under **`(none)`** -- again QP-CAT's own label, not a class of yours.
 
 This is the counterpart to [Independent areas](#independent-areas): **areas decide which cells may share a spatial graph; class decides how the results are compared.** Compartments inside one area are deliberately *not* separated spatially -- Tumor and Stroma in a core are continuous tissue, and the interface between them is usually the thing being measured -- so this tab is where you read them apart.
 
@@ -1447,7 +1452,7 @@ The "pairwise" table is all cluster pairs; the "one vs rest" table compares each
 
 ### Cluster Explainer (LLM) tab
 
-Per-cluster cell-type suggestions from a remote (Anthropic) or local (Ollama) LLM, conditioned on the cluster's top markers. See [Chapter 10](#10-explaining-clusters-with-an-llm-beta) for setup, prompt details, and cost expectations. Always validate suggestions against the Marker Rankings tab.
+Per-cluster cell-type suggestions from a remote (Anthropic) or local (Ollama) LLM, conditioned on the cluster's top markers. See [Chapter 10](#10-explaining-clusters-with-an-llm-experimental) for setup, prompt details, and cost expectations. Always validate suggestions against the Marker Rankings tab.
 
 ### Dotplot tab
 
@@ -1686,7 +1691,7 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
    parameters are capped per area so one small core does not reduce k for the rest).
    **TMA cores flagged missing are skipped too**, and the preview says how many --
    so a ragged grid does not fill the export with blank rows. Detections inside a
-   missing core are still analysed, but land in `unassigned`.
+   missing core are still analysed, but land in `(unassigned)`.
 4. For a **joint** run across multiple images, the same area levels are applied to
    every image. A cell belongs to an area if it **falls inside** that region --
    matched geometrically, from the cell's centroid, not from the object
@@ -1753,9 +1758,10 @@ When the joint run finishes, a results dialog shows:
 - **Per-sample neighborhood proportions** -- a table (and `cn_per_sample_proportions.csv`)
   giving, for each sample (image or independent area, depending on configuration), the
   fraction of its cells in each CN. When areas are configured, rows are areas instead
-  of images. This is the table you compare across samples: "CN 2 is 8% of the control
-  but 31% of the treated slide" (or "8% of core 1 but 31% of core 2"). A
-  `cn_per_sample_proportions.png` heatmap visualizes it (sample x CN).
+  of images, and the CSV's first column is headed `area` rather than `image` so the
+  file says what its rows are. This is the table you compare across samples: "CN 2 is
+  8% of the control but 31% of the treated slide" (or "8% of core 1 but 31% of core
+  2"). A `cn_per_sample_proportions.png` heatmap visualizes it (sample x CN).
 - **Per-group neighborhood proportions** (only when you set **Group images by**) --
   the same proportions pooled per metadata group, plus `cn_per_group_proportions.csv`
   and a `cn_per_group_proportions.png` heatmap (group x CN), for a direct
@@ -2049,7 +2055,7 @@ one graph (that would create false neighbors). This is why comparison is
 > "regions". They are the same **areas** the clustering and neighborhood workflows
 > use, produced by the same shared control, and the long-format CSVs of both now
 > share a header so they can be concatenated. In QP-CAT "window" now means only
-> the per-cell neighborhood window in [Find Cellular Neighborhoods](#find-cellular-neighborhoods),
+> the per-cell neighborhood window in [Find Cellular Neighborhoods](#22-finding-cellular-neighborhoods-spatial-niches),
 > which is a different thing: a window is drawn around one cell, an area is a piece
 > of tissue.
 
@@ -2102,7 +2108,7 @@ To configure:
    capped per area so one small core does not reduce k for the rest).
    **TMA cores flagged missing are skipped too**, and the preview says how many --
    so a ragged grid does not fill the export with blank rows. Detections inside a
-   missing core are still analysed, but land in `unassigned`.
+   missing core are still analysed, but land in `(unassigned)`.
 4. For multi-image scope, the same area levels are applied to every image. A cell
    belongs to an area if it **falls inside** that region -- matched geometrically
    from its centroid, never from parent links, and always read-only.
@@ -2235,3 +2241,38 @@ Two ways, from the "export complete" dialog:
   back into QuPath. (For clicking a point and jumping to that cell *inside* QuPath, use the
   interactive results plots / 3D view instead.)
 - Color-map by the `cluster` column in VEST's controls to see cluster structure.
+
+---
+
+## 30. Reporting a bug
+
+**Menu: Extensions > QP-CAT > Setup & help > "Report a Bug..."**
+
+Files a GitHub issue against
+[qupath-extension-cell-analysis-tools](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues)
+without leaving QuPath, so a report arrives with the context that makes it reproducible
+instead of "clustering failed". **No GitHub account is needed** -- the report is relayed
+through a shared service, and you get the issue number and a link back when it is filed.
+(Adding a comment to the issue later does need an account.)
+
+Give it a **Summary** (used as the issue title) and a **description** -- there is a
+minimum length, because a one-line report is rarely actionable. Then choose what to
+attach:
+
+| Checkbox | What it sends |
+|---|---|
+| **Include system info (versions, OS)** | QP-CAT, QuPath, Java and OS versions. Almost always worth sending; a surprising number of reports come down to a version mismatch. |
+| **Include QP-CAT operation log** | QP-CAT's own audit trail (see [chapter 16](#16-reviewing-the-operation-audit-trail)): which tools ran, with which parameters, in what order. Greyed out with "(none yet)" if you have not run anything. |
+| **Include QuPath log** | QuPath's log as captured in memory this session. QuPath writes no log file by default, so this checkbox is the only way to get a stack trace attached. Shows "(none captured this session)" when there is nothing to send. |
+| **Include a screenshot of the QuPath window** | The window as it looks now. |
+
+**What is redacted, and what is not.** Text attachments have your home directory
+replaced with `~` so the report does not carry your username. The **screenshot is not
+redacted at all** -- it shows whatever is on screen, including open slides. The dialog
+says so and gives you a preview before sending. On patient material, close anything
+sensitive first, and check the operation log too: it records image *names*.
+
+**If the dialog says bug reporting is not set up**, the relay URL was not configured in
+this build. File the issue on GitHub directly; the text you have typed is still on
+screen to copy. A failed submission likewise leaves your text in place and shows the
+error rather than discarding it.

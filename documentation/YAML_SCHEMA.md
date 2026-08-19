@@ -150,6 +150,8 @@ Levels read **outermost first**, and `images` is implicit -- it is always the ou
 
 Areas are keyed on the annotation **object**, not its class -- three tissue sections on one slide usually share a single `Tissue` class, and grouping by class would merge them straight back together.
 
+**Area names** read outermost-first, separated by ` | `: `slide_01.svs | A-1 | Tumor`. The image is dropped from the name when the run covers only one image (`A-1 | Tumor`) -- it is still the outermost level and still part of the area's identity, but repeating one constant token on every row of a 55-core table costs a third of the label and separates nothing. Two areas that would otherwise share a name are numbered (`Tissue #1`, `Tissue #2`).
+
 ```yaml
 # A 55-core TMA in one image: cluster jointly, but keep each core's
 # spatial graph separate and correct batch effects core by core.
@@ -176,11 +178,13 @@ clustering:
 
 > **How a cell is matched to an area.** Geometrically: the cell's centroid falls inside the region. Parent links are NOT used, so this works on a project where cell detection ran before dearraying, or whose hierarchy has since been edited. QP-CAT never reparents objects or resolves your hierarchy -- it only reads.
 
-> **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | unassigned`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
+> **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | (unassigned)`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
+>
+> `(unassigned)` is parenthesised because it is QP-CAT's word, not yours: it has to sit in the same column as your annotation class names, and a pixel classifier that emits a class called `Unclassified` would otherwise be told apart from it only by a capital letter. The Composition by class tab shows the same cells as `(none)`.
 
 > **TMA cores flagged missing are skipped.** A dearrayed grid is rectangular, so a slide with a ragged edge carries cores that hold no tissue at all; the dearrayer flags those, and you can flag more by hand on a core that is folded, torn, or otherwise out of scope. Those cores are not areas, and produce no row in any per-area output -- one blank row per core, per statistic, is what turns a 55-core spreadsheet into one that has to be filtered before it can be read.
 >
-> Any detections that *do* sit inside a missing core are still analysed -- cluster labels map back to objects by position, so cells are never dropped -- but they fall into the image's `unassigned` area and are pooled there, so their own spatial statistics are not meaningful. That is the right outcome for cells you have already declared out of scope. The preview line and the run log both state how many cores were skipped: a large skip count next to a large unassigned count means the dearraying, not the analysis, is what needs attention.
+> Any detections that *do* sit inside a missing core are still analysed -- cluster labels map back to objects by position, so cells are never dropped -- but they fall into the image's `(unassigned)` area and are pooled there, so their own spatial statistics are not meaningful. That is the right outcome for cells you have already declared out of scope. The preview line and the run log both state how many cores were skipped: a large skip count next to a large unassigned count means the dearraying, not the analysis, is what needs attention.
 
 
 > **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighbourhood term rather than borrowing neighbours from another specimen; cells are never dropped.

@@ -66,6 +66,45 @@ class DocLinkAnchorsTest {
     }
 
     /**
+     * Cross-references INSIDE the shipped docs must resolve too.
+     * <p>
+     * Same failure mode, and it accumulates faster: a renamed chapter leaves
+     * every {@code ](#old-anchor)} pointing at the top of the page. Found for
+     * real: the guide's own contents page still called chapter 10 "(Beta)"
+     * after the heading became "[Experimental]", and a "report them" link
+     * pointed at a section that had never been written.
+     */
+    @Test
+    void everyInDocCrossReferenceResolves() throws IOException {
+        Map<String, String> broken = new TreeMap<>();
+        for (Path doc : shippedDocs()) {
+            String md = Files.readString(doc, StandardCharsets.UTF_8);
+            Set<String> anchors = anchorsIn(md);
+            Matcher link = Pattern.compile("\\]\\(#([^)]+)\\)").matcher(md);
+            while (link.find()) {
+                if (!anchors.contains(link.group(1))) {
+                    broken.put(doc.getFileName() + " -> #" + link.group(1), "unresolved");
+                }
+            }
+        }
+        assertThat(broken)
+                .as("in-document links pointing at a section that does not exist")
+                .isEmpty();
+    }
+
+    private static List<Path> shippedDocs() throws IOException {
+        List<Path> out = new java.util.ArrayList<>();
+        try (Stream<Path> docs = Files.list(REPO.resolve("documentation"))) {
+            docs.filter(f -> f.toString().endsWith(".md")).forEach(out::add);
+        }
+        Path readme = REPO.resolve("README.md");
+        if (Files.exists(readme)) {
+            out.add(readme);
+        }
+        return out;
+    }
+
+    /**
      * Anchors a source file asks for. Deliberately conservative: only the LAST
      * string argument of wrapWithGuide is an anchor (the earlier ones are guide
      * prose), and only single-token strings are considered, so a link's visible
@@ -127,8 +166,12 @@ class DocLinkAnchorsTest {
 
     /** GitHub's heading-to-anchor rule: lower-case, drop punctuation, spaces to hyphens. */
     private static String slug(String heading) {
+        // Underscores are KEPT -- GitHub strips punctuation but not '_', so a
+        // heading like "Independent areas (`clustering.area_levels`)" slugs to
+        // ...clusteringarea_levels. Stripping it here would report a working
+        // link as broken, which is how a checker teaches people to ignore it.
         String s = heading.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9 -]", "")
+                .replaceAll("[^a-z0-9 _-]", "")
                 .trim()
                 .replaceAll("\\s+", "-");
         return s.replaceAll("-+", "-");

@@ -73,6 +73,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The guide's own cross-references had rotted, and a shipped feature had no
+  section at all.** The contents page still called chapter 10 "(Beta)" after the
+  heading became "[Experimental]" -- not the same claim, since "Experimental" here
+  means the path has never been run end-to-end. A "report them" link pointed at a
+  "Reporting a bug" section that had never been written, even though **Report a Bug...**
+  has been in the menu since 0.9.x. That chapter now exists (chapter 30), documenting
+  exactly what each attachment sends and, more importantly, what is NOT redacted. The
+  doc-link test covers in-document cross-references as well as in-app links.
+
 - **Two in-app "Documentation" links pointed at sections that do not exist.** Both
   Cellular Neighborhoods links used `#22-cellular-neighborhoods` while the heading's
   anchor is `#22-finding-cellular-neighborhoods-spatial-niches`. A dead anchor does
