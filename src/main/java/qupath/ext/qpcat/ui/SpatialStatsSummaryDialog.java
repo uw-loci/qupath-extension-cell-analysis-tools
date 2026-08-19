@@ -36,7 +36,7 @@ public final class SpatialStatsSummaryDialog {
 
         TableColumn<WindowResult, String> cImage = new TableColumn<>("Image");
         cImage.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(d.getValue().imageName));
-        TableColumn<WindowResult, String> cRegion = new TableColumn<>("Region");
+        TableColumn<WindowResult, String> cRegion = new TableColumn<>("Area");
         cRegion.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(d.getValue().regionLabel));
         TableColumn<WindowResult, String> cClass = new TableColumn<>("Class");
         cClass.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
@@ -82,7 +82,7 @@ public final class SpatialStatsSummaryDialog {
         table.getItems().addAll(results);
 
         long ran = results.stream().filter(r -> !r.isSkipped()).count();
-        Label header = new Label(results.size() + " window(s), " + ran + " analyzed"
+        Label header = new Label(results.size() + " area(s), " + ran + " analyzed"
                 + (ran < results.size() ? " (" + (results.size() - ran) + " skipped)" : "")
                 + ". Double-click a row or use Open to see its full result.");
         header.setWrapText(true);

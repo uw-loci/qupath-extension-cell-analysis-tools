@@ -940,7 +940,11 @@ public class CellularNeighborhoodWorkflow {
                                    String groupMetadataKey, String divergenceWarning) {
         if (resultsDir == null) return;
         try {
-            String perSampleCsv = proportionsJsonToCsv(perSampleJson, "image", "image_names");
+            // The row header follows what the rows ACTUALLY are. Partitioned by
+            // area, this file's rows are cores or sections, and calling the
+            // column "image" made a correct table read as a wrong one.
+            String perSampleCsv = proportionsJsonToCsv(
+                    perSampleJson, sampleKind(perSampleJson), "image_names");
             if (perSampleCsv != null) {
                 Files.writeString(resultsDir.resolve("cn_per_sample_proportions.csv"),
                         perSampleCsv, StandardCharsets.UTF_8);
@@ -988,6 +992,27 @@ public class CellularNeighborhoodWorkflow {
      * names the first column; {@code labelsKey} is the JSON array of row labels
      * ({@code image_names} or {@code group_names}). Returns null on empty input.
      */
+    /**
+     * What one row of the per-sample table is: {@code "area"} when the run was
+     * partitioned below the image level, else {@code "image"}. Read from the
+     * Python payload rather than inferred, so the two cannot disagree.
+     */
+    private static String sampleKind(String json) {
+        if (json == null || json.isBlank()) return "image";
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            if (obj.has("sample_kind") && !obj.get("sample_kind").isJsonNull()) {
+                String kind = obj.get("sample_kind").getAsString();
+                if (kind != null && !kind.isBlank()) {
+                    return kind;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not read sample_kind: {}", e.getMessage());
+        }
+        return "image";
+    }
+
     private static String proportionsJsonToCsv(String json, String rowHeader, String labelsKey) {
         if (json == null || json.isBlank()) return null;
         try {

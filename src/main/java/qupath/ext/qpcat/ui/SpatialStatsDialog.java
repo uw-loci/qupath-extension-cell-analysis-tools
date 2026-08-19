@@ -143,7 +143,31 @@ public class SpatialStatsDialog {
         scope.addScopeChangeListener(areasSection::refresh);
         syncRegion.run();
 
-        HBox regionRow = new HBox(8, new Label("Analysis regions:"), regionBox);
+        // Named for what it actually is: the fallback used when the Independent
+        // areas control has nothing configured. Areas take precedence in
+        // buildWindows, so leaving this reading "Analysis regions" implied a
+        // choice that a configured area path silently overrode.
+        Label regionLabel = new Label("If no areas are configured:");
+        Tooltip regionTip = Tooltips.of(
+                "How to split cells when the Independent areas control below has no "
+                + "levels added.\n\n"
+                + "Whole image: every cell in an image is analysed as one area.\n"
+                + "Selected annotations: one area per annotation you have selected in "
+                + "the current image.\n\n"
+                + "Adding an area level overrides this, so it is disabled while any "
+                + "level is configured.");
+        regionLabel.setTooltip(regionTip);
+        regionBox.setTooltip(regionTip);
+
+        Runnable syncRegionEnabled = () -> {
+            boolean areasConfigured = areasSection.hasSubImageLevels();
+            regionBox.setDisable(areasConfigured);
+            regionLabel.setDisable(areasConfigured);
+        };
+        areasSection.addChangeListener(syncRegionEnabled);
+        syncRegionEnabled.run();
+
+        HBox regionRow = new HBox(8, regionLabel, regionBox);
         regionRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         // --- graph ---
@@ -312,7 +336,7 @@ public class SpatialStatsDialog {
         String savedNote = savedPath != null ? "  Saved to " + savedPath : "";
         long analyzed = results.stream().filter(r -> !r.isSkipped()).count();
         if (analyzed == 0) {
-            StringBuilder reasons = new StringBuilder("No windows could be analyzed:\n");
+            StringBuilder reasons = new StringBuilder("No areas could be analyzed:\n");
             int shown = 0;
             for (PostHocSpatialWorkflow.WindowResult r : results) {
                 if (shown++ >= 6) break;
@@ -320,7 +344,7 @@ public class SpatialStatsDialog {
                         .append(": ").append(r.skipReason).append("\n");
             }
             Dialogs.showWarningNotification("QP-CAT", reasons.toString().trim());
-            status.setText("No windows analyzed.");
+            status.setText("No areas analyzed.");
             return;
         }
         if (results.size() == 1) {
@@ -331,7 +355,7 @@ public class SpatialStatsDialog {
             return;
         }
         SpatialStatsSummaryDialog.show(qupath, results);
-        status.setText("Done -- " + analyzed + " window(s) analyzed." + savedNote);
+        status.setText("Done -- " + analyzed + " area(s) analyzed." + savedNote);
     }
 
     private static void resetRun(Button runBtn, ProgressBar bar, VBox content) {

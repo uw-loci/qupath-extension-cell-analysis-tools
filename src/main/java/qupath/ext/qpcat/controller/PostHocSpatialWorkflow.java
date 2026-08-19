@@ -45,7 +45,18 @@ import java.util.function.Consumer;
  * classification (an existing cluster or phenotype), WITHOUT re-running
  * clustering or embedding.
  *
- * <p>Each analysis <b>window</b> -- a whole image, an annotation class merged per
+ * <h2>A note on the word "window"</h2>
+ * The internal types here are still called {@code Window} / {@code WindowResult}
+ * for historical reasons, but the concept they carry IS an independent
+ * <b>area</b> -- the same thing {@code AreaResolver} produces for clustering.
+ * Everything user-facing (dialog text, CSV headers, the persisted metadata,
+ * the docs) says "area", so the two workflows share one vocabulary and their
+ * long-format CSVs can be concatenated rather than reconciled. Do not
+ * reintroduce "window" or "region" in anything a user reads; in QP-CAT
+ * "window" now means only the per-cell neighbourhood window in Cellular
+ * Neighborhoods, which is a genuinely different thing.
+ *
+ * <p>Each analysis <b>area</b> -- a whole image, an annotation class merged per
  * image, or a single annotation -- is analyzed independently with its OWN spatial
  * graph. This is what makes multi-image correct: cells from different images (or
  * different annotation regions) are never joined into one graph. Windows can be
@@ -203,7 +214,7 @@ public class PostHocSpatialWorkflow {
                 windows.addAll(buildWindows(t, opts));
             }
             if (windows.isEmpty()) {
-                throw new IOException("No analysis windows matched the chosen region settings "
+                throw new IOException("No analysis areas matched the chosen area settings "
                         + "(no annotations of that class, or no cells inside them).");
             }
 
@@ -212,7 +223,7 @@ public class PostHocSpatialWorkflow {
             for (Window w : windows) {
                 if (cancelled) break;
                 idx++;
-                report(progress, String.format("Window %d/%d: %s / %s (%d cells)...",
+                report(progress, String.format("Area %d/%d: %s / %s (%d cells)...",
                         idx, windows.size(), w.imageName, w.regionLabel, w.detections.size()));
                 results.add(runWindow(w, opts, progress));
             }
@@ -222,7 +233,7 @@ public class PostHocSpatialWorkflow {
             lastSavedPath = persistToProject(opts, results);
 
             OperationLogger.getInstance().logEvent("POST-HOC SPATIAL STATS",
-                    "Ran spatial stats on " + windows.size() + " window(s) across "
+                    "Ran spatial stats on " + windows.size() + " area(s) across "
                     + targets.size() + " image(s); graph=" + opts.graphType
                     + (lastSavedPath != null ? "; saved to " + lastSavedPath : ""));
             return results;
@@ -280,7 +291,7 @@ public class PostHocSpatialWorkflow {
             for (WindowResult wr : results) {
                 Map<String, Object> w = new java.util.LinkedHashMap<>();
                 w.put("image", wr.imageName);
-                w.put("region", wr.regionLabel);
+                w.put("area", wr.regionLabel);
                 w.put("class", wr.className);
                 w.put("nCells", wr.nCells);
                 w.put("nClasses", wr.nClasses);
@@ -289,7 +300,7 @@ public class PostHocSpatialWorkflow {
                 w.put("skipReason", wr.skipReason);
                 windows.add(w);
             }
-            meta.put("windows", windows);
+            meta.put("areas", windows);
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             Files.writeString(dir.resolve(base + ".json"), gson.toJson(meta));
             return dir.toString();
@@ -306,7 +317,9 @@ public class PostHocSpatialWorkflow {
      */
     public static String buildCsv(List<WindowResult> results) {
         StringBuilder sb = new StringBuilder();
-        sb.append("image,region,class,n_cells,n_classes,unit,statistic,key,value,p_value\n");
+        // Deliberately the same header as the clustering per-area statistics
+        // file, so the two can be concatenated.
+        sb.append("image,area,class,n_cells,n_classes,unit,statistic,key,value,p_value\n");
         for (WindowResult wr : results) {
             String base = csv(wr.imageName) + "," + csv(wr.regionLabel) + ","
                     + csv(wr.className == null ? "" : wr.className) + ","

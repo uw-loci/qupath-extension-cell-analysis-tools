@@ -73,6 +73,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **"Select 'Mean' only" selected nothing, and Quick Cluster refused to start.**
+  Both matched the literal string `Mean`, but QuPath's own cell measurements are
+  lower case (`Nucleus: DAPI mean`) -- so on a standard project the button checked
+  nothing and Quick Cluster reported "No 'Mean' measurements found" on data made
+  almost entirely of them. Both now use one case-insensitive predicate, matching the
+  measurement filter box, which was already case-insensitive. Quick Cluster's warning
+  also now says how many measurements it did find and what to do instead. An unused
+  `filterMeasurementsBySuffix` helper carrying the same latent bug was removed.
+
+- **Post-hoc spatial statistics called an area a "window" and a "region".** Three
+  words for one concept, across the dialog, the summary table, the persisted metadata
+  and the docs -- and its long CSV's first column was `region` while clustering wrote
+  `area`, so the two files could not be concatenated as intended. Everything
+  user-facing now says **area**; `window` is reserved for the per-cell neighborhood
+  window in Cellular Neighborhoods, which is a genuinely different thing. The
+  "Analysis regions" dropdown is now labelled "If no areas are configured:" and is
+  disabled while any area level is set, since areas already took precedence over it
+  silently.
+
+- **Cellular Neighborhoods wrote `image` as the first CSV column even when the rows
+  were areas.** `cn_per_sample_proportions.csv` hardcoded the header while the payload
+  already carried `sample_kind`; a per-core run produced a table whose column said
+  `image` and whose values were `A-1`, `A-2`. The header now follows the data.
+
 - **QP-CAT's own "no region" label was indistinguishable from a user's class.**
   The area label for cells matching no region was the bare word `unassigned`, which
   sat in the same column as real annotation classes -- next to a pixel classifier's

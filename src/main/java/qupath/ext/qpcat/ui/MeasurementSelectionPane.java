@@ -14,6 +14,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.util.StringConverter;
 
+import qupath.ext.qpcat.service.MeasurementExtractor;
+
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -90,12 +92,13 @@ public class MeasurementSelectionPane extends VBox {
         Button selectMean = new Button("Select 'Mean' only");
         selectMean.setOnAction(e -> inBulk(() -> {
             for (Item m : filtered) {
-                m.selected.set(m.name.contains("Mean"));
+                m.selected.set(MeasurementExtractor.isMeanMeasurement(m.name));
             }
         }));
         selectMean.setTooltip(Tooltips.of(
-                "Among the currently shown measurements, check those containing 'Mean'\n"
-                + "and uncheck the rest. Hidden rows keep their checks."));
+                "Among the currently shown measurements, check those whose name contains\n"
+                + "'mean' (any capitalisation -- detection engines differ) and uncheck\n"
+                + "the rest. Hidden rows keep their checks."));
 
         HBox buttons = new HBox(5, selectAll, selectNone, selectMean);
         getChildren().addAll(filterField, list, buttons);

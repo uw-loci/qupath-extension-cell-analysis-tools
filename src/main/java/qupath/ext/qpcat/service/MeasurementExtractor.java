@@ -306,20 +306,21 @@ public class MeasurementExtractor {
     }
 
     /**
-     * Returns measurement names that end with a specific suffix (e.g., "Mean")
-     * from the given detections.
+     * True for a mean-intensity measurement, matched CASE-INSENSITIVELY.
+     * <p>
+     * Detection engines disagree on the capitalisation: QuPath's own cell
+     * measurements read {@code "Nucleus: DAPI mean"} (lower case), while others
+     * emit {@code "CD8: Cell: Mean"}. Matching {@code "Mean"} literally --
+     * which both the Select 'Mean' button and Quick Cluster used to do -- found
+     * nothing at all on a standard QuPath project, and Quick Cluster refused to
+     * start with "No 'Mean' measurements found" on data that was full of them.
+     * <p>
+     * One predicate, used by every caller, so the two cannot drift apart again.
+     * The measurement FILTER box was already case-insensitive, which is what
+     * made the button look arbitrary rather than simply wrong.
      */
-    public static List<String> filterMeasurementsBySuffix(
-            Collection<? extends PathObject> detections, String suffix) {
-        Set<String> names = new LinkedHashSet<>();
-        for (PathObject det : detections) {
-            for (String name : det.getMeasurements().keySet()) {
-                if (name.endsWith(suffix)) {
-                    names.add(name);
-                }
-            }
-        }
-        return new ArrayList<>(names);
+    public static boolean isMeanMeasurement(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).contains("mean");
     }
 
     /**

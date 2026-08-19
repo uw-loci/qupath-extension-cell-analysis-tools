@@ -1668,10 +1668,10 @@ Leave it at *(no grouping)* to skip.
 Cells in different pieces of tissue are never neighbors -- a cell in one TMA core
 is not a neighbor of a cell in the next core, even if they are in the same image.
 By default, the **image is the area** -- cells stay separate across images, but
-all cells within an image can share a spatial window.
+any two cells within one image can end up in the same neighborhood window.
 
 You can partition cells **below** the image level by configuring **Independent areas**.
-Each area gets its own spatial windows (no window ever crosses an area boundary),
+Each area gets its own neighborhood windows (no window ever crosses an area boundary),
 and the cohort tables automatically group results per area instead of per image.
 
 **When to use:** tissue samples with multiple independent regions in one file --
@@ -2039,11 +2039,19 @@ classification (from clustering, phenotyping, or any classifier) **without
 re-running clustering or embedding**. This is the tool for "I already have my cell
 types -- now test spatial hypotheses, per image and per region across the project."
 
-**Each analysis window is computed independently** -- with its own spatial graph.
-A window is a whole image, an annotation class merged per image, or a single
-annotation. Cells from different images or different regions are never joined into
+**Each analysis area is computed independently** -- with its own spatial graph.
+An area is a whole image, one TMA core, one tissue section, or a single selected
+annotation. Cells from different images or different areas are never joined into
 one graph (that would create false neighbors). This is why comparison is
-*per-window across the project*, not one pooled result.
+*per-area across the project*, not one pooled result.
+
+> **One word for one thing.** This workflow used to call these "windows" and
+> "regions". They are the same **areas** the clustering and neighborhood workflows
+> use, produced by the same shared control, and the long-format CSVs of both now
+> share a header so they can be concatenated. In QP-CAT "window" now means only
+> the per-cell neighborhood window in [Find Cellular Neighborhoods](#find-cellular-neighborhoods),
+> which is a different thing: a window is drawn around one cell, an area is a piece
+> of tissue.
 
 **Label source.** Choose *Current cell classifications* (reads each cell's
 PathClass) or *Saved QP-CAT result...* -- the latter matches the saved result's
@@ -2057,21 +2065,22 @@ key, so they are analyzed as the single population the merge made them.
 **Scope.** Current image / all project images / a chosen subset (via the standard
 scope control). Every image in the scope is analyzed independently.
 
-**Regions (analysis windows).**
+**Analysis areas.**
 
 The dialog uses the shared **Independent areas** control (the same one used by
 the clustering and neighborhood workflows) to partition cells into separately-analyzed
 pieces. Two modes:
 
 - *Independent areas configured* -- the hierarchy levels you specify (e.g., TMA cores,
-  tissue sections) partition the cells. Each area gets its own window and spatial graph.
-  No graph ever crosses an area boundary. See the *Independent areas* section below.
-- *No independent areas* -- whole-image mode: all cells per image. Or use **Selected
-  annotations (current image)** for ad hoc analysis of a particular annotation from the
-  open image.
+  tissue sections) partition the cells. Each area gets its own spatial graph, and no
+  graph ever crosses an area boundary. See the *Independent areas* section below.
+- *No independent areas* -- the **"If no areas are configured:"** dropdown decides:
+  *Whole image* (every cell in an image is one area) or *Selected annotations (current
+  image)* (one area per annotation you have selected). Adding an area level overrides
+  this, so the dropdown is disabled while any level is configured.
 
-Annotations are windows **only** -- detections are never reparented, so a cell can
-belong to several windows. Unclassified (null-class) cells are excluded.
+Annotations define areas **only** -- detections are never reparented, so a cell can
+belong to several areas. Unclassified (null-class) cells are excluded.
 
 **Independent areas.**
 
@@ -2110,23 +2119,23 @@ parameter, the permutation count (0 = adaptive), and which statistics to run:
   dropped; skipped if no suitable measurements remain).
 
 **Results.** A single window opens the standard Results window (spatial tabs). Many
-windows open a **summary table** -- one row per window, with an "Open" button to
+areas open a **summary table** -- one row per area, with an "Open" button to
 drill into each window's full result and a "Save combined CSV" export. Each run is
 also auto-saved (a long-format CSV + a metadata JSON linked to the source result +
-per-window ROI identity) under `<project>/qpcat/spatial_stats/`. Nothing is written
+per-area ROI identity) under `<project>/qpcat/spatial_stats/`. Nothing is written
 to the object hierarchy -- this is read-only.
 
 **Interpretation caveats (important):**
 - **Ripley K/L** on an irregular annotation uses a bounding-box intensity and an
   unbounded-plane null with no edge correction, and graph neighbors are truncated
   at the ROI edge. Treat K/L as valid only at radii small relative to the window,
-  and do **not** compare K/L across windows of different size/shape.
+  and do **not** compare K/L across areas of different size/shape.
 - **Co-occurrence** is a descriptive ratio -- there is **no** significance test.
 - Distances are reported in **microns** for calibrated images (radius/Delaunay
   inputs, Ripley radii, co-occurrence intervals, and distances are all in um), which
-  makes windows comparable across images. Uncalibrated images fall back to pixels
+  makes areas comparable across images. Uncalibrated images fall back to pixels
   (shown in the summary table's Unit column).
-- Very small windows / classes give unstable permutation statistics.
+- Very small areas / classes give unstable permutation statistics.
 
 ---
 

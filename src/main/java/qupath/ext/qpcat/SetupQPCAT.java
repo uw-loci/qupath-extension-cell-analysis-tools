@@ -795,12 +795,15 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // Auto-select "Mean" measurements
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
         List<String> meanMeasurements = allMeasurements.stream()
-                .filter(m -> m.contains("Mean"))
+                .filter(MeasurementExtractor::isMeanMeasurement)
                 .toList();
 
         if (meanMeasurements.isEmpty()) {
             Dialogs.showWarningNotification(EXTENSION_NAME,
-                    "No 'Mean' measurements found in detections.");
+                    "No mean-intensity measurements found on these detections ("
+                    + allMeasurements.size() + " measurement(s) present). Use "
+                    + "'Find cell populations (clustering)...' to pick measurements "
+                    + "by hand.");
             return;
         }
 
