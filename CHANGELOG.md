@@ -75,25 +75,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
-- **Bug reporter leaked usernames on Windows in some path forms.** Before a report
-  is submitted, `scrubPaths()` replaces the user's home directory with `~`. It
-  matched the home path as a literal, which is only the single-backslash filesystem
-  form (`C:\Users\alice`). The same path reaches a log in other forms that the
-  literal never matched: doubled backslashes, which is what `repr()` produces for
-  any list or dict a Python log line formats (`C:\\Users\\alice`), and forward
-  slashes, from URIs and normalized paths (`file:/C:/Users/alice`) -- and QuPath
-  logs image and project URIs constantly, so this was live on the QuPath log that
-  every report can attach. A submitted report therefore showed the username in
-  clear on some lines while redacting it correctly on the lines around it.
-  Scrubbing now splits the home directory on the native separator and rejoins it
-  with a pattern admitting one or two characters of either slash, so every form is
-  caught (case-insensitive matching was already in place and is retained). Tested
-  per form, plus a mixed log asserting the username survives nowhere in it, and
-  that non-home paths -- lab shares, install directories -- are left intact, since
-  those carry no user identity and are usually the most diagnostic part of a
-  report. Invariants INV-3 and INV-4 in
-  `claude-reports/design/2026-08-19_bug-reporter-architecture.md`.
-
 - **The guide's own cross-references had rotted, and a shipped feature had no
   section at all.** The contents page still called chapter 10 "(Beta)" after the
   heading became "[Experimental]" -- not the same claim, since "Experimental" here
