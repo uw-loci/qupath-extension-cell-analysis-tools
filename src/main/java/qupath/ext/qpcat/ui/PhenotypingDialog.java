@@ -549,6 +549,18 @@ public class PhenotypingDialog {
             // "did you mean to ignore these?" prompt at Run time.
             this.comboBox = new ComboBox<>(
                     FXCollections.observableArrayList("--", "pos", "neg", "ignore"));
+            comboBox.setTooltip(Tooltips.of(
+                    "pos: this marker must be at or above its gate.\n"
+                    + "neg: strictly below its gate.\n"
+                    + "ignore / --: this marker takes no part in the rule.\n\n"
+                    + "Every pos/neg in a row must hold AT ONCE (logical AND), and the "
+                    + "first rule a cell satisfies wins.\n\n"
+                    + "Coming from SCIMAP? 'pos' there is NOT this. SCIMAP averages the "
+                    + "listed pos markers into a score, so a cell can be labelled while "
+                    + "failing one of them (it flags those 'likely-<type>'). QP-CAT's "
+                    + "'pos' is SCIMAP's 'allpos': every listed marker must clear the "
+                    + "gate. Rules copied across without that change give different "
+                    + "counts, and QP-CAT's will be the stricter of the two."));
             comboBox.setMaxWidth(Double.MAX_VALUE);
             comboBox.setOnAction(e -> {
                 if (getTableRow() != null && getTableRow().getItem() != null) {

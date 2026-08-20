@@ -17,6 +17,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   shaded jar is unchanged: same 9,335 entries as the 8.12-built release jar, minus a
   stray `META-INF/versions/9/module-info.class` shadow 9 drops.
 
+### Added
+
+- **The phenotyping rule cells explain themselves, including against SCIMAP.** Hovering
+  a `pos` / `neg` / `ignore` dropdown now states the semantics, and warns about the one
+  that silently differs: **QP-CAT's `pos` is SCIMAP's `allpos`.** SCIMAP averages the
+  listed `pos` markers into a score, so a cell can be labelled while failing one of them
+  (it flags those `likely-<type>`); QP-CAT requires every listed marker to clear its gate.
+  Rules copied across without that change give different counts, and QP-CAT's will be
+  stricter.
+
 ### Fixed
 
 - **Phenotype counts under-reported when two rules shared a cell type.** Writing the
