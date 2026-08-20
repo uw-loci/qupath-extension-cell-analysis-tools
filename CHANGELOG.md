@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.10.0] -- 2026-08-19 -- independent areas: no spatial graph across separate tissue
+
 ### Added
 
 - **Composition by area and Composition by class tabs.** The clustering Results
