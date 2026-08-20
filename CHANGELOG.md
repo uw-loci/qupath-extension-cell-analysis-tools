@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Changed
+
+- **Build moved to Gradle 9.2.1** (from 8.12), matching the seven monorepo repos already
+  there. QP-CAT no longer needs a pinned JDK to build: 317 tests pass identically on
+  JDK 21 and JDK 25. Two changes were needed and neither is optional --
+  `com.gradleup.shadow` 9.6.1 (8.3.5's Groovy relocation remapper dies under Gradle 9,
+  and QP-CAT is the only repo here that relocates a dependency), and an explicit
+  `junit-platform-launcher` test runtime dependency (Gradle 9 stopped supplying it). The
+  shaded jar is unchanged: same 9,335 entries as the 8.12-built release jar, minus a
+  stray `META-INF/versions/9/module-info.class` shadow 9 drops.
+
 ### Fixed
 
 - **Phenotype counts under-reported when two rules shared a cell type.** Writing the

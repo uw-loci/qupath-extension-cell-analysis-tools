@@ -1,6 +1,12 @@
 plugins {
     groovy
-    id("com.gradleup.shadow") version "8.3.5"
+    // 9.x, not 8.3.5 like the sibling repos: this is the only extension that
+    // RELOCATES a dependency (cluster3d-core, below), and 8.3.5's relocation
+    // remapper is Groovy-based and dies under Gradle 9 inside
+    // RelocatorRemapper.mapValue while rewriting invokedynamic call sites.
+    // The other repos never exercise that path, which is why they moved to
+    // Gradle 9 on 8.3.5 without noticing.
+    id("com.gradleup.shadow") version "9.6.1"
     id("qupath-conventions")
     id("com.github.spotbugs") version "6.5.0"
 }
@@ -58,6 +64,11 @@ dependencies {
     testImplementation(libs.bundles.qupath)
     testImplementation("io.github.qupath:qupath-app:0.7.0-rc1")
     testImplementation("org.junit.jupiter:junit-jupiter:5.9.1")
+    // Required from Gradle 9: the launcher is no longer put on the test
+    // runtime classpath for you, and its absence surfaces as "Could not start
+    // Gradle Test Executor 1: Failed to load JUnit Platform" rather than as a
+    // missing dependency. Same line as qpsc and tiles-to-pyramid.
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testImplementation("org.assertj:assertj-core:3.27.7")
     testImplementation(libs.bundles.logging)
     testImplementation(libs.qupath.fxtras)

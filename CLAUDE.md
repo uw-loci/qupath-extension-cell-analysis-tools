@@ -11,20 +11,49 @@ library to Maven Local before building QP-CAT:
 
 ```bash
 cd ../cluster3d-core
-./gradlew -Dorg.gradle.java.home=/usr/lib/jvm/java-21-openjdk-amd64 publishToMavenLocal test
+./gradlew publishToMavenLocal test
 cd ../qupath-extension-cell-analysis-tools
-./gradlew -Dorg.gradle.java.home=/usr/lib/jvm/java-21-openjdk-amd64 shadowJar
+./gradlew shadowJar
 ```
+
+**No `-Dorg.gradle.java.home` pin is needed here any more.** Both repos run Gradle
+9.2.1, which works on JDK 25 -- the pin existed only because Gradle 8.12 aborts on Java
+25 with a bare `* What went wrong: 25.0.3`. The eleven monorepo repos still on 8.12 do
+still need it, which is why `tools/pre-push-checks.sh` keeps hunting for a JDK 17-23:
+that hook picks ONE JDK for every repo, so the clamp can only go once they have all
+moved.
 
 - The dependency is a **non-transitive `implementation`**:
   `implementation("io.github.uw-loci:cluster3d-core:0.1.0") { isTransitive = false }`. It gets
   SHADED into the `-all.jar` (its own code); QuPath + JavaFX are host-provided, so `isTransitive
   = false` keeps them out of the bundle (core's published POM lists them because qupath-conventions
   injects them). Confirm the shaded classes with:
-  `unzip -l build/libs/*-all.jar | grep qupath/ext/cluster3d/`.
+  `unzip -l build/libs/*-all.jar | grep qupath/ext/qpcat/internal/cluster3d/` -- note the
+  RELOCATED package (`build.gradle.kts` rewrites `qupath.ext.cluster3d` into it), so
+  grepping the original name finds nothing and looks like a failed shade.
 - A user with BOTH QP-CAT and the standalone `qupath-extension-cluster-3d-navigator` installed
   has `cluster3d-core` shaded into both jars at the same pinned version 0.1.0 -> identical
   bytecode, harmless.
+
+### Gradle 9 + shadow 9 (do not "harmonise" the shadow version down)
+
+This repo pins **`com.gradleup.shadow` 9.6.1** while its siblings sit on 8.3.5. That is
+deliberate. QP-CAT is the only extension in the monorepo that **relocates** a dependency
+(`relocate("qupath.ext.cluster3d", ...)` in `build.gradle.kts`), and shadow 8.3.5's
+relocation remapper is Groovy-based: under Gradle 9 it dies inside
+`RelocatorRemapper.mapValue` while rewriting invokedynamic call sites, failing
+`shadowJar` with `Could not add file ...$QuickDelaunayCustomOptions.class to ZIP`. The
+sibling repos never exercise that path, which is how they moved to Gradle 9 on 8.3.5
+without noticing.
+
+Gradle 9 also stopped putting the JUnit Platform launcher on the test runtime classpath,
+so `testRuntimeOnly("org.junit.platform:junit-platform-launcher")` is required; without
+it `test` fails with *"Could not start Gradle Test Executor 1: Failed to load JUnit
+Platform"*, which does not name the missing dependency.
+
+Verified on the 8.12 -> 9.2.1 move: 317 tests / 36 classes pass identically on JDK 21 and
+JDK 25, and the shaded jar has the same 9,335 entries as the 8.12-built release jar minus
+a stray `META-INF/versions/9/module-info.class` that shadow 9 correctly drops.
 
 ## The "3D View" tab
 
