@@ -29,6 +29,28 @@ import numpy as np
 import pandas as pd
 from appose import NDArray as PyNDArray
 
+
+def build_phenotype_counts(labels, phenotype_names):
+    """Cells per phenotype NAME, summing rules that share a name.
+
+    Two rules may legitimately carry the same cell type: that is how an OR is
+    written today ("Macrophage = CD68 pos" on one row, "Macrophage = CD163 pos"
+    on the next), and both rows classify to the same PathClass. Labels are rule
+    INDICES, so a naive {name: count} assignment let the second row's count
+    OVERWRITE the first's -- the classification was right while the summary
+    under-reported, which is the worse way round because nothing looks wrong.
+
+    Names are emitted in first-appearance order so the summary reads in the
+    order the rules were written.
+    """
+    counts = {}
+    for i, name in enumerate(phenotype_names):
+        c = int(np.sum(np.asarray(labels) == i))
+        if c > 0:
+            counts[name] = counts.get(name, 0) + c
+    return counts
+
+
 # 1. Load data
 task.update("Loading measurements...")
 # The Java side ships float32 when the values round-trip exactly (QuPath
@@ -199,7 +221,14 @@ labels[labels == -1] = unknown_idx
 
 # Build phenotype names list
 phenotype_names = [r.get("cellType", "Unknown") for r in rules] + ["Unknown"]
-n_phenotypes = len(set(int(x) for x in labels))
+
+# 5. Build counts summary (before the log line, which reports off it)
+counts = build_phenotype_counts(labels, phenotype_names)
+
+# Distinct phenotype NAMES present, not distinct rule indices: two rules sharing
+# a cell type are one phenotype to the user, and every message built from this
+# number says "phenotypes".
+n_phenotypes = len(counts)
 
 logger.info(
     "Phenotyping complete: %d distinct phenotypes, %d unknown cells",
@@ -207,12 +236,6 @@ logger.info(
     n_unknown,
 )
 
-# 5. Build counts summary
-counts = {}
-for i, name in enumerate(phenotype_names):
-    c = int(np.sum(labels == i))
-    if c > 0:
-        counts[name] = c
 
 # 6. Package outputs
 task.update("Packaging results...")

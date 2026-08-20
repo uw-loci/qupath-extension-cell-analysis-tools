@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Fixed
+
+- **Phenotype counts under-reported when two rules shared a cell type.** Writing the
+  same name on two rows is how an OR is expressed today ("Macrophage = CD68 pos" on one
+  row, "= CD163 pos" on the next), and both rows classify correctly to the same
+  PathClass. But the summary was built as `counts[name] = c` keyed on the rule INDEX,
+  so the second row's count replaced the first's instead of adding to it. The
+  classification was right while the reported number was low -- the worse way round,
+  because nothing looks wrong. `n_phenotypes` likewise counted rule indices, so two
+  rules named `Macrophage` reported as two phenotypes.
+
+
 ## [0.10.0] -- 2026-08-19 -- independent areas: no spatial graph across separate tissue
 
 ### Added
