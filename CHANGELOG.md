@@ -25,6 +25,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   PNGs (dotplot, matrix plot, stacked violin, PAGA) still label the noise group by its
   numeric index, because renaming the AnnData category would change the
   `marker_rankings` JSON keys the Java panels look up by cluster id.
+- **Latent log floods at every per-object classification site.** A monorepo-wide sweep
+  (`tools/qupath_api_nags.py`, new) found 6 `setPathClass` call sites across all 20
+  extension repos, 5 of them inside a loop and all in QP-CAT. Three could pass the NULL
+  class: `PathClass.fromString(null)` returns the NULL-class SINGLETON rather than null,
+  so a single null cluster / gate / phenotype name is worth one WARN per cell --
+  `GateApplier` builds its class from a user-supplied gate name. All five now route
+  through `ResultApplier.setClassification`, one choke point that clears rather than
+  warns. (A BLANK name is safe by contrast: `fromString` throws on it. Both facts are
+  pinned in `SafeClassificationTest` so a QuPath release that changes either turns a test
+  red instead of a user's log into 300,000 lines.)
 - **Log flood when applying cluster labels.** Noise cells were classified with
   `setPathClass(PathClass.getNullClass())`, which draws a QuPath deprecation WARN per
   object: 67,228 lines on the run above, burying every real message. Now

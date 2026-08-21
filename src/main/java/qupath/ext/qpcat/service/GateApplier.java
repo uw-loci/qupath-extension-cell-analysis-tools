@@ -148,7 +148,7 @@ public final class GateApplier {
             for (CellRef ref : groupRefs) {
                 PathObject po = resolve(ref, index, dets);
                 if (po != null) {
-                    po.setPathClass(pathClass);
+                    ResultApplier.setClassification(po, pathClass);
                     hitsThisImage++;
                 } else {
                     unmatched++;

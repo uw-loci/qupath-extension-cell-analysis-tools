@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.ResultApplier;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.SavedResultApplier;
 import qupath.fx.dialogs.Dialogs;
@@ -801,7 +802,7 @@ public class ClusterManagementDialog {
                 // class) draws a per-object deprecation WARN from QuPath, once
                 // per cell on a merge-to-unclassified.
                 if ("(Unclassified)".equals(finalName)) det.resetPathClass();
-                else det.setPathClass(PathClass.fromString(finalName));
+                else ResultApplier.setClassification(det, PathClass.fromString(finalName));
                 changed++;
             }
             if (snapLabels != null) {

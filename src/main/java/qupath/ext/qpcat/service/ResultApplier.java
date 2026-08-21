@@ -32,6 +32,37 @@ public class ResultApplier {
     private static final String EMBED_2 = "UMAP2";
 
     /**
+     * Sets a classification without tripping QuPath's per-object log nags.
+     *
+     * <p>{@code PathROIObject.setPathClass} logs a WARN for every object handed
+     * the null class ("Please use resetPathClass() instead") or an invalid one
+     * ("Classification {} is invalid!"). Once, that is a helpful hint. In a loop
+     * over detections it is a denial of service: a 304,083-cell run that labelled
+     * 67,228 cells as noise wrote 67,228 log lines and buried everything else,
+     * including the run's own quality warnings.
+     *
+     * <p>The exposure is not hypothetical anywhere the class comes from a name:
+     * {@code PathClass.fromString(null)} returns the NULL class -- not null -- so
+     * one null cluster / gate / phenotype name costs one warning per cell. A
+     * BLANK name is safe by contrast: {@code fromString} throws on it, loudly and
+     * once. The {@code isValid()} branch below is therefore defensive rather than
+     * a live path, and is cheap enough to keep. Routing every per-object write
+     * through here makes the safe behaviour the default instead of each call
+     * site's responsibility; {@code setPathClass(null)} is already silent in
+     * QuPath, it is the NULL class singleton that is not.
+     *
+     * @param obj object to classify
+     * @param pc  the classification, or null / the null class to clear it
+     */
+    public static void setClassification(PathObject obj, PathClass pc) {
+        if (pc == null || pc == PathClass.getNullClass() || !pc.isValid()) {
+            obj.resetPathClass();
+        } else {
+            obj.setPathClass(pc);
+        }
+    }
+
+    /**
      * Applies cluster labels to detections as PathClass classifications.
      * <p>
      * Each detection is assigned a classification like "Cluster 0", "Cluster 1", etc.
@@ -114,7 +145,7 @@ public class ResultApplier {
                 }
                 byLabel.put(label, pc);
             }
-            det.setPathClass(pc);
+            setClassification(det, pc);
         }
     }
 
@@ -318,7 +349,7 @@ public class ResultApplier {
                 }
                 byLabel.put(label, pc);
             }
-            det.setPathClass(pc);
+            setClassification(det, pc);
         }
 
         logger.info("Applied phenotype labels to {} detections", detections.size());
@@ -380,7 +411,7 @@ public class ResultApplier {
                 }
                 byLabel.put(label, pc);
             }
-            det.setPathClass(pc);
+            setClassification(det, pc);
         }
 
         logger.info("Applied sub-cluster labels to {} detections (parent: {})",
