@@ -881,13 +881,16 @@ def cluster_quality_warnings(labels, algorithm):
 
     if algorithm == "hdbscan":
         out.append(
-            "HDBSCAN only finds groups separated by a GAP IN DENSITY. Cell "
-            "morphometry (area, perimeter, caliper, OD means) is usually one "
-            "continuous cloud with no such gap, so HDBSCAN returns one cluster "
-            "plus noise. Try Leiden or K-Means, which partition the data whether "
-            "or not it has density gaps, and add more measurements -- intensity "
-            "and texture features separate populations that shape alone does "
-            "not. Raising min_cluster_size makes this worse, not better."
+            "HDBSCAN can only cut where there is a GAP IN DENSITY between groups. "
+            "Populations can be well separated and still have no such gap -- cell "
+            "morphometry usually forms one connected cloud with denser and "
+            "sparser regions -- and then HDBSCAN merges them and writes off each "
+            "population's sparse fringe as noise. This does NOT mean the "
+            "measurements lack structure: re-run the same measurements with "
+            "Leiden or K-Means, which partition the data whether or not it has "
+            "density gaps, and compare. Raising min_cluster_size makes this "
+            "worse, not better. A tell-tale sign is noise spread evenly across "
+            "the whole cohort rather than concentrated in one region."
         )
     else:
         out.append(

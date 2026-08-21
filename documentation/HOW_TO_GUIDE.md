@@ -1229,12 +1229,17 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 |-----------|-------|---------|-------------|
 | min_cluster_size | 2-500 | 15 | Minimum cells to form a cluster. Smaller = more clusters. Cells in no dense region are labeled noise and left "Unclassified". |
 
-HDBSCAN only separates groups that have a **gap in density** between them. Cell morphometry
-(area, perimeter, caliper, OD means) is usually one continuous cloud with no such gap, so on
-morphology-only measurement sets HDBSCAN commonly returns one large cluster plus noise --
-`min_cluster_size` will not fix it. QP-CAT flags this in the results window ("This result may not
-be usable"). When it happens, use Leiden or KMeans instead and add intensity/texture
-measurements. See [Choosing an algorithm](BEST_PRACTICES.md#caution-hdbscan).
+HDBSCAN only separates groups that have a **gap in density** between them. Populations can be
+perfectly separable and still have no such gap: cell morphometry usually forms one connected cloud
+with denser and sparser regions, and HDBSCAN then merges the populations and writes off each one's
+sparse fringe as noise. `min_cluster_size` will not fix it.
+
+**A degenerate HDBSCAN result is not evidence that your measurements lack structure.** On one
+304,083-cell TMA, HDBSCAN on 12 morphology and OD measurements returned a single cluster plus 22%
+noise; KMeans on the *same* measurements separated the cores 91-99% cleanly. Re-run with Leiden or
+KMeans before concluding anything about the feature set. QP-CAT flags the degenerate case in the
+results window ("This result may not be usable"). See
+[Choosing an algorithm](BEST_PRACTICES.md#caution-hdbscan).
 
 Noise is reported separately, never as a cluster: the run summary reads
 `2 cluster(s) over 304083 cells  (67228 cells, 22.1%, left unclustered as noise)`, the noise

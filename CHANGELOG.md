@@ -30,6 +30,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   object: 67,228 lines on the run above, burying every real message. Now
   `resetPathClass()`. Same fix in "Manage Clusters" when merging a cluster to
   Unclassified.
+- **HDBSCAN guidance overstated the cause.** A degenerate HDBSCAN result says nothing
+  about the measurement set, and the first draft of this advice implied it did. Measured
+  on the run above: KMeans over the IDENTICAL 12-measurement matrix separated the TMA
+  cores 91-99% cleanly, and HDBSCAN's discarded noise was spread evenly across all four
+  KMeans clusters (27/25/24/23%) -- every population's sparse fringe, not a set of
+  outliers. So the populations were separable; there was simply no density valley between
+  them for HDBSCAN to cut on. The advice now says change the algorithm first, names
+  evenly-distributed noise as the tell, and no longer implies more measurements are the
+  fix.
 - **HDBSCAN guidance was wrong about what QP-CAT does with noise.** The dialog and
   BEST_PRACTICES said low-density cells "are kept and labeled, not discarded"; they are
   in fact left Unclassified and excluded from the composition charts. Both now say that,

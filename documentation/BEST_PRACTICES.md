@@ -232,14 +232,22 @@ Cells in no dense region are labeled **noise**: QP-CAT keeps them in the result 
 and their marker profile is available) but leaves them **Unclassified** in the viewer, and the
 composition charts exclude them. Noise is not a cluster and is not counted as one.
 
-**Know the failure mode before you pick it.** HDBSCAN can only separate groups that have a *gap in
-density* between them. Cell morphometry -- area, perimeter, caliper, OD means -- is usually one
-continuous cloud with no such gap, so on that kind of feature set HDBSCAN returns **one large
-cluster plus noise** no matter how `min_cluster_size` is set (raising it makes this worse, not
-better). That is a real answer about the data, not a crash, which is why QP-CAT now flags it
-explicitly in the results window rather than reporting "N clusters" and leaving you to notice.
-If you see it: switch to Leiden or KMeans, which partition the data whether or not it has density
-gaps, and add intensity/texture measurements -- shape alone rarely separates cell populations.
+**Know the failure mode before you pick it.** HDBSCAN can only cut where there is a *gap in
+density* between groups. Populations can be well separated and still have no such gap: cell
+morphometry -- area, perimeter, caliper, OD means -- usually forms one connected cloud with denser
+and sparser regions. HDBSCAN then merges the populations into **one large cluster** and writes off
+each one's sparse fringe as **noise**, no matter how `min_cluster_size` is set (raising it makes
+this worse). QP-CAT flags this in the results window rather than reporting "N clusters" and
+leaving you to notice.
+
+**A degenerate HDBSCAN result says nothing about your measurements.** Worked example: on a
+304,083-cell H&E TMA, HDBSCAN over 12 morphology + OD measurements returned one cluster (77.9% of
+cells), a 15-cell artefact cluster, and 22.1% noise. KMeans over the *identical* matrix separated
+the cores 91-99% cleanly, and the discarded noise turned out to be spread evenly across all four
+KMeans clusters (27/25/24/23%) -- it was every population's sparse fringe, not a set of outliers.
+Evenly-distributed noise is the tell. So when you see this: **change the algorithm first**, to
+Leiden or KMeans, which partition the data whether or not it has density gaps. Adding
+intensity/texture measurements is worth doing on its own merits but is not the fix for this.
 
 Use HDBSCAN when you genuinely expect distinct populations and want the method to tell you how
 many there are. Sweep `min_cluster_size`; reduce dimensionality first, as density estimates weaken
