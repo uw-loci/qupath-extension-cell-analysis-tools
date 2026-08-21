@@ -812,6 +812,92 @@ elif algorithm == "none":
 else:
     raise ValueError("Unknown clustering algorithm: %s" % algorithm)
 
+
+def cluster_quality_warnings(labels, algorithm):
+    """Flag partitions that are degenerate rather than informative.
+
+    A clustering run can "succeed" -- no exception, a labels array, a full set
+    of plots -- and still tell the user nothing, because every cell landed in
+    one cluster or was written off as noise. Density-based methods (HDBSCAN) do
+    this routinely on continuous morphometric features, where there is no
+    density gap to find. Nothing downstream notices, so the run reports
+    "N clusters" and the user discovers the problem by eye in the viewer.
+
+    Returns a list of plain-text warnings, most important first; empty when the
+    partition looks usable.
+    """
+    labels = np.asarray(labels)
+    n = int(labels.size)
+    out = []
+    if n == 0:
+        return out
+
+    n_noise = int(np.sum(labels < 0))
+    noise_frac = n_noise / float(n)
+    real = labels[labels >= 0]
+    n_real = int(np.unique(real).size) if real.size else 0
+
+    if n_real == 0:
+        out.append("No clusters were found: all %d cells were labelled noise." % n)
+    elif n_real == 1:
+        out.append(
+            "Only ONE cluster was found -- every clustered cell got the same "
+            "label, so this result cannot separate cell populations."
+        )
+    else:
+        counts = np.bincount(real)
+        biggest = int(counts.max())
+        # Measured against the CLUSTERED cells, not all cells: with heavy noise
+        # a cluster can hold every cell that got a label while still sitting
+        # under 80% of the cohort. The 2026-08-21 HDBSCAN run was exactly that
+        # -- 236,840 of 236,855 clustered cells (100%), but only 77.9% of the
+        # 304,083 total, so an all-cells threshold missed it. Noise gets its own
+        # warning below; this one is about the partition.
+        n_clustered = int(real.size)
+        frac = biggest / float(n_clustered)
+        if frac >= 0.80:
+            out.append(
+                "One cluster holds %.1f%% of the clustered cells (%d of %d). The "
+                "remaining clusters are too small for this to be a useful "
+                "partition." % (100.0 * frac, biggest, n_clustered)
+            )
+        floor = int(max(10, 0.001 * n))
+        nonempty = counts[counts > 0]
+        tiny = int(np.sum(nonempty < floor))
+        if tiny:
+            out.append(
+                "%d cluster(s) contain fewer than %d cells and are unlikely to be "
+                "meaningful cell populations." % (tiny, floor)
+            )
+
+    if noise_frac >= 0.10:
+        out.append(
+            "%d cells (%.1f%%) were left unclustered as noise; they stay "
+            "unclassified in the viewer." % (n_noise, 100.0 * noise_frac)
+        )
+
+    if not out:
+        return out
+
+    if algorithm == "hdbscan":
+        out.append(
+            "HDBSCAN only finds groups separated by a GAP IN DENSITY. Cell "
+            "morphometry (area, perimeter, caliper, OD means) is usually one "
+            "continuous cloud with no such gap, so HDBSCAN returns one cluster "
+            "plus noise. Try Leiden or K-Means, which partition the data whether "
+            "or not it has density gaps, and add more measurements -- intensity "
+            "and texture features separate populations that shape alone does "
+            "not. Raising min_cluster_size makes this worse, not better."
+        )
+    else:
+        out.append(
+            "Try adding more measurements (intensity and texture features "
+            "separate populations that shape alone does not), or a different "
+            "algorithm -- Leiden finds structure that centroid methods miss."
+        )
+    return out
+
+
 # 5. Compute cluster statistics (per-cluster marker means on normalized data)
 task.update("Computing cluster statistics...", current=3, maximum=6)
 
@@ -828,7 +914,34 @@ else:
 df_norm["cluster"] = labels_shifted
 cluster_means = df_norm.groupby("cluster").mean(numeric_only=True).values
 
-logger.info("Clustering complete: %d clusters found", n_clusters_found)
+# Noise is NOT a cluster. n_clusters_found stays the ROW COUNT of
+# cluster_stats (the Java side sizes its arrays from it), but the noise row is
+# identified explicitly so every label, heading and count downstream can say
+# "noise" instead of inventing a cluster the user will never find in the
+# viewer. HDBSCAN is the only algorithm here that emits negative labels.
+n_noise_cells = int(np.sum(np.asarray(labels) < 0))
+noise_cluster_index = int(labels_shifted.max()) if n_noise_cells > 0 else -1
+n_real_clusters = n_clusters_found - (1 if n_noise_cells > 0 else 0)
+task.outputs["n_noise_cells"] = n_noise_cells
+task.outputs["noise_cluster_index"] = noise_cluster_index
+
+if n_noise_cells > 0:
+    logger.info(
+        "Clustering complete: %d cluster(s) found; %d cell(s) (%.1f%%) left as noise",
+        n_real_clusters,
+        n_noise_cells,
+        100.0 * n_noise_cells / float(n_cells),
+    )
+else:
+    logger.info("Clustering complete: %d clusters found", n_clusters_found)
+
+_quality = cluster_quality_warnings(labels, algorithm)
+if _quality:
+    import json as _json_q
+
+    task.outputs["quality_warnings"] = _json_q.dumps(_quality)
+    for _w in _quality:
+        logger.warning("Clustering quality: %s", _w)
 
 # 5b. Representative cells per cluster (medoids).
 # For each cluster, rank member cells by distance to the cluster center under

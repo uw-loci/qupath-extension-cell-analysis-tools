@@ -535,14 +535,20 @@ def build_area_summary_csv(
         )
 
     present = sorted(set(int(v) for v in labels))
-    if cluster_names is None:
-        names = {c: "Cluster %d" % c for c in present}
-    else:
+
+    # Negative labels are NOISE (HDBSCAN), not a cluster: those cells are left
+    # unclassified in the viewer, so a "Cluster -1" column names a population
+    # the reader cannot go and look at. Name it, and keep it out of the
+    # cluster count.
+    def _name_of(c):
+        if c < 0:
+            return "Noise"
+        if cluster_names is None:
+            return "Cluster %d" % c
         listed = list(cluster_names)
-        names = {
-            c: (listed[c] if 0 <= c < len(listed) else "Cluster %d" % c)
-            for c in present
-        }
+        return listed[c] if 0 <= c < len(listed) else "Cluster %d" % c
+
+    names = {c: _name_of(c) for c in present}
 
     header = ["area", "type", "n_cells", "n_clusters_present"]
     header += ["%s_frac" % names[c] for c in present]
@@ -553,7 +559,7 @@ def build_area_summary_csv(
         area_labels = labels[idx]
         n = int(area_labels.shape[0])
         counts = {c: int(np.count_nonzero(area_labels == c)) for c in present}
-        n_present = sum(1 for c in present if counts[c] > 0)
+        n_present = sum(1 for c in present if c >= 0 and counts[c] > 0)
         row = [
             area_label(area_names, area_id),
             area_type(area_types, area_id),

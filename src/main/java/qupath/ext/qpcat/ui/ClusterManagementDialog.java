@@ -797,8 +797,11 @@ public class ClusterManagementDialog {
             String orig = pc != null ? pc.toString() : "(Unclassified)";
             String finalName = renames.getOrDefault(orig, orig);
             if (!finalName.equals(orig)) {
-                det.setPathClass("(Unclassified)".equals(finalName)
-                        ? PathClass.getNullClass() : PathClass.fromString(finalName));
+                // resetPathClass() for the unclassified case -- setPathClass(null
+                // class) draws a per-object deprecation WARN from QuPath, once
+                // per cell on a merge-to-unclassified.
+                if ("(Unclassified)".equals(finalName)) det.resetPathClass();
+                else det.setPathClass(PathClass.fromString(finalName));
                 changed++;
             }
             if (snapLabels != null) {

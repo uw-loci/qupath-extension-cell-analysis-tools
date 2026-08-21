@@ -228,10 +228,22 @@ merges are greedy and never undone. (Gere 2023.)
 
 <a name="caution-hdbscan"></a>
 **HDBSCAN** -- Finds clusters as dense regions; needs neither k nor a distance threshold.
-Low-density cells are grouped into a separate **noise** cluster (in QP-CAT they are kept and
-labeled, not discarded) -- inspect them, since transitional cells often land there. Sweep
-`min_cluster_size`; reduce dimensionality first, as density estimates weaken in high dimensions.
-(McInnes & Healy 2017.)
+Cells in no dense region are labeled **noise**: QP-CAT keeps them in the result (they are counted,
+and their marker profile is available) but leaves them **Unclassified** in the viewer, and the
+composition charts exclude them. Noise is not a cluster and is not counted as one.
+
+**Know the failure mode before you pick it.** HDBSCAN can only separate groups that have a *gap in
+density* between them. Cell morphometry -- area, perimeter, caliper, OD means -- is usually one
+continuous cloud with no such gap, so on that kind of feature set HDBSCAN returns **one large
+cluster plus noise** no matter how `min_cluster_size` is set (raising it makes this worse, not
+better). That is a real answer about the data, not a crash, which is why QP-CAT now flags it
+explicitly in the results window rather than reporting "N clusters" and leaving you to notice.
+If you see it: switch to Leiden or KMeans, which partition the data whether or not it has density
+gaps, and add intensity/texture measurements -- shape alone rarely separates cell populations.
+
+Use HDBSCAN when you genuinely expect distinct populations and want the method to tell you how
+many there are. Sweep `min_cluster_size`; reduce dimensionality first, as density estimates weaken
+in high dimensions. (McInnes & Healy 2017.)
 
 <a name="caution-gmm"></a>
 **Gaussian Mixture (GMM)** -- Fits elliptical, unequal-size clusters that defeat KMeans, so it

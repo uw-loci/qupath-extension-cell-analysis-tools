@@ -76,8 +76,20 @@ public final class ClusteringRunRecord {
         sb.append("Result name : ").append(savedName).append('\n');
         sb.append("Scope       : ").append(scopeLabel != null ? scopeLabel : "(unknown)").append('\n');
         if (result != null) {
-            sb.append("Outcome     : ").append(result.getNClusters())
-                    .append(" clusters over ").append(result.getNCells()).append(" cells\n");
+            // Report the number of CLUSTERS, not the row count of clusterStats:
+            // a noise row is not a population and counting it made a run that
+            // found one cluster read as "3 clusters".
+            sb.append("Outcome     : ").append(result.getNRealClusters())
+                    .append(" cluster(s) over ").append(result.getNCells()).append(" cells");
+            if (result.hasNoise()) {
+                sb.append(String.format("  (%d cells, %.1f%%, left unclustered as noise)",
+                        result.getNNoiseCells(),
+                        100.0 * result.getNNoiseCells() / Math.max(1, result.getNCells())));
+            }
+            sb.append('\n');
+            for (String w : result.getQualityWarnings()) {
+                sb.append("WARNING     : ").append(w).append('\n');
+            }
         }
         sb.append("QP-CAT      : ").append(ext != null ? ext : "(unknown)").append('\n');
         sb.append("QuPath      : ").append(GeneralTools.getVersion()).append("\n\n");

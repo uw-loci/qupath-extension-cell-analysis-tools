@@ -1676,10 +1676,16 @@ public class ClusteringDialog {
                 algorithmParamsBox.getChildren().add(row);
                 addMethodInfo(
                         "Finds clusters as dense regions; needs neither k nor a distance "
-                        + "threshold. Low-density cells are kept in a separate noise cluster (not "
-                        + "discarded) - inspect them, since transitional cells often land there. "
-                        + "Sweep min_cluster_size; reduce dimensionality first, as density "
-                        + "estimates weaken in high dimensions.",
+                        + "threshold. Cells in no dense region are labeled NOISE and left "
+                        + "Unclassified in the viewer - they are not a cluster, and the "
+                        + "composition charts exclude them. HDBSCAN only separates groups that "
+                        + "have a GAP IN DENSITY between them, and cell morphometry (area, "
+                        + "perimeter, caliper, OD means) is usually one continuous cloud with no "
+                        + "such gap: on that data it returns one big cluster plus noise whatever "
+                        + "min_cluster_size you pick. Use it when you expect genuinely distinct "
+                        + "populations; otherwise Leiden or KMeans, which partition the data "
+                        + "either way. Reduce dimensionality first - density estimates weaken in "
+                        + "high dimensions.",
                         "caution-hdbscan");
             }
             case AGGLOMERATIVE -> {
@@ -2607,8 +2613,9 @@ public class ClusteringDialog {
         if (dialogOwner != null) stage.initOwner(dialogOwner);
         stage.setTitle("QPCAT - Results"
                 + (loadedResultName != null ? " [" + loadedResultName + "]" : "")
-                + "  --  " + result.getNClusters() + " clusters, "
+                + "  --  " + result.getNRealClusters() + " cluster(s), "
                 + result.getNCells() + " cells"
+                + (result.hasNoise() ? " (+" + result.getNNoiseCells() + " noise)" : "")
                 // An edited result looks just like its parent in the title bar
                 // otherwise, which is how the wrong one gets worked on.
                 + (result.getDerivedFrom() != null
@@ -3253,6 +3260,11 @@ public class ClusteringDialog {
                 pngViews, embName, loadedResultName, colorRefreshers);
 
         VBox mainContent = new VBox(8);
+        // A degenerate partition is the one failure the plots hide: everything
+        // renders, so the only clue is the viewer looking wrong. Say it at the
+        // top of the window instead.
+        Node qualityBanner = buildQualityBanner(result);
+        if (qualityBanner != null) mainContent.getChildren().add(qualityBanner);
         mainContent.getChildren().add(tabPane);
         if (colorPanel != null) mainContent.getChildren().add(colorPanel);
         if (locationField != null) mainContent.getChildren().add(locationField);
@@ -3682,6 +3694,30 @@ public class ClusteringDialog {
      * Move the named tabs to the front of the TabPane, in the given order,
      * skipping any that are absent. Used so the at-a-glance tabs lead.
      */
+    /**
+     * Banner listing this run's degenerate-partition warnings, or null when the
+     * partition looks usable. The text comes from
+     * {@code run_clustering.cluster_quality_warnings} -- kept Python-side because
+     * that is where the label array and the algorithm name both live.
+     */
+    private static Node buildQualityBanner(ClusteringResult result) {
+        List<String> warnings = result.getQualityWarnings();
+        if (warnings.isEmpty()) return null;
+        VBox box = new VBox(4);
+        Label head = new Label("This result may not be usable");
+        head.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a2e00;");
+        box.getChildren().add(head);
+        for (String w : warnings) {
+            Label l = new Label("- " + w);
+            l.setWrapText(true);
+            l.setStyle("-fx-text-fill: #6b4e00;");
+            box.getChildren().add(l);
+        }
+        box.setStyle("-fx-font-size: 11px; -fx-background-color: #fff3cd; -fx-padding: 8; "
+                + "-fx-border-color: #d9a400; -fx-border-width: 1;");
+        return box;
+    }
+
     private static void reorderLeadingTabs(TabPane tabPane, String... orderedTitles) {
         int target = 0;
         for (String title : orderedTitles) {

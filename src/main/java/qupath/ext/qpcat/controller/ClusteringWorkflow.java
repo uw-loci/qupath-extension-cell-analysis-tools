@@ -1927,6 +1927,27 @@ public class ClusteringWorkflow {
             ClusteringResult result = new ClusteringResult(labels, nClusters, embedding,
                     clusterStats, extraction.getMeasurementNames());
 
+            // Noise is a row of clusterStats but not a cluster -- carry the index
+            // so every label downstream says so, instead of naming a population
+            // that appears in no viewer.
+            if (task.outputs.containsKey("noise_cluster_index")) {
+                result.setNoiseRowIndex(
+                        ((Number) task.outputs.get("noise_cluster_index")).intValue());
+            }
+            if (task.outputs.containsKey("n_noise_cells")) {
+                result.setNNoiseCells(
+                        ((Number) task.outputs.get("n_noise_cells")).intValue());
+            }
+            if (task.outputs.containsKey("quality_warnings")) {
+                List<String> qw = new Gson().fromJson(
+                        (String) task.outputs.get("quality_warnings"),
+                        new TypeToken<List<String>>(){}.getType());
+                result.setQualityWarnings(qw);
+                if (qw != null) {
+                    for (String w : qw) logger.warn("Clustering quality: {}", w);
+                }
+            }
+
             // Parse post-analysis outputs
             if (task.outputs.containsKey("marker_rankings")) {
                 result.setMarkerRankingsJson((String) task.outputs.get("marker_rankings"));

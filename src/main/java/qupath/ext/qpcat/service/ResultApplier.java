@@ -96,7 +96,13 @@ public class ResultApplier {
             PathObject det = detections.get(i);
             int label = labels[i];
             if (label < 0) {
-                det.setPathClass(PathClass.getNullClass());
+                // resetPathClass(), NOT setPathClass(getNullClass()): QuPath's
+                // PathROIObject logs a deprecation WARN for every call with the
+                // null class. HDBSCAN routinely labels tens of thousands of
+                // cells as noise, so that path floods the log one line per cell
+                // (67,228 lines on a 304k-cell TMA run) and buries the real
+                // messages, including this run's own quality warnings.
+                det.resetPathClass();
                 continue;
             }
             PathClass pc = byLabel.get(label);

@@ -6,6 +6,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Fixed
+
+- **A clustering run that finds nothing now says so.** HDBSCAN on a 304,083-cell TMA
+  returned ONE real population (77.9% of cells), a 15-cell cluster and 22.1% noise --
+  and reported it as "3 clusters over 304083 cells", because the noise group was counted
+  as a cluster. Every plot rendered; the only clue was the viewer showing one colour.
+  Three changes: `run_clustering.cluster_quality_warnings` inspects the label array and
+  flags a single cluster, a cluster holding >= 80% of the clustered cells, clusters
+  below 0.1% of the cohort, and >= 10% noise -- with algorithm-specific advice; those
+  warnings appear as a banner at the top of the results window, in the log, and in
+  `*_RUN_INFO.txt`. Noise is no longer counted or named as a cluster anywhere: the
+  window title, `RUN_INFO`, the saved-result summary and `n_clusters_present` in
+  `*_areas_summary.csv` all report clusters only, the CSV column is `Noise` rather than
+  `Cluster -1`, and the `clusterStats` noise row is labeled "Noise (unclustered)" in the
+  heatmap instead of naming a "Cluster 2" that matches no cell in the viewer. The row
+  itself is kept -- its marker profile is worth reading. One residue: the static scanpy
+  PNGs (dotplot, matrix plot, stacked violin, PAGA) still label the noise group by its
+  numeric index, because renaming the AnnData category would change the
+  `marker_rankings` JSON keys the Java panels look up by cluster id.
+- **Log flood when applying cluster labels.** Noise cells were classified with
+  `setPathClass(PathClass.getNullClass())`, which draws a QuPath deprecation WARN per
+  object: 67,228 lines on the run above, burying every real message. Now
+  `resetPathClass()`. Same fix in "Manage Clusters" when merging a cluster to
+  Unclassified.
+- **HDBSCAN guidance was wrong about what QP-CAT does with noise.** The dialog and
+  BEST_PRACTICES said low-density cells "are kept and labeled, not discarded"; they are
+  in fact left Unclassified and excluded from the composition charts. Both now say that,
+  and both now name the failure mode that actually bites: HDBSCAN needs a gap in density,
+  and cell morphometry usually has none, so on morphology-only measurement sets it
+  returns one cluster plus noise whatever `min_cluster_size` is set to.
+
 ### Changed
 
 - **Build moved to Gradle 9.2.1** (from 8.12), matching the seven monorepo repos already

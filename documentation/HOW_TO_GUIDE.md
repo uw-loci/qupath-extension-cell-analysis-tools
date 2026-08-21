@@ -1227,7 +1227,19 @@ If `on_error: stop` aborted on the first failure, fix the cause (env, data, or Y
 
 | Parameter | Range | Default | Description |
 |-----------|-------|---------|-------------|
-| min_cluster_size | 2-500 | 15 | Minimum cells to form a cluster. Smaller = more clusters. Unassigned cells are labeled "Unclassified". |
+| min_cluster_size | 2-500 | 15 | Minimum cells to form a cluster. Smaller = more clusters. Cells in no dense region are labeled noise and left "Unclassified". |
+
+HDBSCAN only separates groups that have a **gap in density** between them. Cell morphometry
+(area, perimeter, caliper, OD means) is usually one continuous cloud with no such gap, so on
+morphology-only measurement sets HDBSCAN commonly returns one large cluster plus noise --
+`min_cluster_size` will not fix it. QP-CAT flags this in the results window ("This result may not
+be usable"). When it happens, use Leiden or KMeans instead and add intensity/texture
+measurements. See [Choosing an algorithm](BEST_PRACTICES.md#caution-hdbscan).
+
+Noise is reported separately, never as a cluster: the run summary reads
+`2 cluster(s) over 304083 cells  (67228 cells, 22.1%, left unclustered as noise)`, the noise
+column in `*_areas_summary.csv` is named `Noise`, and the noise row in the heatmap is labeled
+"Noise (unclustered)".
 
 ### Agglomerative
 

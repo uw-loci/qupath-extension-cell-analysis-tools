@@ -304,3 +304,28 @@ def test_ripley_emits_per_cluster_p_value_curves_not_an_invented_scalar():
     assert curves, "no p-value curves"
     for name, curve in curves.items():
         assert len(curve) == len(payload["radii"])
+
+
+def test_noise_is_named_noise_and_left_out_of_the_cluster_count():
+    """A "Cluster -1" column names a population the reader cannot go look at.
+
+    HDBSCAN's -1 cells are left unclassified in the viewer, so the summary has
+    to call them what they are. They also must not inflate
+    ``n_clusters_present``: the 2026-08-21 TMA run reported "3 clusters
+    present" per core when two of the three were one real cluster and noise.
+    """
+    build = _summary_builder()
+    # One area: 6 clustered cells over two clusters, plus 4 noise cells.
+    area_ids = [0] * 10
+    labels = [0, 0, 0, 1, 1, 1, -1, -1, -1, -1]
+    csv = build(area_ids, ["A-1"], labels, None, ["TMA Core"])
+    rows = _rows(csv)
+    header = rows[0].split(",")
+
+    assert "Noise_frac" in header and "Noise_count" in header
+    assert not any(h.startswith("Cluster -1") for h in header)
+
+    values = dict(zip(header, rows[1].split(",")))
+    assert values["n_clusters_present"] == "2"  # noise is not the third
+    assert values["Noise_count"] == "4"
+    assert values["Noise_frac"] == "0.400000"

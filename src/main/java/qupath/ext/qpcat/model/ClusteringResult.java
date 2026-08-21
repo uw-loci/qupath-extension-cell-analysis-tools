@@ -17,6 +17,21 @@ public class ClusteringResult {
     private final double[][] clusterStats;    // per-cluster marker means (nClusters x nMarkers)
     private final String[] markerNames;
 
+    // Noise bookkeeping. HDBSCAN labels cells it cannot place as -1, and the
+    // Python side appends their marker means as the LAST row of clusterStats so
+    // the profile is still inspectable. That row is NOT a cluster: no cell in
+    // the viewer carries it (noise cells are unclassified), so displaying it as
+    // "Cluster <n>" invents a population the user can never find. noiseRowIndex
+    // is that row's index, or -1 when the algorithm produced no noise.
+    private int noiseRowIndex = -1;
+    private int nNoiseCells;
+
+    // Plain-text warnings from run_clustering.cluster_quality_warnings -- set
+    // when the partition is degenerate (one dominant cluster, heavy noise, a
+    // single cluster). A run can finish cleanly and still be useless; without
+    // these the only signal is the viewer looking wrong.
+    private java.util.List<String> qualityWarnings;
+
     // Post-analysis results (set after construction)
     private String markerRankingsJson;
     private double[][] pagaConnectivity;
@@ -133,6 +148,10 @@ public class ClusteringResult {
             String n = clusterNames.get(label);
             if (n != null && !n.isBlank()) return n;
         }
+        // Negative labels are noise on the wire; noiseRowIndex is the same cells
+        // as a clusterStats row. Both must read as noise, or the heatmap shows a
+        // cluster that does not exist anywhere else in the UI.
+        if (label < 0 || (noiseRowIndex >= 0 && label == noiseRowIndex)) return NOISE_NAME;
         return "Cluster " + label;
     }
 
@@ -143,6 +162,39 @@ public class ClusteringResult {
     public java.util.function.IntFunction<String> clusterNameFn() {
         return this::clusterName;
     }
+
+    /** Display name for the pseudo-cluster holding cells no algorithm could place. */
+    public static final String NOISE_NAME = "Noise (unclustered)";
+
+    /**
+     * Index into {@link #getClusterStats()} of the noise row, or -1 when the run
+     * produced none. Only density-based algorithms (HDBSCAN) ever produce one.
+     */
+    public int getNoiseRowIndex() { return noiseRowIndex; }
+
+    public void setNoiseRowIndex(int v) { this.noiseRowIndex = v; }
+
+    /** Cells left unclustered as noise (label &lt; 0); 0 for every other algorithm. */
+    public int getNNoiseCells() { return nNoiseCells; }
+
+    public void setNNoiseCells(int v) { this.nNoiseCells = v; }
+
+    /** True when this run set aside cells as noise rather than clustering them. */
+    public boolean hasNoise() { return noiseRowIndex >= 0 && nNoiseCells > 0; }
+
+    /**
+     * Clusters excluding the noise row -- the number a user should be told. Do
+     * not use it to size arrays: {@link #getNClusters()} is the row count of
+     * {@code clusterStats} and PAGA, which include the noise row.
+     */
+    public int getNRealClusters() { return hasNoise() ? nClusters - 1 : nClusters; }
+
+    /** Degenerate-partition warnings, most important first; never null. */
+    public java.util.List<String> getQualityWarnings() {
+        return qualityWarnings == null ? java.util.List.of() : qualityWarnings;
+    }
+
+    public void setQualityWarnings(java.util.List<String> v) { this.qualityWarnings = v; }
 
     // Per-cell parent-annotation display name (index-aligned with clusterLabels).
     // Null for cells whose parent is the image root (i.e. not inside a named /

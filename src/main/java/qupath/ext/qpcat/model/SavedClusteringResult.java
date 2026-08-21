@@ -21,6 +21,13 @@ public class SavedClusteringResult {
     private int nCells;
     private int nMarkers;
 
+    // Noise bookkeeping + degenerate-partition warnings. Additive and
+    // null-tolerant: a result saved before these existed loads with
+    // noiseRowIndex = 0, which is why the default is corrected on read.
+    private Integer noiseRowIndex;      // null on pre-0.11 saves
+    private int nNoiseCells;
+    private List<String> qualityWarnings;
+
     // Core data
     private int[] clusterLabels;
     private double[][] embedding;
@@ -128,6 +135,27 @@ public class SavedClusteringResult {
 
     public int getNClusters() { return nClusters; }
     public void setNClusters(int n) { this.nClusters = n; }
+
+    /**
+     * Index of the noise row in {@link #getClusterStats()}, or -1 when there is
+     * none. Boxed on the field so a pre-0.11 save (which has no such key) reads
+     * as "no noise" instead of as row 0.
+     */
+    public int getNoiseRowIndex() { return noiseRowIndex == null ? -1 : noiseRowIndex; }
+    public void setNoiseRowIndex(int v) { this.noiseRowIndex = v; }
+
+    public int getNNoiseCells() { return nNoiseCells; }
+    public void setNNoiseCells(int v) { this.nNoiseCells = v; }
+
+    public List<String> getQualityWarnings() {
+        return qualityWarnings == null ? List.of() : qualityWarnings;
+    }
+    public void setQualityWarnings(List<String> v) { this.qualityWarnings = v; }
+
+    /** Clusters excluding the noise row -- the number to show a user. */
+    public int getNRealClusters() {
+        return (getNoiseRowIndex() >= 0 && nNoiseCells > 0) ? nClusters - 1 : nClusters;
+    }
 
     public int getNCells() { return nCells; }
     public void setNCells(int n) { this.nCells = n; }
@@ -296,6 +324,10 @@ public class SavedClusteringResult {
         saved.setPagaClusterNames(result.getPagaClusterNames());
         saved.setPlotPaths(result.getPlotPaths());
 
+        saved.setNoiseRowIndex(result.getNoiseRowIndex());
+        saved.setNNoiseCells(result.getNNoiseCells());
+        saved.setQualityWarnings(result.getQualityWarnings());
+
         saved.setNhoodEnrichment(result.getNhoodEnrichment());
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
@@ -379,6 +411,9 @@ public class SavedClusteringResult {
         result.setNhoodEnrichment(nhoodEnrichment);
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
+        result.setNoiseRowIndex(getNoiseRowIndex());
+        result.setNNoiseCells(nNoiseCells);
+        result.setQualityWarnings(qualityWarnings);
 
         // Plot-click navigation + representative crops (null on older saves).
         result.setRepresentativesJson(representativesJson);
@@ -432,7 +467,8 @@ public class SavedClusteringResult {
      * Short summary string for listing in the UI.
      */
     public String getSummary() {
-        return nClusters + " clusters, " + nCells + " cells"
+        return getNRealClusters() + " clusters, " + nCells + " cells"
+                + (nNoiseCells > 0 ? " (+" + nNoiseCells + " noise)" : "")
                 + (algorithm != null ? " (" + algorithm + ")" : "");
     }
 
