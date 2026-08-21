@@ -210,9 +210,6 @@ def test_total_ram_reports_none_rather_than_guessing():
     assert value is None or value > 0.5
 
 
-
-
-
 class _NullLogger:
     def warning(self, *a, **k):
         pass

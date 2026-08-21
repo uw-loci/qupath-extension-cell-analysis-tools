@@ -54,7 +54,7 @@ def test_each_unit_sees_only_its_own_cells():
     assert [c["n"] for c in block.calls] == [2, 2]
     # Unit 1's block must contain only the far-away pair.
     far = next(c for c in block.calls if c["unit"] == 1)
-    assert far["coords"][:, 0].min() >= 900.0   # x column, not both axes
+    assert far["coords"][:, 0].min() >= 900.0  # x column, not both axes
 
 
 def test_rows_land_on_the_right_cells_when_units_are_interleaved():
