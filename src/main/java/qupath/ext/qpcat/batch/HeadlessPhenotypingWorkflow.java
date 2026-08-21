@@ -130,6 +130,14 @@ public final class HeadlessPhenotypingWorkflow {
             if (r.getRequireMarkers() != null) {
                 for (String marker : r.getRequireMarkers()) m.put(marker, "pos");
             }
+            // Written BEFORE exclude so the same conflict warning covers it, and
+            // AFTER require so a marker in both lists keeps the stricter "pos"
+            // rather than being relaxed into an OR group.
+            if (r.getAnyMarkers() != null) {
+                for (String marker : r.getAnyMarkers()) {
+                    m.putIfAbsent(marker, "anypos");
+                }
+            }
             if (r.getExcludeMarkers() != null) {
                 for (String marker : r.getExcludeMarkers()) {
                     // A marker required positive AND excluded by the same rule is

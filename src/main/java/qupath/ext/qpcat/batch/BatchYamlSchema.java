@@ -307,6 +307,12 @@ public final class BatchYamlSchema {
         private String name;
         private List<String> requireMarkers = new ArrayList<>();
         private List<String> excludeMarkers = new ArrayList<>();
+        /**
+         * Markers of which AT LEAST ONE must be positive -- one OR group that
+         * ANDs with require/exclude. Lets "Macrophage = CD68 or CD163 or CD206"
+         * be one rule instead of three sharing a name.
+         */
+        private List<String> anyMarkers = new ArrayList<>();
         private double requireMinZscore = 1.0;
         private double excludeMaxZscore = 1.0;
 
@@ -323,6 +329,12 @@ public final class BatchYamlSchema {
         public void setExcludeMarkers(List<String> excludeMarkers) {
             this.excludeMarkers = excludeMarkers == null
                     ? new ArrayList<>() : new ArrayList<>(excludeMarkers);
+        }
+
+        public List<String> getAnyMarkers() { return anyMarkers; }
+        public void setAnyMarkers(List<String> anyMarkers) {
+            this.anyMarkers = anyMarkers == null
+                    ? new ArrayList<>() : new ArrayList<>(anyMarkers);
         }
 
         public double getRequireMinZscore() { return requireMinZscore; }

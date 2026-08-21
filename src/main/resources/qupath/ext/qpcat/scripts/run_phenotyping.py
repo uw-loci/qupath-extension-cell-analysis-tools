@@ -30,6 +30,78 @@ import pandas as pd
 from appose import NDArray as PyNDArray
 
 
+def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate):
+    """Boolean mask of cells satisfying ONE rule, plus whether it had criteria.
+
+    A rule is an AND over four kinds of condition:
+
+      pos    / neg    -- EVERY marker so marked must be at/above (below) its gate.
+      anypos / anyneg -- AT LEAST ONE marker in that group must be, so the group
+                         is an OR that then ANDs with the rest of the row.
+
+    The any-groups are per row, not per marker: all markers marked `anypos` in a
+    row form one group. That is what lets "Macrophage = CD68 or CD163 or CD206"
+    be a single row instead of three -- and three rows sharing a cell type is the
+    idiom that produced the counts bug fixed on 2026-08-19, because labels are
+    rule indices.
+
+    Note the deliberate asymmetry with an EMPTY group: a row with no `anypos`
+    markers imposes no any-constraint, whereas a row whose only condition is
+    `anypos` on markers absent from the data matches nothing. Silently treating
+    the second as "no constraint" would match every cell.
+
+    Returns (matches, has_criteria). Unknown condition words are warned and
+    skipped rather than failing the run -- a rule set is user input, and one
+    typo should not lose the other twenty rules.
+    """
+    n_cells = norm_data.shape[0]
+    matches = np.ones(n_cells, dtype=bool)
+    anypos = np.zeros(n_cells, dtype=bool)
+    anyneg = np.zeros(n_cells, dtype=bool)
+    has_anypos = False
+    has_anyneg = False
+    has_criteria = False
+
+    for marker, condition in rule.items():
+        if marker == "cellType" or not condition:
+            continue
+        if condition not in ("pos", "neg", "anypos", "anyneg"):
+            logger.warning(
+                "Unknown condition '%s' for marker '%s', skipping", condition, marker
+            )
+            continue
+        # Track the group BEFORE the missing-marker check: a rule asking for
+        # "any of CD68/CD163" where neither column exists must match nothing,
+        # not fall through to an unconstrained row.
+        if condition == "anypos":
+            has_anypos = True
+        elif condition == "anyneg":
+            has_anyneg = True
+        has_criteria = True
+
+        if marker not in marker_idx:
+            logger.warning("Marker '%s' not found in data, skipping", marker)
+            continue
+
+        values = norm_data[:, marker_idx[marker]]
+        gate = gates.get(marker, default_gate)
+
+        if condition == "pos":
+            matches &= values >= gate
+        elif condition == "neg":
+            matches &= values < gate
+        elif condition == "anypos":
+            anypos |= values >= gate
+        else:
+            anyneg |= values < gate
+
+    if has_anypos:
+        matches &= anypos
+    if has_anyneg:
+        matches &= anyneg
+    return matches, has_criteria
+
+
 def build_phenotype_counts(labels, phenotype_names):
     """Cells per phenotype NAME, summing rules that share a name.
 
@@ -142,32 +214,11 @@ for rule_idx, rule in enumerate(rules):
     if not np.any(unassigned):
         break
 
-    # Start with all unassigned cells as candidates
-    matches = unassigned.copy()
-    has_criteria = False
-
-    for marker, condition in rule.items():
-        if marker == "cellType" or not condition:
-            continue
-        if marker not in marker_idx:
-            logger.warning("Marker '%s' not found in data, skipping", marker)
-            continue
-
-        col = marker_idx[marker]
-        values = norm_data[:, col]
-        has_criteria = True
-
-        # Use per-marker gate, falling back to default
-        marker_gate = gates.get(marker, default_gate)
-
-        if condition == "pos":
-            matches &= values >= marker_gate
-        elif condition == "neg":
-            matches &= values < marker_gate
-        else:
-            logger.warning(
-                "Unknown condition '%s' for marker '%s', skipping", condition, marker
-            )
+    rule_matches, has_criteria = evaluate_rule(
+        rule, norm_data, marker_idx, gates, default_gate
+    )
+    # First match wins, so only cells no earlier rule claimed are eligible.
+    matches = unassigned & rule_matches
 
     if has_criteria:
         n_matched = int(np.sum(matches))

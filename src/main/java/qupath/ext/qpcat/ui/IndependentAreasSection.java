@@ -63,7 +63,9 @@ public final class IndependentAreasSection extends VBox {
     public IndependentAreasSection(QuPathGUI qupath) {
         this.qupath = qupath;
         setSpacing(6);
-        setPadding(new Insets(8, 0, 4, 0));
+        // Left inset so the "1. 2. 3." row numbers are not flush against the
+        // enclosing pane's border.
+        setPadding(new Insets(8, 4, 4, 6));
 
         heading.setTooltip(Tooltips.of(
                 "Split cells into physically separate areas. No spatial graph -- BANKSY, "
@@ -128,7 +130,11 @@ public final class IndependentAreasSection extends VBox {
                     + "sections on one slide usually share a single 'Tissue' class, and "
                     + "grouping by class would merge them straight back together."));
 
-            classPicker.setTitle("Any class");
+            // The title is NOT set here. ControlsFX CheckComboBoxSkin.getTextString()
+            // returns the title whenever it is non-null, so a fixed title masks the
+            // selection permanently: tick "Normal" and the box still reads "Any
+            // class". It is set and cleared by syncClassPickerTitle() instead, so
+            // "Any class" shows only when the choice really is "any".
             classPicker.setTooltip(Tooltips.of(
                     "Which annotation classes mark an area boundary -- e.g. tick 'Tissue' "
                     + "to make each Tissue annotation its own area. Leave everything "
@@ -159,8 +165,22 @@ public final class IndependentAreasSection extends VBox {
                 fireChanged();
             });
             classPicker.getCheckModel().getCheckedItems()
-                    .addListener((javafx.collections.ListChangeListener<String>) c -> fireChanged());
+                    .addListener((javafx.collections.ListChangeListener<String>) c -> {
+                        syncClassPickerTitle();
+                        fireChanged();
+                    });
+            syncClassPickerTitle();
             updateClassPickerVisibility();
+        }
+
+        /**
+         * Shows "Any class" only while nothing is ticked; otherwise clears the
+         * title so ControlsFX renders the ticked classes, which is the state the
+         * user needs to see.
+         */
+        private void syncClassPickerTitle() {
+            boolean none = classPicker.getCheckModel().getCheckedItems().isEmpty();
+            classPicker.setTitle(none ? "Any class" : null);
         }
 
         private void updateClassPickerVisibility() {
@@ -219,6 +239,7 @@ public final class IndependentAreasSection extends VBox {
                     classPicker.getCheckModel().check(cls);
                 }
             }
+            syncClassPickerTitle();
             updateClassPickerVisibility();
         }
     }

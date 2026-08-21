@@ -379,9 +379,18 @@ public final class BatchYamlValidator {
                 if (rule.getName() == null || rule.getName().isEmpty()) {
                     r.add(ValidationIssue.error("E001", base + ".name", "required field missing"));
                 }
-                if (rule.getRequireMarkers() == null || rule.getRequireMarkers().isEmpty()) {
+                // A rule needs at least one POSITIVE criterion, but it may be an
+                // OR group: "Macrophage = any of CD68/CD163/CD206" is a valid
+                // rule with no require_markers at all. Demanding require_markers
+                // would force it back into three rules sharing a name.
+                boolean hasRequire = rule.getRequireMarkers() != null
+                        && !rule.getRequireMarkers().isEmpty();
+                boolean hasAny = rule.getAnyMarkers() != null
+                        && !rule.getAnyMarkers().isEmpty();
+                if (!hasRequire && !hasAny) {
                     r.add(ValidationIssue.error("E001", base + ".require_markers",
-                            "required and must have at least one marker"));
+                            "required and must have at least one marker "
+                            + "(or use any_markers for an at-least-one group)"));
                 }
             }
             validateGateConsistency(p.getRules(), r);

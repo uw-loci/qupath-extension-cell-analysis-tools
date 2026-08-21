@@ -298,11 +298,16 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 4. **Set per-marker gates** -- each marker column header has a spinner
    - Values represent the positive/negative threshold for that marker
    - You can drag the red threshold line on the histogram (see [Auto-Thresholding](#7-using-auto-thresholding))
-5. **Define rules** -- each row is a phenotype. Every marker column has four states:
+5. **Define rules** -- each row is a phenotype. Every marker column has six states:
    - **Cell Type**: name for this phenotype (e.g., "CD8+ T Cell")
    - **`pos`** -- the cell must be at/above this marker's gate
    - **`neg`** -- the cell must be below this marker's gate (this is what makes a rule
      *exclusive* -- see "How matching works" below)
+   - **`anypos`** -- at least ONE of the markers marked `anypos` in this row must be
+     at/above its gate. All the `anypos` markers in a row form a single OR group, which
+     then ANDs with the row's other conditions. This is how you write "Macrophage = CD68
+     **or** CD163 **or** CD206" as one row instead of three rows sharing a name.
+   - **`anyneg`** -- the same, for at least one marker below its gate
    - **`ignore`** -- this marker is deliberately not used in the rule
    - **`--`** -- *unselected* (the default). Behaves like `ignore`, but because it may
      just mean "not decided yet", Run Phenotyping will prompt you to confirm any columns
@@ -322,6 +327,11 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
   one -- it is **not** marked "Unknown" for matching more than one rule.
 - **A rule is an AND of its conditions.** Every `pos`/`neg` you set in a row must hold
   *simultaneously* for a cell to match that row. Markers left as `--` are ignored.
+- **`anypos` / `anyneg` are an OR *within* the group, ANDed with everything else.** A row
+  reading `CD45: pos, CD68: anypos, CD163: anypos` means "CD45 positive AND (CD68 or
+  CD163) positive". A row with no `anypos` markers imposes no such condition; a row whose
+  only `anypos` markers are absent from the data matches nothing (rather than matching
+  everything).
 - **"neg" on the other markers makes a rule exclusive.** This is the most common
   surprise. If `markerA+` is defined as `A: pos, B: neg, C: neg`, then a cell that is
   positive for **both** A and B matches **neither** `markerA+` (B is not neg) **nor**

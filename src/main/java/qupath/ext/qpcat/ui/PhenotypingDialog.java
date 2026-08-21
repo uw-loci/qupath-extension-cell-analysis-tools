@@ -547,14 +547,19 @@ public class PhenotypingDialog {
             // deliberately leaves this marker out of the rule. Both mean the
             // marker is not used in matching, but only "--" triggers the
             // "did you mean to ignore these?" prompt at Run time.
-            this.comboBox = new ComboBox<>(
-                    FXCollections.observableArrayList("--", "pos", "neg", "ignore"));
+            this.comboBox = new ComboBox<>(FXCollections.observableArrayList(
+                    "--", "pos", "neg", "anypos", "anyneg", "ignore"));
             comboBox.setTooltip(Tooltips.of(
                     "pos: this marker must be at or above its gate.\n"
                     + "neg: strictly below its gate.\n"
+                    + "anypos: AT LEAST ONE of the markers marked anypos in this row "
+                    + "must be at or above its gate.\n"
+                    + "anyneg: at least one of them must be below its gate.\n"
                     + "ignore / --: this marker takes no part in the rule.\n\n"
                     + "Every pos/neg in a row must hold AT ONCE (logical AND), and the "
-                    + "first rule a cell satisfies wins.\n\n"
+                    + "any-markers form ONE group that ANDs with the rest -- so "
+                    + "'Macrophage = CD68 or CD163 or CD206' is one row, not three. "
+                    + "The first rule a cell satisfies wins.\n\n"
                     + "Coming from SCIMAP? 'pos' there is NOT this. SCIMAP averages the "
                     + "listed pos markers into a score, so a cell can be labelled while "
                     + "failing one of them (it flags those 'likely-<type>'). QP-CAT's "

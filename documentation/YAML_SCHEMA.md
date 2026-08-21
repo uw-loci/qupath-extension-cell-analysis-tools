@@ -200,6 +200,7 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `rules[].name` | string | required | Phenotype label (e.g. `T_cell`). |
 | `rules[].require_markers` | list[string] | `[]` (required >=1) | Markers required positive. |
 | `rules[].exclude_markers` | list[string] | `[]` | Markers required negative. |
+| `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
 | `rules[].require_min_zscore` | double | `1.0` | Minimum z-score for `require_markers`. |
 | `rules[].exclude_max_zscore` | double | `1.0` | Maximum z-score for `exclude_markers`. |
 

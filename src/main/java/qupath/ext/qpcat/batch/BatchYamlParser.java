@@ -71,7 +71,7 @@ public final class BatchYamlParser {
             "enabled", "rules", "llm_explainer"));
 
     private static final Set<String> KNOWN_PHENO_RULE = new HashSet<>(Arrays.asList(
-            "name", "require_markers", "exclude_markers",
+            "name", "require_markers", "exclude_markers", "any_markers",
             "require_min_zscore", "exclude_max_zscore"));
 
     private static final Set<String> KNOWN_LLM = new HashSet<>(Arrays.asList(
@@ -414,6 +414,7 @@ public final class BatchYamlParser {
                 case "name" -> rule.setName(asString(value));
                 case "require_markers" -> rule.setRequireMarkers(asStringList(value));
                 case "exclude_markers" -> rule.setExcludeMarkers(asStringList(value));
+                case "any_markers" -> rule.setAnyMarkers(asStringList(value));
                 case "require_min_zscore" -> rule.setRequireMinZscore(asDouble(value, 1.0));
                 case "exclude_max_zscore" -> rule.setExcludeMaxZscore(asDouble(value, 1.0));
                 default -> {}

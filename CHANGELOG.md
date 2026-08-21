@@ -19,6 +19,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **`anypos` / `anyneg` phenotyping conditions.** All markers marked `anypos` in a rule
+  form ONE group of which at least one must be positive, ANDed with the row's other
+  conditions -- so "Macrophage = CD68 **or** CD163 **or** CD206" is a single rule instead
+  of three rules sharing a name. Available in the rules table and headless as
+  `rules[].any_markers`; a rule may supply `any_markers` instead of `require_markers`.
+  Deliberately a Boolean operator, not SCIMAP's averaged score: a rule stays readable as
+  one statement, and "it met these conditions" stays the answer to why a cell got its
+  label. Rationale, and what we chose NOT to borrow, in
+  `claude-reports/design/2026-08-20_phenotyping-expressiveness.md`.
+
 - **The phenotyping rule cells explain themselves, including against SCIMAP.** Hovering
   a `pos` / `neg` / `ignore` dropdown now states the semantics, and warns about the one
   that silently differs: **QP-CAT's `pos` is SCIMAP's `allpos`.** SCIMAP averages the
@@ -176,6 +186,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   were areas.** `cn_per_sample_proportions.csv` hardcoded the header while the payload
   already carried `sample_kind`; a per-core run produced a table whose column said
   `image` and whose values were `A-1`, `A-2`. The header now follows the data.
+
+- **The Independent areas class picker always read "Any class", whatever you ticked.**
+  Introduced the same day as the picker's other fixes: setting a fixed ControlsFX
+  `title` masks the selection permanently, because `CheckComboBoxSkin.getTextString()`
+  returns the title whenever it is non-null. It now shows "Any class" only while nothing
+  is ticked, and the ticked classes otherwise. The row numbers also get a left inset so
+  they are not flush against the pane border.
 
 - **QP-CAT's own "no region" label was indistinguishable from a user's class.**
   The area label for cells matching no region was the bare word `unassigned`, which
