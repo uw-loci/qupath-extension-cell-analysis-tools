@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.11.0] -- 2026-08-22 -- say when a run found nothing, and stop flooding the log
+
 ### Fixed
 
 - **A clustering run that finds nothing now says so.** HDBSCAN on a 304,083-cell TMA
