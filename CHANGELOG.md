@@ -6,9 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
-## [0.11.0] -- 2026-08-22 -- say when a run found nothing, and stop flooding the log
+## [0.11.0] -- 2026-08-22 -- trustworthy results for TMA cores and subregions
 
 ### Fixed
+
+- **The Independent areas class picker always read "Any class", whatever you ticked.**
+  Introduced the same day as the picker's other fixes: setting a fixed ControlsFX
+  `title` masks the selection permanently, because `CheckComboBoxSkin.getTextString()`
+  returns the title whenever it is non-null. It now shows "Any class" only while nothing
+  is ticked, and the ticked classes otherwise. The row numbers also get a left inset so
+  they are not flush against the pane border.
 
 - **A clustering run that finds nothing now says so.** HDBSCAN on a 304,083-cell TMA
   returned ONE real population (77.9% of cells), a 15-cell cluster and 22.1% noise --
@@ -238,13 +245,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   were areas.** `cn_per_sample_proportions.csv` hardcoded the header while the payload
   already carried `sample_kind`; a per-core run produced a table whose column said
   `image` and whose values were `A-1`, `A-2`. The header now follows the data.
-
-- **The Independent areas class picker always read "Any class", whatever you ticked.**
-  Introduced the same day as the picker's other fixes: setting a fixed ControlsFX
-  `title` masks the selection permanently, because `CheckComboBoxSkin.getTextString()`
-  returns the title whenever it is non-null. It now shows "Any class" only while nothing
-  is ticked, and the ticked classes otherwise. The row numbers also get a left inset so
-  they are not flush against the pane border.
 
 - **QP-CAT's own "no region" label was indistinguishable from a user's class.**
   The area label for cells matching no region was the bare word `unassigned`, which
