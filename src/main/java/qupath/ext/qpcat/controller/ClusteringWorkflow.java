@@ -2569,8 +2569,24 @@ public class ClusteringWorkflow {
 
         int nCells = detections.size();
         int halfTile = tileSize / 2;
-        byte[] tileData = new byte[nCells * tileSize * tileSize * 3];
 
+        // Same guard as readMultiChannelTilesAroundCentroids below, for the
+        // same reason: this product is int arithmetic and silently wraps. At
+        // the default 224 px tile it wraps at 14,267 cells, which would
+        // allocate a SHORT array and then let the negative offset below throw
+        // somewhere unrelated -- so fail here, saying which numbers were too
+        // big.
+        long tileArraySize = (long) nCells * tileSize * tileSize * 3;
+        if (tileArraySize > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                    "Tile data too large: " + nCells + " cells * " + tileSize
+                    + "x" + tileSize + " RGB = " + tileArraySize
+                    + " bytes. Reduce the tile size or the number of cells.");
+        }
+        byte[] tileData = new byte[(int) tileArraySize];
+
+        // Every partial product below is <= tileArraySize, so the per-tile
+        // offset cannot overflow once that check has passed.
         forEachTile(nCells, progressCallback, i -> {
             PathObject det = detections.get(i);
             double cx = det.getROI().getCentroidX();

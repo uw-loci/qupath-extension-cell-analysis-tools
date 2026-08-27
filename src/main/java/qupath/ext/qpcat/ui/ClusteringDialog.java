@@ -1492,15 +1492,37 @@ public class ClusteringDialog {
         // the same box but under their own heading, and a BLOCK also disables
         // Run so the user cannot start something that must fail.
         List<ScalingLimits.Finding> scaling = checkScaling();
-        boolean blocked = ScalingLimits.isBlocked(scaling);
+        boolean scalingBlocked = ScalingLimits.isBlocked(scaling);
 
-        if (warns.isEmpty() && scaling.isEmpty()) {
+        // A missing runtime capability is a third class of problem again: the
+        // configuration is not slow and not poorly chosen, it simply cannot
+        // start. Same treatment as a scale block -- red, Run disabled -- and
+        // caught here rather than at launch, so the user finds out while
+        // choosing the algorithm instead of after configuring a whole run.
+        // Only assert this once the service is up: before that the flag is
+        // false because nothing has been probed yet, not because banksy is
+        // broken, and blocking on that would be a fabricated failure.
+        String capabilityBlock = null;
+        ApposeClusteringService svc = ApposeClusteringService.getInstance();
+        if (algo == Algorithm.BANKSY && svc.isAvailable() && !svc.isBanksyAvailable()) {
+            capabilityBlock = "BANKSY is selected, but pybanksy could not be imported in "
+                    + "this Python environment, so this run cannot start. Choose another "
+                    + "algorithm, or run Utilities > Rebuild Clustering Environment -- the "
+                    + "Python log records why the import failed.";
+        }
+        boolean blocked = scalingBlocked || capabilityBlock != null;
+
+        if (warns.isEmpty() && scaling.isEmpty() && capabilityBlock == null) {
             preflightLabel.setVisible(false);
             preflightLabel.setManaged(false);
         } else {
             StringBuilder sb = new StringBuilder();
+            if (capabilityBlock != null) {
+                sb.append(capabilityBlock);
+                if (!scaling.isEmpty() || !warns.isEmpty()) sb.append("\n\n");
+            }
             if (!scaling.isEmpty()) {
-                sb.append(blocked
+                sb.append(scalingBlocked
                         ? "This will not run at this size:"
                         : "This will be slow at this size:");
                 for (var f : scaling) sb.append("\n- ").append(f.describe());

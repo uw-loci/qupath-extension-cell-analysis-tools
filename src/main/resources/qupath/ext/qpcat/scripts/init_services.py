@@ -56,6 +56,7 @@ ENVIRONMENT_VERSION = "0.2.7"
 # the corresponding feature must surface as visibly-disabled in the UI
 # rather than crashing the worker at init time.
 HARMONYPY_AVAILABLE = False
+BANKSY_AVAILABLE = False
 
 try:
     # Set non-interactive backend before any matplotlib import (scanpy pulls it in)
@@ -71,7 +72,6 @@ try:
     import scanpy
     import anndata
     import squidpy
-    import banksy
 
     logger.info("QP-CAT environment v%s", ENVIRONMENT_VERSION)
     logger.info("  scikit-learn: %s", sklearn.__version__)
@@ -80,7 +80,6 @@ try:
     logger.info("  leidenalg: %s", leidenalg.__version__)
     logger.info("  anndata: %s", anndata.__version__)
     logger.info("  squidpy: %s", squidpy.__version__)
-    logger.info("  pybanksy: available")
 
     # Probe harmonypy without crashing init. Required for the
     # "Batch correction (Harmony)" feature in multi-image clustering.
@@ -93,6 +92,36 @@ try:
         HARMONYPY_AVAILABLE = False
         logger.warning("  harmonypy: NOT INSTALLED (Harmony batch correction "
                        "will be disabled in the Clustering dialog) - %s", _hp_err)
+
+    # Probe banksy the same way. This used to be a bare `import banksy` in the
+    # required block above, which was wrong twice over: a broken pybanksy took
+    # the WHOLE init down into `init_error` -- which nothing on the Java side
+    # reads -- so verification still passed and the failure only surfaced when
+    # a user picked BANKSY; and because it sat before the harmonypy probe, it
+    # also left HARMONYPY_AVAILABLE False, reporting Harmony as missing when
+    # the real casualty was banksy. Catch Exception, not just ImportError:
+    # pybanksy pulls a deep scientific stack, and a version mismatch inside it
+    # raises things other than ImportError.
+    try:
+        # Probe the four entry points the BANKSY call sites actually use
+        # (run_clustering.py's banksy branch and spatial_stats.py's
+        # build_banksy_weights), not just `import banksy`. Two reasons: the
+        # umap_pca helper lives in the SEPARATE banksy_utils distribution, which
+        # a top-level import would never touch; and pybanksy's submodules are
+        # where a version mismatch actually lands.
+        import banksy
+        from banksy.initialize_banksy import initialize_banksy  # noqa: F401
+        from banksy.embed_banksy import generate_banksy_matrix  # noqa: F401
+        from banksy.cluster_methods import run_Leiden_partition  # noqa: F401
+        from banksy_utils.umap_pca import pca_umap  # noqa: F401
+        BANKSY_AVAILABLE = True
+        _bk_ver = getattr(banksy, "__version__", "available")
+        logger.info("  pybanksy: %s", _bk_ver)
+    except Exception as _bk_err:
+        BANKSY_AVAILABLE = False
+        logger.warning("  pybanksy: NOT USABLE (BANKSY clustering will be "
+                       "disabled in the Clustering dialog) - %s: %s",
+                       type(_bk_err).__name__, _bk_err)
 
     # Check for new optional dependencies (may not be present in older environments)
     _optional_packages = {

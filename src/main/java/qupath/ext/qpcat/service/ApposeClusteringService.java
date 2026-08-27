@@ -35,10 +35,14 @@ public class ApposeClusteringService {
     private static final String RESOURCE_BASE = "qupath/ext/qpcat/";
     private static final String PIXI_TOML_RESOURCE = RESOURCE_BASE + "pixi.toml";
     // Bundled lockfile pinning the FULL transitive dependency tree (all 4
-    // platforms). Installed with --frozen so users get the exact, tested
-    // versions on every update -- no re-resolution against current
-    // conda-forge/PyPI, which is what let setuptools drift to a pkg_resources-
-    // less 81.x. Regenerate via tools/regen-pixi-lock.sh when pixi.toml changes.
+    // platforms). We do NOT pass --frozen (see initialize() for why); instead
+    // syncManifest() stages this lock next to the manifest it was generated
+    // from, so plain `pixi install` finds the lock already up to date and
+    // installs straight from it without re-resolving against current
+    // conda-forge/PyPI -- which is what let setuptools drift to a
+    // pkg_resources-less 81.x. That equivalence holds only while the two files
+    // stay in step: regenerate via tools/regen-pixi-lock.sh whenever pixi.toml
+    // changes, and commit both together.
     private static final String PIXI_LOCK_RESOURCE = RESOURCE_BASE + "pixi.lock";
     private static final String SCRIPTS_BASE = RESOURCE_BASE + "scripts/";
     private static final String ENV_NAME = "qupath-qpcat";
@@ -111,6 +115,7 @@ public class ApposeClusteringService {
     // Java reads these to gray out features whose Python deps are missing
     // rather than crashing the whole extension. Default false until init.
     private boolean harmonypyAvailable;
+    private boolean banksyAvailable;
 
     private ApposeClusteringService() {}
 
@@ -309,7 +314,8 @@ public class ApposeClusteringService {
                         "task.outputs['scanpy_version'] = scanpy.__version__\n" +
                         "task.outputs['umap_version'] = umap.__version__\n" +
                         "task.outputs['env_version'] = ENVIRONMENT_VERSION\n" +
-                        "task.outputs['harmonypy_available'] = HARMONYPY_AVAILABLE\n";
+                        "task.outputs['harmonypy_available'] = HARMONYPY_AVAILABLE\n" +
+                        "task.outputs['banksy_available'] = BANKSY_AVAILABLE\n";
 
                 Task verifyTask = pythonService.task(verifyScript);
                 verifyTask.listen(event -> {
@@ -326,9 +332,13 @@ public class ApposeClusteringService {
                 String envVersion = String.valueOf(verifyTask.outputs.get("env_version"));
                 Object harmonypyFlag = verifyTask.outputs.get("harmonypy_available");
                 harmonypyAvailable = Boolean.TRUE.equals(harmonypyFlag);
-                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {} (harmonypy={})",
+                Object banksyFlag = verifyTask.outputs.get("banksy_available");
+                banksyAvailable = Boolean.TRUE.equals(banksyFlag);
+                logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {} "
+                        + "(harmonypy={}, pybanksy={})",
                         sklearnVersion, scanpyVersion, umapVersion, envVersion,
-                        harmonypyAvailable ? "available" : "MISSING");
+                        harmonypyAvailable ? "available" : "MISSING",
+                        banksyAvailable ? "available" : "MISSING");
 
                 // Version check: warn if environment version doesn't match expected
                 if (!EXPECTED_ENV_VERSION.equals(envVersion)) {
@@ -667,6 +677,19 @@ public class ApposeClusteringService {
     }
 
     /**
+     * Whether pybanksy imported cleanly in the worker, so BANKSY clustering can
+     * actually run.
+     *
+     * <p>Probed at init like harmonypy. Before this existed the verification
+     * script did not mention banksy at all, so an environment with a broken
+     * pybanksy verified as healthy and the user only discovered it after
+     * configuring and launching a BANKSY run.
+     */
+    public boolean isBanksyAvailable() {
+        return initialized && banksyAvailable;
+    }
+
+    /**
      * Sets a listener that receives Python debug/stderr output.
      * Useful for forwarding to the Python Console window.
      */
@@ -800,13 +823,20 @@ public class ApposeClusteringService {
 
     /**
      * Sync the on-disk pixi.toml AND pixi.lock with the JAR-bundled versions.
-     * The lock is the source of truth for the installed versions (we build with
-     * --frozen), so it must be staged into the env dir before the build:
+     *
+     * <p>The lock is the source of truth for the installed versions, and this
+     * method is what makes that true. We cannot pass {@code --frozen} to force
+     * it (Appose injects builder flags as global pixi args, which pixi rejects
+     * -- see initialize()), so we get the same effect by construction: stage
+     * the bundled manifest and the lock generated FROM that manifest together,
+     * leaving pixi nothing to re-resolve. Both files must be written before the
+     * build, and they must come from the same bundle -- staging a manifest
+     * without its matching lock is what would silently re-enable resolution.
      *
      * <ul>
      *   <li>First run (no manifest on disk): create the env dir and stage the
-     *       lock so the very first --frozen install has it. Appose writes the
-     *       manifest itself.</li>
+     *       lock so the very first install already has it. Appose writes the
+     *       manifest itself, from the same bundled content.</li>
      *   <li>Either file changed vs the bundle: rewrite both and delete .pixi/
      *       so pixi reinstalls cleanly from the new lock.</li>
      *   <li>Unchanged: ensure the lock is present (re-stage if a prior wipe
@@ -837,7 +867,8 @@ public class ApposeClusteringService {
             String exLock = expectedLock.replace("\r\n", "\n").strip();
 
             if (onToml.equals(exToml) && onLock.equals(exLock)) {
-                // Unchanged -- but make sure the lock is on disk for --frozen.
+                // Unchanged -- but make sure the lock is on disk, so the
+                // install has something to install FROM rather than resolving.
                 if (!Files.exists(lockFile)) {
                     Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
                 }

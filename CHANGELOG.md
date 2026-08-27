@@ -28,6 +28,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   failing. All 28 close sites are now covered by `finally` or try-with-resources. The
   clustering path was already correct; this was confined to the autoencoder and post-hoc
   spatial paths.
+- **A broken pybanksy passed startup verification and only failed when you picked BANKSY.**
+  `init_services.py` imported banksy as a hard requirement, but the Java-side verification
+  task never probed it, so an environment whose pybanksy was unusable still verified as
+  healthy. Worse, because that import sat ahead of the harmonypy probe in the same `try`,
+  a banksy failure also left `HARMONYPY_AVAILABLE` false -- reporting Harmony as missing
+  when the real casualty was banksy -- and took the whole init into an `init_error` that
+  nothing on the Java side reads. banksy is now probed like harmonypy, through the four
+  entry points the call sites actually import (including `banksy_utils.umap_pca`, which
+  ships as a separate distribution and a top-level `import banksy` would never touch). The
+  result is exported as a capability flag, logged at init, and surfaced in the Clustering
+  dialog: choosing BANKSY without a usable pybanksy now blocks Run with an explanation
+  instead of failing mid-run.
+- **Tile extraction for the autoencoder could overflow its own array length.**
+  `readTilesAroundCentroids` sized its buffer with all-int arithmetic
+  (`nCells * tileSize * tileSize * 3`), which wraps at 14,267 cells for the default 224 px
+  tile -- allocating a short array and then indexing it with a negative offset. The path is
+  currently unreachable (the dialog has been unwired since v0.7.0), so this is a trap
+  removed rather than a bug observed; it now fails with the same explicit `long` guard and
+  actionable message its sibling `readMultiChannelTilesAroundCentroids` already used.
+
+### Changed
+
+- **Corrected the `--frozen` comments in `ApposeClusteringService`.** Three places claimed
+  the environment is built with `--frozen`. It is not, and deliberately so: Appose injects
+  builder flags as global pixi args (`pixi --frozen install ...`), which pixi rejects. The
+  reproducibility guarantee is real but comes from a different mechanism -- staging the
+  bundled manifest together with the lock generated from it, leaving pixi nothing to
+  re-resolve -- which the comments now describe, including the condition that keeps it
+  true.
 
 ## [0.11.0] -- 2026-08-22 -- trustworthy results for TMA cores and subregions
 
