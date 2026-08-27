@@ -3596,33 +3596,43 @@ public class ClusteringWorkflow {
             try {
                 predictions = ApposeClusteringService.withExtensionClassLoader(() -> {
                     Map<String, Object> inputs = new HashMap<>();
-                    inputs.put("model_state_base64", modelStateBase64);
+                    // The INPUT array owns a /dev/shm segment as well. The
+                    // try-with-resources below covers only the OUTPUTS, so without
+                    // this the input leaked on EVERY run, not just failing ones --
+                    // once per image, in a loop over images.
+                    List<NDArray> inputShm = new ArrayList<>();
+                    try {
+                        inputs.put("model_state_base64", modelStateBase64);
 
-                    if (useTiles) {
-                        inputs.put("tile_file_path", fInferTileFile.toAbsolutePath().toString());
-                        inputs.put("n_cells", nCells);
-                        inputs.put("n_channels", fNChannels);
-                        inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
-                    } else {
-                        int nMeasurements = fExtraction.getNMeasurements();
-                        NDArray.Shape shape = new NDArray.Shape(
-                                NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-                        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-                        var buf = measurementsNd.buffer().asDoubleBuffer();
-                        for (double[] row : fExtraction.getData()) buf.put(row);
-                        inputs.put("measurements", measurementsNd);
-                        inputs.put("marker_names", List.of(fExtraction.getMeasurementNames()));
-                    }
+                        if (useTiles) {
+                            inputs.put("tile_file_path", fInferTileFile.toAbsolutePath().toString());
+                            inputs.put("n_cells", nCells);
+                            inputs.put("n_channels", fNChannels);
+                            inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
+                        } else {
+                            int nMeasurements = fExtraction.getNMeasurements();
+                            NDArray.Shape shape = new NDArray.Shape(
+                                    NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                            NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                        inputShm.add(measurementsNd);
+                            var buf = measurementsNd.buffer().asDoubleBuffer();
+                            for (double[] row : fExtraction.getData()) buf.put(row);
+                            inputs.put("measurements", measurementsNd);
+                            inputs.put("marker_names", List.of(fExtraction.getMeasurementNames()));
+                        }
 
-                    ApposeClusteringService service = ApposeClusteringService.getInstance();
-                    Task task = service.runTask("infer_autoencoder", inputs);
+                        ApposeClusteringService service = ApposeClusteringService.getInstance();
+                        Task task = service.runTask("infer_autoencoder", inputs);
 
-                    // try-with-resources: the segment leaked whenever the read
-                    // below threw, which is exactly when a run is already failing.
-                    try (NDArray predNd = (NDArray) task.outputs.get("predicted_labels")) {
-                        int[] preds = new int[nCells];
-                        predNd.buffer().asIntBuffer().get(preds);
-                        return preds;
+                        // try-with-resources: the segment leaked whenever the read
+                        // below threw, which is exactly when a run is already failing.
+                        try (NDArray predNd = (NDArray) task.outputs.get("predicted_labels")) {
+                            int[] preds = new int[nCells];
+                            predNd.buffer().asIntBuffer().get(preds);
+                            return preds;
+                        }
+                    } finally {
+                        for (NDArray n : inputShm) closeQuietly(n, "autoencoder-infer-input");
                     }
                 });
             } catch (Exception e) {
@@ -3828,70 +3838,80 @@ public class ClusteringWorkflow {
                 ApposeClusteringService.withExtensionClassLoader(() -> {
                     int nCells = detections.size();
                     Map<String, Object> inputs = new HashMap<>();
-                    inputs.put("model_state_base64", modelStateBase64);
+                    // The INPUT array owns a /dev/shm segment as well. The
+                    // try-with-resources below covers only the OUTPUTS, so without
+                    // this the input leaked on EVERY run, not just failing ones --
+                    // once per image, in a loop over images.
+                    List<NDArray> inputShm = new ArrayList<>();
+                    try {
+                        inputs.put("model_state_base64", modelStateBase64);
 
-                    if (useTiles) {
-                        inputs.put("tile_file_path",
-                                finalInferTileFile.toAbsolutePath().toString());
-                        inputs.put("n_cells", nCells);
-                        inputs.put("n_channels", finalNChannels);
-                        inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
-                    } else {
-                        int nMeasurements = finalExtraction.getNMeasurements();
-                        NDArray.Shape shape = new NDArray.Shape(
-                                NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
-                        NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
-                        var buf = measurementsNd.buffer().asDoubleBuffer();
-                        for (double[] row : finalExtraction.getData()) buf.put(row);
-                        inputs.put("measurements", measurementsNd);
-                        inputs.put("marker_names", List.of(finalExtraction.getMeasurementNames()));
-                    }
-
-                    ApposeClusteringService service = ApposeClusteringService.getInstance();
-                    Task task = service.runTaskWithListener("infer_autoencoder", inputs, event -> {
-                        if (event.responseType == ResponseType.UPDATE && event.message != null) {
-                            report(progressCallback, event.message);
+                        if (useTiles) {
+                            inputs.put("tile_file_path",
+                                    finalInferTileFile.toAbsolutePath().toString());
+                            inputs.put("n_cells", nCells);
+                            inputs.put("n_channels", finalNChannels);
+                            inputs.put("tile_size", Math.max(2, (int) Math.round(tileSize / downsample)));
+                        } else {
+                            int nMeasurements = finalExtraction.getNMeasurements();
+                            NDArray.Shape shape = new NDArray.Shape(
+                                    NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
+                            NDArray measurementsNd = new NDArray(NDArray.DType.FLOAT64, shape);
+                        inputShm.add(measurementsNd);
+                            var buf = measurementsNd.buffer().asDoubleBuffer();
+                            for (double[] row : finalExtraction.getData()) buf.put(row);
+                            inputs.put("measurements", measurementsNd);
+                            inputs.put("marker_names", List.of(finalExtraction.getMeasurementNames()));
                         }
-                    });
 
-                    // try-with-resources: these three own /dev/shm segments and
-                    // were closed on the success path only, so any failure between
-                    // here and the end of the block leaked all three -- once per
-                    // image in the loop.
-                    try (NDArray latentNd = (NDArray) task.outputs.get("latent_features");
-                         NDArray predNd = (NDArray) task.outputs.get("predicted_labels");
-                         NDArray confNd = (NDArray) task.outputs.get("prediction_confidence")) {
-
-                        // Infer latent dim from buffer size
-                        int latentBufSize = latentNd.buffer().asFloatBuffer().remaining();
-                        int latentDim = latentBufSize / nCells;
-
-                        float[] latentBuf = new float[nCells * latentDim];
-                        latentNd.buffer().asFloatBuffer().get(latentBuf);
-                        int[] predLabels = new int[nCells];
-                        predNd.buffer().asIntBuffer().get(predLabels);
-                        float[] confidence = new float[nCells];
-                        confNd.buffer().asFloatBuffer().get(confidence);
-
-                        // Apply to detections
-                        List<PathObject> targetDets = useTiles
-                                ? detections
-                                : finalExtraction.getDetections();
-                        for (int i = 0; i < nCells; i++) {
-                            var ml = targetDets.get(i).getMeasurements();
-                            for (int d = 0; d < latentDim; d++) {
-                                ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
+                        ApposeClusteringService service = ApposeClusteringService.getInstance();
+                        Task task = service.runTaskWithListener("infer_autoencoder", inputs, event -> {
+                            if (event.responseType == ResponseType.UPDATE && event.message != null) {
+                                report(progressCallback, event.message);
                             }
-                            ml.put("AE_confidence", (double) confidence[i]);
-                        }
+                        });
 
-                        if (classNames != null && classNames.length > 0) {
-                            ResultApplier applier = new ResultApplier();
-                            applier.applyPhenotypeLabels(targetDets,
-                                    predLabels, classNames);
-                        }
+                        // try-with-resources: these three own /dev/shm segments and
+                        // were closed on the success path only, so any failure between
+                        // here and the end of the block leaked all three -- once per
+                        // image in the loop.
+                        try (NDArray latentNd = (NDArray) task.outputs.get("latent_features");
+                             NDArray predNd = (NDArray) task.outputs.get("predicted_labels");
+                             NDArray confNd = (NDArray) task.outputs.get("prediction_confidence")) {
 
-                        return null;
+                            // Infer latent dim from buffer size
+                            int latentBufSize = latentNd.buffer().asFloatBuffer().remaining();
+                            int latentDim = latentBufSize / nCells;
+
+                            float[] latentBuf = new float[nCells * latentDim];
+                            latentNd.buffer().asFloatBuffer().get(latentBuf);
+                            int[] predLabels = new int[nCells];
+                            predNd.buffer().asIntBuffer().get(predLabels);
+                            float[] confidence = new float[nCells];
+                            confNd.buffer().asFloatBuffer().get(confidence);
+
+                            // Apply to detections
+                            List<PathObject> targetDets = useTiles
+                                    ? detections
+                                    : finalExtraction.getDetections();
+                            for (int i = 0; i < nCells; i++) {
+                                var ml = targetDets.get(i).getMeasurements();
+                                for (int d = 0; d < latentDim; d++) {
+                                    ml.put("AE_" + d, (double) latentBuf[i * latentDim + d]);
+                                }
+                                ml.put("AE_confidence", (double) confidence[i]);
+                            }
+
+                            if (classNames != null && classNames.length > 0) {
+                                ResultApplier applier = new ResultApplier();
+                                applier.applyPhenotypeLabels(targetDets,
+                                        predLabels, classNames);
+                            }
+
+                            return null;
+                        }
+                    } finally {
+                        for (NDArray n : inputShm) closeQuietly(n, "autoencoder-infer-input");
                     }
                 });
             } catch (Exception e) {

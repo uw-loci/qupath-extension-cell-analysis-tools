@@ -364,11 +364,14 @@ public final class VestExporter {
                     if (out == null) {
                         throw new IOException("embed_3d returned no embedding.");
                     }
-                    double[][] coords = new double[n][3];
-                    var obuf = out.buffer().asDoubleBuffer();
-                    for (int i = 0; i < n; i++) obuf.get(coords[i]);
-                    out.close();
-                    return coords;
+                    // try-with-resources: closing on the success path only meant
+                    // this segment leaked whenever the read below threw.
+                    try (NDArray outNd = out) {
+                        double[][] coords = new double[n][3];
+                        var obuf = outNd.buffer().asDoubleBuffer();
+                        for (int i = 0; i < n; i++) obuf.get(coords[i]);
+                        return coords;
+                    }
                 } finally {
                     measNd.close();
                 }
@@ -452,11 +455,14 @@ public final class VestExporter {
                     if (out == null) {
                         throw new IOException("geosketch_select returned no indices.");
                     }
-                    java.nio.IntBuffer ib = out.buffer().asIntBuffer();
-                    int[] idx = new int[ib.remaining()];
-                    ib.get(idx);
-                    out.close();
-                    return idx;
+                    // try-with-resources: as above, the success-path close left this
+                    // segment behind whenever the read threw.
+                    try (NDArray outNd = out) {
+                        java.nio.IntBuffer ib = outNd.buffer().asIntBuffer();
+                        int[] idx = new int[ib.remaining()];
+                        ib.get(idx);
+                        return idx;
+                    }
                 } finally {
                     measNd.close();
                     labelsNd.close();
