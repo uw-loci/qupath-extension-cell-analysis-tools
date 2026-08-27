@@ -75,6 +75,9 @@ public class BugReportDialog {
 
     private volatile boolean submitting = false;
 
+    // The one dialog window currently on screen, or null. Only touched on the FX thread.
+    private static Stage activeStage;
+
     private BugReportDialog(QuPathGUI qupath) {
         this.owner = qupath != null && qupath.getStage() != null ? qupath.getStage() : null;
         this.stage = new Stage();
@@ -82,14 +85,30 @@ public class BugReportDialog {
         if (owner != null) {
             stage.initOwner(owner);
         }
-        stage.initModality(Modality.APPLICATION_MODAL);
+        // Non-modal: the screenshot warning tells the operator to close anything
+        // sensitive before submitting, and the capture happens at submit time --
+        // application modality locks out the very windows they need to close.
+        stage.initModality(Modality.NONE);
         stage.setScene(new Scene(buildContent()));
         stage.setMinWidth(560);
     }
 
     /** Builds and shows the dialog on the FX thread. */
     public static void show() {
-        Runnable r = () -> new BugReportDialog(QuPathGUI.getInstance()).stage.show();
+        // Modality was the only thing preventing a second copy from being opened
+        // off the menu while one is up. Guard it explicitly.
+        Runnable r = () -> {
+            if (activeStage != null && activeStage.isShowing()) {
+                logger.info("Bug report dialog already open - bringing to front");
+                activeStage.toFront();
+                activeStage.requestFocus();
+                return;
+            }
+            BugReportDialog dialog = new BugReportDialog(QuPathGUI.getInstance());
+            activeStage = dialog.stage;
+            dialog.stage.setOnHidden(e -> activeStage = null);
+            dialog.stage.show();
+        };
         if (Platform.isFxApplicationThread()) {
             r.run();
         } else {
