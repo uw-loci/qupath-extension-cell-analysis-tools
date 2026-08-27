@@ -62,6 +62,44 @@ public class ApposeClusteringService {
 
     private static ApposeClusteringService instance;
 
+    /**
+     * Serializes task execution on the shared Python worker.
+     *
+     * <p>Appose runs one Python thread per task inside ONE interpreter, and this
+     * service is a singleton, so two QP-CAT workflows started from two dialogs
+     * execute concurrently in the same process. That is not safe with the
+     * scripts we ship: run_clustering, cellular_neighborhoods, spatial_stats and
+     * regenerate_plots all drive matplotlib through pyplot's GLOBAL
+     * current-figure state, and three of them call {@code plt.close("all")}. A
+     * concurrent run therefore closes the other's figures, or writes the other's
+     * figure under its own filename -- with no error raised, so the first sign
+     * of it is a plot that does not match its result.
+     *
+     * <p>Serializing is the honest fix: there is one interpreter, so there is one
+     * queue. It also covers any other shared-global hazard in these scripts
+     * rather than only the pyplot one we happened to find. Fair, so a queued
+     * workflow is not starved by a stream of short tasks; reentrant, so a task
+     * that calls back in cannot deadlock itself.
+     *
+     * <p>Deliberately NOT taken by {@code withExtensionClassLoader}, which is a
+     * generic TCCL helper and not a task runner.
+     */
+    private static final java.util.concurrent.locks.ReentrantLock TASK_LOCK =
+            new java.util.concurrent.locks.ReentrantLock(true);
+
+    /**
+     * Takes {@link #TASK_LOCK}, saying so in the log if the caller has to wait.
+     * Without that line a queued run looks like a hang -- the dialog sits on
+     * "Running..." with nothing to explain why.
+     */
+    private static void acquireWorker(String scriptName) {
+        if (TASK_LOCK.tryLock()) return;
+        logger.info("Task '{}' is waiting for the Python worker -- another QP-CAT "
+                + "analysis is running. Tasks run one at a time because they share "
+                + "a single Python interpreter.", scriptName);
+        TASK_LOCK.lock();
+    }
+
     private Environment environment;
     private Service pythonService;
     private boolean initialized;
@@ -422,6 +460,7 @@ public class ApposeClusteringService {
         int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
+        acquireWorker(scriptName);
         try {
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -455,6 +494,7 @@ public class ApposeClusteringService {
             Thread.currentThread().interrupt();
             throw new IOException("Task '" + scriptName + "' interrupted", e);
         } finally {
+            TASK_LOCK.unlock();
             Thread.currentThread().setContextClassLoader(original);
         }
     }
@@ -494,6 +534,7 @@ public class ApposeClusteringService {
         int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
+        acquireWorker(scriptName);
         try {
             for (int attempt = 1; attempt <= maxAttempts; attempt++) {
                 try {
@@ -524,6 +565,7 @@ public class ApposeClusteringService {
             Thread.currentThread().interrupt();
             throw new IOException("Task '" + scriptName + "' interrupted", e);
         } finally {
+            TASK_LOCK.unlock();
             Thread.currentThread().setContextClassLoader(original);
         }
     }

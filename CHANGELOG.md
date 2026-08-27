@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two QP-CAT analyses run at once could silently corrupt each other's plots.**
+  Appose runs one Python thread per task inside ONE interpreter and the service is a
+  singleton, so starting a second workflow from another dialog executed it concurrently
+  in the same process. Four of the shipped scripts (`run_clustering`,
+  `cellular_neighborhoods`, `spatial_stats`, `regenerate_plots`) drive matplotlib through
+  pyplot's GLOBAL current-figure state and three of them call `plt.close("all")` -- so a
+  concurrent run closed the other's figures, or wrote the other's figure under its own
+  filename. No error was raised, which means the first sign of it was a plot that did not
+  match its result. Task execution is now serialized on a fair, reentrant lock, with a log
+  line when a run has to queue so the wait is not mistaken for a hang. Serializing rather
+  than locking pyplot specifically also covers any other shared-global hazard in these
+  scripts, not only the one we found.
+- **Shared-memory (`/dev/shm`) leaks when applying autoencoder results.** Every Appose
+  `NDArray` owns a shared-memory segment that must be closed. Two were never closed on any
+  path -- the hybrid-mode training measurement buffer (`nCells * nMeasurements * 8` bytes,
+  leaked on every successful run) and the post-hoc neighbourhood-enrichment matrix -- and
+  nine more were closed only on the success path, so they leaked whenever a run was already
+  failing. All 28 close sites are now covered by `finally` or try-with-resources. The
+  clustering path was already correct; this was confined to the autoencoder and post-hoc
+  spatial paths.
+
 ## [0.11.0] -- 2026-08-22 -- trustworthy results for TMA cores and subregions
 
 ### Fixed

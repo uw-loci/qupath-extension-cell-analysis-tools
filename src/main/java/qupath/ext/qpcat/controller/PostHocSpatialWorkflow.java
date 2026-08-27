@@ -793,11 +793,15 @@ public class PostHocSpatialWorkflow {
         }
         if (outputs.containsKey("nhood_enrichment")) {
             try {
-                NDArray nd = (NDArray) outputs.get("nhood_enrichment");
-                double[][] m = new double[nClasses][nClasses];
-                var buf = nd.buffer().asDoubleBuffer();
-                for (int i = 0; i < nClasses; i++) buf.get(m[i]);
-                result.setNhoodEnrichment(m);
+                // try-with-resources: an NDArray owns a /dev/shm segment, and this
+                // one was never closed on ANY path -- so every post-hoc run with
+                // neighbourhood enrichment leaked one.
+                try (NDArray nd = (NDArray) outputs.get("nhood_enrichment")) {
+                    double[][] m = new double[nClasses][nClasses];
+                    var buf = nd.buffer().asDoubleBuffer();
+                    for (int i = 0; i < nClasses; i++) buf.get(m[i]);
+                    result.setNhoodEnrichment(m);
+                }
                 if (outputs.containsKey("nhood_cluster_names")) {
                     List<String> namesList = gson.fromJson(
                             (String) outputs.get("nhood_cluster_names"),
