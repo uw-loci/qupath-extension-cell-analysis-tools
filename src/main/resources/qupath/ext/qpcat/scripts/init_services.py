@@ -7,6 +7,7 @@ Sets up persistent globals that remain available across all task() calls.
 CRITICAL: All output must go to sys.stderr, NOT sys.stdout.
 Appose uses stdout for its JSON-based IPC protocol.
 """
+
 import sys
 import os
 import logging
@@ -27,6 +28,7 @@ import warnings
 #     also still uses it internally.
 try:
     import dask
+
     dask.config.set({"dataframe.query-planning": True})
 except Exception:
     pass
@@ -39,7 +41,7 @@ warnings.filterwarnings(
 logging.basicConfig(
     level=logging.INFO,
     stream=sys.stderr,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
 logger = logging.getLogger("qpcat.appose")
@@ -61,7 +63,8 @@ BANKSY_AVAILABLE = False
 try:
     # Set non-interactive backend before any matplotlib import (scanpy pulls it in)
     import matplotlib
-    matplotlib.use('Agg')
+
+    matplotlib.use("Agg")
 
     import numpy
     import pandas
@@ -85,13 +88,17 @@ try:
     # "Batch correction (Harmony)" feature in multi-image clustering.
     try:
         import harmonypy
+
         HARMONYPY_AVAILABLE = True
         _hp_ver = getattr(harmonypy, "__version__", "available")
         logger.info("  harmonypy: %s", _hp_ver)
     except ImportError as _hp_err:
         HARMONYPY_AVAILABLE = False
-        logger.warning("  harmonypy: NOT INSTALLED (Harmony batch correction "
-                       "will be disabled in the Clustering dialog) - %s", _hp_err)
+        logger.warning(
+            "  harmonypy: NOT INSTALLED (Harmony batch correction "
+            "will be disabled in the Clustering dialog) - %s",
+            _hp_err,
+        )
 
     # Probe banksy the same way. This used to be a bare `import banksy` in the
     # required block above, which was wrong twice over: a broken pybanksy took
@@ -114,14 +121,18 @@ try:
         from banksy.embed_banksy import generate_banksy_matrix  # noqa: F401
         from banksy.cluster_methods import run_Leiden_partition  # noqa: F401
         from banksy_utils.umap_pca import pca_umap  # noqa: F401
+
         BANKSY_AVAILABLE = True
         _bk_ver = getattr(banksy, "__version__", "available")
         logger.info("  pybanksy: %s", _bk_ver)
     except Exception as _bk_err:
         BANKSY_AVAILABLE = False
-        logger.warning("  pybanksy: NOT USABLE (BANKSY clustering will be "
-                       "disabled in the Clustering dialog) - %s: %s",
-                       type(_bk_err).__name__, _bk_err)
+        logger.warning(
+            "  pybanksy: NOT USABLE (BANKSY clustering will be "
+            "disabled in the Clustering dialog) - %s: %s",
+            type(_bk_err).__name__,
+            _bk_err,
+        )
 
     # Check for new optional dependencies (may not be present in older environments)
     _optional_packages = {
@@ -146,8 +157,9 @@ except Exception as e:
 # --- Parent process watcher ---
 def _parent_alive(pid):
     """Check if a process with the given PID is still running."""
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
@@ -176,12 +188,12 @@ def _watch_parent():
         try:
             current_ppid = os.getppid()
             if current_ppid != ppid:
-                logger.warning("Parent process changed (%d -> %d), exiting",
-                               ppid, current_ppid)
+                logger.warning(
+                    "Parent process changed (%d -> %d), exiting", ppid, current_ppid
+                )
                 os._exit(1)
             if not _parent_alive(ppid):
-                logger.warning("Parent process %d no longer exists, exiting",
-                               ppid)
+                logger.warning("Parent process %d no longer exists, exiting", ppid)
                 os._exit(1)
         except Exception as e:
             logger.debug("Parent watcher check error: %s", e)
