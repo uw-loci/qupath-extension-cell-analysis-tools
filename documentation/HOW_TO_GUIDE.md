@@ -1351,6 +1351,26 @@ The **Center** dropdown chooses how "center" is defined: *Feature-space medoid* 
 
 **Show channels from Marker Rankings** (optional checkbox) appends a small legend to the end of each cluster's row listing the image channels behind that cluster's top-ranked markers, each as a colored swatch (the channel's display color) plus its name. The **Channels** spinner sets how many to show (default 4). Channels are resolved from the [Marker Rankings](#marker-rankings-tab): the top measurements per cluster are matched back to image channels by looking for a channel name inside each measurement name -- this works across detection engines that name measurements differently ("CD8: Cell: Mean", "Cell: CD8 mean", etc.). If you renamed channels or measurements so that nothing matches, the legend simply shows no channels for that cluster rather than erroring. The checkbox is disabled when the result has no Marker Rankings or no image is open. Use the legend to read at a glance which stains dominate each cluster while looking at its crops.
 
+**Use per-cluster channels** (optional checkbox) renders each cluster's crops in **that
+cluster's own top-ranked marker channels**, plus one **Fixed channel** shown in every cluster --
+normally the nuclear stain, so each crop keeps a common anatomical reference. It defaults to the
+first channel whose name contains DAPI, Hoechst or Nucleus, and you can pick any channel. The
+fixed channel does **not** count towards the **Channels:** number: set that to 3 and you get the
+fixed channel plus 3 ranked markers.
+
+Without this, crops are rendered with whatever channels the viewer is currently showing, which in
+a highly multiplexed panel is rarely the handful that define a given cluster.
+
+> **The trade-off is comparability.** Once each cluster is drawn in different channels, the
+> montages **cannot be compared with each other** -- brightness, contrast and colour no longer
+> mean the same thing from one image to the next. They can only be read one at a time, as "what
+> does a typical cell of this cluster look like in the markers that define it". The panel says so
+> while the option is on, and **Save montages** writes a `WARNING.txt` beside the PNGs so the
+> caveat travels with the images into whatever figure they end up in. For the broader practice
+> here, see the community checklists for publishing images: Schmied C, Nelson MS, Avilov S, et
+> al., *Nature Methods* **21**, 170-181 (2024),
+> [doi:10.1038/s41592-023-01987-9](https://doi.org/10.1038/s41592-023-01987-9).
+
 A medoid is a real, observed cell -- not a synthetic prototype or an average image -- and "representative" means typical, not pure. Read these crops alongside the Heatmap and Marker Rankings tabs. See [Best Practices -> Representative Cells](BEST_PRACTICES.md#representative-cells).
 
 ### Marker Rankings tab

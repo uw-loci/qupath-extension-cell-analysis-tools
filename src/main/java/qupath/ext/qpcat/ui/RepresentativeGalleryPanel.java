@@ -11,6 +11,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -18,6 +19,7 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -45,6 +47,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -88,6 +91,19 @@ public class RepresentativeGalleryPanel extends VBox {
     private double cropScale = CellCropService.DEFAULT_CROP_SCALE;
     private boolean showChannelLegend = false;
     private int legendChannels = DEFAULT_LEGEND_CHANNELS;
+
+    // Issue #16: render each cluster's crops in ITS OWN top-ranked channels
+    // instead of whatever the viewer happens to be showing. Off by default --
+    // it makes the montages non-comparable across clusters, which is a real
+    // cost and has to be chosen deliberately.
+    private boolean perClusterChannels;
+    private String fixedChannel;
+    private CheckBox perClusterChannelsCheck;
+    private ComboBox<String> fixedChannelCombo;
+    private Label comparabilityWarning;
+
+    /** Channel names tried in order for the fixed (usually nuclear) channel default. */
+    private static final String[] NUCLEAR_HINTS = {"DAPI", "dapi", "Hoechst", "Nucleus"};
 
     // Crops loaded for the current (space, scale), keyed by cell index. Reused
     // by "Save montages" so it composes exactly what the user sees.
@@ -175,15 +191,68 @@ public class RepresentativeGalleryPanel extends VBox {
             rebuild();
         });
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        // --- Per-cluster channels (issue #16) ---
+        fixedChannelCombo = new ComboBox<>();
+        fixedChannelCombo.getItems().addAll(channelColors.keySet());
+        fixedChannelCombo.setPrefWidth(130);
+        fixedChannelCombo.setDisable(true);
+        fixedChannelCombo.setTooltip(Tooltips.of(
+                "A channel shown in EVERY cluster's crops, on top of that cluster's\n"
+                + "top-ranked markers. Normally the nuclear channel -- whatever it is\n"
+                + "called in your data -- so each crop has a common anatomical\n"
+                + "reference.\n\n"
+                + "It does NOT count towards the 'Channels:' number: with that set to 3\n"
+                + "you get the fixed channel plus 3 ranked markers."));
+        fixedChannel = defaultNuclearChannel(fixedChannelCombo.getItems());
+        if (fixedChannel != null) fixedChannelCombo.setValue(fixedChannel);
+        fixedChannelCombo.valueProperty().addListener((obs, o, n) -> {
+            fixedChannel = n;
+            if (perClusterChannels) rebuild();
+        });
+        Label fixedChannelLabel = new Label("Fixed channel:");
 
-        HBox controls = new HBox(8,
+        perClusterChannelsCheck = new CheckBox("Use per-cluster channels");
+        perClusterChannelsCheck.setTooltip(Tooltips.of(
+                "Render each cluster's crops using that cluster's own top-ranked\n"
+                + "markers (from Marker Rankings), plus the fixed channel below,\n"
+                + "instead of the channels currently shown in the viewer.\n\n"
+                + "Useful for highly multiplexed data, where the viewer's channels\n"
+                + "rarely happen to be the ones that define a given cluster.\n\n"
+                + "WARNING: clusters are then displayed in DIFFERENT channels, so the\n"
+                + "montages cannot be compared with each other."));
+        perClusterChannelsCheck.setDisable(!legendPossible);
+        perClusterChannelsCheck.selectedProperty().addListener((obs, o, n) -> {
+            perClusterChannels = Boolean.TRUE.equals(n);
+            fixedChannelCombo.setDisable(!perClusterChannels);
+            comparabilityWarning.setVisible(perClusterChannels);
+            comparabilityWarning.setManaged(perClusterChannels);
+            loadedCrops.clear();   // cached crops were rendered with other channels
+            rebuild();
+        });
+
+        comparabilityWarning = new Label(
+                "THESE IMAGES CANNOT BE COMPARED WITH EACH OTHER. EACH CLUSTER IS SHOWN "
+                + "IN DIFFERENT CHANNELS WITH DIFFERENT DISPLAY SETTINGS.");
+        comparabilityWarning.setWrapText(true);
+        comparabilityWarning.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a2e00; "
+                + "-fx-background-color: #fff3cd; -fx-border-color: #d9a400; "
+                + "-fx-border-width: 1; -fx-padding: 6;");
+        comparabilityWarning.setVisible(false);
+        comparabilityWarning.setManaged(false);
+
+        // A FlowPane, not an HBox. These controls want 1,479 px and the results
+        // window opens at 850, so an HBox shrinks its children until the
+        // checkbox labels ellipsize to "Show channels from Marker Ranki..." --
+        // measured, not guessed. Wrapping keeps every label readable at any
+        // window width.
+        FlowPane controls = new FlowPane(8, 6,
                 new Label("Center:"), spaceChoice,
                 new Label("Crop x bbox:"), scaleSpinner,
                 new Separator(Orientation.VERTICAL),
                 channelLegendCheck, legendChannelLabel, legendChannelSpinner,
-                spacer, refreshBtn, saveBtn);
+                new Separator(Orientation.VERTICAL),
+                perClusterChannelsCheck, fixedChannelLabel, fixedChannelCombo,
+                refreshBtn, saveBtn);
         controls.setAlignment(Pos.CENTER_LEFT);
 
         // --- Cluster rows ---
@@ -193,8 +262,49 @@ public class RepresentativeGalleryPanel extends VBox {
         scroll.setPrefViewportHeight(420);
         VBox.setVgrow(scroll, Priority.ALWAYS);
 
-        getChildren().addAll(controls, scroll);
+        getChildren().addAll(controls, comparabilityWarning, scroll);
         rebuild();
+    }
+
+    /**
+     * Drop a WARNING.txt next to the exported montages when per-cluster channels
+     * were used.
+     *
+     * <p>Each cluster is rendered in different channels, so the images are not
+     * comparable -- and a PNG carries no record of that. Failure here is logged,
+     * never thrown: losing the note is bad, losing the export is worse.
+     */
+    private void writeComparabilityWarning(File outDir) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("WARNING: THESE IMAGES CANNOT BE COMPARED WITH EACH OTHER\n");
+        sb.append("========================================================\n\n");
+        sb.append("Each cluster montage in this folder was rendered using THAT CLUSTER'S\n");
+        sb.append("OWN top-ranked marker channels, plus a fixed reference channel");
+        if (fixedChannel != null && !fixedChannel.isBlank()) {
+            sb.append(" (\"").append(fixedChannel).append("\")");
+        }
+        sb.append(".\n\n");
+        sb.append("Different clusters therefore show DIFFERENT CHANNELS, with different\n");
+        sb.append("display settings. Brightness, contrast and colour do not carry the same\n");
+        sb.append("meaning from one image to the next.\n\n");
+        sb.append("Do NOT place these side by side to argue that one cluster is brighter,\n");
+        sb.append("darker or differently coloured than another. They can only be read one\n");
+        sb.append("at a time, as \"what does a typical cell of this cluster look like in the\n");
+        sb.append("markers that define it\".\n\n");
+        sb.append("For a comparable figure, turn OFF \"Use per-cluster channels\" and\n");
+        sb.append("re-export: every cluster is then rendered with the same viewer\n");
+        sb.append("channels and settings.\n\n");
+        sb.append("On reporting microscopy images honestly, see the community checklists:\n");
+        sb.append("  Schmied C, Nelson MS, Avilov S, et al. Community-developed checklists\n");
+        sb.append("  for publishing images and image analyses.\n");
+        sb.append("  Nature Methods 21, 170-181 (2024).\n");
+        sb.append("  https://doi.org/10.1038/s41592-023-01987-9\n");
+        try {
+            java.nio.file.Files.writeString(new File(outDir, "WARNING.txt").toPath(),
+                    sb.toString());
+        } catch (Exception e) {
+            logger.warn("Could not write WARNING.txt beside the montages: {}", e.getMessage());
+        }
     }
 
     private int clusterCount(int cluster) {
@@ -234,7 +344,8 @@ public class RepresentativeGalleryPanel extends VBox {
                     int cellIdx = idx[rank];
                     CellRef ref = (refs != null && cellIdx >= 0 && cellIdx < refs.length)
                             ? refs[cellIdx] : null;
-                    strip.getChildren().add(buildThumb(cellIdx, ref, rank == 0, token));
+                    strip.getChildren().add(buildThumb(cellIdx, ref, rank == 0, token,
+                            channelsForCluster(c)));
                 }
             }
 
@@ -256,6 +367,53 @@ public class RepresentativeGalleryPanel extends VBox {
      * user renamed channels or measurements) so the caller shows no legend --
      * this never throws.
      */
+    /**
+     * First channel matching a common nuclear-stain name, or null.
+     *
+     * <p>Case-insensitive and substring-based, because real panels name this
+     * channel "DAPI", "dapi", "DAPI (405)", "Hoechst 33342", "Nucleus" and so
+     * on. Only a default -- the user can pick anything.
+     */
+    private static String defaultNuclearChannel(List<String> channelNames) {
+        for (String hint : NUCLEAR_HINTS) {
+            for (String name : channelNames) {
+                if (name != null && name.toLowerCase(Locale.ROOT)
+                        .contains(hint.toLowerCase(Locale.ROOT))) {
+                    return name;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Channels to render one cluster's crops in: the fixed channel first, then
+     * that cluster's top-ranked markers. Null when per-cluster channels are off,
+     * which leaves {@link CellCropService} on the viewer's own selection.
+     *
+     * <p>The fixed channel is deliberately NOT counted against the "Channels:"
+     * spinner -- it is a constant reference, not one of the cluster's markers,
+     * and silently spending one of the user's N on it would make the control
+     * mean something different from what it says.
+     */
+    private List<String> channelsForCluster(int cluster) {
+        if (!perClusterChannels) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
+        if (fixedChannel != null && !fixedChannel.isBlank()) {
+            out.add(fixedChannel);
+        }
+        List<String> ranked = rankedMarkersByCluster.get(String.valueOf(cluster));
+        if (ranked != null && !ranked.isEmpty() && !channelColors.isEmpty()) {
+            for (String name : ChannelMatcher.matchChannels(
+                    new ArrayList<>(channelColors.keySet()), ranked, legendChannels)) {
+                if (!out.contains(name)) out.add(name);
+            }
+        }
+        return out.isEmpty() ? null : out;
+    }
+
     private Region buildChannelLegend(int cluster) {
         List<String> ranked = rankedMarkersByCluster.get(String.valueOf(cluster));
         if (ranked == null || ranked.isEmpty() || channelColors.isEmpty()) {
@@ -353,7 +511,8 @@ public class RepresentativeGalleryPanel extends VBox {
         return out;
     }
 
-    private VBox buildThumb(int cellIdx, CellRef ref, boolean isMedoid, long token) {
+    private VBox buildThumb(int cellIdx, CellRef ref, boolean isMedoid, long token,
+                            List<String> clusterChannels) {
         ImageView iv = new ImageView();
         iv.setPreserveRatio(true);
         iv.setFitWidth(THUMB_SIZE);
@@ -381,7 +540,7 @@ public class RepresentativeGalleryPanel extends VBox {
 
         // Async crop read
         Thread t = new Thread(() -> {
-            BufferedImage crop = cropService.readCrop(ref, cropScale);
+            BufferedImage crop = cropService.readCrop(ref, cropScale, clusterChannels);
             if (crop != null) loadedCrops.put(cellIdx, crop);
             Image fx = (crop != null) ? SwingFXUtils.toFXImage(crop, null) : null;
             Platform.runLater(() -> {
@@ -408,6 +567,13 @@ public class RepresentativeGalleryPanel extends VBox {
         File outDir = resolveOutputDir();
         if (outDir == null) return;
 
+        // The warning has to leave the app with the images. A caveat that lives
+        // only in the panel is gone the moment someone drops these PNGs into a
+        // figure, which is exactly when it matters.
+        if (perClusterChannels) {
+            writeComparabilityWarning(outDir);
+        }
+
         CellRef[] refs = result.getCellRefs();
         int written = 0;
         for (int c = 0; c < result.getNClusters(); c++) {
@@ -416,7 +582,8 @@ public class RepresentativeGalleryPanel extends VBox {
             for (int cellIdx : idx) {
                 BufferedImage crop = loadedCrops.get(cellIdx);
                 if (crop == null && refs != null && cellIdx >= 0 && cellIdx < refs.length) {
-                    crop = cropService.readCrop(refs[cellIdx], cropScale);  // fill any gaps
+                    crop = cropService.readCrop(refs[cellIdx], cropScale,
+                            channelsForCluster(c));  // fill any gaps
                 }
                 if (crop != null) crops.add(crop);
             }

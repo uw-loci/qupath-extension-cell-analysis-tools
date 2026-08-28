@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Added
+
+- **Representative cells can be rendered in each cluster's own marker channels**
+  ([#16](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/16)). Crops
+  previously used whatever channels the viewer happened to be showing, which in a highly
+  multiplexed panel is rarely the ones that define a cluster -- and the existing "Show channels
+  from Marker Rankings" legend could therefore NAME channels the crop was not actually drawn in.
+  **Use per-cluster channels** renders each cluster in its own top-ranked marker channels plus a
+  **Fixed channel** shown everywhere (normally the nuclear stain; defaults to the first channel
+  matching DAPI / Hoechst / Nucleus). The fixed channel does not consume one of the "Channels:"
+  slots. Because this makes the montages non-comparable, the panel carries an all-caps warning
+  while it is on and **Save montages** writes a `WARNING.txt` beside the PNGs, citing the
+  community checklists for publishing images (Schmied et al., Nat Methods 21, 170-181, 2024).
+  The gallery's control bar became a wrapping FlowPane in the process: it wants 1,479 px and the
+  results window opens at 850, so as an HBox the checkbox labels would have ellipsized.
+
 ### Removed
 
 - **Foundation-model feature extraction is deleted, not just unwired.** The
