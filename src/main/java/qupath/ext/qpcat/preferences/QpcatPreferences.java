@@ -17,7 +17,6 @@ public final class QpcatPreferences {
     private static final String CATEGORY_VAE = "QP-CAT: Autoencoder Classifier";
     private static final String CATEGORY_CLUSTERING = "QP-CAT: Run Clustering";
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
-    private static final String CATEGORY_FEATURES = "QP-CAT: Extract Foundation Model Features";
     private static final String CATEGORY_LLM = "QP-CAT: [Experimental] LLM Cluster Explainer";
     private static final String CATEGORY_GENERAL = "QP-CAT";
 
@@ -265,14 +264,6 @@ public final class QpcatPreferences {
     private static final DoubleProperty phenoGateMax = PathPrefs.createPersistentPreference(
             "qpcat.pheno.gateMax", 5.0);
 
-    // ==================== Extract Foundation Model Features ====================
-
-    private static final IntegerProperty fmTileSize = PathPrefs.createPersistentPreference(
-            "qpcat.fm.tileSize", 224);
-
-    private static final IntegerProperty fmBatchSize = PathPrefs.createPersistentPreference(
-            "qpcat.fm.batchSize", 32);
-
     // ==================== LLM Cluster Explainer ====================
     // The API key is intentionally NOT persisted (in-memory + env-var fallback only).
 
@@ -512,11 +503,6 @@ public final class QpcatPreferences {
     public static double getPhenoGammaStdMultiplier() { return phenoGammaStdMultiplier.get(); }
     public static double getPhenoGateMax() { return phenoGateMax.get(); }
 
-    // Feature extraction getters/setters
-    public static int getFmTileSize() { return fmTileSize.get(); }
-    public static void setFmTileSize(int v) { fmTileSize.set(v); }
-    public static int getFmBatchSize() { return fmBatchSize.get(); }
-    public static void setFmBatchSize(int v) { fmBatchSize.set(v); }
 
 
     // LLM Cluster Explainer getters / setters
@@ -843,22 +829,6 @@ public final class QpcatPreferences {
                 .category(CATEGORY_PHENOTYPING)
                 .description(Tooltips.wrap("Maximum value for per-marker gate threshold spinners (default: 5.0). "
                         + "Increase if your normalized values exceed this range."))
-                .build());
-
-        // --- Extract Foundation Model Features ---
-
-        items.add(new PropertyItemBuilder<>(fmTileSize, Integer.class)
-                .name("Tile Size")
-                .category(CATEGORY_FEATURES)
-                .description(Tooltips.wrap("Tile size in pixels for foundation model input (default: 224). "
-                        + "Most models expect 224. Only change if using a model with different input size."))
-                .build());
-
-        items.add(new PropertyItemBuilder<>(fmBatchSize, Integer.class)
-                .name("Batch Size")
-                .category(CATEGORY_FEATURES)
-                .description(Tooltips.wrap("Number of tiles per GPU batch for feature extraction (default: 32). "
-                        + "Reduce if running out of GPU memory. Range: 1-128."))
                 .build());
 
         // --- LLM Cluster Explainer ---

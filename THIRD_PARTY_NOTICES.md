@@ -28,7 +28,7 @@ it is noted for attribution.
 
 | Project / work | License | What it inspired |
 |---|---|---|
-| LazySlide | MIT | Foundation-model feature-extraction integration approach |
+| LazySlide | MIT | Spatial feature smoothing (graph convolution) approach |
 | OpenIMC (dean-tessone/OpenIMC) | see project repo | Batch figure export + YAML-config batch mode (`openimc workflow`) |
 | CellSighter (Amitay et al. 2023, Nature Communications) | academic reference | Neighbor-spillover features for classification (method, not code) |
 
@@ -37,4 +37,4 @@ it is noted for attribution.
 - No QuPath source code is copied into QP-CAT; the QuPath coupling is a runtime dependency
   plus implementation of the `QuPathExtension` interface.
 - Inline attributions also appear in the relevant source files (e.g. `ClusteringWorkflow.java`,
-  `FeatureExtractionDialog.java`, `AutoencoderDialog.java`).
+  `ClusteringDialog.java`, `AutoencoderDialog.java`).

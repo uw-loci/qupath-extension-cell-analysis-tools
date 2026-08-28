@@ -293,12 +293,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             new SpatialStatsDialog(qupath).show();
         });
         spatialStatsItem.visibleProperty().bind(environmentReady);
-        // NOTE: "Add AI appearance features to cells..." (foundation-model feature
-        // extraction, FeatureExtractionDialog) was removed from the menu in v0.7.0
-        // -- it was not pulling its weight. The dialog/backend code is retained but
-        // unwired; re-add the menu item here if there is demand. See HOW_TO_GUIDE
-        // "Removed features".
-
         // Autoencoder Classifier
         MenuItem autoencoderItem = new MenuItem(res.getString("menu.autoencoderClassifier"));
         autoencoderItem.setOnAction(e -> {

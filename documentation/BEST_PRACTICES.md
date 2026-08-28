@@ -13,16 +13,15 @@ Recommendations for getting the best results from cell clustering and phenotypin
    - [A cluster label is a hypothesis](#cluster-labels-are-hypotheses)
 5. [Spatial Feature Smoothing](#spatial-feature-smoothing)
 6. [Cluster Evaluation](#cluster-evaluation)
-7. [Foundation Model Features vs Channel Measurements (removed in v0.7.0)](#foundation-model-features-vs-channel-measurements)
-8. [Phenotyping Strategy](#phenotyping-strategy)
-9. [Rule-Based Phenotyping](#rule-based-phenotyping)
-10. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
-11. [Spatial Analysis](#spatial-analysis)
-12. [When to Batch-Export Figures](#when-to-batch-export-figures)
-13. [Multi-Image Projects](#multi-image-projects)
-14. [Reproducibility](#reproducibility)
-15. [Common Pitfalls](#common-pitfalls)
-16. [Autoencoder Cell Classifier](#autoencoder-cell-classifier)
+7. [Phenotyping Strategy](#phenotyping-strategy)
+8. [Rule-Based Phenotyping](#rule-based-phenotyping)
+9. [When to Use the LLM Cluster Explainer](#when-to-use-the-llm-cluster-explainer)
+10. [Spatial Analysis](#spatial-analysis)
+11. [When to Batch-Export Figures](#when-to-batch-export-figures)
+12. [Multi-Image Projects](#multi-image-projects)
+13. [Reproducibility](#reproducibility)
+14. [Common Pitfalls](#common-pitfalls)
+15. [Autoencoder Cell Classifier](#autoencoder-cell-classifier)
 
 ---
 
@@ -473,12 +472,6 @@ Clustering is rarely perfect on the first try. A typical workflow:
 
 ---
 
-## Foundation Model Features vs Channel Measurements
-
-> **Removed in v0.7.0.** Foundation-model feature extraction (`FM_*` morphological
-> embeddings) is no longer in the menu. See HOW_TO_GUIDE
-> "[Removed features](HOW_TO_GUIDE.md#8-removed-features)" for what it did and how
-> to request its return. The guidance that lived here is retired with the feature.
 
 ---
 

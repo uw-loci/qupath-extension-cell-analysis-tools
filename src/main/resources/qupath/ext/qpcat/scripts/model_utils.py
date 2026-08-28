@@ -1,11 +1,11 @@
 """
 Shared utilities for QP-CAT task scripts.
 
-Provides device detection, the foundation model registry, and the shared
-non-finite measurement guard. Loaded into every task script's global scope by
+Provides device detection, UMAP execution resolution, cancellation checks and
+the shared non-finite measurement guard. Loaded into every task script's global scope by
 ApposeClusteringService at init, so task scripts use these without importing.
 
-Foundation model integration inspired by LazySlide (MIT License).
+Spatial feature smoothing approach inspired by LazySlide (MIT License).
 Zheng, Y. et al. Nature Methods (2026). https://doi.org/10.1038/s41592-026-03044-7
 """
 
@@ -16,33 +16,6 @@ import numpy as np
 import torch
 
 logger = logging.getLogger("qpcat.model_utils")
-
-# Foundation model registry: name -> (timm_id, embed_dim, license)
-# Only models with commercially-permissive licenses (Apache 2.0, MIT).
-# Models are downloaded on-demand from HuggingFace, not bundled.
-#
-# Every id here MUST be a repo timm can load, i.e. its config.json carries a
-# top-level "architecture" key. A *transformers* repo instead carries
-# "architectures" (plural), and timm.create_model dies on it with a bare
-# KeyError: 'architecture' -- see issue #8, where "dinov2-large" pointed at
-# facebook/dinov2-large (a transformers repo) and could never have loaded.
-# Check before adding a model:
-#   curl -sL https://huggingface.co/<repo>/raw/main/config.json | grep architecture
-FOUNDATION_MODELS = {
-    "h-optimus-0": ("hf_hub:bioptimus/H-optimus-0", 1536, "Apache 2.0"),
-    "virchow": ("hf_hub:paige-ai/Virchow", 2560, "Apache 2.0"),
-    "hibou-l": ("hf_hub:histai/hibou-L", 1024, "Apache 2.0"),
-    "hibou-b": ("hf_hub:histai/hibou-b", 768, "Apache 2.0"),
-    # timm's DINOv2 mirror, not facebook/dinov2-large. The model card is
-    # Apache-2.0 (same weights); the "cc-by-nc-4.0" string inside this repo's
-    # pretrained_cfg is a stale timm default from before Meta relicensed DINOv2.
-    # Native input size is 518, so tiles are upscaled from the configured size.
-    "dinov2-large": (
-        "hf_hub:timm/vit_large_patch14_dinov2.lvd142m",
-        1024,
-        "Apache 2.0",
-    ),
-}
 
 
 def impute_nonfinite(data, context="measurements"):

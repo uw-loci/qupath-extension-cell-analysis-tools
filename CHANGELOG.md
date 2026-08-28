@@ -6,7 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Removed
+
+- **Foundation-model feature extraction is deleted, not just unwired.** The
+  "Extract Foundation Model Features..." command (embeddings from pathology vision models
+  stored as `FM_*` measurements, for clustering cells by appearance rather than marker
+  expression) was taken off the menu in v0.7.0 and has now been removed outright:
+  `FeatureExtractionDialog`, `runFeatureExtraction`, `readTilesAroundCentroids`,
+  `extract_features.py`, the `FOUNDATION_MODELS` registry, and the two `qpcat.fm.*`
+  preferences. The decisive reason is not disuse -- it is that **the Java half was never
+  run end to end by anyone**, as `HOW_TO_GUIDE` section 8 already recorded. It was an
+  unvalidated path, not a working feature set aside, so section 8 no longer offers it for
+  revival. The autoencoder is unaffected: it has its own tile preferences and its own
+  `torch` use, and `detect_device()` stays in `model_utils.py`.
+
 ### Fixed
+
+- **Python bytecode caches were shipping inside the jar.** Running the Python test suite
+  leaves a `__pycache__` beside the shipped scripts, and `processResources` packaged it:
+  19 `.pyc` files in every release jar, including bytecode for scripts that had since been
+  deleted. The directory is gitignored, so this was invisible in a diff and visible only
+  in the jar. Now excluded.
 
 - **Two QP-CAT analyses run at once could silently corrupt each other's plots.**
   Appose runs one Python thread per task inside ONE interpreter and the service is a

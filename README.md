@@ -745,7 +745,6 @@ src/main/java/qupath/ext/qpcat/
     ClusterManagementDialog.java  Rename/merge cluster classifications
     EmbeddingDialog.java          Embedding-only computation dialog
     EmbeddingScatterPanel.java    Interactive 2D embedding scatter plot
-    FeatureExtractionDialog.java  Foundation-model feature extraction dialog (removed/unwired; see HOW_TO_GUIDE "Removed features")
     HistogramPanel.java           Interactive histogram with draggable threshold
     PhenotypingDialog.java        Phenotyping rules and gating dialog
     PythonConsoleWindow.java      Real-time Python stderr viewer
@@ -756,7 +755,6 @@ src/main/resources/qupath/ext/qpcat/
   scripts/
     compute_thresholds.py         Auto-threshold computation
     export_anndata.py             AnnData export
-    extract_features.py           Foundation-model feature extraction (removed/unwired)
     infer_autoencoder.py          Autoencoder inference on new data
     init_services.py              Python worker initialization
     model_utils.py                Model save/load and architecture utilities

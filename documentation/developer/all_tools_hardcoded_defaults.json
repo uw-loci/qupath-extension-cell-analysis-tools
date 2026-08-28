@@ -1,6 +1,5 @@
 {
   "_description": "Hardcoded constants across ALL QP-CAT tools (excluding VAE, documented separately). Each entry explains what it controls and why it should NOT be changed. See vae_hardcoded_defaults.json for VAE-specific constants.",
-
   "clustering": {
     "umap_n_components": {
       "value": 2,
@@ -27,19 +26,25 @@
       "why_not_change": "Higher orders capture more complex spatial patterns but increase computation exponentially. Order 1 (first-order neighbors) is sufficient for cell-level spatial analysis."
     },
     "percentile_normalization_bounds": {
-      "value": [0.01, 0.99],
+      "value": [
+        0.01,
+        0.99
+      ],
       "file": "run_clustering.py, compute_thresholds.py",
       "description": "1st and 99th percentile quantiles for percentile normalization.",
       "why_not_change": "Statistical convention for robust normalization. 1st/99th percentile clips extreme outliers while preserving 98% of the data distribution. Changing to 5th/95th would lose too much dynamic range."
     },
     "scatter_plot_aesthetics": {
-      "value": {"point_size": 1, "alpha": 0.5, "legend_marker_scale": 5},
+      "value": {
+        "point_size": 1,
+        "alpha": 0.5,
+        "legend_marker_scale": 5
+      },
       "file": "run_clustering.py",
       "description": "Scatter plot visual parameters for UMAP/t-SNE/PCA plots.",
       "why_not_change": "Optimized for typical cell datasets (1k-100k cells). Larger points or higher alpha would create overlapping blobs. These could be configurable but are purely aesthetic."
     }
   },
-
   "phenotyping": {
     "gmm_n_components": {
       "value": 2,
@@ -60,28 +65,16 @@
       "why_not_change": "4 decimal places provide sufficient precision for normalized fluorescence values. More would be false precision. Less would lose meaningful differences."
     },
     "default_gate_thresholds": {
-      "value": {"minmax": 0.5, "percentile": 0.5, "zscore": 0.0},
+      "value": {
+        "minmax": 0.5,
+        "percentile": 0.5,
+        "zscore": 0.0
+      },
       "file": "run_phenotyping.py",
       "description": "Default gating thresholds when no per-marker gate is specified.",
       "why_not_change": "These are sensible midpoints: 0.5 for [0,1]-normalized data (midpoint), 0.0 for z-scored data (mean). They match the normalization method semantics. Users override these per-marker in the dialog."
     }
   },
-
-  "feature_extraction": {
-    "model_embedding_dims": {
-      "value": {"h-optimus-0": 1536, "virchow": 2560, "hibou-l": 1024, "hibou-b": 768, "midnight": 1536, "dinov2-large": 1024},
-      "file": "model_utils.py",
-      "description": "Output embedding dimensions for each foundation model.",
-      "why_not_change": "Fixed by the model architecture. These are NOT hyperparameters -- they are the number of features each pre-trained model outputs. Changing them would cause shape mismatches."
-    },
-    "progress_log_interval": {
-      "value": 5,
-      "file": "extract_features.py",
-      "description": "Log progress every N batches.",
-      "why_not_change": "Display-only constant. Changing it has no effect on results."
-    }
-  },
-
   "services": {
     "shutdown_poll_interval": {
       "value": 200,

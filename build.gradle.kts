@@ -111,6 +111,16 @@ tasks.test {
 // ---------------------------------------------------------------------------
 // SpotBugs -- static bug detection (gates the build)
 // ---------------------------------------------------------------------------
+// Python bytecode caches are build litter, not resources. Running the
+// python_tests suite (or any local python) against the shipped scripts leaves
+// a __pycache__ beside them, and Gradle was packaging it: 19 .pyc files rode
+// into every jar, including bytecode for scripts that had since been deleted.
+// The directory is gitignored, so this never showed up in a diff -- only in
+// the jar.
+tasks.named<ProcessResources>("processResources") {
+    exclude("**/__pycache__/**")
+}
+
 spotbugs {
     effort.set(com.github.spotbugs.snom.Effort.MAX)
     reportLevel.set(com.github.spotbugs.snom.Confidence.HIGH)

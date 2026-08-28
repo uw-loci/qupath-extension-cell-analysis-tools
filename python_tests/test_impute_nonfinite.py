@@ -151,33 +151,6 @@ class TestConsumersAreGuarded:
         )
 
 
-class TestModelRegistry:
-    """Guard the issue #8 root cause: a transformers repo in a timm registry."""
-
-    def test_no_known_transformers_repos(self):
-        source = (SCRIPTS_DIR / "model_utils.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        registry = None
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign) and any(
-                getattr(t, "id", None) == "FOUNDATION_MODELS" for t in node.targets
-            ):
-                registry = ast.literal_eval(node.value)
-        assert registry, "FOUNDATION_MODELS not found"
-
-        # facebook/dinov2-large and kaiko-ai/midnight are transformers repos:
-        # their config.json has "architectures", not "architecture", so
-        # timm.create_model raises KeyError: 'architecture'.
-        for name, (timm_id, _dim, _lic) in registry.items():
-            assert "facebook/dinov2-large" not in timm_id, name
-            assert "kaiko-ai/midnight" not in timm_id, name
-
-    def test_extract_features_translates_the_keyerror(self):
-        source = (SCRIPTS_DIR / "extract_features.py").read_text(encoding="utf-8")
-        assert "except KeyError" in source
-        assert "not loadable by timm" in source
-
-
 def warnings_as_errors():
     """Turn RuntimeWarning into an error, so an unsuppressed all-NaN nanmedian fails."""
     ctx = warnings.catch_warnings()

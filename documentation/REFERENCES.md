@@ -443,22 +443,6 @@ Open-source platform for bioimage analysis, with emphasis on digital pathology a
 > Bankhead P, Loughrey MB, Fernandez JA, et al. "QuPath: Open source software for digital pathology image analysis." *Scientific Reports* 7, 16878 (2017).
 > https://doi.org/10.1038/s41598-017-17204-5
 
----
-
-## Foundation Model Feature Extraction (removed in v0.7.0)
-
-The foundation-model feature-extraction command was removed from the menu in
-v0.7.0 (see HOW_TO_GUIDE "Removed features"); the backend is retained but unwired.
-For attribution, the models/frameworks it used were: LazySlide
-([Zheng et al., *Nature Methods* 2026](https://doi.org/10.1038/s41592-026-03044-7));
-H-optimus-0 ([Bioptimus](https://huggingface.co/bioptimus/H-optimus-0)); Virchow
-([Paige AI](https://huggingface.co/paige-ai/Virchow)); Hibou-B/L
-([HistAI](https://huggingface.co/histai/hibou-B)); Midnight
-([kaiko.ai](https://huggingface.co/kaiko-ai/midnight)); and DINOv2
-([Oquab et al., TMLR 2024](https://doi.org/10.48550/arXiv.2304.07193);
-[Meta AI](https://huggingface.co/facebook/dinov2-large)). All Apache-2.0;
-downloaded on demand, not bundled. These references stand if the feature is
-reinstated.
 
 ---
 

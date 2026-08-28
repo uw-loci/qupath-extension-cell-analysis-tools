@@ -384,78 +384,28 @@ Automatically compute marker gate thresholds instead of setting them manually.
 ## 8. Removed features
 
 Capabilities that shipped in earlier versions but were removed to keep the tool
-focused. The code generally remains in the repository (just unwired), so any of
-these can be **re-added if there is enough interest** -- open an issue or use
-**Report a Bug** to ask.
+focused. Whether the code is still in the repository varies -- each entry below
+says. Where it has been deleted, treat bringing the capability back as new work
+rather than as re-enabling something that already works. If you want one of
+these, open an issue or use **Report a Bug** to ask.
 
-### Foundation-model feature extraction (removed in v0.7.0)
+### Foundation-model feature extraction (removed in v0.7.0, deleted in 0.11.1)
 
-Earlier versions had **"Add AI appearance features to cells..."** (later
-**"Extract Foundation Model Features..."**), which extracted morphological
-embeddings from pretrained pathology vision foundation models (H-optimus-0,
-Virchow, Hibou-B/L, Midnight, DINOv2-Large) and stored them as per-cell `FM_*`
-measurements; those could then be selected in the clustering dialog like channel
-intensities to cluster cells by appearance rather than marker expression. It was
-removed from the menu in v0.7.0 because it saw little use and added a heavy
-model-download dependency. The backend (`FeatureExtractionDialog`,
-`extract_features.py`) is retained but unwired; the menu command can be
-reinstated on request.
+**"Extract Foundation Model Features..."** extracted morphological embeddings from
+pretrained pathology vision foundation models and stored them as per-cell `FM_*`
+measurements, which could then be selected in the clustering dialog to cluster cells by
+appearance rather than marker expression.
 
-**Test status (checked 2026-08-04).** Be precise about what has and has not been
-run, because "untested" was previously doing too much work here:
+It was unwired from the menu in v0.7.0 and the code has now been deleted. Two reasons, and
+the second is the decisive one: it saw effectively no use and pulled a heavy model-download
+dependency (`timm`, `huggingface-hub`) that every user installed; and **the Java half was
+never run end to end by anyone.** The Python extraction logic had been exercised against a
+single ungated model, but the full path -- QuPath detections to tiles, shared-memory
+transfer, `FM_*` measurements written back onto cells -- was never executed. It is not a
+working feature that was set aside; it is an unvalidated one.
 
-- The **Python side runs.** `extract_features.py` was executed against the shipped
-  `model_utils.py` registry with `dinov2-large` and 12 synthetic 224x224 RGB
-  tiles: it loaded the model through timm, ran inference and returned a
-  `(12, 1024)` float32 array -- all finite, non-degenerate, and matching the
-  embedding dimension the registry declares. So the extraction logic, the
-  batching, the model-output handling and the NDArray packaging all work.
-- **Four of the five models are unverified.** H-optimus-0, Virchow, Hibou-B and
-  Hibou-L are all gated on HuggingFace (their `config.json` returns HTTP 401
-  without an accepted licence and a token), so none of their registry entries has
-  been confirmed loadable. `dinov2-large` is the only ungated entry and the only
-  one anyone has run. Note the script carries an explicit guard for a repo that
-  is a *transformers* model rather than a *timm* one -- which is a failure mode a
-  gated entry could still be sitting in.
-- **The Java side has never been run.** The dialog is unwired from the menu, so
-  the full path -- QuPath detections to tiles, shared-memory transfer, `FM_*`
-  measurements written back onto cells -- has not been exercised end-to-end by
-  anyone. This, not the Python, is the untested part.
-
-If the feature is ever reinstated, treat the Java round trip as unproven and the
-four gated models as unconfirmed.
-
-<details>
-<summary>Full pre-removal documentation (preserved for revival)</summary>
-
-**Extensions > QP-CAT > Extract Foundation Model Features...** extracted
-tile-level morphological embeddings from pre-trained vision foundation models and
-stored them as per-detection measurements (`FM_0`, `FM_1`, ..., `FM_N`).
-
-Supported models:
-
-| Model | Developer | License | Embedding Dim | Gated? |
-|-------|-----------|---------|:---:|:---:|
-| **H-optimus-0** | Bioptimus | Apache 2.0 | 1536 | Yes |
-| **Virchow** | Paige AI | Apache 2.0 | 2560 | Yes |
-| **Hibou-B** | HistAI | Apache 2.0 | 768 | Yes |
-| **Hibou-L** | HistAI | Apache 2.0 | 1024 | Yes |
-| **Midnight** | kaiko.ai | Apache 2.0 | 768 | No |
-| **DINOv2-Large** | Meta AI | Apache 2.0 | 1024 | No |
-
-All models were downloaded on-demand from HuggingFace and cached locally (not
-bundled with the extension); only commercially permissive (Apache 2.0) licenses
-were included. Gated models (H-optimus-0, Virchow, Hibou) required a HuggingFace
-account and auth token: accept the model's license on its HuggingFace page, then
-enter the token in the extraction dialog.
-
-Foundation model features capture rich morphological information from the image
-tile surrounding each cell, usable as input measurements for clustering (instead
-of or alongside channel intensities) for morphology-driven cell grouping. Powered
-by [LazySlide](https://doi.org/10.1038/s41592-026-03044-7). The Python
-dependencies (`timm`, `huggingface-hub`) remain in `pixi.toml`.
-
-</details>
+There is therefore nothing here to reinstate. Anyone wanting appearance-based clustering
+should treat it as new work rather than as a revival.
 
 ---
 
