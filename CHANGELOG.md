@@ -6,6 +6,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Removed
+
+- **`timm` and `huggingface-hub` are out of the bundled Python environment.** They existed
+  only for foundation-model feature extraction, deleted in the previous release entry, so
+  every user was installing two packages for code that is gone.
+
+### Changed
+
+- **Three dependency pins tightened, because regenerating the lock exposed that they were
+  too loose to be safe.** A routine regeneration -- whose only intent was dropping the two
+  packages above -- resolved **squidpy BACKWARDS from 1.6.6 to 1.5.0**. `spatial_stats.py`
+  reads Ripley's L from `uns[...]["L_stat"]`, which is the 1.6.6 shape; on older squidpy that
+  read returns an EMPTY payload while logging success, which is exactly the bug fixed in
+  0.9.x. The floor is now `>=1.6.6`. The same regeneration moved **anthropic 0.107 -> 1.2**,
+  a major bump the LLM explainer has never been tested against; held at `<1`, to be lifted
+  deliberately with a test rather than as a side effect. **pybanksy** is now `>=1.3.4,<1.4`
+  as a standing TODO had specified for the next regeneration: `run_clustering.py` drives its
+  low-level API, which is not stable across minor releases.
+- Remaining environment drift from the same regeneration, none of it requested but all of it
+  forward: pytorch 2.11 -> 2.13, torchvision 0.26 -> 0.28, numba 0.65 -> 0.67, matplotlib
+  3.10 -> 3.11, pandas/pillow/python patch bumps, pybanksy 1.3.4 -> 1.3.5. squidpy, scanpy,
+  anndata, numpy, requests and setuptools (still capped below 81) are unchanged. **The
+  pybanksy contract tests cannot verify 1.3.5 here** -- they need the Appose env and skip
+  without it -- so BANKSY is owed a rig smoke test before release.
+
 ### Added
 
 - **Representative cells can be rendered in each cluster's own marker channels**

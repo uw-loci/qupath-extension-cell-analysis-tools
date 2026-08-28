@@ -47,21 +47,29 @@ pytorch-gpu = ">=2.0.0"
 scanpy = ">=1.10"
 anndata = ">=0.10"
 seaborn = ">=0.13"
-squidpy = ">=1.4.0"
+# Floor at 1.6.6, not 1.4.0. spatial_stats.py reads Ripley's L from
+# uns[...]["L_stat"], which is the 1.6.6 shape -- older squidpy uses a
+# different key and the read silently returns an EMPTY payload while logging
+# success (the exact bug fixed in 0.9.x). A ">=1.4.0" floor let a routine
+# lock regeneration resolve BACKWARDS to 1.5.0 and would have reintroduced it.
+squidpy = ">=1.6.6"
 # harmonypy 2.0.0+ is a pybind11/CMake build with no Windows wheel,
 # which forces a source build that requires MSVC nmake on user machines.
 # Pin <2 to stay on the pure-Python (py3-none-any) wheel that installs
 # everywhere. 0.2.0 has the same run_harmony() entry point we call.
 harmonypy = ">=0.2.0,<2"
-pybanksy = ">=1.3.4"
+# Upper bound at 1.4: run_clustering.py drives pybanksy's LOW-LEVEL API
+# (it forges banksy_dict and calls generate_banksy_matrix directly), and
+# that API is not stable across minor releases -- a loose ">=" previously
+# landed an install on a build without the symbol we import (issue #4).
+pybanksy = ">=1.3.4,<1.4"
 scikit-image = ">=0.21"
-# Foundation model feature extraction
-# Inspired by LazySlide (Zheng et al. 2026, Nature Methods)
-# Models downloaded on-demand from HuggingFace, not bundled
-timm = ">=1.0.3"
-huggingface-hub = ">=0.20.0"
-# LLM Cluster Explainer [Beta] (v0.2.6+): Anthropic SDK + requests
-# (requests is already transitive via huggingface-hub; listed explicitly so
-# the Ollama HTTP path works even if the transitive chain changes).
-anthropic = ">=0.40.0"
+# LLM Cluster Explainer [Beta] (v0.2.6+): Anthropic SDK + requests.
+# requests is a DIRECT dependency, not transitive: huggingface-hub used to pull
+# it in, and was dropped along with foundation-model feature extraction.
+# Held below 1.0 deliberately. A lock regeneration whose purpose was removing
+# two unrelated packages resolved anthropic 0.107 -> 1.2, a major bump we have
+# not tested the LLM explainer against. Lift this on purpose, with a test, not
+# as a side effect of some other change.
+anthropic = ">=0.40.0,<1"
 requests = ">=2.31"
