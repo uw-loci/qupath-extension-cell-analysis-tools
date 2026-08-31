@@ -6,6 +6,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.11.2] -- 2026-08-30 -- read each cluster in the channels that define it
+
+### Fixed
+
+- **"Use per-cluster channels" had no effect on the images.**
+  `DirectServerChannelInfo.getName()` appends the channel index -- it returns
+  `3_SYTOX (C3)` where the server metadata says `3_SYTOX` -- so the channel match never
+  succeeded, and the crops silently fell back to the viewer's channels. The fallback
+  ("nothing matched, so use the viewer rather than render black") turned a hard failure
+  into a no-op, which is why the control looked wired up and did nothing. Matches on
+  `getOriginalChannelName()` now.
+- **The "Channels:" count was greyed out and changing it redrew nothing.** It was gated on
+  the legend checkbox rather than on per-cluster channels.
+- **Greyed-out channel controls explained nothing, and could not recover.** Both causes now
+  say which applies and what to do, and the channel list is re-read on every rebuild --
+  opening an image *after* the results window previously left every channel control dead
+  until the window was closed and reopened.
+
+### Changed
+
+- **"Show channels from Marker Rankings" is gone**, and the feature is renamed **"Show each
+  cluster's top channels"**. The old checkbox only moved the legend, which read as a broken
+  image control; the legend is not optional when each cluster is drawn in different
+  channels, because it is the only way to read them.
+- **A `(none)` fixed-channel option**, so a cluster can be drawn in its ranked markers
+  alone. It is also the default when no nuclear-looking channel is present, instead of an
+  empty combo.
+- **Nuclear-channel defaults widened** to DAPI, Hoechst, SYTOX, DRAQ5, TO-PRO, PI, Nucleus,
+  Nuclear and DNA, matched as substrings -- the previous list missed real panel names like
+  `3_SYTOX`.
+- **The spatial-statistics estimate prompt no longer stalls an unattended run.** It fires
+  before any clustering is submitted and blocked indefinitely, so a run left waiting
+  computed nothing and saved nothing. It now counts down 60 s and **proceeds** on timeout
+  (never cancels -- someone who walks away wanted the run to happen), and does not appear
+  at all when the estimate is under two minutes. Cancel stays available throughout.
+
 ### Removed
 
 - **`timm` and `huggingface-hub` are out of the bundled Python environment.** They existed
