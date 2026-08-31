@@ -712,6 +712,10 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(envBaseDir, String.class)
                 .name("Environment location")
                 .category(CATEGORY_ENV)
+                // DIRECTORY gives QuPath's own folder chooser, the same control
+                // used by other path preferences -- rather than making the user
+                // type or paste an absolute path.
+                .propertyType(PropertyItemBuilder.PropertyType.DIRECTORY)
                 .description(Tooltips.wrap(
                         "Directory the Python environment is built under. Leave blank for the "
                         + "default (~/.local/share/appose), which is right for most machines.\n\n"
@@ -724,8 +728,12 @@ public final class QpcatPreferences {
                 .build());
 
         items.add(new PropertyItemBuilder<>(envVariant, String.class)
-                .name("Compute variant (CPU or GPU)")
+                .name("Compute variant")
                 .category(CATEGORY_ENV)
+                // A closed choice: any other value would silently fall back to
+                // CPU, which is worse than not offering it.
+                .propertyType(PropertyItemBuilder.PropertyType.CHOICE)
+                .choices(java.util.List.of("CPU", "GPU"))
                 .description(Tooltips.wrap(
                         "Which environment to install: 'CPU' (default, installs anywhere) or "
                         + "'GPU' (CUDA, and REQUIRES an NVIDIA GPU -- it cannot be installed "
