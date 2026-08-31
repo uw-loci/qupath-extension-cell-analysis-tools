@@ -848,7 +848,7 @@ Log files are plain text and can be opened in any text editor. A new file is cre
 
 Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the rest of squidpy's standard spatial-statistics catalog: Ripley's K and L, Geary's C, and co-occurrence (pairwise + one-vs-rest). Each is driven by a single graph constructor you pick once at the top of the dialog; the same graph backs spatial feature smoothing (when the preference is enabled) so the parameters are visible and consistent across the run. QP-CAT's v1 catalog closes the gap with [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats surface while keeping the squidpy backend the extension already ships with -- no new dependencies.
 
-> These statistics use permutation testing and can be slow on large slides (the dialog estimates the time and lets you skip or cancel). For a fast, scalable way to map recurring tissue micro-environments instead, see [chapter 22 -- Finding Cellular Neighborhoods](#22-finding-cellular-neighborhoods-spatial-niches).
+> These statistics use permutation testing and can be slow on large slides. Before clustering is submitted, a dialog estimates the computation time and lets you proceed, skip, or cancel. Estimates under 2 minutes do not show a prompt. For longer estimates, the dialog waits 60 seconds for your choice; if you leave it unattended, it automatically proceeds rather than stalling the run. For a fast, scalable way to map recurring tissue micro-environments instead, see [chapter 22 -- Finding Cellular Neighborhoods](#22-finding-cellular-neighborhoods-spatial-niches).
 
 ### When to use each statistic
 
@@ -1349,17 +1349,15 @@ Per-cluster gallery of image crops of the most typical cells. For each cluster, 
 
 The **Center** dropdown chooses how "center" is defined: *Feature-space medoid* (default; nearest the cluster mean in the normalized measurement space the clustering used) or *Embedding-space medoid* (nearest the cluster's center in the 2D plot). The **Crop x bbox** spinner sets the crop window as a multiple of each cell's bounding box (default 3x), so cells fill a consistent fraction of every thumbnail regardless of magnification.
 
-**Show channels from Marker Rankings** (optional checkbox) appends a small legend to the end of each cluster's row listing the image channels behind that cluster's top-ranked markers, each as a colored swatch (the channel's display color) plus its name. The **Channels** spinner sets how many to show (default 4). Channels are resolved from the [Marker Rankings](#marker-rankings-tab): the top measurements per cluster are matched back to image channels by looking for a channel name inside each measurement name -- this works across detection engines that name measurements differently ("CD8: Cell: Mean", "Cell: CD8 mean", etc.). If you renamed channels or measurements so that nothing matches, the legend simply shows no channels for that cluster rather than erroring. The checkbox is disabled when the result has no Marker Rankings or no image is open. Use the legend to read at a glance which stains dominate each cluster while looking at its crops.
+**Show each cluster's top channels** (optional checkbox) renders each cluster's crops in **that cluster's own top-ranked marker channels** (from [Marker Rankings](#marker-rankings-tab)), plus one **Fixed channel** shown in every cluster -- normally the nuclear stain, so each crop keeps a common anatomical reference. A small legend showing all channels used for each crop is automatically appended to the end of each cluster's row.
 
-**Use per-cluster channels** (optional checkbox) renders each cluster's crops in **that
-cluster's own top-ranked marker channels**, plus one **Fixed channel** shown in every cluster --
-normally the nuclear stain, so each crop keeps a common anatomical reference. It defaults to the
-first channel whose name contains DAPI, Hoechst or Nucleus, and you can pick any channel. The
-fixed channel does **not** count towards the **Channels:** number: set that to 3 and you get the
-fixed channel plus 3 ranked markers.
+The **Channels** spinner sets how many ranked markers to show per cluster (default 4). Channels are matched from the [Marker Rankings](#marker-rankings-tab) by looking for a channel name inside each measurement name -- this works across detection engines that name measurements differently ("CD8: Cell: Mean", "Cell: CD8 mean", etc.). If you renamed channels or measurements so that a marker matches no channel, that marker is simply left out rather than erroring; if nothing matches at all, the crops fall back to the channels the viewer is currently showing.
 
-Without this, crops are rendered with whatever channels the viewer is currently showing, which in
-a highly multiplexed panel is rarely the handful that define a given cluster.
+The **Fixed channel** dropdown defaults to the first channel whose name contains (as substrings) DAPI, Hoechst, SYTOX, DRAQ5, TO-PRO, PI, Nucleus, Nuclear or DNA. You can pick any channel from the dropdown, or **(none)** to add no fixed channel -- each cluster is then drawn in its ranked markers alone. The fixed channel does **not** count towards the **Channels:** number: set that to 3 and you get the fixed channel plus 3 ranked markers, or just those 3 with **(none)** selected -- it does not promote the fixed slot into an extra marker.
+
+The checkbox is disabled when the result has no Marker Rankings or no image is open.
+
+Without this option, crops are rendered with whatever channels the viewer is currently showing, which in a highly multiplexed panel is rarely the handful that define a given cluster.
 
 > **The trade-off is comparability.** Once each cluster is drawn in different channels, the
 > montages **cannot be compared with each other** -- brightness, contrast and colour no longer
