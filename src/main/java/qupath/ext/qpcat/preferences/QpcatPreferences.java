@@ -54,6 +54,19 @@ public final class QpcatPreferences {
     private static final StringProperty envVariant = PathPrefs.createPersistentPreference(
             "qpcat.env.variant", "CPU");
 
+    /**
+     * The directory an environment was last successfully built at. Bookkeeping,
+     * not a setting -- deliberately absent from the preference pane.
+     *
+     * <p>This is the "buffer" that makes cleanup possible at all: once the
+     * location preference changes, the OLD path is gone from the preferences and
+     * nothing would know which directory had been superseded. Recorded only
+     * after a build verifies, so a failed build never marks a location as the
+     * one to clean up FROM.
+     */
+    private static final StringProperty envLastBuiltDir = PathPrefs.createPersistentPreference(
+            "qpcat.env.lastBuiltDir", "");
+
     private static final IntegerProperty aeLatentDim = PathPrefs.createPersistentPreference(
             "qpcat.ae.latentDim", 16);
 
@@ -332,6 +345,12 @@ public final class QpcatPreferences {
     public static String getEnvBaseDir() { return envBaseDir.get(); }
     public static void setEnvBaseDir(String v) { envBaseDir.set(v == null ? "" : v.strip()); }
     public static StringProperty envBaseDirProperty() { return envBaseDir; }
+
+    /** Directory an environment was last successfully built at; "" if none. */
+    public static String getEnvLastBuiltDir() { return envLastBuiltDir.get(); }
+    public static void setEnvLastBuiltDir(String v) {
+        envLastBuiltDir.set(v == null ? "" : v);
+    }
 
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }

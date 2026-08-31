@@ -52,6 +52,35 @@ public class ApposeClusteringService {
     private static final String ENV_NAME = "qupath-qpcat";
 
     /**
+     * After a verified build, offer to remove the environment this one replaced.
+     *
+     * <p>Runs off the initialization thread and never blocks it. Records the
+     * current location as the new "last built" REGARDLESS of the answer -- the
+     * question is asked once; declining means keep, not ask again next launch.
+     */
+    private void offerPreviousEnvCleanup() {
+        final Path current = getEnvironmentPath();
+        final String previous = qupath.ext.qpcat.preferences.QpcatPreferences.getEnvLastBuiltDir();
+        qupath.ext.qpcat.preferences.QpcatPreferences.setEnvLastBuiltDir(current.toString());
+        if (previous == null || previous.isBlank() || previous.equals(current.toString())) {
+            return;
+        }
+        try {
+            javafx.application.Platform.runLater(() -> {
+                try {
+                    ApposeEnvLocation.promptCleanup(Path.of(previous), current);
+                } catch (Exception e) {
+                    logger.warn("Previous-environment cleanup prompt failed: {}", e.getMessage());
+                }
+            });
+        } catch (IllegalStateException e) {
+            // No FX toolkit (headless / batch): nothing to prompt with. The old
+            // directory simply stays, which is the safe outcome.
+            logger.info("Previous environment at {} left in place (no UI available)", previous);
+        }
+    }
+
+    /**
      * The configured environment directory, or null to let Appose use its own
      * default root. Kept next to {@link #getEnvironmentPath()} so the reported
      * path and the built path cannot drift apart.
@@ -411,6 +440,12 @@ public class ApposeClusteringService {
                 report(statusCallback, "Setup complete! (scikit-learn " + sklearnVersion
                         + ", scanpy " + scanpyVersion + ", env v" + envVersion + ")");
                 logger.info("QPCAT Appose service initialized (env v{})", envVersion);
+
+                // The environment is now built AND verified, which is the only
+                // point at which it is safe to offer to remove the one it
+                // replaced. Off the init thread: a prompt here would block
+                // startup behind a question nobody may be sitting in front of.
+                offerPreviousEnvCleanup();
             } finally {
                 Thread.currentThread().setContextClassLoader(original);
             }

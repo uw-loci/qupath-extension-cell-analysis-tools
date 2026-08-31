@@ -76,6 +76,39 @@ class ApposeEnvLocationTest {
     }
 
     @Test
+    void theCleanupIsActuallyWiredToAVerifiedBuild() throws Exception {
+        // promptCleanup existed but nothing called it -- the helper was tested
+        // and the feature did not exist. Guard the wiring, not just the helper.
+        String svc = Files.readString(Path.of(
+                "src/main/java/qupath/ext/qpcat/service/ApposeClusteringService.java"));
+        int call = svc.indexOf("offerPreviousEnvCleanup();");
+        assertThat(call).as("cleanup must be invoked, not merely defined").isGreaterThan(0);
+        int verified = svc.indexOf("QPCAT Appose service initialized");
+        assertThat(verified).isGreaterThan(0);
+        assertThat(call)
+                .as("cleanup must come AFTER the build verifies -- offering to delete the "
+                        + "only working environment before the replacement is proven is the "
+                        + "one outcome that cannot be undone")
+                .isGreaterThan(verified);
+    }
+
+    @Test
+    void theSupersededPathIsRecordedOnlyAfterAVerifiedBuild() throws Exception {
+        String svc = Files.readString(Path.of(
+                "src/main/java/qupath/ext/qpcat/service/ApposeClusteringService.java"));
+        int at = svc.indexOf("private void offerPreviousEnvCleanup");
+        String body = svc.substring(at, svc.indexOf("\n    }", at));
+        // Without recording the old path, changing the preference loses it and
+        // nothing can know which directory was superseded.
+        assertThat(body).contains("setEnvLastBuiltDir");
+        assertThat(body)
+                .as("the record must update whether or not the user deletes -- the question "
+                        + "is asked once, and declining means keep, not ask again every launch")
+                .satisfies(b -> assertThat(b.indexOf("setEnvLastBuiltDir"))
+                        .isLessThan(b.indexOf("promptCleanup")));
+    }
+
+    @Test
     void sizeOfIsBestEffortAndNeverThrows(@TempDir Path tmp) throws Exception {
         Files.writeString(tmp.resolve("a"), "12345");
         assertThat(ApposeEnvLocation.sizeOf(tmp)).isEqualTo(5);
