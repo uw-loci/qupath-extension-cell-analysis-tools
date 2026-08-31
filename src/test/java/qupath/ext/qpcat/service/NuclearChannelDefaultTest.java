@@ -19,7 +19,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NuclearChannelDefaultTest {
 
     /** Mirrors RepresentativeGalleryPanel.defaultNuclearChannel. */
-    private static final String[] HINTS = {"DAPI", "dapi", "Hoechst", "Nucleus"};
+    private static final String[] HINTS = {
+        "DAPI", "Hoechst", "SYTOX", "DRAQ5", "TO-PRO", "PI ", "Nucleus", "Nuclear", "DNA",
+    };
 
     private static String defaultNuclear(List<String> names) {
         for (String hint : HINTS) {
@@ -49,6 +51,17 @@ class NuclearChannelDefaultTest {
         // instead of silently fixing an arbitrary channel into every montage.
         assertThat(defaultNuclear(List.of("Hematoxylin", "DAB", "Residual"))).isNull();
         assertThat(defaultNuclear(List.of())).isNull();
+    }
+
+    @Test
+    void findsTheNuclearStainsAMultiplexPanelActuallyUses() {
+        // Reported from a real 23-cluster multiplex run: the panel's nuclear
+        // channel was "3_SYTOX" and the original DAPI/Hoechst/Nucleus list found
+        // nothing, so the combo came up empty and the user had to know to pick it.
+        assertThat(defaultNuclear(List.of("1_CD8", "3_SYTOX", "5_CD68"))).isEqualTo("3_SYTOX");
+        assertThat(defaultNuclear(List.of("CD3", "DRAQ5"))).isEqualTo("DRAQ5");
+        assertThat(defaultNuclear(List.of("TO-PRO-3", "CD20"))).isEqualTo("TO-PRO-3");
+        assertThat(defaultNuclear(List.of("DNA1", "CD45"))).isEqualTo("DNA1");
     }
 
     @Test

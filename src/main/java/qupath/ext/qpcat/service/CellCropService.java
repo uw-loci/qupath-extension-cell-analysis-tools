@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.lib.display.ChannelDisplayInfo;
+import qupath.lib.display.DirectServerChannelInfo;
 import qupath.lib.display.ImageDisplay;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -184,7 +185,7 @@ public class CellCropService implements AutoCloseable {
         for (String want : channelNames) {
             if (want == null || want.isBlank()) continue;
             for (ChannelDisplayInfo info : display.availableChannels()) {
-                if (want.equalsIgnoreCase(info.getName())) {
+                if (matchesChannel(info, want)) {
                     if (!out.contains(info)) out.add(info);
                     break;
                 }
@@ -192,6 +193,36 @@ public class CellCropService implements AutoCloseable {
         }
         // Nothing matched -> fall back rather than render an all-black crop.
         return out.isEmpty() ? display.selectedChannels() : out;
+    }
+
+    /**
+     * Does this display channel correspond to the image channel named {@code want}?
+     *
+     * <p>Match {@code getOriginalChannelName()} FIRST. {@code getName()} decorates
+     * the channel name with its index -- {@code DirectServerChannelInfo} returns
+     * "3_SYTOX (C3)" where the server metadata says "3_SYTOX" -- so comparing
+     * against getName() never matches, selectChannels() finds nothing, and the
+     * crop silently falls back to the viewer's channels. That is exactly the bug
+     * where ticking "Use per-cluster channels" appeared to do nothing at all.
+     *
+     * <p>getOriginalChannelName() is declared on DirectServerChannelInfo, not on
+     * the ChannelDisplayInfo interface, hence the instanceof. getName() is still
+     * tried as a fallback for channel types that are not server-backed.
+     */
+    private static boolean matchesChannel(ChannelDisplayInfo info, String want) {
+        if (info instanceof DirectServerChannelInfo direct) {
+            String original = direct.getOriginalChannelName();
+            if (original != null && want.equalsIgnoreCase(original)) {
+                return true;
+            }
+        }
+        String name = info.getName();
+        if (name == null) return false;
+        if (want.equalsIgnoreCase(name)) return true;
+        // "3_SYTOX (C3)" -> "3_SYTOX", for any implementation that decorates the
+        // same way without exposing the undecorated name.
+        int paren = name.lastIndexOf(" (C");
+        return paren > 0 && want.equalsIgnoreCase(name.substring(0, paren));
     }
 
     private ImageDisplay resolveDisplay(CellRef ref, ImageServer<BufferedImage> server) {
