@@ -705,7 +705,7 @@ public class RepresentativeGalleryPanel extends VBox {
             }
             if (crops.isEmpty()) continue;
 
-            BufferedImage montage = composeHorizontal(crops);
+            BufferedImage montage = composeHorizontal(crops, channelsForCluster(c));
             File out = new File(outDir, "cluster_" + c + "_representatives.png");
             try {
                 ImageIO.write(montage, "png", out);
@@ -716,12 +716,40 @@ public class RepresentativeGalleryPanel extends VBox {
         }
 
         final int count = written;
-        Platform.runLater(() -> Dialogs.showInfoNotification("QP-CAT",
-                "Wrote " + count + " cluster montage(s) to " + outDir.getAbsolutePath()));
+        Platform.runLater(() -> ExportLocation.announce(outDir,
+                count + " cluster montage(s)"
+                + (perClusterChannels ? " and WARNING.txt" : "")));
     }
 
     /** Horizontal strip of crops with a small gutter, top-aligned. */
-    private static BufferedImage composeHorizontal(List<BufferedImage> crops) {
+    private BufferedImage composeHorizontal(List<BufferedImage> crops, List<String> legend) {
+        java.util.LinkedHashMap<String, java.awt.Color> awt = new java.util.LinkedHashMap<>();
+        if (legend != null) {
+            for (String name : legend) {
+                Color fx = channelColors.get(name);
+                awt.put(name, fx == null ? java.awt.Color.GRAY
+                        : new java.awt.Color((float) fx.getRed(), (float) fx.getGreen(),
+                                (float) fx.getBlue()));
+            }
+        }
+        String fixed = (perClusterChannels && !NO_FIXED_CHANNEL.equals(fixedChannel))
+                ? fixedChannel : null;
+        return compose(crops, legend, awt, isFluorescence(), fixed);
+    }
+
+    /**
+     * Compose one cluster's crops into a montage.
+     *
+     * <p>Static and fully parameterised so the geometry can be tested: the
+     * centring and the background are the parts a reader notices and the parts
+     * no unit test would otherwise cover.
+     *
+     * @param dark  render for fluorescence (black ground) rather than brightfield
+     * @param fixed the fixed channel to mark in the legend, or null
+     */
+    static BufferedImage compose(List<BufferedImage> crops, List<String> legend,
+                                 java.util.Map<String, java.awt.Color> legendColors,
+                                 boolean dark, String fixed) {
         int gutter = 4;
         int maxH = 0;
         int totalW = 0;
@@ -730,18 +758,78 @@ public class RepresentativeGalleryPanel extends VBox {
             totalW += c.getWidth() + gutter;
         }
         totalW = Math.max(1, totalW - gutter);
-        BufferedImage montage = new BufferedImage(totalW, Math.max(1, maxH),
+        maxH = Math.max(1, maxH);
+
+        // Fluorescence reads against black: a white gutter around dark crops is
+        // a bright frame drawn around the data, and the ragged edge left by
+        // crops of differing heights is exactly what makes the export look odd.
+        java.awt.Color bg = dark ? java.awt.Color.BLACK : java.awt.Color.WHITE;
+        java.awt.Color fg = dark ? java.awt.Color.WHITE : java.awt.Color.DARK_GRAY;
+
+        int legendW = (legend == null || legend.isEmpty()) ? 0 : LEGEND_EXPORT_WIDTH;
+        BufferedImage montage = new BufferedImage(totalW + legendW, maxH,
                 BufferedImage.TYPE_INT_RGB);
         Graphics2D g = montage.createGraphics();
-        g.setColor(java.awt.Color.WHITE);
-        g.fillRect(0, 0, totalW, maxH);
+        g.setColor(bg);
+        g.fillRect(0, 0, totalW + legendW, maxH);
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+
         int x = 0;
         for (BufferedImage c : crops) {
-            g.drawImage(c, x, 0, null);
+            // Centre vertically. Top-aligning crops of different heights is the
+            // other half of the ragged-edge problem.
+            g.drawImage(c, x, (maxH - c.getHeight()) / 2, null);
             x += c.getWidth() + gutter;
+        }
+        if (legendW > 0) {
+            drawExportLegend(g, legend, legendColors, totalW + 8, maxH, fg, fixed);
         }
         g.dispose();
         return montage;
+    }
+
+    /** Width reserved for the legend column in an exported montage. */
+    private static final int LEGEND_EXPORT_WIDTH = 150;
+
+    /**
+     * Draw the channel legend into an exported montage.
+     *
+     * <p>The on-screen legend is part of the JavaFX scene and does not survive
+     * export, so a saved PNG used to carry no indication of which channels it
+     * was drawn in -- the one thing a reader needs, given every cluster is drawn
+     * in different ones.
+     */
+    private static void drawExportLegend(Graphics2D g, List<String> legend,
+                                         java.util.Map<String, java.awt.Color> colors,
+                                         int x, int height, java.awt.Color fg, String fixed) {
+        int rowH = 18;
+        int y = Math.max(14, (height - legend.size() * rowH) / 2);
+        g.setFont(g.getFont().deriveFont(11f));
+        for (String name : legend) {
+            java.awt.Color chip = colors == null ? null : colors.get(name);
+            g.setColor(chip == null ? java.awt.Color.GRAY : chip);
+            g.fillRect(x, y - 9, 11, 11);
+            g.setColor(fg);
+            g.drawRect(x, y - 9, 11, 11);
+            g.drawString(name.equals(fixed) ? name + " (fixed)" : name, x + 17, y);
+            y += rowH;
+        }
+    }
+
+    /**
+     * Is the open image fluorescence (as opposed to RGB brightfield)?
+     *
+     * <p>Only affects export cosmetics, so any failure answers "not
+     * fluorescence" and keeps the previous white background.
+     */
+    private boolean isFluorescence() {
+        try {
+            var data = qupath == null ? null : qupath.getImageData();
+            return data != null && !data.getServer().isRGB();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**

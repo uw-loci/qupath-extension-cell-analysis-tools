@@ -126,7 +126,7 @@ public final class SpatialStatsSummaryDialog {
         if (file == null) return;
         try {
             Files.writeString(file.toPath(), PostHocSpatialWorkflow.buildCsv(results));
-            Dialogs.showInfoNotification("QP-CAT", "Saved: " + file.getName());
+            ExportLocation.announce(file.getParentFile(), file.getName());
         } catch (IOException ex) {
             logger.error("Failed to write spatial stats CSV", ex);
             Dialogs.showErrorNotification("QP-CAT", "Could not write CSV: " + ex.getMessage());

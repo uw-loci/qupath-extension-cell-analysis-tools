@@ -19,10 +19,40 @@ public final class QpcatPreferences {
     private static final String CATEGORY_PHENOTYPING = "QP-CAT: Run Phenotyping";
     private static final String CATEGORY_LLM = "QP-CAT: [Experimental] LLM Cluster Explainer";
     private static final String CATEGORY_GENERAL = "QP-CAT";
+    private static final String CATEGORY_ENV = "QP-CAT: Python environment";
 
     private QpcatPreferences() {}
 
     // ==================== Autoencoder Training ====================
+
+    // ==================== Python environment ====================
+    //
+    // DUPLICATED ACROSS THE APPOSE EXTENSIONS. The same two preferences and the
+    // same ApposeEnvLocation helper exist in qupath-extension-cellAPpose,
+    // -dl-pixel-classifier, -ppm and -fiber-analysis. There is no shared library
+    // yet (see claude-reports/TODO_LIST.md, "shared Appose env-location
+    // library"), so a change here must be made in all five or they diverge --
+    // which is how the bug-reporter triplication produced one privacy defect in
+    // three places at once. Keep the keys spelled the same except for the
+    // extension prefix.
+
+    /**
+     * Base directory the Appose environment is built under, or blank for the
+     * Appose default ({@code ~/.local/share/appose}). Configurable because that
+     * default sits under the home-directory quota on managed and HPC machines,
+     * where a multi-gigabyte env fails with "Quota exceeded (os error 122)".
+     * Reported in issue #15.
+     */
+    private static final StringProperty envBaseDir = PathPrefs.createPersistentPreference(
+            "qpcat.env.baseDir", "");
+
+    /**
+     * Which bundled environment to install: {@code CPU} or {@code GPU}. See
+     * {@link qupath.ext.qpcat.model.ComputeVariant} for why this cannot be one
+     * environment that simply uses a GPU when present.
+     */
+    private static final StringProperty envVariant = PathPrefs.createPersistentPreference(
+            "qpcat.env.variant", "CPU");
 
     private static final IntegerProperty aeLatentDim = PathPrefs.createPersistentPreference(
             "qpcat.ae.latentDim", 16);
@@ -297,6 +327,15 @@ public final class QpcatPreferences {
             "qpcat.service.shutdownTimeoutMs", 5000);
 
     // ==================== Getters / Setters ====================
+
+    /** Base dir for the Appose env, or "" for the Appose default. */
+    public static String getEnvBaseDir() { return envBaseDir.get(); }
+    public static void setEnvBaseDir(String v) { envBaseDir.set(v == null ? "" : v.strip()); }
+    public static StringProperty envBaseDirProperty() { return envBaseDir; }
+
+    /** Selected environment variant id ("CPU" or "GPU"). */
+    public static String getEnvVariant() { return envVariant.get(); }
+    public static void setEnvVariant(String v) { envVariant.set(v); }
 
     public static int getAeLatentDim() { return aeLatentDim.get(); }
     public static void setAeLatentDim(int v) { aeLatentDim.set(v); }
@@ -666,6 +705,36 @@ public final class QpcatPreferences {
                         + "recolor instantly, and PNG regeneration costs a short Python "
                         + "round-trip. You can always regenerate on demand with the "
                         + "'Regenerate static plots' button."))
+                .build());
+
+        // --- Python environment ---
+
+        items.add(new PropertyItemBuilder<>(envBaseDir, String.class)
+                .name("Environment location")
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(
+                        "Directory the Python environment is built under. Leave blank for the "
+                        + "default (~/.local/share/appose), which is right for most machines.\n\n"
+                        + "Set this when the home directory is quota-limited -- on HPC and "
+                        + "managed desktops a multi-gigabyte environment fails there with "
+                        + "'Quota exceeded (os error 122)'. Point it at scratch or project "
+                        + "storage instead.\n\n"
+                        + "Changing this builds a NEW environment; the old one is left in place "
+                        + "and QP-CAT offers to remove it only after the new one works."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(envVariant, String.class)
+                .name("Compute variant (CPU or GPU)")
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(
+                        "Which environment to install: 'CPU' (default, installs anywhere) or "
+                        + "'GPU' (CUDA, and REQUIRES an NVIDIA GPU -- it cannot be installed "
+                        + "without one).\n\n"
+                        + "These cannot be one environment: a lockfile pins exact package "
+                        + "builds, and a CPU build of PyTorch cannot use a GPU. Today only the "
+                        + "autoencoder benefits; see documentation/GPU_ACCELERATION.md for "
+                        + "what is and is not accelerated.\n\n"
+                        + "Switching builds a separate environment and re-downloads several GB."))
                 .build());
 
         // --- Spatial Statistics Expansion (v1) ---

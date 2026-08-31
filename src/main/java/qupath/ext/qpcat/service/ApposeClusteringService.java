@@ -33,7 +33,6 @@ public class ApposeClusteringService {
     private static final Logger logger = LoggerFactory.getLogger(ApposeClusteringService.class);
 
     private static final String RESOURCE_BASE = "qupath/ext/qpcat/";
-    private static final String PIXI_TOML_RESOURCE = RESOURCE_BASE + "pixi.toml";
     // Bundled lockfile pinning the FULL transitive dependency tree (all 4
     // platforms). We do NOT pass --frozen (see initialize() for why); instead
     // syncManifest() stages this lock next to the manifest it was generated
@@ -43,9 +42,33 @@ public class ApposeClusteringService {
     // pkg_resources-less 81.x. That equivalence holds only while the two files
     // stay in step: regenerate via tools/regen-pixi-lock.sh whenever pixi.toml
     // changes, and commit both together.
-    private static final String PIXI_LOCK_RESOURCE = RESOURCE_BASE + "pixi.lock";
     private static final String SCRIPTS_BASE = RESOURCE_BASE + "scripts/";
+    /**
+     * Default environment name. The ACTUAL name and manifest come from the
+     * selected {@link qupath.ext.qpcat.model.ComputeVariant}, so the CPU and
+     * GPU environments live side by side and switching does not overwrite
+     * either. Kept for the default case and for older callers.
+     */
     private static final String ENV_NAME = "qupath-qpcat";
+
+    /**
+     * The configured environment directory, or null to let Appose use its own
+     * default root. Kept next to {@link #getEnvironmentPath()} so the reported
+     * path and the built path cannot drift apart.
+     */
+    private static Path configuredEnvDir() {
+        String base = qupath.ext.qpcat.preferences.QpcatPreferences.getEnvBaseDir();
+        if (base == null || base.isBlank()) {
+            return null;
+        }
+        return ApposeEnvLocation.resolve(base, variant().envName());
+    }
+
+    /** The variant the user has selected (CPU unless they chose otherwise). */
+    private static qupath.ext.qpcat.model.ComputeVariant variant() {
+        return qupath.ext.qpcat.model.ComputeVariant.fromId(
+                qupath.ext.qpcat.preferences.QpcatPreferences.getEnvVariant());
+    }
 
     /**
      * Expected environment version. Must match ENVIRONMENT_VERSION in init_services.py
@@ -152,7 +175,7 @@ public class ApposeClusteringService {
             if (!Files.exists(pixiTomlFile)) return false;
             if (!Files.isDirectory(envDir.resolve(".pixi"))) return false;
 
-            String expected = loadResource(PIXI_TOML_RESOURCE);
+            String expected = loadResource(RESOURCE_BASE + variant().tomlResource());
             String existing = Files.readString(pixiTomlFile, StandardCharsets.UTF_8);
             return !existing.replace("\r\n", "\n").strip()
                     .equals(expected.replace("\r\n", "\n").strip());
@@ -166,8 +189,9 @@ public class ApposeClusteringService {
         if (svc != null && svc.environment != null) {
             return Path.of(svc.environment.base());
         }
-        return Path.of(System.getProperty("user.home"),
-                ".local", "share", "appose", ENV_NAME);
+        return ApposeEnvLocation.resolve(
+                qupath.ext.qpcat.preferences.QpcatPreferences.getEnvBaseDir(),
+                variant().envName());
     }
 
     /**
@@ -187,8 +211,11 @@ public class ApposeClusteringService {
             report(statusCallback, "Loading environment configuration...");
             logger.info("Initializing QPCAT Appose environment...");
 
-            String pixiToml = loadResource(PIXI_TOML_RESOURCE);
-            String pixiLock = loadResource(PIXI_LOCK_RESOURCE);
+            // Manifest AND lock come from the same variant, so they can never
+            // be paired wrongly (lockResource() is derived from tomlResource()).
+            var computeVariant = variant();
+            String pixiToml = loadResource(RESOURCE_BASE + computeVariant.tomlResource());
+            String pixiLock = loadResource(RESOURCE_BASE + computeVariant.lockResource());
 
             // TCCL must be set for all Appose operations
             ClassLoader original = Thread.currentThread().getContextClassLoader();
@@ -215,7 +242,7 @@ public class ApposeClusteringService {
                 var builder = Appose.pixi()
                         .content(pixiToml)
                         .scheme("pixi.toml")
-                        .name(ENV_NAME)
+                        .name(computeVariant.envName())
                         .logDebug()
                         .subscribeOutput(msg -> logger.info("[pixi] {}", msg))
                         .subscribeError(msg -> logger.warn("[pixi] {}", msg));
@@ -224,6 +251,20 @@ public class ApposeClusteringService {
                 if (statusCallback != null) {
                     builder.subscribeProgress((msg, step, numSteps) ->
                             report(statusCallback, msg));
+                }
+
+                // Builder.base() overrides name(), so pass the FULL
+                // <base>/<envName> directory -- the same path getEnvironmentPath()
+                // reports and syncManifest() already staged the manifest into.
+                // Without this the preference would move where we say the
+                // environment is while Appose kept building somewhere else, and
+                // the staged lock would never be read.
+                Path configuredDir = configuredEnvDir();
+                if (configuredDir != null) {
+                    Files.createDirectories(configuredDir);
+                    builder.base(configuredDir.toFile());
+                    logger.info("Building the environment at the configured location: {}",
+                            configuredDir);
                 }
 
                 environment = builder.build();

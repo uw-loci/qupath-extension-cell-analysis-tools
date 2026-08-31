@@ -380,9 +380,9 @@ public class ClusterCompositionPanel extends BorderPane {
                 n++;
             }
 
-            Dialogs.showInfoNotification("QPCAT", String.format(
-                    "Wrote %s.png, %s.csv and %d individual %s (plus legend.png) to %s",
-                    base, base, n, n == 1 ? "pie" : "pies", dir.getName()));
+            ExportLocation.announce(dir, String.format(
+                    "%s.png, %s.csv and %d individual %s (plus legend.png)",
+                    base, base, n, n == 1 ? "pie" : "pies"));
         } catch (Exception e) {
             Dialogs.showErrorNotification("QPCAT",
                     "Could not write composition export: " + e.getMessage());

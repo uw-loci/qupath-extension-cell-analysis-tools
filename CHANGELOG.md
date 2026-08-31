@@ -6,6 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Added
+
+- **The Python environment location is configurable**
+  ([#15](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/15)).
+  **Edit > Preferences > QP-CAT: Python environment > Environment location**. Appose
+  defaults to `~/.local/share/appose`, which on HPC and managed desktops sits under a
+  home-directory quota, so a multi-gigabyte install dies with `Quota exceeded (os error
+  122)` and the extension cannot be used at all. Reported by @mikemcka while deploying on
+  a cluster. Changing it builds a NEW environment and leaves the old one alone; QP-CAT
+  offers to remove the old one only **after** the new one is built and verified, and only
+  by asking -- never automatically, since the old environment is the only working one
+  until the new one is proven and the directory may not be ours to delete.
+- **CPU and GPU environment variants**, selected in the same preference group. These
+  cannot be one environment: a lockfile pins exact package builds, a CPU build of PyTorch
+  cannot use a GPU, and pixi validates the `__cuda` virtual package on EVERY install --
+  so a CUDA-pinned environment does not merely run slowly on a machine without an NVIDIA
+  GPU, **it refuses to start**. CPU is the default because it works everywhere. New
+  [`documentation/GPU_ACCELERATION.md`](documentation/GPU_ACCELERATION.md) says plainly
+  what is accelerated: today, only the autoencoder. If your work is clustering and spatial
+  statistics, stay on CPU -- the GPU variant costs a several-GB download and buys nothing.
+
+### Changed
+
+- **`spatialdata` and `zarr` are pinned** (`>=0.4`, `>=2.18,<3`). A fresh re-solve drifts
+  to zarr 3, which removed `zarr.storage.BaseStore` -- imported at load time by
+  `multiscale_spatial_image` (squidpy -> spatialdata), so `import squidpy` dies. Diagnosed
+  by @mikemcka; the same class of failure as the squidpy 1.6.6 -> 1.5.0 downgrade a loose
+  floor allowed here previously.
+
 ## [0.11.2] -- 2026-08-30 -- read each cluster in the channels that define it
 
 ### Fixed

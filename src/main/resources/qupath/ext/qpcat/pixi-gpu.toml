@@ -2,6 +2,13 @@
 channels = ["conda-forge"]
 platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
 
+# CUDA steering. This is the GPU variant: pixi validates the __cuda virtual
+# package on EVERY install, so this manifest CANNOT install on a machine
+# without an NVIDIA GPU -- which is exactly why the CPU variant exists and is
+# the default. See documentation/GPU_ACCELERATION.md.
+[system-requirements]
+cuda = "12"
+
 [dependencies]
 python = "3.11.*"
 # setuptools provides pkg_resources, which xarray_schema (transitive dep of
@@ -25,18 +32,19 @@ matplotlib-base = ">=3.7"
 h5py = ">=3.0"
 # pyproj via conda-forge (includes PROJ C library; pip build fails on macOS)
 pyproj = ">=3.6"
-# PyTorch + torchvision via conda-forge. Deliberately NOT pinned to a CPU or a
-# CUDA build, and there is no [system-requirements] cuda entry: pixi validates
-# the __cuda virtual package on EVERY `pixi install` -- which is every QuPath
-# launch -- so requiring CUDA meant the environment could not even START on a
-# machine without an NVIDIA GPU, let alone run slowly. Reported from an HPC
-# deployment (issue #15). Pinning build="cpu*" instead would fix that by taking
-# the GPU away from everyone who has one; the autoencoder uses CUDA when it is
-# there, and README's own table calls a GPU "Required" for 64x64 tile mode.
-# Unconstrained, the solver picks what the platform can actually support.
+# PyTorch + torchvision. Left unconstrained on build: the CUDA steering above
+# is what makes the solver choose CUDA variants here.
 pytorch = ">=2.0.0"
 torchvision = ">=0.15.0"
 pillow = ">=10.0"
+
+# pytorch-gpu steers the resolver to CUDA variants. Only exists for linux-64
+# and win-64; macOS uses MPS through the plain pytorch build.
+[target.linux-64.dependencies]
+pytorch-gpu = ">=2.0.0"
+
+[target.win-64.dependencies]
+pytorch-gpu = ">=2.0.0"
 
 [pypi-dependencies]
 scanpy = ">=1.10"
