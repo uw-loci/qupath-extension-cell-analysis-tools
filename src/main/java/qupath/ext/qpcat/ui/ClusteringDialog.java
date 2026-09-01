@@ -24,6 +24,7 @@ import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.RunCostSummary;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.service.ImageDataResources;
@@ -150,6 +151,11 @@ public class ClusteringDialog {
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
     private CheckBox pcaPrecursorCheck;
+
+    // Live "what this run trades" line, refreshed whenever a cost-bearing option
+    // changes. Sits directly above the Run button so it is the last thing read
+    // before committing -- see model/RunCostSummary.
+    private Label runCostLabel;
     private CheckBox batchCorrectionCheck;
     private ComboBox<String> batchKeyCombo;
 
@@ -278,10 +284,26 @@ public class ClusteringDialog {
                 createConfigSection()
         );
 
+        // The pre-run cost line. QP-CAT already estimates the spatial-statistics
+        // time before committing to it; this covers the rest of the settings that
+        // are not free, so the trades are visible at the moment of pressing Run
+        // rather than only in the tooltips of the controls that caused them.
+        runCostLabel = new Label();
+        runCostLabel.setWrapText(true);
+        runCostLabel.setStyle("-fx-font-size: 11px;");
+        refreshRunCostLabel();
+        pcaPrecursorCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        spatialSmoothingCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        spatialAnalysisCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        embeddingModeCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        embeddingCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        algorithmCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
         content.setPrefWidth(550);
-        content.getChildren().addAll(settingsBox, new Separator(), createStatusSection());
+        content.getChildren().addAll(
+                settingsBox, new Separator(), runCostLabel, createStatusSection());
 
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
@@ -756,7 +778,8 @@ public class ClusteringDialog {
                 + "Powered by squidpy (Palla et al. 2022, Nature Methods).\n"
                 + "See documentation/REFERENCES.md for citations."));
 
-        spatialSmoothingCheck = new CheckBox("Spatial feature smoothing");
+        spatialSmoothingCheck = new CheckBox(
+                "Spatial feature smoothing (slower; not comparable to runs without it)");
         spatialSmoothingCheck.setSelected(false);
         spatialSmoothingCheck.setTooltip(Tooltips.of(
                 "Smooth features using spatial neighbors before clustering.\n"
@@ -788,7 +811,12 @@ public class ClusteringDialog {
         // OFF by default. It is a real speed-up on wide panels, but it changes
         // cluster labels, so it has to be a decision the user makes before a run
         // rather than something that arrives switched on.
-        pcaPrecursorCheck = new CheckBox("Reduce features with PCA before clustering (faster; changes labels)");
+        // The parenthetical names the trade, following the convention the embedding
+        // mode combo already uses. It says "not comparable to runs without it",
+        // NOT "layout varies": the precursor is seeded and fully repeatable. The
+        // two costs are different and must not be worded as if they were the same.
+        pcaPrecursorCheck = new CheckBox(
+                "Reduce features with PCA before clustering (faster; not comparable to runs without it)");
         pcaPrecursorCheck.setSelected(false);
         pcaPrecursorCheck.setTooltip(Tooltips.of(
                 "OFF by default -- tick it before running if you want it.\n\n"
@@ -798,9 +826,12 @@ public class ClusteringDialog {
                 + "and usually less noisy; on an ordinary panel it does nothing at all,\n"
                 + "because it only engages when there are more features than the\n"
                 + "component count. BANKSY runs its own PCA and is never affected.\n\n"
-                + "TRADE-OFF: it CHANGES cluster labels. A run with it on and a run\n"
-                + "with it off are not comparable, so pick one per study. Every run\n"
-                + "records what it did, in the operation log and in RUN_INFO.txt.\n\n"
+                + "REPEATABLE: the same cells, settings and seed give the same clusters\n"
+                + "every time. This does NOT make a run non-reproducible.\n\n"
+                + "WHAT IT COSTS: the clusters differ from those of the same run with\n"
+                + "this off, so the two are not comparable -- choose one per study\n"
+                + "rather than per run. Every run records which it used, in the\n"
+                + "operation log and in RUN_INFO.txt.\n\n"
                 + "Marker rankings, the heatmap and the cluster means always use your\n"
                 + "original measurements, so cluster identities stay interpretable.\n"
                 + "Component count: QP-CAT preferences, 'PCA Precursor Components'."));
@@ -2701,6 +2732,38 @@ public class ClusteringDialog {
      * them, or cancel the whole run. Called from the workflow's background
      * thread; shows a modal dialog on the FX thread and blocks for the choice.
      */
+    /**
+     * The run's non-spatial costs, for the spatial-estimate prompt. Empty when
+     * there are none -- the prompt should not grow a heading with nothing under it.
+     */
+    private String otherRunCosts() {
+        try {
+            java.util.List<String> costs = RunCostSummary.describe(buildConfig());
+            costs.removeIf(c -> c.startsWith("Spatial statistics"));
+            if (costs.isEmpty()) {
+                return "";
+            }
+            return "Also set for this run:\n  - " + String.join("\n  - ", costs) + "\n";
+        } catch (RuntimeException e) {
+            logger.debug("Could not summarise run costs for the prompt: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    /** Recompute the pre-run cost line from the current control state. */
+    private void refreshRunCostLabel() {
+        if (runCostLabel == null) {
+            return;
+        }
+        try {
+            runCostLabel.setText(RunCostSummary.describeLine(buildConfig()));
+        } catch (RuntimeException e) {
+            // The dialog is still assembling, or a control is mid-edit. A cost
+            // line is advisory; never let it break the dialog.
+            logger.debug("Could not refresh the run cost line: {}", e.getMessage());
+        }
+    }
+
     private ClusteringWorkflow.SpatialDecision askSpatialEstimate(Double estimateSeconds) {
         // Don't interrupt a run to report a short wait. Below the threshold the
         // prompt is pure friction: the user reads "42 seconds" and clicks Run.
@@ -2726,7 +2789,8 @@ public class ClusteringDialog {
                         + "counts. You can run them, skip them (clustering still completes), or "
                         + "cancel the whole run.\n\n"
                         + "You can also press Cancel at any time while it runs -- no measurements "
-                        + "are written unless the run finishes.\n\n";
+                        + "are written unless the run finishes.\n\n"
+                        + otherRunCosts() + "\n";
                 alert.setContentText(body + countdownLine(SPATIAL_PROMPT_TIMEOUT_SECONDS));
 
                 ButtonType run = new ButtonType("Run spatial stats", ButtonBar.ButtonData.OK_DONE);

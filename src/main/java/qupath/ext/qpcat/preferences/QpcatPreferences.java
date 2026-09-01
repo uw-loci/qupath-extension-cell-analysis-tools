@@ -755,8 +755,9 @@ public final class QpcatPreferences {
                         + "This count is also the threshold at which it does anything: with "
                         + "fewer features than this, clustering uses the full matrix. "
                         + "Clamped to below the feature and cell counts. More components "
-                        + "retain more variance and reduce the speed-up. Changing this changes "
-                        + "cluster labels, so runs record what they used."))
+                        + "retain more variance and reduce the speed-up. Runs stay repeatable "
+                        + "either way, but changing this changes the resulting clusters, so runs "
+                        + "record the count they used."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterPlotMaxFeatures, Integer.class)

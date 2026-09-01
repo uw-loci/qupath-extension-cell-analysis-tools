@@ -226,11 +226,13 @@ cluster on those.
   **original measurements**, so cluster identities stay interpretable. Only the embedding and the
   clustering algorithm see the components.
 
-> **It changes cluster labels**, which is why it is off unless you ask for it. Every run records
-> what it did -- the operation log, the Workflow tab entry, and the `PCA precursor` line in
+> **It is repeatable, but it is not comparable.** The same cells, settings and seed give the same
+> clusters every time -- this does not make a run non-reproducible. What it changes is the result
+> relative to the *same run with the option off*: those two are **not comparable**, so choose once
+> per study rather than per run. That is why it is off unless you ask for it. Every run records
+> which it used -- the operation log, the Workflow tab entry, and the `PCA precursor` line in
 > `RUN_INFO.txt` -- and loading a config saved before this option existed leaves it off, so those
-> runs still reproduce exactly. Two runs that differ only in this setting are **not comparable**,
-> so choose once per study rather than per run.
+> runs still reproduce exactly.
 
 ### Why some plots show fewer features than you selected
 
@@ -2354,7 +2356,9 @@ large, a prompt appears with the number and a one-minute countdown. Computation 
 started when you see it, and continues if you do nothing, so an unattended run is never blocked
 by that dialog.
 
-### Costs reproducibility
+### Costs reproducibility -- identical runs can differ
+
+This is the only group where running the same thing twice can give you a different answer.
 
 | Setting | Where | Effect |
 |---|---|---|
@@ -2363,11 +2367,15 @@ by that dialog.
 The run records which path it took, so a layout that is not bit-reproducible is never silently
 non-reproducible. See [Reproducing a clustering run](#23-reproducing-a-clustering-run).
 
-### Costs comparability between runs
+### Costs comparability -- repeatable, but different from runs without it
+
+Everything here is seeded and fully repeatable: the same cells, settings and seed give the same
+answer every time. What changes is the result *relative to the same run with the option off*.
+That is a different cost from the group above, and worth keeping separate in your head.
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Reduce features with PCA before clustering** | Run Clustering > Analysis | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. **It changes cluster labels** -- see [the full description](#2-running-clustering). |
+| **Reduce features with PCA before clustering** | Run Clustering > Analysis | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. Repeatable, but the clusters differ from the same run with it off -- see [the full description](#2-running-clustering). |
 | **Spatial feature smoothing** | Run Clustering > Analysis | Adds a graph-convolution pre-step. Changes the feature matrix every algorithm then sees. |
 | **MiniBatch KMeans** instead of KMeans | Run Clustering > Algorithm | Much faster on large cohorts, at some cost in cluster quality. |
 | **BANKSY PCA dimensions** | Preferences | Fewer dimensions is faster and retains less variance. |
