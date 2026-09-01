@@ -92,17 +92,17 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `louvain`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `skip`. Case-insensitive. |
+| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (logged as a warning). An unrecognised value is an error -- it is no longer silently run as Leiden. |
 | `mode` | string | `run` | `run` (run a new clustering) or `reuse_saved` (skip clustering; attach `saved_result_name`). |
 | `saved_result_name` | string | -- | Required when `mode: reuse_saved`. |
 | `resolution` | double | `1.0` | Leiden / Louvain only. Range `(0, 10]`. |
 | `k` | int | `10` | KMeans / MiniBatch KMeans only. Range `[2, 200]`. |
-| `n_clusters` | int | `10` | Agglomerative / GMM only. |
+| `n_clusters` | int | `10` | Agglomerative / GMM only (written as `n_components` for GMM, which is what the script reads). |
 | `min_cluster_size` | int | `15` | HDBSCAN only. Matches the dialog default; smaller = more clusters, also more noise rows. |
 | `linkage` | string | `ward` | Agglomerative only. `ward`, `complete`, `average`, `single`. |
 | `banksy_lambda` | double | `0.2` | BANKSY only. |
 | `banksy_k_geom` | int | `15` | BANKSY only. |
-| `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile_99`, `log1p`. |
+| `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99`. `log1p` is accepted but **not implemented** -- it runs z-score and logs a warning; there is no log transform. |
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
 | `umap_min_dist` | double | `0.1` | UMAP only. |

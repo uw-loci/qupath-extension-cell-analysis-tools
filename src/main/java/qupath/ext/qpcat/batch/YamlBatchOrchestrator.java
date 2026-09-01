@@ -636,15 +636,25 @@ public final class YamlBatchOrchestrator {
         ClusteringConfig config = new ClusteringConfig();
         // Algorithm
         String type = cc.getType() == null ? "leiden" : cc.getType().toLowerCase(Locale.ROOT);
-        config.setAlgorithm(parseAlgorithm(type));
+        // Parameter names must match what run_clustering.py READS and what the
+        // dialog writes. A name only the orchestrator uses is silently ignored by
+        // the script, which then falls back to its own default -- the run
+        // succeeds and reports a number the user never asked for.
+        ClusteringConfig.Algorithm algorithm = parseAlgorithm(type);
+        config.setAlgorithm(algorithm);
         Map<String, Object> algoParams = new LinkedHashMap<>();
         if (cc.getResolution() != null) algoParams.put("resolution", cc.getResolution());
-        if (cc.getK() != null) algoParams.put("n_clusters", cc.getK());
-        if (cc.getNClusters() != null) algoParams.put("n_clusters", cc.getNClusters());
+        // GMM takes n_components; every other k-style algorithm takes n_clusters
+        // (run_clustering.py:773 vs :736/:757, matching ClusteringDialog).
+        String clusterCountKey =
+                algorithm == ClusteringConfig.Algorithm.GMM ? "n_components" : "n_clusters";
+        if (cc.getK() != null) algoParams.put(clusterCountKey, cc.getK());
+        if (cc.getNClusters() != null) algoParams.put(clusterCountKey, cc.getNClusters());
         if (cc.getMinClusterSize() != null) algoParams.put("min_cluster_size", cc.getMinClusterSize());
         if (cc.getLinkage() != null) algoParams.put("linkage", cc.getLinkage());
-        if (cc.getBanksyLambda() != null) algoParams.put("banksy_lambda", cc.getBanksyLambda());
-        if (cc.getBanksyKGeom() != null) algoParams.put("banksy_k_geom", cc.getBanksyKGeom());
+        // BANKSY reads lambda_param / k_geom (run_clustering.py:811-812).
+        if (cc.getBanksyLambda() != null) algoParams.put("lambda_param", cc.getBanksyLambda());
+        if (cc.getBanksyKGeom() != null) algoParams.put("k_geom", cc.getBanksyKGeom());
         if (cc.getRandomSeed() != null) algoParams.put("random_seed", cc.getRandomSeed());
         config.setAlgorithmParams(algoParams);
 
@@ -731,29 +741,86 @@ public final class YamlBatchOrchestrator {
         return config;
     }
 
+    /**
+     * Resolve a YAML {@code clustering.type} to an algorithm.
+     *
+     * <p>Never falls back silently. An unrecognised type used to return Leiden,
+     * so a batch asking for something else ran Leiden and reported success --
+     * and because the validator whitelists the spellings, the user had already
+     * been told the file was valid. {@code minibatch_kmeans} was exactly that
+     * case: accepted by the validator, absent from the enum ids, run as Leiden.
+     *
+     * @param id the YAML value, already lower-cased
+     * @return the matching algorithm
+     * @throws IllegalArgumentException if the type is not recognised
+     */
     private static ClusteringConfig.Algorithm parseAlgorithm(String id) {
         for (ClusteringConfig.Algorithm a : ClusteringConfig.Algorithm.values()) {
             if (a.getId().equalsIgnoreCase(id)) return a;
         }
-        // Accept "louvain" -> leiden (closest available v1 alg)
-        if ("louvain".equalsIgnoreCase(id)) return ClusteringConfig.Algorithm.LEIDEN;
-        return ClusteringConfig.Algorithm.LEIDEN;
+        // Documented spellings that differ from the enum id. Both are real
+        // substitutions, so both say so rather than happening quietly.
+        if ("minibatch_kmeans".equalsIgnoreCase(id)) {
+            return ClusteringConfig.Algorithm.MINIBATCHKMEANS;
+        }
+        if ("louvain".equalsIgnoreCase(id)) {
+            logger.warn("clustering.type 'louvain' is not implemented; running Leiden instead. "
+                    + "Set type: leiden to make that explicit.");
+            return ClusteringConfig.Algorithm.LEIDEN;
+        }
+        // "skip" is a validator-accepted type, but it means "do not cluster" and
+        // is handled upstream (the reuseSaved branch), so it never arrives here.
+        StringBuilder known = new StringBuilder();
+        for (ClusteringConfig.Algorithm a : ClusteringConfig.Algorithm.values()) {
+            if (known.length() > 0) known.append(", ");
+            known.append(a.getId());
+        }
+        throw new IllegalArgumentException(
+                "Unknown clustering.type '" + id + "'. Accepted: " + known
+                + ", minibatch_kmeans, louvain, skip.");
     }
 
+    /**
+     * Resolve a YAML {@code clustering.normalization}.
+     *
+     * @param id the YAML value
+     * @return the matching normalization
+     * @throws IllegalArgumentException if it is not recognised
+     */
     private static ClusteringConfig.Normalization parseNormalization(String id) {
         for (ClusteringConfig.Normalization n : ClusteringConfig.Normalization.values()) {
             if (n.getId().equalsIgnoreCase(id)) return n;
         }
+        // Alias for the same thing: PERCENTILE is p1-p99.
         if ("percentile_99".equalsIgnoreCase(id)) return ClusteringConfig.Normalization.PERCENTILE;
-        if ("log1p".equalsIgnoreCase(id)) return ClusteringConfig.Normalization.ZSCORE;
-        return ClusteringConfig.Normalization.ZSCORE;
+        if ("log1p".equalsIgnoreCase(id)) {
+            // A real substitution, not an alias: no log transform exists. Say so
+            // -- a run silently z-scored when the user asked for log1p produces
+            // different clusters and different marker means, and nothing else
+            // would tell them.
+            logger.warn("clustering.normalization 'log1p' is NOT implemented; this run uses "
+                    + "z-score instead. Results are z-scored, not log-transformed. "
+                    + "Set normalization: zscore to make that explicit.");
+            return ClusteringConfig.Normalization.ZSCORE;
+        }
+        throw new IllegalArgumentException(
+                "Unknown clustering.normalization '" + id
+                + "'. Accepted: zscore, minmax, percentile, percentile_99, none, log1p.");
     }
 
+    /**
+     * Resolve a YAML {@code clustering.embedding}.
+     *
+     * @param id the YAML value
+     * @return the matching embedding method
+     * @throws IllegalArgumentException if it is not recognised
+     */
     private static ClusteringConfig.EmbeddingMethod parseEmbedding(String id) {
         for (ClusteringConfig.EmbeddingMethod e : ClusteringConfig.EmbeddingMethod.values()) {
             if (e.getId().equalsIgnoreCase(id)) return e;
         }
-        return ClusteringConfig.EmbeddingMethod.UMAP;
+        throw new IllegalArgumentException(
+                "Unknown clustering.embedding '" + id + "'. Accepted: umap, pca, tsne, none.");
     }
 
     // ---------------- Figure export dispatch ----------------
