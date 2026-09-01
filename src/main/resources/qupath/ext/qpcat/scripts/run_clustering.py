@@ -383,7 +383,7 @@ if do_spatial_smoothing and has_spatial_coords:
             raise RuntimeError(
                 "spatial_stats module is not available -- the QP-CAT analysis "
                 "environment was not initialized with it. Rebuild the analysis "
-                "environment (Utilities > Rebuild) and try again."
+                "environment (Setup & help > Rebuild analysis environment) and try again."
             ) from _e
         adj_norm = build_smoothing_adjacency_squidpy(
             spatial_data,
@@ -407,7 +407,7 @@ if do_spatial_smoothing and has_spatial_coords:
             raise RuntimeError(
                 "spatial_stats module is not available -- the QP-CAT analysis "
                 "environment was not initialized with it. Rebuild the analysis "
-                "environment (Utilities > Rebuild) and try again."
+                "environment (Setup & help > Rebuild analysis environment) and try again."
             ) from _e
         adj_norm = build_smoothing_adjacency_sklearn(
             spatial_data, k=pref_spatial_knn, area_ids=area_ids_list
@@ -469,7 +469,7 @@ if do_batch and batch_labels_list is not None:
         # task script disagree about the env state - usually a stale install.
         raise RuntimeError(
             "Harmony batch correction is not available in this Python "
-            "environment. Use Utilities > Rebuild Clustering Environment "
+            "environment. Use Setup & help > Rebuild analysis environment "
             "to refresh, or uncheck 'Batch correction (Harmony)' to run "
             "without it. Underlying error: %s" % _hp_err
         )
@@ -802,7 +802,7 @@ elif algorithm == "banksy":
         raise RuntimeError(
             "spatial_stats module is not available -- the QP-CAT analysis "
             "environment was not initialized with it. Rebuild the analysis "
-            "environment (Utilities > Rebuild) and try again."
+            "environment (Setup & help > Rebuild analysis environment) and try again."
         ) from _e
 
     # float(), not int. run_Leiden_partition skips any lambda key that is not a
@@ -1343,7 +1343,7 @@ if has_spatial and n_clusters_found > 1:
         raise RuntimeError(
             "spatial_stats module is not available -- the QP-CAT analysis "
             "environment was not initialized with it. Rebuild the analysis "
-            "environment (Utilities > Rebuild) and try again."
+            "environment (Setup & help > Rebuild analysis environment) and try again."
         ) from _e
 
     adata.obsm["spatial"] = spatial_data

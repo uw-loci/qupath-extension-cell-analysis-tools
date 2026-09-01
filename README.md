@@ -281,7 +281,7 @@ Parameters:
 
 1. Open the QP-CAT Python log to see why pybanksy failed to import (Extensions > QP-CAT > Setup & help > System Info..., or check the QuPath log).
 2. Look for the line `pybanksy: <version>` or `pybanksy: NOT USABLE` in the startup messages.
-3. **Use Utilities > Rebuild Clustering Environment** to delete and re-create the pixi env from a clean slate. This re-resolves all dependencies and should produce a working pybanksy install.
+3. **Use Setup & help > Rebuild analysis environment** to delete and re-create the pixi env from a clean slate. This re-resolves all dependencies and should produce a working pybanksy install.
 4. If rebuild still fails, file a bug report with the full QuPath log attached.
 
 ### Spatial Feature Smoothing
@@ -627,9 +627,9 @@ All items are under **Extensions > QP-CAT**:
 | Manage Clusters... | Rename and merge cluster classifications | Image |
 | Export AnnData (.h5ad)... | Export data for external analysis tools | Image + detections |
 | Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [HOW_TO_GUIDE chapter 18](documentation/HOW_TO_GUIDE.md#18-exporting-figures) | Project + at least one saved clustering result |
-| Utilities > Python Console | View Python debug output | None |
-| Utilities > System Info... | Show version and environment details | Environment ready |
-| Utilities > Rebuild Environment | Delete and re-download Python environment | None |
+| Setup & help > Python Console | View Python debug output | None |
+| Setup & help > System Info... | Show version and environment details | Environment ready |
+| Setup & help > Rebuild analysis environment | Delete and re-download Python environment | None |
 
 </details>
 

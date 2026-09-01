@@ -58,9 +58,9 @@ Classify cells >
 --------
 Explore & spatial >
     Quick clustering presets >               one-click Leiden / KMeans / HDBSCAN / Delaunay
-    Map cells in 2D (UMAP / PCA / t-SNE)...               ch. 3
+    Map cells in 2D (UMAP / PCA / t-SNE)...               ch. 5
     Plot & gate cells (2D)...                             ch. 25
-    Find cellular neighborhoods (spatial niches)...       ch. 13
+    Find cellular neighborhoods (spatial niches)...       ch. 22
     Spatial statistics on existing clusters...            ch. 27
 Results & populations >
     View Past Results...                                  ch. 20
@@ -119,7 +119,7 @@ The setup dialog offers two options **before you download**:
 
 ### Troubleshooting setup failures
 
-**General failures:** Check your internet connection and disk space (~2.5 GB needed). Use **Utilities > Rebuild Clustering Environment** to start fresh.
+**General failures:** Check your internet connection and disk space (~2.5 GB needed). Use **Setup & help > Rebuild analysis environment** to start fresh.
 
 **Windows file-lock during install** (`failed to link ... os error 32 ... being used by another process`): another process is holding a file open inside the env directory. QP-CAT v0.3.4+ detects this and logs the full PowerShell recovery script -- check the QuPath log. Short version: close QuPath fully (kill leftover `java.exe` / `python.exe` in Task Manager), delete `%USERPROFILE%\.local\share\appose\qupath-qpcat\.pixi` and `pixi.lock`, optionally add `%USERPROFILE%\.local\share\appose\` as an AV exclusion, then relaunch. Reboot Windows if step 3 fails -- that releases every file handle.
 
@@ -148,11 +148,13 @@ Full clustering with all configuration options.
 7. **Algorithm** -- Choose a clustering method
    - **Leiden** is recommended for most use cases (auto-detects number of clusters)
    - Set algorithm-specific parameters (see [Parameter Reference](#algorithm-parameters) below)
-8. **Analysis options** -- Check boxes as needed:
-   - "Generate analysis plots" -- produces static PNGs (marker ranking, PAGA, dotplot)
-   - "Spatial analysis" -- computes neighborhood enrichment and Moran's I
-   - "Spatial feature smoothing" -- smooths features using spatial neighbors before clustering (see note below)
-   - "Batch correction" -- applies Harmony (only for multi-image scope)
+8. **Analysis options** (the untitled block below the algorithm section) -- tick as needed:
+   - "Generate analysis plots (marker ranking, PAGA, dotplot)" -- produces the static PNGs
+   - "Neighborhood enrichment + Moran's I" -- the two spatial statistics that run with clustering
+   - "Spatial feature smoothing" -- smooths features over spatial neighbours before clustering (see note below)
+   - "Reduce features with PCA before clustering" -- off by default; see [the description below](#reduce-features-with-pca-before-clustering)
+   - "Batch correction (Harmony)" -- enabled when the run spans several images **or** several
+     independent areas within one image; pick which with the **Batch key** dropdown beside it
 
 > **You do not need an image open.** With a project open, launch the dialog and
 > choose the images first -- QP-CAT reads their measurements directly, so the
@@ -187,7 +189,7 @@ Full clustering with all configuration options.
 > Apply saved result -- a one-time modal warns you that these tools overwrite the current
 > classifications of detections across every image the run covers. Duplicate your project
 > folder (e.g. to a zip) before continuing. The warning appears once; re-arm it from
-> **Edit > Preferences > QP-CAT** (General > "Backup Warning Acknowledged"). Read-only tools
+> **Edit > Preferences > QP-CAT > "Backup Warning Acknowledged"**. Read-only tools
 > (View Past Results, Spatial statistics, Compute Embedding, Apply palette) do not trigger it.
 
 > **Cells vs. detections.** If your hierarchy contains cell objects, QP-CAT analyzes only
@@ -255,6 +257,9 @@ One-click clustering with sensible defaults. Good for initial exploration.
    - **Quick Leiden (auto)** -- Leiden with n_neighbors=50, resolution=1.0, Z-score normalization, UMAP embedding
    - **Quick KMeans (k=10)** -- KMeans with 10 clusters
    - **Quick HDBSCAN (auto)** -- HDBSCAN with min_cluster_size=15
+   - **Quick Delaunay (Leiden + Delaunay smoothing)** -- Leiden on features smoothed over a
+     Delaunay graph, for when neighbourhood context should influence the clusters
+   - **Quick Delaunay (custom)...** -- the same, with the graph and smoothing parameters exposed
 3. Wait for the notification that clustering is complete
 4. Cell classifications are updated immediately
 
@@ -466,6 +471,7 @@ should treat it as new work rather than as a revival.
 
 ---
 
+<a name="10-explaining-clusters-with-an-llm-beta"></a>
 ## 10. Explaining Clusters with an LLM [Experimental]
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
@@ -782,7 +788,7 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
 5. **Cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
 6. **Configure class weights:**
    - **Per-class weight spinners**: Individual weight spinners appear for each detected class. Adjust to emphasize or de-emphasize specific cell types during training.
-   - **Auto-Balance button**: Click to automatically compute inverse-frequency weights based on the number of labeled cells per class. This is recommended when class populations are imbalanced (e.g., 5000 tumor cells but only 200 rare immune cells).
+   - **Auto-Balance Weights** button: Click to automatically compute inverse-frequency weights based on the number of labeled cells per class. This is recommended when class populations are imbalanced (e.g., 5000 tumor cells but only 200 rare immune cells).
 7. **Adjust training parameters** if desired (defaults work well for most cases):
    - Latent dimensions: 16 (how compressed the representation is; 8-32 typical)
    - Epochs: 100 (maximum training iterations; early stopping may stop sooner)
@@ -792,15 +798,15 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
    - Validation split: 0.2 (20% holdout for early stopping and best model selection)
    - Early stop patience: 15 (epochs without val improvement before stopping; 0 = disabled)
    - Class weighting: ON (handles imbalanced cell populations via inverse-frequency weights)
-   - Data augmentation: expand the collapsible **Augmentation** section to configure augmentation options (Gaussian noise + per-channel scaling for measurement mode). The section is collapsed by default to reduce dialog clutter.
-8. Click **Train on Current Image**
+   - Data augmentation: expand the collapsible **Advanced -- Augmentation** section to configure augmentation options (Gaussian noise + per-channel scaling for measurement mode). The section is collapsed by default to reduce dialog clutter.
+8. Click **Train on Selected Images**
 9. Review accuracy on labeled cells in the status bar
 
 ### Applying to Project
 
 After training on the current image:
 
-1. Click **Apply to All Project Images**
+1. Click **Apply to Checked Images**
 2. The trained model encodes each image's cells and assigns predicted labels
 3. For tile mode, tiles are read from each image's server automatically
 4. Results (labels + latent features + confidence) are saved per image
@@ -992,7 +998,7 @@ Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPAT
 
 ### Matplotlib PNG output
 
-When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplotlib PNGs** is enabled (the default), each spatial statistic that runs also writes a PNG alongside the existing clustering plots under `<project>/qpcat/results/<result_name>/`:
+When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplotlib PNGs** is enabled (the default), each spatial statistic that runs also writes a PNG alongside the existing clustering plots under `<project>/qpcat/cluster_results/<result_name>_plots/`:
 
 - `ripley_k_l.png` -- two-panel K and L plot with Poisson null overlays
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
@@ -1056,7 +1062,8 @@ For the **headless scripting API** (see [SCRIPTING.md](SCRIPTING.md#figureexport
 
 ### Exporting the composition figures
 
-The pie charts and composition table from the Results window's **Composition by image** / **Composition by annotation** tabs export like any other figure. Four plot kinds:
+The pie charts and composition tables from the Results window's Composition tabs export like any
+other figure. Eight plot kinds -- a pie/table pair for each of the four grouping axes:
 
 | Slug | Writes | Notes |
 |---|---|---|
@@ -1064,6 +1071,10 @@ The pie charts and composition table from the Results window's **Composition by 
 | `composition_table_image` | The per-image counts table | Always `.csv`, whatever raster format is ticked |
 | `composition_pie_annotation` | One pie per parent annotation | Off by default -- needs an annotation-input result |
 | `composition_table_annotation` | The per-annotation counts table | Always `.csv` |
+| `composition_pie_area` | One pie per independent area (TMA core, tissue section) | Off by default -- needs a run with area levels |
+| `composition_table_area` | The per-area counts table | Always `.csv` |
+| `composition_pie_class` | One pie per cell classification | Off by default |
+| `composition_table_class` | The per-class counts table | Always `.csv` |
 
 Three things differ from the per-image plots, all of them deliberate:
 
@@ -1098,7 +1109,7 @@ Available substitution variables:
 | Token | Expands to | Example |
 |---|---|---|
 | `{image}` | QuPath image name (filesystem-sanitised) | `Slide_07` |
-| `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
+| `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
 | `{result_name}` | Saved-result name from `ClusteringResultManager`, sanitised | `Leiden_res1.0_2026-05-13` |
 | `{date}` | YYYY-MM-DD date of export | `2026-05-13` |
 | `{ext}` | File extension matching the format (`png` or `tif`) | `png` |
@@ -1330,8 +1341,8 @@ other knobs are under **Advanced**. (Ranges below are typical starting points.)
 | early_exaggeration | 4-12 | 12 | How tightly groups pack during the initial phase. Higher pushes well-separated clusters apart; lower preserves more accurate embeddings. *(Advanced)* |
 | random seed | int | 42 | Seed for the embedding **and** the stochastic clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY); fix for reproducible layouts and cluster assignments. *(Advanced)* |
 
-> The t-SNE perplexity **default** comes from Preferences > QP-CAT > t-SNE
-> Perplexity; the per-run spinner overrides it for that run. PCA exposes no
+> The t-SNE perplexity **default** comes from Preferences > QP-CAT: Run
+> Clustering > t-SNE Perplexity; the per-run spinner overrides it for that run. PCA exposes no
 > parameters here (the embedding is always 2-D).
 
 ## 20. Results dialog reference
@@ -1583,17 +1594,20 @@ Cells plotted at their physical tissue coordinates (X / Y centroids), colored by
 
 QP-CAT v0.3 makes the spatial neighbor graph visible. Every time you run Spatial Statistics ([chapter 17](#17-spatial-statistics-ripley-geary-co-occurrence)), QP-CAT builds a per-cell graph -- kNN, Radius, or Delaunay -- and the same graph drives every spatial metric in the run. Until v0.3 that graph lived only as a sparse matrix inside the Python session and was invisible from the viewer. v0.3 pushes the graph back to QuPath as a `PathObjectConnections` object so you can toggle the edges on and off via **View -> Show object connections**, the same menu that drove QuPath core's now-deprecated Delaunay Clustering tool. You can also write per-cell neighbor measurements and per-component aggregate measurements to the measurement table on the same run, mirroring the legacy plugin's output one-for-one.
 
-### Overview (`overview`)
+<a name="overview"></a>
+### Overview
 
 The overlay is a sanity-check tool first and a presentation tool second. Seeing the edges your neighborhood-enrichment, Ripley K/L, Geary's C, and co-occurrence runs are using catches three classes of mistake at a glance: a Delaunay graph spanning a tissue gap; a kNN graph with k too high in dense regions; a Radius graph too sparse for the cell density. Use the overlay early to validate the graph, then turn it off for the rest of the analysis.
 
-### Turning the overlay on -- View -> Show object connections (`view-show-object-connections`)
+<a name="view-show-object-connections"></a>
+### Turning the overlay on -- View -> Show object connections
 
 The toggle is a QuPath core menu item: **View -> Show object connections**. QP-CAT's job is to populate the data the menu reads from; QuPath core's job is to draw the edges. If the menu is unchecked, nothing renders -- check it once after your first v0.3 run and QuPath remembers the choice.
 
 By default the menu is off (QuPath core default `OverlayOptions.showConnections = false`); the overlay color is fixed to translucent black on brightfield, translucent white on fluorescence (QuPath core's choice, not a QP-CAT preference); the alpha drops at high downsample so the edges fade out at whole-slide zoom.
 
-### The Spatial Statistics "Viewer overlay" group (`viewer-overlay-group`)
+<a name="viewer-overlay-group"></a>
+### The Spatial Statistics "Viewer overlay" group
 
 A new sub-section at the bottom of the Spatial Statistics section of the **Find cell populations (clustering)...** dialog. The controls:
 
@@ -1605,11 +1619,13 @@ A new sub-section at the bottom of the Spatial Statistics section of the **Find 
 - **Limit edges to same class (post-hoc filter)** (default off) -- hides cross-class edges in the overlay.
 - **Push to viewer now** -- retroactive rebuild, see below.
 
-### Push to viewer now -- retroactive overlay for saved results (`push-to-viewer-now`)
+<a name="push-to-viewer-now"></a>
+### Push to viewer now -- retroactive overlay for saved results
 
 If you ran spatial stats in v0.3 without "Push graph edges to viewer" enabled, or you opened a project saved with v0.2.x that has no `PathObjectConnections` on disk, the **Push to viewer now** button reads the most recent saved spatial-stats result and reconstructs the connections without re-running clustering. This is the workflow for testers handed a finished project to look at. The button re-applies both the overlay and the per-cell / per-component measurements (honouring the current toggles); it does not re-run any statistic.
 
-### The 250k-edge prompt threshold (`edge-count-threshold`)
+<a name="edge-count-threshold"></a>
+### The 250k-edge prompt threshold
 
 When the graph has more than 250,000 undirected edges, QP-CAT prompts before pushing -- a large graph rendered at high zoom can make panning feel sluggish. The threshold is `qpcat.spatial.connectionsPromptThreshold` under **Edit > Preferences > QP-CAT: Run Clustering**; raise it (e.g., to 1000000) to suppress the prompt for big slides, or lower it for cautious behavior on slow machines.
 
@@ -1617,31 +1633,36 @@ The threshold counts undirected edges (each pair `(i, j)` listed once). kNN(k=15
 
 > **Multi-image / cohort runs:** you are asked **once for the whole run**, not once per image -- the decision (based on the densest image) is applied to every image. After the run, a single dialog lists the average connections per cell for each image plus the run mean.
 
-### Per-cell neighbor measurements (`per-cell-neighbor-measurements`)
+<a name="per-cell-neighbor-measurements"></a>
+### Per-cell neighbor measurements
 
 QP-CAT v0.3 writes `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean distance`, `QPCAT spatial: Median distance`, `QPCAT spatial: Max distance`, and `QPCAT spatial: Min distance` to every cell in the measurement table whenever Spatial Statistics runs. Distances are in microns when the image has pixel calibration, in pixels otherwise -- both cases write the same column name. For Delaunay graphs only, `QPCAT spatial: Mean triangle area` and `QPCAT spatial: Max triangle area` are also written. These are the columns the legacy QuPath core Delaunay Clustering tool wrote as `Delaunay: ...`.
 
 Preference toggle: `qpcat.spatial.writeNodeMeasurements`, default on. Note that kNN and Radius graphs do not have triangle measurements because no triangulation exists for those graph types -- QP-CAT does not invent a fake value.
 
-### Per-component aggregate measurements (`per-component-aggregate-measurements`)
+<a name="per-component-aggregate-measurements"></a>
+### Per-component aggregate measurements
 
 Opt-in. When `qpcat.spatial.writeComponentMeasurements` is enabled (default off), QP-CAT writes `QPCAT component: size` (number of cells in the graph-connected component this cell belongs to) and `QPCAT component: mean: <existing measurement>` for every existing numeric measurement on the cell. This mirrors the legacy `Cluster mean: <X>` / `Cluster size` output, with the deliberate rename to "component" to avoid confusion with Leiden phenotype clusters.
 
 This is a wide measurement-table expansion (`n_existing_measurements` new columns) -- that is why opt-in is the right default. See the [BEST_PRACTICES Component vs Cluster](BEST_PRACTICES.md#component-vs-cluster-naming) section for the worked example.
 
-### Limit edges to same class (`limit-edges-by-class`)
+<a name="limit-edges-by-class"></a>
+### Limit edges to same class
 
 After phenotyping, toggle `qpcat.spatial.limitEdgesBySameClass` to filter the rendered overlay to within-class edges only. Useful for visualising same-cell-type neighborhoods after a Leiden + Phenotyping pass. Mirrors the legacy plugin's `Limit by class` option but applies post-hoc -- you do not have to re-run the graph build.
 
 Toggling off restores the unfiltered graph without a rebuild; cells with no class (null pathClass) drop their edges entirely under the filter.
 
-### Component vs Cluster -- the naming convention (`component-vs-cluster`)
+<a name="component-vs-cluster"></a>
+### Component vs Cluster -- the naming convention
 
 Two different things share the word "cluster" in spatial analysis: a Leiden cluster (a phenotype cluster from QP-CAT's clustering pipeline) and a graph-connected component (a maximal set of cells reachable through neighbor edges). QP-CAT v0.3 deliberately uses **cluster** for the Leiden output and **component** for the graph-connected output, even though the legacy QuPath core plugin called the graph-connected set "Cluster" too. Read more in [BEST_PRACTICES -- Spatial graph overlay > Component vs Cluster](BEST_PRACTICES.md#component-vs-cluster-naming).
 
 Short worked example: two CD8 T cells far apart in tissue can share the same Leiden cluster (same phenotype) but live in different graph-connected components (no neighbor path between them). Conversely, two cells in the same graph-connected component can have different Leiden cluster labels (one is CD8, one is CD4, but they touch).
 
-### Legacy Delaunay-clustering migration table (`legacy-delaunay-clustering-migration`)
+<a name="legacy-delaunay-clustering-migration"></a>
+### Legacy Delaunay-clustering migration table
 
 If you arrived here from QuPath core's Delaunay Clustering plugin, this table maps every legacy output to its QP-CAT v0.3 equivalent. Same data, new column names, same place in the workflow.
 
@@ -1660,11 +1681,13 @@ If you arrived here from QuPath core's Delaunay Clustering plugin, this table ma
 | `Limit by class` (build-time filter) | `qpcat.spatial.limitEdgesBySameClass` (post-hoc filter) | Applied after the graph is built so you can phenotype first, then filter. |
 | `Distance threshold` (microns / pixels auto-switch) | `qpcat.spatial.delaunayMaxEdgeUm` (canonical) plus `qpcat.spatial.delaunayMaxEdge` fallback | Dialog shows the unit that matches the current image's calibration. |
 
-### Note on the underlying QuPath API (`api-deprecation-note`)
+<a name="api-deprecation-note"></a>
+### Note on the underlying QuPath API
 
 Honest disclosure: the QuPath core `PathObjectConnections` API that QP-CAT writes into is marked `@Deprecated` in QuPath 0.7. QuPath core plans to replace it with a new `DelaunayTools.Subdivision` API that is fundamentally a Delaunay-triangulation type and cannot represent kNN or Radius graphs. QP-CAT will need that gap closed (or its own custom overlay) before the legacy API is removed, so v0.3 is an explicit "uses today's API while it exists" deliverable. The `@Deprecated` JavaDoc on `PathObjectConnectionGroup` and `DefaultPathObjectConnectionGroup` says only "v0.6.0, to be replaced by `qupath.lib.analysis.DelaunayTools.Subdivision`" -- there is no public issue-tracker reference at the JavaDoc level; track the QuPath GitHub issue tracker for the eventual removal milestone.
 
-### Scripting -- pushConnectionsToViewer (`scripting-push-connections-to-viewer`)
+<a name="scripting-push-connections-to-viewer"></a>
+### Scripting -- pushConnectionsToViewer
 
 `SpatialConnectionsScripts.pushConnectionsToViewer(imageData, resultName)` reads a saved spatial-stats result by name and materializes its graph as `PathObjectConnections` on the given `ImageData`. Equivalent to clicking "Push to viewer now" in the dialog. Useful for batch operations or for restoring the overlay across all images in a project after a v0.2.x to v0.3 upgrade.
 
@@ -1678,7 +1701,8 @@ SpatialConnectionsScripts.pushConnectionsToViewer(
 )
 ```
 
-### Quick troubleshooting (`troubleshooting`)
+<a name="troubleshooting"></a>
+### Quick troubleshooting
 
 Four things to check when the overlay does not appear after a run:
 
@@ -1687,7 +1711,9 @@ Four things to check when the overlay does not appear after a run:
 3. Is the result on disk? See [chapter 16](#16-reviewing-the-operation-audit-trail) for the audit-log row.
 4. The project was created in v0.2.x and the saved spatial-stats result predates the edge-COO write path -- re-run clustering once on v0.3 to populate the overlay.
 
-### Clearing the overlay -- `Utilities > Clear cell connections...` (`clear-connections`)
+<a name="clear-connections"></a>
+<a name="clearing-the-overlay----utilities--clear-cell-connections-clear-connections"></a>
+### Clearing the overlay -- `Setup & help > Clear cell connections...`
 
 `Extensions > QP-CAT > Setup & help > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or simply when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
 
@@ -1900,7 +1926,7 @@ Schurch et al. (Cell 2020), Windhager et al. (Nat Protoc 2023) -- see
 
 ## 23. Reproducing a clustering run
 
-Every clustering run is **auto-saved** to the project's `clustering_results/`
+Every clustering run is **auto-saved** to the project's `qpcat/cluster_results/`
 folder. Four ways to get back to it, from "just look again" to "re-run headless":
 
 1. **View the result again (no recompute).**
@@ -1921,7 +1947,7 @@ folder. Four ways to get back to it, from "just look again" to "re-run headless"
 
 3. **Save a config by hand for reuse.**
    **Save Config... / Load Config...** in the dialog store named configs in the
-   project (`clustering_configs/`). Use this to keep a canonical recipe.
+   project (`qpcat/cluster_configs/`). Use this to keep a canonical recipe.
 
 4. **Re-run headless / in a script (no dialog).**
    QP-CAT ships a YAML headless batch runner, `qpcat_batch.groovy`, driven by a
@@ -2000,7 +2026,7 @@ plots), so to cluster *on the embedding* you run it in two steps.
   DBSCAN); it is the strict upgrade -- no global `eps` to guess, it handles
   variable density, and it labels low-density points as a noise cluster (shown as
   its own class, which you can ignore or reclassify). See the HDBSCAN parameters
-  in [section 17 / the algorithm reference](#umap).
+  in [the algorithm reference](#hdbscan).
 - **Scale of the work / reproducibility.** Because UMAP itself is stochastic, fix
   the **random seed** (Dimensionality Reduction > Advanced) in step 1 so the same
   embedding -- and therefore the same HDBSCAN result -- reproduces.

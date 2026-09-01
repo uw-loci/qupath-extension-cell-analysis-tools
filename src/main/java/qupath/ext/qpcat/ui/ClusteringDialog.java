@@ -854,7 +854,7 @@ public class ClusteringDialog {
                 + "Ref: Korsunsky et al. (2019) Nature Methods");
         Tooltip unavailableTooltip = Tooltips.of(
                 "Harmony batch correction is not installed in this\n"
-                + "Python environment. Use Utilities > Rebuild Clustering\n"
+                + "Python environment. Use Setup & help > Rebuild analysis\n"
                 + "Environment to refresh, or see the QP-CAT README for\n"
                 + "the platform support matrix.");
         batchCorrectionCheck.setTooltip(harmonypyAvailable ? activeTooltip : unavailableTooltip);
@@ -1607,7 +1607,7 @@ public class ClusteringDialog {
         if (algo == Algorithm.BANKSY && svc.isAvailable() && !svc.isBanksyAvailable()) {
             capabilityBlock = "BANKSY is selected, but pybanksy could not be imported in "
                     + "this Python environment, so this run cannot start. Choose another "
-                    + "algorithm, or run Utilities > Rebuild Clustering Environment -- the "
+                    + "algorithm, or run Setup & help > Rebuild analysis environment -- the "
                     + "Python log records why the import failed.";
         }
         boolean blocked = scalingBlocked || capabilityBlock != null;

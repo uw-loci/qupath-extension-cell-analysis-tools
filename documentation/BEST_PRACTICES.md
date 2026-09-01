@@ -932,7 +932,8 @@ Clustering dialog scoped to that class and labels the result `<name>.0`, `<name>
 
 The spatial graph overlay is a sanity-check tool first, a presentation tool second, and a "leave it on all the time" tool never. This chapter covers when the overlay is informative versus noisy, when to enable per-class edge filtering, and how to read the per-cell and per-component measurements without confusing graph-connected components with Leiden phenotype clusters.
 
-### When the overlay is informative (`overlay-informative`)
+<a name="overlay-informative"></a>
+### When the overlay is informative
 
 The overlay earns its keep on small-to-medium populations where you can actually see individual edges -- typically under ~50,000 cells per annotated region, or a single zoomed-in tissue niche on a larger slide. Use it to:
 
@@ -940,17 +941,20 @@ The overlay earns its keep on small-to-medium populations where you can actually
 - confirm a kNN graph is not over-connecting dense regions (cells in the dense area should have ~k visible edges, no more);
 - confirm a Radius graph is not under-connecting sparse regions (isolated cells should still have at least one or two neighbors).
 
-### When the overlay is noisy (`overlay-noisy`)
+<a name="overlay-noisy"></a>
+### When the overlay is noisy
 
 Above ~250,000 edges -- which is roughly a 50,000-cell Delaunay graph, or a 25,000-cell kNN(k=15) graph -- the overlay degrades from sanity-check to confetti. Edges blur into a uniform gray haze at whole-slide zoom; panning feels sluggish; nothing about the graph structure is visible. At 1,000,000+ edges QuPath's stock connections overlay was not designed for this density and pan/zoom interactions become jerky. Recommended: turn the overlay on once at a representative zoom level, sanity-check, turn it off, run the rest of the analysis without it.
 
-### When to enable `limitEdgesBySameClass` (`limit-edges-by-class-when`)
+<a name="limit-edges-by-class-when"></a>
+### When to enable `limitEdgesBySameClass`
 
 Enable when you want to *visualise* same-cell-type neighborhoods after a Leiden + Phenotyping pass -- e.g., showing CD8 T cell clusters touching each other, or fibroblast networks. Leave off when you want to see the full graph the spatial statistics actually ran on. The filter is purely a viewer affordance; it does not retroactively change any computed statistic.
 
 Edge cases: cells with no pathClass (null) drop their edges entirely under the filter. If you phenotyped only part of the cell population, expect to see large patches of empty overlay where unphenotyped cells live. The fix is to run phenotyping over the whole population, not to disable the filter.
 
-### Component vs Cluster naming (`component-vs-cluster-naming`)
+<a name="component-vs-cluster-naming"></a>
+### Component vs Cluster naming
 
 QP-CAT v0.3 writes per-component aggregate measurements as `QPCAT component: ...` instead of `Cluster ...` -- a deliberate rename. The reason: a Leiden cluster (from QP-CAT's clustering pipeline) and a graph-connected component (from a kNN / Radius / Delaunay graph) are different things, and the legacy QuPath core plugin reusing "Cluster" for the graph-connected set has confused users on image.sc more than once.
 
@@ -965,7 +969,8 @@ Rule of thumb: **Cluster** answers "what cell type is this?" **Component** answe
 
 A practical aside on the three-colon `QPCAT component: mean: <Marker>` header layout: at default Measurements-table column widths the prefix may truncate the marker name on narrow tables. Drag the column wider or use the column-visibility menu to filter to the columns you need.
 
-### The deprecated-API warn-once log line (`api-deprecation-log`)
+<a name="api-deprecation-log"></a>
+### The deprecated-API warn-once log line
 
 On the first push of connections per session, QuPath 0.7 logs:
 
@@ -973,11 +978,13 @@ On the first push of connections per session, QuPath 0.7 logs:
 
 This is harmless. QuPath core's `PathObjectConnections` API is marked `@Deprecated` for replacement by `DelaunayTools.Subdivision` in a future major release, but the old API is fully functional in 0.7 and is the only API surface that can carry kNN and Radius graphs (the `Subdivision` replacement is Delaunay-only). The warning fires once per session, not per push -- subsequent pushes within the same session do not re-trigger it. Do not flag this as a bug; document it in user issue reports if it appears.
 
-### Clearing the overlay between runs (`clearing-the-overlay`)
+<a name="clearing-the-overlay"></a>
+### Clearing the overlay between runs
 
-QP-CAT's own clustering runs replace the previously-attached connection group with the new one -- they do not stack. Connections from other tools (the legacy QuPath core Delaunay Clustering plugin in particular) do stack alongside QP-CAT's overlay, because QuPath has no built-in clear-connections action and re-running cell detection is the only stock way to drop them. Use **Utilities > Clear cell connections...** when an overlay from a previous tool or a previous saved-result push is in the way; the action is reversible -- the underlying spatial data is untouched on disk, so you can repopulate the overlay via **Push to viewer now** on any saved result.
+QP-CAT's own clustering runs replace the previously-attached connection group with the new one -- they do not stack. Connections from other tools (the legacy QuPath core Delaunay Clustering plugin in particular) do stack alongside QP-CAT's overlay, because QuPath has no built-in clear-connections action and re-running cell detection is the only stock way to drop them. Use **Setup & help > Clear cell connections...** when an overlay from a previous tool or a previous saved-result push is in the way; the action is reversible -- the underlying spatial data is untouched on disk, so you can repopulate the overlay via **Push to viewer now** on any saved result.
 
-### Performance and the 250k threshold (`performance-and-threshold`)
+<a name="performance-and-threshold"></a>
+### Performance and the 250k threshold
 
 The default `qpcat.spatial.connectionsPromptThreshold` value of 250000 edges is empirical. It is the count at which QuPath's stock connections overlay (which draws every edge with a single `Graphics2D.draw(Line2D)` call per edge) starts to feel sluggish at typical whole-slide zoom on commodity hardware. Below 250000, pan and zoom are smooth. Above 250000, frame time grows roughly linearly with edge count, viewport-culled. Above 1000000 the experience is noticeably degraded even with the cull.
 

@@ -414,7 +414,7 @@ public class ApposeClusteringService {
                 if (!EXPECTED_ENV_VERSION.equals(envVersion)) {
                     logger.warn("Environment version mismatch: expected {}, got {}. "
                             + "Some features may not work correctly. "
-                            + "Use Utilities > Rebuild Clustering Environment to update.",
+                            + "Use Setup & help > Rebuild analysis environment to update.",
                             EXPECTED_ENV_VERSION, envVersion);
                     report(statusCallback,
                             "Warning: environment version mismatch (expected "
@@ -427,8 +427,8 @@ public class ApposeClusteringService {
                 // which run_clustering.py imports -- surface it here, not at first run.
                 if (!meetsMinVersion(sklearnVersion, MIN_SKLEARN_VERSION)) {
                     logger.warn("scikit-learn {} is older than the required {}; HDBSCAN "
-                            + "clustering will fail. Use Utilities > Rebuild Clustering "
-                            + "Environment.", sklearnVersion, MIN_SKLEARN_VERSION);
+                            + "clustering will fail. Use Setup & help > Rebuild analysis "
+                            + "environment.", sklearnVersion, MIN_SKLEARN_VERSION);
                     report(statusCallback,
                             "Warning: scikit-learn " + sklearnVersion + " < "
                             + MIN_SKLEARN_VERSION + " (HDBSCAN unavailable). Rebuild recommended.");

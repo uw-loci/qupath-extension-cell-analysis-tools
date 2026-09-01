@@ -136,6 +136,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 > saved once under `result_name` (default `yaml_joint`) and labels are written back
 > to each image; `joint` is ignored for `mode: reuse_saved`.
 
+<a name="independent-areas-clusteringarea_levels"></a>
 ### Independent areas (`clustering.area_levels`)
 
 An **area** is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. No spatial graph -- BANKSY, spatial smoothing, Ripley's L, co-occurrence, Moran's I -- is ever built across two areas, because the distance between a cell in one core and a cell in the next is not a distance through tissue.
