@@ -145,9 +145,9 @@ public class ClusterManagementDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Manage Clusters");
-        dialog.setHeaderText("Rename or merge cluster classifications across the images "
-                + "the clustering run covered");
+        dialog.setTitle("QPCAT - Modify Clusters");
+        dialog.setHeaderText("Rename, merge or sub-cluster the populations from a clustering "
+                + "run, across every image that run covered");
         dialog.setResizable(true);
 
         // --- Scope selector -------------------------------------------------
@@ -315,7 +315,7 @@ public class ClusterManagementDialog {
         statusBar.setAlignment(Pos.CENTER_LEFT);
 
         VBox content = new VBox(8,
-                QpcatDocLinks.linkBar("clusters.md", "renaming-and-merging"),
+                QpcatDocLinks.linkBar("clusters.md", "modifying-clusters"),
                 scopeBox,
                 new Separator(),
                 infoLabel, clusterListView, editBar, statusBar);
@@ -900,7 +900,7 @@ public class ClusterManagementDialog {
         if (report.cellsUnmatched > 0) sb.append("  Unmatched: ").append(report.cellsUnmatched);
         sb.append("\n\n");
         for (String line : report.perImage) sb.append("  ").append(line).append("\n");
-        showTextDialog("Manage Clusters - applied", sb.toString());
+        showTextDialog("Modify Clusters - applied", sb.toString());
         Dialogs.showInfoNotification("QPCAT",
                 "Relabelled " + report.cellsMatched + " cells across "
                 + report.imagesProcessed + " image(s).");
@@ -919,7 +919,7 @@ public class ClusterManagementDialog {
         }
         sb.append("\n");
         for (String line : report.lines) sb.append("  ").append(line).append("\n");
-        showTextDialog("Manage Clusters - applied", sb.toString());
+        showTextDialog("Modify Clusters - applied", sb.toString());
         Dialogs.showInfoNotification("QPCAT",
                 "Relabelled " + report.cellsChanged + " cells across " + report.images + " image(s).");
     }

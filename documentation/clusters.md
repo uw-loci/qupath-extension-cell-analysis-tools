@@ -4,7 +4,7 @@ What to do with a result once you have one: judge it, rename it, split it, gate 
 or push it onto another image's detections.
 
 - [Judging a result](#judging-a-result)
-- [Renaming and merging](#renaming-and-merging)
+- [Modifying clusters: rename, merge, sub-cluster](#modifying-clusters)
 - [Sub-clustering](#sub-clustering-cluster-within-a-cluster)
 - [Gating cells on a 2D plot](#gating-cells-on-a-2d-plot)
 - [Applying a saved result to detections](#applying-a-saved-result-to-detections)
@@ -76,7 +76,17 @@ Clustering is rarely perfect on the first try. A typical workflow:
 
 
 ---
-## Renaming and merging
+<a name="renaming-and-merging"></a>
+## Modifying clusters
+
+One dialog does three things to the populations a clustering run produced:
+**rename** them, **merge** several into one, and **sub-cluster** one into sub-types.
+All three apply across every image the run covered.
+
+**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge,
+sub-cluster)...**, or the **Modify clusters...** button in the Results window, which
+pre-selects the result you are viewing.
+
 
 Rename clusters to biological names (e.g. "Cluster 3" -> "CD8+ T Cells") or merge several
 clusters into one -- **across every image the clustering run covered**, not just the open
@@ -89,11 +99,11 @@ source image id + centroid, the same mechanism as "Apply saved result"). This is
 recommended and default path, and it is **non-destructive** -- your edit is written as a new
 copy, and the original saved result is never changed.
 
-You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Results & populations > Rename or merge cell populations...**), or from the **Results window** -- the **"Rename or merge clusters..."** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
+You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, sub-cluster)...**), or from the **Results window** -- the **Modify clusters...** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
 
-### Rename / merge using a saved result (recommended)
+### Using a saved result (recommended)
 
-1. **Extensions > QP-CAT > Results & populations > Rename or merge cell populations...** (or the **"Rename or merge clusters..."** button in the Results window, which pre-selects the current result)
+1. **Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, sub-cluster)...** (or the **Modify clusters...** button in the Results window, which pre-selects the current result)
 2. Under **Apply changes to**, leave **Use a saved clustering result (recommended)** selected
    and pick the run from the drop-down (each entry shows its timestamp and scope, e.g.
    "6 project images").

@@ -45,7 +45,7 @@ Explore & spatial >
 Results & populations >
     View Past Results...                                  Results
     Manage Saved Results...                               Results
-    Rename or merge cell populations...                   Working with clusters
+    Modify cell populations (rename, merge, sub-cluster)...                   Working with clusters
     Apply saved result to detections...                   Working with clusters
     Apply cluster color palette...                        Results
 Export >
