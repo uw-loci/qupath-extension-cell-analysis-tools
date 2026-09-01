@@ -40,6 +40,7 @@ Step-by-step instructions for every workflow in the QP-CAT extension.
 28. [Applying a saved result to detections](#28-applying-a-saved-result-to-detections)
 29. [Viewing clusters in 3D with VEST](#29-viewing-clusters-in-3d-with-vest)
 30. [Reporting a bug](#30-reporting-a-bug)
+31. [What makes a run slow](#31-what-makes-a-run-slow)
 
 ---
 
@@ -2327,6 +2328,74 @@ Two ways, from the "export complete" dialog:
   back into QuPath. (For clicking a point and jumping to that cell *inside* QuPath, use the
   interactive results plots / 3D view instead.)
 - Color-map by the `cluster` column in VEST's controls to see cluster structure.
+
+---
+
+## 31. What makes a run slow
+
+Every setting below trades run time against something else. They are documented in place, next
+to the features they belong to -- this section exists so you can see the whole picture at once
+when a run is taking longer than you expected, and so the **cost** of each speed-up is stated
+next to the saving.
+
+They are grouped by what you give up, not by how much time you save. Nothing here is a
+"performance" switch you can flip freely: only the first group is free.
+
+### Free -- you only lose the output itself
+
+| Setting | Where | Effect |
+|---|---|---|
+| **Ripley's L, co-occurrence, Geary's C, neighbourhood enrichment** | Run Clustering > Spatial statistics | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
+| **Spatial permutations** | Run Clustering > Spatial statistics | `0` picks adaptively by cell count (1000 / 100 / 50). A fixed high value multiplies the cost of every permuted statistic. |
+| **Generate plots** | Run Clustering > Analysis | Skips the static matplotlib figures. The interactive tabs still work. |
+
+QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
+large, a prompt appears with the number and a one-minute countdown. Computation has already
+started when you see it, and continues if you do nothing, so an unattended run is never blocked
+by that dialog.
+
+### Costs reproducibility
+
+| Setting | Where | Effect |
+|---|---|---|
+| **UMAP speed vs reproducibility** | Run Clustering > Embedding > Advanced | `auto` (default) pins the seed below 200,000 cells and uses every core above it. `reproducible` always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. `fast` never pins it. |
+
+The run records which path it took, so a layout that is not bit-reproducible is never silently
+non-reproducible. See [Reproducing a clustering run](#23-reproducing-a-clustering-run).
+
+### Costs comparability between runs
+
+| Setting | Where | Effect |
+|---|---|---|
+| **Reduce features with PCA before clustering** | Run Clustering > Analysis | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. **It changes cluster labels** -- see [the full description](#2-running-clustering). |
+| **Spatial feature smoothing** | Run Clustering > Analysis | Adds a graph-convolution pre-step. Changes the feature matrix every algorithm then sees. |
+| **MiniBatch KMeans** instead of KMeans | Run Clustering > Algorithm | Much faster on large cohorts, at some cost in cluster quality. |
+| **BANKSY PCA dimensions** | Preferences | Fewer dimensions is faster and retains less variance. |
+
+Runs that differ in any of these are not comparable with each other. Choose once per study
+rather than per run.
+
+### Costs completeness of a figure
+
+| Setting | Where | Effect |
+|---|---|---|
+| **Plot Feature Limit** | Preferences (default 40) | Above this, the dot plot / matrix plot / stacked violin show the most discriminative features rather than all of them. The stacked violin fits a curve per feature *per cluster*, so this is the dominant plotting cost on wide panels. The figure states how many of how many it shows. |
+| **Plot DPI** | Preferences (default 150) | Higher is slower to write and larger on disk. Also scales the results window's "Save plot..." export. |
+| Embedding scatter decimation | automatic | Above a threshold the interactive scatter draws a subsample; the tab title says so. Not configurable, and it never changes the clustering. |
+
+### Not a setting, but the biggest lever
+
+Cell count dominates everything above. If a run is impractical, clustering a **representative
+subset** of images first is usually more informative than waiting on the full cohort -- the
+scope picker in the Run Clustering dialog takes a specific image subset. QP-CAT also refuses
+runs it can predict will exhaust memory, naming the statistic and the limit rather than failing
+part-way.
+
+### GPU
+
+Only the autoencoder is GPU-accelerated today. Clustering and spatial statistics do not use a
+GPU, so the GPU environment variant costs a several-GB download and buys nothing for those
+workflows. See [`GPU_ACCELERATION.md`](GPU_ACCELERATION.md).
 
 ---
 
