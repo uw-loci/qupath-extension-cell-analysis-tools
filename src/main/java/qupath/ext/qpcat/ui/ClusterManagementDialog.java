@@ -183,6 +183,7 @@ public class ClusterManagementDialog {
         // when there is no saved-result JSON to target.
         Label manualHint = new Label();
         manualHint.setWrapText(true);
+        manualHint.setMaxWidth(Double.MAX_VALUE);
         manualHint.setStyle("-fx-text-fill: #777; -fx-font-size: 11px;");
         if (hasSaved) {
             savedResultRadio.setSelected(true);
@@ -283,14 +284,26 @@ public class ClusterManagementDialog {
             applyVersionToCells(activeSaved, activeSourceName);
         });
 
-        HBox editBar = new HBox(8, renameBtn, mergeBtn, subclusterBtn, new Region(),
-                applyVersionBtn, stepBackBtn, resetBtn);
-        HBox.setHgrow(editBar.getChildren().get(3), Priority.ALWAYS);
-        editBar.setAlignment(Pos.CENTER_LEFT);
+        // Two rows, split by what the button acts on: the selected cluster(s) on
+        // top, the result version underneath. Six buttons in one row overflowed
+        // and every label ellipsized ("Ren...", "Sub-clu..."), which is worse
+        // than a taller dialog.
+        HBox selectionRow = new HBox(8, renameBtn, mergeBtn, subclusterBtn);
+        selectionRow.setAlignment(Pos.CENTER_LEFT);
+        HBox versionRow = new HBox(8, applyVersionBtn, stepBackBtn, resetBtn);
+        versionRow.setAlignment(Pos.CENTER_LEFT);
+        VBox editBar = new VBox(6, selectionRow, versionRow);
+
+        // Let each button keep its full label rather than shrinking to fit.
+        for (Button b : new Button[] {renameBtn, mergeBtn, subclusterBtn,
+                applyVersionBtn, stepBackBtn, resetBtn}) {
+            b.setMinWidth(Region.USE_PREF_SIZE);
+        }
 
         Label infoLabel = new Label("Select one cluster to rename or sub-cluster, or several "
                 + "to merge. Edits are staged; click Apply to write them.");
         infoLabel.setWrapText(true);
+        infoLabel.setMaxWidth(Double.MAX_VALUE);
         infoLabel.setStyle("-fx-text-fill: #555;");
 
         busy = new ProgressIndicator();
@@ -307,6 +320,7 @@ public class ClusterManagementDialog {
                 new Separator(),
                 infoLabel, clusterListView, editBar, statusBar);
         content.setPadding(new Insets(10));
+        content.setPrefWidth(620);
 
         dialog.getDialogPane().setContent(content);
         ButtonType applyType = new ButtonType("Apply", ButtonBar.ButtonData.OK_DONE);
