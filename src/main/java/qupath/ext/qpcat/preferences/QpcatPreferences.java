@@ -731,8 +731,11 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(clusterBanksyPcaDims, Integer.class)
                 .name("BANKSY PCA Dimensions")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Number of PCA dimensions for BANKSY spatial clustering (default: 20). "
-                        + "Higher captures more variance but slower. Range: 5-50."))
+                .description(Tooltips.wrap("Number of PCA dimensions for BANKSY spatial clustering "
+                        + "(default: 20). Higher captures more variance but is slower. Range: 5-50. "
+                        + "Runs stay repeatable either way, but changing it changes the resulting "
+                        + "clusters, so BANKSY runs at different values are not comparable with "
+                        + "each other."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterPlotDpi, Integer.class)
