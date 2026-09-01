@@ -30,9 +30,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   are untouched; BANKSY is exempt because it runs its own PCA. Marker rankings, the heatmap
   and the cluster means still use your original measurements, so cluster identities stay
   interpretable. Contributed by @mikemcka.
-  - **This changes cluster labels**, so every run records whether it ran, in the operation
-    log, the Workflow tab entry and `RUN_INFO.txt`. A config saved before this option
-    existed loads with it **off**, so those runs still reproduce exactly.
+  - **Off by default, and chosen per run before it starts.** It changes cluster labels, so
+    two runs differing only in this setting are not comparable -- that is a decision to make
+    deliberately, not one to inherit from an upgrade. Every run records whether it ran, in
+    the operation log, the Workflow tab entry and `RUN_INFO.txt`, and a config saved before
+    the option existed loads with it off so those runs still reproduce exactly.
 - **`PCA Precursor Components`** and **`Plot Feature Limit`** preferences
   (*Edit > Preferences > QP-CAT: Clustering*), so neither the component count nor the
   point at which plots switch to a feature subset is a constant only the source reveals.

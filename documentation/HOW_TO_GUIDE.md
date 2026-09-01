@@ -213,8 +213,9 @@ across 34 compartments is 442 features). Clustering directly on that is both slo
 QP-CAT offers the standard scanpy pre-step: reduce to principal components first, then embed and
 cluster on those.
 
-- The checkbox is **ticked for new runs** and sits in the Analysis block of the Run Clustering
-  dialog.
+- **It is off by default.** The checkbox sits in the Analysis block of the Run Clustering
+  dialog, so it is a decision you make *before* starting a run -- it is never applied to a run
+  you did not ask for it on.
 - It only does anything when there are **more features than components** -- the
   **PCA Precursor Components** preference (default 50) is both the target dimensionality and the
   threshold. A 12-marker panel is untouched.
@@ -224,10 +225,11 @@ cluster on those.
   **original measurements**, so cluster identities stay interpretable. Only the embedding and the
   clustering algorithm see the components.
 
-> **It changes cluster labels.** Every run records what it did -- the operation log, the Workflow
-> tab entry, and the `PCA precursor` line in `RUN_INFO.txt` -- and loading a config saved before
-> this option existed leaves it **off**, so those runs still reproduce exactly. Two runs that
-> differ only in this setting are not comparable.
+> **It changes cluster labels**, which is why it is off unless you ask for it. Every run records
+> what it did -- the operation log, the Workflow tab entry, and the `PCA precursor` line in
+> `RUN_INFO.txt` -- and loading a config saved before this option existed leaves it off, so those
+> runs still reproduce exactly. Two runs that differ only in this setting are **not comparable**,
+> so choose once per study rather than per run.
 
 ### Why some plots show fewer features than you selected
 

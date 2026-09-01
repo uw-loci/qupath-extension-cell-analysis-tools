@@ -785,17 +785,24 @@ public class ClusteringDialog {
                 tipLabel("Iterations:", smoothingIterationsSpinner), smoothingIterationsSpinner);
         smoothingRow.setAlignment(Pos.CENTER_LEFT);
 
-        pcaPrecursorCheck = new CheckBox("Reduce features with PCA before clustering");
-        pcaPrecursorCheck.setSelected(true);
+        // OFF by default. It is a real speed-up on wide panels, but it changes
+        // cluster labels, so it has to be a decision the user makes before a run
+        // rather than something that arrives switched on.
+        pcaPrecursorCheck = new CheckBox("Reduce features with PCA before clustering (faster; changes labels)");
+        pcaPrecursorCheck.setSelected(false);
         pcaPrecursorCheck.setTooltip(Tooltips.of(
-                "Reduce a many-feature matrix to principal components before the\n"
-                + "embedding and clustering step (the standard scanpy flow): faster,\n"
-                + "and less noisy on panels with many markers or compartments.\n"
-                + "Only does anything when there are more features than the component\n"
-                + "count, so small panels are untouched; BANKSY runs its own PCA and\n"
-                + "is unaffected. This CHANGES cluster labels, so each run records\n"
-                + "whether it ran, and loading a config saved before this option\n"
-                + "existed leaves it off so that run still reproduces.\n"
+                "OFF by default -- tick it before running if you want it.\n\n"
+                + "Reduces a many-feature matrix to principal components before the\n"
+                + "embedding and clustering step (the standard scanpy flow). On panels\n"
+                + "with many marker x compartment combinations this is markedly faster\n"
+                + "and usually less noisy; on an ordinary panel it does nothing at all,\n"
+                + "because it only engages when there are more features than the\n"
+                + "component count. BANKSY runs its own PCA and is never affected.\n\n"
+                + "TRADE-OFF: it CHANGES cluster labels. A run with it on and a run\n"
+                + "with it off are not comparable, so pick one per study. Every run\n"
+                + "records what it did, in the operation log and in RUN_INFO.txt.\n\n"
+                + "Marker rankings, the heatmap and the cluster means always use your\n"
+                + "original measurements, so cluster identities stay interpretable.\n"
                 + "Component count: QP-CAT preferences, 'PCA Precursor Components'."));
 
         batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");

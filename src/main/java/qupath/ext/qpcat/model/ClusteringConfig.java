@@ -105,7 +105,8 @@ public class ClusteringConfig {
      * initialised value -- so a primitive defaulting to {@code true} would silently
      * switch it on for every config saved before this option existed, breaking the
      * reproduce-this-run contract RUN_INFO.txt makes. Null means "written before
-     * the option existed" and reads as OFF; the dialog ticks it for new runs.
+     * the option existed" and reads as OFF -- which is also the default for a new
+     * run, so the precursor never applies unless someone asked for it.
      */
     private Boolean pcaPrecursor;
 

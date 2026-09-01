@@ -749,11 +749,12 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(clusterPcaPrecursorComponents, Integer.class)
                 .name("PCA Precursor Components")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("How many principal components to keep when 'Reduce features "
-                        + "with PCA before clustering' is ticked in the Run Clustering dialog "
-                        + "(default: 50). This is also the threshold at which that option does "
-                        + "anything: with fewer features than this, clustering uses the full "
-                        + "matrix. Clamped to below the feature and cell counts. More components "
+                .description(Tooltips.wrap("How many principal components to keep when you tick 'Reduce "
+                        + "features with PCA before clustering' in the Run Clustering dialog "
+                        + "(default: 50). That option is OFF unless you turn it on for a run. "
+                        + "This count is also the threshold at which it does anything: with "
+                        + "fewer features than this, clustering uses the full matrix. "
+                        + "Clamped to below the feature and cell counts. More components "
                         + "retain more variance and reduce the speed-up. Changing this changes "
                         + "cluster labels, so runs record what they used."))
                 .build());
