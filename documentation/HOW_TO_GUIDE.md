@@ -2382,7 +2382,7 @@ That is a different cost from the group above, and worth keeping separate in you
 | Setting | Where | Effect |
 |---|---|---|
 | **Reduce features with PCA before clustering** | Run Clustering > Analysis | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. Repeatable, but the clusters differ from the same run with it off -- see [the full description](#2-running-clustering). |
-| **Spatial feature smoothing** | Run Clustering > Analysis | Adds a graph-convolution pre-step. Changes the feature matrix every algorithm then sees. |
+| **Spatial feature smoothing** | Run Clustering > Analysis | Slower, but repeatable: the result differs from the same run without it. Adds a graph-convolution pre-step so every algorithm sees the smoothed feature matrix. |
 | **MiniBatch KMeans** instead of KMeans | Run Clustering > Algorithm | Much faster on large cohorts, at some cost in cluster quality. |
 | **BANKSY PCA dimensions** | Preferences | Fewer dimensions is faster and retains less variance. |
 
