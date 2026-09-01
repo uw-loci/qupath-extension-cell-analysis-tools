@@ -2356,6 +2356,12 @@ large, a prompt appears with the number and a one-minute countdown. Computation 
 started when you see it, and continues if you do nothing, so an unattended run is never blocked
 by that dialog.
 
+**Pre-run cost summary.** Directly above the Run button in the Clustering dialog, a line summarizes
+all the non-free settings you have configured. It reads either "This run is repeatable and
+comparable to other default runs" (when no costs apply) or "This run: " followed by the costs
+separated by semicolons -- so the information is visible at the moment you press Run, not hidden
+in tooltips. The summary updates live as you change settings.
+
 ### Costs reproducibility -- identical runs can differ
 
 This is the only group where running the same thing twice can give you a different answer.
