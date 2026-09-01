@@ -45,12 +45,20 @@ Controls the audit log written for every YAML batch run.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `log_dir` (alias `log_path`) | string (path) | `<project>/qpcat/logs` | Where the audit log lives. Relative paths resolve against the first project's directory. Absolute paths used as-is. |
-| `log_level` | string | `INFO` | One of `DEBUG`, `INFO`, `WARN`, `ERROR`. Drops `INFO`-and-above when set to `WARN` / `ERROR`. |
-| `run_name` | string | `qpcat_batch_<ts>` | Identifier used as the audit log filename prefix and in `OperationLogger` rows. Collisions get `_N` suffix. |
-| `capture_prompts` | boolean | `false` | If `phenotyping.llm_explainer.enabled` is true, capture full prompt + response in the audit log. |
+| `run_name` | string | `qpcat_batch_<ts>` | Recorded as the `run_name` row inside the audit entry, so a run can be identified in the log. It does **not** name the file. |
+| `record_yaml_hash` | boolean | `true` | Accepted for compatibility. The SHA-256 of the YAML is recorded on every run and cannot be turned off. |
+| `log_dir` (alias `log_path`) | string (path) | -- | **No effect (W007).** Accepted, then ignored. |
+| `log_level` | string | -- | **No effect (W008).** Validated against `DEBUG`/`INFO`/`WARN`/`ERROR`, then ignored. |
+| `capture_prompts` | boolean | -- | **No effect (W009).** See the note below. |
 
-> **Note:** `audit.log_dir` resolves against the **first** project in the run when relative; the run log is per-run, not per-project. Users wanting per-project audit logs should write one YAML per project.
+**Where the audit log goes.** Always `<project>/qpcat/logs/qpcat_<yyyy-MM-dd>.log`, one file per
+project per day. This is not configurable; `log_dir` and `log_level` are accepted so existing
+files keep parsing, and each warns.
+
+**Prompts are always captured.** When the LLM explainer runs, the full prompt and response are
+written to the audit log on every call, scrubbed of API keys. That is the explainer's privacy
+model, not an opt-in -- the audit log is the canonical record of what was sent. `capture_prompts`
+never gated it, and its documented default of `false` said the opposite of what happens.
 
 ## `scope` (required, object)
 
@@ -61,7 +69,7 @@ Which projects and which images to operate on.
 | `projects` | list[string] | required (>=1 entry) | Absolute paths to QuPath `project.qpproj` files (or directories containing one). |
 | `images` | string \| list[string] \| object | `"all"` | Image selector. See *Image scoping* below. |
 | `skip_missing` | boolean | `false` | If `true`, an image name in the list that isn't in the project warns (W003) but continues. If `false`, hard-fails (E008). |
-| `per_image_overrides` | list[object] | -- | Per-image config overrides (deep merge with the top-level blocks). |
+| `per_image_overrides` | list[object] | -- | **Not applied (W004).** Parsed and validated, but the runner uses the top-level blocks for every image. Run those images as a separate YAML instead. |
 
 ```yaml
 scope:
@@ -478,6 +486,7 @@ figure_export:
 
 `qpcat_batch.groovy` validates the YAML against the schema before opening any project. Pass `--args=<file.yaml> --args=--dry-run` to validate without executing. Validation errors include:
 
+- E000 YAML parse error
 - E001 Missing required field (e.g. `version`, `scope.projects`, `clustering.type`)
 - E002 Unknown field at a known block (typo)
 - E003 Type mismatch (e.g. `dpi: "300"` instead of `300`)
@@ -487,8 +496,10 @@ figure_export:
 - E007 Schema major version unsupported
 - E008 Image listed in `scope.images` not found in any project
 - E009 Unknown statistic slug
+- E010 Marker not found (deferred to the run)
 - E011 JavaFX-only plot kind requested (not exportable headlessly)
 - E012 Filename pattern missing required token
+- E013 Project resolution failed
 - E014 Project file not found
 - E015 Mixed list / map shape in `scope.images`
 - E017 Malformed `version` string
@@ -501,5 +512,11 @@ Warnings (non-fatal):
 - W001 Schema minor-version mismatch
 - W002 `workers > 1` coerced to 1
 - W003 Image scope filter matched zero images for a project
+- W004 `per_image_overrides` parsed but not applied
+- W005 `batch_key` ignored when `batch_correction` is off
+- W006 Repeated unfiltered `annotations` area level
+- W007 `audit.log_dir` has no effect
+- W008 `audit.log_level` has no effect
+- W009 `audit.capture_prompts` has no effect
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.

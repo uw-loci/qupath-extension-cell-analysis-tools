@@ -619,12 +619,38 @@ public final class BatchYamlValidator {
         }
     }
 
+    /**
+     * Audit block. Three of its keys are accepted and then ignored, so each one
+     * warns rather than passing silently -- a key that validates clean reads as a
+     * key that took effect, which is how they went unnoticed. Same reasoning as
+     * W004 on per_image_overrides.
+     */
     private static void validateAudit(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.AuditBlock a = s.getAudit();
         if (a == null) return;
         if (a.getLogLevel() != null && !LOG_LEVELS.contains(a.getLogLevel().toUpperCase())) {
             r.add(ValidationIssue.error("E005", "audit.log_level",
                     "'" + asciiSafe(a.getLogLevel()) + "' is not one of " + LOG_LEVELS));
+        }
+        if (a.getLogDir() != null && !a.getLogDir().isBlank()) {
+            r.add(ValidationIssue.warning("W007", "audit.log_dir",
+                    "audit.log_dir has no effect; the audit log is always written to "
+                    + "<project>/qpcat/logs/qpcat_<date>.log. Remove the key."));
+        }
+        if (a.getLogLevel() != null) {
+            r.add(ValidationIssue.warning("W008", "audit.log_level",
+                    "audit.log_level has no effect; it is validated but never applied to "
+                    + "any logger. Remove the key."));
+        }
+        if (a.isCapturePrompts() != null) {
+            // The default reads as "prompts are not captured unless you ask", which
+            // is the opposite of what happens. Prompts and responses always go to
+            // the audit log (scrubbed) -- that is the LLM explainer's privacy model,
+            // not an opt-in.
+            r.add(ValidationIssue.warning("W009", "audit.capture_prompts",
+                    "audit.capture_prompts has no effect. The LLM explainer ALWAYS writes "
+                    + "the prompt and response to the audit log, scrubbed of API keys, "
+                    + "whatever this is set to. Remove the key."));
         }
     }
 

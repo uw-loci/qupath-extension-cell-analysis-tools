@@ -73,9 +73,14 @@ public final class BatchYamlSchema {
     /** {@code audit} block. All fields optional. */
     public static final class AuditBlock {
         private String logDir;
-        private String logLevel = "INFO";
+        // Null unless the user wrote the key. The old "INFO" default made it
+        // impossible to tell "set" from "absent", and since the key has no effect
+        // the default meant nothing anyway.
+        private String logLevel;
         private String runName;
-        private boolean capturePrompts = false;
+        // Nullable so the validator can tell "the user wrote this key" from "absent".
+        // The key has no effect either way; warning on absence would be noise.
+        private Boolean capturePrompts;
 
         public String getLogDir() { return logDir; }
         public void setLogDir(String logDir) { this.logDir = logDir; }
@@ -86,8 +91,8 @@ public final class BatchYamlSchema {
         public String getRunName() { return runName; }
         public void setRunName(String runName) { this.runName = runName; }
 
-        public boolean isCapturePrompts() { return capturePrompts; }
-        public void setCapturePrompts(boolean capturePrompts) { this.capturePrompts = capturePrompts; }
+        public Boolean isCapturePrompts() { return capturePrompts; }
+        public void setCapturePrompts(Boolean capturePrompts) { this.capturePrompts = capturePrompts; }
     }
 
     /** {@code scope} block. {@code projects} REQUIRED. */

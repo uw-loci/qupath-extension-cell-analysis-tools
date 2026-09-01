@@ -35,6 +35,63 @@ class BatchYamlValidatorTest {
         return n;
     }
 
+    // ---- Accepted-but-ignored keys -------------------------------------
+    //
+    // Each of these parses clean, validates clean, and then does nothing. A key
+    // that validates without comment reads as a key that took effect, which is
+    // how all three went unnoticed -- so each one warns, and each warning is
+    // pinned here.
+
+    private static final String BASE =
+            "version: \"1.0\"\nscope:\n  projects: [/tmp/p]\n";
+
+    @Test
+    void w007_audit_log_dir_has_no_effect() {
+        List<ValidationIssue> issues =
+                validate(BASE + "audit:\n  log_dir: /tmp/elsewhere\n");
+        assertThat(hasCode(issues, "W007"))
+                .as("audit.log_dir is never read; the log is always <project>/qpcat/logs")
+                .isTrue();
+    }
+
+    @Test
+    void w008_audit_log_level_has_no_effect() {
+        List<ValidationIssue> issues = validate(BASE + "audit:\n  log_level: WARN\n");
+        assertThat(hasCode(issues, "W008"))
+                .as("audit.log_level is validated and then never applied to a logger")
+                .isTrue();
+    }
+
+    @Test
+    void w009_audit_capture_prompts_has_no_effect() {
+        List<ValidationIssue> issues =
+                validate(BASE + "audit:\n  capture_prompts: false\n");
+        assertThat(hasCode(issues, "W009"))
+                .as("prompts are ALWAYS written to the audit log; the documented default of "
+                        + "false said the opposite of what happens")
+                .isTrue();
+    }
+
+    @Test
+    void anAbsentAuditBlockWarnsAboutNothing() {
+        // The warnings must fire on the KEY, not on the block, or every batch file
+        // that never mentioned audit would carry three warnings it cannot act on.
+        List<ValidationIssue> issues = validate(BASE);
+        assertThat(hasCode(issues, "W007")).isFalse();
+        assertThat(hasCode(issues, "W008")).isFalse();
+        assertThat(hasCode(issues, "W009")).isFalse();
+    }
+
+    @Test
+    void runNameIsNotANoOpAndDoesNotWarn() {
+        // Unlike the three above, run_name IS read -- it becomes a row in the audit
+        // entry. It just does not name the file, which is what the docs claimed.
+        List<ValidationIssue> issues = validate(BASE + "audit:\n  run_name: my_run\n");
+        assertThat(hasCode(issues, "W007")).isFalse();
+        assertThat(hasCode(issues, "W008")).isFalse();
+        assertThat(hasCode(issues, "W009")).isFalse();
+    }
+
     @Test
     void e001_missing_required_version() {
         List<ValidationIssue> issues = validate("scope:\n  projects: [/tmp/p]\n");
