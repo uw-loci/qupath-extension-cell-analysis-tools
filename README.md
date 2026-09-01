@@ -53,7 +53,7 @@ caveats.
 - **[Marker gating with auto-thresholds](documentation/phenotyping.md#running-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
 - **[Cleaner clusters via tissue context](documentation/clustering.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
 - **[Annotate a few cells, classify the rest](documentation/autoencoder.md)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
-- **[Get a phenotype suggestion in plain English](documentation/README.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
+- **[Get a phenotype suggestion in plain English](documentation/llm-explainer.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
 
 **Ask spatial questions**
 
@@ -326,7 +326,7 @@ This is a lighter-weight alternative to BANKSY when you want spatial awareness w
 
 **This feature has never been successfully run end-to-end by the QP-CAT developers** -- "experimental" means the path is unproven, not merely that its output is unvalidated. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
-Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See `documentation/HOW_TO_GUIDE.md` Section 10 for the workflow.
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See [the LLM explainer documentation](documentation/llm-explainer.md) for the workflow.
 
 ### Providers
 
@@ -359,7 +359,7 @@ It does **not** see pixels, individual cell measurements, image metadata, patien
 
 The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never serialized into `SavedClusteringResult`. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
 
-See [How-To Guide section 10](documentation/README.md) for the full workflow and [Best Practices](documentation/llm-explainer.md#when-it-is-worth-using) for guidance on when to trust the output.
+See [LLM explainer documentation](documentation/llm-explainer.md) for the full workflow and [guidance on when to trust the output](documentation/llm-explainer.md#when-it-is-worth-using).
 
 </details>
 
@@ -541,7 +541,7 @@ iterative session leaves a chain of versions you can step through in either dire
 names then appear throughout the Results window (heatmap, embedding legend, composition table
 and pies, fingerprints, gallery) and in exported figures and CSVs.
 
-See [HOW_TO_GUIDE: Iterating, and stepping backwards](documentation/README.md).
+See [Iterating, and stepping backwards](documentation/clusters.md#iterating-and-stepping-backwards).
 
 </details>
 

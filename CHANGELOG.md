@@ -56,7 +56,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   cannot use a GPU, and pixi validates the `__cuda` virtual package on EVERY install --
   so a CUDA-pinned environment does not merely run slowly on a machine without an NVIDIA
   GPU, **it refuses to start**. CPU is the default because it works everywhere. New
-  [`documentation/GPU_ACCELERATION.md`](documentation/setup.md#cpu-or-gpu) says plainly
+  [Setup guide section on CPU vs GPU](documentation/setup.md#cpu-or-gpu) says plainly
   what is accelerated: today, only the autoencoder. If your work is clustering and spatial
   statistics, stay on CPU -- the GPU variant costs a several-GB download and buys nothing.
 
@@ -2072,7 +2072,7 @@ Patch release. Adds a one-click way to wipe the spatial-graph overlay from the c
 ### Added
 
 - **`Extensions > QP-CAT > Utilities > Clear cell connections...`** -- removes every `PathObjectConnectionGroup` attached to the current image (QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot) and clears QP-CAT's same-class filter stash. QuPath core has no built-in clear action -- the only way to drop these groups was to re-run cell detection (which discards the detections that carry the edges). Reports the number of groups and edges removed via an info notification, records a workflow step (`SpatialConnectionsScripts.clearConnections(getCurrentImageData())`), and writes a `SPATIAL OVERLAY CLEAR` row to the operation audit log.
-- **Public scripting facade**: `SpatialConnectionsScripts.clearConnections(ImageData)` returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch scripts. See [HOW_TO_GUIDE chapter 21](documentation/README.md).
+- **Public scripting facade**: `SpatialConnectionsScripts.clearConnections(ImageData)` returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for batch scripts. See [Spatial graph overlay section](documentation/spatial-neighborhoods.md#the-viewer-overlay).
 
 ### Notes
 
