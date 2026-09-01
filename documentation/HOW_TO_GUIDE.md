@@ -1345,6 +1345,19 @@ When more than five results accumulate for one scope (a single image, or "Entire
 
 > A run made before v0.3.6 only persisted its cluster labels onto the objects, not the embedding / marker-ranking data, so its rich interface cannot be rebuilt. Re-run clustering with the same parameters to regenerate an equivalent result (it will auto-save).
 
+### Save plot... (export individual tabs as PNG)
+
+The **Save plot...** button at the top of the Results dialog exports whichever tab is currently on top as a PNG image. The Heatmap, Marker Fingerprints, Embedding, and 3D View tabs are drawn live in the dialog (not pre-rendered), so this is the only way to export them. Resolution follows the **Plot DPI** preference, so these exports match the figures QP-CAT writes itself rather than being screenshots.
+
+- Click the button to browse for a save location. The chooser opens in this
+  result's own folder, where its other figures already live.
+- The PNG shows exactly what you see in the tab, including anything scrolled out
+  of view.
+- Resolution is the **Plot DPI** setting (Edit > Preferences > QP-CAT: Run Clustering).
+- The default filename is the tab name, e.g. `Heatmap.png`.
+
+For batch export of multiple plots across multiple images, use **Extensions > QP-CAT > Export > Export figures (batch)...**
+
 ### Heatmap vs Dotplot vs Matrix Plot
 
 These three tabs sit next to each other deliberately -- they are complementary views of the same per-cluster-per-marker expression matrix.
