@@ -92,14 +92,33 @@ Menu paths throughout this guide are written in full, e.g.
 
 **First-time only.** This downloads Python and all scientific packages (~1.5-2.5 GB).
 
+### Quick Start
+
 1. Open QuPath
 2. Go to **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...**
-3. Click **Setup Environment**
-4. Wait for the download and build to complete (5-10 minutes depending on internet speed)
-5. When "Environment setup complete!" appears, close the dialog
-6. The rest of the QP-CAT menu items now become visible
+3. (Optional) Configure the environment location and compute variant before clicking **Setup Environment** (see below)
+4. Click **Setup Environment**
+5. Wait for the download and build to complete (5-10 minutes depending on internet speed)
+6. When "Environment setup complete!" appears, close the dialog
+7. The rest of the QP-CAT menu items now become visible
 
-**Troubleshooting:** If setup fails, check your internet connection and disk space (~2.5 GB needed). Use **Utilities > Rebuild Clustering Environment** to start fresh.
+### Environment Location and Compute Variant (before setup)
+
+The setup dialog offers two options **before you download**:
+
+**Environment location** -- Where the ~2.5 GB Python environment is built.
+- **Default** (recommended): Lives in your home directory at `~/.local/share/appose/qupath-qpcat/`
+- **Custom**: Point it at scratch or project storage on HPC or managed desktops where the home directory is quota-limited. The old environment is left in place and you'll be asked to delete it after the new one verifies.
+- **After setup:** change via **Edit > Preferences > QP-CAT: Python environment > Environment location**
+
+**Compute variant** -- Which bundled environment to install: CPU-only (default) or GPU/CUDA.
+- **CPU** (default): Installs on any machine; clustering and spatial stats run on CPU regardless
+- **GPU/CUDA**: Requires an NVIDIA GPU. **Only the autoencoder benefits**; clustering, UMAP, and spatial statistics are just as fast on CPU. See [GPU acceleration](GPU_ACCELERATION.md) for what does and doesn't use a GPU
+- **After setup:** change via **Edit > Preferences > QP-CAT: Python environment > Compute variant** (this builds a separate environment)
+
+### Troubleshooting setup failures
+
+**General failures:** Check your internet connection and disk space (~2.5 GB needed). Use **Utilities > Rebuild Clustering Environment** to start fresh.
 
 **Windows file-lock during install** (`failed to link ... os error 32 ... being used by another process`): another process is holding a file open inside the env directory. QP-CAT v0.3.4+ detects this and logs the full PowerShell recovery script -- check the QuPath log. Short version: close QuPath fully (kill leftover `java.exe` / `python.exe` in Task Manager), delete `%USERPROFILE%\.local\share\appose\qupath-qpcat\.pixi` and `pixi.lock`, optionally add `%USERPROFILE%\.local\share\appose\` as an AV exclusion, then relaunch. Reboot Windows if step 3 fails -- that releases every file handle.
 

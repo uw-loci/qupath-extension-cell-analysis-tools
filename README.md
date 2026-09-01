@@ -69,7 +69,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Java** 21+
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
-- No GPU required -- all operations run on CPU
+- **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/GPU_ACCELERATION.md) for details on what does and doesn't benefit.
 - **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (which has never been successfully run end-to-end by the developers). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
@@ -571,12 +571,14 @@ The console includes a **Save Log...** button to export its contents to a text f
 <details>
 <summary><h2>Python Environment</h2></summary>
 
-QP-CAT manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). The environment is stored at:
+QP-CAT manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). By default, the environment is stored at:
 
 ```
 ~/.local/share/appose/qupath-qpcat/    (Linux/macOS)
 %LOCALAPPDATA%\appose\qupath-qpcat\    (Windows)
 ```
+
+**The location is configurable** via **Edit > Preferences > QP-CAT: Python environment > Environment location** (or by setting it before the first download in the setup dialog). This is useful when the home directory is quota-limited, such as on HPC or managed desktops -- point it to scratch or project storage instead. Two separate environments (CPU and GPU variants) can coexist at the same base directory.
 
 ### Key Python Packages
 
