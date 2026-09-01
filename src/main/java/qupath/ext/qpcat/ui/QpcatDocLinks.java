@@ -8,67 +8,73 @@ import javafx.scene.layout.Priority;
 import qupath.lib.gui.QuPathGUI;
 
 /**
- * Shared helpers for linking QP-CAT dialogs to their documentation.
- * <p>
- * Every QP-CAT tool should expose a "Documentation" hyperlink that opens the
- * relevant section of the shipped HOW_TO_GUIDE in the user's browser, so the
- * in-dialog guidance always has a deeper reference one click away. Centralised
- * here so the base URL and link styling live in one place.
+ * Links from QP-CAT dialogs to the shipped documentation.
+ *
+ * <p>Every tool exposes a "Documentation" hyperlink that opens the page describing
+ * it, so the in-dialog guidance always has a deeper reference one click away.
+ *
+ * <p>Each call names its PAGE as well as its anchor. An earlier version hard-coded
+ * one page per helper, which meant the links could only ever point into a single
+ * monolithic guide -- and when a heading was renamed, they broke silently, because
+ * nothing opens them except a user clicking. {@code tools/check_doc_links.py}
+ * verifies every call site against the actual headings, and needs the page name to
+ * do it.
  */
 public final class QpcatDocLinks {
 
-    /** Base URL of the shipped HOW_TO_GUIDE on the default branch. Anchors are
-     *  appended as {@code #<anchor>} to jump to a specific chapter. */
-    public static final String HOW_TO_GUIDE =
+    /** Where the docs live on the default branch. Pages are appended. */
+    private static final String DOC_BASE =
             "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
-            + "blob/main/documentation/HOW_TO_GUIDE.md";
-
-    /** Base URL of BEST_PRACTICES.md on the default branch. */
-    public static final String BEST_PRACTICES =
-            "https://github.com/uw-loci/qupath-extension-cell-analysis-tools/"
-            + "blob/main/documentation/BEST_PRACTICES.md";
+            + "blob/main/documentation/";
 
     private QpcatDocLinks() {}
 
     /**
-     * A "Documentation" hyperlink that opens HOW_TO_GUIDE at the given anchor.
+     * URL of one documentation page, for callers that append their own anchor.
      *
-     * @param anchor the in-page anchor (no leading '#'), e.g.
-     *               {@code "6-rule-based-phenotyping"}
+     * @param file page file name, e.g. {@code "results.md"}
+     * @return the page URL
      */
-    public static Hyperlink howToGuide(String anchor) {
-        return howToGuide("Documentation", anchor);
+    public static String pageUrl(String file) {
+        return DOC_BASE + file;
     }
 
     /**
-     * A hyperlink with custom text that opens HOW_TO_GUIDE at the given anchor.
+     * A hyperlink that opens one documentation page, optionally at an anchor.
      *
      * @param text   the visible link text
-     * @param anchor the in-page anchor (no leading '#'); null opens the guide top
+     * @param file   page file name, e.g. {@code "clustering.md"}
+     * @param anchor in-page anchor without the leading '#', or null for the top
+     * @return the hyperlink
      */
-    public static Hyperlink howToGuide(String text, String anchor) {
+    public static Hyperlink page(String text, String file, String anchor) {
         Hyperlink link = new Hyperlink(text);
-        String url = (anchor == null || anchor.isBlank())
-                ? HOW_TO_GUIDE : HOW_TO_GUIDE + "#" + anchor;
+        String url = DOC_BASE + file + (anchor == null || anchor.isBlank() ? "" : "#" + anchor);
         link.setOnAction(e -> QuPathGUI.openInBrowser(url));
         link.setStyle("-fx-font-size: 11px;");
         link.setBorder(null);
         return link;
     }
 
+    /** A "Documentation" hyperlink to one page and anchor. @see #page */
+    public static Hyperlink page(String file, String anchor) {
+        return page("Documentation", file, anchor);
+    }
+
     /**
-     * A compact, right-aligned "Help: Documentation" row to drop at the top of a
-     * tool dialog so every tool links to the chapter that describes it. The
-     * {@code "Help:"} label is pushed left and the link sits at the right edge.
+     * A compact, right-aligned "Help: Documentation" row for the top of a tool
+     * dialog, linking to the page that describes it.
      *
-     * @param anchor the HOW_TO_GUIDE anchor for this tool (no leading '#')
+     * @param file   page file name, e.g. {@code "clustering.md"}
+     * @param anchor in-page anchor without the leading '#', or null for the top
+     * @return the row
      */
-    public static HBox linkBar(String anchor) {
+    public static HBox linkBar(String file, String anchor) {
         Label spacer = new Label();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Label help = new Label("Help:");
         help.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
-        HBox bar = new HBox(4, spacer, help, howToGuide("Documentation", anchor));
+        HBox bar = new HBox(4, spacer, help, page("Documentation", file, anchor));
         bar.setAlignment(Pos.CENTER_RIGHT);
         return bar;
     }

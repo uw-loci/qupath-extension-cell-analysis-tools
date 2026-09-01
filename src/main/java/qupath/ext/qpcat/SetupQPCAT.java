@@ -509,7 +509,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // one thing that should not require a built environment.
         MenuItem documentationItem = new MenuItem(res.getString("menu.documentation"));
         documentationItem.setOnAction(e ->
-                QuPathGUI.openInBrowser(QpcatDocLinks.HOW_TO_GUIDE));
+                QuPathGUI.openInBrowser(QpcatDocLinks.pageUrl("README.md")));
 
         // ---- Menu structure -------------------------------------------------
         // Six rows, not nineteen. The two things QP-CAT is FOR -- finding

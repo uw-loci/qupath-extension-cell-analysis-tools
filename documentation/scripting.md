@@ -97,7 +97,7 @@ def graph = SpatialGraphScripts.buildGraph([
 
 Convenience overload returning the literal-default map (kNN, k = 15, radius = -1, maxEdge = -1, no areas). Equivalent to `buildGraph([:])`.
 
-> **These facades stage parameters; they do not execute.** As the class javadoc says, the graph is built Python-side as part of `run_clustering`. To actually RUN an analysis from a script -- with areas or without -- use the headless YAML batch (`YamlBatchScripts.runBatch`) with `clustering.area_levels`; see [YAML_SCHEMA.md](YAML_SCHEMA.md). The `spatial_stats` YAML block runs inline with clustering, so it inherits the same areas.
+> **These facades stage parameters; they do not execute.** As the class javadoc says, the graph is built Python-side as part of `run_clustering`. To actually RUN an analysis from a script -- with areas or without -- use the headless YAML batch (`YamlBatchScripts.runBatch`) with `clustering.area_levels`; see [YAML_SCHEMA.md](yaml-reference.md). The `spatial_stats` YAML block runs inline with clustering, so it inherits the same areas.
 
 ## SpatialStatsScripts
 
@@ -210,7 +210,7 @@ import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
 SpatialConnectionsScripts.applySameClassFilter(getCurrentImageData(), true)
 ```
 
-The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](REFERENCES.md#spatial-graph-overlay-pathobjectconnections) and [HOW_TO_GUIDE chapter 21 -- API deprecation note](HOW_TO_GUIDE.md#api-deprecation-note) for the rationale.
+The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](references.md#spatial-graph-overlay-pathobjectconnections) and [HOW_TO_GUIDE chapter 21 -- API deprecation note](spatial-neighborhoods.md#api-deprecation-note) for the rationale.
 
 ### `clearConnections(ImageData imageData) -> ClearResult`
 
@@ -237,9 +237,9 @@ All three are Gson-serialisable and persist on `SavedClusteringResult.spatialSta
 
 ## FigureExportScripts
 
-Static facade for batch figure export. Writes one or more plots from saved clustering results to a directory. Matches the behavior of the **Extensions > QP-CAT > Export > Export figures (batch)...** dialog but without the GUI -- callable from scripts, the **Run for project** workflow, and the QP-CAT YAML batch (Feature C).
+Static facade for batch figure export. Writes one or more plots from saved clustering results to a directory. Matches the behavior of the **Extensions > QP-CAT > Export > Export figures (batch)...** dialog but without the GUI -- callable from scripts, the **Run for project** workflow, and the QP-CAT YAML batch (the YAML batch).
 
-> **Headless plot scope.** The scripting API exports the **saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment matrix, spatial scatter, plus the Feature A spatial-stats line charts when the Feature A persisted-PNG path is implemented) and the **cluster-composition figures and tables** (`composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`), which QP-CAT renders in Java straight from the saved result. The four JavaFX-rendered plots (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) are GUI-thread-only and require the interactive **Export Figures** dialog -- the script call records them as failures in the returned `ExportResult` and continues. This restriction is per v1 architect design; v1.1 may lift it via off-screen scene-graph rendering on `Platform.runLater`.
+> **Headless plot scope.** The scripting API exports the **saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment matrix, spatial scatter, plus the spatial-stats line charts) and the **cluster-composition figures and tables** (`composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`), which QP-CAT renders in Java straight from the saved result. The four JavaFX-rendered plots (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) are GUI-thread-only and require the interactive **Export Figures** dialog -- the script call records them as failures in the returned `ExportResult` and continues. Off-screen rendering of those four is not implemented.
 >
 > Composition kinds are written **once per result**, not once per image: they describe how the result's clusters split across all its images / annotations. `{image}` expands to `all-images` in their filenames, and the table kinds always write `.csv` whatever `formats` says. `FigureExportScripts.headlessKinds()` returns every kind a headless call can actually produce (matplotlib + composition); `matplotlibKinds()` remains the PNG-only set.
 
@@ -251,8 +251,8 @@ Exports figures from one or more images to a directory.
 |---|---|---|---|
 | `imageNames` | `List<String>` | empty = current image only | Image names within the project. Empty = current image; explicit list = those images; `["*"]` = every image in the project. |
 | `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
-| `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. v1.1 adds `"svg"`, `"pdf"`, `"eps"`. Unrecognised values are warned and skipped. |
-| `dpi` | int | 300 | Output DPI for raster formats. Range 72-1200. Ignored for vector formats (when they land in v1.1). |
+| `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. Unrecognised values are warned and skipped; there is no vector format. |
+| `dpi` | int | 300 | Output DPI. Range 72-1200. Applies to the Java-rendered composition figures; matplotlib PNGs are copied at the DPI they were written with. |
 | `outputDir` | `String` or `Path` | required | Directory to write into. Created if it does not exist. |
 | `filenamePattern` | `String` | `"{image}_{plot}.{ext}"` | Substitution tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain at least `{image}`, `{plot}`, `{ext}`. |
 | `resultName` | `String` | inferred from image | Saved-result name to export from. If omitted, the per-image fall-back logic in `BatchFigureExporter` picks the best match (a saved result whose name matches or starts with the image name; otherwise the most-recent saved result). |
@@ -317,7 +317,7 @@ println result.summary()
 | `embedding_scanpy` | scanpy `sc.pl.embedding` saved PNG | No |
 | `neighborhood` | squidpy `sq.pl.nhood_enrichment` saved PNG | No |
 | `spatial_scatter` | scanpy `sc.pl.spatial` saved PNG | No |
-| `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Feature A persisted PNGs (when the spatial-stats PNG-output enhancement is enabled) | No (when persisted) |
+| `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Spatial-statistics PNGs, saved with the result | No (when persisted) |
 | `heatmap`, `embedding_interactive` | JavaFX `Canvas.snapshot()` | **Yes -- requires open dialog** |
 | `autoencoder_pie`, `histogram` | JavaFX `PieChart` / `Canvas` snapshot | **Yes -- requires open dialog** |
 
@@ -325,9 +325,9 @@ If `plotKinds` includes a JavaFX-only key when called from script mode, the call
 
 ### Ripley slug shorthand
 
-The YAML schema accepts `ripley` in `figure_export.figures` as shorthand that expands to both `ripley_k` and `ripley_l` at validation time. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass both slugs explicitly (`plotKinds: ["ripley_k", "ripley_l"]`) or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](YAML_SCHEMA.md#filename-slug-shorthand) for the YAML-side rule.
+The YAML schema accepts `ripley` in `figure_export.figures` as shorthand that expands to both `ripley_k` and `ripley_l` at validation time. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass both slugs explicitly (`plotKinds: ["ripley_k", "ripley_l"]`) or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](yaml-reference.md#filename-slug-shorthand) for the YAML-side rule.
 
-### Integration with the YAML batch (Feature C)
+### Integration with the YAML batch
 
 The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds` (with the `ripley` slug shorthand already expanded); `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
 
@@ -341,7 +341,7 @@ The primary user-facing surface for headless QP-CAT is the YAML config file cons
 - Run the batch from inside an existing Groovy workflow that has other QuPath steps before / after.
 - Re-use the validator + orchestrator from a custom CI harness.
 
-For users who just want to run an existing YAML file from the command line, ignore this section and use `qpcat_batch.groovy` directly per [HOW_TO_GUIDE section 19](HOW_TO_GUIDE.md#19-yaml-headless-batch).
+For users who just want to run an existing YAML file from the command line, ignore this section and use `qpcat_batch.groovy` directly per [HOW_TO_GUIDE section 19](batch.md#running-one).
 
 ### `runBatch(Map opts) -> BatchOutcome`
 

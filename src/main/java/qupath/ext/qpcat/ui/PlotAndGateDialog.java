@@ -111,7 +111,7 @@ public class PlotAndGateDialog {
                 + "group of points, and select or assign a class to those cells -- across every "
                 + "image in scope. Points are colored by their current classification.");
         body.setWrapText(true);
-        return new VBox(4, title, body, QpcatDocLinks.linkBar("24-recipes-worked-examples"));
+        return new VBox(4, title, body, QpcatDocLinks.linkBar("clusters.md", "gating-cells-on-a-2d-plot"));
     }
 
     private VBox createAxisSection() {

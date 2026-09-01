@@ -172,8 +172,8 @@ public class PhenotypingDialog {
         HBox.setHgrow(info, Priority.ALWAYS);
 
         VBox links = new VBox(2,
-                QpcatDocLinks.howToGuide("Documentation", "6-rule-based-phenotyping"),
-                QpcatDocLinks.howToGuide("Auto-thresholding", "7-using-auto-thresholding"));
+                QpcatDocLinks.page("Documentation", "phenotyping.md", "running-phenotyping"),
+                QpcatDocLinks.page("Auto-thresholding", "phenotyping.md", "auto-thresholding"));
         links.setAlignment(Pos.TOP_RIGHT);
 
         HBox bar = new HBox(8, info, links);

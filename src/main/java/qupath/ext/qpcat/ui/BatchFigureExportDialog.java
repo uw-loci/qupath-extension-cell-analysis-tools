@@ -114,7 +114,7 @@ public class BatchFigureExportDialog {
         dialog.setResizable(true);
 
         VBox root = new VBox(10,
-                QpcatDocLinks.linkBar("18-exporting-figures"),
+                QpcatDocLinks.linkBar("exporting.md", "figure-export"),
                 buildScrollableContent(), buildProgressFooter());
         root.setPadding(new Insets(10));
         root.setPrefWidth(720);

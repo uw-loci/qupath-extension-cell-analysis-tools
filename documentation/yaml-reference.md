@@ -2,7 +2,7 @@
 
 Field-by-field reference for the YAML config file consumed by `qpcat_batch.groovy`. v1 covers clustering, rule-based phenotyping, the LLM cluster explainer (optional), spatial statistics, and figure export. Schema version `1.0` (shorthand `1` accepted).
 
-For the workflow narrative ("when to use, how to debug a failed run"), see [HOW_TO_GUIDE section 19](HOW_TO_GUIDE.md#19-yaml-headless-batch). For reproducibility / CI guidance, see [BEST_PRACTICES](BEST_PRACTICES.md#yaml-batch-mode). For error-by-error remediation, see [TROUBLESHOOTING_YAML_BATCH.md](TROUBLESHOOTING_YAML_BATCH.md).
+For the workflow narrative ("when to use, how to debug a failed run"), see [HOW_TO_GUIDE section 19](batch.md#running-one). For reproducibility / CI guidance, see [BEST_PRACTICES](batch.md#when-to-use-a-batch-instead-of-the-dialog). For error-by-error remediation, see [TROUBLESHOOTING_YAML_BATCH.md](batch.md#when-it-fails).
 
 Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's `script` subcommand so the analysis surface is identical to the dialog.
 
@@ -243,7 +243,7 @@ Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, stat
 | `enabled` | boolean | `true` | Master switch. |
 | `graph` | object | `{type: knn, k: 15}` | Graph constructor for every statistic. |
 | `statistics` | list[string] | `[]` | At least one entry. Valid slugs below. |
-| `permutations` | string \| int | `auto` | `auto` = Feature A adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. |
+| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. |
 | `persist_plots` | boolean | `true` | Write per-stat PNGs to the saved-result's plot directory so `figure_export` can pick them up. |
 
 Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_k` + `ripley_l`), `ripley_k`, `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
@@ -257,11 +257,11 @@ Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_k` + `ri
 | `radius` | double | `-1` (auto) | Radius only (pixel units). |
 | `max_edge` | double | `-1` (no pruning) | Delaunay only (pixel units). |
 
-> **Note:** `spatial_stats.statistics` slugs mirror Feature A's `SpatialStatsScripts` keys 1:1. See [SCRIPTING.md `SpatialStatsScripts`](SCRIPTING.md#spatialstatsscripts).
+> **Note:** `spatial_stats.statistics` slugs mirror the `SpatialStatsScripts` keys 1:1. See [SCRIPTING.md `SpatialStatsScripts`](scripting.md#spatialstatsscripts).
 
 ## `figure_export` (optional, object)
 
-Dispatches into Feature B's `BatchFigureExporter`. Skipped entirely if omitted or `enabled: false`.
+Dispatches into `BatchFigureExporter`. Skipped entirely if omitted or `enabled: false`.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -317,7 +317,7 @@ Per-image error policy. `continue` skips failed images and proceeds (exits 1 at 
 | Default | `1` |
 | Valid values | `1` in v1 |
 
-v1 clamps `workers` to 1; passing any other value warns (W002) and coerces. Parallel workers are reserved for v1.1.
+`workers` is clamped to 1; any other value warns (W002) and is coerced. Parallel workers are not implemented.
 
 ---
 

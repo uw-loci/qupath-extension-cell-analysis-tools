@@ -106,6 +106,13 @@ tasks.withType<JavaCompile> {
 // classpath classes land in the unnamed module, which is already fully open.)
 tasks.test {
     useJUnitPlatform()
+    // DocLinkAnchorsTest reads the shipped markdown, but Gradle only knows about
+    // the Java sources -- so a docs-only commit left the task up-to-date and the
+    // test never ran, which is exactly when an anchor breaks. Declaring the docs
+    // as an input makes a heading rename re-run it.
+    inputs.dir(layout.projectDirectory.dir("documentation"))
+            .withPropertyName("documentation")
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // ---------------------------------------------------------------------------

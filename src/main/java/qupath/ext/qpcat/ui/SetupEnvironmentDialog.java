@@ -130,7 +130,7 @@ public class SetupEnvironmentDialog {
         buttonBox.setAlignment(Pos.CENTER);
 
         VBox root = new VBox(12,
-                QpcatDocLinks.linkBar("1-setting-up-the-environment"),
+                QpcatDocLinks.linkBar("setup.md", null),
                 statusLabel, locationRow, locationLabel, variantRow,
                 progressBar, buttonBox);
         root.setPadding(new Insets(20));

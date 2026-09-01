@@ -99,21 +99,17 @@ def check_markdown():
 # Whole-file scan: these calls routinely wrap across lines, so a line-at-a-time
 # regex sees only the link TEXT and reports it as a bogus anchor.
 JAVA_CALL = re.compile(
-    r"QpcatDocLinks\.(?P<helper>howToGuide|linkBar|bestPractices|page)\s*\(\s*"
+    r"QpcatDocLinks\.(?P<helper>page|linkBar|pageUrl)\s*\(\s*"
     r"(?P<args>(?:\"(?:[^\"\\]|\\.)*\"\s*,?\s*)+)\)",
     re.DOTALL,
 )
 STRING = re.compile(r"\"((?:[^\"\\]|\\.)*)\"")
 
-# Which page each helper opens. Keep in step with QpcatDocLinks.
-HELPER_PAGE = {
-    "howToGuide": "documentation/HOW_TO_GUIDE.md",
-    "linkBar": "documentation/HOW_TO_GUIDE.md",
-    "bestPractices": "documentation/BEST_PRACTICES.md",
-}
-
 
 def check_java():
+    """In-app links. Every call names its page, so find the .md argument and take
+    whatever follows it as the anchor -- that holds for page(file, anchor),
+    page(text, file, anchor), linkBar(file, anchor) and pageUrl(file) alike."""
     problems = []
     if not os.path.isdir(JAVA_DIR):
         return problems
@@ -124,21 +120,14 @@ def check_java():
             path = os.path.join(root, name)
             text = open(path, encoding="utf-8", errors="replace").read()
             for m in JAVA_CALL.finditer(text):
-                helper = m.group("helper")
                 args = STRING.findall(m.group("args"))
-                if not args:
+                md = [i for i, a in enumerate(args) if a.endswith(".md")]
+                if not md:
                     continue
+                i = md[0]
+                page = os.path.join(DOC_DIR, args[i])
+                anchor = args[i + 1] if i + 1 < len(args) else None
                 line = text.count("\n", 0, m.start()) + 1
-                if helper == "page":
-                    # page("FILE.md", "anchor") -- explicit page, tree-friendly.
-                    page = os.path.join(DOC_DIR, args[0])
-                    anchor = args[1] if len(args) > 1 else None
-                else:
-                    page = HELPER_PAGE[helper]
-                    # One arg is the anchor; two are (text, anchor).
-                    anchor = args[-1] if len(args) >= 1 else None
-                    if len(args) == 1 and helper == "howToGuide":
-                        anchor = args[0]
                 anchors = anchors_of(page)
                 if anchors is None:
                     problems.append((path, line, page, anchor, "in-app page not found"))
@@ -147,8 +136,49 @@ def check_java():
     return problems
 
 
+# Anchors the results dialog appends to DOCS_BASE at runtime
+# (`DOCS_BASE + "#" + docAnchor`). Concatenated, so the call-site scan above
+# cannot see them -- but they are the links every results tab shows, so they get
+# their own check rather than being silently uncovered.
+CONCAT_PAGES = {
+    "DOCS_BASE": "results.md",
+    "BEST_PRACTICES_BASE": "clustering.md",
+}
+CONCAT_ANCHOR = re.compile(r"\"([a-z0-9]+(?:-[a-z0-9]+)+)\"")
+
+
+def check_concatenated_anchors():
+    """Verify the anchor literals the results dialog appends to a base URL."""
+    problems = []
+    path = os.path.join(JAVA_DIR, "qupath/ext/qpcat/ui/ClusteringDialog.java")
+    if not os.path.isfile(path):
+        return problems
+    text = open(path, encoding="utf-8", errors="replace").read()
+    for const, page_name in CONCAT_PAGES.items():
+        if const + " + \"#\"" not in text:
+            continue
+        page = os.path.join(DOC_DIR, page_name)
+        anchors = anchors_of(page)
+        if anchors is None:
+            problems.append((path, 1, page, None, "concatenated-link page not found"))
+            continue
+        # Any anchor-shaped literal that names a tab or an algorithm caution.
+        for m in CONCAT_ANCHOR.finditer(text):
+            anchor = m.group(1)
+            if not (anchor.endswith("-tab") or anchor.endswith("-tabs")
+                    or anchor.startswith("caution-")):
+                continue
+            target = "clustering.md" if anchor.startswith("caution-") else page_name
+            target_anchors = anchors_of(os.path.join(DOC_DIR, target))
+            if target_anchors is not None and anchor not in target_anchors:
+                line = text.count("\n", 0, m.start()) + 1
+                problems.append((path, line, target, anchor, "results-tab anchor not found"))
+        break
+    return problems
+
+
 def main():
-    problems = check_markdown() + check_java()
+    problems = check_markdown() + check_java() + check_concatenated_anchors()
     if not problems:
         print("[doc-links] OK -- every documentation link resolves")
         return 0

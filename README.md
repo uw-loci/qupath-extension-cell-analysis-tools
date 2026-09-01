@@ -12,13 +12,28 @@ QP-CAT embeds a full scientific Python environment (via [Appose](https://github.
 
 ### Documentation
 
-- **[How-To Guide](documentation/HOW_TO_GUIDE.md)** -- Step-by-step instructions for every workflow
-- **[Best Practices](documentation/BEST_PRACTICES.md)** -- Recommendations for measurement selection, normalization, algorithm choice, and phenotyping strategy
-- **[Scripting (Groovy)](documentation/SCRIPTING.md)** -- programmatic API for the spatial graph, spatial statistics, batch figure export, and the YAML headless-batch runner, callable from QuPath workflow scripts
-- **[YAML Schema](documentation/YAML_SCHEMA.md)** -- field-by-field reference for the YAML headless-batch config file
-- **[Troubleshooting -- LLM Cluster Explainer](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md)** -- error states for the Cluster Explainer (LLM) [Experimental] tab with what-you-see / what-it-means / what-to-do for every case
-- **[Troubleshooting -- YAML Headless Batch](documentation/TROUBLESHOOTING_YAML_BATCH.md)** -- error-by-error remediation for the YAML batch runner, keyed by `E0xx` validation codes
-- **[References](documentation/REFERENCES.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
+Start at **[documentation/README.md](documentation/README.md)** -- it routes by task.
+One page per topic:
+
+| Page | Covers |
+|---|---|
+| [Setup](documentation/setup.md) | Installing the Python environment, its location, CPU vs GPU |
+| [Clustering](documentation/clustering.md) | Running a clustering, and which measurements, normalization and algorithm to choose |
+| [Results](documentation/results.md) | The results window: heatmap, embedding, composition, markers |
+| [Working with clusters](documentation/clusters.md) | Judging, renaming, merging, sub-clustering, gating |
+| [Phenotyping](documentation/phenotyping.md) | Labelling cells by marker rules |
+| [Spatial statistics](documentation/spatial-statistics.md) | Ripley, Geary, co-occurrence, Moran's I |
+| [Neighborhoods](documentation/spatial-neighborhoods.md) | Spatial niches, independent areas, the viewer overlay |
+| [Autoencoder](documentation/autoencoder.md) | Classifying cells by appearance |
+| [Exporting](documentation/exporting.md) | Figures, AnnData, VEST 3D |
+| [Batch runs](documentation/batch.md) | Headless YAML, and what its errors mean |
+| [YAML reference](documentation/yaml-reference.md) | Field-by-field config reference |
+| [Scripting](documentation/scripting.md) | Groovy API for graph, statistics, export and batch |
+| [Reproducibility](documentation/reproducibility.md) | Reproducing a run, and what makes one slow |
+| [LLM explainer](documentation/llm-explainer.md) | Cluster naming from an LLM [Experimental] |
+| [Troubleshooting](documentation/troubleshooting.md) | Common pitfalls, the Python console, bug reports |
+| [Recipes](documentation/recipes.md) | Worked examples |
+- **[References](documentation/references.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
 
 ---
 
@@ -30,34 +45,34 @@ caveats.
 
 **Set up**
 
-- **[No-setup install](documentation/HOW_TO_GUIDE.md#1-setting-up-the-environment)** -- one click configures the full Python environment. No conda, no command line. <sub>~1.5-2.5 GB download, ~2.5 GB on disk</sub>
+- **[No-setup install](documentation/setup.md)** -- one click configures the full Python environment. No conda, no command line. <sub>~1.5-2.5 GB download, ~2.5 GB on disk</sub>
 
 **Find cell types**
 
-- **[Discover cell types without labels](documentation/HOW_TO_GUIDE.md#2-running-clustering)** -- group cells automatically by marker expression. <sub>Leiden or KMeans to start, HDBSCAN for rare populations, BANKSY when architecture matters; plus 3 more</sub>
-- **[Marker gating with auto-thresholds](documentation/HOW_TO_GUIDE.md#6-rule-based-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
-- **[Cleaner clusters via tissue context](documentation/BEST_PRACTICES.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
-- **[Annotate a few cells, classify the rest](documentation/HOW_TO_GUIDE.md#12-autoencoder-cell-classifier)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
-- **[Get a phenotype suggestion in plain English](documentation/HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
+- **[Discover cell types without labels](documentation/clustering.md)** -- group cells automatically by marker expression. <sub>Leiden or KMeans to start, HDBSCAN for rare populations, BANKSY when architecture matters; plus 3 more</sub>
+- **[Marker gating with auto-thresholds](documentation/phenotyping.md#running-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
+- **[Cleaner clusters via tissue context](documentation/clustering.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
+- **[Annotate a few cells, classify the rest](documentation/autoencoder.md)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
+- **[Get a phenotype suggestion in plain English](documentation/README.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
 
 **Ask spatial questions**
 
-- **[Test where cell types live in tissue](documentation/HOW_TO_GUIDE.md#17-spatial-statistics-ripley-geary-co-occurrence)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley K/L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
-- **[Find cellular neighborhoods](documentation/HOW_TO_GUIDE.md#22-finding-cellular-neighborhoods-spatial-niches)** -- recurring tissue niches, from the cell-type composition around each cell. <sub>Windowed composition + clustering</sub>
-- **[Compare across slides and batches](documentation/BEST_PRACTICES.md#batch-correction)** -- clusters that reflect biology, not slide-of-origin or staining day. <sub>Harmony, across a multi-image project</sub>
+- **[Test where cell types live in tissue](documentation/spatial-statistics.md)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley K/L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
+- **[Find cellular neighborhoods](documentation/spatial-neighborhoods.md#cellular-neighborhoods)** -- recurring tissue niches, from the cell-type composition around each cell. <sub>Windowed composition + clustering</sub>
+- **[Compare across slides and batches](documentation/clustering.md)** -- clusters that reflect biology, not slide-of-origin or staining day. <sub>Harmony, across a multi-image project</sub>
 
 **Look at results**
 
-- **[Click the plot, see the cells](documentation/HOW_TO_GUIDE.md#20-results-dialog-reference)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
-- **[Gate cells on a 2D plot](documentation/HOW_TO_GUIDE.md#25-gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
-- **[Publication-ready follow-up](documentation/HOW_TO_GUIDE.md#20-results-dialog-reference)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
+- **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
+- **[Gate cells on a 2D plot](documentation/clusters.md#gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
+- **[Publication-ready follow-up](documentation/results.md)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
 
 **Get results out**
 
-- **[Hand off to Python / R](documentation/HOW_TO_GUIDE.md#13-exporting-anndata)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
-- **[Export every figure in one click](documentation/HOW_TO_GUIDE.md#18-exporting-figures)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF; SVG / PDF / EPS in v1.1; callable from Groovy</sub>
-- **[Run in batch from one YAML config](documentation/YAML_SCHEMA.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is identical to the dialog</sub>
-- **[Reproducible audit trail](documentation/HOW_TO_GUIDE.md#16-reviewing-the-operation-audit-trail)** -- every run's parameters, cell counts and results, in plain text. <sub>Per-project log, diff-friendly</sub>
+- **[Hand off to Python / R](documentation/exporting.md#anndata-for-python)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
+- **[Export every figure in one click](documentation/exporting.md#figure-export)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF; SVG / PDF / EPS in v1.1; callable from Groovy</sub>
+- **[Run in batch from one YAML config](documentation/yaml-reference.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is identical to the dialog</sub>
+- **[Reproducible audit trail](documentation/reproducibility.md#the-audit-log)** -- every run's parameters, cell counts and results, in plain text. <sub>Per-project log, diff-friendly</sub>
 
 <sub>Batch export and YAML batch mode were inspired by
 [OpenIMC](https://github.com/dean-tessone/OpenIMC); QP-CAT's spatial-stats
@@ -69,7 +84,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Java** 21+
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
-- **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/GPU_ACCELERATION.md) for details on what does and doesn't benefit.
+- **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/setup.md#cpu-or-gpu) for details on what does and doesn't benefit.
 - **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (which has never been successfully run end-to-end by the developers). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
@@ -236,7 +251,7 @@ When enabled in the clustering dialog, QP-CAT computes spatial statistics over c
 - **Moran's I autocorrelation** -- per-marker spatial autocorrelation (already in QP-CAT v0)
 - **Co-occurrence** (pairwise + one-vs-rest) -- how often cluster A is found within distance r of cluster B across a range of r. Pairwise gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison
 
-Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [SCRIPTING.md](documentation/SCRIPTING.md) for the Groovy API.
+Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [SCRIPTING.md](documentation/scripting.md) for the Groovy API.
 
 ### Graph constructor (kNN / Radius / Delaunay)
 
@@ -344,7 +359,7 @@ It does **not** see pixels, individual cell measurements, image metadata, patien
 
 The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never serialized into `SavedClusteringResult`. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
 
-See [How-To Guide section 10](documentation/HOW_TO_GUIDE.md#10-explaining-clusters-with-an-llm-beta) for the full workflow and [Best Practices](documentation/BEST_PRACTICES.md#when-to-use-the-llm-cluster-explainer) for guidance on when to trust the output.
+See [How-To Guide section 10](documentation/README.md) for the full workflow and [Best Practices](documentation/llm-explainer.md#when-it-is-worth-using) for guidance on when to trust the output.
 
 </details>
 
@@ -355,7 +370,7 @@ See [How-To Guide section 10](documentation/HOW_TO_GUIDE.md#10-explaining-cluste
 
 **Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. Tested and working.
 
-This is an **original QP-CAT implementation**, not a wrapper around a published Python library -- the VAE, the classifier head, the KL annealing schedule and the tile-mode masking were written for this extension -- and it is **unpublished and not peer reviewed**. The design draws on published methods ([REFERENCES.md](documentation/REFERENCES.md#autoencoder-cell-classification)), but this combination has not been through review; validate it on your own data, and describe it as software rather than citing it as a method.
+This is an **original QP-CAT implementation**, not a wrapper around a published Python library -- the VAE, the classifier head, the KL annealing schedule and the tile-mode masking were written for this extension -- and it is **unpublished and not peer reviewed**. The design draws on published methods ([REFERENCES.md](documentation/references.md#autoencoder-cell-classification)), but this combination has not been through review; validate it on your own data, and describe it as software rather than citing it as a method.
 
 ### How It Works
 
@@ -526,7 +541,7 @@ iterative session leaves a chain of versions you can step through in either dire
 names then appear throughout the Results window (heatmap, embedding legend, composition table
 and pies, fingerprints, gallery) and in exported figures and CSVs.
 
-See [HOW_TO_GUIDE: Iterating, and stepping backwards](documentation/HOW_TO_GUIDE.md#iterating-and-stepping-backwards).
+See [HOW_TO_GUIDE: Iterating, and stepping backwards](documentation/README.md).
 
 </details>
 
@@ -626,7 +641,7 @@ All items are under **Extensions > QP-CAT**:
 | Quick Cluster > Quick HDBSCAN | One-click HDBSCAN with defaults | Image + detections |
 | Manage Clusters... | Rename and merge cluster classifications | Image |
 | Export AnnData (.h5ad)... | Export data for external analysis tools | Image + detections |
-| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [HOW_TO_GUIDE chapter 18](documentation/HOW_TO_GUIDE.md#18-exporting-figures) | Project + at least one saved clustering result |
+| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [HOW_TO_GUIDE chapter 18](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
 | Setup & help > Python Console | View Python debug output | None |
 | Setup & help > System Info... | Show version and environment details | Environment ready |
 | Setup & help > Rebuild analysis environment | Delete and re-download Python environment | None |
@@ -665,7 +680,7 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
   QP-CAT predicts whether it can finish on *your machine's actual RAM* and refuses
   runs that would crash or hang. The clustering dialog shows this as a red box with
   the reason and an alternative; YAML batch runs fail the image with a clear error
-  message. See [TROUBLESHOOTING_YAML_BATCH.md](documentation/TROUBLESHOOTING_YAML_BATCH.md)
+  message. See [TROUBLESHOOTING_YAML_BATCH.md](documentation/batch.md#when-it-fails)
   for the list of guarded analyses and remedies.
 
 - **A run that seems stuck is usually the embedding.** UMAP dominates wall time at
@@ -685,14 +700,14 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 - Above 150,000 cells the embedding scatter plot draws a cluster-stratified
   subsample, stated in the plot title. Clustering still uses every cell.
 
-See [BEST_PRACTICES: Large datasets](documentation/BEST_PRACTICES.md#large-datasets-200000-cells)
+See [BEST_PRACTICES: Large datasets](documentation/clustering.md)
 for the reasoning and sources.
 
 ### Cluster Explainer (LLM) issues
 
 The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, malformed response, Ollama endpoint down, Ollama model not pulled, request cancelled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
 
-See [`documentation/TROUBLESHOOTING_LLM_EXPLAINER.md`](documentation/TROUBLESHOOTING_LLM_EXPLAINER.md) for the full list with what-you-see / what-it-means / what-to-do for every case.
+See [`documentation/TROUBLESHOOTING_LLM_EXPLAINER.md`](documentation/llm-explainer.md#troubleshooting) for the full list with what-you-see / what-it-means / what-to-do for every case.
 
 </details>
 

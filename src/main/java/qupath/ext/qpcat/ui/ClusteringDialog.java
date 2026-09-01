@@ -74,14 +74,11 @@ public class ClusteringDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringDialog.class);
 
-    /** Base URL for the HOW_TO_GUIDE; each Results-dialog tab appends a fragment
-     *  to point at its dedicated subsection in Chapter 20. Shared with the other
-     *  QP-CAT dialogs via {@link QpcatDocLinks}. */
-    private static final String DOCS_BASE = QpcatDocLinks.HOW_TO_GUIDE;
+    /** Results page; each Results-dialog tab appends its own anchor. */
+    private static final String DOCS_BASE = QpcatDocLinks.pageUrl("results.md");
 
-    /** Base URL for BEST_PRACTICES.md; the clustering "Learn more" links append
-     *  a per-method anchor (e.g. #caution-gmm) defined in that doc. */
-    private static final String BEST_PRACTICES_BASE = QpcatDocLinks.BEST_PRACTICES;
+    /** Clustering page; the algorithm "Learn more" links append their anchor. */
+    private static final String BEST_PRACTICES_BASE = QpcatDocLinks.pageUrl("clustering.md");
 
     private final QuPathGUI qupath;
     private final Stage owner;
@@ -267,7 +264,7 @@ public class ClusteringDialog {
         // during a run; the status row (with Cancel) stays interactive because
         // it is a sibling, not a child, of this box.
         settingsBox = new VBox(10);
-        settingsBox.getChildren().add(QpcatDocLinks.linkBar("2-running-clustering"));
+        settingsBox.getChildren().add(QpcatDocLinks.linkBar("clustering.md", null));
         settingsBox.getChildren().addAll(
                 scopeNode,
                 new Separator(),
@@ -1498,10 +1495,10 @@ public class ClusteringDialog {
         reproNote.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
 
         HBox reproLinks = new HBox(12,
-                QpcatDocLinks.howToGuide("How-To: Reproducing a run",
-                        "23-reproducing-a-clustering-run"),
-                QpcatDocLinks.howToGuide("How-To: Headless YAML batch",
-                        "19-yaml-headless-batch"));
+                QpcatDocLinks.page("How-To: Reproducing a run",
+                        "reproducibility.md", "reproducing-a-run"),
+                QpcatDocLinks.page("How-To: Headless YAML batch",
+                        "batch.md", "running-one"));
         reproLinks.setAlignment(Pos.CENTER_LEFT);
 
         phasePane = new PhaseProgressPane();

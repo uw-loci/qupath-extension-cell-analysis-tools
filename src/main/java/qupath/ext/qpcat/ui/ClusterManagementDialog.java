@@ -302,7 +302,7 @@ public class ClusterManagementDialog {
         statusBar.setAlignment(Pos.CENTER_LEFT);
 
         VBox content = new VBox(8,
-                QpcatDocLinks.linkBar("11-managing-clusters-renamemerge"),
+                QpcatDocLinks.linkBar("clusters.md", "renaming-and-merging"),
                 scopeBox,
                 new Separator(),
                 infoLabel, clusterListView, editBar, statusBar);

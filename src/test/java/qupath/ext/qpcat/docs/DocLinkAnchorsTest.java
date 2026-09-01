@@ -34,34 +34,49 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DocLinkAnchorsTest {
 
     private static final Path REPO = Path.of(System.getProperty("user.dir"));
-    private static final Path GUIDE = REPO.resolve("documentation/HOW_TO_GUIDE.md");
+    private static final Path DOCS = REPO.resolve("documentation");
 
-    /** Anchor passed to QpcatDocLinks.howToGuide/linkBar, or as wrapWithGuide's docAnchor. */
+    /** Arguments of a QpcatDocLinks call. Each names its page, so the page is
+     *  whichever argument ends in ".md" and the anchor is the one after it. */
     private static final Pattern DOC_LINKS =
-            Pattern.compile("QpcatDocLinks\\.(?:howToGuide|linkBar)\\(([^)]*)\\)", Pattern.DOTALL);
+            Pattern.compile("QpcatDocLinks\\.(?:page|linkBar|pageUrl)\\(([^)]*)\\)", Pattern.DOTALL);
+    /** Page the results dialog appends its per-tab anchors to. */
+    private static final String RESULTS_PAGE = "results.md";
+    /** Page the algorithm "Learn more" links append their anchors to. */
+    private static final String CLUSTERING_PAGE = "clustering.md";
     private static final Pattern WRAP_GUIDE =
             Pattern.compile("wrapWithGuide\\((.*?)\\);", Pattern.DOTALL);
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
 
     @Test
     void everyInAppDocumentationLinkResolves() throws IOException {
-        assertThat(GUIDE).as("shipped guide").exists();
-        Set<String> anchors = anchorsIn(Files.readString(GUIDE, StandardCharsets.UTF_8));
+        assertThat(DOCS).as("shipped documentation").exists();
 
         Map<String, String> broken = new TreeMap<>();
         try (Stream<Path> java = Files.walk(REPO.resolve("src/main/java"))) {
             for (Path p : java.filter(f -> f.toString().endsWith(".java")).toList()) {
+                if (p.getFileName().toString().equals("QpcatDocLinks.java")) {
+                    continue;
+                }
                 String src = Files.readString(p, StandardCharsets.UTF_8);
-                for (String anchor : referencedAnchors(src)) {
-                    if (!anchors.contains(anchor)) {
-                        broken.put(anchor, p.getFileName().toString());
+                for (Map.Entry<String, String> ref : referencedLinks(src).entrySet()) {
+                    String page = ref.getValue();
+                    String anchor = ref.getKey();
+                    Path target = DOCS.resolve(page);
+                    if (!Files.exists(target)) {
+                        broken.put(page + "#" + anchor, p.getFileName() + " (page missing)");
+                        continue;
+                    }
+                    Set<String> anchors = anchorsIn(Files.readString(target, StandardCharsets.UTF_8));
+                    if (!anchor.isEmpty() && !anchors.contains(anchor)) {
+                        broken.put(page + "#" + anchor, p.getFileName().toString());
                     }
                 }
             }
         }
         assertThat(broken)
-                .as("in-app Documentation links with no matching section in HOW_TO_GUIDE.md "
-                        + "(anchor -> source file); fix the anchor or add the section")
+                .as("in-app Documentation links with no matching section (page#anchor -> source "
+                        + "file); fix the anchor or add the section")
                 .isEmpty();
     }
 
@@ -105,29 +120,36 @@ class DocLinkAnchorsTest {
     }
 
     /**
-     * Anchors a source file asks for. Deliberately conservative: only the LAST
-     * string argument of wrapWithGuide is an anchor (the earlier ones are guide
-     * prose), and only single-token strings are considered, so a link's visible
-     * TEXT is never mistaken for an anchor.
+     * Documentation links a source file asks for, as anchor -> page.
+     * <p>
+     * Two shapes. A {@code QpcatDocLinks} call names its page explicitly, so the
+     * page is the argument ending in {@code .md} and the anchor is the next one;
+     * that also stops a link's visible TEXT being mistaken for an anchor, which
+     * "Auto-thresholding" otherwise is. The results dialog instead concatenates
+     * a per-tab anchor onto a base URL, so those anchors are matched by shape and
+     * resolved against the page that base points at.
      */
-    private static Set<String> referencedAnchors(String src) {
-        Set<String> out = new LinkedHashSet<>();
+    private static Map<String, String> referencedLinks(String src) {
+        Map<String, String> out = new TreeMap<>();
         Matcher m = DOC_LINKS.matcher(src);
         while (m.find()) {
-            // The anchor is always the LAST string argument: howToGuide(anchor),
-            // howToGuide(text, anchor) and linkBar(anchor) all put it there. An
-            // earlier argument is the link's visible TEXT, and "Auto-thresholding"
-            // looks exactly like an anchor if you do not make that distinction.
             List<String> args = quoted(m.group(1));
-            if (!args.isEmpty()) {
-                addIfAnchorLike(out, args.get(args.size() - 1));
+            for (int i = 0; i < args.size(); i++) {
+                if (args.get(i).endsWith(".md")) {
+                    String anchor = (i + 1 < args.size()) ? args.get(i + 1) : "";
+                    out.put(anchor, args.get(i));
+                    break;
+                }
             }
         }
-        m = WRAP_GUIDE.matcher(src);
-        while (m.find()) {
-            List<String> args = quoted(m.group(1));
-            if (!args.isEmpty()) {
-                addIfAnchorLike(out, args.get(args.size() - 1));
+        // Per-tab anchors, appended to a base URL at runtime.
+        Matcher tab = Pattern.compile("\"([a-z0-9]+(?:-[a-z0-9]+)+)\"").matcher(src);
+        while (tab.find()) {
+            String anchor = tab.group(1);
+            if (anchor.endsWith("-tab") || anchor.endsWith("-tabs")) {
+                out.put(anchor, RESULTS_PAGE);
+            } else if (anchor.startsWith("caution-")) {
+                out.put(anchor, CLUSTERING_PAGE);
             }
         }
         return out;
