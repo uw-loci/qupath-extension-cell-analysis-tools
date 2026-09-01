@@ -8,6 +8,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Sub-clustering: cluster within a cluster.** *Manage Clusters* -> select one cluster ->
+  **Sub-cluster...** re-clusters only that population into `<name>.0`, `<name>.1`, ...
+  Cluster on lineage markers first, then split one lineage on its functional markers,
+  without raising the resolution globally and over-splitting everything else. Works on the
+  current image or pooled across project images (one run, so `.0` means the same thing in
+  every image), and the result is auto-saved like any other -- it opens the full results
+  window and its sub-clusters can be renamed or merged in turn. Contributed by @mikemcka;
+  the engine existed and `BEST_PRACTICES.md` already recommended the feature, but nothing
+  in the UI could invoke it.
+- **"Save plot..." in the results window** exports whichever tab is on top as a PNG,
+  exactly as displayed. The Heatmap, Marker Fingerprints, Embedding and 3D View tabs are
+  drawn live and previously had no export at all, so the results folder held figures from
+  some tabs and not others. Resolution follows the **Plot DPI** preference, so these match
+  the figures QP-CAT writes itself rather than being screenshots. Contributed by @mikemcka.
+- **"Reduce features with PCA before clustering"** in the Run Clustering dialog, for panels
+  with many marker x compartment combinations (2 markers across 34 compartments is 442
+  features). Reduces to principal components before embedding and clustering -- the standard
+  scanpy flow -- which is both faster and less noisy. Only engages when there are more
+  features than the **PCA Precursor Components** preference (default 50), so ordinary panels
+  are untouched; BANKSY is exempt because it runs its own PCA. Marker rankings, the heatmap
+  and the cluster means still use your original measurements, so cluster identities stay
+  interpretable. Contributed by @mikemcka.
+  - **This changes cluster labels**, so every run records whether it ran, in the operation
+    log, the Workflow tab entry and `RUN_INFO.txt`. A config saved before this option
+    existed loads with it **off**, so those runs still reproduce exactly.
+- **`PCA Precursor Components`** and **`Plot Feature Limit`** preferences
+  (*Edit > Preferences > QP-CAT: Clustering*), so neither the component count nor the
+  point at which plots switch to a feature subset is a constant only the source reveals.
+
 - **The Python environment location is configurable**
   ([#15](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/15)).
   **Edit > Preferences > QP-CAT: Python environment > Environment location**. Appose
@@ -28,6 +57,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   statistics, stay on CPU -- the GPU variant costs a several-GB download and buys nothing.
 
 ### Changed
+
+- **The dot plot, matrix plot and stacked violin no longer draw one column per feature on
+  wide panels.** Above the `Plot Feature Limit` (default 40) they show the most
+  cluster-discriminative features, an even share per cluster so no population is left out.
+  This was the dominant cost of the plotting step on large panels -- the stacked violin fits
+  a curve per feature *per cluster*. **The figure states how many of how many it is
+  showing**, so an exported PNG is never mistaken for the full panel. The heatmap and the
+  marker ranking table still cover every feature.
+- **The cluster embedding scatter is rasterized**, so writing it no longer scales with cell
+  count (matching the spatial scatter). Axes, labels and legend stay vector.
 
 - **`spatialdata` and `zarr` are pinned** (`>=0.4`, `>=2.18,<3`). A fresh re-solve drifts
   to zarr 3, which removed `zarr.storage.BaseStore` -- imported at load time by

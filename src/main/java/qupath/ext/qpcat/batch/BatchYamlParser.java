@@ -59,7 +59,7 @@ public final class BatchYamlParser {
             "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
             "embedding_execution_mode",
             "random_seed", "result_name",
-            "measurements", "spatial_smoothing", "batch_correction",
+            "measurements", "spatial_smoothing", "pca_precursor", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
             "banksy_lambda", "banksy_k_geom", "joint",
             "area_levels", "batch_key"));
@@ -275,6 +275,7 @@ public final class BatchYamlParser {
                 case "result_name" -> c.setResultName(asString(value));
                 case "measurements" -> c.setMeasurements(asStringList(value));
                 case "spatial_smoothing" -> c.setSpatialSmoothing(asBool(value, false));
+                case "pca_precursor" -> c.setPcaPrecursor(asBool(value, false));
                 case "batch_correction" -> c.setBatchCorrection(asBool(value, false));
                 case "n_clusters" -> c.setNClusters(asIntObj(value));
                 case "min_cluster_size" -> c.setMinClusterSize(asIntObj(value));

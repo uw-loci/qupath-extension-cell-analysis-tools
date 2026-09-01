@@ -246,6 +246,20 @@ public class ClusterManagementDialog {
         mergeBtn.setOnAction(e -> mergeSelected());
         mergeBtn.setTooltip(Tooltips.of("Merge two or more selected clusters into one name."));
 
+        // Sub-cluster the one selected cluster: re-cluster only its cells into
+        // sub-types. Enabled only when exactly one row is selected.
+        Button subclusterBtn = new Button("Sub-cluster...");
+        subclusterBtn.setDisable(true);
+        subclusterBtn.setTooltip(Tooltips.of(
+                "Re-cluster only the cells of the selected cluster into sub-types, "
+                + "labelled '<name>.0', '<name>.1', ... Opens the Run Clustering dialog "
+                + "scoped to that class, where you pick the scope and algorithm."));
+        subclusterBtn.setOnAction(e -> subclusterSelected());
+        clusterListView.getSelectionModel().getSelectedItems().addListener(
+                (javafx.collections.ListChangeListener<ClusterRow>) c ->
+                        subclusterBtn.setDisable(
+                                clusterListView.getSelectionModel().getSelectedItems().size() != 1));
+
         Button resetBtn = new Button("Reset");
         resetBtn.setOnAction(e -> reloadClusters());
         resetBtn.setTooltip(Tooltips.of("Discard pending edits and reload the cluster list."));
@@ -269,13 +283,13 @@ public class ClusterManagementDialog {
             applyVersionToCells(activeSaved, activeSourceName);
         });
 
-        HBox editBar = new HBox(8, renameBtn, mergeBtn, new Region(),
+        HBox editBar = new HBox(8, renameBtn, mergeBtn, subclusterBtn, new Region(),
                 applyVersionBtn, stepBackBtn, resetBtn);
-        HBox.setHgrow(editBar.getChildren().get(2), Priority.ALWAYS);
+        HBox.setHgrow(editBar.getChildren().get(3), Priority.ALWAYS);
         editBar.setAlignment(Pos.CENTER_LEFT);
 
-        Label infoLabel = new Label("Select one cluster to rename, or several to merge. "
-                + "Edits are staged; click Apply to write them.");
+        Label infoLabel = new Label("Select one cluster to rename or sub-cluster, or several "
+                + "to merge. Edits are staged; click Apply to write them.");
         infoLabel.setWrapText(true);
         infoLabel.setStyle("-fx-text-fill: #555;");
 
@@ -535,6 +549,37 @@ public class ClusterManagementDialog {
     }
 
     // --- Rename / merge (staged) ------------------------------------------
+
+    /**
+     * Open the Run Clustering dialog in sub-cluster mode for the one selected
+     * cluster, re-clustering that class's cells into "&lt;name&gt;.0", ".1", ...
+     * <p>
+     * Reads the class off the CELLS, so staged-but-unapplied renames do not
+     * apply: put the version on the cells first, or the run reports that no cells
+     * match.
+     */
+    private void subclusterSelected() {
+        List<ClusterRow> selected = new ArrayList<>(clusterListView.getSelectionModel().getSelectedItems());
+        if (selected.size() != 1) {
+            Dialogs.showWarningNotification("QPCAT", "Select exactly one cluster to sub-cluster.");
+            return;
+        }
+        String className = selected.get(0).displayName;
+        if (className == null || className.isBlank()) {
+            return;
+        }
+        // An open image is enough for a current-image run; a project with images
+        // is enough for a project-wide one. Only refuse when neither exists.
+        boolean haveImage = qupath.getImageData() != null;
+        boolean haveProject = qupath.getProject() != null
+                && !qupath.getProject().getImageList().isEmpty();
+        if (!haveImage && !haveProject) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "Open an image, or a project with images, to sub-cluster.");
+            return;
+        }
+        new ClusteringDialog(qupath, className).show();
+    }
 
     private void renameSelected() {
         List<ClusterRow> selected = new ArrayList<>(clusterListView.getSelectionModel().getSelectedItems());

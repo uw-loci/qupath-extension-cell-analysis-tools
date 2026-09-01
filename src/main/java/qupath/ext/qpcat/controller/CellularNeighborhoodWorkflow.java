@@ -403,6 +403,11 @@ public class CellularNeighborhoodWorkflow {
             }
             List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
             if (dets.isEmpty()) {
+                // Close the detached copy; a skipped image is never added to
+                // `loaded`, so nothing else will. Never close the LIVE open image.
+                if (!isOpenImage) {
+                    ClusteringWorkflow.closeReadImageData(imageData);
+                }
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }

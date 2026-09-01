@@ -145,6 +145,7 @@ public final class BatchYamlSchema {
         private String resultName;
         private List<String> measurements;
         private Boolean spatialSmoothing;
+        private Boolean pcaPrecursor;
         private Boolean batchCorrection;
         private Integer nClusters;           // agglomerative / gmm
         private Integer minClusterSize;      // hdbscan
@@ -257,6 +258,11 @@ public final class BatchYamlSchema {
         public Boolean getSpatialSmoothing() { return spatialSmoothing; }
         public void setSpatialSmoothing(Boolean spatialSmoothing) {
             this.spatialSmoothing = spatialSmoothing;
+        }
+
+        public Boolean getPcaPrecursor() { return pcaPrecursor; }
+        public void setPcaPrecursor(Boolean pcaPrecursor) {
+            this.pcaPrecursor = pcaPrecursor;
         }
 
         public Boolean getBatchCorrection() { return batchCorrection; }

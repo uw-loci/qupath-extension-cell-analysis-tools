@@ -866,7 +866,9 @@ Name rule sets with versions (e.g., "Immune Panel v1", "Immune Panel v2") rather
 
 **Problem:** Biologically distinct populations are lumped together.
 **Symptoms:** Known cell types are not separated; embedding shows sub-structure within clusters.
-**Solution:** Increase Leiden resolution, increase KMeans k, or run sub-clustering on specific clusters.
+**Solution:** Increase Leiden resolution, increase KMeans k, or run sub-clustering on specific
+clusters (*Manage Clusters* -> select one cluster -> **Sub-cluster...**, which reopens the Run
+Clustering dialog scoped to that class and labels the result `<name>.0`, `<name>.1`, ...).
 
 ### 5. Ignoring gate positions in phenotyping
 

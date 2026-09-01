@@ -68,6 +68,12 @@ public class ClusteringResult {
     // so the audit trail has to say which path was taken -- see
     // model_utils.resolve_umap_execution.
     private String embeddingExecution;
+
+    // Human-readable summary of the PCA precursor when it engaged (input feature
+    // count -> components, variance retained), or null when clustering ran on the
+    // full feature matrix. Recorded because the precursor changes cluster labels,
+    // so the audit trail and RUN_INFO have to say whether it ran.
+    private String pcaPrecursor;
     private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
     // Auto-save bookkeeping (transient; set by ClusteringWorkflow after the
@@ -94,6 +100,12 @@ public class ClusteringResult {
 
     /** @see #embeddingExecution */
     public void setEmbeddingExecution(String note) { this.embeddingExecution = note; }
+
+    /** @see #pcaPrecursor */
+    public String getPcaPrecursor() { return pcaPrecursor; }
+
+    /** @see #pcaPrecursor */
+    public void setPcaPrecursor(String note) { this.pcaPrecursor = note; }
 
     public int[] getClusterLabels() { return clusterLabels; }
     public int getNClusters() { return nClusters; }

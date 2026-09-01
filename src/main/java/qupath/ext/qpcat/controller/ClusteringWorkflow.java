@@ -407,6 +407,10 @@ public class ClusteringWorkflow {
         if (result.getEmbeddingExecution() != null) {
             auditParams.put("Embedding execution", result.getEmbeddingExecution());
         }
+        // The precursor changes cluster labels, so it belongs in the audit trail.
+        if (result.getPcaPrecursor() != null) {
+            auditParams.put("PCA precursor", result.getPcaPrecursor());
+        }
         OperationLogger.getInstance().logOperation(opType, auditParams, completeMsg, elapsed);
 
         // Auto-save so the result is always reloadable via "View Past Results",
@@ -703,6 +707,8 @@ public class ClusteringWorkflow {
 
             Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
             if (detections.isEmpty()) {
+                // Close the copy: a skipped image never reaches closeGroups().
+                closeReadImageData(imageData);
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
@@ -1051,6 +1057,11 @@ public class ClusteringWorkflow {
                 }
                 lines.add(areaLine.toString());
             }
+            if (result.getPcaPrecursor() != null) {
+                // Only recorded when it engaged, and for the same reason as the
+                // areas line above: re-running without it does NOT reproduce.
+                lines.add("// PCA precursor: " + result.getPcaPrecursor());
+            }
             lines.add("// Result: " + result.getNClusters() + " clusters, "
                     + result.getNCells() + " cells"
                     + (crossImage ? " across " + nImages + " images" : ""));
@@ -1318,6 +1329,8 @@ public class ClusteringWorkflow {
             }
             Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
             if (detections.isEmpty()) {
+                // Close the copy: a skipped image never reaches closeGroups().
+                closeReadImageData(imageData);
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
@@ -1820,6 +1833,11 @@ public class ClusteringWorkflow {
         inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
+        inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
+        // Absent from an older saved config -> isPcaPrecursor() is false, so the
+        // run reproduces on the full feature matrix as it originally did.
+        inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
+        inputs.put("pca_precursor_n_comps", QpcatPreferences.getClusterPcaPrecursorComponents());
 
         // ---- Spatial stats expansion (v1) inputs ----
         // Always pass; the Python side gates the heavy work on per-statistic flags.
@@ -2176,6 +2194,25 @@ public class ClusteringWorkflow {
                 logger.info("Embedding execution: {}", execNote);
             }
 
+            // Whether the PCA precursor engaged. It changes cluster labels, so the
+            // run has to record it in a form a human reads later.
+            Object precNote = task.outputs.get("pca_precursor");
+            if (precNote != null) {
+                try {
+                    Map<?, ?> m = new Gson().fromJson(String.valueOf(precNote), Map.class);
+                    int inFeat = ((Number) m.get("n_input_features")).intValue();
+                    int nComp = ((Number) m.get("n_components")).intValue();
+                    double var = ((Number) m.get("explained_variance")).doubleValue();
+                    String summary = String.format(
+                            "%d features -> %d PCs (%.1f%% variance retained)",
+                            inFeat, nComp, 100.0 * var);
+                    result.setPcaPrecursor(summary);
+                    logger.info("PCA precursor: {}", summary);
+                } catch (RuntimeException e) {
+                    logger.warn("Could not parse pca_precursor output: {}", precNote, e);
+                }
+            }
+
             // ---- Spatial graph overlay (v0.3) outputs ----
             ClusteringResult.SpatialGraphPayload payload = retrieveSpatialGraphPayload(
                     task, nCells);
@@ -2244,6 +2281,30 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * Label -&gt; display-name map for a sub-cluster run, matching exactly what
+     * {@link ResultApplier#applySubclusterLabels} writes onto the detections
+     * ({@code parentClusterName + "." + label}).
+     * <p>
+     * Covers EVERY distinct label including negative (noise) ones:
+     * {@code applySubclusterLabels} does not route those to "Noise (unclustered)"
+     * the way the top-level {@code applyClusterLabels} does, it names them
+     * {@code <parent>.-1} like any other label. Without this map the saved result
+     * would fall back to generic "Cluster N" names, so "Manage Clusters" and the
+     * results dialog would show names that nothing on the cells actually carries.
+     *
+     * @param labels            per-cell sub-cluster labels
+     * @param parentClusterName the class being sub-clustered
+     * @return label -&gt; display name, in first-seen order
+     */
+    private Map<Integer, String> buildSubclusterNames(int[] labels, String parentClusterName) {
+        Map<Integer, String> names = new LinkedHashMap<>();
+        for (int lab : labels) {
+            names.putIfAbsent(lab, parentClusterName + "." + lab);
+        }
+        return names;
+    }
+
+    /**
      * Runs sub-clustering on detections within a specific parent cluster.
      * The parent cluster detections are re-clustered and assigned hierarchical labels
      * (e.g., "Cluster 3.0", "Cluster 3.1").
@@ -2302,6 +2363,21 @@ public class ClusteringWorkflow {
             throw new IOException("Sub-clustering failed: " + e.getMessage(), e);
         }
 
+        // Per-cell back-references for plot-click navigation and representative
+        // crops, exactly as runClustering does. A single-image run carries no
+        // image segments, so supply the open image's id and name as the fallback.
+        String fbName = imageData.getServer().getMetadata().getName();
+        String fbId = null;
+        var projectForRefs = currentProject();
+        if (projectForRefs != null) {
+            var openEntry = projectForRefs.getEntry(imageData);
+            if (openEntry != null) fbId = openEntry.getID();
+        }
+        result.setCellRefs(buildCellRefs(extraction, fbId, fbName));
+        result.setCellParentNames(buildParentNames(extraction));
+        result.setCellParentClasses(buildParentClassNames(extraction));
+        result.setClusterNames(buildSubclusterNames(result.getClusterLabels(), parentClusterName));
+
         // Apply hierarchical sub-cluster labels
         report(progressCallback, "Applying sub-cluster labels...");
         ResultApplier applier = new ResultApplier();
@@ -2335,7 +2411,247 @@ public class ClusteringWorkflow {
                         extraction.getNCells()),
                 completeMsg, elapsed);
 
+        // Auto-save, the same treatment runClustering gives a single-image run,
+        // so the sub-cluster result is reloadable via "View Past Results" and
+        // renameable via "Manage Clusters". The scope label says it is a
+        // sub-cluster so it reads distinctly from a normal run in the dropdown.
+        String scopeKey = (fbId != null) ? fbId : fbName;
+        autoSaveResult(result, config, scopeKey,
+                fbName + " (sub-cluster of '" + parentClusterName + "')");
+
         return result;
+    }
+
+    /**
+     * Counts cells carrying {@code className} in each project image, without
+     * mutating anything.
+     * <p>
+     * Exists so the confirmation dialog can state what a project-wide
+     * sub-cluster run will actually re-classify -- "3,412 cells across 4 of 55
+     * images" rather than "up to 55 images". The distinction matters because
+     * matching is by class NAME: an image whose cells got that name from the
+     * user's own classifier rather than a QP-CAT run would be rewritten too, and
+     * the only defence against that is showing the real numbers first.
+     *
+     * @param imageEntries images to scan
+     * @param className    classification to count
+     * @return image entry -&gt; matching cell count, only for images with at least one
+     */
+    public Map<ProjectImageEntry<BufferedImage>, Integer> countCellsWithClass(
+            List<ProjectImageEntry<BufferedImage>> imageEntries, String className) {
+
+        Map<ProjectImageEntry<BufferedImage>, Integer> counts = new LinkedHashMap<>();
+        if (imageEntries == null || className == null) {
+            return counts;
+        }
+        for (ProjectImageEntry<BufferedImage> entry : imageEntries) {
+            ImageData<BufferedImage> imageData = null;
+            try {
+                imageData = entry.readImageData();
+                int n = 0;
+                for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
+                    var pc = det.getPathClass();
+                    if (pc != null && pc.toString().equals(className)) {
+                        n++;
+                    }
+                }
+                if (n > 0) {
+                    counts.put(entry, n);
+                }
+            } catch (Exception e) {
+                logger.warn("Could not scan {} for '{}': {}",
+                        entry.getImageName(), className, e.getMessage());
+            } finally {
+                closeReadImageData(imageData);
+            }
+        }
+        return counts;
+    }
+
+    /**
+     * Runs sub-clustering on one class pooled across multiple project images.
+     * Every image in {@code imageEntries} is searched for cells classified as
+     * {@code parentClusterName}; those are pooled, re-clustered TOGETHER in one
+     * run so the sub-labels are comparable across images, and written back onto
+     * their own image. Images with no matching cells are skipped -- most images
+     * will not carry every class.
+     * <p>
+     * Mirrors {@link #runProjectClustering} for the multi-image plumbing (load,
+     * extract, one Appose call, apply and save per image) and for auto-saving the
+     * result. Stays on the no-spatial-graph-overlay path {@link #runSubclustering}
+     * uses; that piece remains out of scope.
+     *
+     * @param parentClusterName the classification to sub-cluster
+     * @param imageEntries      project images to search
+     * @param config            clustering configuration
+     * @param progressCallback  optional callback for progress messages
+     * @return the pooled sub-cluster result
+     * @throws IOException if sub-clustering fails, or no image has a matching cell
+     */
+    public ClusteringResult runProjectSubclustering(
+            String parentClusterName,
+            List<ProjectImageEntry<BufferedImage>> imageEntries,
+            ClusteringConfig config,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+
+        if (imageEntries == null || imageEntries.isEmpty()) {
+            throw new IOException("No project images selected for sub-clustering.");
+        }
+
+        reportPhase(progressCallback, "load", "Loading '" + parentClusterName
+                + "' detections from " + imageEntries.size() + " images...");
+
+        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        try {
+            for (int idx = 0; idx < imageEntries.size(); idx++) {
+                ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
+                report(progressCallback, "Loading image " + (idx + 1) + "/" + imageEntries.size()
+                        + ": " + entry.getImageName());
+
+                ImageData<BufferedImage> imageData;
+                try {
+                    imageData = entry.readImageData();
+                } catch (Exception e) {
+                    logger.warn("Failed to read image data for {}: {}",
+                            entry.getImageName(), e.getMessage());
+                    continue;
+                }
+
+                List<PathObject> parentDetections = imageData.getHierarchy().getDetectionObjects()
+                        .stream()
+                        .filter(det -> {
+                            var pc = det.getPathClass();
+                            return pc != null && pc.toString().equals(parentClusterName);
+                        })
+                        .collect(java.util.stream.Collectors.toList());
+
+                if (parentDetections.isEmpty()) {
+                    // Close the copy we just read. Skipping is the COMMON case here
+                    // -- most images do not carry every class -- so leaving these
+                    // open would leak an ImageData per skipped image on every run.
+                    closeReadImageData(imageData);
+                    logger.info("Skipping {} - no detections classified as '{}'",
+                            entry.getImageName(), parentClusterName);
+                    continue;
+                }
+
+                groups.add(new MeasurementExtractor.ImageDetectionGroup(
+                        entry, imageData, parentDetections));
+                logger.info("Loaded {} '{}' detections from {}",
+                        parentDetections.size(), parentClusterName, entry.getImageName());
+            }
+
+            if (groups.isEmpty()) {
+                throw new IOException("No detections found with classification '"
+                        + parentClusterName + "' in any selected image.");
+            }
+
+            reportPhase(progressCallback, "extract", "Extracting measurements...");
+            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor.ExtractionResult extraction =
+                    extractor.extractMultiImage(groups, config.getSelectedMeasurements());
+
+            logger.info("Combined extraction: {} cells x {} measurements across {} images",
+                    extraction.getNCells(), extraction.getNMeasurements(),
+                    extraction.getImageSegments().size());
+
+            warnDroppedMeasurements(extraction);
+
+            int nImages = extraction.getImageSegments().size();
+            report(progressCallback, "Sub-clustering " + extraction.getNCells()
+                    + " cells from " + parentClusterName + " across " + nImages + " images...");
+
+            ClusteringResult result;
+            try {
+                result = ApposeClusteringService.withExtensionClassLoader(() ->
+                        executeClusteringTask(extraction, config, progressCallback));
+            } catch (IOException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IOException("Sub-clustering failed: " + e.getMessage(), e);
+            }
+
+            // Multi-image segments each carry their own entry, so no fallback needed.
+            result.setCellRefs(buildCellRefs(extraction, null, null));
+            result.setCellParentNames(buildParentNames(extraction));
+            result.setCellParentClasses(buildParentClassNames(extraction));
+            result.setClusterNames(
+                    buildSubclusterNames(result.getClusterLabels(), parentClusterName));
+
+            reportPhase(progressCallback, "apply", "Applying results to project images...");
+            ResultApplier applier = new ResultApplier();
+
+            for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
+                int start = segment.getStartIndex();
+                int end = segment.getEndIndex();
+
+                List<PathObject> segmentDetections = extraction.getDetections().subList(start, end);
+                int[] segmentLabels = new int[end - start];
+                System.arraycopy(result.getClusterLabels(), start, segmentLabels, 0, end - start);
+
+                applier.applySubclusterLabels(segmentDetections, segmentLabels, parentClusterName);
+
+                if (result.hasEmbedding()) {
+                    String prefix = ResultApplier.getEmbeddingPrefix(
+                            config.getEmbeddingMethod().getId(), embeddingName(config));
+                    double[][] segmentEmbedding = new double[end - start][];
+                    for (int i = 0; i < end - start; i++) {
+                        segmentEmbedding[i] = result.getEmbedding()[start + i];
+                    }
+                    applier.applyEmbedding(segmentDetections, segmentEmbedding, prefix);
+                }
+
+                @SuppressWarnings("unchecked")
+                ProjectImageEntry<BufferedImage> entry =
+                        (ProjectImageEntry<BufferedImage>) segment.getImageEntry();
+                @SuppressWarnings("unchecked")
+                ImageData<BufferedImage> imageData =
+                        (ImageData<BufferedImage>) segment.getImageData();
+
+                try {
+                    entry.saveImageData(imageData);
+                    logger.info("Saved sub-cluster labels for {} ({} detections)",
+                            entry.getImageName(), segment.getCount());
+                } catch (Exception e) {
+                    logger.error("Failed to save image data for {}: {}",
+                            entry.getImageName(), e.getMessage());
+                }
+
+                report(progressCallback, "Saved results for " + entry.getImageName());
+            }
+
+            if (qupath != null) {
+                Platform.runLater(() -> {
+                    ImageData<BufferedImage> currentImageData = qupath.getImageData();
+                    if (currentImageData != null) {
+                        currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
+                    }
+                });
+            }
+
+            String completeMsg = "Project sub-clustering complete: " + result.getNClusters()
+                    + " sub-clusters of '" + parentClusterName + "' across " + nImages + " images.";
+            report(progressCallback, completeMsg);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            Map<String, String> params = OperationLogger.subclusteringParams(
+                    parentClusterName, config.getAlgorithm().getDisplayName(),
+                    extraction.getNCells());
+            params.put("Images", nImages + " project image" + (nImages == 1 ? "" : "s"));
+            OperationLogger.getInstance().logOperation(
+                    "PROJECT SUB-CLUSTERING", params, completeMsg, elapsed);
+
+            autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY,
+                    nImages + " project image" + (nImages == 1 ? "" : "s")
+                            + " (sub-cluster of '" + parentClusterName + "')");
+
+            return result;
+        } finally {
+            // Every group holds a detached copy read via readImageData().
+            closeGroups(groups);
+        }
     }
 
     /**

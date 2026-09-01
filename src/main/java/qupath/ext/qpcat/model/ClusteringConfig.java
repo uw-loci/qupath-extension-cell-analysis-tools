@@ -93,6 +93,23 @@ public class ClusteringConfig {
     private int spatialSmoothingIterations = 1;
 
     /**
+     * Reduce a high-feature matrix to principal components before the embedding +
+     * clustering step (the canonical scanpy flow). Only engages when there is
+     * something to reduce -- the feature count exceeds the "PCA Precursor
+     * Components" preference -- so small panels are untouched, and BANKSY is
+     * always exempt because it runs its own PCA over spatially-augmented
+     * features.
+     * <p>
+     * Deliberately a nullable {@link Boolean}, not a primitive. The precursor
+     * CHANGES CLUSTER LABELS, and Gson leaves a field absent from the JSON at its
+     * initialised value -- so a primitive defaulting to {@code true} would silently
+     * switch it on for every config saved before this option existed, breaking the
+     * reproduce-this-run contract RUN_INFO.txt makes. Null means "written before
+     * the option existed" and reads as OFF; the dialog ticks it for new runs.
+     */
+    private Boolean pcaPrecursor;
+
+    /**
      * Reproducibility-vs-speed policy for the UMAP embedding: {@code "auto"},
      * {@code "reproducible"} or {@code "fast"}.
      * <p>
@@ -273,6 +290,20 @@ public class ClusteringConfig {
 
     public int getSpatialSmoothingIterations() { return spatialSmoothingIterations; }
     public void setSpatialSmoothingIterations(int v) { this.spatialSmoothingIterations = v; }
+
+    /**
+     * Whether the PCA precursor is requested for this run. Absent (null) means the
+     * config predates the option, which reads as off so the run reproduces.
+     *
+     * @see #pcaPrecursor
+     */
+    public boolean isPcaPrecursor() { return pcaPrecursor != null && pcaPrecursor; }
+
+    /** True only when the config actually recorded a choice. @see #pcaPrecursor */
+    public boolean hasPcaPrecursorChoice() { return pcaPrecursor != null; }
+
+    /** @see #pcaPrecursor */
+    public void setPcaPrecursor(boolean v) { this.pcaPrecursor = v; }
 
     // ---- Spatial stats expansion (v1) accessors ----
 

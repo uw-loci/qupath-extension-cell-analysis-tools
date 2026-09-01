@@ -118,6 +118,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per-image. |
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
+| `pca_precursor` | boolean | `false` | Reduce features to principal components before embedding + clustering (the scanpy flow). Only engages when the feature count exceeds the component count (`PCA Precursor Components` preference, default 50); BANKSY is always exempt. Omitted means off, so a YAML written before this option existed keeps producing the clusters it always did. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. |
 | `batch_key` | `images` \| `areas` | `images` | What Harmony treats as a batch. `areas` requires `area_levels`. See *Independent areas* below. |
 | `area_levels` | list[object] | -- (one area per image) | Hierarchy levels that split cells into physically separate areas, so no spatial graph crosses a boundary. See *Independent areas* below. |

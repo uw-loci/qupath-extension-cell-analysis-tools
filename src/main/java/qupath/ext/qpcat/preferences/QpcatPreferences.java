@@ -215,6 +215,19 @@ public final class QpcatPreferences {
     private static final IntegerProperty clusterPlotDpi = PathPrefs.createPersistentPreference(
             "qpcat.cluster.plotDpi", 150);
 
+    // How many principal components the PCA precursor keeps when the "Reduce
+    // features with PCA before clustering" option is on. Doubles as the engage
+    // floor: the precursor only runs when the feature count exceeds this.
+    private static final IntegerProperty clusterPcaPrecursorComponents =
+            PathPrefs.createPersistentPreference("qpcat.cluster.pcaPrecursorComponents", 50);
+
+    // Upper bound on how many features the per-feature plots (dotplot, matrix
+    // plot, stacked violin) draw before they switch to the most discriminative
+    // subset. A preference rather than a constant because the readable limit
+    // depends on the panel and on the figure size the user is aiming for.
+    private static final IntegerProperty clusterPlotMaxFeatures =
+            PathPrefs.createPersistentPreference("qpcat.cluster.plotMaxFeatures", 40);
+
     // When on, editing a cluster color in the Results dialog automatically
     // regenerates the static matplotlib PNGs (embedding / spatial scatter, etc.)
     // so they match the new colors. Default off: the interactive Java plots
@@ -489,6 +502,21 @@ public final class QpcatPreferences {
     public static int getClusterMiniBatchSize() { return clusterMiniBatchSize.get(); }
     public static int getClusterBanksyPcaDims() { return clusterBanksyPcaDims.get(); }
     public static int getClusterPlotDpi() { return clusterPlotDpi.get(); }
+    public static int getClusterPcaPrecursorComponents() { return clusterPcaPrecursorComponents.get(); }
+    public static int getClusterPlotMaxFeatures() { return clusterPlotMaxFeatures.get(); }
+
+    /**
+     * Scale factor for "Save plot..." snapshots of the live JavaFX result tabs,
+     * derived from {@link #getClusterPlotDpi()} against the 96 DPI a JavaFX
+     * logical pixel represents. Snapshotting at 1:1 would hand the user a
+     * screen-resolution PNG for exactly the tabs (heatmap, marker fingerprints)
+     * that have no matplotlib equivalent, so they would be the worst figures in
+     * the folder. One knob covers both kinds of plot rather than two that can
+     * disagree.
+     */
+    public static double getSavedPlotSnapshotScale() {
+        return Math.max(1.0, clusterPlotDpi.get() / 96.0);
+    }
     public static boolean isClusterAutoRegeneratePlots() { return clusterAutoRegeneratePlots.get(); }
     public static void setClusterAutoRegeneratePlots(boolean v) { clusterAutoRegeneratePlots.set(v); }
 
@@ -711,7 +739,37 @@ public final class QpcatPreferences {
                 .name("Plot DPI")
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Resolution for saved clustering plots in DPI (default: 150). "
-                        + "Higher = larger files but sharper images. Range: 72-300."))
+                        + "Higher = larger files but sharper images. Range: 72-300. "
+                        + "Also scales the 'Save plot...' button in the results window, which "
+                        + "snapshots the on-screen tab: at 150 the PNG is about 1.6x the "
+                        + "displayed size, so it holds up in a figure rather than looking "
+                        + "like a screenshot."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterPcaPrecursorComponents, Integer.class)
+                .name("PCA Precursor Components")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("How many principal components to keep when 'Reduce features "
+                        + "with PCA before clustering' is ticked in the Run Clustering dialog "
+                        + "(default: 50). This is also the threshold at which that option does "
+                        + "anything: with fewer features than this, clustering uses the full "
+                        + "matrix. Clamped to below the feature and cell counts. More components "
+                        + "retain more variance and reduce the speed-up. Changing this changes "
+                        + "cluster labels, so runs record what they used."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterPlotMaxFeatures, Integer.class)
+                .name("Plot Feature Limit")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Most features the dot plot, matrix plot and stacked violin will "
+                        + "draw (default: 40). These plots use one column per feature, so a "
+                        + "compartment-heavy panel (say 2 markers x 34 compartments = 442 "
+                        + "features) becomes both unreadable and slow -- the stacked violin fits "
+                        + "a curve per feature per cluster. Above this limit they show the most "
+                        + "cluster-discriminative features instead, taking an even share from "
+                        + "each cluster, and the figure states how many of how many it is "
+                        + "showing. Set it above your feature count to always plot everything. "
+                        + "The heatmap and marker rankings always cover the full panel."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterAutoRegeneratePlots, Boolean.class)

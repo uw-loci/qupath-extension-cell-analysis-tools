@@ -125,6 +125,15 @@ public final class ClusteringRunRecord {
                     .append(config.getSpatialGraphType()).append(")");
         }
         sb.append('\n');
+        // The precursor changes cluster labels, so a record headed "How to
+        // reproduce this run" has to state whether it ran and what it did.
+        sb.append("PCA precursor    : ").append(config.isPcaPrecursor());
+        if (result != null && result.getPcaPrecursor() != null) {
+            sb.append("  (").append(result.getPcaPrecursor()).append(")");
+        } else if (config.isPcaPrecursor()) {
+            sb.append("  (requested; did not engage -- too few features to reduce)");
+        }
+        sb.append('\n');
         if (config.isEnableSpatialAnalysis() || config.isAnySpatialStatEnabled()) {
             sb.append("Spatial stats    : graph=").append(config.getSpatialGraphType())
                     .append(" k=").append(config.getSpatialGraphK())

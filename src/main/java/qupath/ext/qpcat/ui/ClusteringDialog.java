@@ -51,6 +51,14 @@ import qupath.lib.projects.ProjectImageEntry;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.WritableImage;
+import javafx.scene.Parent;
+import javafx.scene.SnapshotParameters;
+import javafx.scene.transform.Transform;
+import javafx.stage.FileChooser;
+import javafx.embed.swing.SwingFXUtils;
+import javax.imageio.ImageIO;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import javafx.scene.paint.Color;
 
 import java.awt.image.BufferedImage;
@@ -76,6 +84,11 @@ public class ClusteringDialog {
 
     private final QuPathGUI qupath;
     private final Stage owner;
+
+    // Non-null puts the dialog in sub-cluster mode: it re-clusters only the cells
+    // of this class and writes "<parent>.0 / .1" labels, instead of a top-level
+    // run over every cell. Set by the Manage Clusters "Sub-cluster..." action.
+    private final String subclusterParentClass;
 
     // UI components
     // Reusable 3-way image-scope control (current / all / specific subset).
@@ -136,6 +149,7 @@ public class ClusteringDialog {
     private CheckBox spatialAnalysisCheck;
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
+    private CheckBox pcaPrecursorCheck;
     private CheckBox batchCorrectionCheck;
     private ComboBox<String> batchKeyCombo;
 
@@ -201,17 +215,47 @@ public class ClusteringDialog {
     private Spinner<Double> banksyResolutionSpinner;
 
     public ClusteringDialog(QuPathGUI qupath) {
+        this(qupath, null);
+    }
+
+    /**
+     * Sub-cluster constructor. When {@code subclusterParentClass} is non-null the
+     * dialog re-clusters only the cells carrying that class and applies
+     * hierarchical "&lt;parent&gt;.N" labels; pass null for a normal run.
+     *
+     * @param qupath                the QuPath instance
+     * @param subclusterParentClass class to sub-cluster, or null for a normal run
+     */
+    public ClusteringDialog(QuPathGUI qupath, String subclusterParentClass) {
         this.qupath = qupath;
         this.owner = qupath.getStage();
+        this.subclusterParentClass = subclusterParentClass;
     }
 
     public void show() {
+        boolean subcluster = subclusterParentClass != null;
+
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Run Clustering");
-        dialog.setHeaderText("Configure clustering parameters");
+        dialog.setTitle(subcluster
+                ? "QPCAT - Sub-cluster '" + subclusterParentClass + "'"
+                : "QPCAT - Run Clustering");
+        dialog.setHeaderText(subcluster
+                ? "Re-cluster cells classified as '" + subclusterParentClass
+                        + "' into sub-labels -- choose the scope below"
+                : "Configure clustering parameters");
         dialog.setResizable(true);
+
+        // Sub-cluster mode uses the same scope picker as a normal run; it just
+        // re-clusters the parent class's cells within the chosen scope rather
+        // than every cell.
+        Node scopeNode = createScopeSection();
+        if (subcluster) {
+            scopeSection.setScopeTooltip("Cells classified as '" + subclusterParentClass
+                    + "' in each selected image are pooled and re-clustered into '"
+                    + subclusterParentClass + ".N' sub-labels.");
+        }
 
         // Settings live in their own box so the whole group can be disabled
         // during a run; the status row (with Cancel) stays interactive because
@@ -219,7 +263,7 @@ public class ClusteringDialog {
         settingsBox = new VBox(10);
         settingsBox.getChildren().add(QpcatDocLinks.linkBar("2-running-clustering"));
         settingsBox.getChildren().addAll(
-                createScopeSection(),
+                scopeNode,
                 new Separator(),
                 createMeasurementSection(),
                 new Separator(),
@@ -247,7 +291,9 @@ public class ClusteringDialog {
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
 
         // Add Run button
-        ButtonType runType = new ButtonType("Run Clustering", ButtonBar.ButtonData.OK_DONE);
+        ButtonType runType = new ButtonType(
+                subcluster ? "Run Sub-clustering" : "Run Clustering",
+                ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().add(runType);
 
         runButton = (Button) dialog.getDialogPane().lookupButton(runType);
@@ -739,6 +785,19 @@ public class ClusteringDialog {
                 tipLabel("Iterations:", smoothingIterationsSpinner), smoothingIterationsSpinner);
         smoothingRow.setAlignment(Pos.CENTER_LEFT);
 
+        pcaPrecursorCheck = new CheckBox("Reduce features with PCA before clustering");
+        pcaPrecursorCheck.setSelected(true);
+        pcaPrecursorCheck.setTooltip(Tooltips.of(
+                "Reduce a many-feature matrix to principal components before the\n"
+                + "embedding and clustering step (the standard scanpy flow): faster,\n"
+                + "and less noisy on panels with many markers or compartments.\n"
+                + "Only does anything when there are more features than the component\n"
+                + "count, so small panels are untouched; BANKSY runs its own PCA and\n"
+                + "is unaffected. This CHANGES cluster labels, so each run records\n"
+                + "whether it ran, and loading a config saved before this option\n"
+                + "existed leaves it off so that run still reproduces.\n"
+                + "Component count: QP-CAT preferences, 'PCA Precursor Components'."));
+
         batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");
         batchCorrectionCheck.setSelected(false);
         batchCorrectionCheck.setDisable(true);
@@ -825,7 +884,7 @@ public class ClusteringDialog {
         refreshBatchGate.run();
 
         VBox box = new VBox(5, generatePlotsCheck, spatialAnalysisCheck,
-                smoothingRow, batchCorrectionCheck, batchKeyRow,
+                smoothingRow, pcaPrecursorCheck, batchCorrectionCheck, batchKeyRow,
                 areasPane, spatialStatsPane);
         return box;
     }
@@ -1891,6 +1950,7 @@ public class ClusteringDialog {
         config.setEnableSpatialAnalysis(spatialAnalysisCheck.isSelected());
         config.setEnableSpatialSmoothing(spatialSmoothingCheck.isSelected());
         config.setSpatialSmoothingIterations(smoothingIterationsSpinner.getValue());
+        config.setPcaPrecursor(pcaPrecursorCheck.isSelected());
         config.setEnableBatchCorrection(batchCorrectionCheck.isSelected());
         config.setAreaLevels(areasSection.getAreaLevels());
         config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
@@ -2235,6 +2295,10 @@ public class ClusteringDialog {
         spatialAnalysisCheck.setSelected(config.isEnableSpatialAnalysis());
         spatialSmoothingCheck.setSelected(config.isEnableSpatialSmoothing());
         smoothingIterationsSpinner.getValueFactory().setValue(config.getSpatialSmoothingIterations());
+        // A config written before this option existed records no choice; leave it
+        // OFF so reloading it reproduces the original clusters rather than
+        // silently switching on a step that changes labels.
+        pcaPrecursorCheck.setSelected(config.isPcaPrecursor());
         batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
         areasSection.setAreaLevels(config.getAreaLevels());
         batchKeyCombo.setValue(
@@ -2303,6 +2367,65 @@ public class ClusteringDialog {
     private boolean confirmClassificationOverwrite(
             List<ProjectImageEntry<BufferedImage>> subsetEntries) {
         boolean projectScope = scopeSection.isAllImages() || subsetEntries != null;
+
+        if (subclusterParentClass != null) {
+            // Sub-clustering only rewrites cells that already carry the parent
+            // class, so name that class rather than warning about "ALL
+            // classifications". Matching is by class NAME, so an image whose cells
+            // got that name from something other than this QP-CAT result would be
+            // rewritten too -- hence the real per-image counts below rather than
+            // "up to N images", which reads as a bound and hides the true scope.
+            if (projectScope) {
+                Project<BufferedImage> project = qupath.getProject();
+                List<ProjectImageEntry<BufferedImage>> entries = (subsetEntries != null)
+                        ? subsetEntries
+                        : (project != null ? project.getImageList() : List.of());
+                var counts = new ClusteringWorkflow(qupath)
+                        .countCellsWithClass(entries, subclusterParentClass);
+                if (counts.isEmpty()) {
+                    Dialogs.showWarningNotification("QPCAT",
+                            "No cells classified as '" + subclusterParentClass
+                            + "' in any of the " + entries.size() + " selected image(s).");
+                    return false;
+                }
+                long totalCells = counts.values().stream().mapToLong(Integer::longValue).sum();
+                StringBuilder perImage = new StringBuilder();
+                counts.entrySet().stream().limit(10).forEach(en -> perImage
+                        .append("\n  - ").append(en.getKey().getImageName())
+                        .append(": ").append(en.getValue()).append(" cell(s)"));
+                if (counts.size() > 10) {
+                    perImage.append("\n  - ... and ").append(counts.size() - 10)
+                            .append(" more image(s)");
+                }
+                return Dialogs.showConfirmDialog("QPCAT - sub-cluster?",
+                        totalCells + " cell(s) classified as '" + subclusterParentClass
+                        + "' in " + counts.size() + " of " + entries.size()
+                        + " selected image(s) will be re-clustered into '"
+                        + subclusterParentClass + ".0', '" + subclusterParentClass
+                        + ".1', etc., replacing that classification on those cells."
+                        + perImage + "\n\nResults are saved back to each image. Continue?");
+            }
+            var imageData = qupath.getImageData();
+            if (imageData == null) {
+                return true;
+            }
+            long matching = imageData.getHierarchy().getDetectionObjects().stream()
+                    .filter(d -> d.getPathClass() != null
+                            && d.getPathClass().toString().equals(subclusterParentClass))
+                    .count();
+            if (matching == 0) {
+                Dialogs.showWarningNotification("QPCAT",
+                        "No cells on this image are classified as '"
+                        + subclusterParentClass + "'.");
+                return false;
+            }
+            return Dialogs.showConfirmDialog("QPCAT - sub-cluster?",
+                    matching + " cell(s) classified as '" + subclusterParentClass
+                    + "' will be re-clustered into '" + subclusterParentClass + ".0', '"
+                    + subclusterParentClass + ".1', etc., replacing that classification "
+                    + "on those cells. Continue?");
+        }
+
         if (projectScope) {
             int n = subsetEntries != null ? subsetEntries.size()
                     : (qupath.getProject() != null ? qupath.getProject().getImageList().size() : 0);
@@ -2428,7 +2551,32 @@ public class ClusteringDialog {
                 // single current image (the 3D pane falls back to the current image).
                 final List<ProjectImageEntry<BufferedImage>> clusteredScope;
 
-                if (config.isClusterEntireProject()) {
+                // Sub-cluster completion messaging: whether the run was
+                // project-wide (in which case each image was already saved) and
+                // how many images the requested scope covered.
+                int subclusterScopeImages = 1;
+                boolean subclusterProjectWide = false;
+
+                if (subclusterParentClass != null && config.isClusterEntireProject()) {
+                    // Project-wide sub-cluster: pool the parent class's cells across
+                    // the selected images, re-cluster once so the sub-labels are
+                    // comparable, then relabel and save each image.
+                    Project<BufferedImage> project = qupath.getProject();
+                    if (project == null) {
+                        throw new Exception("No project is open.");
+                    }
+                    List<ProjectImageEntry<BufferedImage>> entries =
+                            (subsetEntries != null) ? subsetEntries : project.getImageList();
+                    subclusterScopeImages = entries.size();
+                    subclusterProjectWide = true;
+                    clusteredScope = entries;
+                    result = workflow.runProjectSubclustering(
+                            subclusterParentClass, entries, config, progress);
+                } else if (subclusterParentClass != null) {
+                    // Single-image sub-cluster: relabel the open image in place.
+                    clusteredScope = null;
+                    result = workflow.runSubclustering(subclusterParentClass, config, progress);
+                } else if (config.isClusterEntireProject()) {
                     // Multi-image project clustering: all images, or just the
                     // chosen subset under the "Specific images..." scope.
                     Project<BufferedImage> project = qupath.getProject();
@@ -2445,21 +2593,49 @@ public class ClusteringDialog {
                     result = workflow.runClustering(config, progress);
                 }
 
+                final ClusteringResult finalResult = result;
+                final int finalScopeImages = subclusterScopeImages;
+                final boolean finalProjectWide = subclusterProjectWide;
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
                     phasePane.complete();
-                    statusLabel.setText("Complete: " + result.getNClusters()
-                            + " clusters, " + result.getNCells() + " cells");
                     setRunActive(false);
                     activeWorkflow = null;
-                    Dialogs.showInfoNotification("QPCAT",
-                            "Clustering complete: " + result.getNClusters() + " clusters found.");
+
+                    if (subclusterParentClass != null) {
+                        String scopeNote = finalProjectWide
+                                ? " across up to " + finalScopeImages + " project image(s)"
+                                : "";
+                        // The project path already saved every processed image; the
+                        // single-image path only relabels the open ImageData, so that
+                        // one still needs a project save to persist the classes.
+                        String persistNote = finalProjectWide
+                                ? "Results were saved to each processed image."
+                                : "Save the project to persist the new classes.";
+                        String savedNote = finalResult.getSavedName() != null
+                                ? " Saved as '" + finalResult.getSavedName()
+                                        + "' -- rename or merge via \"Manage Clusters\"."
+                                : "";
+                        statusLabel.setText("Complete: " + finalResult.getNClusters()
+                                + " sub-clusters of '" + subclusterParentClass + "'" + scopeNote);
+                        Dialogs.showInfoNotification("QPCAT",
+                                "Sub-clustering complete: " + finalResult.getNClusters()
+                                + " sub-clusters of '" + subclusterParentClass + "'" + scopeNote
+                                + " (labels '" + subclusterParentClass + ".0', '"
+                                + subclusterParentClass + ".1', ...). " + persistNote + savedNote);
+                    } else {
+                        statusLabel.setText("Complete: " + finalResult.getNClusters()
+                                + " clusters, " + finalResult.getNCells() + " cells");
+                        Dialogs.showInfoNotification("QPCAT",
+                                "Clustering complete: " + finalResult.getNClusters()
+                                + " clusters found.");
+                    }
 
                     // Always open the results interface so the run is
                     // inspectable -- even a bare clustering (no plots / spatial
                     // stats) now opens, since the result was auto-saved and is
                     // reloadable via "View Past Results".
-                    showResultsDialog(result, clusteredScope);
+                    showResultsDialog(finalResult, clusteredScope);
                 });
             } catch (Exception e) {
                 // Cancellation is not a failure: nothing was written to objects.
@@ -3309,9 +3485,22 @@ public class ClusteringDialog {
         openFolderBtn.setDisable(resultsFolder == null);
         openFolderBtn.setOnAction(e -> openFolder(resultsFolder));
 
+        // "Save plot": whatever tab is on top, exactly as shown. One button rather
+        // than a bespoke exporter per tab, because the tabs mix live JavaFX views
+        // (heatmap, marker fingerprints, embedding scatter, 3D view) with static
+        // PNGs already on disk (dotplot, matrix plot, PAGA, violin) -- only the
+        // former have no export at all, and a snapshot covers both uniformly.
+        Button savePlotBtn = new Button("Save plot...");
+        savePlotBtn.setTooltip(Tooltips.of(
+                "Save the plot in the current tab as a PNG, exactly as displayed.\n"
+                + "Resolution follows the 'Plot DPI' preference, so it matches the\n"
+                + "figures QP-CAT writes itself rather than being a screenshot."));
+        savePlotBtn.setOnAction(e -> savePlotSnapshot(tabPane, stage, resultsFolder));
+
         Button closeResultsBtn = new Button("Close");
         closeResultsBtn.setOnAction(e -> stage.close());
-        buttonBar.getChildren().addAll(openFolderBtn, saveBtn, manageBtn, closeResultsBtn);
+        buttonBar.getChildren().addAll(openFolderBtn, saveBtn, manageBtn,
+                savePlotBtn, closeResultsBtn);
 
         // Disable save/manage if no project
         if (qp == null || qp.getProject() == null) {
@@ -3684,6 +3873,102 @@ public class ClusteringDialog {
         VBox box = new VBox(bar, content);
         VBox.setVgrow(content, Priority.ALWAYS);
         return box;
+    }
+
+    /**
+     * The plot content of a tab, with the {@link #wrapWithGuide} banner stripped.
+     * Every tab's content is either the {@code VBox(bar, content)} that method
+     * returns (the bar is always a {@code BorderPane}), or -- for the few tabs
+     * that skip it -- the tab content itself.
+     * <p>
+     * If a {@code ScrollPane} sits in that content, its {@code getContent()} is
+     * returned instead: snapshotting the ScrollPane captures only the current
+     * viewport, silently cropping anything scrolled out of view.
+     */
+    private static Node plotContentOf(Tab tab) {
+        Node content = tab.getContent();
+        if (content instanceof VBox vbox && vbox.getChildren().size() >= 2
+                && vbox.getChildren().get(0) instanceof BorderPane) {
+            content = vbox.getChildren().get(1);
+        }
+        ScrollPane scroll = findScrollPane(content);
+        return (scroll != null && scroll.getContent() != null) ? scroll.getContent() : content;
+    }
+
+    /**
+     * First {@code ScrollPane} in this subtree (depth-first), or null.
+     * <p>
+     * Does NOT descend into other {@link Control}s. A {@code TableView} or
+     * {@code ListView} builds its own scrolling machinery inside its skin, and
+     * that machinery only realises the visible rows -- returning it would export
+     * a table missing every row the user had not scrolled to. Stopping at the
+     * control keeps the whole control in frame instead.
+     */
+    private static ScrollPane findScrollPane(Node node) {
+        if (node instanceof ScrollPane sp) {
+            return sp;
+        }
+        if (node instanceof Control) {
+            return null;
+        }
+        if (node instanceof Parent parent) {
+            for (Node child : parent.getChildrenUnmodifiable()) {
+                ScrollPane found = findScrollPane(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Save the currently selected results tab as a PNG, exactly as displayed.
+     * <p>
+     * Rendered at the "Plot DPI" preference rather than 1:1, so the tabs with no
+     * matplotlib equivalent (heatmap, marker fingerprints) do not end up as the
+     * only screen-resolution figures in the folder.
+     */
+    private static void savePlotSnapshot(TabPane tabPane, Stage stage, File resultsFolder) {
+        Tab tab = tabPane.getSelectionModel().getSelectedItem();
+        if (tab == null) {
+            return;
+        }
+        Node target = plotContentOf(tab);
+        if (target == null) {
+            Dialogs.showWarningNotification("QPCAT", "This tab has nothing to save.");
+            return;
+        }
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Save plot as PNG");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("PNG image", "*.png"));
+        chooser.setInitialFileName(FilenameSanitizer.sanitize(tab.getText()) + ".png");
+        // Default to this result's own folder, where its other plots already live,
+        // rather than the OS default of the home directory.
+        if (resultsFolder != null && resultsFolder.isDirectory()) {
+            chooser.setInitialDirectory(resultsFolder);
+        }
+        File file = chooser.showSaveDialog(stage);
+        if (file == null) {
+            return;
+        }
+
+        try {
+            double scale = QpcatPreferences.getSavedPlotSnapshotScale();
+            SnapshotParameters params = new SnapshotParameters();
+            params.setTransform(Transform.scale(scale, scale));
+            WritableImage image = target.snapshot(params, null);
+            BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
+            ImageIO.write(buffered, "png", file);
+            // Same export convention as every other QP-CAT export: say where it
+            // went and open the folder, rather than only naming the file.
+            ExportLocation.announce(file.getParentFile(), "plot '" + tab.getText() + "'");
+        } catch (Exception e) {
+            logger.error("Failed to write plot snapshot", e);
+            Dialogs.showErrorNotification("QPCAT", "Could not write PNG: " + e.getMessage());
+        }
     }
 
     private static void styleGuideHyperlink(Hyperlink h) {

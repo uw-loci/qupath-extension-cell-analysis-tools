@@ -206,6 +206,39 @@ When "Spatial feature smoothing" is checked, a graph convolution pre-step is app
 
 This makes **any** algorithm spatially-aware (not just BANKSY). Adjust the smoothing **k** parameter to control the spatial neighborhood size (default 15). Higher k = stronger smoothing across a larger neighborhood.
 
+### Reduce features with PCA before clustering
+
+Panels built from many markers x many compartments produce very wide feature matrices (2 markers
+across 34 compartments is 442 features). Clustering directly on that is both slow and noisy, so
+QP-CAT offers the standard scanpy pre-step: reduce to principal components first, then embed and
+cluster on those.
+
+- The checkbox is **ticked for new runs** and sits in the Analysis block of the Run Clustering
+  dialog.
+- It only does anything when there are **more features than components** -- the
+  **PCA Precursor Components** preference (default 50) is both the target dimensionality and the
+  threshold. A 12-marker panel is untouched.
+- **BANKSY is always exempt**: it runs its own PCA over spatially-augmented features, and a
+  generic precursor would corrupt that.
+- Marker rankings, the heatmap, the dot plot values and the cluster means all still use your
+  **original measurements**, so cluster identities stay interpretable. Only the embedding and the
+  clustering algorithm see the components.
+
+> **It changes cluster labels.** Every run records what it did -- the operation log, the Workflow
+> tab entry, and the `PCA precursor` line in `RUN_INFO.txt` -- and loading a config saved before
+> this option existed leaves it **off**, so those runs still reproduce exactly. Two runs that
+> differ only in this setting are not comparable.
+
+### Why some plots show fewer features than you selected
+
+The dot plot, matrix plot and stacked violin draw one column per feature, so a wide panel makes
+them unreadable and slow (the stacked violin fits a curve per feature *per cluster*). Above the
+**Plot Feature Limit** preference (default 40) they switch to the most cluster-discriminative
+features, taking an even share from each cluster so no population goes unrepresented. The figure
+states how many of how many it is showing, so an exported PNG is never mistaken for the whole
+panel. Raise the preference above your feature count to always plot everything -- the **heatmap
+and the marker ranking table always cover every feature** regardless.
+
 ---
 
 ## 3. Quick Clustering
@@ -685,6 +718,30 @@ and target it directly next time.
 
 > Tip: if Manage Clusters offers only the manual path, run a clustering analysis first (QP-CAT
 > auto-saves each run), then reopen this dialog -- the saved-result path will be available.
+
+### Sub-clustering: cluster within a cluster
+
+Select **exactly one** cluster and click **Sub-cluster...** to re-cluster only that population.
+The Run Clustering dialog reopens scoped to that class, and the result is written back as
+`<name>.0`, `<name>.1`, ... replacing the parent class on those cells.
+
+This is the answer to under-clustering when raising the resolution globally would over-split
+everything else: cluster on lineage markers first, then sub-cluster one lineage on its functional
+markers.
+
+- **Scope works as it does for a normal run.** *Current image* re-clusters the open image only.
+  *All* / *Specific images* pools that class's cells across the selected images and clusters them
+  **together in one run**, so `.0` means the same thing in every image -- and writes the labels
+  back to each. Images with no cells of that class are skipped.
+- **It reads the class off the cells**, not the staged list. If you have renamed clusters but not
+  yet applied them, use *Put this version on the cells* first.
+- **Confirm carefully on a project-wide run.** Matching is by class **name**, so the confirmation
+  dialog lists the actual cell count per image before anything is written. If a class name in
+  another image came from somewhere other than this result, those cells would be re-classified
+  too -- the counts are there so you see that before agreeing.
+- The result is auto-saved like any other run: it appears in **View Past Results**, opens the full
+  results window (heatmap, embedding, plots, 3D view), and its sub-clusters can themselves be
+  renamed or merged in Manage Clusters.
 
 ---
 
