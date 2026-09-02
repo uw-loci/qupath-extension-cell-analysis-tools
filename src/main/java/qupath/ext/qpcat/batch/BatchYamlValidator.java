@@ -45,7 +45,7 @@ public final class BatchYamlValidator {
     private static final Set<String> CLUSTERING_TYPES = new HashSet<>(Arrays.asList(
             "leiden", "louvain", "kmeans", "skip", "hdbscan",
             "agglomerative", "minibatch_kmeans", "minibatchkmeans",
-            "gmm", "banksy", "none"));
+            "gmm", "banksy", "none", "existing"));
 
     private static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
             "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"));

@@ -592,7 +592,12 @@ public class ClusteringDialog {
     }
 
     private TitledPane createAlgorithmSection() {
-        algorithmCombo = new ComboBox<>(FXCollections.observableArrayList(Algorithm.values()));
+        // EXISTING is not a clustering method -- it analyses the classes already on
+        // the cells, and is reached from its own menu item, not from this list.
+        algorithmCombo = new ComboBox<>(FXCollections.observableArrayList(
+                java.util.Arrays.stream(Algorithm.values())
+                        .filter(a -> a != Algorithm.EXISTING)
+                        .toList()));
         algorithmCombo.setValue(Algorithm.LEIDEN);
         algorithmCombo.setOnAction(e -> {
             updateAlgorithmParams();

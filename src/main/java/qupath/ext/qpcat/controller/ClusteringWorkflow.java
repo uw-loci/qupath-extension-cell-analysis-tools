@@ -17,6 +17,7 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.DetectionSelector;
+import qupath.ext.qpcat.service.ExistingLabelReader;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -44,6 +45,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -1694,6 +1696,18 @@ public class ClusteringWorkflow {
             MeasurementExtractor.ExtractionResult extraction,
             ClusteringConfig config,
             Consumer<String> progressCallback) throws IOException {
+        return executeClusteringTask(extraction, config, null, progressCallback);
+    }
+
+    /**
+     * @param suppliedLabels dense 0..k-1 labels read off the objects, or null to
+     *                       let the chosen algorithm compute them
+     */
+    private ClusteringResult executeClusteringTask(
+            MeasurementExtractor.ExtractionResult extraction,
+            ClusteringConfig config,
+            int[] suppliedLabels,
+            Consumer<String> progressCallback) throws IOException {
 
         int nCells = extraction.getNCells();
         int nMeasurements = extraction.getNMeasurements();
@@ -1834,6 +1848,11 @@ public class ClusteringWorkflow {
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
         inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
+        // Labels read off the objects, for the analyze-existing-classifications
+        // path. Python validates length, sign and density before using them.
+        if (suppliedLabels != null) {
+            inputs.put("supplied_labels", buildLabelNDArray(suppliedLabels));
+        }
         // Absent from an older saved config -> isPcaPrecursor() is false, so the
         // run reproduces on the full feature matrix as it originally did.
         inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
@@ -2257,6 +2276,15 @@ public class ClusteringWorkflow {
      * that go through {@code impute_nonfinite} get that for free; the ones that read
      * {@code measurements.ndarray()} directly upcast explicitly.
      */
+    /** Cluster labels as an int32 NDArray, for the analyze-existing path. */
+    private static NDArray buildLabelNDArray(int[] labels) {
+        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, labels.length);
+        NDArray nd = new NDArray(NDArray.DType.INT32, shape);
+        var buf = nd.buffer().asIntBuffer();
+        buf.put(labels);
+        return nd;
+    }
+
     private static NDArray buildMeasurementNDArray(double[][] data, int nCells, int nMeasurements) {
         NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
         if (MeasurementExtractor.isFloat32Exact(data)) {
@@ -2488,6 +2516,193 @@ public class ClusteringWorkflow {
      * @return the pooled sub-cluster result
      * @throws IOException if sub-clustering fails, or no image has a matching cell
      */
+    /**
+     * Analyse the classifications the detections ALREADY carry, without clustering.
+     *
+     * <p>Computes the full results surface -- marker means, marker rankings, the
+     * embedding, composition and spatial statistics -- treating each existing
+     * PathClass as a population. It exists because a saved result is a snapshot of
+     * one run: after sub-clustering, the sub-clusters and the clusters they came
+     * from live in two disjoint results, while the objects carry the combined
+     * labelling that nothing could display.
+     *
+     * <p><b>Nothing is written to any object.</b> This method never calls
+     * {@link ResultApplier}; that absence is the point. It reads classifications it
+     * did not create, so it must not modify them, and no classification is added,
+     * changed or removed by running it.
+     *
+     * @param config           measurements, normalization, embedding and analysis
+     *                         options; its algorithm is forced to EXISTING
+     * @param entries          project images to read, or null for the current image
+     * @param includedClasses  class names to analyse, or null for every class found
+     * @param progressCallback optional progress messages
+     * @return the result, auto-saved and ready for the results window
+     * @throws IOException if no classified cells are found, or the analysis fails
+     */
+    public ClusteringResult runExistingLabelAnalysis(
+            ClusteringConfig config,
+            List<ProjectImageEntry<BufferedImage>> entries,
+            Set<String> includedClasses,
+            Consumer<String> progressCallback) throws IOException {
+
+        long startTime = System.currentTimeMillis();
+        config.setAlgorithm(ClusteringConfig.Algorithm.EXISTING);
+
+        List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        String fallbackName = null;
+        String fallbackId = null;
+        boolean multiImage = entries != null && !entries.isEmpty();
+
+        try {
+            if (multiImage) {
+                reportPhase(progressCallback, "load",
+                        "Reading classifications from " + entries.size() + " images...");
+                for (ProjectImageEntry<BufferedImage> entry : entries) {
+                    ImageData<BufferedImage> imageData;
+                    try {
+                        imageData = entry.readImageData();
+                    } catch (Exception e) {
+                        logger.warn("Failed to read image data for {}: {}",
+                                entry.getImageName(), e.getMessage());
+                        continue;
+                    }
+                    Collection<PathObject> dets = imageData.getHierarchy().getDetectionObjects();
+                    if (dets.isEmpty()) {
+                        closeReadImageData(imageData);
+                        logger.info("Skipping {} - no detections", entry.getImageName());
+                        continue;
+                    }
+                    dets = DetectionSelector.filterToCellsWhenPresent(dets, entry.getImageName());
+                    groups.add(new MeasurementExtractor.ImageDetectionGroup(
+                            entry, imageData, dets));
+                }
+            } else {
+                ImageData<BufferedImage> imageData = qupath == null ? null : qupath.getImageData();
+                if (imageData == null) {
+                    throw new IOException("No image is open.");
+                }
+                Collection<PathObject> dets = DetectionSelector.filterToCellsWhenPresent(
+                        imageData.getHierarchy().getDetectionObjects(), "existing classifications");
+                if (dets.isEmpty()) {
+                    throw new IOException("No detection objects found. Run cell detection first.");
+                }
+                groups.add(new MeasurementExtractor.ImageDetectionGroup(null, imageData, dets));
+                fallbackName = imageData.getServer().getMetadata().getName();
+                var project = currentProject();
+                if (project != null) {
+                    var openEntry = project.getEntry(imageData);
+                    if (openEntry != null) fallbackId = openEntry.getID();
+                }
+            }
+
+            if (groups.isEmpty()) {
+                throw new IOException("No detection objects found in any selected image.");
+            }
+
+            // Read the labels FIRST: the extraction must cover exactly the cells
+            // that carry an included class, so data[i] aligns with labels[i].
+            List<Collection<? extends PathObject>> perImage = new ArrayList<>();
+            for (MeasurementExtractor.ImageDetectionGroup g : groups) {
+                perImage.add(g.detections);
+            }
+            ExistingLabelReader.LabelSet labelSet =
+                    ExistingLabelReader.read(perImage, includedClasses);
+
+            if (labelSet.getNClasses() == 0) {
+                throw new IOException("No classified cells found. Every detection in the "
+                        + "chosen scope is unclassified, so there is nothing to analyze.");
+            }
+            report(progressCallback, labelSet.getNClasses() + " classes over "
+                    + labelSet.getLabels().length + " cells"
+                    + (labelSet.getUnclassified() > 0
+                        ? " (" + labelSet.getUnclassified() + " unclassified, excluded)" : ""));
+
+            // Rebuild the groups over ONLY the analysed cells, preserving image
+            // boundaries so the segments still describe which cells came from where.
+            List<MeasurementExtractor.ImageDetectionGroup> analysedGroups = new ArrayList<>();
+            int cursor = 0;
+            for (MeasurementExtractor.ImageDetectionGroup g : groups) {
+                List<PathObject> mine = new ArrayList<>();
+                for (PathObject det : g.detections) {
+                    if (cursor < labelSet.getAnalysed().size()
+                            && labelSet.getAnalysed().get(cursor) == det) {
+                        mine.add(det);
+                        cursor++;
+                    }
+                }
+                if (!mine.isEmpty()) {
+                    analysedGroups.add(new MeasurementExtractor.ImageDetectionGroup(
+                            g.imageEntry, g.imageData, mine));
+                }
+            }
+
+            reportPhase(progressCallback, "extract", "Extracting measurements...");
+            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor.ExtractionResult extraction = multiImage
+                    ? extractor.extractMultiImage(analysedGroups, config.getSelectedMeasurements())
+                    : extractor.extract(analysedGroups.get(0).detections,
+                            config.getSelectedMeasurements());
+            warnDroppedMeasurements(extraction);
+
+            if (extraction.getNCells() != labelSet.getLabels().length) {
+                throw new IOException("Internal error: extracted " + extraction.getNCells()
+                        + " cells but read " + labelSet.getLabels().length
+                        + " labels. Refusing rather than mislabelling.");
+            }
+
+            report(progressCallback, "Analyzing " + extraction.getNCells() + " cells across "
+                    + labelSet.getNClasses() + " classifications...");
+
+            ClusteringResult result;
+            try {
+                final int[] labels = labelSet.getLabels();
+                result = ApposeClusteringService.withExtensionClassLoader(() ->
+                        executeClusteringTask(extraction, config, labels, progressCallback));
+            } catch (IOException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new IOException("Analysis failed: " + e.getMessage(), e);
+            }
+
+            result.setCellRefs(buildCellRefs(extraction, fallbackId, fallbackName));
+            result.setCellParentNames(buildParentNames(extraction));
+            result.setCellParentClasses(buildParentClassNames(extraction));
+            // The class names ARE the populations; without this every panel would
+            // relabel them "Cluster N" and the sub-cluster names would be lost.
+            result.setClusterNames(new LinkedHashMap<>(labelSet.getNames()));
+
+            String completeMsg = "Analysis complete: " + labelSet.getNClasses()
+                    + " existing classifications over " + extraction.getNCells() + " cells.";
+            report(progressCallback, completeMsg);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            Map<String, String> params = new LinkedHashMap<>();
+            params.put("Source", "current object classifications");
+            params.put("Classes", String.valueOf(labelSet.getNClasses()));
+            params.put("Cells", String.valueOf(extraction.getNCells()));
+            params.put("Unclassified excluded", String.valueOf(labelSet.getUnclassified()));
+            params.put("Normalization", config.getNormalization().getId());
+            OperationLogger.getInstance().logOperation(
+                    "ANALYZE EXISTING CLASSIFICATIONS", params, completeMsg, elapsed);
+
+            String scopeKey = multiImage
+                    ? SavedClusteringResult.PROJECT_SCOPE_KEY
+                    : (fallbackId != null ? fallbackId : fallbackName);
+            String scopeLabel = multiImage
+                    ? (extraction.getImageSegments().size() + " project image(s), existing classifications")
+                    : (fallbackName + " (existing classifications)");
+            result.setDerivedOp("analyzed current classifications");
+            autoSaveResult(result, config, scopeKey, scopeLabel);
+
+            return result;
+        } finally {
+            // Only the detached copies we opened; never the live open image.
+            if (multiImage) {
+                closeGroups(groups);
+            }
+        }
+    }
+
     public ClusteringResult runProjectSubclustering(
             String parentClusterName,
             List<ProjectImageEntry<BufferedImage>> imageEntries,

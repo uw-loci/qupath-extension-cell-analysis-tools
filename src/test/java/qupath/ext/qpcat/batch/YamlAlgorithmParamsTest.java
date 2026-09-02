@@ -61,7 +61,7 @@ class YamlAlgorithmParamsTest {
         // "do not cluster" and is handled before the parser is reached.
         for (String id : new String[] {
                 "leiden", "louvain", "kmeans", "minibatch_kmeans", "minibatchkmeans",
-                "hdbscan", "agglomerative", "gmm", "banksy", "none"}) {
+                "hdbscan", "agglomerative", "gmm", "banksy", "none", "existing"}) {
             assertThat(parse(id)).as("validator accepts '%s'", id).isNotNull();
         }
     }

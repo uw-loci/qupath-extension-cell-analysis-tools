@@ -19,7 +19,15 @@ public class ClusteringConfig {
         MINIBATCHKMEANS("minibatchkmeans", "MiniBatch KMeans"),
         GMM("gmm", "Gaussian Mixture Model"),
         BANKSY("banksy", "BANKSY (spatially-aware)"),
-        NONE("none", "None (embedding only)");
+        NONE("none", "None (embedding only)"),
+        /**
+         * Not a clustering method: analyse the classifications the cells already
+         * carry. Deliberately a distinct id rather than reusing "none", which sets
+         * {@code embedding_only} in the Python script and switches off the marker
+         * ranking, PAGA and every plot -- the whole output this path exists for.
+         * Hidden from the Run Clustering dialog's algorithm list.
+         */
+        EXISTING("existing", "Existing classifications");
 
         private final String id;
         private final String displayName;
