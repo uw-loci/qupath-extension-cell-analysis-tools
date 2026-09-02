@@ -164,15 +164,28 @@ public final class SavedResultApplier {
 
         applyCore(project, saved, targetIds, openImageId(qupath), qupath.getImageData(),
                 null, null,
-                label -> {
-                    String n = nameByLabel != null ? nameByLabel.get(label) : null;
-                    return (n != null && !n.isBlank()) ? n : "Cluster " + label;
-                },
+                label -> nameForLabel(nameByLabel, label),
                 "rename/merge clusters", report);
 
         // Preserve each cluster's color under its (possibly new/merged) name.
         new ResultApplier().applyClusterColors(renamedColors(saved, nameByLabel), null);
         return report;
+    }
+
+    /**
+     * The class name a label gets when a rename/merge is applied.
+     *
+     * <p>A label the caller left out falls back to "Cluster N", which is what makes
+     * a split work: undoing a merge simply drops those labels from the map, and the
+     * cells are actively relabelled to their own names rather than skipped.
+     *
+     * @param nameByLabel custom names by label; may be null or partial
+     * @param label       cluster label
+     * @return the custom name when there is a non-blank one, else "Cluster N"
+     */
+    public static String nameForLabel(Map<Integer, String> nameByLabel, int label) {
+        String n = nameByLabel != null ? nameByLabel.get(label) : null;
+        return (n != null && !n.isBlank()) ? n : "Cluster " + label;
     }
 
     /**
@@ -191,8 +204,7 @@ public final class SavedResultApplier {
         Set<Integer> seen = new java.util.HashSet<>();
         for (int lab : labels) {
             if (lab < 0 || !seen.add(lab)) continue;
-            String n = nameByLabel != null ? nameByLabel.get(lab) : null;
-            String name = (n != null && !n.isBlank()) ? n : "Cluster " + lab;
+            String name = nameForLabel(nameByLabel, lab);
             Integer rgb = src != null ? src.get("Cluster " + lab) : null;
             if (rgb == null) rgb = ClusterPalette.rgbFor(lab);
             out.putIfAbsent(name, rgb);

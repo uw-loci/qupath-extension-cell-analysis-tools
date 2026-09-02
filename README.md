@@ -527,10 +527,11 @@ Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cel
 <details>
 <summary><h2>Cluster Management</h2></summary>
 
-**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, sub-cluster)...** opens a dialog for post-hoc cluster organization:
+**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, split, sub-cluster)...** opens a dialog for post-hoc cluster organization:
 
 - **Rename** -- Change a cluster's classification name (e.g., "Cluster 3" -> "CD8+ T Cells")
 - **Merge** -- Combine two or more clusters into one with a user-specified name
+- **Split** -- Separate a merged cluster back into the clusters it was made from, all of them or only some
 - **Step back to '<parent>'** -- re-apply the previous version's names to the cells, undoing an edit
 - **Put this version on the cells** -- the same move forwards, for any saved version
 

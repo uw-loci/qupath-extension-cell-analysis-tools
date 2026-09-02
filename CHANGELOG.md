@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Split a merged cluster back apart.** *Modify cell populations* -> select a merged
+  cluster -> **Split...** lists the clusters it was made from and separates out the ones
+  you choose: all of them to undo the merge, or some to take those out and leave the rest
+  merged. A merge only ever mapped several clusters to one name -- the labels underneath
+  were never rewritten -- so this needs no re-run and recovers nothing; it just stops the
+  merge from being a one-way door. Works on a staged merge and on one applied in an earlier
+  session. Requested by @mikemcka (#18).
 - **Sub-clustering: cluster within a cluster.** *Manage Clusters* -> select one cluster ->
   **Sub-cluster...** re-clusters only that population into `<name>.0`, `<name>.1`, ...
   Cluster on lineage markers first, then split one lineage on its functional markers,

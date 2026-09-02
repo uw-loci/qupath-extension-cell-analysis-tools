@@ -4,7 +4,7 @@ What to do with a result once you have one: judge it, rename it, split it, gate 
 or push it onto another image's detections.
 
 - [Judging a result](#judging-a-result)
-- [Modifying clusters: rename, merge, sub-cluster](#modifying-clusters)
+- [Modifying clusters: rename, merge, split, sub-cluster](#modifying-clusters)
 - [Sub-clustering](#sub-clustering-cluster-within-a-cluster)
 - [Gating cells on a 2D plot](#gating-cells-on-a-2d-plot)
 - [Applying a saved result to detections](#applying-a-saved-result-to-detections)
@@ -79,11 +79,11 @@ Clustering is rarely perfect on the first try. A typical workflow:
 <a name="renaming-and-merging"></a>
 ## Modifying clusters
 
-One dialog does three things to the populations a clustering run produced:
-**rename** them, **merge** several into one, and **sub-cluster** one into sub-types.
-All three apply across every image the run covered.
+One dialog does four things to the populations a clustering run produced:
+**rename** them, **merge** several into one, **split** a merge back apart, and
+**sub-cluster** one into sub-types. All four apply across every image the run covered.
 
-**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge,
+**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, split,
 sub-cluster)...**, or the **Modify clusters...** button in the Results window, which
 pre-selects the result you are viewing.
 
@@ -99,11 +99,11 @@ source image id + centroid, the same mechanism as "Apply saved result"). This is
 recommended and default path, and it is **non-destructive** -- your edit is written as a new
 copy, and the original saved result is never changed.
 
-You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, sub-cluster)...**), or from the **Results window** -- the **Modify clusters...** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
+You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, split, sub-cluster)...**), or from the **Results window** -- the **Modify clusters...** button in the "Cluster colors:" bar below the tabs. Launched from the Results window it **pre-selects the result you are viewing**, so the rename/merge is already scoped to exactly the images that result covers; you go straight to the cluster list.
 
 ### Using a saved result (recommended)
 
-1. **Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, sub-cluster)...** (or the **Modify clusters...** button in the Results window, which pre-selects the current result)
+1. **Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, split, sub-cluster)...** (or the **Modify clusters...** button in the Results window, which pre-selects the current result)
 2. Under **Apply changes to**, leave **Use a saved clustering result (recommended)** selected
    and pick the run from the drop-down (each entry shows its timestamp and scope, e.g.
    "6 project images").
@@ -112,15 +112,38 @@ You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Result
 5. **To merge:** select two or more clusters (Ctrl/Cmd+click), click **Merge Selected**, type
    the merged name. Merged rows combine and show their constituent cluster numbers in
    brackets.
-6. Edits are **staged** -- nothing is written until you click **Apply**. (Use **Reset** to
+6. **To split a merge:** select the merged cluster, click **Split...**, and choose which of
+   its constituents to separate out (all of them by default). See below.
+7. Edits are **staged** -- nothing is written until you click **Apply**. (Use **Reset** to
    discard staged edits.)
-7. Click **Apply**. You are asked to name the **new copy** (default `<result>_renamed`). QP-CAT
+8. Click **Apply**. You are asked to name the **new copy** (default `<result>_renamed`). QP-CAT
    then writes that copy and relabels the detections across all referenced images; a busy
    indicator runs while it works, and a summary reports how many cells were relabelled per
    image. Labels appear live -- no manual "Reload data" needed.
 
 The original saved result and its plots are left untouched, so you can always go back to the
 run's original labels.
+
+### Splitting a merge apart
+
+A merge is a **naming** operation: the clusters keep their own labels underneath, and the
+merged row shows them in brackets (`Immune (4210 cells)  [Cluster 1, Cluster 4]`). Nothing is
+discarded, so a merge you regret costs a click rather than a re-run.
+
+Select the merged cluster and click **Split...**. The constituents are listed with their cell
+counts, all selected:
+
+- **Leave them all selected** to undo the merge -- each cluster goes back to its own name.
+- **Deselect some** to keep those merged and separate out only the rest. Use this to pull one
+  cluster out of a class that is otherwise right.
+
+Like every other edit it is staged, so click **Apply** to write it. **Split...** is enabled
+only for a row built from more than one cluster; to change a single cluster's name, use
+**Rename...**.
+
+This works on a merge you have just staged and on one applied in an earlier session -- reopen
+the merged result from the drop-down and split it there. To undo an entire edit rather than one
+merge, use **Step back** (next section).
 
 ### Renamed clusters in the Results window
 

@@ -256,10 +256,26 @@ public class ClusterManagementDialog {
                 + "labelled '<name>.0', '<name>.1', ... Opens the Run Clustering dialog "
                 + "scoped to that class, where you pick the scope and algorithm."));
         subclusterBtn.setOnAction(e -> subclusterSelected());
+
+        // The undo for a merge. A merge only ever pointed several clusters at one
+        // name, so both paths still hold the constituents and separating them is a
+        // staged name change like any other -- nothing is recovered or re-run.
+        Button splitBtn = new Button("Split...");
+        splitBtn.setDisable(true);
+        splitBtn.setTooltip(Tooltips.of(
+                "Separate a merged cluster back into the clusters it was made from. "
+                + "Choose all of them to undo the merge, or only some to take those out "
+                + "and leave the rest merged."));
+        splitBtn.setOnAction(e -> splitSelected());
+
         clusterListView.getSelectionModel().getSelectedItems().addListener(
-                (javafx.collections.ListChangeListener<ClusterRow>) c ->
-                        subclusterBtn.setDisable(
-                                clusterListView.getSelectionModel().getSelectedItems().size() != 1));
+                (javafx.collections.ListChangeListener<ClusterRow>) c -> {
+                    List<ClusterRow> sel = clusterListView.getSelectionModel().getSelectedItems();
+                    subclusterBtn.setDisable(sel.size() != 1);
+                    // Only a row standing for more than one cluster can be split.
+                    splitBtn.setDisable(sel.size() != 1 || sel.get(0) == null
+                            || constituentCount(sel.get(0)) < 2);
+                });
 
         Button resetBtn = new Button("Reset");
         resetBtn.setOnAction(e -> reloadClusters());
@@ -288,20 +304,20 @@ public class ClusterManagementDialog {
         // top, the result version underneath. Six buttons in one row overflowed
         // and every label ellipsized ("Ren...", "Sub-clu..."), which is worse
         // than a taller dialog.
-        HBox selectionRow = new HBox(8, renameBtn, mergeBtn, subclusterBtn);
+        HBox selectionRow = new HBox(8, renameBtn, mergeBtn, splitBtn, subclusterBtn);
         selectionRow.setAlignment(Pos.CENTER_LEFT);
         HBox versionRow = new HBox(8, applyVersionBtn, stepBackBtn, resetBtn);
         versionRow.setAlignment(Pos.CENTER_LEFT);
         VBox editBar = new VBox(6, selectionRow, versionRow);
 
         // Let each button keep its full label rather than shrinking to fit.
-        for (Button b : new Button[] {renameBtn, mergeBtn, subclusterBtn,
+        for (Button b : new Button[] {renameBtn, mergeBtn, splitBtn, subclusterBtn,
                 applyVersionBtn, stepBackBtn, resetBtn}) {
             b.setMinWidth(Region.USE_PREF_SIZE);
         }
 
-        Label infoLabel = new Label("Select one cluster to rename or sub-cluster, or several "
-                + "to merge. Edits are staged; click Apply to write them.");
+        Label infoLabel = new Label("Select one cluster to rename, split or sub-cluster, or "
+                + "several to merge. Edits are staged; click Apply to write them.");
         infoLabel.setWrapText(true);
         infoLabel.setMaxWidth(Double.MAX_VALUE);
         infoLabel.setStyle("-fx-text-fill: #555;");
@@ -623,6 +639,89 @@ public class ClusterManagementDialog {
         for (ClusterRow row : selected) applyNameToRow(row, target);
     }
 
+    /** Constituents behind a row: labels on the saved path, class names on the manual one. */
+    private static int constituentCount(ClusterRow row) {
+        return row.labels.isEmpty() ? row.origNames.size() : row.labels.size();
+    }
+
+    /**
+     * Separate a merged row back into the clusters it was built from.
+     *
+     * <p>Nothing is recovered here. A merge only ever mapped several clusters to
+     * one name, leaving the constituents intact -- labels on the saved path,
+     * original class names on the manual one -- so a split just restores each
+     * chosen constituent to its own name.
+     *
+     * <p>Choosing every constituent undoes the merge. Choosing some takes those
+     * out and leaves the rest merged, which is how one cluster is removed from a
+     * class without disturbing the others.
+     */
+    private void splitSelected() {
+        List<ClusterRow> selected = new ArrayList<>(clusterListView.getSelectionModel().getSelectedItems());
+        if (selected.size() != 1) {
+            Dialogs.showWarningNotification("QPCAT", "Select exactly one cluster to split.");
+            return;
+        }
+        ClusterRow row = selected.get(0);
+        if (constituentCount(row) < 2) {
+            Dialogs.showWarningNotification("QPCAT", "'" + row.displayName + "' is a single "
+                    + "cluster, so there is nothing to split. Use Rename to change its name.");
+            return;
+        }
+
+        // One entry per constituent, paired with the edit that restores its own name.
+        List<String> items = new ArrayList<>();
+        List<Runnable> restores = new ArrayList<>();
+        boolean savedPath = !row.labels.isEmpty();
+        if (savedPath) {
+            List<Integer> labs = new ArrayList<>(row.labels);
+            Collections.sort(labs);
+            for (int lab : labs) {
+                items.add("Cluster " + lab + "  (" + countByLabel.getOrDefault(lab, 0) + " cells)");
+                restores.add(() -> workingName.put(lab, "Cluster " + lab));
+            }
+        } else {
+            List<String> origs = new ArrayList<>(row.origNames);
+            Collections.sort(origs);
+            for (String orig : origs) {
+                items.add(orig + "  (" + manualCount.getOrDefault(orig, 0) + " cells)");
+                restores.add(() -> workingManual.put(orig, orig));
+            }
+        }
+
+        ListView<String> picker = new ListView<>(FXCollections.observableArrayList(items));
+        picker.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        // Undoing the whole merge is the common case, so it is the default.
+        picker.getSelectionModel().selectAll();
+        picker.setPrefHeight(Math.min(240, 26 * items.size() + 30));
+
+        Label help = new Label("All are selected, which undoes the merge completely. "
+                + "Deselect any that should stay in '" + row.displayName + "'.");
+        help.setWrapText(true);
+        help.setMaxWidth(420);
+        help.setStyle("-fx-text-fill: #555;");
+
+        Dialog<ButtonType> d = new Dialog<>();
+        d.setTitle("QPCAT - Split Cluster");
+        d.setHeaderText("'" + row.displayName + "' is " + items.size()
+                + " clusters under one name. Choose which to separate out.");
+        d.initOwner(owner);
+        VBox box = new VBox(8, help, picker);
+        box.setPadding(new Insets(6));
+        d.getDialogPane().setContent(box);
+        d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        Optional<ButtonType> choice = d.showAndWait();
+        if (choice.isEmpty() || choice.get() != ButtonType.OK) return;
+
+        List<Integer> picked = new ArrayList<>(picker.getSelectionModel().getSelectedIndices());
+        if (picked.isEmpty()) return;
+        for (int i : picked) restores.get(i).run();
+
+        if (savedPath) rebuildSavedRows(); else rebuildManualRows();
+        statusLabel.setText("Split " + picked.size() + " cluster(s) out of '" + row.displayName
+                + "'. Click Apply to write the change.");
+    }
+
     private void applyNameToRow(ClusterRow row, String newName) {
         if (isSavedPath()) {
             for (int lab : row.labels) workingName.put(lab, newName);
@@ -654,6 +753,31 @@ public class ClusterManagementDialog {
         }
     }
 
+    private boolean hasPendingSavedEdits() {
+        return hasPendingEdits(workingName, activeSaved);
+    }
+
+    /**
+     * Whether the staged names differ from the ones the result was saved with --
+     * the accurate "is there anything to apply" test.
+     *
+     * <p>Compared against the saved names rather than the "Cluster N" defaults,
+     * because a split back to defaults is a real edit and reopening an already-named
+     * result is not. Static and package-private so the comparison can be tested
+     * without a JavaFX toolkit.
+     *
+     * @param working staged label -> name
+     * @param saved   the result being edited, or null when none is selected
+     * @return true when at least one label's staged name differs from its saved one
+     */
+    static boolean hasPendingEdits(Map<Integer, String> working, SavedClusteringResult saved) {
+        if (saved == null || working == null) return false;
+        for (Map.Entry<Integer, String> e : working.entrySet()) {
+            if (!Objects.equals(e.getValue(), saved.displayNameForLabel(e.getKey()))) return true;
+        }
+        return false;
+    }
+
     private void applySavedPath() {
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || activeSaved == null || activeSourceName == null) {
@@ -665,7 +789,12 @@ public class ClusterManagementDialog {
         for (var e : workingName.entrySet()) {
             if (!e.getValue().equals("Cluster " + e.getKey())) custom.put(e.getKey(), e.getValue());
         }
-        if (custom.isEmpty()) {
+        // Ask whether the staged names differ from the SAVED ones, not from the
+        // "Cluster N" defaults. Testing whether `custom` is empty gets both
+        // directions wrong: splitting a merge fully back to defaults is a real edit
+        // that leaves it empty, and reopening an already-named result leaves it full
+        // with nothing edited.
+        if (!hasPendingSavedEdits()) {
             Dialogs.showInfoNotification("QPCAT", "No rename/merge edits to apply.");
             return;
         }
