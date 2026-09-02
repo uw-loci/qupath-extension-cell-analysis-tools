@@ -67,13 +67,19 @@ Useful for diagnosing errors, monitoring long operations, and seeing detailed Py
 Files a GitHub issue against
 [qupath-extension-cell-analysis-tools](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues)
 without leaving QuPath, so a report arrives with the context that makes it reproducible
-instead of "clustering failed". **No GitHub account is needed** -- the report is relayed
-through a shared service, and you get the issue number and a link back when it is filed.
-(Adding a comment to the issue later does need an account.)
+instead of "clustering failed". **Reports are filed anonymously** -- the issue is created by
+a shared reporting service, not from your GitHub account, so you will not be notified of
+replies unless you add your contact information below. No GitHub account is needed.
 
-Give it a **Summary** (used as the issue title) and a **description** -- there is a
-minimum length, because a one-line report is rarely actionable. Then choose what to
-attach:
+**Summary and description.** Provide a **Summary** (used as the issue title) and a **description** --
+there is a minimum length, because a one-line report is rarely actionable.
+
+**Contact (optional).** To be notified when someone replies to your issue, add a **GitHub username**
+and/or **image.sc forum username**. Both fields are optional -- leave them blank to stay anonymous.
+The handles accept pasted profile URLs (e.g. `https://github.com/alice` or `https://forum.image.sc/u/alice`),
+which are automatically cleaned up. Both handles appear publicly in the issue.
+
+**Artifacts.** Choose what to attach:
 
 | Checkbox | What it sends |
 |---|---|
@@ -87,6 +93,11 @@ replaced with `~` so the report does not carry your username. The **screenshot i
 redacted at all** -- it shows whatever is on screen, including open slides. The dialog
 says so and gives you a preview before sending. On patient material, close anything
 sensitive first, and check the operation log too: it records image *names*.
+
+**Opening the issue.** **"Open the issue in my browser after submitting"** is checked by default;
+uncheck it if you would rather not have a browser window open. Either way the success dialog gives
+you the issue number and a link you can follow later. Commenting on the issue -- the only way to
+follow up if you left the contact fields blank -- does need a GitHub account.
 
 **If the dialog says bug reporting is not set up**, the relay URL was not configured in
 this build. File the issue on GitHub directly; the text you have typed is still on
