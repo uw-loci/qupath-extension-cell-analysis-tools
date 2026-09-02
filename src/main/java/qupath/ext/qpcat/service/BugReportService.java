@@ -67,12 +67,33 @@ public class BugReportService {
 
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(30);
 
+    /**
+     * Shape of an optional reporter contact handle. GitHub allows alphanumerics
+     * and single hyphens, at most 39 characters, and cannot start or end with a
+     * hyphen. image.sc is a Discourse forum, whose handles additionally allow
+     * '.' and '_'. Both are validated here AND in the Worker: the Worker is a
+     * public endpoint, and an unchecked handle would land in a public issue body
+     * where it can mention arbitrary accounts.
+     */
+    private static final Pattern GITHUB_HANDLE = Pattern.compile("[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}");
+
+    private static final Pattern IMAGESC_HANDLE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{1,38}");
+
+    /** Profile-URL forms a user is likely to paste instead of a bare handle. */
+    private static final Pattern HANDLE_URL_PREFIX =
+            Pattern.compile("(?i)^(?:https?://)?(?:www\\.)?(?:github\\.com|forum\\.image\\.sc/u)/");
+
     private BugReportService() {}
 
     /** Immutable request assembled by the dialog. */
     public record BugReport(
-            String summary, String description, String sysinfo,
-            Map<String, String> artifacts, String screenshotBase64) {}
+            String summary,
+            String description,
+            String githubUser,
+            String imageScUser,
+            String sysinfo,
+            Map<String, String> artifacts,
+            String screenshotBase64) {}
 
     /** Outcome of a submission. {@code ok} false carries a user-facing {@code error}. */
     public record Result(boolean ok, String issueUrl, Integer issueNumber, String error) {}
@@ -80,6 +101,46 @@ public class BugReportService {
     /** True once {@link #WORKER_URL} points at a real deployment. */
     public static boolean isConfigured() {
         return WORKER_URL != null && !WORKER_URL.contains("YOUR-SUBDOMAIN");
+    }
+
+    // ---- reporter contact handles ------------------------------------------
+
+    /**
+     * Cleans a user-typed contact handle: trims it, drops a pasted profile-URL
+     * prefix and anything after the handle, and strips one leading {@code @}.
+     * So "@alice", "alice" and "https://github.com/alice/" all normalize to
+     * "alice", and a user who types either form gets the same result.
+     *
+     * <p>Never rejects -- validity is decided by
+     * {@link #isValidGitHubHandle(String)} / {@link #isValidImageScHandle(String)}
+     * on the normalized result.</p>
+     *
+     * @param raw raw field text, may be null
+     * @return the normalized handle, or "" when nothing usable was typed
+     */
+    public static String normalizeHandle(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String handle = HANDLE_URL_PREFIX.matcher(raw.trim()).replaceFirst("");
+        if (handle.startsWith("@")) {
+            handle = handle.substring(1);
+        }
+        int slash = handle.indexOf('/');
+        if (slash >= 0) {
+            handle = handle.substring(0, slash);
+        }
+        return handle.trim();
+    }
+
+    /** True if an already-normalized handle is a well-formed GitHub username. */
+    public static boolean isValidGitHubHandle(String handle) {
+        return handle != null && GITHUB_HANDLE.matcher(handle).matches();
+    }
+
+    /** True if an already-normalized handle is a well-formed image.sc username. */
+    public static boolean isValidImageScHandle(String handle) {
+        return handle != null && IMAGESC_HANDLE.matcher(handle).matches();
     }
 
     /** Extension version from the JAR manifest, or "dev" from an IDE. */
@@ -313,6 +374,17 @@ public class BugReportService {
         root.addProperty("app_version", version);
         root.addProperty("summary", report.summary());
         root.addProperty("description", report.description());
+
+        // Contact handles are user-authored, so they are NOT scrubbed (INV-2),
+        // and omitted entirely when blank -- an anonymous report stays anonymous.
+        String githubUser = report.githubUser();
+        if (githubUser != null && !githubUser.isBlank()) {
+            root.addProperty("github_user", githubUser);
+        }
+        String imageScUser = report.imageScUser();
+        if (imageScUser != null && !imageScUser.isBlank()) {
+            root.addProperty("imagesc_user", imageScUser);
+        }
 
         String sysinfo = report.sysinfo();
         if (sysinfo != null && !sysinfo.isBlank()) {

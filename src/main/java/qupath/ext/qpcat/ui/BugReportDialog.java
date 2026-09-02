@@ -63,6 +63,9 @@ public class BugReportDialog {
 
     private final TextField summaryField = new TextField();
     private final TextArea descriptionArea = new TextArea();
+    private final TextField githubUserField = new TextField();
+    private final TextField imageScUserField = new TextField();
+    private final CheckBox chkOpenIssue = new CheckBox("Open the issue in my browser after submitting");
     private final CheckBox chkSysInfo = new CheckBox("Include system info (versions, OS)");
     private final CheckBox chkSessionLog = new CheckBox("Include QP-CAT operation log");
     private final CheckBox chkQuPathLog = new CheckBox("Include QuPath log");
@@ -120,6 +123,16 @@ public class BugReportDialog {
         VBox root = new VBox(10);
         root.setPadding(new Insets(16));
 
+        // The single most surprising thing about this reporter: the issue is not
+        // filed under the reporter's name, so GitHub has nobody to notify. Say
+        // so at the top, before they write anything, not in the success dialog.
+        Label anonymityNote = new Label("Reports are filed anonymously -- the issue is created by the reporting "
+                + "service, not from your GitHub account. You will NOT be notified of replies unless you comment "
+                + "on the issue yourself on GitHub. Adding a GitHub username below mentions you on the issue, "
+                + "which does notify you.");
+        anonymityNote.setWrapText(true);
+        anonymityNote.setStyle("-fx-text-fill: -fx-accent;");
+
         Label summaryHeading = new Label("Summary (used as the issue title):");
         summaryHeading.setStyle("-fx-font-weight: bold;");
 
@@ -163,6 +176,20 @@ public class BugReportDialog {
 
         VBox options = new VBox(6, chkSysInfo, chkSessionLog, chkQuPathLog, chkScreenshot, screenshotWarning);
 
+        // Optional contact. Both handles are user-typed and go into a public
+        // issue, so the note below says so plainly rather than relying on the
+        // user knowing where the report lands.
+        Label contactHeading = new Label("Contact (optional -- leave blank to report anonymously):");
+        contactHeading.setStyle("-fx-font-weight: bold;");
+        githubUserField.setPromptText("GitHub username, with or without @ (e.g. alice or @alice)");
+        imageScUserField.setPromptText("image.sc forum username (e.g. alice)");
+        Label contactNote = new Label("Both are shown publicly in the issue.");
+        contactNote.setWrapText(true);
+        VBox contactBox =
+                new VBox(6, contactHeading, githubUserField, imageScUserField, contactNote);
+
+        chkOpenIssue.setSelected(true);
+
         statusLabel.setWrapText(true);
 
         submitButton.setDefaultButton(true);
@@ -184,7 +211,8 @@ public class BugReportDialog {
         }
 
         root.getChildren().addAll(
-                summaryHeading, summaryField, heading, descriptionArea, options, statusLabel, buttons);
+                anonymityNote, summaryHeading, summaryField, heading, descriptionArea,
+                contactBox, options, chkOpenIssue, statusLabel, buttons);
         return root;
     }
 
@@ -210,6 +238,25 @@ public class BugReportDialog {
         }
         if (description.length() > BugReportService.MAX_DESCRIPTION_CHARS) {
             setStatus("Description is too long (max " + BugReportService.MAX_DESCRIPTION_CHARS + " characters).", true);
+            return;
+        }
+
+        // Validated before the screenshot is captured so a typo does not cost
+        // the user a preview round-trip. Blank stays blank -- both are optional.
+        String githubUser = BugReportService.normalizeHandle(githubUserField.getText());
+        if (!githubUser.isEmpty() && !BugReportService.isValidGitHubHandle(githubUser)) {
+            setStatus(
+                    "That does not look like a GitHub username. Use letters, digits and single hyphens "
+                            + "(max 39 characters), with or without a leading @. Leave it blank to stay anonymous.",
+                    true);
+            return;
+        }
+        String imageScUser = BugReportService.normalizeHandle(imageScUserField.getText());
+        if (!imageScUser.isEmpty() && !BugReportService.isValidImageScHandle(imageScUser)) {
+            setStatus(
+                    "That does not look like an image.sc username. Use letters, digits, '.', '_' or '-'. "
+                            + "Leave it blank to stay anonymous.",
+                    true);
             return;
         }
 
@@ -239,13 +286,16 @@ public class BugReportDialog {
         Map<String, String> artifacts =
                 BugReportService.gatherLogArtifacts(chkSessionLog.isSelected(), chkQuPathLog.isSelected());
 
-        BugReport report = new BugReport(summary, description, sysinfo, artifacts, screenshotBase64);
+        BugReport report = new BugReport(
+                summary, description, githubUser, imageScUser, sysinfo, artifacts, screenshotBase64);
 
         submitting = true;
         submitButton.setDisable(true);
         submitButton.setText("Submitting...");
         summaryField.setDisable(true);
         descriptionArea.setDisable(true);
+        githubUserField.setDisable(true);
+        imageScUserField.setDisable(true);
         setStatus("Submitting...", false);
 
         Thread worker = new Thread(
@@ -264,10 +314,16 @@ public class BugReportDialog {
         submitButton.setText("Submit");
         summaryField.setDisable(false);
         descriptionArea.setDisable(false);
+        githubUserField.setDisable(false);
+        imageScUserField.setDisable(false);
 
         if (result.ok()) {
             stage.close();
-            showSuccess(result.issueNumber(), result.issueUrl());
+            String issueUrl = result.issueUrl();
+            if (chkOpenIssue.isSelected() && issueUrl != null && !issueUrl.isEmpty()) {
+                QuPathGUI.openInBrowser(issueUrl);
+            }
+            showSuccess(result.issueNumber(), issueUrl);
         } else {
             setStatus(result.error() != null ? result.error() : "Submission failed.", true);
         }

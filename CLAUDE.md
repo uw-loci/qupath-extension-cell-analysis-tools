@@ -96,5 +96,5 @@ This extension ships a "Report a Bug..." menu item (`service/BugReportService.ja
 `ui/BugReportDialog.java`). It is one of **three** near-identical copies across the monorepo with
 no shared code, so **a change here almost certainly belongs in the other two as well**. Before
 touching the scrubber, the payload, or the artifact set, read the contract and the change protocol
-in `claude-reports/design/2026-08-19_bug-reporter-architecture.md` (invariants INV-1..INV-8).
+in `claude-reports/design/2026-08-19_bug-reporter-architecture.md` (invariants INV-1..INV-9).
 User-submitted reports become public GitHub issues -- redaction is a privacy surface.
