@@ -128,6 +128,61 @@ class ClusterSplitEditsTest {
                 .containsEntry("Cluster 2", 0x0000ff);
     }
 
+    // --- What the edit gets recorded as -----------------------------------
+
+    private static SavedClusteringResult plainResult() {
+        SavedClusteringResult saved = new SavedClusteringResult();
+        saved.setClusterLabels(new int[]{0, 1, 2});
+        saved.setNClusters(3);
+        saved.setNCells(3);
+        return saved;   // no custom names: every label is "Cluster N"
+    }
+
+    @Test
+    void aSplitIsRecordedAsASplitNotAsAMerge() {
+        // The whole point: "rename/merge" cannot describe the inverse of a merge.
+        Map<Integer, String> afterSplit = staged("Cluster 0", "Cluster 1", "Cluster 2");
+        assertThat(ClusterManagementDialog.describeEdit(afterSplit, mergedResult()))
+                .isEqualTo("split");
+    }
+
+    @Test
+    void aMergeIsRecordedAsAMerge() {
+        Map<Integer, String> m = staged("Immune", "Immune", "Cluster 2");
+        assertThat(ClusterManagementDialog.describeEdit(m, plainResult())).isEqualTo("merge");
+    }
+
+    @Test
+    void aPlainRenameIsNotMistakenForAMerge() {
+        // A rename changes a name too, so grouping is what separates the two.
+        Map<Integer, String> m = staged("Tumor", "Cluster 1", "Cluster 2");
+        assertThat(ClusterManagementDialog.describeEdit(m, plainResult())).isEqualTo("rename");
+    }
+
+    @Test
+    void renamingAMergedClusterIsARenameNotASplit() {
+        // Both merged labels move together, so the grouping is untouched.
+        Map<Integer, String> m = staged("Lymphocyte", "Lymphocyte", "Cluster 2");
+        assertThat(ClusterManagementDialog.describeEdit(m, mergedResult())).isEqualTo("rename");
+    }
+
+    @Test
+    void oneApplyDoingSeveralThingsRecordsAllOfThem() {
+        // Split 0 out of "Immune", and merge what is left with Cluster 2.
+        Map<Integer, String> m = staged("Cluster 0", "Other", "Other");
+        assertThat(ClusterManagementDialog.describeEdit(m, mergedResult()))
+                .isEqualTo("merge/split");
+    }
+
+    @Test
+    void noResultOrNoStagedNamesFallsBackRatherThanClaimingAnEdit() {
+        assertThat(ClusterManagementDialog.describeEdit(null, plainResult())).isEqualTo("edit");
+        assertThat(ClusterManagementDialog.describeEdit(staged("a", "b", "c"), null))
+                .isEqualTo("edit");
+        assertThat(ClusterManagementDialog.describeEdit(new LinkedHashMap<>(), plainResult()))
+                .isEqualTo("edit");
+    }
+
     /**
      * The premise the whole feature rests on: a merge only ever changed names, so
      * the constituents are still there to split apart.

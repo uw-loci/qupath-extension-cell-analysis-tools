@@ -373,6 +373,13 @@ public class SavedClusteringResult {
 
         // Custom cluster names survive a re-save, so a renamed result that is
         // saved again under a new name does not silently revert to "Cluster N".
+        // Lineage. Dropping these silently discards provenance the caller set on
+        // the result -- a sub-cluster or an "analyze existing" run records what it
+        // came from in memory, shows it in the results title, and then reopens from
+        // disk with no lineage at all.
+        saved.setDerivedFrom(result.getDerivedFrom());
+        saved.setDerivedOp(result.getDerivedOp());
+
         if (result.hasClusterNames()) {
             saved.setClusterNames(result.getClusterNames());
         }

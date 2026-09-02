@@ -113,6 +113,38 @@ class ClusterRenameRoundTripTest {
         assertThat(result.getDerivedOp()).isEqualTo("rename/merge");
     }
 
+    /**
+     * Lineage set on a result has to survive being saved.
+     *
+     * <p>fromResult copied everything else and silently dropped these two, so a
+     * sub-cluster or an "analyze current classifications" run showed its origin in
+     * the live results window and then reopened from disk with none: the fields
+     * were set, and thrown away one call later.
+     */
+    @Test
+    void lineageSetOnAResultSurvivesTheSave() {
+        ClusteringResult result = new ClusteringResult(new int[]{0, 1}, 2, null, null, null);
+        result.setDerivedFrom("auto_20260902_leiden");
+        result.setDerivedOp("sub-cluster of 'Cluster 1'");
+
+        SavedClusteringResult saved = SavedClusteringResult.fromResult(
+                result, "sub_run", "leiden", "zscore", "umap");
+
+        assertThat(saved.getDerivedFrom()).isEqualTo("auto_20260902_leiden");
+        assertThat(saved.getDerivedOp()).isEqualTo("sub-cluster of 'Cluster 1'");
+        // isDerived is what lights up "Step back", so it is the user-visible half.
+        assertThat(saved.isDerived()).isTrue();
+    }
+
+    @Test
+    void anOriginalRunStillSavesWithNoLineage() {
+        ClusteringResult result = new ClusteringResult(new int[]{0, 1}, 2, null, null, null);
+        SavedClusteringResult saved = SavedClusteringResult.fromResult(
+                result, "run", "leiden", "zscore", "umap");
+        assertThat(saved.isDerived()).isFalse();
+        assertThat(saved.getDerivedOp()).isNull();
+    }
+
     @Test
     void aBlankDerivedFromIsNotTreatedAsALineage() {
         SavedClusteringResult saved = savedWithNames(null);

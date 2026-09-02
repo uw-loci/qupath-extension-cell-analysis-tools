@@ -778,6 +778,70 @@ public class ClusterManagementDialog {
         return false;
     }
 
+    /**
+     * What the staged edit actually did, for the copy's lineage.
+     *
+     * <p>Recorded rather than assumed, because "rename/merge" cannot describe a
+     * split -- the inverse of a merge -- and a chain of edits is only readable if
+     * each step says which it was. Clusters that share a name after the edit but
+     * did not before are a merge; the reverse is a split; a name change that leaves
+     * the grouping alone is a rename. A single Apply can do more than one, so the
+     * result is slash-joined in that order.
+     *
+     * @param working staged label -&gt; name
+     * @param saved   the result being edited
+     * @return "rename", "merge", "split", a slash-joined combination, or "edit"
+     */
+    static String describeEdit(Map<Integer, String> working, SavedClusteringResult saved) {
+        if (working == null || saved == null || working.isEmpty()) return "edit";
+        List<Integer> labels = new ArrayList<>(working.keySet());
+
+        boolean merged = false;
+        boolean split = false;
+        for (int i = 0; i < labels.size(); i++) {
+            for (int j = i + 1; j < labels.size(); j++) {
+                int a = labels.get(i);
+                int b = labels.get(j);
+                boolean before = Objects.equals(
+                        saved.displayNameForLabel(a), saved.displayNameForLabel(b));
+                boolean after = Objects.equals(working.get(a), working.get(b));
+                if (after && !before) merged = true;
+                if (before && !after) split = true;
+            }
+        }
+
+        // A rename moves nothing between groups, so it counts only for a label
+        // whose companions are identical before and after. Without that test a
+        // merge would also read as a rename, since merging changes a name too.
+        boolean renamed = false;
+        for (int lab : labels) {
+            if (Objects.equals(working.get(lab), saved.displayNameForLabel(lab))) continue;
+            Set<Integer> before = groupSharingName(labels, lab, l -> saved.displayNameForLabel(l));
+            Set<Integer> after = groupSharingName(labels, lab, working::get);
+            if (before.equals(after)) {
+                renamed = true;
+                break;
+            }
+        }
+
+        List<String> parts = new ArrayList<>();
+        if (renamed) parts.add("rename");
+        if (merged) parts.add("merge");
+        if (split) parts.add("split");
+        return parts.isEmpty() ? "edit" : String.join("/", parts);
+    }
+
+    /** Labels that share {@code label}'s name under the given naming. */
+    private static Set<Integer> groupSharingName(List<Integer> labels, int label,
+                                                 java.util.function.IntFunction<String> nameOf) {
+        String name = nameOf.apply(label);
+        Set<Integer> group = new TreeSet<>();
+        for (int l : labels) {
+            if (Objects.equals(nameOf.apply(l), name)) group.add(l);
+        }
+        return group;
+    }
+
     private void applySavedPath() {
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || activeSaved == null || activeSourceName == null) {
@@ -799,6 +863,8 @@ public class ClusterManagementDialog {
             return;
         }
 
+        String editDescription = describeEdit(workingName, activeSaved);
+
         String copyName = promptName("Save renamed copy",
                 "The original result '" + activeSourceName + "' is kept unchanged.\n"
                 + "Name for the new (renamed) copy:",
@@ -811,7 +877,7 @@ public class ClusterManagementDialog {
             SavedResultApplier.ApplyReport report;
             try {
                 writtenName = ClusteringResultManager.saveRenamedCopy(
-                        project, activeSourceName, copyName, custom);
+                        project, activeSourceName, copyName, custom, editDescription);
             } catch (Exception ex) {
                 logger.error("Failed to write renamed copy", ex);
                 Platform.runLater(() -> {

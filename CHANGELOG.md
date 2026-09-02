@@ -15,6 +15,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   were never rewritten -- so this needs no re-run and recovers nothing; it just stops the
   merge from being a one-way door. Works on a staged merge and on one applied in an earlier
   session. Requested by @mikemcka (#18).
+
+### Fixed
+
+- **Lineage set on a result now survives being saved.** `SavedClusteringResult.fromResult`
+  copied every other field and silently dropped `derivedFrom` / `derivedOp`, so a run that
+  recorded where it came from showed that in the live results window and then reopened from
+  disk with no lineage at all -- and with **Step back** disabled, since that button keys off
+  `isDerived()`. Affected "Analyze current classifications" and any re-save of a derived
+  result.
+- **An edit is recorded as what it was.** A rename/merge copy hardcoded its lineage as
+  `"rename/merge"`, which cannot describe a split. The op is now derived from what actually
+  changed -- `rename`, `merge`, `split`, or a slash-joined combination when one Apply did
+  several -- so a chain of edits can be read back.
 - **Sub-clustering: cluster within a cluster.** *Manage Clusters* -> select one cluster ->
   **Sub-cluster...** re-clusters only that population into `<name>.0`, `<name>.1`, ...
   Cluster on lineage markers first, then split one lineage on its functional markers,

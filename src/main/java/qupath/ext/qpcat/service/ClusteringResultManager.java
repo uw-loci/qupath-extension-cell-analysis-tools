@@ -378,11 +378,14 @@ public class ClusteringResultManager {
      * Backs the "Manage Clusters" rename/merge when a saved result is the target.
      *
      * @param nameByLabel cluster label -&gt; new display name (labels absent keep "Cluster N")
+     * @param derivedOp   what the edit did ("rename", "merge", "split", or a
+     *                    slash-joined combination); recorded as this copy's lineage
      * @return the sanitized base name actually used on disk
      * @throws IOException if the name is empty/duplicate or the source cannot be read
      */
     public static String saveRenamedCopy(Project<?> project, String sourceName, String newName,
-                                         Map<Integer, String> nameByLabel) throws IOException {
+                                         Map<Integer, String> nameByLabel, String derivedOp)
+            throws IOException {
         if (newName == null || newName.trim().isEmpty()) {
             throw new IOException("New result name cannot be empty");
         }
@@ -406,7 +409,9 @@ public class ClusteringResultManager {
         // Provenance: what this copy came from, so an iterative chain of edits
         // stays legible and there is always a named result to step back to.
         saved.setDerivedFrom(sourceName);
-        saved.setDerivedOp("rename/merge");
+        // What was actually done, not a fixed label: a split is the inverse of a
+        // merge, and a chain that records both as "rename/merge" cannot be read back.
+        saved.setDerivedOp(derivedOp != null && !derivedOp.isBlank() ? derivedOp : "edit");
 
         // Copy the plot images so the new result is self-contained, rewriting each
         // relative path's "<source>_plots/" prefix to "<copy>_plots/". (The PNG
