@@ -244,7 +244,7 @@ public final class ApplySavedResultDialog {
         ta.setPrefRowCount(Math.min(16, 4 + report.perImage.size()));
 
         Dialog<ButtonType> d = new Dialog<>();
-        d.setTitle("QP-CAT - Apply Saved Result");
+        d.setTitle("QP-CAT - Apply Saved Result - Report");
         d.setHeaderText(report.cellsMatched > 0
                 ? "Saved result applied."
                 : "No cells were labelled -- see details.");
