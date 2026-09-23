@@ -69,6 +69,12 @@ public class ClusteringResult {
     // model_utils.resolve_umap_execution.
     private String embeddingExecution;
 
+    // Measurement-name prefix the embedding columns were written under ("UMAP",
+    // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
+    // from names. A custom name is not recognisable by pattern, which is how the 3D view
+    // ended up opening on the first three measurements.
+    private String embeddingPrefix;
+
     // Human-readable summary of the PCA precursor when it engaged (input feature
     // count -> components, variance retained), or null when clustering ran on the
     // full feature matrix. Recorded because the precursor changes cluster labels,
@@ -100,6 +106,12 @@ public class ClusteringResult {
 
     /** @see #embeddingExecution */
     public void setEmbeddingExecution(String note) { this.embeddingExecution = note; }
+
+    /** Measurement prefix of the embedding columns ("UMAP1"/"UMAP2" -> "UMAP"), or null. */
+    public String getEmbeddingPrefix() { return embeddingPrefix; }
+
+    /** Records the measurement prefix the embedding columns were written under. */
+    public void setEmbeddingPrefix(String prefix) { this.embeddingPrefix = prefix; }
 
     /** @see #pcaPrecursor */
     public String getPcaPrecursor() { return pcaPrecursor; }

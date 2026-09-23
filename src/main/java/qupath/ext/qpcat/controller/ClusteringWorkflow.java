@@ -366,6 +366,8 @@ public class ClusteringWorkflow {
         if (result.hasEmbedding()) {
             String prefix = ResultApplier.getEmbeddingPrefix(
                     config.getEmbeddingMethod().getId(), embeddingName(config));
+            // Record it so the results window can point the 3D view at THIS run's columns.
+            result.setEmbeddingPrefix(prefix);
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
         }
 
@@ -836,6 +838,7 @@ public class ClusteringWorkflow {
                 for (int i = 0; i < end - start; i++) {
                     segmentEmbedding[i] = result.getEmbedding()[start + i];
                 }
+                result.setEmbeddingPrefix(prefix);
                 applier.applyEmbedding(segmentDetections, segmentEmbedding, prefix);
             }
 
@@ -2438,6 +2441,8 @@ public class ClusteringWorkflow {
         if (result.hasEmbedding()) {
             String prefix = ResultApplier.getEmbeddingPrefix(
                     config.getEmbeddingMethod().getId(), embeddingName(config));
+            // Record it so the results window can point the 3D view at THIS run's columns.
+            result.setEmbeddingPrefix(prefix);
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
         }
 
@@ -2845,6 +2850,7 @@ public class ClusteringWorkflow {
                     for (int i = 0; i < end - start; i++) {
                         segmentEmbedding[i] = result.getEmbedding()[start + i];
                     }
+                    result.setEmbeddingPrefix(prefix);
                     applier.applyEmbedding(segmentDetections, segmentEmbedding, prefix);
                 }
 

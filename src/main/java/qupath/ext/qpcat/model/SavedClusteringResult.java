@@ -91,6 +91,9 @@ public class SavedClusteringResult {
     private String derivedOp;
     // The class a sub-cluster run split, when this result is one.
     private String subclusterParentClass;
+    // Measurement prefix the embedding columns were written under ("UMAP", "UMAP_Demo").
+    // Persisted so a reopened result can still point the 3D view at its own embedding.
+    private String embeddingPrefix;
 
     // Spatial analysis
     private double[][] nhoodEnrichment;
@@ -240,6 +243,11 @@ public class SavedClusteringResult {
     public String getSubclusterParentClass() { return subclusterParentClass; }
     public void setSubclusterParentClass(String v) { this.subclusterParentClass = v; }
 
+    /** Measurement prefix of this run's embedding columns, or null on older saves. */
+    public String getEmbeddingPrefix() { return embeddingPrefix; }
+
+    public void setEmbeddingPrefix(String v) { this.embeddingPrefix = v; }
+
     public String getDerivedOp() { return derivedOp; }
     public void setDerivedOp(String v) { this.derivedOp = v; }
 
@@ -385,6 +393,7 @@ public class SavedClusteringResult {
         saved.setDerivedFrom(result.getDerivedFrom());
         saved.setDerivedOp(result.getDerivedOp());
         saved.setSubclusterParentClass(result.getSubclusterParentClass());
+        saved.setEmbeddingPrefix(result.getEmbeddingPrefix());
 
         if (result.hasClusterNames()) {
             saved.setClusterNames(result.getClusterNames());
@@ -461,6 +470,7 @@ public class SavedClusteringResult {
         result.setDerivedFrom(derivedFrom);
         result.setDerivedOp(derivedOp);
         result.setSubclusterParentClass(subclusterParentClass);
+        result.setEmbeddingPrefix(embeddingPrefix);
         result.setAnnotationInput(annotationInput);
 
         // Spatial stats expansion (v1) -- absent on older saves; the

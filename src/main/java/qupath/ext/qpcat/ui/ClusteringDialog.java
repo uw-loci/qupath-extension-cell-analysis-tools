@@ -3,6 +3,7 @@ package qupath.ext.qpcat.ui;
 import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
 
 import javafx.animation.KeyFrame;
+import javafx.animation.PauseTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
@@ -75,6 +76,9 @@ import java.util.function.Consumer;
 public class ClusteringDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringDialog.class);
+
+    /** Delay before the 3D view starts reading, so a look-and-close session does not pay for it. */
+    private static final int THREE_D_PREFETCH_SECONDS = 5;
 
     /** Results page; each Results-dialog tab appends its own anchor. */
     private static final String DOCS_BASE = QpcatDocLinks.pageUrl("results.md");
@@ -3237,6 +3241,21 @@ public class ClusteringDialog {
         return String.format("%.1f hours", mins / 60.0);
     }
 
+    /**
+     * Embedding measurement names for the 3D view, or null when this result records no
+     * prefix (an older save, or a run with no embedding).
+     *
+     * @param result the result being shown
+     * @return {@code {<prefix>1, <prefix>2, <prefix>3}}, or null
+     */
+    private static String[] embeddingAxisNames(ClusteringResult result) {
+        String prefix = (result == null) ? null : result.getEmbeddingPrefix();
+        if (prefix == null || prefix.isBlank()) {
+            return null;
+        }
+        return new String[] {prefix + "1", prefix + "2", prefix + "3"};
+    }
+
     private void showResultsDialog(ClusteringResult result) {
         showResultsDialog(result, null);
     }
@@ -3576,24 +3595,48 @@ public class ClusteringDialog {
         if (qupath != null) {
             final QuPathGUI qupath3d = qupath;
             final List<ProjectImageEntry<BufferedImage>> scope3d = clusteredEntries;
+            // The embedding this run actually wrote, so the view opens on it whatever the
+            // user named it. The pane validates the names against the measurements present,
+            // so a stale or missing prefix just falls back to auto-detection.
+            final String[] axes3d = embeddingAxisNames(result);
             final qupath.ext.cluster3d.ui.Cluster3DNavigatorPane[] pane3dHolder = {null};
-            Label placeholder3d = new Label("Open this tab to load the interactive 3D view.");
+            Label placeholder3d = new Label("Loading the interactive 3D view...");
             placeholder3d.setPadding(new Insets(12));
             Tab tab3d = new Tab("3D View", placeholder3d);
             tab3d.setClosable(false);
             tabPane.getTabs().add(tab3d);
+            Runnable build3d = () -> {
+                if (pane3dHolder[0] != null) {
+                    return;
+                }
+                qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d =
+                        new qupath.ext.cluster3d.ui.Cluster3DNavigatorPane(qupath3d);
+                pane3dHolder[0] = pane3d;
+                tab3d.setContent(pane3d);
+                // Host owns the scope (the clustered images) -> no picker prompt.
+                pane3d.initializeForHost(scope3d, axes3d);
+            };
             tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
-                if (newTab == tab3d && pane3dHolder[0] == null) {
-                    qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d =
-                            new qupath.ext.cluster3d.ui.Cluster3DNavigatorPane(qupath3d);
-                    pane3dHolder[0] = pane3d;
-                    tab3d.setContent(pane3d);
-                    // Host owns the scope (the clustered images) -> no picker prompt.
-                    pane3d.initializeForHost(scope3d);
+                if (newTab == tab3d) {
+                    build3d.run();
                 }
             });
+            // Start the read shortly after the window opens rather than on first click.
+            // Reading every cell of every clustered image takes minutes on a large run, and
+            // doing it on click meant the wait started only once the user asked. The delay
+            // keeps a look-and-close session from paying for a tab it never opens. The pane
+            // reads off the FX thread and repaints when its tab is first laid out, so
+            // building it while hidden is safe.
+            PauseTransition prefetch3d = new PauseTransition(Duration.seconds(THREE_D_PREFETCH_SECONDS));
+            prefetch3d.setOnFinished(ev -> {
+                if (stage.isShowing()) {
+                    build3d.run();
+                }
+            });
+            prefetch3d.play();
             // Stacks with (does not clobber) any existing WINDOW_HIDDEN handler.
             stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN, ev -> {
+                prefetch3d.stop();
                 if (pane3dHolder[0] != null) {
                     pane3dHolder[0].dispose();
                 }

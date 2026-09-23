@@ -136,6 +136,32 @@ class ClusterRenameRoundTripTest {
         assertThat(saved.isDerived()).isTrue();
     }
 
+    /**
+     * The embedding prefix must survive the save too, for the same reason the lineage
+     * fields must: the 3D view plots this run's embedding by name, and a reopened result
+     * that forgot its own prefix falls back to guessing -- which is what opened the view
+     * on the first three morphology measurements for a run named "UMAP_Demo".
+     */
+    @Test
+    void theEmbeddingPrefixSurvivesTheSaveAndReopen() {
+        ClusteringResult result = new ClusteringResult(new int[]{0, 1}, 2, null, null, null);
+        result.setEmbeddingPrefix("UMAP_Demo");
+
+        SavedClusteringResult saved = SavedClusteringResult.fromResult(
+                result, "run", "leiden", "zscore", "umap");
+        assertThat(saved.getEmbeddingPrefix()).isEqualTo("UMAP_Demo");
+        assertThat(saved.toClusteringResult().getEmbeddingPrefix()).isEqualTo("UMAP_Demo");
+    }
+
+    @Test
+    void anOlderSaveWithNoEmbeddingPrefixReopensWithNull() {
+        ClusteringResult result = new ClusteringResult(new int[]{0, 1}, 2, null, null, null);
+        SavedClusteringResult saved = SavedClusteringResult.fromResult(
+                result, "run", "leiden", "zscore", "umap");
+        assertThat(saved.getEmbeddingPrefix()).isNull();
+        assertThat(saved.toClusteringResult().getEmbeddingPrefix()).isNull();
+    }
+
     @Test
     void anOriginalRunStillSavesWithNoLineage() {
         ClusteringResult result = new ClusteringResult(new int[]{0, 1}, 2, null, null, null);

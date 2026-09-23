@@ -15,6 +15,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   selection, after filtering", next to the buttons. That has always been the behaviour;
   nothing said so in the dialog.
 
+### Fixed
+
+- **The 3D View opened on the wrong axes when the embedding had a custom name.** A run
+  whose embedding was named, say, `UMAP_Demo` writes `UMAP_Demo1..3`, which the viewer's
+  name-matching could not parse (it reads `UMAP1`, `UMAP 2` and the like), so it fell back
+  to the first three measurements -- morphology columns -- after a read that takes minutes.
+  The run now records the prefix it wrote and hands those names to the view, whatever they
+  are called. An axis choice you make yourself still wins.
+- **The 3D View remembered guesses as though you had chosen them.** The remembered
+  per-project axes were saved on every render, including an auto-detected or fallback pick,
+  and that remembered guess then outranked auto-detection next time. Only the axis dialog
+  remembers now, and only when you tick the box.
+- **The 3D View starts reading when the results window opens**, about five seconds in,
+  instead of waiting for the first click on the tab. Nothing was happening before that
+  click, so the whole read landed on the user as dead time.
+- **Project-scope 3D reads no longer leak an image reader per image**, and run concurrently
+  rather than one image after another.
+- **The 3D View rotates all the way round.** Vertical rotation stopped just short of the
+  pole; it now carries on through, as horizontal rotation already did.
+
 ## [0.12.0] -- 2026-09-09 -- see a sub-cluster next to the clusters it came from
 
 ### Added
