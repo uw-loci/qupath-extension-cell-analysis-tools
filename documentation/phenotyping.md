@@ -85,7 +85,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
    open image.
 3. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
-   - Use **Select 'Mean' only** then deselect irrelevant markers
+   - Use **Select 'Mean' only** (or **Select 'Median' only** if your measurements are medians) then deselect irrelevant markers
 3. **Set normalization** -- determines how marker values are scaled before gating
    - Min-Max or Percentile recommended for gating (values in [0,1] range)
    - The "Default gate" spinner sets the initial gate for all markers
