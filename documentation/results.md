@@ -251,6 +251,7 @@ rewritten -- it costs a Python round-trip each time, which is why it is off by d
 ## 3D view
 
 Present when the result carries a 3D embedding. It reads the clustered images' detections
-and their UMAP1/2/3 measurements directly, and is built the first time you select the tab.
-For the standalone viewer and the export path, see
+and their embedding measurements directly. Loading starts automatically about 5 seconds
+after the results window opens; this avoids dead time waiting for a click. For the
+standalone viewer and the export path, see
 [Exporting](exporting.md#vest-3d-export).
