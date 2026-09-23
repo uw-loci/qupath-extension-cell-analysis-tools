@@ -324,6 +324,20 @@ public class MeasurementExtractor {
     }
 
     /**
+     * True for a median-intensity measurement, matched CASE-INSENSITIVELY.
+     * <p>
+     * Same reasoning as {@link #isMeanMeasurement(String)}: engines disagree on
+     * capitalisation. "median" does not contain "mean" as a substring, so the two
+     * predicates cannot both match one name.
+     *
+     * @param name measurement name, may be null
+     * @return true if the name contains "median" in any capitalisation
+     */
+    public static boolean isMedianMeasurement(String name) {
+        return name != null && name.toLowerCase(java.util.Locale.ROOT).contains("median");
+    }
+
+    /**
      * Extracts XY centroid coordinates from detection ROIs.
      *
      * @param detections ordered list of detections

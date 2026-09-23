@@ -6,6 +6,7 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
@@ -25,10 +26,10 @@ import java.util.stream.Collectors;
 
 /**
  * Reusable measurement picker: a text filter + a checkbox list + Select All / Select None /
- * Select 'Mean' buttons. The quick-select buttons operate ONLY on the currently VISIBLE
- * (filtered) rows and leave filtered-out rows' checks untouched -- so filtering to "nucleus"
- * then "Select None" clears just the nucleus measurements, not everything. Checks survive
- * filtering (narrow, tick, clear filter, repeat).
+ * Select 'Mean' / Select 'Median' buttons. The quick-select buttons operate ONLY on the
+ * currently VISIBLE (filtered) rows and leave filtered-out rows' checks untouched -- so
+ * filtering to "nucleus" then "Select None" clears just the nucleus measurements, not
+ * everything. Checks survive filtering (narrow, tick, clear filter, repeat).
  *
  * <p>Single source of truth for every QP-CAT dialog that chooses which measurements feed an
  * analysis (clustering, embedding, phenotyping), so they all behave identically.</p>
@@ -90,18 +91,33 @@ public class MeasurementSelectionPane extends VBox {
         selectNone.setOnAction(e -> setVisibleChecked(false));
         selectNone.setTooltip(Tooltips.of("Uncheck all currently shown measurements."));
         Button selectMean = new Button("Select 'Mean' only");
-        selectMean.setOnAction(e -> inBulk(() -> {
-            for (Item m : filtered) {
-                m.selected.set(MeasurementExtractor.isMeanMeasurement(m.name));
-            }
-        }));
+        selectMean.setOnAction(e -> selectVisibleOnly(MeasurementExtractor::isMeanMeasurement));
         selectMean.setTooltip(Tooltips.of(
                 "Among the currently shown measurements, check those whose name contains\n"
                 + "'mean' (any capitalisation -- detection engines differ) and uncheck\n"
                 + "the rest. Hidden rows keep their checks."));
+        Button selectMedian = new Button("Select 'Median' only");
+        selectMedian.setOnAction(e -> selectVisibleOnly(MeasurementExtractor::isMedianMeasurement));
+        selectMedian.setTooltip(Tooltips.of(
+                "Among the currently shown measurements, check those whose name contains\n"
+                + "'median' (any capitalisation -- detection engines differ) and uncheck\n"
+                + "the rest. Hidden rows keep their checks."));
 
-        HBox buttons = new HBox(5, selectAll, selectNone, selectMean);
+        Label scopeHint = new Label("Applies to visible selection, after filtering");
+        scopeHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        HBox buttons = new HBox(5, selectAll, selectNone, selectMean, selectMedian, scopeHint);
+        buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         getChildren().addAll(filterField, list, buttons);
+    }
+
+    /** Checks the visible rows matching {@code predicate}, unchecking the other visible rows. */
+    private void selectVisibleOnly(java.util.function.Predicate<String> predicate) {
+        inBulk(() -> {
+            for (Item m : filtered) {
+                m.selected.set(predicate.test(m.name));
+            }
+        });
     }
 
     private void setVisibleChecked(boolean checked) {

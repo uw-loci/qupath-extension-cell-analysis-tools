@@ -4,6 +4,17 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **"Select 'Median' only" in the measurement picker**, beside Select All / Select None /
+  Select 'Mean' only. Matches "median" case-insensitively, the same way the mean button
+  does, because detection engines disagree on capitalisation.
+- **The measurement picker now says what its buttons act on** -- "Applies to visible
+  selection, after filtering", next to the buttons. That has always been the behaviour;
+  nothing said so in the dialog.
+
 ## [0.12.0] -- 2026-09-09 -- see a sub-cluster next to the clusters it came from
 
 ### Added

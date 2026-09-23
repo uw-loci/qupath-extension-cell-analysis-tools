@@ -79,7 +79,11 @@ every detection is analysed.
 
 **Mean intensity**, not median, max, or area. Mean best represents average expression,
 is comparable across cells of different sizes, and is the standard single-cell input.
-**Select 'Mean' only** does this.
+**Select 'Mean' only** does this. If your measurements are medians rather than means,
+**Select 'Median' only** is the same shortcut for those; prefer mean when you have both.
+
+Both buttons, like **Select All** and **Select None**, act on the rows currently shown.
+Filter the list first and they apply only to what you can see; hidden rows keep their ticks.
 
 Leave out measurements that carry no biological signal -- DAPI/Hoechst (nuclear stain,
 not a marker), autofluorescence channels, and morphology unless it is your question.
