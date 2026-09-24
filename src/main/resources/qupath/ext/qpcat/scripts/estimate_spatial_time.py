@@ -95,6 +95,77 @@ import anndata as ad
 import squidpy as sq
 import spatial_stats as ss
 
+
+def extrapolate_seconds(points, n_cells):
+    """Extrapolate probe timings to the full cell count.
+
+    The estimate decides whether the user is warned before a long run, so an
+    UNDER-estimate is the dangerous direction. Three things a plain log-log fit got
+    wrong on a real 132k-cell run whose probes were (100, 17.3s), (1000, 5.6s),
+    (2000, 6.5s):
+
+    1. The first probe pays one-time cost (imports, numba JIT, squidpy setup), so the
+       SMALLEST point was the SLOWEST. Fitted through, that gives a negative exponent --
+       "bigger is faster" -- and an estimate of 1.18 s for a run whose spatial statistics
+       took about 11 minutes. A leading point slower than the next is dropped as warm-up.
+    2. The remaining points still carry per-call overhead, which flattens the exponent
+       (0.23 here, estimating 17 s). Differencing the two largest probes cancels that
+       constant term and recovers a usable per-cell slope.
+    3. No estimate may be lower than the slowest probe already measured: a full run
+       cannot be quicker than a subset of itself.
+
+    The largest of the plausible estimates wins, because the cost of over-estimating is
+    an unnecessary prompt and the cost of under-estimating is no prompt at all.
+
+    Args:
+        points: (size, seconds) pairs, in probe order.
+        n_cells: the full cell count to extrapolate to.
+
+    Returns:
+        Estimated seconds, or None when there is nothing usable.
+    """
+    pts = [(int(s), float(t)) for s, t in points if t > 0 and s > 0]
+    if not pts:
+        return None
+
+    # Floor spans every probe, including one dropped as warm-up below.
+    floor = max(t for _, t in pts)
+    candidates = [floor]
+
+    dropped_warmup = False
+    if len(pts) >= 3 and pts[0][1] > pts[1][1]:
+        pts = pts[1:]
+        dropped_warmup = True
+
+    by_size = sorted(pts, key=lambda p: p[0])
+    biggest_n, biggest_t = by_size[-1]
+
+    if len(by_size) >= 2:
+        (n1, t1), (n2, t2) = by_size[-2], by_size[-1]
+        if n2 > n1 and t2 > t1:
+            per_cell = (t2 - t1) / float(n2 - n1)
+            candidates.append(t2 + per_cell * max(0.0, float(n_cells) - n2))
+
+        xs = np.log(np.array([p[0] for p in by_size], dtype=float))
+        ys = np.log(np.array([p[1] for p in by_size], dtype=float))
+        b, loga = np.polyfit(xs, ys, 1)
+        if np.isfinite(b) and np.isfinite(loga) and b > 0:
+            candidates.append(float(np.exp(loga) * (float(n_cells) ** b)))
+            logger.info(
+                "probe fit: exponent=%.3f%s",
+                b,
+                " (warm-up point dropped)" if dropped_warmup else "",
+            )
+        else:
+            logger.warning(
+                "probe fit unusable (exponent=%s); using linear scaling instead", str(b)
+            )
+
+    # Plain linear scaling from the largest probe, as a floor on growth.
+    candidates.append(float(biggest_t * n_cells / biggest_n))
+    return max(candidates)
+
+
 rng = np.random.RandomState(0)
 results = []
 
@@ -225,18 +296,9 @@ for s in sizes:
     except Exception as e:
         logger.warning("probe size %d failed entirely: %s", s, e)
 
-# Extrapolate to the full cell count. Fit a power law (time ~ a * n^b) on the
-# probe points in log-log space; fall back to linear scaling from a single point.
-estimate_seconds = None
-pts = [(r["size"], r["seconds"]) for r in results if r["seconds"] > 0 and r["size"] > 0]
-if len(pts) >= 2:
-    xs = np.log(np.array([p[0] for p in pts], dtype=float))
-    ys = np.log(np.array([p[1] for p in pts], dtype=float))
-    b, loga = np.polyfit(xs, ys, 1)
-    estimate_seconds = float(np.exp(loga) * (float(n_cells) ** b))
-elif len(pts) == 1:
-    s0, t0 = pts[0]
-    estimate_seconds = float(t0 * n_cells / s0)
+estimate_seconds = extrapolate_seconds(
+    [(r["size"], r["seconds"]) for r in results], n_cells
+)
 
 task.outputs["timings_json"] = json.dumps(results)
 task.outputs["estimate_seconds"] = json.dumps(estimate_seconds)

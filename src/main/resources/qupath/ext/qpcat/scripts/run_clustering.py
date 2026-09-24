@@ -330,15 +330,56 @@ try:
 except NameError:
     pref_spatial_persist_plots = True
 
+
+def require_finite(matrix, step, column_names=None, max_named=6):
+    """Fail with a useful message when a step has produced NaN or Inf.
+
+    Without this the first thing to notice is the embedding, which reports
+    "ValueError: Input contains NaN" from deep inside sklearn -- naming neither the
+    step that introduced it nor the columns affected, and leaving the user to guess
+    which option to turn off.
+
+    Args:
+        matrix: 2-D array to check.
+        step: what just ran, named in the error.
+        column_names: optional per-column names, used to name the offenders.
+        max_named: how many column names to list before summarising.
+
+    Raises:
+        ValueError: naming the step and the affected columns.
+    """
+    arr = np.asarray(matrix, dtype=np.float64)
+    bad = ~np.isfinite(arr)
+    if not bad.any():
+        return
+    cols = np.unique(np.nonzero(bad)[1]) if arr.ndim == 2 else np.array([])
+    if column_names is not None and arr.ndim == 2:
+        named = [
+            str(column_names[c]) for c in cols[:max_named] if c < len(column_names)
+        ]
+    else:
+        named = [str(int(c)) for c in cols[:max_named]]
+    more = "" if len(cols) <= max_named else " (and %d more)" % (len(cols) - max_named)
+    raise ValueError(
+        "%s produced %d non-finite value(s) in %d column(s): %s%s. "
+        "This is a QP-CAT defect rather than a problem with your data; the run was "
+        "stopped here so the cause is named instead of surfacing later as "
+        "'Input contains NaN' from inside the embedding."
+        % (step, int(bad.sum()), len(cols), ", ".join(named), more)
+    )
+
+
 # 2. Normalize
 _progress(
     0.05, "Normalizing measurements (%d cells x %d markers)..." % (n_cells, n_markers)
 )
 
 if normalization == "zscore":
-    std = df.std()
-    std[std == 0] = 1  # avoid division by zero for constant columns
-    df_norm = (df - df.mean()) / std
+    # fillna(1) as well as the zero guard: a column with fewer than two finite
+    # values has an undefined standard deviation, and dividing by it turns the
+    # whole column NaN. embed_3d.py and geosketch_select.py already do both.
+    std = df.std().replace(0, 1).fillna(1)
+    df_norm = (df - df.mean().fillna(0.0)) / std
 elif normalization == "minmax":
     dmin = df.min()
     dmax = df.max()
@@ -429,6 +470,7 @@ if do_spatial_smoothing and has_spatial_coords:
     for it in range(smoothing_iters):
         smoothed = adj_norm @ smoothed
     df_norm = pd.DataFrame(smoothed, columns=df_norm.columns)
+    require_finite(df_norm.values, "Spatial feature smoothing", list(df_norm.columns))
     logger.info("Spatial smoothing applied: iterations=%d", smoothing_iters)
 elif do_spatial_smoothing and not has_spatial_coords:
     logger.warning(
@@ -488,6 +530,9 @@ if do_batch and batch_labels_list is not None:
         ho = hm.run_harmony(df_norm.values, meta_df, "batch")
         corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
         df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
+        require_finite(
+            df_norm.values, "Harmony batch correction", list(df_norm.columns)
+        )
         logger.info("Harmony batch correction applied (%d batches)", n_batches)
     else:
         logger.info("Skipping batch correction (only 1 batch)")
@@ -574,6 +619,7 @@ def resolve_pca_precursor(enabled, n_features, n_comps, algorithm_name):
 # ranking, the dotplot values -- keeps reading `df_norm`, so marker identities
 # stay in the user's own measurement units.
 cluster_matrix = df_norm.values
+require_finite(cluster_matrix, "Normalization", list(df_norm.columns))
 pca_precursor_info = None
 _n_features_pre = cluster_matrix.shape[1]
 if resolve_pca_precursor(

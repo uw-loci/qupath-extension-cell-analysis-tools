@@ -55,6 +55,17 @@ public final class QpcatPreferences {
             "qpcat.env.variant", "CPU");
 
     /**
+     * The last configuration the Run Clustering dialog actually ran, as JSON.
+     * <p>
+     * The dialog is constructed fresh each time it opens, so anything not restored from
+     * here reverts to a hard-coded default -- which is why a KMeans run reopened as
+     * Leiden. Bookkeeping rather than a setting, so it is deliberately absent from the
+     * preference pane: it is edited by running the dialog, not by typing into it.
+     */
+    private static final StringProperty clusterLastRunConfig = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.lastRunConfig", "");
+
+    /**
      * The directory an environment was last successfully built at. Bookkeeping,
      * not a setting -- deliberately absent from the preference pane.
      *
@@ -368,6 +379,10 @@ public final class QpcatPreferences {
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
+
+    public static String getClusterLastRunConfig() { return clusterLastRunConfig.get(); }
+
+    public static void setClusterLastRunConfig(String v) { clusterLastRunConfig.set(v == null ? "" : v); }
 
     public static int getAeLatentDim() { return aeLatentDim.get(); }
     public static void setAeLatentDim(int v) { aeLatentDim.set(v); }

@@ -709,8 +709,12 @@ public class ClusteringResultManager {
                     custom = nameEl.getAsString();
                 }
             }
-            // The sidecar stores the enum ("UMAP"); getEmbeddingPrefix keys off the id.
-            return ResultApplier.getEmbeddingPrefix(method.toLowerCase(Locale.ROOT), custom);
+            // The sidecar stores the enum ("UMAP"); the prefix helpers key off the id.
+            // LEGACY form deliberately: a result old enough to need its prefix recovered
+            // here was written before QP-CAT marked its own columns, so its measurements
+            // are "UMAP_Demo1", not "QPCAT UMAP_Demo1". Newer runs carry the prefix on
+            // the result itself and never reach this path.
+            return ResultApplier.legacyEmbeddingPrefix(method.toLowerCase(Locale.ROOT), custom);
         } catch (RuntimeException e) {
             logger.debug("Could not parse config sidecar JSON: {}", e.getMessage());
             return null;

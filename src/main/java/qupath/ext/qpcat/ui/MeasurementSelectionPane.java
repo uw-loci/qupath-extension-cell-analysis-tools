@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 /**
  * Reusable measurement picker: a text filter + a checkbox list + Select All / Select None /
- * Select 'Mean' / Select 'Median' buttons. The quick-select buttons operate ONLY on the
+ * Select 'Mean' / Select 'Median' / Deselect QPCAT buttons. The quick-select buttons operate ONLY on the
  * currently VISIBLE (filtered) rows and leave filtered-out rows' checks untouched -- so
  * filtering to "nucleus" then "Select None" clears just the nucleus measurements, not
  * everything. Checks survive filtering (narrow, tick, clear filter, repeat).
@@ -103,12 +103,32 @@ public class MeasurementSelectionPane extends VBox {
                 + "'median' (any capitalisation -- detection engines differ) and uncheck\n"
                 + "the rest. Hidden rows keep their checks."));
 
+        Button deselectQpcat = new Button("Deselect QPCAT");
+        deselectQpcat.setOnAction(e -> deselectVisibleMatching(MeasurementExtractor::isQpcatMeasurement));
+        deselectQpcat.setTooltip(Tooltips.of(
+                "Uncheck every shown measurement QP-CAT wrote itself -- embedding\n"
+                + "coordinates, 'QPCAT spatial:', 'QPCAT component:', 'QPCAT CN'.\n"
+                + "These are OUTPUT: clustering on them clusters on a previous run's\n"
+                + "answer. Other checks are left alone."));
+
         Label scopeHint = new Label("Applies to visible selection, after filtering");
         scopeHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
 
-        HBox buttons = new HBox(5, selectAll, selectNone, selectMean, selectMedian, scopeHint);
+        HBox buttons = new HBox(
+                5, selectAll, selectNone, selectMean, selectMedian, deselectQpcat, scopeHint);
         buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         getChildren().addAll(filterField, list, buttons);
+    }
+
+    /** Unchecks the visible rows matching {@code predicate}, leaving the others as they are. */
+    private void deselectVisibleMatching(java.util.function.Predicate<String> predicate) {
+        inBulk(() -> {
+            for (Item m : filtered) {
+                if (predicate.test(m.name)) {
+                    m.selected.set(false);
+                }
+            }
+        });
     }
 
     /** Checks the visible rows matching {@code predicate}, unchecking the other visible rows. */

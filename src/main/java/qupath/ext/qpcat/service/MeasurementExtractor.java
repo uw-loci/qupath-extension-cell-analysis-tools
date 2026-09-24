@@ -338,6 +338,21 @@ public class MeasurementExtractor {
     }
 
     /**
+     * True for a measurement QP-CAT itself wrote -- embedding coordinates, spatial and
+     * component columns, cellular-neighborhood labels.
+     * <p>
+     * These are OUTPUT. Feeding them back in as input clusters on a previous run's
+     * answer, which is how a run came back with a cluster whose defining feature was
+     * its own UMAP1.
+     *
+     * @param name measurement name, may be null
+     * @return true if the name contains "QPCAT" in any capitalisation
+     */
+    public static boolean isQpcatMeasurement(String name) {
+        return name != null && name.toUpperCase(java.util.Locale.ROOT).contains("QPCAT");
+    }
+
+    /**
      * Extracts XY centroid coordinates from detection ROIs.
      *
      * @param detections ordered list of detections

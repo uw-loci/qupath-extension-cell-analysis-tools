@@ -50,7 +50,7 @@ dependencies {
     // the -all.jar. isTransitive=false: core's published POM lists QuPath/JavaFX (injected
     // by qupath-conventions) but the QuPath host provides those at runtime -- bundling them
     // would balloon the jar. Build cluster3d-core with publishToMavenLocal first (mavenLocal).
-    implementation("io.github.uw-loci:cluster3d-core:0.1.7") { isTransitive = false }
+    implementation("io.github.uw-loci:cluster3d-core:0.1.8") { isTransitive = false }
 
     // SnakeYAML for the v1 YAML headless-batch parser. Already present on
     // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)

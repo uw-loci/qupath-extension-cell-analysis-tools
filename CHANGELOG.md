@@ -4,6 +4,43 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **"Deselect QPCAT" in the measurement picker**, which unticks every shown measurement
+  QP-CAT wrote itself and leaves your own alone.
+- **QP-CAT marks the embedding columns it writes**: they are now named `QPCAT UMAP1`
+  rather than `UMAP1`, matching `QPCAT spatial:`, `QPCAT component:` and `QPCAT CN`.
+  Without a marker they were indistinguishable from your own measurements in the picker,
+  so a later run could cluster on a previous run's embedding -- one run came back with a
+  cluster whose defining feature was its own `UMAP1`.
+- **The embedding name defaults to include the dimensionality**, e.g. `2D UMAP` or
+  `3D UMAP` (written as `QPCAT 3D UMAP1`), so a 2D and a 3D run of the same method no
+  longer write the same columns and overwrite one another.
+- **The progress checklist shows how long each step took**, with the running step
+  ticking, so a long run says which step is the expensive one.
+
+### Fixed
+
+- **Run Clustering reopens with the settings you last ran.** The dialog is built fresh
+  each time, so every control not backed by a preference reverted to its default -- a
+  KMeans run reopened as Leiden. The last run's configuration is now stored whole and
+  replayed through the same path "Load Config from file..." uses, which covers the
+  algorithm and its parameters, normalization, embedding and its parameters, analysis
+  options and the spatial-statistics settings.
+- **The spatial run-time estimate no longer under-reports by two orders of magnitude.**
+  The first probe pays one-time import and JIT cost, so the smallest sample was the
+  slowest; fitting through it implied "bigger is faster" and estimated 1.2 seconds for a
+  run whose spatial statistics took about 11 minutes -- and because the estimate was
+  small, the warning prompt was skipped. The warm-up point is dropped, a fit implying no
+  growth is rejected, and no estimate can come in below the slowest measured probe.
+- **A NaN produced mid-run now names the step that produced it.** It previously
+  surfaced as `ValueError: Input contains NaN` from inside UMAP, naming neither the step
+  nor the column. Normalization, spatial smoothing and Harmony batch correction are each
+  checked, and the z-score guard now covers an undefined standard deviation as well as a
+  zero one.
+
 ## [0.12.2] -- 2026-09-24 -- everything QP-CAT writes lives under one folder
 
 ### Changed

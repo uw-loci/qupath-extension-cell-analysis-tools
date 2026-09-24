@@ -411,6 +411,10 @@ public class ClusteringDialog {
         // Show algorithm params for default selection
         updateAlgorithmParams();
 
+        // Restore whatever the last run used, now that the controls and the
+        // measurement list exist.
+        restoreLastRunSettings();
+
         dialog.show();
     }
 
@@ -567,8 +571,7 @@ public class ClusteringDialog {
 
         // Measurement name (prefix NAME1/NAME2). Defaults to the method; change
         // it to keep two embeddings side by side instead of overwriting.
-        embeddingNameField = new TextField(
-                ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+        embeddingNameField = new TextField(defaultEmbeddingName());
         embeddingNameField.setPrefWidth(130);
         embeddingNameField.setTooltip(Tooltips.of(
                 "Prefix for the coordinate measurements (NAME1 / NAME2). Reusing a name\n"
@@ -581,6 +584,15 @@ public class ClusteringDialog {
         embeddingDimCombo = new ComboBox<>(FXCollections.observableArrayList("2D", "3D"));
         embeddingDimCombo.setValue("2D");
         embeddingDimCombo.setPrefWidth(70);
+        // The dimensionality is part of the default name, so it has to follow the combo:
+        // a 2D and a 3D run otherwise write to the same columns and overwrite each other.
+        embeddingDimCombo.setOnAction(e -> {
+            if (!embNameEdited[0] && embeddingCombo.getValue() != null
+                    && embeddingCombo.getValue() != EmbeddingMethod.NONE) {
+                embeddingNameField.setText(defaultEmbeddingName());
+                embNameEdited[0] = false;
+            }
+        });
         embeddingDimCombo.setTooltip(Tooltips.of(
                 "Number of embedding components written as measurements.\n"
                 + "  2D - NAME1 / NAME2 (default; unchanged behavior).\n"
@@ -655,8 +667,7 @@ public class ClusteringDialog {
             // Track the method name until the user customizes it.
             if (!embNameEdited[0] && embeddingCombo.getValue() != null
                     && embeddingCombo.getValue() != EmbeddingMethod.NONE) {
-                embeddingNameField.setText(
-                        ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+                embeddingNameField.setText(defaultEmbeddingName());
                 embNameEdited[0] = false;
             }
         });
@@ -2264,6 +2275,26 @@ public class ClusteringDialog {
      *
      * @return the config, or null when the controls are not yet a runnable configuration
      */
+    /**
+     * Default name for the embedding columns, e.g. "2D UMAP" or "3D UMAP".
+     * <p>
+     * Carries the dimensionality because a 2D and a 3D run of the same method would
+     * otherwise write the same column names and silently overwrite one another. QP-CAT
+     * adds its own "QPCAT " marker when the measurements are written, so this is the
+     * human half only -- the columns read "QPCAT 3D UMAP1".
+     *
+     * @return the default name for the current method and dimensionality
+     */
+    private String defaultEmbeddingName() {
+        EmbeddingMethod method = embeddingCombo == null ? null : embeddingCombo.getValue();
+        if (method == null || method == EmbeddingMethod.NONE) {
+            return "";
+        }
+        String dims = (embeddingDimCombo == null || embeddingDimCombo.getValue() == null)
+                ? "2D" : embeddingDimCombo.getValue();
+        return dims + " " + ResultApplier.legacyEmbeddingPrefix(method.getId(), null);
+    }
+
     private ClusteringConfig buildConfig() {
         return buildConfig(true);
     }
@@ -2537,6 +2568,48 @@ public class ClusteringDialog {
             logger.error("Failed to load config", e);
             Dialogs.showErrorNotification("QPCAT",
                     "Failed to load config: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Re-apply the settings of the last run, so the dialog opens where it was left.
+     * <p>
+     * The dialog is built fresh on every open, so before this every control that was not
+     * backed by a preference reverted to its hard-coded default -- a KMeans run reopened
+     * as Leiden. Rather than a preference per control, the last run's config is stored
+     * whole and replayed through {@link #applyConfig(ClusteringConfig)}, the same path
+     * "Load Config from file..." uses, so every setting that a saved config round-trips
+     * is restored here too.
+     * <p>
+     * Only in the standard clustering mode: sub-clustering and "analyze current
+     * classifications" are answering a different question, and one of them has no
+     * algorithm section at all.
+     */
+    private void restoreLastRunSettings() {
+        if (mode != RunMode.CLUSTER) {
+            return;
+        }
+        try {
+            ClusteringConfig last = ClusteringConfigManager.fromJson(
+                    QpcatPreferences.getClusterLastRunConfig());
+            if (last != null) {
+                applyConfig(last);
+            }
+        } catch (RuntimeException e) {
+            // Never let a stale or incompatible stored config stop the dialog opening.
+            logger.debug("Could not restore the last run's settings: {}", e.getMessage());
+        }
+    }
+
+    /** Remember a config that is about to run, for the next time the dialog opens. */
+    private void rememberLastRunSettings(ClusteringConfig config) {
+        if (mode != RunMode.CLUSTER) {
+            return;
+        }
+        try {
+            QpcatPreferences.setClusterLastRunConfig(ClusteringConfigManager.toJson(config));
+        } catch (RuntimeException e) {
+            logger.debug("Could not store the last run's settings: {}", e.getMessage());
         }
     }
 
@@ -2878,6 +2951,7 @@ public class ClusteringDialog {
     private void runClustering() {
         ClusteringConfig config = buildConfig();
         if (config == null) return;
+        rememberLastRunSettings(config);
 
         // Resolve the image set for the "Specific images..." scope up front so
         // we can validate before kicking off the background run.

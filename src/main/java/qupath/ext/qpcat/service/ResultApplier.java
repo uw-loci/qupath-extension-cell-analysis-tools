@@ -422,12 +422,58 @@ public class ResultApplier {
      * Convenience method to get the embedding measurement prefix for a given method.
      */
     public static String getEmbeddingPrefix(String embeddingMethod) {
+        return withQpcatPrefix(baseEmbeddingPrefix(embeddingMethod));
+    }
+
+    /** The family name alone, with no tool marker. */
+    private static String baseEmbeddingPrefix(String embeddingMethod) {
         return switch (embeddingMethod) {
             case "umap" -> "UMAP";
             case "pca" -> "PCA";
             case "tsne" -> "tSNE";
             default -> embeddingMethod.toUpperCase();
         };
+    }
+
+    /**
+     * The prefix a run wrote BEFORE QP-CAT marked its own columns -- "UMAP", "UMAP_Demo".
+     * <p>
+     * Only for reconstructing the column names of a result saved back then, whose
+     * measurements on disk are "UMAP_Demo1" and not "QPCAT UMAP_Demo1". Asking for
+     * today's prefix there would name columns that do not exist, and the viewer would
+     * fall back to guessing axes -- the exact failure that recovery was added to fix.
+     *
+     * @param embeddingMethod the embedding method id ("umap", "pca", ...)
+     * @param customName      the run's custom embedding name, or null
+     * @return the unmarked prefix
+     */
+    public static String legacyEmbeddingPrefix(String embeddingMethod, String customName) {
+        if (customName != null && !customName.isBlank()) {
+            return sanitizePrefix(customName);
+        }
+        return baseEmbeddingPrefix(embeddingMethod);
+    }
+
+    /**
+     * Marks a measurement as written by QP-CAT, matching "QPCAT CN",
+     * "QPCAT spatial:" and "QPCAT component:".
+     * <p>
+     * Embedding columns used to be bare ("UMAP1"), which made them indistinguishable
+     * from a user's own measurements in the picker -- so a later run could cluster ON A
+     * PREVIOUS RUN'S EMBEDDING without anything saying so. One run came back with UMAP1
+     * as a cluster's defining feature. The prefix is what makes "Deselect QPCAT" able to
+     * clear every column QP-CAT produced in one click.
+     */
+    public static final String QPCAT_PREFIX = "QPCAT ";
+
+    /** Prepend the QP-CAT marker unless the name already carries it. */
+    private static String withQpcatPrefix(String base) {
+        if (base == null || base.isBlank()) {
+            return base;
+        }
+        return base.toUpperCase(java.util.Locale.ROOT).startsWith("QPCAT")
+                ? base
+                : QPCAT_PREFIX + base;
     }
 
     /**
@@ -438,14 +484,17 @@ public class ResultApplier {
      */
     public static String getEmbeddingPrefix(String embeddingMethod, String customName) {
         if (customName != null && !customName.isBlank()) {
-            return sanitizePrefix(customName);
+            return withQpcatPrefix(sanitizePrefix(customName));
         }
         return getEmbeddingPrefix(embeddingMethod);
     }
 
     /** Keep only measurement-safe characters in a user-supplied embedding name. */
     public static String sanitizePrefix(String name) {
-        String s = name.trim().replaceAll("[^A-Za-z0-9_-]", "_");
+        // Spaces are allowed: QuPath measurement names carry them routinely
+        // ("Nucleus: Area um^2"), and the default name reads "2D UMAP", which
+        // "2D_UMAP" would make needlessly ugly. Runs of whitespace collapse to one.
+        String s = name.trim().replaceAll("[^A-Za-z0-9_\\- ]", "_").replaceAll("\\s+", " ").trim();
         return s.isBlank() ? "EMB" : s;
     }
 }

@@ -146,4 +146,32 @@ public class ClusteringConfigManager {
             logger.info("Deleted clustering config '{}'", name);
         }
     }
+
+    /**
+     * Serialize a config exactly as a saved config file stores it.
+     *
+     * @param config the config
+     * @return JSON, or null if {@code config} is null
+     */
+    public static String toJson(ClusteringConfig config) {
+        return config == null ? null : GSON.toJson(config);
+    }
+
+    /**
+     * Parse a config written by {@link #toJson(ClusteringConfig)}.
+     *
+     * @param json the JSON, may be null or blank
+     * @return the config, or null if it cannot be parsed
+     */
+    public static ClusteringConfig fromJson(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return GSON.fromJson(json, ClusteringConfig.class);
+        } catch (RuntimeException e) {
+            logger.debug("Could not parse stored clustering config: {}", e.getMessage());
+            return null;
+        }
+    }
 }

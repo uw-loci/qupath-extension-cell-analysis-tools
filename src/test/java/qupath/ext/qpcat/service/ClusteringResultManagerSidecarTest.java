@@ -10,6 +10,10 @@ import org.junit.jupiter.api.Test;
  * Results saved before the prefix was recorded on the result itself still have their run
  * config sidecar beside them, and it names the embedding exactly. Recovering it there is
  * what lets an existing project open the 3D view on its own embedding with no re-run.
+ * <p>
+ * The recovered name is the LEGACY, unmarked one. Such a result predates QP-CAT marking
+ * its own columns, so its measurements really are "UMAP_Demo1" -- returning today's
+ * "QPCAT UMAP_Demo" would name columns that do not exist on those objects.
  */
 class ClusteringResultManagerSidecarTest {
 
