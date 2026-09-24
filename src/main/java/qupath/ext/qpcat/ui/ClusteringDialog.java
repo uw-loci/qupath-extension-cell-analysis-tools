@@ -4158,6 +4158,7 @@ public class ClusteringDialog {
                     algo != null ? algo.toLowerCase() + "-result" : "result");
             nameDialog.setTitle("Save Clustering Results");
             nameDialog.setHeaderText("Enter a name for this copy:");
+            nameDialog.initOwner(saveBtn.getScene().getWindow());
             var nameResult = nameDialog.showAndWait();
             if (nameResult.isEmpty() || nameResult.get().trim().isEmpty()) return;
 
