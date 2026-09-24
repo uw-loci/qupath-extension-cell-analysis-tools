@@ -1948,7 +1948,13 @@ public class ClusteringDialog {
         if (nCells == 0) return List.of();
 
         int nFeatures = measurementPane != null ? measurementPane.getSelected().size() : 0;
-        ClusteringConfig probe = buildConfig();
+        ClusteringConfig probe = buildConfig(false);
+        if (probe == null) {
+            // Not a runnable configuration yet (typically no measurements ticked). There
+            // is nothing to size, and dereferencing it here is what logged "Scale
+            // pre-flight failed ... config is null" twice on every dialog open.
+            return List.of();
+        }
         return ScalingLimits.check(
                 ClusteringWorkflow.scalingRequest(nCells, nFeatures, probe));
     }
@@ -2247,7 +2253,26 @@ public class ClusteringDialog {
                 || algo == Algorithm.BANKSY;
     }
 
+    /**
+     * Config from the current controls, warning the user about anything missing.
+     * <p>
+     * Use ONLY for something the user just asked for (Run, Save config). Passive
+     * refreshes must use {@link #buildConfig(boolean)} with {@code false}: this pops a
+     * notification, and the cost line and the scale pre-flight both rebuild the config
+     * whenever a control changes -- which is why simply opening the dialog produced three
+     * "No measurements selected" warnings before anything had been chosen.
+     *
+     * @return the config, or null when the controls are not yet a runnable configuration
+     */
     private ClusteringConfig buildConfig() {
+        return buildConfig(true);
+    }
+
+    /**
+     * @param notify whether to tell the user what is missing; false for passive refreshes
+     * @return the config, or null when the controls are not yet a runnable configuration
+     */
+    private ClusteringConfig buildConfig(boolean notify) {
         ClusteringConfig config = new ClusteringConfig();
 
         // Scope -- both the "all" and "specific images" options use the
@@ -2300,7 +2325,9 @@ public class ClusteringDialog {
         // Selected measurements (checked items, in list order)
         List<String> selected = measurementPane.getSelected();
         if (selected.isEmpty()) {
-            Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
+            if (notify) {
+                Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
+            }
             return null;
         }
         config.setSelectedMeasurements(selected);
@@ -3119,7 +3146,11 @@ public class ClusteringDialog {
      */
     private String otherRunCosts() {
         try {
-            java.util.List<String> costs = RunCostSummary.describe(buildConfig());
+            ClusteringConfig cfg = buildConfig(false);
+            if (cfg == null) {
+                return "";
+            }
+            java.util.List<String> costs = RunCostSummary.describe(cfg);
             costs.removeIf(c -> c.startsWith("Spatial statistics"));
             if (costs.isEmpty()) {
                 return "";
@@ -3137,7 +3168,8 @@ public class ClusteringDialog {
             return;
         }
         try {
-            runCostLabel.setText(RunCostSummary.describeLine(buildConfig()));
+            ClusteringConfig cfg = buildConfig(false);
+            runCostLabel.setText(cfg == null ? "" : RunCostSummary.describeLine(cfg));
         } catch (RuntimeException e) {
             // The dialog is still assembling, or a control is mid-edit. A cost
             // line is advisory; never let it break the dialog.
