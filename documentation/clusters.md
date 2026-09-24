@@ -293,8 +293,9 @@ imported classifier's labels, and gives any of them a full results window.
 Two things to know before running it:
 
 - **Untick the run's own outputs.** After a clustering run the measurement list includes that
-  run's `UMAP1/2/3` and `QPCAT spatial:` columns. Analysing those is circular -- you would be
+  run's `QPCAT UMAP1/2/3` and `QPCAT spatial:` columns. Analysing those is circular -- you would be
   grouping cells on coordinates derived from their own clusters. Select the marker measurements.
+  The **Deselect QPCAT** button in the measurement picker clears all of QP-CAT's output in one click.
 - **Unclassified cells are excluded**, and the count is shown. An unclassified bucket is a
   mixture rather than a population; including it would pull every marker mean toward the
   unlabelled remainder and give the ranking a comparison group that means nothing.
@@ -315,8 +316,8 @@ survives reload.
   UMAP/t-SNE/PCA, colored by cluster. Works on reopened past results too.
 - **The standalone tool: Extensions > QP-CAT > Explore & spatial > Plot & gate cells (2D)...** Pick a
   **scope** (Current / All / Specific images) and an axis source:
-  - **2D embedding** -- plots existing `UMAP1/UMAP2` (or `tSNE1/2`, `PCA1/2`)
-    coordinates. Run **Map cells in 2D** ([Clustering](clustering.md#embeddings-without-clustering))
+  - **2D embedding** -- plots existing embedding coordinates (`QPCAT UMAP1/UMAP2`, `QPCAT tSNE1/2`,
+    `QPCAT PCA1/2`, etc.). Run **Map cells in 2D** ([Clustering](clustering.md#embeddings-without-clustering))
     or clustering first to create them.
   - **Two markers (biaxial)** -- plots any two measurements against each other
     (classic biaxial gating). No precomputation needed.

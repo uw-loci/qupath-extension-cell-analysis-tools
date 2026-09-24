@@ -209,7 +209,7 @@ Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
    - Expression matrix (all measurements)
    - Cluster labels (if cells are classified as "Cluster N")
    - Phenotype labels (if cells have other classifications)
-   - Embedding coordinates (UMAP1/UMAP2, etc., if present)
+   - Embedding coordinates (QPCAT UMAP1/UMAP2, etc., if present)
    - Spatial coordinates (cell centroids)
 4. Open the file in Python:
 

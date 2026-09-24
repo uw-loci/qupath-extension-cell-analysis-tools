@@ -157,11 +157,14 @@ public class EmbeddingDialog {
 
         // Measurement name -- the prefix written to each cell (NAME1/NAME2).
         // Defaults to the method name; change it to keep two runs side by side
-        // (e.g. "UMAP_k15" -> UMAP_k151/UMAP_k152) instead of overwriting.
-        embeddingNameField = new TextField("UMAP");
+        // (e.g. "UMAP_k15" -> QPCAT UMAP_k151/2) instead of overwriting. This is the
+        // human half only: QP-CAT adds its own "QPCAT " marker when the columns are
+        // written, so showing it here too would just read back QP-CAT's own prefix.
+        embeddingNameField = new TextField(ResultApplier.legacyEmbeddingPrefix("umap", null));
         embeddingNameField.setPrefWidth(140);
         embeddingNameField.setTooltip(Tooltips.of(
-                "Prefix for the coordinate measurements (NAME1 / NAME2).\n"
+                "Prefix for the coordinate measurements, written as\n"
+                + "\"QPCAT <name>1\" / \"QPCAT <name>2\".\n"
                 + "Reusing a name OVERWRITES those columns; give a unique name to keep\n"
                 + "two embeddings (e.g. different settings) side by side."));
         boolean[] nameEdited = {false};
@@ -182,8 +185,8 @@ public class EmbeddingDialog {
             paramsRow.setManaged(isUmap);
             // Keep the name in step with the method until the user customizes it.
             if (!nameEdited[0]) {
-                embeddingNameField.setText(
-                        ResultApplier.getEmbeddingPrefix(embeddingCombo.getValue().getId()));
+                embeddingNameField.setText(ResultApplier.legacyEmbeddingPrefix(
+                        embeddingCombo.getValue().getId(), null));
                 nameEdited[0] = false;
             }
         });

@@ -4,10 +4,10 @@
 Short, copy-the-steps recipes that combine the chapters above to do something
 useful that isn't a single menu item.
 
-### Recipe: cluster *on* a UMAP / t-SNE embedding (UMAP + HDBSCAN on UMAP1/UMAP2)
+### Recipe: cluster *on* a UMAP / t-SNE embedding (UMAP + HDBSCAN on embedding coordinates)
 
 **What it is.** Reduce to 2-D first, then cluster on those two coordinates --
-the popular "UMAP + DBSCAN on UMAP1-UMAP2" approach. QP-CAT's clustering normally
+the popular "UMAP + DBSCAN on embedding coordinates" approach. QP-CAT's clustering normally
 fits in **full marker space** (the embedding is computed only for the scatter and
 plots), so to cluster *on the embedding* you run it in two steps.
 
@@ -15,11 +15,11 @@ plots), so to cluster *on the embedding* you run it in two steps.
 
 1. **Compute the embedding.** Run **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...
    (UMAP / PCA / t-SNE)...** ([section 5](clustering.md#embeddings-without-clustering)) with UMAP.
-   This writes `UMAP1` and `UMAP2` measurements onto every detection. (A normal
+   This writes `QPCAT UMAP1` and `QPCAT UMAP2` measurements onto every detection. (A normal
    clustering run with UMAP embedding writes them too.)
 2. **Cluster on those two columns.** Open **Find cell populations
    (clustering)...** ([section 2](clustering.md)) and:
-   - In the measurement picker, select **only `UMAP1` and `UMAP2`** (use the
+   - In the measurement picker, select **only `QPCAT UMAP1` and `QPCAT UMAP2`** (use the
      filter box to find them, Select none, then check just those two).
    - **Algorithm: HDBSCAN.**
    - **Normalization: None** (the coordinates are already on a comparable scale;

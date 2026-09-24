@@ -25,7 +25,9 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
    [Choosing measurements](#choosing-measurements).
 3. **Normalization** -- Z-score unless you have a reason otherwise. See
    [Choosing a normalization](#choosing-a-normalization).
-4. **Embedding** -- UMAP by default; `n_neighbors` 15, `min_dist` 0.1.
+4. **Embedding** -- UMAP by default; `n_neighbors` 15, `min_dist` 0.1. Choose **2D** or **3D** for
+   the number of embedding components (default 2D); the dimensionality is part of the measurement
+   name so both can coexist without overwriting.
 5. **Algorithm** -- Leiden by default. See [Choosing an algorithm](#choosing-an-algorithm).
 6. **Analysis options** (the untitled block below the algorithm section):
    - *Generate analysis plots* -- the static PNGs (marker ranking, PAGA, dotplot)
@@ -67,7 +69,10 @@ one-time modal says so. Duplicate the project folder before continuing. Re-arm i
 ### What it writes
 
 - A **PathClass** per detection -- "Cluster 0", "Cluster 1", ...
-- **UMAP1/UMAP2** measurements (or PCA1/2, tSNE1/2) if an embedding was computed
+- **QPCAT UMAP1/UMAP2** measurements (or QPCAT PCA1/2, QPCAT tSNE1/2) if an embedding was computed.
+  The "QPCAT " prefix marks these as output so they are not mistaken for your own measurements.
+  The default embedding name includes dimensionality (e.g., "QPCAT 2D UMAP1", "QPCAT 3D UMAP1"),
+  so a 2D and a 3D run of the same method do not overwrite one another.
 - Viewer colours update to match
 
 **Cells vs. detections.** If the hierarchy has cell objects, QP-CAT analyses only cells,
@@ -82,8 +87,14 @@ is comparable across cells of different sizes, and is the standard single-cell i
 **Select 'Mean' only** does this. If your measurements are medians rather than means,
 **Select 'Median' only** is the same shortcut for those; prefer mean when you have both.
 
-Both buttons, like **Select All** and **Select None**, act on the rows currently shown.
-Filter the list first and they apply only to what you can see; hidden rows keep their ticks.
+All buttons (**Select All**, **Select None**, **Select 'Mean'**, **Select 'Median'**, and **Deselect QPCAT**)
+act on the rows currently shown. Filter the list first and they apply only to what you can see;
+hidden rows keep their ticks.
+
+**Deselect QPCAT** unmarks every measurement QP-CAT wrote itself — embedding coordinates, spatial
+and component columns, cellular-neighborhood labels. These are *output*, not input; feeding them
+back into a later run clusters on a previous run's answer, which is how one run came back with a
+cluster whose defining feature was its own embedding coordinate.
 
 Leave out measurements that carry no biological signal -- DAPI/Hoechst (nuclear stain,
 not a marker), autofluorescence channels, and morphology unless it is your question.
@@ -334,8 +345,8 @@ treat those areas as the batch.
 ## Embeddings without clustering
 
 **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...**
-computes an embedding and writes UMAP1/UMAP2 (or PCA/tSNE) measurements without assigning
-any cluster labels. Nothing is reclassified, so it is safe to run on a project you have
-already labelled -- useful for looking at structure before deciding how to cluster, or
-for plotting an existing classification in 2D via
+computes an embedding and writes `QPCAT UMAP1/UMAP2` (or `QPCAT PCA1/PCA2`, `QPCAT tSNE1/tSNE2`)
+measurements without assigning any cluster labels. Nothing is reclassified, so it is safe to run
+on a project you have already labelled -- useful for looking at structure before deciding how to
+cluster, or for plotting an existing classification in 2D via
 [Plot & gate](clusters.md#gating-cells-on-a-2d-plot).
