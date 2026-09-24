@@ -30,6 +30,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
+import qupath.ext.qpcat.service.SpatialStatsCsv;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
@@ -3248,6 +3249,73 @@ public class ClusteringDialog {
      * @param result the result being shown
      * @return {@code {<prefix>1, <prefix>2, <prefix>3}}, or null
      */
+    /**
+     * Wrap a spatial-stats tab with Copy / Copy CSV / Save CSV.
+     * <p>
+     * The tables on screen are fixed-width and built for reading: the pairwise
+     * co-occurrence table is one column per ordered cluster pair, so the pair labels
+     * scroll off the right long before you find the pair you want. CSV is written in long
+     * form, one row per observation, so every pair is named on its own row.
+     *
+     * @param content    the tab's existing content
+     * @param rawText    the on-screen text to offer as a plain copy, or null (charts)
+     * @param csv        builds the CSV on demand
+     * @param fileName   suggested file name for the save dialog
+     * @return content plus an export bar
+     */
+    private static javafx.scene.Node withCsvExport(
+            javafx.scene.Node content,
+            java.util.function.Supplier<String> rawText,
+            java.util.function.Supplier<String> csv,
+            String fileName) {
+        HBox bar = new HBox(6);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(4, 0, 0, 0));
+        if (rawText != null) {
+            Button copyText = new Button("Copy text");
+            copyText.setTooltip(Tooltips.of("Copy the table exactly as shown, spacing and all."));
+            copyText.setOnAction(e -> copyToClipboard(rawText.get()));
+            bar.getChildren().add(copyText);
+        }
+        Button copyCsv = new Button("Copy CSV");
+        copyCsv.setTooltip(Tooltips.of(
+                "Copy as comma-separated rows, one row per observation, ready to paste\n"
+                + "into a spreadsheet."));
+        copyCsv.setOnAction(e -> copyToClipboard(csv.get()));
+        Button saveCsv = new Button("Save CSV...");
+        saveCsv.setTooltip(Tooltips.of("Write these numbers to a .csv file."));
+        saveCsv.setOnAction(e -> saveCsvFile(csv.get(), fileName));
+        bar.getChildren().addAll(copyCsv, saveCsv);
+
+        VBox box = new VBox(4, content, bar);
+        VBox.setVgrow(content, javafx.scene.layout.Priority.ALWAYS);
+        return box;
+    }
+
+    private static void copyToClipboard(String text) {
+        javafx.scene.input.ClipboardContent cc = new javafx.scene.input.ClipboardContent();
+        cc.putString(text == null ? "" : text);
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(cc);
+    }
+
+    private static void saveCsvFile(String csv, String fileName) {
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("Save CSV");
+        fc.setInitialFileName(fileName);
+        fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("CSV", "*.csv"));
+        java.io.File file = fc.showSaveDialog(null);
+        if (file == null) {
+            return;
+        }
+        try {
+            java.nio.file.Files.writeString(file.toPath(), csv);
+            ExportLocation.announce(file.getParentFile(), file.getName());
+        } catch (java.io.IOException ex) {
+            logger.error("Failed to write CSV", ex);
+            Dialogs.showErrorNotification("QP-CAT", "Could not write CSV: " + ex.getMessage());
+        }
+    }
+
     private static String[] embeddingAxisNames(ClusteringResult result) {
         String prefix = (result == null) ? null : result.getEmbeddingPrefix();
         if (prefix == null || prefix.isBlank()) {
@@ -3733,8 +3801,11 @@ public class ClusteringDialog {
         // and co-occurrence use a monospaced TextArea mirroring the
         // Moran's I rendering style.
         if (result.hasRipley()) {
-            javafx.scene.Node ripleyNode = buildRipleyChartPane(
-                    result.getRipley(), result.getSpatialUnit(), result);
+            javafx.scene.Node ripleyNode = withCsvExport(
+                    buildRipleyChartPane(result.getRipley(), result.getSpatialUnit(), result),
+                    null,
+                    () -> SpatialStatsCsv.ripleyCsv(result.getRipley(), k -> clusterNameForKey(result, k)),
+                    "qpcat_ripley_k_l.csv");
             Tab tab = new Tab("Ripley K and L", wrapWithGuide(ripleyNode,
                     "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
                     + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
@@ -3751,7 +3822,11 @@ public class ClusteringDialog {
             gearyText.setEditable(false);
             gearyText.setWrapText(false);
             gearyText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
-            Tab tab = new Tab("Geary's C", wrapWithGuide(gearyText,
+            Tab tab = new Tab("Geary's C", wrapWithGuide(withCsvExport(
+                    gearyText,
+                    gearyText::getText,
+                    () -> SpatialStatsCsv.gearyCsv(result.getGeary()),
+                    "qpcat_geary_c.csv"),
                     "Geary's C per marker measures local spatial autocorrelation.\n"
                     + "  C < 1: positive autocorrelation (nearby cells have similar values).\n"
                     + "  C ~ 1: spatial randomness.\n"
@@ -3769,7 +3844,12 @@ public class ClusteringDialog {
             cooText.setEditable(false);
             cooText.setWrapText(false);
             cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
-            Tab tab = new Tab("Co-occurrence (pairwise)", wrapWithGuide(cooText,
+            Tab tab = new Tab("Co-occurrence (pairwise)", wrapWithGuide(withCsvExport(
+                    cooText,
+                    cooText::getText,
+                    () -> SpatialStatsCsv.coOccurrenceCsv(
+                            result.getCoOccurrencePairwise(), k -> clusterNameForKey(result, k)),
+                    "qpcat_cooccurrence_pairwise.csv"),
                     "For each pair of clusters (A, B), the table reports the ratio\n"
                     + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
                     + "as a function of radius. Values > 1 mean A's neighborhood is enriched\n"
@@ -3786,7 +3866,12 @@ public class ClusteringDialog {
             cooText.setEditable(false);
             cooText.setWrapText(false);
             cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
-            Tab tab = new Tab("Co-occurrence (one vs rest)", wrapWithGuide(cooText,
+            Tab tab = new Tab("Co-occurrence (one vs rest)", wrapWithGuide(withCsvExport(
+                    cooText,
+                    cooText::getText,
+                    () -> SpatialStatsCsv.coOccurrenceCsv(
+                            result.getCoOccurrenceOneVsRest(), k -> clusterNameForKey(result, k)),
+                    "qpcat_cooccurrence_one_vs_rest.csv"),
                     "For each cluster A, the table reports the ratio of A's neighborhood\n"
                     + "composition vs all-other-clusters combined, as a function of radius.\n"
                     + "Same scale interpretation as the pairwise table; smaller and easier\n"

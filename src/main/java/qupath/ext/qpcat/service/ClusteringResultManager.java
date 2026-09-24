@@ -651,7 +651,70 @@ public class ClusteringResultManager {
         // had when it was saved (PathClass is the single source of truth).
         new ResultApplier().applyClusterColors(saved.getClusterColors());
 
-        return saved.toClusteringResult();
+        ClusteringResult result = saved.toClusteringResult();
+        if (result.getEmbeddingPrefix() == null) {
+            // Saved before the prefix was recorded on the result. The run's config
+            // sidecar still names the embedding exactly, so the 3D view can plot this
+            // run's own columns instead of guessing -- no re-run needed.
+            result.setEmbeddingPrefix(embeddingPrefixFromSidecar(resultsDir, name));
+        }
+        return result;
+    }
+
+    /**
+     * Embedding measurement prefix read from a run's {@code <name>_config.json}, or null
+     * when there is no sidecar, it cannot be parsed, or it records no embedding.
+     *
+     * @param resultsDir the project's cluster_results directory
+     * @param name       the saved result's name
+     * @return the prefix (e.g. "UMAP_Demo"), or null
+     */
+    static String embeddingPrefixFromSidecar(Path resultsDir, String name) {
+        Path sidecar = resultsDir.resolve(name + CONFIG_SIDECAR_SUFFIX);
+        if (!Files.exists(sidecar)) {
+            return null;
+        }
+        try {
+            return embeddingPrefixFromConfigJson(Files.readString(sidecar));
+        } catch (IOException e) {
+            logger.debug("Could not read config sidecar for '{}': {}", name, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Embedding prefix from a run-config JSON document, or null when it names no
+     * embedding. Separated from file access so it can be tested directly.
+     *
+     * @param json the contents of a {@code <name>_config.json}
+     * @return the prefix, or null
+     */
+    static String embeddingPrefixFromConfigJson(String json) {
+        try {
+            var root = GSON.fromJson(json, com.google.gson.JsonObject.class);
+            if (root == null) {
+                return null;
+            }
+            var methodEl = root.get("embeddingMethod");
+            String method = (methodEl == null || methodEl.isJsonNull())
+                    ? null : methodEl.getAsString();
+            if (method == null || method.isBlank() || "NONE".equalsIgnoreCase(method)) {
+                return null;
+            }
+            String custom = null;
+            var paramsEl = root.get("embeddingParams");
+            if (paramsEl != null && paramsEl.isJsonObject()) {
+                var nameEl = paramsEl.getAsJsonObject().get("name");
+                if (nameEl != null && !nameEl.isJsonNull()) {
+                    custom = nameEl.getAsString();
+                }
+            }
+            // The sidecar stores the enum ("UMAP"); getEmbeddingPrefix keys off the id.
+            return ResultApplier.getEmbeddingPrefix(method.toLowerCase(Locale.ROOT), custom);
+        } catch (RuntimeException e) {
+            logger.debug("Could not parse config sidecar JSON: {}", e.getMessage());
+            return null;
+        }
     }
 
     /**
