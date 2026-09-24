@@ -226,6 +226,17 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 
+### Exporting spatial statistics tables
+
+The **Geary's C**, **Ripley K and L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
+
+Buttons above each table:
+- **Copy text** -- copies the table exactly as shown, spacing preserved (Geary's C and Co-occurrence only; Ripley K/L is a chart).
+- **Copy CSV** -- copies comma-separated rows in long form, ready to paste into a spreadsheet or R/Python.
+- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_geary_c.csv`, `qpcat_ripley_k_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
+
+**Why long form?** The on-screen table for pairwise co-occurrence is one column per ordered cluster pair (20 clusters = 400 columns, labels scroll away). CSV writes one row per pair, so every comparison is explicit and legible in a cell editor or data frame.
+
 ## Saving a plot
 
 **Save plot...** exports whichever tab is on top as a PNG, exactly as displayed. The

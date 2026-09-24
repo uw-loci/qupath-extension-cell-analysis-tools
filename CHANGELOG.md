@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **CSV export for spatial statistics tables.** The Geary's C, Ripley K and L, and
+  Co-occurrence tabs now have **Copy CSV** and **Save CSV...** buttons that export the
+  on-screen table in long form (one row per observation, every column named), ready for
+  re-analysis in a spreadsheet or stats package. The fixed-width on-screen layout is
+  optimized for reading; the long form is optimized for data re-use.
 - **"Select 'Median' only" in the measurement picker**, beside Select All / Select None /
   Select 'Mean' only. Matches "median" case-insensitively, the same way the mean button
   does, because detection engines disagree on capitalisation.
@@ -17,6 +22,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Results saved before the embedding prefix was recorded now recover it from their
+  config sidecar.** Old results opened for 3D viewing can now find and display their
+  original embedding measurements without re-running clustering. The sidecar file
+  (`<result_name>_config.json`) has always been written and always named the embedding
+  exactly, so the 3D view reads it from there rather than guessing or requiring a re-run.
 - **The 3D View opened on the wrong axes when the embedding had a custom name.** A run
   whose embedding was named, say, `UMAP_Demo` writes `UMAP_Demo1..3`, which the viewer's
   name-matching could not parse (it reads `UMAP1`, `UMAP 2` and the like), so it fell back

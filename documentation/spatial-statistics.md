@@ -149,6 +149,8 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
 
+Each table tab has **Copy CSV** and **Save CSV...** buttons to export the data in long form (one row per observation), which is more suitable for re-analysis than the on-screen fixed-width layout.
+
 After the run completes, see [Chapter 21 -- Spatial graph overlay](spatial-neighborhoods.md) for how to view the underlying graph in the QuPath viewer.
 
 ### What gets logged
