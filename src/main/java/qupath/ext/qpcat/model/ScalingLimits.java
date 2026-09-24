@@ -284,7 +284,7 @@ public final class ScalingLimits {
 
     /**
      * Memoized because installed RAM does not change while QuPath is running,
-     * and the last-resort probe SPAWNS A PROCESS ({@code wmic} on Windows,
+     * and the last-resort probe SPAWNS A PROCESS (PowerShell or {@code wmic} on Windows,
      * {@code sysctl} on macOS). The pre-flight runs on every dialog edit, so an
      * unmemoized probe put a process launch behind each one. It also stops the
      * "could not determine" warning repeating once per keystroke.
@@ -354,31 +354,73 @@ public final class ScalingLimits {
         return OptionalDouble.empty();
     }
 
-    /** macOS and Windows last resort: ask the OS directly. */
+    /**
+     * macOS and Windows last resort: ask the OS directly, trying each candidate in turn.
+     * <p>
+     * Windows tries PowerShell before {@code wmic}. WMIC is deprecated and recent Windows
+     * 11 builds no longer install it, so on those machines the old single-command probe
+     * failed and total memory came back unknown -- which is why a co-occurrence estimate
+     * of about 11 GB was reported without being judged against the machine.
+     */
     private static OptionalDouble ramFromCommand() {
         String osName = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
-        List<String> cmd;
-        if (osName.contains("mac")) {
-            cmd = List.of("sysctl", "-n", "hw.memsize");            // bytes
-        } else if (osName.contains("win")) {
-            cmd = List.of("wmic", "ComputerSystem", "get", "TotalPhysicalMemory");
-        } else {
-            return OptionalDouble.empty();
+        for (List<String> cmd : ramCommandsFor(osName)) {
+            OptionalDouble v = ramFromOneCommand(cmd);
+            if (v.isPresent()) {
+                return v;
+            }
         }
+        return OptionalDouble.empty();
+    }
+
+    /**
+     * Candidate total-memory commands for an OS name, most likely to work first.
+     * Separated from process handling so the order can be tested without spawning one.
+     *
+     * @param osName lower-case {@code os.name}
+     * @return commands to try in order; empty when this OS has no shell probe
+     */
+    static List<List<String>> ramCommandsFor(String osName) {
+        if (osName.contains("mac")) {
+            return List.of(List.of("sysctl", "-n", "hw.memsize")); // bytes
+        }
+        if (osName.contains("win")) {
+            return List.of(
+                    // Windows PowerShell 5.1 ships with every supported Windows.
+                    List.of(
+                            "powershell",
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-Command",
+                            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory"),
+                    // Kept for older Windows, where wmic is present and PowerShell may be locked down.
+                    List.of("wmic", "ComputerSystem", "get", "TotalPhysicalMemory"));
+        }
+        return List.of();
+    }
+
+    private static OptionalDouble ramFromOneCommand(List<String> cmd) {
+        Process p = null;
         try {
-            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             String out;
             try (var in = p.getInputStream()) {
                 out = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             }
-            p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+            if (!p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+            }
             for (String tok : out.split("\\s+")) {
                 if (tok.matches("\\d{9,}")) {   // a byte count, not a header word
                     return OptionalDouble.of(Long.parseLong(tok) / GB);
                 }
             }
+            logger.debug("No byte count in output of {}", cmd.get(0));
         } catch (Exception e) {
             logger.debug("Could not read total memory via {}: {}", cmd.get(0), e.getMessage());
+            if (p != null) {
+                p.destroyForcibly();
+            }
         }
         return OptionalDouble.empty();
     }

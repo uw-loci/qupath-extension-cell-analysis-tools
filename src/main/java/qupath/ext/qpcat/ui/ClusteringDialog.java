@@ -81,6 +81,13 @@ public class ClusteringDialog {
     /** Delay before the 3D view starts reading, so a look-and-close session does not pay for it. */
     private static final int THREE_D_PREFETCH_SECONDS = 5;
 
+    /** The Poisson reference: dashed and theme-neutral, so shape carries the meaning. */
+    private static final String NULL_SERIES_STYLE =
+            "-fx-stroke: -fx-text-base-color; -fx-stroke-dash-array: 6 4; -fx-stroke-width: 2px;";
+
+    /** Series name of the Poisson reference on the Ripley charts. */
+    private static final String POISSON_NULL_SERIES = "Poisson null";
+
     /** Results page; each Results-dialog tab appends its own anchor. */
     private static final String DOCS_BASE = QpcatDocLinks.pageUrl("results.md");
 
@@ -5315,7 +5322,8 @@ public class ClusteringDialog {
         double[][] lValues = ripley.getLValues();
         List<String> clusterNames = ripley.getClusterNames();
 
-        if (kValues != null && clusterNames != null) {
+        boolean showK = !ripley.isKUnavailable();
+        if (showK && kValues != null && clusterNames != null) {
             for (int i = 0; i < clusterNames.size() && i < kValues.length; i++) {
                 javafx.scene.chart.XYChart.Series<Number, Number> series =
                         new javafx.scene.chart.XYChart.Series<>();
@@ -5345,10 +5353,10 @@ public class ClusteringDialog {
         // shape (dashed) carries the meaning, not colour alone -- this is
         // the colorblind-safety contract from the Phase 1 accessibility
         // pass.
-        if (ripley.getPoissonK() != null && ripley.getPoissonK().length > 0) {
+        if (showK && ripley.getPoissonK() != null && ripley.getPoissonK().length > 0) {
             javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
                     new javafx.scene.chart.XYChart.Series<>();
-            nullSeries.setName("Poisson null");
+            nullSeries.setName(POISSON_NULL_SERIES);
             double[] poissonK = ripley.getPoissonK();
             for (int r = 0; r < radii.length && r < poissonK.length; r++) {
                 nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
@@ -5360,7 +5368,7 @@ public class ClusteringDialog {
         if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
             javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
                     new javafx.scene.chart.XYChart.Series<>();
-            nullSeries.setName("Poisson null");
+            nullSeries.setName(POISSON_NULL_SERIES);
             double[] poissonL = ripley.getPoissonL();
             for (int r = 0; r < radii.length && r < poissonL.length; r++) {
                 nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
@@ -5368,6 +5376,35 @@ public class ClusteringDialog {
             }
             lChart.getData().add(nullSeries);
             stylePoissonNullSeries(nullSeries);
+        }
+
+        // Colour both charts from the shared cluster palette. Without this JavaFX cycles
+        // eight default colours, so a 20-cluster run repeats colours and the null blends in.
+        Map<String, String> hexByName = new LinkedHashMap<>();
+        if (clusterNames != null) {
+            for (int i = 0; i < clusterNames.size(); i++) {
+                hexByName.put(
+                        clusterNameForKey(result, clusterNames.get(i)),
+                        ripleySeriesHex(result, clusterNames.get(i), i));
+            }
+        }
+        hexByName.put(POISSON_NULL_SERIES, "-fx-text-base-color");
+        applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
+        applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
+
+        if (!showK) {
+            // This squidpy build has no mode='K'. The K curves are zero padding, and a
+            // chart of zeros reads exactly like a measured "no clustering at any radius"
+            // result, so show L alone and say why.
+            Label kNote = new Label(
+                    "Ripley K is not available in this version of squidpy, so only L is shown. "
+                    + "L is the variance-stabilised transform of K and carries the same "
+                    + "clustering-versus-dispersion signal.");
+            kNote.setWrapText(true);
+            kNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+            VBox onlyL = new VBox(6, kNote, lChart);
+            VBox.setVgrow(lChart, javafx.scene.layout.Priority.ALWAYS);
+            return onlyL;
         }
 
         // Responsive container -- side-by-side or stacked depending on width.
@@ -5410,14 +5447,81 @@ public class ClusteringDialog {
      */
     private static void stylePoissonNullSeries(
             javafx.scene.chart.XYChart.Series<Number, Number> series) {
-        series.nodeProperty().addListener((obs, oldNode, newNode) -> {
-            if (newNode != null) {
-                newNode.setStyle(
-                        "-fx-stroke: -fx-text-base-color;"
-                        + "-fx-stroke-dash-array: 6 4;"
-                        + "-fx-opacity: 0.7;");
+        // Apply NOW as well as on change. The chart assigns the line node synchronously
+        // inside getData().add(...), and this is called after that, so a listener alone
+        // never fired and the dash never landed -- the panel text promised a dashed line
+        // that was never drawn.
+        styleNullNode(series.getNode());
+        series.nodeProperty().addListener((obs, oldNode, newNode) -> styleNullNode(newNode));
+    }
+
+    private static void styleNullNode(javafx.scene.Node node) {
+        if (node != null) {
+            node.setStyle(NULL_SERIES_STYLE);
+        }
+    }
+
+    /**
+     * Colour each series' line and its legend swatch from the same cluster palette the
+     * rest of QP-CAT uses.
+     * <p>
+     * JavaFX's default chart palette has eight colours and repeats, so a 20-cluster run
+     * gave several clusters the same colour and handed the Poisson null one of them.
+     * Legend swatches are matched by LABEL TEXT, not by index: {@code lookupAll} returns
+     * an unordered set, so position cannot be trusted.
+     *
+     * @param chart      the chart to colour
+     * @param hexByName  series name -> CSS colour
+     * @param nullName   the Poisson null series name, drawn dashed instead of solid
+     */
+    private static void applySeriesColors(
+            javafx.scene.chart.LineChart<Number, Number> chart,
+            Map<String, String> hexByName,
+            String nullName) {
+        Runnable apply = () -> {
+            for (javafx.scene.chart.XYChart.Series<Number, Number> series : chart.getData()) {
+                String hex = hexByName.get(series.getName());
+                if (hex == null || series.getNode() == null) {
+                    continue;
+                }
+                series.getNode().setStyle(nullName.equals(series.getName())
+                        ? NULL_SERIES_STYLE
+                        : "-fx-stroke: " + hex + ";");
+            }
+            for (javafx.scene.Node n : chart.lookupAll(".chart-legend-item")) {
+                if (n instanceof Label label && label.getGraphic() != null) {
+                    String hex = hexByName.get(label.getText());
+                    if (hex != null) {
+                        label.getGraphic().setStyle("-fx-background-color: " + hex + ";");
+                    }
+                }
+            }
+        };
+        apply.run();
+        // Legend nodes do not exist until the chart has been laid out.
+        chart.sceneProperty().addListener((obs, old, scene) -> {
+            if (scene != null) {
+                Platform.runLater(apply);
             }
         });
+        Platform.runLater(apply);
+    }
+
+    /**
+     * CSS colour for a Ripley series, from the cluster's own colour where the key is a
+     * plain label, so the chart agrees with the heatmap, the scatter and the viewer.
+     */
+    private static String ripleySeriesHex(ClusteringResult result, String key, int fallbackIndex) {
+        try {
+            Color c = EmbeddingScatterPanel.clusterColorFor(
+                    Integer.parseInt(key.trim()), result == null ? null : result.clusterNameFn());
+            return String.format("#%02X%02X%02X",
+                    (int) Math.round(c.getRed() * 255),
+                    (int) Math.round(c.getGreen() * 255),
+                    (int) Math.round(c.getBlue() * 255));
+        } catch (NumberFormatException e) {
+            return ClusterPalette.hexFor(fallbackIndex);
+        }
     }
 
     /**

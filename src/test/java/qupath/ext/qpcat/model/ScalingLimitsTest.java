@@ -377,4 +377,27 @@ class ScalingLimitsTest {
         assertThat(ScalingLimits.isBlocked(ScalingLimits.check(after)))
                 .isEqualTo(ScalingLimits.isBlocked(ScalingLimits.check(before)));
     }
+
+    /**
+     * WMIC is deprecated and recent Windows 11 builds do not install it, which is how a
+     * Windows machine reported "Could not determine total system memory by any method"
+     * and left an 11 GB co-occurrence estimate unjudged. PowerShell must be tried first,
+     * with wmic kept for older Windows.
+     */
+    @Test
+    void windowsTriesPowerShellBeforeWmic() {
+        var cmds = ScalingLimits.ramCommandsFor("windows 11");
+        assertThat(cmds).hasSize(2);
+        assertThat(cmds.get(0).get(0)).isEqualTo("powershell");
+        assertThat(String.join(" ", cmds.get(0))).contains("Win32_ComputerSystem").contains("-NoProfile");
+        assertThat(cmds.get(1).get(0)).isEqualTo("wmic");
+    }
+
+    @Test
+    void macUsesSysctlAndLinuxHasNoShellProbe() {
+        assertThat(ScalingLimits.ramCommandsFor("mac os x")).containsExactly(
+                java.util.List.of("sysctl", "-n", "hw.memsize"));
+        // Linux is served by /proc/meminfo before this point.
+        assertThat(ScalingLimits.ramCommandsFor("linux")).isEmpty();
+    }
 }

@@ -22,6 +22,7 @@ public class RipleyResult {
     private double[] radii;
     private double[][] kValues;       // [cluster][r]
     private double[][] lValues;       // [cluster][r]
+    private boolean kUnavailable;
     private double[] poissonK;        // analytical null K(r)
     private double[] poissonL;        // analytical null L(r) (zero line)
     private Map<String, Double> pValues;
@@ -41,6 +42,15 @@ public class RipleyResult {
 
     public double[][] getLValues() { return lValues; }
     public void setLValues(double[][] v) { this.lValues = v; }
+
+    /**
+     * True when this squidpy build dropped {@code mode='K'}, so {@link #getKValues()} is
+     * zero padding rather than a measurement. A chart of those zeros reads exactly like a
+     * real "no clustering at any radius" result, so consumers must not plot them.
+     */
+    public boolean isKUnavailable() { return kUnavailable; }
+
+    public void setKUnavailable(boolean v) { this.kUnavailable = v; }
 
     public double[] getPoissonK() { return poissonK; }
     public void setPoissonK(double[] v) { this.poissonK = v; }

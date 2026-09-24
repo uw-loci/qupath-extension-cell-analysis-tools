@@ -4412,6 +4412,13 @@ public class ClusteringWorkflow {
         Object n = raw.get("n_permutations");
         if (n instanceof Number num) out.setNPermutations(num.intValue());
         if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        // Set when squidpy has no mode='K'; k_values are then zero padding, not data.
+        Object ku = raw.get("k_unavailable");
+        if (ku instanceof Boolean b) {
+            out.setKUnavailable(b);
+        } else if (ku != null) {
+            out.setKUnavailable(Boolean.parseBoolean(ku.toString()));
+        }
         return out;
     }
 

@@ -101,7 +101,9 @@ public final class SpatialStatsCsv {
         }
         double[] radii = ripley.getRadii();
         List<String> names = ripley.getClusterNames();
-        double[][] k = ripley.getKValues();
+        // Zero padding when squidpy had no mode='K'; writing those zeros would put a
+        // measured-looking 0 in every k cell.
+        double[][] k = ripley.isKUnavailable() ? null : ripley.getKValues();
         double[][] l = ripley.getLValues();
         if (names != null) {
             for (int i = 0; i < names.size(); i++) {
@@ -118,7 +120,7 @@ public final class SpatialStatsCsv {
                 }
             }
         }
-        double[] pk = ripley.getPoissonK();
+        double[] pk = ripley.isKUnavailable() ? null : ripley.getPoissonK();
         double[] pl = ripley.getPoissonL();
         if (pk != null || pl != null) {
             for (int r = 0; r < radii.length; r++) {

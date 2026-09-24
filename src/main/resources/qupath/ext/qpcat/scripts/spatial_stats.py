@@ -1055,6 +1055,11 @@ def run_ripley(
             "p_value_curves": p_value_curves,
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
+            # True when this squidpy build dropped mode='K'. The k_values above
+            # are then ZERO PADDING, not a measurement, and a chart of zeros
+            # reads exactly like a real "no clustering at any radius" result --
+            # so the consumer must be told rather than left to plot it.
+            "k_unavailable": not k_available,
         }
         task.outputs["ripley"] = json.dumps(payload)
         logger.info(
@@ -1072,14 +1077,21 @@ def run_ripley(
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
 
-                fig, (ax_k, ax_l) = plt.subplots(1, 2, figsize=(12, 5))
+                if k_available:
+                    fig, (ax_k, ax_l) = plt.subplots(1, 2, figsize=(12, 5))
+                else:
+                    # No K from this squidpy build; k_curves are zero padding.
+                    # Plotting them would show every cluster flat on zero, which
+                    # reads as a measured result. Draw L alone instead.
+                    fig, ax_l = plt.subplots(1, 1, figsize=(7, 5))
+                    ax_k = None
                 n_clusters = len(cluster_names)
                 cmap_name = "tab20" if n_clusters > 10 else "tab10"
                 cmap = plt.get_cmap(cmap_name, max(n_clusters, 1))
 
                 for idx, cname in enumerate(cluster_names):
                     color = cmap(idx)
-                    if idx < len(k_curves):
+                    if ax_k is not None and idx < len(k_curves):
                         ax_k.plot(
                             radii,
                             k_curves[idx],
@@ -1097,14 +1109,15 @@ def run_ripley(
                         )
 
                 # Poisson null overlays (dashed black for visibility)
-                ax_k.plot(
-                    radii,
-                    poisson_k,
-                    "--",
-                    color="black",
-                    label="Poisson null",
-                    linewidth=1.0,
-                )
+                if ax_k is not None:
+                    ax_k.plot(
+                        radii,
+                        poisson_k,
+                        "--",
+                        color="black",
+                        label="Poisson null",
+                        linewidth=1.0,
+                    )
                 ax_l.plot(
                     radii,
                     poisson_l,
@@ -1114,11 +1127,12 @@ def run_ripley(
                     linewidth=1.0,
                 )
 
-                ax_k.set_xlabel("Radius (%s)" % coord_unit)
-                ax_k.set_ylabel("K(r)")
-                ax_k.set_title("Ripley K")
-                ax_k.legend(fontsize="small", loc="best")
-                ax_k.grid(True, alpha=0.3)
+                if ax_k is not None:
+                    ax_k.set_xlabel("Radius (%s)" % coord_unit)
+                    ax_k.set_ylabel("K(r)")
+                    ax_k.set_title("Ripley K")
+                    ax_k.legend(fontsize="small", loc="best")
+                    ax_k.grid(True, alpha=0.3)
 
                 ax_l.set_xlabel("Radius (%s)" % coord_unit)
                 ax_l.set_ylabel("L(r)")
@@ -1126,9 +1140,14 @@ def run_ripley(
                 ax_l.legend(fontsize="small", loc="best")
                 ax_l.grid(True, alpha=0.3)
 
+                title = "Ripley K and L" if k_available else "Ripley L"
+                if not k_available:
+                    title += " (K not available in squidpy %s)" % getattr(
+                        sq, "__version__", "?"
+                    )
                 fig.suptitle(
-                    "Ripley K and L (graph: %s, perms: %d)"
-                    % (graph_type, int(n_permutations))
+                    "%s (graph: %s, perms: %d)"
+                    % (title, graph_type, int(n_permutations))
                 )
                 out_path = os.path.join(plot_dir, PLOT_FILE_RIPLEY)
                 fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")

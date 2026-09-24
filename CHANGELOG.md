@@ -22,6 +22,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The Ripley "K(r)" chart showed a measured-looking result where nothing was measured.**
+  squidpy 1.6.6 dropped Ripley K (only F, G and L remain), so QP-CAT zero-pads the K
+  curves and logs "using L only". Nothing read that flag, so the chart drew every cluster
+  flat on zero, which is indistinguishable from a genuine "no clustering at any radius"
+  finding. The K chart and the K half of the PNG are now omitted when K was not computed,
+  with a line saying why, and the CSV leaves those cells empty instead of writing zeros.
+- **The Poisson null was never actually dashed.** The dashed style was applied through a
+  node listener registered after the series had been added to the chart, but JavaFX
+  assigns that node during the add, so the listener never fired. It now styles the node
+  directly, and the reference is drawn thicker and in a theme-neutral colour.
+- **Ripley charts use QP-CAT's cluster colours.** They previously used JavaFX's default
+  palette, which has eight colours and repeats, so a 20-cluster run gave several clusters
+  the same colour and handed the Poisson null one of them. Lines and legend swatches now
+  match the colours used by the heatmap, the scatter and the viewer.
+- **Total system memory is read with PowerShell before `wmic` on Windows.** `wmic` is
+  deprecated and recent Windows 11 builds no longer install it, so memory detection failed
+  outright and scale checks reported predictions without judging them ("Could not
+  determine total system memory by any method"). `wmic` is still tried afterwards for
+  older Windows.
 - **Results saved before the embedding prefix was recorded now recover it from their
   config sidecar.** Old results opened for 3D viewing can now find and display their
   original embedding measurements without re-running clustering. The sidecar file
