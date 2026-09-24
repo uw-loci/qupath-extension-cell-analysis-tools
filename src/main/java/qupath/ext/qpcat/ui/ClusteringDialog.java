@@ -348,8 +348,14 @@ public class ClusteringDialog {
         // it is a sibling, not a child, of this box.
         settingsBox = new VBox(10);
         settingsBox.getChildren().add(QpcatDocLinks.linkBar("clustering.md", null));
+        // Scope on the left, "start from a saved configuration" on the right: the two
+        // decisions taken before any of the settings below them.
+        HBox topRow = new HBox(16, scopeNode, createLoadConfigColumn());
+        topRow.setAlignment(Pos.TOP_LEFT);
+        HBox.setHgrow(scopeNode, javafx.scene.layout.Priority.ALWAYS);
+
         settingsBox.getChildren().addAll(
-                scopeNode,
+                topRow,
                 new Separator(),
                 createMeasurementSection(),
                 new Separator(),
@@ -2432,6 +2438,39 @@ public class ClusteringDialog {
         return config;
     }
 
+    /**
+     * The two "start from an existing configuration" buttons, as a column beside Scope.
+     * <p>
+     * Loading is something you do FIRST -- it replaces every setting below it -- so it
+     * belongs at the top of the dialog next to the other opening decision, not at the
+     * bottom past the settings it overwrites. Saving stays at the bottom, because it is
+     * the last thing you do.
+     */
+    private VBox createLoadConfigColumn() {
+        Label heading = new Label("Start from a saved configuration:");
+        heading.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        Button loadBtn = new Button("Load Config...");
+        loadBtn.setOnAction(e -> loadConfig());
+        loadBtn.setMaxWidth(Double.MAX_VALUE);
+        loadBtn.setTooltip(Tooltips.of(
+                "Load a previously saved clustering configuration\n"
+                + "and restore all settings in this dialog."));
+
+        Button loadFileBtn = new Button("Load Config from file...");
+        loadFileBtn.setOnAction(e -> loadConfigFromFile());
+        loadFileBtn.setMaxWidth(Double.MAX_VALUE);
+        loadFileBtn.setTooltip(Tooltips.of(
+                "Load a config from any JSON file -- e.g. the '<name>_config.json'\n"
+                + "saved next to a result, to reproduce that exact run. Restores all\n"
+                + "settings here; then pick the Scope and click Run Clustering."));
+
+        VBox box = new VBox(4, heading, loadBtn, loadFileBtn);
+        box.setAlignment(Pos.TOP_LEFT);
+        return box;
+    }
+
+    /** Saving the current settings, which is the last thing you do, not the first. */
     private HBox createConfigSection() {
         Button saveBtn = new Button("Save Config...");
         saveBtn.setOnAction(e -> saveConfig());
@@ -2439,20 +2478,7 @@ public class ClusteringDialog {
                 "Save the current clustering configuration (algorithm,\n"
                 + "parameters, measurements) to the project for reuse."));
 
-        Button loadBtn = new Button("Load Config...");
-        loadBtn.setOnAction(e -> loadConfig());
-        loadBtn.setTooltip(Tooltips.of(
-                "Load a previously saved clustering configuration\n"
-                + "and restore all settings in this dialog."));
-
-        Button loadFileBtn = new Button("Load Config from file...");
-        loadFileBtn.setOnAction(e -> loadConfigFromFile());
-        loadFileBtn.setTooltip(Tooltips.of(
-                "Load a config from any JSON file -- e.g. the '<name>_config.json'\n"
-                + "saved next to a result, to reproduce that exact run. Restores all\n"
-                + "settings here; then pick the Scope and click Run Clustering."));
-
-        HBox box = new HBox(10, saveBtn, loadBtn, loadFileBtn);
+        HBox box = new HBox(10, saveBtn);
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
     }
