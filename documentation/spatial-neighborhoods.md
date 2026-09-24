@@ -133,7 +133,11 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
   reproduce, re-run with the same image scope.)
 - For **joint** runs, labels are written back and **saved to every selected
   image**, and the cohort tables + heatmaps are written to a results folder under
-  the project (`qpcat-cellular-neighborhoods/<run-id>/`).
+  the project, one folder per run named by time and settings
+  (`qpcat/cellular_neighborhoods/cn_20260628_173500_k20_n10/`). The run's UUID is
+  recorded inside `cn_RUN_INFO.txt`, which also notes that the cell-type classes were
+  read from whatever the objects carried at the time -- a clustering result, phenotyping,
+  an imported classifier or hand edits -- so the run records no parent result.
 
 ### Reading the enrichment heatmap
 
