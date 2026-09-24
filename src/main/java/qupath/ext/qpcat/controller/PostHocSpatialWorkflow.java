@@ -19,6 +19,7 @@ import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.SavedResultApplier;
+import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
@@ -271,7 +272,7 @@ public class PostHocSpatialWorkflow {
         Project<BufferedImage> project = currentProject();
         if (project == null || project.getPath() == null) return null;
         try {
-            Path dir = project.getPath().getParent().resolve("qpcat/spatial_stats");
+            Path dir = project.getPath().getParent().resolve(QpcatPaths.SPATIAL_STATS);
             Files.createDirectories(dir);
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
             String base = "spatial_" + stamp;

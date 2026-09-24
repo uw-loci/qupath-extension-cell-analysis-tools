@@ -25,7 +25,7 @@ public class ClusteringConfigManager {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringConfigManager.class);
 
-    private static final String CONFIGS_DIR = "qpcat/cluster_configs";
+    private static final String CONFIGS_DIR = QpcatPaths.CLUSTER_CONFIGS;
     private static final String JSON_EXT = ".json";
 
     // The config's algorithm/embedding params are Map<String,Object>; without a

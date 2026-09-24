@@ -38,6 +38,7 @@ import qupath.ext.qpcat.model.PlotKind;
 import qupath.ext.qpcat.service.BatchFigureExporter;
 import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
@@ -202,8 +203,8 @@ public class BatchFigureExportDialog {
             }
             try {
                 Path projDir = project.getPath().getParent();
-                Path target = projDir.resolve("qpcat")
-                        .resolve("figures").resolve(LocalDate.now().toString());
+                Path target = projDir.resolve(QpcatPaths.FIGURES)
+                        .resolve(LocalDate.now().toString());
                 outputDirField.setText(target.toAbsolutePath().toString());
             } catch (Exception ex) {
                 logger.warn("Project default dir failed", ex);

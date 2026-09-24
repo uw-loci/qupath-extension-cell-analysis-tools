@@ -23,7 +23,7 @@ public class PhenotypeRuleSetManager {
 
     private static final Logger logger = LoggerFactory.getLogger(PhenotypeRuleSetManager.class);
 
-    private static final String RULES_DIR = "qpcat/phenotype_rules";
+    private static final String RULES_DIR = QpcatPaths.PHENOTYPE_RULES;
     private static final String JSON_EXT = ".json";
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();

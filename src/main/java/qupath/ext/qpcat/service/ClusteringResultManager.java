@@ -29,7 +29,7 @@ public class ClusteringResultManager {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringResultManager.class);
 
-    private static final String RESULTS_DIR = "qpcat/cluster_results";
+    private static final String RESULTS_DIR = QpcatPaths.CLUSTER_RESULTS;
     private static final String JSON_EXT = ".json";
     private static final String PLOTS_SUFFIX = "_plots";
 

@@ -36,7 +36,7 @@ public class OperationLogger {
 
     private static final Logger logger = LoggerFactory.getLogger(OperationLogger.class);
 
-    private static final String LOGS_DIR = "qpcat/logs";
+    private static final String LOGS_DIR = QpcatPaths.LOGS;
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIMESTAMP_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

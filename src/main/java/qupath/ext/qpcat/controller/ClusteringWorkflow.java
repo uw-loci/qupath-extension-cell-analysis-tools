@@ -20,6 +20,7 @@ import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ExistingLabelReader;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
+import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.fx.dialogs.Dialogs;
@@ -4324,7 +4325,7 @@ public class ClusteringWorkflow {
 
     /**
      * Returns the temp directory inside the project folder for large temp files.
-     * Creates .qpcat_temp/ if it doesn't exist. Requires a project to be open.
+     * Creates qpcat/.temp/ if it doesn't exist. Requires a project to be open.
      */
     private Path getProjectTempDir() throws IOException {
         if (currentProject() == null) {
@@ -4332,7 +4333,7 @@ public class ClusteringWorkflow {
                     + "(temp files are stored in the project folder).");
         }
         Path projectDir = currentProject().getPath().getParent();
-        Path tempDir = projectDir.resolve(".qpcat_temp");
+        Path tempDir = projectDir.resolve(QpcatPaths.TEMP);
         Files.createDirectories(tempDir);
         return tempDir;
     }

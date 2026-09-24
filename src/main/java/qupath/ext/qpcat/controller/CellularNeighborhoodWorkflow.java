@@ -11,6 +11,7 @@ import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -494,7 +495,7 @@ public class CellularNeighborhoodWorkflow {
         }
 
         // 5. Results folder under the project (heatmaps + tables land here).
-        Path resultsDir = createResultsDir(runId);
+        Path resultsDir = createResultsDir(runId, kNeighbors, nNeighborhoods);
 
         // 6. Run the joint Python task.
         report(progress, "Sending " + totalCells + " cells from " + loaded.size()
@@ -644,13 +645,31 @@ public class CellularNeighborhoodWorkflow {
         }
     }
 
-    private Path createResultsDir(String runId) {
+    /**
+     * Folder for one run's tables and figures, under {@code qpcat/cellular_neighborhoods}.
+     * <p>
+     * Named by timestamp and settings rather than by a slice of the run's UUID, which told
+     * a reader nothing about when the run happened or what it was. The UUID stays in
+     * {@code cn_RUN_INFO.txt} as the join key to the operation log.
+     *
+     * @param runId          the run's UUID, used only to break a same-second collision
+     * @param kNeighbors     window size, part of the folder name
+     * @param nNeighborhoods requested neighborhood count, part of the folder name
+     * @return the created directory, or a temp directory if the project has no path
+     */
+    private Path createResultsDir(String runId, int kNeighbors, int nNeighborhoods) {
         try {
             if (qupath != null && qupath.getProject() != null
                     && qupath.getProject().getPath() != null) {
-                Path base = qupath.getProject().getPath().getParent()
-                        .resolve("qpcat-cellular-neighborhoods")
-                        .resolve(runId.substring(0, Math.min(8, runId.length())));
+                String folder = QpcatPaths.cnRunFolderName(
+                        java.time.LocalDateTime.now(), kNeighbors, nNeighborhoods);
+                Path parent = qupath.getProject().getPath().getParent()
+                        .resolve(QpcatPaths.CELLULAR_NEIGHBORHOODS);
+                Path base = parent.resolve(folder);
+                if (Files.exists(base)) {
+                    // Two runs in the same second with the same settings.
+                    base = parent.resolve(folder + "_" + runId.substring(0, Math.min(4, runId.length())));
+                }
                 Files.createDirectories(base);
                 return base;
             }
@@ -975,6 +994,10 @@ public class CellularNeighborhoodWorkflow {
             info.append("total cells: ").append(totalCells).append('\n');
             info.append("cell-type classes (union): ").append(classNames.size())
                     .append(" -> ").append(String.join(", ", classNames)).append('\n');
+            info.append("classes read from: the classifications on the objects when this run "
+                    + "started.\n  These may come from a clustering result, phenotyping, an "
+                    + "imported classifier\n  or hand edits -- QP-CAT cannot tell which, so this "
+                    + "run records no parent result.\n");
             info.append("grouped by metadata key: ")
                     .append(groupMetadataKey == null || groupMetadataKey.isBlank()
                             ? "(none)" : groupMetadataKey).append('\n');

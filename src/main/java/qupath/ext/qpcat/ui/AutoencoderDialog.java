@@ -23,6 +23,7 @@ import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ViewerNavigator;
+import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -252,7 +253,7 @@ public class AutoencoderDialog {
         }
     }
 
-    /** Schedule a non-blocking sweep of `<project>/.qpcat_temp/qpcat_*.bin`
+    /** Schedule a non-blocking sweep of `<project>/qpcat/.temp/qpcat_*.bin`
      *  files older than 1 hour. VAE training/eval/infer write large memmap
      *  buffers there; if QuPath crashes mid-run they linger. Anything that
      *  hasn't been touched for an hour is safely an orphan because (a) any
@@ -261,7 +262,7 @@ public class AutoencoderDialog {
     private void cleanupOrphanTempFilesAsync() {
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || project.getPath() == null) return;
-        Path tempDir = project.getPath().getParent().resolve(".qpcat_temp");
+        Path tempDir = project.getPath().getParent().resolve(QpcatPaths.TEMP);
         if (!Files.isDirectory(tempDir)) return;
 
         Thread t = new Thread(() -> {

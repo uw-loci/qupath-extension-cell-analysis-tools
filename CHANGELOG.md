@@ -4,6 +4,34 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Changed
+
+- **Everything QP-CAT writes now lives under one `qpcat/` folder in the project.**
+  Cellular-neighborhood runs used to write to a top-level
+  `qpcat-cellular-neighborhoods/`, and the scratch directory sat beside
+  `project.qpproj` as `.qpcat_temp/`. They are now `qpcat/cellular_neighborhoods/` and
+  `qpcat/.temp/`. Existing folders are left where they are; nothing is moved.
+- **Cellular-neighborhood runs are named by time and settings**, e.g.
+  `cn_20260628_173500_k20_n10`, instead of by eight characters of the run's UUID
+  (`737ac095`), which said nothing about when the run happened or what it covered. The
+  UUID is still recorded in `cn_RUN_INFO.txt`, where it remains the join key to the
+  operation log, and run folders now sort chronologically.
+- **`cn_RUN_INFO.txt` says where its cell-type classes came from** -- the classifications
+  on the objects when the run started -- and states plainly that QP-CAT cannot tell
+  whether those came from a clustering result, phenotyping, an imported classifier or
+  hand edits, so the run records no parent result.
+
+### Fixed
+
+- **Opening Run Clustering no longer warns three times that no measurements are selected.**
+  The config builder both assembled the configuration and validated it with a popup, and
+  three passive refreshes rebuilt it on open (the scale pre-flight, which runs twice, plus
+  the run-cost line and the cost summary). Only actions you take -- Run, Save config --
+  warn now. This also removes the two "Scale pre-flight failed ... config is null" log
+  lines.
+
 ## [0.12.1] -- 2026-09-24 -- the 3D view opens on the right axes
 
 ### Added
