@@ -632,6 +632,10 @@ if resolve_pca_precursor(
     if _n_comps >= 2:
         _prec = _PrecursorPCA(n_components=_n_comps, random_state=clustering_seed)
         cluster_matrix = _prec.fit_transform(df_norm.values)
+        # Checked here as well as after normalization: the precursor REPLACES
+        # cluster_matrix, so a check before it cannot speak for what the embedding
+        # and the clustering algorithm actually receive.
+        require_finite(cluster_matrix, "PCA precursor")
         _prec_var = float(np.sum(_prec.explained_variance_ratio_))
         pca_precursor_info = {
             "applied": True,
