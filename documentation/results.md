@@ -222,7 +222,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 |---|---|
 | **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. |
 | **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. |
-| **Ripley K / L** | Curve above the dashed Poisson null = clustering at that radius; below = dispersion. |
+| **Ripley K / L** | Curve above the dashed Poisson null = clustering at that radius; below = dispersion. K may be unavailable in squidpy 1.6.6+, in which case only L is shown. |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 
