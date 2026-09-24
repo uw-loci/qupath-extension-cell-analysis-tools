@@ -97,7 +97,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
      * The current version is always persisted so the advisory fires once per install/update.
      * Unpackaged IDE/dev runs report no manifest version and are skipped.
      */
-    private void warnIfExtensionRecentlyUpdated() {
+    private void warnIfExtensionRecentlyUpdated(QuPathGUI qupath) {
         String current = GeneralTools.getPackageVersion(SetupQPCAT.class);
         if (current == null || current.isBlank() || "dev".equals(current)) {
             return;
@@ -133,8 +133,26 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             if (content != null) {
                 content.setWrapText(true);
             }
-            alert.showAndWait();
+            showStartupAlert(qupath, alert);
         });
+    }
+
+    /**
+     * Shows a startup alert owned by the QuPath main window and non-modal. An owned window
+     * always stays above its owner, and a non-modal one can never block input to QuPath --
+     * an unowned APPLICATION_MODAL alert fired during startup can land behind the main window
+     * and leave QuPath accepting no input with nothing visible to explain why. Skipped when
+     * the main window is not showing (headless run).
+     */
+    private static void showStartupAlert(QuPathGUI qupath, javafx.scene.control.Alert alert) {
+        javafx.stage.Stage stage = qupath == null ? null : qupath.getStage();
+        if (stage == null || !stage.isShowing()) {
+            logger.info("Main window not showing; skipping startup alert '{}'", alert.getTitle());
+            return;
+        }
+        alert.initOwner(stage);
+        alert.initModality(javafx.stage.Modality.NONE);
+        alert.show();
     }
 
     @Override
@@ -147,7 +165,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         updateEnvironmentState();
         QpcatPreferences.installPreferences(qupath);
-        warnIfExtensionRecentlyUpdated();
+        warnIfExtensionRecentlyUpdated(qupath);
         Platform.runLater(() -> {
             addMenuItem(qupath);
 

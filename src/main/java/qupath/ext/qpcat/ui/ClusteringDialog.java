@@ -1813,7 +1813,7 @@ public class ClusteringDialog {
 
     /**
      * Heuristic pre-flight check, surfaced as an amber caution near the Run
-     * button, for configurations that commonly under-cluster -- so the user is
+     * button, for configurations that commonly produce too few clusters -- so the user is
      * warned BEFORE a run that is likely to collapse to one giant cluster or a
      * few clusters plus a large noise pile. Config-only (no data needed): driven
      * by the algorithm, feature count + compartment redundancy, background
@@ -1850,7 +1850,8 @@ public class ClusteringDialog {
             warns.add("HDBSCAN clusters the full " + n + "-feature space; density-based "
                     + "clustering degrades in high dimensions and tends to collapse to one giant "
                     + "cluster (or a few clusters plus a large \"Unclassified\" noise pile). "
-                    + "Consider Leiden, or compute UMAP first and cluster on UMAP1/UMAP2.");
+                    + "Consider Leiden, or compute UMAP first and cluster on the UMAP "
+                    + "coordinates.");
         } else if ((algo == Algorithm.KMEANS || algo == Algorithm.GMM
                 || algo == Algorithm.AGGLOMERATIVE || algo == Algorithm.MINIBATCHKMEANS) && n > 40) {
             warns.add(algo.getDisplayName() + " uses Euclidean distance on " + n + " features; "
@@ -1918,7 +1919,7 @@ public class ClusteringDialog {
                 if (!warns.isEmpty()) sb.append("\n\n");
             }
             if (!warns.isEmpty()) {
-                sb.append("Heads up -- this configuration may under-cluster:\n- ")
+                sb.append("Heads up -- this configuration may produce too few clusters:\n- ")
                         .append(String.join("\n- ", warns));
             }
             preflightLabel.setText(sb.toString());
