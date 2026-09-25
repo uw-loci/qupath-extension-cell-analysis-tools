@@ -28,6 +28,17 @@ plots), so to cluster *on the embedding* you run it in two steps.
      z-scoring each axis separately stretches the embedding along one axis and
      squashes it along another, and the geometry is the only thing an embedding
      carries).
+   - **`min_cluster_size`: set it deliberately.** The default 15 is a floor for
+     finding something rare; with **Leaf** selection, which cuts at the finest
+     level of the tree, a floor that low shatters populations into fragments.
+     Scale it to the smallest group you actually want to recover -- comfortably
+     below that group's size, comfortably above 15.
+   - **Batch correction: off.** It will be selectable if several images are in
+     scope, but there is nothing here for it to correct -- the input is the
+     embedding, and correcting that adjusts the picture rather than the
+     measurements that produced it. Batch correction belongs in step 1, the run
+     that computes the embedding. Whatever batch structure was present then is
+     already baked into the coordinates you are about to cluster.
    - Run. The cluster step now fits on the UMAP coordinates rather than the
      markers.
 
@@ -47,6 +58,11 @@ plots), so to cluster *on the embedding* you run it in two steps.
   scikit-learn and uses `min_cluster_size`. A small `min_samples` beside a large
   `min_cluster_size` estimates density over a handful of points while demanding
   clusters of hundreds, which is the other way to get one giant cluster.
+- **A `min_cluster_size` sweep is not a one-variable sweep.** Because auto ties
+  `min_samples` to it, raising the floor also widens the neighbourhood the density
+  is estimated over. Usually what you want, but say which you changed when you
+  report a result, and pin `min_samples` to a fixed number if you need the two
+  separated.
 - **HDBSCAN is the DBSCAN to use here.** QP-CAT ships **HDBSCAN** (not plain
   DBSCAN); it is the strict upgrade -- no global `eps` to guess, it handles
   variable density, and it labels low-density points as a noise cluster (shown as
