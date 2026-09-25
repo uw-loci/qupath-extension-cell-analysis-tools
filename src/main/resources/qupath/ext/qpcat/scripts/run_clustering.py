@@ -586,6 +586,136 @@ except NameError:
     embedding_mode = "auto"
 
 
+def pca_rank_parallel_analysis(X, max_comps, n_perm=20, seed=0, quantile=95.0):
+    """Horn's parallel analysis: keep components that beat shuffled data.
+
+    Each column is permuted INDEPENDENTLY, which destroys the correlation between
+    columns while leaving each column's own distribution intact. A component of the
+    real data is kept only if its eigenvalue exceeds what that same PCA produces on
+    the shuffled version, so "how many components" is answered against a null built
+    from this dataset rather than a fixed variance target.
+
+    This is the right test for a panel of tens of correlated features -- the same
+    marker measured in nucleus, cytoplasm and cell is exactly the redundancy the
+    permutation removes -- but it costs one PCA per permutation, so the caller
+    should not send it thousands of columns.
+
+    Args:
+        X: 2-D array, cells x features, already normalized.
+        max_comps: never return more than this.
+        n_perm: permutations forming the null. Measured: at 5 the 95th percentile is
+            itself noisy enough to keep 3-5 components of pure noise; at 20 it settles
+            on the floor. The cost is 20 decompositions of a subsampled matrix.
+        seed: RNG seed, so a run is reproducible.
+        quantile: percentile of the null eigenvalues to clear (95 = conservative).
+
+    Returns:
+        Number of components to keep, at least 2.
+    """
+    Xc = np.asarray(X, dtype=np.float64)
+    Xc = Xc - Xc.mean(axis=0)
+    n, p = Xc.shape
+    k = int(min(max_comps, p - 1, n - 1))
+    if k < 2:
+        return max(2, k)
+    denom = float(max(n - 1, 1))
+    real = (np.linalg.svd(Xc, compute_uv=False)[:k] ** 2) / denom
+    rng = np.random.RandomState(seed)
+    null = np.empty((n_perm, k), dtype=np.float64)
+    for i in range(n_perm):
+        Xp = np.column_stack([rng.permutation(Xc[:, j]) for j in range(p)])
+        null[i] = (np.linalg.svd(Xp, compute_uv=False)[:k] ** 2) / denom
+    threshold = np.percentile(null, quantile, axis=0)
+    keep = int(np.sum(real > threshold))
+    return int(min(max(keep, 2), k))
+
+
+def pca_rank_marchenko_pastur(X, max_comps, iters=5):
+    """Random-matrix threshold: keep eigenvalues above the noise bulk's edge.
+
+    Pure noise does not give equal eigenvalues -- it spreads them over a band whose
+    upper edge the Marchenko-Pastur law predicts from the shape of the matrix alone.
+    Anything above that edge is signal. The noise variance is estimated by fitting
+    the bulk iteratively: take an edge, average the eigenvalues below it, recompute.
+
+    Chosen for wide data (thousands of genes or markers), where permutation-based
+    tests would mean repeatedly decomposing a very large matrix, and where the law's
+    large-p behaviour is the regime it was derived for. It assumes roughly
+    homoskedastic noise; on count data that is an approximation, which is why the
+    result is capped rather than trusted blindly.
+
+    Args:
+        X: 2-D array, cells x features, already normalized.
+        max_comps: never return more than this.
+        iters: bulk-fitting iterations.
+
+    Returns:
+        Number of components to keep, at least 2.
+    """
+    Xc = np.asarray(X, dtype=np.float64)
+    Xc = Xc - Xc.mean(axis=0)
+    n, p = Xc.shape
+    k = int(min(max_comps, p - 1, n - 1))
+    if k < 2:
+        return max(2, k)
+    ev = (np.linalg.svd(Xc, compute_uv=False) ** 2) / float(max(n - 1, 1))
+    gamma = p / float(n)
+    sigma2 = float(np.median(ev))
+    for _ in range(iters):
+        edge = sigma2 * (1.0 + np.sqrt(gamma)) ** 2
+        bulk = ev[ev <= edge]
+        if bulk.size < 2:
+            break
+        new_sigma2 = float(np.mean(bulk))
+        if not np.isfinite(new_sigma2) or new_sigma2 <= 0:
+            break
+        if abs(new_sigma2 - sigma2) < 1e-9 * max(sigma2, 1e-9):
+            sigma2 = new_sigma2
+            break
+        sigma2 = new_sigma2
+    edge = sigma2 * (1.0 + np.sqrt(gamma)) ** 2
+    keep = int(np.sum(ev > edge))
+    return int(min(max(keep, 2), k))
+
+
+def choose_pca_rank(
+    X, max_comps, permutation_limit=200, n_perm=5, seed=0, row_cap=20000
+):
+    """Pick the component count, and the method, by the shape of the data.
+
+    Neither test is right everywhere. Parallel analysis is the better answer for a
+    panel of tens of correlated features but costs a PCA per permutation. The
+    Marchenko-Pastur edge is built for wide matrices and is cheap there, but its
+    assumptions are weakest exactly where the feature count is small. So the choice
+    is made by feature count rather than fixing one method and hoping.
+
+    Rows are subsampled for the decision only: the rank is a property of the
+    covariance structure, and 20,000 cells estimate it as well as a million.
+
+    Args:
+        X: 2-D array, cells x features, already normalized.
+        max_comps: upper bound, e.g. what the user asked for.
+        permutation_limit: at or below this many features, use parallel analysis.
+        n_perm: permutations for parallel analysis.
+        seed: RNG seed.
+        row_cap: rows used for the decision.
+
+    Returns:
+        (n_components, method_name)
+    """
+    Xa = np.asarray(X, dtype=np.float64)
+    n, p = Xa.shape
+    if n > row_cap:
+        rng = np.random.RandomState(seed)
+        Xa = Xa[rng.choice(n, row_cap, replace=False)]
+    if p <= permutation_limit:
+        return (
+            pca_rank_parallel_analysis(Xa, max_comps, n_perm=n_perm, seed=seed),
+            "parallel analysis",
+        )
+    return pca_rank_marchenko_pastur(Xa, max_comps), "Marchenko-Pastur edge"
+
+
 def resolve_pca_precursor(enabled, n_features, n_comps, algorithm_name):
     """Decide whether the PCA precursor engages. Pure, so it is testable.
 
@@ -622,13 +752,36 @@ cluster_matrix = df_norm.values
 require_finite(cluster_matrix, "Normalization", list(df_norm.columns))
 pca_precursor_info = None
 _n_features_pre = cluster_matrix.shape[1]
+# 0 or less means "decide from the data". A fixed 50 is scanpy/Seurat's default for
+# thousands of genes; on a 58-feature panel it reduced 58 to 50 at 99.8% variance --
+# no reduction at all, while the dialog was separately warning that those features
+# were redundant. The cap for the engage-or-not test is the ceiling, not the answer.
+_pca_auto = int(pref_pca_precursor_n_comps) <= 0
+_pca_cap = (
+    int(min(50, max(_n_features_pre - 1, 2)))
+    if _pca_auto
+    else int(pref_pca_precursor_n_comps)
+)
 if resolve_pca_precursor(
-    pref_pca_precursor_enabled, _n_features_pre, pref_pca_precursor_n_comps, algorithm
+    pref_pca_precursor_enabled, _n_features_pre, _pca_cap, algorithm
 ):
     import json as _json_prec
     from sklearn.decomposition import PCA as _PrecursorPCA
 
-    _n_comps = int(min(pref_pca_precursor_n_comps, _n_features_pre - 1, n_cells - 1))
+    _pca_method = "fixed"
+    if _pca_auto:
+        _n_comps, _pca_method = choose_pca_rank(
+            df_norm.values, _pca_cap, seed=clustering_seed
+        )
+        logger.info(
+            "PCA precursor: %d of %d features kept, chosen by %s",
+            _n_comps,
+            _n_features_pre,
+            _pca_method,
+        )
+    else:
+        _n_comps = _pca_cap
+    _n_comps = int(min(_n_comps, _n_features_pre - 1, n_cells - 1))
     if _n_comps >= 2:
         _prec = _PrecursorPCA(n_components=_n_comps, random_state=clustering_seed)
         cluster_matrix = _prec.fit_transform(df_norm.values)
@@ -642,6 +795,7 @@ if resolve_pca_precursor(
             "n_input_features": int(_n_features_pre),
             "n_components": int(_n_comps),
             "explained_variance": _prec_var,
+            "selection": _pca_method,
         }
         task.outputs["pca_precursor"] = _json_prec.dumps(pca_precursor_info)
         logger.info(

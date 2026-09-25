@@ -679,7 +679,22 @@ public class ClusteringDialog {
         });
         updateVisibility.run();
 
-        VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane);
+        // Said HERE, while the choice is still open. None of the algorithms below
+        // cluster the embedding -- they all cluster the measurements, or their
+        // principal components -- so clusters need not look cohesive on the plot the
+        // embedding produces. The two-step route that DOES cluster the embedding is
+        // real and supported, and is only useful to know beforehand.
+        Label embeddingUseNote = new Label(
+                "The embedding is for viewing: every clustering algorithm here works on the "
+                + "measurements (or their principal components), not on these coordinates, so "
+                + "one cluster can appear in several places on the plot. To cluster the "
+                + "embedding itself, compute it first with Explore & spatial > Map cells in "
+                + "2D..., then run clustering with those columns as the measurements.");
+        embeddingUseNote.setWrapText(true);
+        embeddingUseNote.setMinHeight(Region.USE_PREF_SIZE);
+        embeddingUseNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane, embeddingUseNote);
         TitledPane pane = new TitledPane("Dimensionality Reduction", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -3456,6 +3471,29 @@ public class ClusteringDialog {
         }
     }
 
+    /**
+     * Why a cluster can be drawn in several places on an embedding.
+     * <p>
+     * Clustering runs on the measurements (or their principal components); the
+     * embedding is a separate projection made for looking at. Nothing enforces that a
+     * cluster maps to one connected blob here, and on one 132k-cell run 7 of 21
+     * clusters were genuinely drawn in two separated places. Said on the plot rather
+     * than left for the user to discover and mistrust the run over.
+     *
+     * @param result the result being shown
+     * @return a sentence naming the space the clusters were computed in
+     */
+    private static String clusteringSpaceNote(ClusteringResult result) {
+        String space = (result != null && result.getPcaPrecursor() != null
+                && !result.getPcaPrecursor().isBlank())
+                ? "the principal components of your measurements (" + result.getPcaPrecursor() + ")"
+                : "your measurements";
+        return "Clusters were computed in " + space + ", NOT from this layout. "
+                + "A cluster can therefore appear in more than one place here, and that is "
+                + "not a fault in the run. Distances between groups are not meaningful; "
+                + "local neighbourhoods are.";
+    }
+
     private static String[] embeddingAxisNames(ClusteringResult result) {
         String prefix = (result == null) ? null : result.getEmbeddingPrefix();
         if (prefix == null || prefix.isBlank()) {
@@ -3630,8 +3668,7 @@ public class ClusteringDialog {
                     + "to preview its cell, double-click to open the image and center on it.\n"
                     + "Use Gate to lasso a region of the plot and select or classify the "
                     + "enclosed cells across their images.\n"
-                    + "Note: distances within a group are meaningful, but absolute "
-                    + "distances between groups should be interpreted cautiously.",
+                    + clusteringSpaceNote(result),
                     "embedding-tab-interactive"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -3820,7 +3857,13 @@ public class ClusteringDialog {
                 qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d =
                         new qupath.ext.cluster3d.ui.Cluster3DNavigatorPane(qupath3d);
                 pane3dHolder[0] = pane3d;
-                tab3d.setContent(pane3d);
+                Label note3d = new Label(clusteringSpaceNote(result));
+                note3d.setWrapText(true);
+                note3d.setMinHeight(Region.USE_PREF_SIZE);
+                note3d.setStyle("-fx-font-size: 11px; -fx-text-fill: #666; -fx-padding: 4 8 4 8;");
+                VBox with3dNote = new VBox(4, note3d, pane3d);
+                VBox.setVgrow(pane3d, Priority.ALWAYS);
+                tab3d.setContent(with3dNote);
                 // Host owns the scope (the clustered images) -> no picker prompt.
                 pane3d.initializeForHost(scope3d, axes3d);
             };
