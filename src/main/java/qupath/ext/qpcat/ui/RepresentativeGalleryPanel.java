@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -845,6 +846,7 @@ public class RepresentativeGalleryPanel extends VBox {
             }
         }
         var chooser = new javafx.stage.DirectoryChooser();
+        ExportLocation.seed(chooser, qupath, QpcatPaths.FIGURES);
         chooser.setTitle("Choose a folder for cluster montages");
         return chooser.showDialog(getScene() != null ? getScene().getWindow() : null);
     }

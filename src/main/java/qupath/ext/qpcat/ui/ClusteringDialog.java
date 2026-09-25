@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
 
 import javafx.animation.KeyFrame;
@@ -87,6 +88,9 @@ public class ClusteringDialog {
 
     /** Series name of the Poisson reference on the Ripley charts. */
     private static final String POISSON_NULL_SERIES = "Poisson null";
+
+    /** Legend label for the simulated complete-spatial-randomness band. */
+    private static final String CSR_NULL_SERIES = "Random (simulated)";
 
     /** HDBSCAN cluster-selection labels, mapped to scikit-learn's ids on the wire. */
     private static final String HDBSCAN_SELECTION_EOM = "Excess of mass (default)";
@@ -3618,6 +3622,7 @@ public class ClusteringDialog {
     private static void saveCsvFile(String csv, String fileName) {
         javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
         fc.setTitle("Save CSV");
+        ExportLocation.seed(fc, QuPathGUI.getInstance(), QpcatPaths.SPATIAL_STATS);
         fc.setInitialFileName(fileName);
         fc.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("CSV", "*.csv"));
         java.io.File file = fc.showSaveDialog(null);
@@ -4157,10 +4162,15 @@ public class ClusteringDialog {
                     result.getRipley() != null && result.getRipley().isKUnavailable()
                             ? "Ripley L" : "Ripley K and L",
                     wrapWithGuide(ripleyNode,
-                    "Ripley's L(r) is the variance-stabilised transform of K(r), which\n"
-                    + "cumulates per-cluster neighbor counts within radius r. Under a\n"
-                    + "Poisson null L(r) = r -- the dashed diagonal.\n"
-                    + "Curves above it = spatial clustering; below = inhibition / dispersion.",
+                    "Ripley's L(r) cumulates each cluster's neighbour counts within\n"
+                    + "radius r, variance-stabilised. Read each curve against the DASHED\n"
+                    + "BAND: complete spatial randomness simulated with that cluster's own\n"
+                    + "cell count, in the same tissue outline, through the same estimator.\n"
+                    + "Above the band = spatial clustering; below = inhibition / dispersion;\n"
+                    + "inside = indistinguishable from random at that radius.\n\n"
+                    + "The band is the null, NOT the line L(r) = r. That diagonal assumes an\n"
+                    + "edge-corrected estimator; this one is not, so random points sit below\n"
+                    + "the diagonal at every radius and would read as dispersed.",
                     "ripley-l-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5708,6 +5718,7 @@ public class ClusteringDialog {
         // checkboxes can put one back exactly where it was. JavaFX has no "hide a
         // series" -- the only way is to take it out of the chart's data and add it
         // again later, which means the full list has to be held somewhere.
+        Set<String> hexByNameEnvelope = new LinkedHashSet<>();
         List<javafx.scene.chart.XYChart.Series<Number, Number>> kSeries = new ArrayList<>();
         List<javafx.scene.chart.XYChart.Series<Number, Number>> lSeries = new ArrayList<>();
         List<String> seriesNames = new ArrayList<>();
@@ -5759,7 +5770,42 @@ public class ClusteringDialog {
             kSeries.add(nullSeries);
             stylePoissonNullSeries(nullSeries);
         }
-        if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
+        // The null for L. A simulated band where the run produced one, because the
+        // analytical diagonal is the expectation of an EDGE-CORRECTED estimator and
+        // this one is not: random points fall below r at every radius, so every
+        // cluster reads as dispersed. One band per cluster, since the band depends
+        // on that cluster's point count.
+        if (ripley.hasEnvelope()) {
+            double[][] lo = ripley.getEnvelopeLow();
+            double[][] hi = ripley.getEnvelopeHigh();
+            for (int i = 0; i < lo.length && i < hi.length; i++) {
+                String label = i == 0 ? CSR_NULL_SERIES : CSR_NULL_SERIES + " " + (i + 1);
+                javafx.scene.chart.XYChart.Series<Number, Number> loS =
+                        new javafx.scene.chart.XYChart.Series<>();
+                loS.setName(label);
+                javafx.scene.chart.XYChart.Series<Number, Number> hiS =
+                        new javafx.scene.chart.XYChart.Series<>();
+                hiS.setName(label + " ");   // distinct name, same style
+                for (int r = 0; r < radii.length; r++) {
+                    if (r < lo[i].length) {
+                        loS.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                                radii[r], lo[i][r]));
+                    }
+                    if (r < hi[i].length) {
+                        hiS.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                                radii[r], hi[i][r]));
+                    }
+                }
+                lChart.getData().addAll(loS, hiS);
+                lSeries.add(loS);
+                lSeries.add(hiS);
+                stylePoissonNullSeries(loS);
+                stylePoissonNullSeries(hiS);
+                hexByNameEnvelope.add(loS.getName());
+                hexByNameEnvelope.add(hiS.getName());
+            }
+        } else if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
+            // Pre-envelope result. Drawn, but named so nobody reads it as the null.
             javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
                     new javafx.scene.chart.XYChart.Series<>();
             nullSeries.setName(POISSON_NULL_SERIES);
@@ -5784,6 +5830,9 @@ public class ClusteringDialog {
             }
         }
         hexByName.put(POISSON_NULL_SERIES, "-fx-text-base-color");
+        for (String n : hexByNameEnvelope) {
+            hexByName.put(n, "-fx-text-base-color");
+        }
         applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
         applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
 
@@ -5983,16 +6032,33 @@ public class ClusteringDialog {
                 if (hex == null || series.getNode() == null) {
                     continue;
                 }
-                series.getNode().setStyle(nullName.equals(series.getName())
+                boolean isNull = nullName.equals(series.getName())
+                        || series.getName().startsWith(CSR_NULL_SERIES);
+                series.getNode().setStyle(isNull
                         ? NULL_SERIES_STYLE
                         : "-fx-stroke: " + hex + ";");
             }
+            // The simulated band is two series per cluster, so a 7-cluster run
+            // would put fourteen identical entries in the legend. Keep one.
+            boolean keptBand = false;
             for (javafx.scene.Node n : chart.lookupAll(".chart-legend-item")) {
-                if (n instanceof Label label && label.getGraphic() != null) {
-                    String hex = hexByName.get(label.getText());
-                    if (hex != null) {
-                        label.getGraphic().setStyle("-fx-background-color: " + hex + ";");
+                if (!(n instanceof Label label)) {
+                    continue;
+                }
+                if (label.getText() != null && label.getText().startsWith(CSR_NULL_SERIES)) {
+                    if (keptBand) {
+                        label.setVisible(false);
+                        label.setManaged(false);
+                        continue;
                     }
+                    keptBand = true;
+                    label.setVisible(true);
+                    label.setManaged(true);
+                    label.setText(CSR_NULL_SERIES);
+                }
+                String hex = hexByName.get(label.getText());
+                if (hex != null && label.getGraphic() != null) {
+                    label.getGraphic().setStyle("-fx-background-color: " + hex + ";");
                 }
             }
         };

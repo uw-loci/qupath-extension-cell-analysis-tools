@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.chart.PieChart;
@@ -348,6 +349,8 @@ public class ClusterCompositionPanel extends BorderPane {
      */
     private void exportFigureAndTable() {
         var chooser = new javafx.stage.DirectoryChooser();
+        ExportLocation.seed(chooser, qupath.lib.gui.QuPathGUI.getInstance(),
+                QpcatPaths.FIGURES);
         chooser.setTitle("Choose a folder for the cluster-composition export");
         File dir = chooser.showDialog(getScene() != null ? getScene().getWindow() : null);
         if (dir == null) return;

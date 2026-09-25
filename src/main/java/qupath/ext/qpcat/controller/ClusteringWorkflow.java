@@ -4411,6 +4411,12 @@ public class ClusteringWorkflow {
         out.setLValues(asDouble2D(raw.get("l_values")));
         out.setPoissonK(asDoubleArray(raw.get("poisson_k")));
         out.setPoissonL(asDoubleArray(raw.get("poisson_l")));
+        out.setEnvelopeLow(asDouble2D(raw.get("envelope_low")));
+        out.setEnvelopeMedian(asDouble2D(raw.get("envelope_median")));
+        out.setEnvelopeHigh(asDouble2D(raw.get("envelope_high")));
+        if (raw.get("envelope_sims") instanceof Number n) {
+            out.setEnvelopeSims(n.intValue());
+        }
         Object pv = raw.get("p_values");
         if (pv instanceof Map<?, ?> pvm) {
             Map<String, Double> pMap = new LinkedHashMap<>();

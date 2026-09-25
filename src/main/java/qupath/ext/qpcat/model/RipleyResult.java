@@ -58,6 +58,42 @@ public class RipleyResult {
     public double[] getPoissonL() { return poissonL; }
     public void setPoissonL(double[] v) { this.poissonL = v; }
 
+    /**
+     * Per-cluster Monte-Carlo null band for L(r): complete spatial randomness with
+     * the same point count, in the same hull, through the same estimator.
+     * <p>
+     * This, not {@link #getPoissonL()}, is what a curve should be read against.
+     * The analytical {@code L(r) = r} is the expectation of an unbiased,
+     * edge-corrected estimator; this one has no edge correction, so random points
+     * fall below the diagonal at every radius and read as dispersed. Simulating
+     * the null through the same code cancels that.
+     * <p>
+     * Indexed {@code [cluster][radius]}, or null on results computed before the
+     * envelope existed.
+     */
+    private double[][] envelopeLow;
+    private double[][] envelopeMedian;
+    private double[][] envelopeHigh;
+    private int envelopeSims;
+
+    public double[][] getEnvelopeLow() { return envelopeLow; }
+    public void setEnvelopeLow(double[][] v) { this.envelopeLow = v; }
+
+    public double[][] getEnvelopeMedian() { return envelopeMedian; }
+    public void setEnvelopeMedian(double[][] v) { this.envelopeMedian = v; }
+
+    public double[][] getEnvelopeHigh() { return envelopeHigh; }
+    public void setEnvelopeHigh(double[][] v) { this.envelopeHigh = v; }
+
+    public int getEnvelopeSims() { return envelopeSims; }
+    public void setEnvelopeSims(int v) { this.envelopeSims = v; }
+
+    /** True when this result carries a simulated null band. */
+    public boolean hasEnvelope() {
+        return envelopeLow != null && envelopeHigh != null
+                && envelopeLow.length > 0 && envelopeHigh.length > 0;
+    }
+
     public Map<String, Double> getPValues() { return pValues; }
     public void setPValues(Map<String, Double> v) { this.pValues = v; }
 

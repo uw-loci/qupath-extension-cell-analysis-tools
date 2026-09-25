@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Cursor;
@@ -144,6 +145,7 @@ public final class VestExportDialog {
         Button browse = new Button("Browse...");
         browse.setOnAction(e -> {
             DirectoryChooser dc = new DirectoryChooser();
+            ExportLocation.seed(dc, qupath, QpcatPaths.ROOT);
             dc.setTitle("VEST export folder");
             File f = dc.showDialog(qupath.getStage());
             if (f != null) dirField.setText(f.getAbsolutePath());

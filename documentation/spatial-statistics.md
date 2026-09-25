@@ -101,7 +101,12 @@ Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the re
 - **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" Cheap, no permutation cost.
 - **Ripley's L** -- *a cluster against itself at a range of distances*: "are CD8 cells within 50 microns of each other more often than chance would predict? What about within 200 microns?" It is the variance-stabilised transform of Ripley's K, which cumulates the neighbour count within radius r normalised by density. Curves **above** the null mean clustering at that radius; **below** means dispersion or inhibition.
 
-  **The null is the diagonal, not zero.** squidpy returns the *uncentred* L, `L(r) = sqrt(K(r) / pi)`. Under complete spatial randomness `K(r) = pi * r^2`, so `L(r) = r`. The *centred* form `L(r) - r` is the one with a flat zero null, and squidpy does not return it -- so a chart drawn with a zero reference puts every curve far above "the null" and reads as clustering at every radius. QP-CAT draws the diagonal (fixed in 0.13.0; earlier versions drew zero).
+  **The null is a simulated band, not a line.** QP-CAT computes L itself and draws, per cluster, the 2.5-97.5 percentile band of 99 complete-spatial-randomness realisations with that cluster's own cell count, in the same tissue outline, through the same estimator. Read each curve against its band: above = clustering, below = inhibition, inside = indistinguishable from random at that radius.
+
+  Two reasons it is not the analytical `L(r) = r` (both fixed in 0.14.0):
+
+  - **squidpy's L is scaled by `n_cluster / N`.** Its `_ripley.py` takes each cluster's pairwise distances but passes the *total* cell count to the estimator. On complete spatial randomness it returned `0.10 * r` for a cluster holding 15% of the points, so curves ordered by cluster size rather than by clustering. QP-CAT no longer uses it for L.
+  - **The estimator has no edge correction.** `L(r) = r` is the expectation of an edge-corrected estimator. Without one, part of every disc near the tissue boundary falls outside the study region, and random points measure `0.70 * r` at the largest radius -- so the diagonal would call randomness dispersion. Simulating the null through the same code cancels the bias.
 - **Geary's C** -- per-marker spatial autocorrelation, dual to Moran's I but weighted toward *local* differences. Use Geary's C when you suspect a marker is structured at short range (sharp tissue boundaries, immune infiltrates) and Moran's I when the structure is global.
 - **Co-occurrence (pairwise)** -- *radius profile* for every cluster pair: "as we expand the radius from r1 to r2, how does the probability of finding a cluster-B cell near a cluster-A cell change?"
 - **Co-occurrence (one-vs-rest)** -- the same radius profile but with "all other clusters" collapsed into a single comparison. Useful when a single cluster is what you care about.
@@ -145,7 +150,7 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
 5. (Optional) Check **Spatial feature smoothing** as a pre-clustering pass
 6. Click **Run Clustering**
 7. In the results dialog, navigate to the new tabs:
-   - **Ripley L** -- line chart with the Poisson null overlaid as a dashed diagonal, L(r) = r
+   - **Ripley L** -- line chart with a dashed simulated-randomness band per cluster
    - **Geary's C** -- per-marker table with C, p-value, permutation count
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius

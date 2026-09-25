@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -155,6 +156,8 @@ public class PythonConsoleWindow {
         if (textArea == null || textArea.getText().isEmpty()) return;
 
         FileChooser fileChooser = new FileChooser();
+        ExportLocation.seed(fileChooser, qupath.lib.gui.QuPathGUI.getInstance(),
+                QpcatPaths.LOGS);
         fileChooser.setTitle("Save Python Console Log");
         fileChooser.getExtensionFilters().add(
                 new FileChooser.ExtensionFilter("Text files", "*.txt"));

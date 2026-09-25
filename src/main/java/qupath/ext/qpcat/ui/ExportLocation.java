@@ -6,6 +6,12 @@ import org.slf4j.LoggerFactory;
 import qupath.fx.dialogs.Dialogs;
 
 import java.io.File;
+import qupath.ext.qpcat.service.QpcatPaths;
+import qupath.lib.gui.QuPathGUI;
+import javafx.stage.FileChooser;
+import javafx.stage.DirectoryChooser;
+import java.nio.file.Path;
+import java.nio.file.Files;
 
 /**
  * Tell the user where an export actually went -- in the log, in a notification,
@@ -29,6 +35,72 @@ public final class ExportLocation {
     private static final Logger logger = LoggerFactory.getLogger(ExportLocation.class);
 
     private ExportLocation() {}
+
+    /**
+     * Point a chooser at this project's QP-CAT folder, creating it if needed.
+     *
+     * <p>Unseeded, JavaFX opens a chooser wherever the OS last left one -- a
+     * Downloads folder, another project, the user's home. Exports then scatter
+     * across the disk and nothing sits next to the data it came from. Every
+     * QP-CAT save should land under {@code <project>/qpcat/}, so the project
+     * folder stays the unit you can copy, archive or hand to someone else.
+     *
+     * <p>Falls back to the project root, then to leaving the chooser alone, so a
+     * project-less session still works.
+     *
+     * @param qupath    the GUI, for the current project
+     * @param subfolder a {@link QpcatPaths} constant, e.g. {@code QpcatPaths.FIGURES}
+     * @return the seeded folder, or null when there is no project
+     */
+    public static File qpcatDir(QuPathGUI qupath, String subfolder) {
+        try {
+            var project = qupath == null ? null : qupath.getProject();
+            if (project == null || project.getPath() == null) {
+                return null;
+            }
+            // Project.getPath() is the .qpproj FILE; its parent is the folder.
+            Path root = project.getPath().getParent();
+            if (root == null) {
+                return null;
+            }
+            Path dir = (subfolder == null || subfolder.isBlank())
+                    ? root.resolve(QpcatPaths.ROOT)
+                    : root.resolve(subfolder);
+            Files.createDirectories(dir);
+            return dir.toFile();
+        } catch (Exception e) {
+            logger.debug("Could not resolve the QP-CAT export folder: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Seed a {@link DirectoryChooser} with {@link #qpcatDir}. No-op without a project.
+     *
+     * @param chooser   the chooser to seed
+     * @param qupath    the GUI
+     * @param subfolder a {@link QpcatPaths} constant
+     */
+    public static void seed(DirectoryChooser chooser, QuPathGUI qupath, String subfolder) {
+        File dir = qpcatDir(qupath, subfolder);
+        if (dir != null && dir.isDirectory()) {
+            chooser.setInitialDirectory(dir);
+        }
+    }
+
+    /**
+     * Seed a {@link FileChooser} with {@link #qpcatDir}. No-op without a project.
+     *
+     * @param chooser   the chooser to seed
+     * @param qupath    the GUI
+     * @param subfolder a {@link QpcatPaths} constant
+     */
+    public static void seed(FileChooser chooser, QuPathGUI qupath, String subfolder) {
+        File dir = qpcatDir(qupath, subfolder);
+        if (dir != null && dir.isDirectory()) {
+            chooser.setInitialDirectory(dir);
+        }
+    }
 
     /**
      * Announce a completed export and open its folder.

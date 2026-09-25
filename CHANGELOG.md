@@ -4,6 +4,45 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.0] -- 2026-09-25 -- Ripley L was measuring cluster size
+
+### Fixed
+
+- **Ripley's L was wrong, and the chart said so in the wrong direction.** A 7-cluster run
+  plotted every curve far below the null and read as universal dispersion, on tissue
+  containing tumour nests and B-cell follicles. Two independent causes:
+
+  **squidpy normalises each cluster's K by the TOTAL cell count.** Its `_ripley.py` takes
+  cluster *i*'s pairwise distances but passes the global `N` to the estimator, so every
+  cluster's L comes out scaled by `n_cluster / N`. On complete spatial randomness -- where
+  the answer must be `L(r) = r` -- squidpy returned `0.10 * r` for a cluster holding 15% of
+  the points. The curves were ordered by cluster **size**, not by clustering. squidpy's own
+  docstring gives the right formula, so this is an implementation slip. QP-CAT now computes
+  L itself, per cluster, with that cluster's own intensity.
+
+  **The analytical diagonal was the wrong reference anyway.** `L(r) = r` is the expectation
+  of an edge-corrected estimator; this one has no edge correction, so part of every disc
+  near the tissue boundary falls outside the study region and random points sit *below* the
+  diagonal at every radius. Measured: 0.70 * r at the largest radius on pure randomness.
+
+- **The null is now simulated, per cluster.** A dashed band from 99 complete-spatial-
+  randomness realisations with that cluster's own cell count, in the same tissue outline,
+  through the same estimator -- so whatever the estimator does to random data it does to the
+  band too. Above the band = clustering, below = inhibition, inside = indistinguishable from
+  random. Verified: random points now sit inside their own band at 50 of 50 radii, where the
+  diagonal called them dispersed at every one.
+
+- **Exports default to the project folder.** Seven file and folder choosers opened wherever
+  the OS last left one, so montages, figures and CSVs scattered across the disk. They now
+  open under `<project>/qpcat/` in the subfolder that matches what is being saved
+  (`figures/`, `spatial_stats/`, `logs/`).
+
+### Changed
+
+- Results saved before 0.14.0 have no envelope; their Ripley tab still draws the old
+  diagonal, now labelled so it is not mistaken for the null. **Re-run to get a readable
+  chart** -- the curves in those results are mis-scaled and cannot be compared to anything.
+
 ## [0.13.1] -- 2026-09-25 -- Ripley L is what it is
 
 ### Changed

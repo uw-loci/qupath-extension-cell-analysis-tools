@@ -186,6 +186,7 @@ public class BatchFigureExportDialog {
         browseBtn.setTooltip(tip("Pick the output folder."));
         browseBtn.setOnAction(e -> {
             DirectoryChooser chooser = new DirectoryChooser();
+            ExportLocation.seed(chooser, qupath, QpcatPaths.FIGURES);
             chooser.setTitle("Pick output folder for figures");
             File chosen = chooser.showDialog(qupath == null ? null : qupath.getStage());
             if (chosen != null) outputDirField.setText(chosen.getAbsolutePath());

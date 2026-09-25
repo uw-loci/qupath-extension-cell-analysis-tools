@@ -741,6 +741,132 @@ def run_per_area(
     return results, skipped
 
 
+# CSR realisations per cluster for the Ripley envelope. 99 gives a 2.5/97.5 band
+# with a resolution of about one percentile, and costs well under a second for a
+# few thousand points.
+RIPLEY_ENVELOPE_SIMS = 99
+
+
+def ripley_l_observed(coords, radii):
+    """Ripley's L for one point pattern, normalised by ITS OWN intensity.
+
+    ``K(r) = (A / n^2) * #{ordered pairs closer than r}``, then
+    ``L(r) = sqrt(K(r) / pi)``.
+
+    WHY WE DO NOT USE squidpy's L. squidpy's ``_ripley.py`` computes each
+    cluster's pairwise distances from that cluster's points but passes the
+    GLOBAL cell count to the estimator:
+
+        distances = pdist(coord_c)                     # cluster i only
+        _l_function(distances, support, N, area)       # N = ALL cells
+
+    so every cluster's K is divided by N^2 instead of n_c^2 and its L comes out
+    scaled by n_c / N. Measured on complete spatial randomness -- where the
+    answer must be L(r) = r -- squidpy returned 0.10 * r for a cluster holding
+    15% of the points. Every cluster therefore plots far below the diagonal
+    whatever its real pattern, ordered by cluster SIZE rather than by
+    clustering, which is what a 7-cluster run looked like: all seven below the
+    null, reading as universal dispersion.
+
+    squidpy's own docstring gives the right formula -- ``K(t) = (1/lambda) *
+    sum_{i != j} I(d_ij < t) / n`` -- so this is an implementation slip, not a
+    difference of definition.
+
+    :param coords: (n, 2) array of point coordinates
+    :param radii: increasing array of radii to evaluate at
+    :return: L(r) array, same length as radii; zeros when n < 2
+    """
+    import numpy as np
+    from scipy.spatial import ConvexHull
+    from scipy.spatial.distance import pdist
+
+    coords = np.asarray(coords, dtype=float)
+    n = coords.shape[0]
+    radii = np.asarray(radii, dtype=float)
+    if n < 2:
+        return np.zeros(len(radii))
+    try:
+        area = float(ConvexHull(coords).volume)
+    except Exception:
+        # Degenerate (collinear / coincident) points have no hull.
+        return np.zeros(len(radii))
+    if area <= 0:
+        return np.zeros(len(radii))
+
+    d = pdist(coords)
+    counts = (d < radii.reshape(-1, 1)).sum(axis=1)
+    k = (2.0 * counts) * area / float(n * n)
+    return np.sqrt(np.maximum(k, 0.0) / math.pi)
+
+
+def ripley_csr_envelope(
+    hull_points, n_points, radii, n_sim=99, seed=0, lo=2.5, hi=97.5
+):
+    """Monte-Carlo envelope of L(r) under complete spatial randomness.
+
+    THE ENVELOPE IS THE NULL, not the analytical diagonal. ``L(r) = r`` is the
+    expectation of an UNBIASED, edge-corrected estimator. This estimator has no
+    edge correction, so near the domain boundary part of every disc of radius r
+    falls outside the study region and the pair count is systematically short --
+    increasingly so as r grows. Measured on complete spatial randomness with the
+    correct per-cluster intensity, L still came out at 0.70 * r at the largest
+    radius. Judged against the diagonal, random points look dispersed.
+
+    Simulating CSR with the SAME point count, in the SAME hull, through the SAME
+    estimator absorbs that bias: whatever the estimator does to random data, it
+    does to the envelope too. A curve is only meaningful where it leaves the
+    band.
+
+    :param hull_points: points whose convex hull defines the study region
+    :param n_points: how many points to scatter per simulation (the cluster's n)
+    :param radii: radii to evaluate at
+    :param n_sim: number of CSR realisations
+    :param seed: RNG seed, so a run reproduces
+    :param lo: lower percentile of the band
+    :param hi: upper percentile of the band
+    :return: (low, median, high) arrays, each the length of radii
+    """
+    import numpy as np
+    from scipy.spatial import ConvexHull, Delaunay
+
+    radii = np.asarray(radii, dtype=float)
+    zeros = np.zeros(len(radii))
+    hull_points = np.asarray(hull_points, dtype=float)
+    if n_points < 2 or hull_points.shape[0] < 3:
+        return zeros, zeros, zeros
+    try:
+        hull = ConvexHull(hull_points)
+        verts = hull.points[hull.vertices]
+        tri = Delaunay(verts)
+    except Exception:
+        return zeros, zeros, zeros
+
+    lo_xy = verts.min(axis=0)
+    hi_xy = verts.max(axis=0)
+    rng = np.random.default_rng(seed)
+
+    curves = np.empty((n_sim, len(radii)))
+    for i in range(n_sim):
+        # Rejection-sample uniformly inside the hull via its bounding box.
+        got = np.empty((0, 2))
+        guard = 0
+        while got.shape[0] < n_points and guard < 100:
+            need = n_points - got.shape[0]
+            cand = rng.uniform(lo_xy, hi_xy, size=(max(need * 2, 32), 2))
+            inside = cand[tri.find_simplex(cand) >= 0]
+            got = np.vstack([got, inside]) if got.size else inside
+            guard += 1
+        if got.shape[0] < n_points:
+            return zeros, zeros, zeros
+        curves[i] = ripley_l_observed(got[:n_points], radii)
+
+    return (
+        np.percentile(curves, lo, axis=0),
+        np.percentile(curves, 50.0, axis=0),
+        np.percentile(curves, hi, axis=0),
+    )
+
+
 def run_ripley(
     adata,
     task,
@@ -763,7 +889,10 @@ def run_ripley(
         "k_values": [[...], ...],       # per-cluster K(r)
         "l_values": [[...], ...],       # per-cluster L(r)
         "poisson_k": [...],             # analytical null K(r)
-        "poisson_l": [...],             # analytical null L(r) = r
+        "poisson_l": [...],             # analytical L(r) = r, NOT the null used
+        "envelope_low":    [[...], ...],  # per-cluster CSR band, low percentile
+        "envelope_median": [[...], ...],  # per-cluster CSR band, median
+        "envelope_high":   [[...], ...],  # per-cluster CSR band, high percentile
         "p_values": {"0": p0, ...},
         "n_permutations": N,
         "graph_type": "..."
@@ -1026,13 +1155,58 @@ def run_ripley(
         if not k_curves:
             k_curves = [[0.0] * n_r for _ in cluster_names]
 
-        # Analytical Poisson null: K_poisson(r) = pi * r^2; L_poisson(r) = 0
+        # RECOMPUTE L, and build a simulated null. squidpy's curves are kept only
+        # for the K panel; its L is scaled by n_cluster / N (see
+        # ripley_l_observed) and cannot be compared with anything. Both the
+        # observed curve and its null are produced here by the same estimator, so
+        # the comparison is valid whatever that estimator's edge bias.
         poisson_k = [math.pi * (r * r) for r in radii]
-        # squidpy returns the UNCENTRED L: _ripley.py computes
-        # l_estimate = sqrt(k_estimate / pi), documented as L(t) = (K(t)/pi)^(1/2).
-        # Under complete spatial randomness K(r) = pi*r^2, so L(r) = r -- the null is
-        # the DIAGONAL, not zero. A flat zero line was drawn here, which put every
-        # curve far above "the null" and read as clustering at every radius.
+        envelope_low = []
+        envelope_high = []
+        envelope_median = []
+        try:
+            import numpy as _np
+
+            coords_all = _np.asarray(adata.obsm["spatial"], dtype=float)
+            radii_arr = _np.asarray(radii, dtype=float)
+            labels_all = [str(c) for c in adata.obs[cluster_key].values]
+            recomputed = []
+            for cname in cluster_names:
+                mask = _np.array([lab == cname for lab in labels_all], dtype=bool)
+                pts_c = coords_all[mask]
+                recomputed.append(
+                    [float(v) for v in ripley_l_observed(pts_c, radii_arr)]
+                )
+                lo, med, hi = ripley_csr_envelope(
+                    coords_all,
+                    int(mask.sum()),
+                    radii_arr,
+                    n_sim=RIPLEY_ENVELOPE_SIMS,
+                    seed=0,
+                )
+                envelope_low.append([float(v) for v in lo])
+                envelope_median.append([float(v) for v in med])
+                envelope_high.append([float(v) for v in hi])
+            l_curves = recomputed
+            logger.info(
+                "Ripley L recomputed per cluster with its own intensity, plus a "
+                "%d-run CSR envelope per cluster",
+                RIPLEY_ENVELOPE_SIMS,
+            )
+        except Exception as e:
+            # Refuse rather than fall back to squidpy's mis-scaled L: a curve that
+            # cannot be compared to its null is worse than no curve.
+            msg = (
+                "Ripley L could not be recomputed (%s). No result was written: "
+                "squidpy's own L is normalised by the total cell count rather "
+                "than each cluster's, so it cannot be read against any null." % e
+            )
+            logger.error(msg)
+            task.outputs["ripley_error"] = msg
+            return
+
+        # Kept for the payload's shape; the envelope is what the chart compares
+        # against now.
         poisson_l = [float(r) for r in radii]
 
         # p-values: squidpy attaches them as part of the uns dict in newer versions
@@ -1052,6 +1226,10 @@ def run_ripley(
             "l_values": l_curves,
             "poisson_k": poisson_k,
             "poisson_l": poisson_l,
+            "envelope_low": envelope_low,
+            "envelope_median": envelope_median,
+            "envelope_high": envelope_high,
+            "envelope_sims": RIPLEY_ENVELOPE_SIMS,
             "p_values": p_values,
             # Per-cluster p-value CURVE (one value per radius). squidpy reports
             # significance per radius; collapsing it to one number per cluster

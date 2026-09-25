@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.QpcatPaths;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
@@ -119,6 +120,7 @@ public final class SpatialStatsSummaryDialog {
 
     private static void saveCsv(QuPathGUI qupath, List<WindowResult> results) {
         FileChooser fc = new FileChooser();
+        ExportLocation.seed(fc, qupath, QpcatPaths.SPATIAL_STATS);
         fc.setTitle("Save spatial statistics CSV");
         fc.setInitialFileName("qpcat_spatial_stats.csv");
         fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV", "*.csv"));
