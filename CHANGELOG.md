@@ -4,6 +4,17 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.1] -- 2026-09-25 -- The 3D view recognises your embedding's name
+
+### Fixed
+
+- **"(no embedding detected -- pick 3 axes)" beside three correctly-chosen axes.** The 3D View
+  opened on `3DUMAP1/2/3` and then told you it had found nothing. Axis auto-detection allowed
+  only a `QPCAT ` marker in front of the family token, but QP-CAT's default embedding name
+  carries the dimensionality, so a 3D run writes `3DUMAP1`. A run name between the family and
+  the component digit -- `UMAP_Demo1` -- was invisible for the same reason. Both are now
+  recognised (cluster3d-core 0.1.9).
+
 ## [0.14.0] -- 2026-09-25 -- Ripley L was measuring cluster size
 
 ### Fixed
