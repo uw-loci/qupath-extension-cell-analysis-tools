@@ -31,17 +31,49 @@
 clusters (*Manage Clusters* -> select one cluster -> **Sub-cluster...**, which reopens the Run
 Clustering dialog scoped to that class and labels the result `<name>.0`, `<name>.1`, ...).
 
-### 5. Ignoring gate positions in phenotyping
+### 5. HDBSCAN returns one giant cluster and almost no noise
+
+**Problem:** A run returns two or three clusters, one of which holds 90%+ of the cells, and
+under 5% of cells are noise. This is common when clustering on embedding coordinates, where
+the groups are visibly separated on the plot.
+
+**Symptoms:** The quality banner says "One cluster holds N% of the clustered cells" while the
+noise count is small. In the viewer the slide is one colour.
+
+**This is not the same failure as pitfall 3 or 4, and the usual advice makes it worse.** The
+documented HDBSCAN failure -- no density gap exists, so each population's sparse fringe is
+written off -- leaves **a lot** of noise behind, spread evenly. Little noise means the
+opposite: no boundary was cut *anywhere*.
+
+**Solution:** it is the cluster-selection setting, not the data.
+
+1. **Cluster selection -> Leaf.** The default, *Excess of mass*, is scikit-learn's and keeps
+   the most *persistent* clusters, which favours large ones: where the lobes of a space differ
+   in density it returns their common parent instead of the lobes. *Leaf* takes the leaves of
+   the density tree -- scikit-learn's own wording is "the most fine grained and homogeneous
+   clusters".
+2. **min_samples -> 0 (auto).** Auto follows scikit-learn and uses `min_cluster_size`. A small
+   fixed value beside a large `min_cluster_size` measures density over a handful of points
+   while demanding clusters of hundreds.
+3. **Normalization -> None, if the input is an embedding.** Z-scoring each axis separately
+   stretches the embedding along one axis and squashes it along another, and the geometry is
+   the only thing an embedding carries.
+
+Measured: a 3D UMAP of 107,282 cells with plainly separated lobes returned 4 clusters, one
+holding 97.0% of them, with 0.9% noise, on the defaults. See the full walkthrough in
+[Recipes: cluster on a UMAP / t-SNE embedding](recipes.md).
+
+### 6. Ignoring gate positions in phenotyping
 
 **Problem:** Default gates may not match the actual positive/negative boundary for each marker.
 **Solution:** Always check histograms. Use auto-thresholding as a starting point, then verify visually.
 
-### 6. Rule order in phenotyping
+### 7. Rule order in phenotyping
 
 **Problem:** Cells are classified as the wrong type because a less specific rule matched first.
 **Solution:** Place more specific rules (more marker conditions) above more general rules.
 
-### 7. Batch effects in multi-image analysis
+### 8. Batch effects in multi-image analysis
 
 **Problem:** Cells cluster by image source rather than biology.
 **Solution:** Enable Harmony batch correction, or verify that technical variation is minimal before clustering without it.

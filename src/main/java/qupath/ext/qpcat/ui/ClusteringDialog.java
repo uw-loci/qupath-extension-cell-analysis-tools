@@ -1399,13 +1399,16 @@ public class ClusteringDialog {
         graphBox.setPadding(new Insets(2, 0, 6, 0));
 
         // ---- Statistic checkboxes ----
-        enableRipleyCheck = new CheckBox("Ripley K and L (point-pattern, dual plot)");
+        // Named for what the shipped environment produces. squidpy is pinned at
+        // >= 1.6.6, which dropped mode='K', so a label promising K describes a
+        // chart no user of this build will see.
+        enableRipleyCheck = new CheckBox("Ripley L (point-pattern)");
         enableRipleyCheck.setTooltip(Tooltips.of(
-                "Compute Ripley's K and L functions per cluster against a Poisson null.\n"
-                + "Detects spatial clustering (curve above null) or inhibition (below).\n"
-                + "Results show as two LineCharts side by side."));
+                "Compute Ripley's L function per cluster against a Poisson null.\n"
+                + "Under complete spatial randomness L(r) = r, the dashed diagonal.\n"
+                + "Curves above it mean spatial clustering; below, inhibition."));
         enableRipleyCheck.setAccessibleText(
-                "Enable Ripley K and L point-pattern statistics");
+                "Enable Ripley L point-pattern statistics");
 
         enableGearyCheck = new CheckBox("Geary's C (local autocorrelation)");
         enableGearyCheck.setTooltip(Tooltips.of(
@@ -4147,19 +4150,18 @@ public class ClusteringDialog {
                     buildRipleyChartPane(result.getRipley(), result.getSpatialUnit(), result),
                     null,
                     () -> SpatialStatsCsv.ripleyCsv(result.getRipley(), k -> clusterNameForKey(result, k)),
-                    "qpcat_ripley_k_l.csv");
+                    "qpcat_ripley_l.csv");
             // Named for what it shows: a tab called "K and L" holding only L is its own
             // small lie, and the user has no way to act on the difference.
             Tab tab = new Tab(
                     result.getRipley() != null && result.getRipley().isKUnavailable()
                             ? "Ripley L" : "Ripley K and L",
                     wrapWithGuide(ripleyNode,
-                    "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
-                    + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) is the\n"
-                    + "variance-stabilised transform of K, so under the null L(r) = r --\n"
-                    + "the dashed diagonal.\n"
+                    "Ripley's L(r) is the variance-stabilised transform of K(r), which\n"
+                    + "cumulates per-cluster neighbor counts within radius r. Under a\n"
+                    + "Poisson null L(r) = r -- the dashed diagonal.\n"
                     + "Curves above it = spatial clustering; below = inhibition / dispersion.",
-                    "ripley-k-and-l-tab"));
+                    "ripley-l-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
         }

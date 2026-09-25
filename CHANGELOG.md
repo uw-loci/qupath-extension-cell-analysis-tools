@@ -4,6 +4,30 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.13.1] -- 2026-09-25 -- Ripley L is what it is
+
+### Changed
+
+- **The Ripley statistic is named "Ripley L" everywhere.** squidpy is pinned at `>= 1.6.6`,
+  which dropped `mode="K"`, so every shipped environment computes L and only L. A checkbox
+  reading "Ripley K and L (point-pattern, dual plot)" promised a chart no user of this build
+  can produce. The checkbox, the results tab, the CSV filename (`qpcat_ripley_l.csv`), the
+  README and the documentation now say L.
+
+### Fixed
+
+- **The documentation gave the wrong Ripley L formula.** `documentation/spatial-statistics.md`
+  described `L(r) = sqrt(K(r)/pi) - r`, "centred at 0 under the Poisson null" -- the *centred*
+  form, which squidpy does not return. This was the same error the chart carried until 0.13.0:
+  read against a zero null, every curve sits far above it and reads as clustering at every
+  radius. The null is `L(r) = r`, the diagonal.
+
+### Added
+
+- **Troubleshooting: "HDBSCAN returns one giant cluster and almost no noise"**, which is the
+  opposite failure from the documented one and takes the opposite fix. Cross-linked from the
+  recipe for clustering on an embedding.
+
 ## [0.13.0] -- 2026-09-25 -- Clustering on an embedding, and reading the result
 
 ### Added

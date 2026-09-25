@@ -213,7 +213,7 @@ comparing clusters at a glance rather than reading a table.
 
 <a name="spatial-autocorrelation-tab"></a>
 <a name="gearys-c-tab"></a>
-<a name="ripley-k-and-l-tab"></a>
+<a name="ripley-l-tab"></a>
 <a name="co-occurrence-tabs"></a>
 <a name="neighborhood-enrichment-tab"></a>
 <a name="cluster-explainer-llm-tab"></a>
@@ -232,18 +232,18 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 
 ### Exporting spatial statistics tables
 
-The **Geary's C**, **Ripley K and L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
+The **Geary's C**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
 
 Buttons above each table:
-- **Copy text** -- copies the table exactly as shown, spacing preserved (Geary's C and Co-occurrence only; Ripley K/L is a chart).
+- **Copy text** -- copies the table exactly as shown, spacing preserved (Geary's C and Co-occurrence only; Ripley L is a chart).
 - **Copy CSV** -- copies comma-separated rows in long form, ready to paste into a spreadsheet or R/Python.
-- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_geary_c.csv`, `qpcat_ripley_k_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
+- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
 
 **Why long form?** The on-screen table for pairwise co-occurrence is one column per ordered cluster pair (20 clusters = 400 columns, labels scroll away). CSV writes one row per pair, so every comparison is explicit and legible in a cell editor or data frame.
 
-### Ripley K and L: controlling cluster visibility
+### Ripley L: controlling cluster visibility
 
-The **Ripley K and L** chart may have many curves when there are many clusters -- twenty curves on one axis is a thicket. A panel on the right side lists each cluster with checkboxes so you can hide the ones you are not reading. Hiding clusters also re-scales the axes onto what remains, which often makes the pattern clearer.
+The **Ripley L** chart may have many curves when there are many clusters -- twenty curves on one axis is a thicket. A panel on the right side lists each cluster with checkboxes so you can hide the ones you are not reading. Hiding clusters also re-scales the axes onto what remains, which often makes the pattern clearer.
 
 Use **All** to show every cluster again, or **None** to hide all (the Poisson null line stays visible as a reference). The Poisson null is never hidden because it is the reference the curves are read against; without it the empty chart is unreadable.
 

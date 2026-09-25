@@ -1,6 +1,6 @@
 # QP-CAT -- Scripting (Groovy)
 
-Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley K/L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
+Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
 
 ## When to script vs. use the dialog
 
@@ -105,7 +105,7 @@ Static facade for the spatial-statistics catalog. Each method takes a graph hand
 
 ### `ripley(graphHandle, Map opts) -> Map<String, Object>`
 
-Stages Ripley's K and L for every cluster (or the subset listed in `clusters`).
+Stages Ripley's L for every cluster (or the subset listed in `clusters`).
 
 | Option key | Type | Default | Notes |
 |---|---|---|---|
@@ -444,7 +444,7 @@ Use `SpatialStatsScripts.PERMUTATIONS_ADAPTIVE` (== -1) to request the adaptive 
 Every staged statistic that runs through the dialog produces one row in the project's `qpcat/logs/qpcat_YYYY-MM-DD.log` file:
 
 - `=== SPATIAL GRAPH === ...` -- one row per graph build
-- `=== SPATIAL STATS RIPLEY === ...` -- one row per Ripley K/L run
+- `=== SPATIAL STATS RIPLEY === ...` -- one row per Ripley L run
 - `=== SPATIAL STATS GEARY === ...` -- one row per Geary's C run
 - `=== SPATIAL STATS COOC PAIRWISE === ...` -- one row per pairwise co-occurrence run
 - `=== SPATIAL STATS COOC ONE-VS-REST === ...` -- one row per one-vs-rest run

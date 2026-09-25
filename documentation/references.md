@@ -204,7 +204,7 @@ Principal Component Analysis. Linear dimensionality reduction projecting onto to
 
 ### Squidpy
 
-Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis. Used by QP-CAT as the Python-side backend for every spatial-stat exposed in v1: `sq.gr.spatial_neighbors` for graph construction (kNN / Radius / Delaunay), `sq.gr.nhood_enrichment` for neighborhood enrichment, `sq.gr.spatial_autocorr` for Moran's I and Geary's C, `sq.gr.ripley` for Ripley K and L, and `sq.gr.co_occurrence` for pairwise + one-vs-rest co-occurrence.
+Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis. Used by QP-CAT as the Python-side backend for every spatial-stat exposed in v1: `sq.gr.spatial_neighbors` for graph construction (kNN / Radius / Delaunay), `sq.gr.nhood_enrichment` for neighborhood enrichment, `sq.gr.spatial_autocorr` for Moran's I and Geary's C, `sq.gr.ripley` for Ripley L, and `sq.gr.co_occurrence` for pairwise + one-vs-rest co-occurrence.
 
 **Original paper:**
 > Palla G, Spitzer H, Klein M, et al. "Squidpy: a scalable framework for spatial omics analysis." *Nature Methods* 19, 171-178 (2022).
@@ -242,7 +242,7 @@ Dual to Moran's I. Weighted toward short-range / local differences, so it is mor
 
 ---
 
-### Ripley's K and L Functions
+### Ripley's L Functions
 
 Cumulative point-pattern statistics for cluster-on-cluster spatial relationships at a range of distances. K(r) is the cumulative count of neighbors within distance r normalised by cluster density (above the Poisson null = clustering / co-localization; below = dispersion / avoidance); L is the variance-stabilised transform L(r) = sqrt(K(r) / pi) - r and is the recommended reading on radial plots because L is centred at 0 under the Poisson null at every r.
 
@@ -252,7 +252,7 @@ Cumulative point-pattern statistics for cluster-on-cluster spatial relationships
 
 **Implementation:** `squidpy.gr.ripley(mode="K")` and `squidpy.gr.ripley(mode="L")`. QP-CAT plots both panels in a single chart with the Poisson null overlay; the permutation count adapts to the cell count (1000 / 100 / 50) unless overridden via the `qpcat.spatial.permutations` preference.
 
-**Used in:** Spatial analysis (Ripley K and L tabs in the clustering results dialog; v0.2.7+)
+**Used in:** Spatial analysis (Ripley L tabs in the clustering results dialog; v0.2.7+)
 
 ---
 

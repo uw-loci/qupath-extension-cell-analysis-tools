@@ -57,7 +57,7 @@ caveats.
 
 **Ask spatial questions**
 
-- **[Test where cell types live in tissue](documentation/spatial-statistics.md)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley K/L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
+- **[Test where cell types live in tissue](documentation/spatial-statistics.md)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
 - **[Find cellular neighborhoods](documentation/spatial-neighborhoods.md#cellular-neighborhoods)** -- recurring tissue niches, from the cell-type composition around each cell. <sub>Windowed composition + clustering</sub>
 - **[Compare across slides and batches](documentation/clustering.md)** -- clusters that reflect biology, not slide-of-origin or staining day. <sub>Harmony, across a multi-image project</sub>
 
@@ -241,12 +241,12 @@ Phenotype rules, gates, and marker selections can be saved to and loaded from th
 <details>
 <summary><h2>Spatial Analysis</h2></summary>
 
-When enabled in the clustering dialog, QP-CAT computes spatial statistics over cell centroid coordinates. v1 covers the catalog OpenIMC ships (Ripley K/L, Geary's C, neighborhood enrichment, co-occurrence) on top of squidpy, with one explicit graph constructor driving every analysis so the parameters are visible and the same neighborhood backs every result.
+When enabled in the clustering dialog, QP-CAT computes spatial statistics over cell centroid coordinates. v1 covers the catalog OpenIMC ships (Ripley L, Geary's C, neighborhood enrichment, co-occurrence) on top of squidpy, with one explicit graph constructor driving every analysis so the parameters are visible and the same neighborhood backs every result.
 
 ### Available statistics
 
 - **Neighborhood enrichment** -- Z-score matrix showing which clusters tend to co-localize (or avoid each other) in tissue space
-- **Ripley's K** and **Ripley's L** -- cumulative distance distribution of cluster A around cluster B (or any cluster around itself), tested against a Poisson null. L is the variance-stabilised transform of K; most users read L
+- **Ripley's L** -- cumulative distance distribution of a cluster around itself, tested against a Poisson null. Under complete spatial randomness `L(r) = r`, so the null is the diagonal: curves above it mean clustering at that radius, below means dispersion
 - **Geary's C** -- per-marker spatial autocorrelation. Sensitive to short-range / local patterns; complements Moran's I which weights long-range structure more heavily
 - **Moran's I autocorrelation** -- per-marker spatial autocorrelation (already in QP-CAT v0)
 - **Co-occurrence** (pairwise + one-vs-rest) -- how often cluster A is found within distance r of cluster B across a range of r. Pairwise gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison
@@ -269,7 +269,7 @@ QP-CAT's v1 statistic surface matches [OpenIMC](https://github.com/dean-tessone/
 
 ### Permutation tests
 
-Ripley K/L, Geary's C, and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
+Ripley L, Geary's C, and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
 
 | Cell count | Permutations |
 |---|---|
@@ -604,7 +604,7 @@ QP-CAT manages its own isolated Python environment via [Appose](https://github.c
 | scikit-learn | KMeans, HDBSCAN, GMM, Agglomerative clustering |
 | leidenalg | Leiden community detection |
 | umap-learn | UMAP dimensionality reduction |
-| squidpy | Spatial analysis (neighborhood enrichment, Moran's I, Geary's C, Ripley K/L, co-occurrence) |
+| squidpy | Spatial analysis (neighborhood enrichment, Moran's I, Geary's C, Ripley L, co-occurrence) |
 | harmonypy | Batch correction for multi-sample integration |
 | pybanksy | Spatially-aware BANKSY clustering |
 | anndata | AnnData format for interoperability |

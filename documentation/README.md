@@ -21,6 +21,7 @@ which options to pick for which kind of data.
 | Reproduce an earlier run, or work out why one is slow | [Reproducibility and run cost](reproducibility.md) |
 | Ask an LLM to name clusters | [LLM explainer](llm-explainer.md) |
 | Fix something that went wrong | [Troubleshooting](troubleshooting.md) |
+| Cluster *on* a UMAP instead of on the markers | [Recipes](recipes.md) |
 | See a worked example end to end | [Recipes](recipes.md) |
 | Cite the method behind an option | [References](references.md) |
 
