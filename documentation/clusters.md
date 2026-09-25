@@ -17,8 +17,8 @@ or push it onto another image's detections.
 
 - Each row is a cluster, each column is a marker
 - Look for **distinct expression patterns** -- good clusters have markers that are clearly high in some clusters and low in others
-- **Uniform rows** suggest the cluster may be splitting similar cells (over-clustering)
-- **Very similar rows** suggest two clusters could be merged (under-clustering)
+- **Uniform rows** suggest the cluster may be splitting similar cells -- too many clusters
+- **Very similar rows** suggest two clusters could be merged -- too few clusters
 
 ### Marker Rankings
 
@@ -239,7 +239,7 @@ Select **exactly one** cluster and click **Sub-cluster...** to re-cluster only t
 The Run Clustering dialog reopens scoped to that class, and the result is written back as
 `<name>.0`, `<name>.1`, ... replacing the parent class on those cells.
 
-This is the answer to under-clustering when raising the resolution globally would over-split
+This is the answer to having too few clusters when raising the resolution globally would over-split
 everything else: cluster on lineage markers first, then sub-cluster one lineage on its functional
 markers.
 

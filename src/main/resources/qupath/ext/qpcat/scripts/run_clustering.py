@@ -1112,7 +1112,7 @@ def plot_feature_note(n_shown, n_total, subset_applied):
     )
 
 
-def cluster_quality_warnings(labels, algorithm):
+def cluster_quality_warnings(labels, algorithm, marker_names=None):
     """Flag partitions that are degenerate rather than informative.
 
     A clustering run can "succeed" -- no exception, a labels array, a full set
@@ -1121,6 +1121,13 @@ def cluster_quality_warnings(labels, algorithm):
     this routinely on continuous morphometric features, where there is no
     density gap to find. Nothing downstream notices, so the run reports
     "N clusters" and the user discovers the problem by eye in the viewer.
+
+    ``marker_names`` is what the run actually clustered on. Without it the closing
+    suggestion used to advise adding measurements in every case, which directly
+    CONTRADICTED the pre-run caution on the same screen: one run was told before it
+    started that its 58 features were too many correlated compartments, and told
+    afterwards to add more. Advice that reverses itself across a single run teaches the
+    user to ignore both.
 
     Returns a list of plain-text warnings, most important first; empty when the
     partition looks usable.
@@ -1192,11 +1199,32 @@ def cluster_quality_warnings(labels, algorithm):
             "the whole cohort rather than concentrated in one region."
         )
     else:
-        out.append(
-            "Try adding more measurements (intensity and texture features "
-            "separate populations that shape alone does not), or a different "
-            "algorithm -- Leiden finds structure that centroid methods miss."
+        # Pointed the same way as the PRE-run caution. The dialog warns before a run
+        # when one marker is selected in several compartments, because those columns
+        # are correlated; telling the same user afterwards to add measurements would
+        # be the opposite advice about the same run, and one user met both at once.
+        n_features = None if marker_names is None else len(marker_names)
+        tail = (
+            " Or try a different algorithm -- Leiden finds structure that centroid"
+            " methods miss."
         )
+        if n_features is None:
+            out.append(
+                "Review the measurement selection, which changes the answer more than"
+                " the algorithm does." + tail
+            )
+        elif n_features >= 20:
+            out.append(
+                "This run already used %d measurements, so adding more is unlikely to"
+                " help. Correlated columns -- the same marker in several compartments"
+                " -- dilute the differences that separate populations; try one"
+                " compartment per marker." % n_features + tail
+            )
+        else:
+            out.append(
+                "Try adding more measurements: intensity and texture features separate"
+                " populations that shape alone does not." + tail
+            )
     return out
 
 
@@ -1237,7 +1265,7 @@ if n_noise_cells > 0:
 else:
     logger.info("Clustering complete: %d clusters found", n_clusters_found)
 
-_quality = cluster_quality_warnings(labels, algorithm)
+_quality = cluster_quality_warnings(labels, algorithm, marker_names)
 if _quality:
     import json as _json_q
 

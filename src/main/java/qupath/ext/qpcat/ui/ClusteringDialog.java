@@ -4773,16 +4773,41 @@ public class ClusteringDialog {
     private static Node buildQualityBanner(ClusteringResult result) {
         List<String> warnings = result.getQualityWarnings();
         if (warnings.isEmpty()) return null;
-        VBox box = new VBox(4);
+
         Label head = new Label("This result may not be usable");
         head.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a2e00;");
-        box.getChildren().add(head);
+
+        VBox details = new VBox(4);
         for (String w : warnings) {
             Label l = new Label("- " + w);
             l.setWrapText(true);
+            // The tab pane below takes all the spare height, so the VBox shrinks this
+            // banner to its MINIMUM -- which for a wrapped label is one line, and the
+            // rest of the sentence was dropped as an ellipsis. Never below the wrapped
+            // height: a warning that cannot be read in full is not a warning.
+            l.setMinHeight(Region.USE_PREF_SIZE);
             l.setStyle("-fx-text-fill: #6b4e00;");
-            box.getChildren().add(l);
+            details.getChildren().add(l);
         }
+
+        // Collapsible, because it is the one banner that cannot be dismissed by acting
+        // on it: the run has already happened. The heading stays when collapsed, so the
+        // caveat does not disappear from a window someone screenshots.
+        Button toggle = new Button("Hide");
+        toggle.setStyle("-fx-font-size: 10px;");
+        toggle.setOnAction(e -> {
+            boolean show = !details.isVisible();
+            details.setVisible(show);
+            details.setManaged(show);
+            toggle.setText(show ? "Hide" : "Show");
+        });
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox headRow = new HBox(8, head, spacer, toggle);
+        headRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox box = new VBox(4, headRow, details);
+        box.setMinHeight(Region.USE_PREF_SIZE);
         box.setStyle("-fx-font-size: 11px; -fx-background-color: #fff3cd; -fx-padding: 8; "
                 + "-fx-border-color: #d9a400; -fx-border-width: 1;");
         return box;

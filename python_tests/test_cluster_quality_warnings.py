@@ -17,11 +17,11 @@ from conftest import load_script_symbol
 SCRIPT = "run_clustering.py"
 
 
-def _warn(labels, algorithm="hdbscan"):
+def _warn(labels, algorithm="hdbscan", marker_names=None):
     fn = load_script_symbol(
         SCRIPT, "cluster_quality_warnings", extra_globals={"np": np}
     )
-    return fn(np.asarray(labels), algorithm)
+    return fn(np.asarray(labels), algorithm, marker_names)
 
 
 def test_balanced_partition_is_silent():
@@ -81,3 +81,27 @@ def test_advice_is_algorithm_specific():
 
 def test_empty_input_does_not_raise():
     assert _warn(np.zeros(0, dtype=int), "leiden") == []
+
+
+def test_advice_does_not_contradict_the_pre_run_caution():
+    """The dialog warns BEFORE a run that 58 correlated features are too many.
+
+    Telling the same user afterwards to add more measurements is the opposite
+    advice about the same run, and one user met both on screen at once.
+    """
+    labels = np.array([0] * 990 + [1] * 10)
+    many = ["Cell: M%d: Mean" % i for i in range(58)]
+    text = " ".join(_warn(labels, "kmeans", many))
+    assert "adding more is unlikely to help" in text
+    assert "Try adding more measurements" not in text
+
+    few = ["Nucleus: Area", "Nucleus: Circularity", "Nucleus: Solidity"]
+    text_few = " ".join(_warn(labels, "kmeans", few))
+    assert "Try adding more measurements" in text_few
+
+
+def test_without_marker_names_it_gives_no_direction():
+    labels = np.array([0] * 990 + [1] * 10)
+    text = " ".join(_warn(labels, "kmeans"))
+    assert "Review the measurement selection" in text
+    assert "adding more" not in text
