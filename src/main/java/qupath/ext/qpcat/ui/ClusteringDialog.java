@@ -3989,12 +3989,17 @@ public class ClusteringDialog {
                     null,
                     () -> SpatialStatsCsv.ripleyCsv(result.getRipley(), k -> clusterNameForKey(result, k)),
                     "qpcat_ripley_k_l.csv");
-            Tab tab = new Tab("Ripley K and L", wrapWithGuide(ripleyNode,
+            // Named for what it shows: a tab called "K and L" holding only L is its own
+            // small lie, and the user has no way to act on the difference.
+            Tab tab = new Tab(
+                    result.getRipley() != null && result.getRipley().isKUnavailable()
+                            ? "Ripley L" : "Ripley K and L",
+                    wrapWithGuide(ripleyNode,
                     "Ripley's K(r) cumulates per-cluster neighbor counts within radius r,\n"
-                    + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) - r is the\n"
-                    + "variance-stabilised transform of K; under the null L is centred at zero.\n"
-                    + "Curves above the null = spatial clustering; below = inhibition / dispersion.\n"
-                    + "The Poisson reference is drawn as a dashed line on each chart.",
+                    + "tested against a Poisson null. L(r) = sqrt(K(r) / pi) is the\n"
+                    + "variance-stabilised transform of K, so under the null L(r) = r --\n"
+                    + "the dashed diagonal.\n"
+                    + "Curves above it = spatial clustering; below = inhibition / dispersion.",
                     "ripley-k-and-l-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5595,18 +5600,11 @@ public class ClusteringDialog {
         applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
 
         if (!showK) {
-            // This squidpy build has no mode='K'. The K curves are zero padding, and a
-            // chart of zeros reads exactly like a measured "no clustering at any radius"
-            // result, so show L alone and say why.
-            Label kNote = new Label(
-                    "Ripley K is not available in this version of squidpy, so only L is shown. "
-                    + "L is the variance-stabilised transform of K and carries the same "
-                    + "clustering-versus-dispersion signal.");
-            kNote.setWrapText(true);
-            kNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
-            VBox onlyL = new VBox(6, kNote, lChart);
-            VBox.setVgrow(lChart, javafx.scene.layout.Priority.ALWAYS);
-            return onlyL;
+            // No K from this squidpy build. Its curves would be zero padding, and a chart
+            // of zeros reads exactly like a measured "no clustering at any radius" result,
+            // so L is shown alone -- without commentary about a missing statistic, which
+            // is not the user's problem to reason about.
+            return lChart;
         }
 
         // Responsive container -- side-by-side or stacked depending on width.

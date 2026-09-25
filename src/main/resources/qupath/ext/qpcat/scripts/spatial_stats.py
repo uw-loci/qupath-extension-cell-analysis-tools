@@ -763,7 +763,7 @@ def run_ripley(
         "k_values": [[...], ...],       # per-cluster K(r)
         "l_values": [[...], ...],       # per-cluster L(r)
         "poisson_k": [...],             # analytical null K(r)
-        "poisson_l": [...],             # zero line
+        "poisson_l": [...],             # analytical null L(r) = r
         "p_values": {"0": p0, ...},
         "n_permutations": N,
         "graph_type": "..."
@@ -1028,7 +1028,12 @@ def run_ripley(
 
         # Analytical Poisson null: K_poisson(r) = pi * r^2; L_poisson(r) = 0
         poisson_k = [math.pi * (r * r) for r in radii]
-        poisson_l = [0.0 for _ in radii]
+        # squidpy returns the UNCENTRED L: _ripley.py computes
+        # l_estimate = sqrt(k_estimate / pi), documented as L(t) = (K(t)/pi)^(1/2).
+        # Under complete spatial randomness K(r) = pi*r^2, so L(r) = r -- the null is
+        # the DIAGONAL, not zero. A flat zero line was drawn here, which put every
+        # curve far above "the null" and read as clustering at every radius.
+        poisson_l = [float(r) for r in radii]
 
         # p-values: squidpy attaches them as part of the uns dict in newer versions
         try:
@@ -1141,10 +1146,6 @@ def run_ripley(
                 ax_l.grid(True, alpha=0.3)
 
                 title = "Ripley K and L" if k_available else "Ripley L"
-                if not k_available:
-                    title += " (K not available in squidpy %s)" % getattr(
-                        sq, "__version__", "?"
-                    )
                 fig.suptitle(
                     "%s (graph: %s, perms: %d)"
                     % (title, graph_type, int(n_permutations))

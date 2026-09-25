@@ -144,7 +144,7 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
 5. (Optional) Check **Spatial feature smoothing** as a pre-clustering pass
 6. Click **Run Clustering**
 7. In the results dialog, navigate to the new tabs:
-   - **Ripley K and L** -- side-by-side line charts with Poisson null overlay (stacked vertically below ~700 px width). Note: in squidpy 1.6.6+, K was dropped by the library, so only L is shown with an explanation.
+   - **Ripley L** -- line chart with the Poisson null overlaid as a dashed diagonal, L(r) = r
    - **Geary's C** -- per-marker table with C, p-value, permutation count
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
@@ -161,7 +161,7 @@ Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPAT
 
 When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplotlib PNGs** is enabled (the default), each spatial statistic that runs also writes a PNG alongside the existing clustering plots under `<project>/qpcat/cluster_results/<result_name>_plots/`:
 
-- `ripley_k_l.png` -- two-panel K and L plot with Poisson null overlays, or single-panel L only (if K is unavailable in the installed squidpy version)
+- `ripley_k_l.png` -- Ripley L against its Poisson null
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
 - `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (mean over radius)
 - `co_occurrence_one_vs_rest.png` -- cluster x radius heatmap
