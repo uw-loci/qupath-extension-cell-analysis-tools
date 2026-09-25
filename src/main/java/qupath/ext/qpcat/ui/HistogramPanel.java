@@ -69,7 +69,7 @@ public class HistogramPanel extends VBox {
                 + "    (Zack et al. 1977, J Histochem Cytochem)\n"
                 + "  GMM - 2-component Gaussian mixture model\n"
                 + "  Gamma - Gamma distribution fit, for right-skewed markers\n"
-                + "    (inspired by GammaGateR, Conroy et al. 2024, Bioinformatics)\n"
+                + "    (inspired by GammaGateR, Xiong et al. 2024, Bioinformatics)\n"
                 + "See documentation/REFERENCES.md for full citations."));
 
         // Wide initial range; the real range/step is set per marker from the

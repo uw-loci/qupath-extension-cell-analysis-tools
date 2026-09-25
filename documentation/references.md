@@ -35,8 +35,8 @@ Classic centroid-based partitioning algorithm.
 > http://ilpubs.stanford.edu:8090/778/
 
 **Choosing the number of clusters (elbow/silhouette/gap, and why they disagree):**
-> Fu W, Perry PO. "Estimating the number of clusters using cross-validation." (2017).
-> https://doi.org/10.1080/10618600.2016.1158738
+> Fu W, Perry PO. "Estimating the Number of Clusters Using Cross-Validation." *Journal of Computational and Graphical Statistics* 29(1), 162-173 (2020).
+> https://doi.org/10.1080/10618600.2019.1647846
 
 **Used in:** Clustering Dialog (KMeans, MiniBatch KMeans algorithms)
 
@@ -126,7 +126,7 @@ QP-CAT implements this directly (`scikit-learn` `NearestNeighbors` + `KMeans`); 
 > https://doi.org/10.1016/j.cell.2018.07.010
 
 **Cellular neighborhoods at the tumor invasive front (the windowed-composition + k-means recipe QP-CAT follows):**
-> Schurch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
+> Schürch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
 > https://doi.org/10.1016/j.cell.2020.07.005
 
 **Windowed-neighborhood workflow for IMC (imcRtools `aggregateNeighbors` / `buildSpatialGraph`):**
@@ -366,7 +366,7 @@ Geometric auto-thresholding method that works well for distributions with a domi
 Uses gamma mixture models for marker gating, better suited to the right-skewed, strictly positive distributions typical of cell marker intensities.
 
 **Original paper:**
-> Conroy JM, Neumann EK, et al. "GammaGateR: semi-automated marker gating for single-cell multiplexed imaging." *Bioinformatics* 40(6), btae356 (2024).
+> Xiong J, Kaur H, Heiser CN, et al. "GammaGateR: semi-automated marker gating for single-cell multiplexed imaging." *Bioinformatics* 40(6), btae356 (2024).
 > https://doi.org/10.1093/bioinformatics/btae356
 
 **Used in:** Auto-thresholding (Gamma method, inspired by GammaGateR approach)
@@ -456,6 +456,10 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 > Kipf TN, Welling M. "Semi-Supervised Classification with Graph Convolutional Networks." *Proceedings of the 5th International Conference on Learning Representations (ICLR)* (2017).
 > https://doi.org/10.48550/arXiv.1609.02907
 
+**Approach reference (the tool the feature is modelled on):**
+> Zheng Y, Abila E, Chrenková E, Buljan I, Winkler J, Rendeiro AF. "LazySlide: accessible and interoperable whole-slide image analysis." *Nature Methods* 23, 728-731 (2026).
+> https://doi.org/10.1038/s41592-026-03044-7
+
 **Used in:** Clustering dialog (spatial feature smoothing pre-step with row-normalized k-NN adjacency)
 
 ---
@@ -479,7 +483,7 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 **Used in:** Autoencoder Classifier (4-cycle KL beta ramp prevents posterior collapse)
 
 **Free bits regularization:**
-> Kingma DP, Salimans T, Jozefowicz R, et al. "Improved Variational Inference with Inverse Autoregressive Flow." *Advances in Neural Information Processing Systems 29 (NeurIPS)* (2016).
+> Kingma DP, Salimans T, Jozefowicz R, et al. "Improving Variational Inference with Inverse Autoregressive Flow." *Advances in Neural Information Processing Systems 29 (NeurIPS)* (2016).
 > https://doi.org/10.48550/arXiv.1606.04934
 
 **Used in:** Autoencoder Classifier (minimum 0.25 nats KL per latent dimension prevents dimension collapse)
@@ -524,7 +528,7 @@ brianhie) so the mode adds no new environment dependency; see the header of
 > Code: https://github.com/brianhie/geosketch (MIT License)
 
 **Related diversity-preserving subsampling methods (not bundled, for reference):**
-> Song D, Li JJ, et al. "scSampler: fast diversity-preserving subsampling of large-scale
+> Song D, Xi NM, Li JJ, Wang L. "scSampler: fast diversity-preserving subsampling of large-scale
 > single-cell transcriptomic data." *Bioinformatics* 38(11), 3126-3127 (2022).
 > https://doi.org/10.1093/bioinformatics/btac271
 
@@ -540,7 +544,7 @@ brianhie) so the mode adds no new environment dependency; see the header of
 
 These papers demonstrate workflows similar to QP-CAT's capabilities applied to multiplexed tissue imaging:
 
-> Schurch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
+> Schürch CM, Bhate SS, Barlow GL, et al. "Coordinated Cellular Neighborhoods Orchestrate Antitumoral Immunity at the Colorectal Cancer Invasive Front." *Cell* 182(5), 1341-1359 (2020).
 > https://doi.org/10.1016/j.cell.2020.07.005
 
 > Jackson HW, Fischer JR, Zanotelli VRT, et al. "The single-cell pathology landscape of breast cancer." *Nature* 578, 615-620 (2020).
