@@ -241,6 +241,12 @@ Buttons above each table:
 
 **Why long form?** The on-screen table for pairwise co-occurrence is one column per ordered cluster pair (20 clusters = 400 columns, labels scroll away). CSV writes one row per pair, so every comparison is explicit and legible in a cell editor or data frame.
 
+### Ripley K and L: controlling cluster visibility
+
+The **Ripley K and L** chart may have many curves when there are many clusters -- twenty curves on one axis is a thicket. A panel on the right side lists each cluster with checkboxes so you can hide the ones you are not reading. Hiding clusters also re-scales the axes onto what remains, which often makes the pattern clearer.
+
+Use **All** to show every cluster again, or **None** to hide all (the Poisson null line stays visible as a reference). The Poisson null is never hidden because it is the reference the curves are read against; without it the empty chart is unreadable.
+
 ## Saving a plot
 
 **Save plot...** exports whichever tab is on top as a PNG, exactly as displayed. The
