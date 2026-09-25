@@ -81,8 +81,12 @@ very-dense regions look identical. (CATALYST plots a 1,000-cell-per-sample UMAP 
 clusters computed on every cell; umap-learn's own `umap.plot` switches representation
 above `width * height / 10` points.)
 
-Distances *within* a cluster mean something. Distances *between* clusters do not --
-embeddings preserve local topology, not global geometry.
+**Clusters are computed in your measurements (or their principal components), not in the
+embedding coordinates.** Distances *within* a cluster mean something because nearby cells
+in the embedding are usually nearby in the measurement space. Distances *between* clusters
+do not -- embeddings preserve local topology, not global geometry. A cluster can therefore
+appear in two or more separated regions of this plot. That is not an error; local
+neighbourhoods are what matter.
 
 ## Composition tabs
 
@@ -263,6 +267,11 @@ rewritten -- it costs a Python round-trip each time, which is why it is off by d
 
 Present when the result carries a 3D embedding. It reads the clustered images' detections
 and their embedding measurements directly. Loading starts automatically about 5 seconds
-after the results window opens; this avoids dead time waiting for a click. For the
-standalone viewer and the export path, see
+after the results window opens; this avoids dead time waiting for a click.
+
+**As with the 2D embedding**, clusters are computed in your measurements (or their
+principal components), not in the 3D coordinates shown here. A cluster can appear in
+multiple separated regions of this view.
+
+For the standalone viewer and the export path, see
 [Exporting](exporting.md#vest-3d-export).

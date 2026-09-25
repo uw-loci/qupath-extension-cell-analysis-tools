@@ -2248,9 +2248,15 @@ public class ClusteringWorkflow {
                     int inFeat = ((Number) m.get("n_input_features")).intValue();
                     int nComp = ((Number) m.get("n_components")).intValue();
                     double var = ((Number) m.get("explained_variance")).doubleValue();
+                    // How the rank was chosen belongs in the record: with adaptive
+                    // selection the number is a decision about this data, not a setting
+                    // someone typed, and reproducing the run means knowing which test made it.
+                    Object sel = m.get("selection");
+                    String how = (sel == null || "fixed".equals(String.valueOf(sel)))
+                            ? "" : ", chosen by " + sel;
                     String summary = String.format(
-                            "%d features -> %d PCs (%.1f%% variance retained)",
-                            inFeat, nComp, 100.0 * var);
+                            "%d features -> %d PCs (%.1f%% variance retained%s)",
+                            inFeat, nComp, 100.0 * var, how);
                     result.setPcaPrecursor(summary);
                     logger.info("PCA precursor: {}", summary);
                 } catch (RuntimeException e) {

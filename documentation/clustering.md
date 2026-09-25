@@ -296,6 +296,12 @@ and cluster on those.
 - It only engages when there are **more features than components** -- the **PCA Precursor
   Components** preference (default 50) is both the target dimensionality and the
   threshold. An ordinary panel is untouched.
+- **Automatic rank selection**: set **PCA Precursor Components** to **0 or less** and QP-CAT
+  will choose the component count from your data. Small feature counts (≤200) use
+  parallel analysis (permutation-based, good for redundant correlated markers like one
+  protein measured in nucleus + cytoplasm + cell). Large feature counts use the
+  Marchenko-Pastur eigenvalue edge (scalable, designed for thousands of genes). Results
+  show which method was used.
 - **BANKSY is exempt**: it runs its own PCA over spatially-augmented features, and a
   generic precursor would corrupt that.
 - Marker rankings, the heatmap, the dot plot values and the cluster means keep using your
