@@ -361,7 +361,8 @@ public class ClusteringWorkflow {
 
         // Skip label application for embedding-only mode
         if (config.getAlgorithm() != ClusteringConfig.Algorithm.NONE) {
-            applier.applyClusterLabels(extraction.getDetections(), result.getClusterLabels());
+            applier.applyClusterLabels(extraction.getDetections(), result.getClusterLabels(),
+                    result.clusterNameDigits());
         }
 
         if (result.hasEmbedding()) {
@@ -830,7 +831,11 @@ public class ClusteringWorkflow {
             int[] segmentLabels = new int[end - start];
             System.arraycopy(result.getClusterLabels(), start, segmentLabels, 0, end - start);
 
-            applier.applyClusterLabels(segmentDetections, segmentLabels);
+            // The WHOLE run's width, not this segment's: a per-image subset can
+            // have a lower highest label, and a class name one digit narrower than
+            // its siblings is a different class.
+            applier.applyClusterLabels(segmentDetections, segmentLabels,
+                    result.clusterNameDigits());
 
             if (result.hasEmbedding()) {
                 String prefix = ResultApplier.getEmbeddingPrefix(

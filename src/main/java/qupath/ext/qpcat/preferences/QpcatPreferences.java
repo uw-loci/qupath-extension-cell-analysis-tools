@@ -214,8 +214,11 @@ public final class QpcatPreferences {
     private static final DoubleProperty clusterTsnePerplexity = PathPrefs.createPersistentPreference(
             "qpcat.cluster.tsnePerplexity", 30.0);
 
+    // 0 = auto, which is scikit-learn's own behaviour (min_samples = min_cluster_size).
+    // This used to default to 5 and was applied whatever min_cluster_size was set to,
+    // so a run asking for clusters of 500 still estimated density over 5 neighbours.
     private static final IntegerProperty clusterHdbscanMinSamples = PathPrefs.createPersistentPreference(
-            "qpcat.cluster.hdbscanMinSamples", 5);
+            "qpcat.cluster.hdbscanMinSamples", 0);
 
     private static final IntegerProperty clusterMiniBatchSize = PathPrefs.createPersistentPreference(
             "qpcat.cluster.miniBatchKmeansBatchSize", 1024);
@@ -732,8 +735,10 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(clusterHdbscanMinSamples, Integer.class)
                 .name("HDBSCAN Min Samples")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("HDBSCAN min_samples parameter (default: 5). "
-                        + "Lower = more clusters found, higher = denser clusters required. Range: 1-50."))
+                .description(Tooltips.wrap("Starting value of the HDBSCAN min_samples spinner "
+                        + "(default: 0 = auto, which follows scikit-learn and uses min_cluster_size). "
+                        + "Higher = a smoother density estimate, cleaner separation and more noise; "
+                        + "a small value with a large min_cluster_size returns one giant cluster."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(clusterMiniBatchSize, Integer.class)

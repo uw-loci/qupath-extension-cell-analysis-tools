@@ -265,8 +265,27 @@ public class SavedClusteringResult {
             String n = clusterNames.get(label);
             if (n != null && !n.isBlank()) return n;
         }
-        return "Cluster " + label;
+        return ClusterNaming.defaultName(label, clusterNameDigits());
     }
+
+    /**
+     * How many digits this result's default cluster names pad their number to.
+     * Must agree with the width the run used, because the padded name IS the
+     * PathClass on the cells and the key of {@link #getClusterColors()}.
+     *
+     * @return 1 for fewer than eleven clusters, 2 or 3 above that
+     */
+    public int clusterNameDigits() {
+        if (clusterNameDigits == 0) {
+            clusterNameDigits = clusterLabels != null
+                    ? ClusterNaming.digitsForLabels(clusterLabels)
+                    : ClusterNaming.digitsForClusterCount(nClusters);
+        }
+        return clusterNameDigits;
+    }
+
+    /** Lazily computed by {@link #clusterNameDigits()}; 0 means "not yet". */
+    private transient int clusterNameDigits;
 
     // --- Spatial ---
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }

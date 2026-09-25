@@ -12,6 +12,7 @@ import javafx.stage.Stage;
 import javafx.util.StringConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.ResultApplier;
@@ -81,6 +82,12 @@ public class ClusterManagementDialog {
         int count;
         final List<Integer> labels = new ArrayList<>();   // saved path: constituent labels
         final List<String> origNames = new ArrayList<>(); // manual path: constituent class names
+        /**
+         * Zero-pad width of this result's default names. Held per row because the
+         * "has this been renamed?" test below compares against the default, and a
+         * default built at the wrong width reads every cluster as renamed.
+         */
+        int digits = 1;
 
         @Override
         public String toString() {
@@ -89,9 +96,10 @@ public class ClusterManagementDialog {
                 List<Integer> sorted = new ArrayList<>(labels);
                 Collections.sort(sorted);
                 boolean renamed = labels.size() > 1
-                        || !displayName.equals("Cluster " + sorted.get(0));
+                        || !displayName.equals(ClusterNaming.defaultName(sorted.get(0), digits));
                 detail = renamed
-                        ? "  [" + sorted.stream().map(l -> "Cluster " + l)
+                        ? "  [" + sorted.stream()
+                                .map(l -> ClusterNaming.defaultName(l, digits))
                                 .reduce((a, b) -> a + ", " + b).orElse("") + "]"
                         : "";
             } else {
@@ -625,11 +633,13 @@ public class ClusterManagementDialog {
         LinkedHashMap<String, ClusterRow> byName = new LinkedHashMap<>();
         List<Integer> labs = new ArrayList<>(countByLabel.keySet());
         Collections.sort(labs);
+        final int digits = activeSaved != null ? activeSaved.clusterNameDigits() : 1;
         for (int lab : labs) {
             String name = workingName.get(lab);
             ClusterRow row = byName.computeIfAbsent(name, n -> {
                 ClusterRow r = new ClusterRow();
                 r.displayName = n;
+                r.digits = digits;
                 return r;
             });
             row.labels.add(lab);
@@ -776,8 +786,10 @@ public class ClusterManagementDialog {
             List<Integer> labs = new ArrayList<>(row.labels);
             Collections.sort(labs);
             for (int lab : labs) {
-                items.add("Cluster " + lab + "  (" + countByLabel.getOrDefault(lab, 0) + " cells)");
-                restores.add(() -> workingName.put(lab, "Cluster " + lab));
+                int digits = activeSaved != null ? activeSaved.clusterNameDigits() : 1;
+                items.add(ClusterNaming.defaultName(lab, digits)
+                        + "  (" + countByLabel.getOrDefault(lab, 0) + " cells)");
+                restores.add(() -> workingName.put(lab, ClusterNaming.defaultName(lab, digits)));
             }
         } else {
             List<String> origs = new ArrayList<>(row.origNames);
@@ -950,7 +962,10 @@ public class ClusterManagementDialog {
         // Only the labels whose name differs from the default "Cluster N".
         Map<Integer, String> custom = new LinkedHashMap<>();
         for (var e : workingName.entrySet()) {
-            if (!e.getValue().equals("Cluster " + e.getKey())) custom.put(e.getKey(), e.getValue());
+            if (!e.getValue().equals(
+                    ClusterNaming.defaultName(e.getKey(), activeSaved.clusterNameDigits()))) {
+                custom.put(e.getKey(), e.getValue());
+            }
         }
         // Ask whether the staged names differ from the SAVED ones, not from the
         // "Cluster N" defaults. Testing whether `custom` is empty gets both

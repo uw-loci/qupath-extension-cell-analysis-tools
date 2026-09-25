@@ -16,6 +16,7 @@ import qupath.ext.qpcat.service.NamedPalettes;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.ColorTools;
 import qupath.lib.gui.QuPathGUI;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.objects.classes.PathClass;
 
 import java.util.LinkedHashMap;
@@ -131,6 +132,34 @@ public final class ClusterColorPaletteDialog {
 
     /** Number of "Cluster N" classes for the target (saved result count, or the
      *  distinct "Cluster N" classes currently registered). */
+    /**
+     * The zero-pad width of the cluster class names this target uses, so the
+     * palette recolours the classes that exist rather than naming "Cluster 3"
+     * when the cells carry "Cluster 03".
+     *
+     * @param qupath    the GUI, for the live class list
+     * @param savedName the saved result to read, or null/empty for the live classes
+     * @return the digit width
+     */
+    private static int resolveClusterDigits(QuPathGUI qupath, String savedName) {
+        if (savedName != null && !savedName.isEmpty()) {
+            try {
+                return ClusteringResultManager.loadSavedResult(qupath.getProject(), savedName)
+                        .clusterNameDigits();
+            } catch (Exception e) {
+                logger.warn("Could not read saved result '{}': {}", savedName, e.getMessage());
+                return 1;
+            }
+        }
+        int max = -1;
+        for (PathClass pc : qupath.getAvailablePathClasses()) {
+            if (pc == null || pc.getName() == null) continue;
+            Matcher m = CLUSTER.matcher(pc.toString());
+            if (m.matches()) max = Math.max(max, Integer.parseInt(m.group(1)));
+        }
+        return ClusterNaming.digitsForHighestLabel(max);
+    }
+
     private static int resolveClusterCount(QuPathGUI qupath, String savedName) {
         if (savedName != null && !savedName.isEmpty()) {
             try {
@@ -160,8 +189,9 @@ public final class ClusterColorPaletteDialog {
         }
         int[] colors = NamedPalettes.colorsFor(palette, n);
         var available = qupath.getAvailablePathClasses();
+        int digits = resolveClusterDigits(qupath, savedName);
         for (int i = 0; i < n; i++) {
-            PathClass pc = PathClass.fromString("Cluster " + i);
+            PathClass pc = PathClass.fromString(ClusterNaming.defaultName(i, digits));
             pc.setColor(colors[i]);
             if (!available.contains(pc)) available.add(pc);
         }

@@ -204,6 +204,22 @@ noise is the tell.** When you see it, change the algorithm first, to Leiden or K
 which partition the data whether or not it has density gaps. Adding intensity or texture
 measurements is worth doing on its own merits but is not the fix.
 
+*One big cluster with LITTLE noise is a different problem, with a different fix.* The
+failure above leaves evenly-spread noise behind, because each population's fringe was
+discarded. A result that is one dominant cluster and almost **no** noise means no boundary
+was cut anywhere -- and that is usually **Cluster selection**, not the data. The default,
+"Excess of mass", is scikit-learn's and keeps the most *persistent* clusters, which favours
+large ones: where the lobes of a space differ in density it returns their common parent. On
+a 3D UMAP of 107,282 cells with visibly separated lobes it gave 4 clusters, one holding
+97.0% of the cells, with 0.9% noise. Switch **Cluster selection** to **Leaf**, which reads
+the leaves of the density tree instead -- scikit-learn's own wording is "the most fine
+grained and homogeneous clusters".
+
+*`min_samples` is how many neighbours the density estimate is built from.* Leave it on
+**auto (0)**, which follows scikit-learn and uses `min_cluster_size`. A small fixed value
+beside a large `min_cluster_size` measures density over a handful of points while demanding
+clusters of hundreds, and returns one cluster for that reason alone.
+
 Use HDBSCAN when you genuinely expect distinct populations and want the method to tell you
 how many. Sweep `min_cluster_size` and reduce dimensionality first -- density estimates
 weaken in high dimensions. (McInnes & Healy 2017.)
@@ -248,7 +264,7 @@ Starting points, all of them the dialog defaults:
 |---|---|---|
 | **Leiden** | resolution 1.0, n_neighbors 50 | raise resolution for more clusters |
 | **KMeans / MiniBatch** | k = 10 | adjust from biology or the heatmap |
-| **HDBSCAN** | min_cluster_size 15 | lower to find smaller clusters |
+| **HDBSCAN** | min_cluster_size 15, min_samples 0 (auto), Cluster selection "Excess of mass" | lower min_cluster_size to find smaller clusters; switch to "Leaf" when one cluster swallows the run |
 | **Agglomerative** | k = 10, Ward linkage | justify any other linkage |
 | **GMM** | 10 components, full covariance | |
 | **BANKSY** | lambda 0.2, k_geom 15, resolution 0.7 | raise lambda toward tissue domains |

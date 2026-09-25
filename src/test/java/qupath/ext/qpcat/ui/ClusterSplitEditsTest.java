@@ -81,24 +81,24 @@ class ClusterSplitEditsTest {
     @Test
     void aLabelDroppedByASplitIsRelabelledToItsOwnName() {
         Map<Integer, String> customAfterFullSplit = new LinkedHashMap<>();  // nothing custom left
-        assertThat(SavedResultApplier.nameForLabel(customAfterFullSplit, 0)).isEqualTo("Cluster 0");
-        assertThat(SavedResultApplier.nameForLabel(customAfterFullSplit, 1)).isEqualTo("Cluster 1");
-        assertThat(SavedResultApplier.nameForLabel(null, 7)).isEqualTo("Cluster 7");
+        assertThat(SavedResultApplier.nameForLabel(customAfterFullSplit, 0, 1)).isEqualTo("Cluster 0");
+        assertThat(SavedResultApplier.nameForLabel(customAfterFullSplit, 1, 1)).isEqualTo("Cluster 1");
+        assertThat(SavedResultApplier.nameForLabel(null, 7, 1)).isEqualTo("Cluster 7");
     }
 
     @Test
     void aPartialSplitLeavesTheRemainingClusterMerged() {
         Map<Integer, String> custom = new LinkedHashMap<>();
         custom.put(1, "Immune");   // label 0 was split out, so it is absent
-        assertThat(SavedResultApplier.nameForLabel(custom, 0)).isEqualTo("Cluster 0");
-        assertThat(SavedResultApplier.nameForLabel(custom, 1)).isEqualTo("Immune");
+        assertThat(SavedResultApplier.nameForLabel(custom, 0, 1)).isEqualTo("Cluster 0");
+        assertThat(SavedResultApplier.nameForLabel(custom, 1, 1)).isEqualTo("Immune");
     }
 
     @Test
     void aBlankNameFallsBackRatherThanClearingTheClass() {
         Map<Integer, String> custom = new LinkedHashMap<>();
         custom.put(0, "   ");
-        assertThat(SavedResultApplier.nameForLabel(custom, 0)).isEqualTo("Cluster 0");
+        assertThat(SavedResultApplier.nameForLabel(custom, 0, 1)).isEqualTo("Cluster 0");
     }
 
     /**

@@ -88,6 +88,10 @@ public class ClusteringDialog {
     /** Series name of the Poisson reference on the Ripley charts. */
     private static final String POISSON_NULL_SERIES = "Poisson null";
 
+    /** HDBSCAN cluster-selection labels, mapped to scikit-learn's ids on the wire. */
+    private static final String HDBSCAN_SELECTION_EOM = "Excess of mass (default)";
+    private static final String HDBSCAN_SELECTION_LEAF = "Leaf (finest clusters)";
+
     /** Results page; each Results-dialog tab appends its own anchor. */
     private static final String DOCS_BASE = QpcatDocLinks.pageUrl("results.md");
 
@@ -248,6 +252,8 @@ public class ClusteringDialog {
     private Spinner<Double> leidenResolutionSpinner;
     private Spinner<Integer> kmeansClusterSpinner;
     private Spinner<Integer> hdbscanMinClusterSpinner;
+    private Spinner<Integer> hdbscanMinSamplesSpinner;
+    private ComboBox<String> hdbscanSelectionCombo;
     private Spinner<Integer> aggClusterSpinner;
     private ComboBox<String> aggLinkageCombo;
     private Spinner<Double> banksyLambdaSpinner;
@@ -455,6 +461,8 @@ public class ClusteringDialog {
                 + "  Percentile - robust min-max using 1st/99th percentiles\n"
                 + "  None - use raw measurement values"));
 
+        // One pre-flight caution depends on this: normalizing an embedding.
+        normalizationCombo.valueProperty().addListener((o, ov, nv) -> updatePreflight());
         HBox box = new HBox(10, tipLabel("Normalization:", normalizationCombo), normalizationCombo);
         box.setAlignment(Pos.CENTER_LEFT);
         return box;
@@ -676,6 +684,9 @@ public class ClusteringDialog {
                 embeddingNameField.setText(defaultEmbeddingName());
                 embNameEdited[0] = false;
             }
+            // One pre-flight caution depends on the method: embedding an
+            // embedding.
+            updatePreflight();
         });
         updateVisibility.run();
 
@@ -955,16 +966,51 @@ public class ClusteringDialog {
                 + "Must be specified in advance. If unsure, try Leiden\n"
                 + "instead (auto-detects cluster count)."));
 
-        hdbscanMinClusterSpinner = new Spinner<>(2, 500, 15);
+        // Ceiling raised from 500: on a 107,282-cell run 500 was 0.47% of the
+        // cohort and the spinner was already at its maximum, so the one knob the
+        // caution text tells you to reach for had nothing left to give.
+        hdbscanMinClusterSpinner = new Spinner<>(2, 100000, 15);
         hdbscanMinClusterSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(hdbscanMinClusterSpinner);
         hdbscanMinClusterSpinner.setPrefWidth(80);
         hdbscanMinClusterSpinner.setTooltip(Tooltips.of(
                 "Minimum number of cells to form a cluster.\n"
-                + "Range: 2-500. Default: 15.\n"
+                + "Default: 15.\n"
                 + "Smaller values find more (and smaller) clusters.\n"
                 + "Cells not assigned to any cluster are labeled\n"
                 + "'Unclassified' (noise points)."));
+
+        // 0 = follow scikit-learn, whose own default is min_samples =
+        // min_cluster_size. QP-CAT used to force 5 regardless, which estimates
+        // density over five neighbours while demanding clusters of hundreds.
+        hdbscanMinSamplesSpinner = new Spinner<>(0, 100000,
+                Math.max(0, QpcatPreferences.getClusterHdbscanMinSamples()));
+        hdbscanMinSamplesSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(hdbscanMinSamplesSpinner);
+        hdbscanMinSamplesSpinner.setPrefWidth(80);
+        hdbscanMinSamplesSpinner.setTooltip(Tooltips.of(
+                "How many neighbours the density estimate is built from.\n"
+                + "0 = auto, which follows scikit-learn and uses min_cluster_size.\n\n"
+                + "A small value with a large min_cluster_size is the combination\n"
+                + "that returns one giant cluster and almost no noise: density is\n"
+                + "measured over a handful of points while whole regions are\n"
+                + "required to be large, so no boundary survives.\n"
+                + "Higher = smoother density, cleaner separation, more noise."));
+
+        hdbscanSelectionCombo = new ComboBox<>(FXCollections.observableArrayList(
+                HDBSCAN_SELECTION_EOM, HDBSCAN_SELECTION_LEAF));
+        hdbscanSelectionCombo.setValue(HDBSCAN_SELECTION_EOM);
+        hdbscanSelectionCombo.valueProperty().addListener((o, ov, nv) -> updatePreflight());
+        hdbscanSelectionCombo.setTooltip(Tooltips.of(
+                "How clusters are read off the density tree.\n\n"
+                + "Excess of mass (scikit-learn's default): keeps the most\n"
+                + "persistent clusters. It favours large ones, so where the lobes\n"
+                + "of the space differ in density it returns their common parent --\n"
+                + "one cluster holding almost everything, with very little noise.\n\n"
+                + "Leaf: takes the leaves of the tree instead -- scikit-learn's own\n"
+                + "wording is 'the most fine grained and homogeneous clusters'.\n"
+                + "This is the setting to use when you can SEE separate groups in\n"
+                + "an embedding and excess of mass returns one."));
 
         aggClusterSpinner = new Spinner<>(2, 200, 10);
         aggClusterSpinner.setEditable(true);
@@ -1154,7 +1200,8 @@ public class ClusteringDialog {
         Tooltip activeTooltip = Tooltips.of(
                 "Apply Harmony batch correction to remove per-image\n"
                 + "technical variation before clustering.\n"
-                + "Only available when clustering all project images.\n"
+                + "Needs more than one batch: two or more images in scope,\n"
+                + "or independent areas within one image.\n"
                 + "Ref: Korsunsky et al. (2019) Nature Methods");
         Tooltip unavailableTooltip = Tooltips.of(
                 "Harmony batch correction is not installed in this\n"
@@ -1197,11 +1244,15 @@ public class ClusteringDialog {
         // is more than one batch to correct over -- either several images, or
         // independent areas within one image. Before areas existed only the
         // first was possible, so the gate was scope-only.
+        // COUNT the images rather than testing for the "All project images"
+        // radio: six images chosen under "Specific images..." are six batches,
+        // and gating on the radio alone grayed Harmony out for exactly the
+        // scope a user picks when they want to correct between chosen images.
         // If harmonypy is missing we keep the checkbox visibly disabled even
         // when scope changes, so the user can see the feature exists but
         // understands it is currently unusable.
         Runnable refreshBatchGate = () -> {
-            boolean severalImages = scopeSection.isAllImages();
+            boolean severalImages = scopeSection.scopeImageCount() > 1;
             boolean severalAreas = areasSection != null
                     && areasSection.hasSubImageLevels();
             boolean usable = harmonypyAvailable && (severalImages || severalAreas);
@@ -1827,6 +1878,35 @@ public class ClusteringDialog {
     }
 
     /**
+     * Whether a measurement name looks like an embedding coordinate from an
+     * earlier dimensionality-reduction run -- "UMAP1", "UMAP_Demo3",
+     * "QPCAT 3D UMAP2", "PCA1", "tSNE2".
+     * <p>
+     * Name-matched rather than read from provenance, because the columns of a run
+     * made before QP-CAT marked its own output carry no marker at all, and those
+     * are exactly the results a user re-clusters. A user measurement that happens
+     * to end in a digit after "PCA" will match; the consequence is one extra
+     * caution, which is the safe direction.
+     *
+     * @param name a measurement name
+     * @return true when the name reads as an embedding coordinate
+     */
+    static boolean looksLikeEmbeddingColumn(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        // No compartment: an embedding column is a flat name, so "Cell: UMAP: Mean"
+        // (a marker someone named UMAP) is not one of these.
+        if (name.contains(":")) {
+            return false;
+        }
+        // The digits need not follow the family token: a run's custom embedding name
+        // sits between them ("UMAP_Demo3", "UMAP3D2"), and those are precisely the
+        // columns a user re-clusters.
+        return name.trim().matches("(?i).*\\b(umap|pca|t-?sne).*\\d$");
+    }
+
+    /**
      * Heuristic pre-flight check, surfaced as an amber caution near the Run
      * button, for configurations that commonly produce too few clusters -- so the user is
      * warned BEFORE a run that is likely to collapse to one giant cluster or a
@@ -1842,11 +1922,19 @@ public class ClusteringDialog {
         int n = selected.size();
         java.util.Set<String> compartments = new java.util.LinkedHashSet<>();
         java.util.Set<String> markers = new java.util.LinkedHashSet<>();
+        List<String> priorEmbeddingCols = new ArrayList<>();
         boolean hasBackground = false;
         for (String s : selected) {
+            if (looksLikeEmbeddingColumn(s)) {
+                priorEmbeddingCols.add(s);
+            }
             String[] parts = s.split(":\\s*");
-            if (parts.length >= 1) compartments.add(parts[0].trim());
+            // A compartment is the part BEFORE a colon. A name with no colon --
+            // "QPCAT 3D UMAP1", "Cell Area" -- has no compartment at all, and
+            // reading the whole name as one turned three embedding columns into
+            // "0 markers x 3 compartments (UMAP_Demo1, UMAP_Demo2, UMAP_Demo3)".
             if (parts.length >= 2) {
+                compartments.add(parts[0].trim());
                 String marker = parts[1].trim();
                 markers.add(marker);
                 String ml = marker.toLowerCase();
@@ -1874,7 +1962,7 @@ public class ClusteringDialog {
                     + "(graph-based) is more robust for large panels.");
         }
 
-        if (compartments.size() >= 2 && n > markers.size()) {
+        if (compartments.size() >= 2 && !markers.isEmpty() && n > markers.size()) {
             warns.add("Selected " + n + " features = " + markers.size() + " markers x "
                     + compartments.size() + " compartments (" + String.join(", ", compartments)
                     + "). A marker's compartments are highly correlated -- one compartment is "
@@ -1884,6 +1972,57 @@ public class ClusteringDialog {
         if (hasBackground) {
             warns.add("Selection includes likely background / autofluorescence channels "
                     + "(e.g. AF_*); these add noise -- consider removing them.");
+        }
+
+        // Clustering ON a previous run's embedding is a deliberate, useful
+        // workflow -- it is what the HDBSCAN caution above recommends -- but it
+        // changes what the result can tell you, and until the columns carried
+        // the QPCAT marker nothing on screen said it was happening.
+        if (!priorEmbeddingCols.isEmpty()) {
+            EmbeddingMethod emb = embeddingCombo == null ? null : embeddingCombo.getValue();
+            String cols = priorEmbeddingCols.size() <= 4
+                    ? String.join(", ", priorEmbeddingCols)
+                    : String.join(", ", priorEmbeddingCols.subList(0, 4)) + ", ...";
+            boolean onlyEmbedding = priorEmbeddingCols.size() == n;
+            warns.add((onlyEmbedding
+                        ? "Every selected measurement is an embedding coordinate"
+                        : priorEmbeddingCols.size() + " of the " + n
+                                + " selected measurements are embedding coordinates")
+                    + " from an earlier run (" + cols + "). Clustering on them is a "
+                    + "valid two-step route -- the point of it -- but the heatmap and "
+                    + "marker rankings then describe the embedding axes, not your "
+                    + "markers, so the clusters cannot be read as marker phenotypes. "
+                    + "Add the markers you want to interpret by, or use Marker "
+                    + "Rankings on a separate run over the markers themselves.");
+            if (onlyEmbedding && normalizationCombo != null
+                    && normalizationCombo.getValue() != Normalization.NONE) {
+                warns.add("Normalization is "
+                        + normalizationCombo.getValue().getDisplayName()
+                        + " and the input is an embedding. Z-scoring (or rescaling) each "
+                        + "axis separately stretches the embedding along one axis and "
+                        + "squashes it along another, and the geometry is the only thing "
+                        + "an embedding carries. Set Normalization to None so the "
+                        + "coordinates are clustered as they were drawn.");
+            }
+            if (onlyEmbedding && algo == Algorithm.HDBSCAN
+                    && hdbscanSelectionCombo != null
+                    && !HDBSCAN_SELECTION_LEAF.equals(hdbscanSelectionCombo.getValue())) {
+                warns.add("HDBSCAN on embedding coordinates with Cluster selection set to "
+                        + "excess of mass usually returns ONE cluster holding almost every "
+                        + "cell, with very little noise -- even when the lobes are plainly "
+                        + "visible in the plot -- because excess of mass prefers their "
+                        + "common parent. Set Cluster selection to \"Leaf\" to cut at the "
+                        + "lobes instead.");
+            }
+            if (onlyEmbedding && emb != null && emb != EmbeddingMethod.NONE) {
+                warns.add("Embedding method is " + emb.getDisplayName() + " and the input is "
+                        + "already an embedding, so this computes " + emb.getDisplayName()
+                        + " of an embedding. It runs, and it is only used for the plot -- "
+                        + "clustering uses the coordinates you selected either way -- but it "
+                        + "cannot recover detail the first projection discarded. Set Method "
+                        + "to None to cluster the coordinates as they are; the 3D View reads "
+                        + "the existing columns off the cells regardless.");
+            }
         }
 
         if (spatialSmoothingCheck != null && spatialSmoothingCheck.isSelected()) {
@@ -2104,9 +2243,16 @@ public class ClusteringDialog {
             }
             case HDBSCAN -> {
                 HBox row = new HBox(10,
-                        tipLabel("min_cluster_size:", hdbscanMinClusterSpinner), hdbscanMinClusterSpinner);
+                        tipLabel("min_cluster_size:", hdbscanMinClusterSpinner),
+                        hdbscanMinClusterSpinner,
+                        tipLabel("min_samples:", hdbscanMinSamplesSpinner),
+                        hdbscanMinSamplesSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
-                algorithmParamsBox.getChildren().add(row);
+                HBox selRow = new HBox(10,
+                        tipLabel("Cluster selection:", hdbscanSelectionCombo),
+                        hdbscanSelectionCombo);
+                selRow.setAlignment(Pos.CENTER_LEFT);
+                algorithmParamsBox.getChildren().addAll(row, selRow);
                 addMethodInfo(
                         "Finds clusters as dense regions; needs neither k nor a distance "
                         + "threshold. Cells in no dense region are labeled NOISE and left "
@@ -2435,6 +2581,10 @@ public class ClusteringDialog {
             }
             case HDBSCAN -> {
                 algorithmParams.put("min_cluster_size", hdbscanMinClusterSpinner.getValue());
+                algorithmParams.put("min_samples", hdbscanMinSamplesSpinner.getValue());
+                algorithmParams.put("cluster_selection_method",
+                        HDBSCAN_SELECTION_LEAF.equals(hdbscanSelectionCombo.getValue())
+                                ? "leaf" : "eom");
             }
             case AGGLOMERATIVE -> {
                 algorithmParams.put("n_clusters", aggClusterSpinner.getValue());
@@ -2732,6 +2882,15 @@ public class ClusteringDialog {
             if (algoParams.containsKey("min_cluster_size")) {
                 hdbscanMinClusterSpinner.getValueFactory().setValue(
                         ((Number) algoParams.get("min_cluster_size")).intValue());
+            }
+            if (algoParams.containsKey("min_samples")) {
+                hdbscanMinSamplesSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("min_samples")).intValue());
+            }
+            if (algoParams.containsKey("cluster_selection_method")) {
+                hdbscanSelectionCombo.setValue(
+                        "leaf".equals(String.valueOf(algoParams.get("cluster_selection_method")))
+                                ? HDBSCAN_SELECTION_LEAF : HDBSCAN_SELECTION_EOM);
             }
             if (algoParams.containsKey("n_components")) {
                 kmeansClusterSpinner.getValueFactory().setValue(
@@ -4829,12 +4988,22 @@ public class ClusteringDialog {
         for (String w : warnings) {
             Label l = new Label("- " + w);
             l.setWrapText(true);
-            // The tab pane below takes all the spare height, so the VBox shrinks this
-            // banner to its MINIMUM -- which for a wrapped label is one line, and the
-            // rest of the sentence was dropped as an ellipsis. Never below the wrapped
-            // height: a warning that cannot be read in full is not a warning.
-            l.setMinHeight(Region.USE_PREF_SIZE);
             l.setStyle("-fx-text-fill: #6b4e00;");
+            // The tab pane below takes all the spare height, so the VBox shrinks this
+            // banner to its MINIMUM, and a warning that cannot be read in full is not
+            // a warning.
+            //
+            // USE_PREF_SIZE alone does NOT fix this, which is why the sentence was
+            // still ellipsizing after that was tried: it resolves to
+            // computePrefHeight(-1), and a wrapped Label asked for its preferred
+            // height at an UNKNOWN width answers with ONE LINE. The height has to be
+            // recomputed against the width the label actually got, so it is set from
+            // a width listener instead.
+            l.widthProperty().addListener((obs, oldW, newW) -> {
+                if (newW != null && newW.doubleValue() > 0) {
+                    l.setMinHeight(l.prefHeight(newW.doubleValue()));
+                }
+            });
             details.getChildren().add(l);
         }
 
@@ -4855,6 +5024,10 @@ public class ClusteringDialog {
         headRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(4, headRow, details);
+        // Same trap one level up, but USE_PREF_SIZE is the right answer HERE: a
+        // VBox re-evaluates the sentinel on every layout pass and computes its
+        // preferred height from its children, whose own minimum heights the
+        // listeners above keep correct for the width they were given.
         box.setMinHeight(Region.USE_PREF_SIZE);
         box.setStyle("-fx-font-size: 11px; -fx-background-color: #fff3cd; -fx-padding: 8; "
                 + "-fx-border-color: #d9a400; -fx-border-width: 1;");
@@ -5529,6 +5702,14 @@ public class ClusteringDialog {
         double[][] lValues = ripley.getLValues();
         List<String> clusterNames = ripley.getClusterNames();
 
+        // Every series in the order it was added, per chart, so the visibility
+        // checkboxes can put one back exactly where it was. JavaFX has no "hide a
+        // series" -- the only way is to take it out of the chart's data and add it
+        // again later, which means the full list has to be held somewhere.
+        List<javafx.scene.chart.XYChart.Series<Number, Number>> kSeries = new ArrayList<>();
+        List<javafx.scene.chart.XYChart.Series<Number, Number>> lSeries = new ArrayList<>();
+        List<String> seriesNames = new ArrayList<>();
+
         boolean showK = !ripley.isKUnavailable();
         if (showK && kValues != null && clusterNames != null) {
             for (int i = 0; i < clusterNames.size() && i < kValues.length; i++) {
@@ -5540,6 +5721,7 @@ public class ClusteringDialog {
                             radii[r], kValues[i][r]));
                 }
                 kChart.getData().add(series);
+                kSeries.add(series);
             }
         }
         if (lValues != null && clusterNames != null) {
@@ -5552,6 +5734,8 @@ public class ClusteringDialog {
                             radii[r], lValues[i][r]));
                 }
                 lChart.getData().add(series);
+                lSeries.add(series);
+                seriesNames.add(series.getName());
             }
         }
 
@@ -5570,6 +5754,7 @@ public class ClusteringDialog {
                         radii[r], poissonK[r]));
             }
             kChart.getData().add(nullSeries);
+            kSeries.add(nullSeries);
             stylePoissonNullSeries(nullSeries);
         }
         if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
@@ -5582,6 +5767,7 @@ public class ClusteringDialog {
                         radii[r], poissonL[r]));
             }
             lChart.getData().add(nullSeries);
+            lSeries.add(nullSeries);
             stylePoissonNullSeries(nullSeries);
         }
 
@@ -5599,12 +5785,27 @@ public class ClusteringDialog {
         applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
         applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
 
+        // Per-cluster visibility. With twenty clusters the chart is a thicket and
+        // the one curve being read is lost in it; hiding the rest also re-scales
+        // the axes onto what is left, which is most of the value.
+        Set<String> hidden = new LinkedHashSet<>();
+        Runnable refreshVisible = () -> {
+            syncChartSeries(kChart, kSeries, hidden);
+            syncChartSeries(lChart, lSeries, hidden);
+            applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
+            applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
+        };
+        Node visibilityControls = buildSeriesVisibilityPane(
+                seriesNames, hexByName, hidden, refreshVisible);
+
         if (!showK) {
             // No K from this squidpy build. Its curves would be zero padding, and a chart
             // of zeros reads exactly like a measured "no clustering at any radius" result,
             // so L is shown alone -- without commentary about a missing statistic, which
             // is not the user's problem to reason about.
-            return lChart;
+            HBox lOnly = new HBox(8, lChart, visibilityControls);
+            HBox.setHgrow(lChart, javafx.scene.layout.Priority.ALWAYS);
+            return lOnly;
         }
 
         // Responsive container -- side-by-side or stacked depending on width.
@@ -5635,7 +5836,103 @@ public class ClusteringDialog {
             }
         });
 
-        return responsive;
+        HBox withControls = new HBox(8, responsive, visibilityControls);
+        HBox.setHgrow(responsive, javafx.scene.layout.Priority.ALWAYS);
+        return withControls;
+    }
+
+    /**
+     * Put exactly the not-hidden series back on a chart, in their original order.
+     * <p>
+     * JavaFX offers no per-series visibility, so hiding one means removing it from
+     * the chart's data and adding it back later. Re-adding re-assigns the default
+     * {@code .default-colorN} style class, so the caller must re-apply the palette
+     * afterwards or the survivors take JavaFX's eight-colour cycle instead.
+     *
+     * @param chart  the chart to update
+     * @param all    every series in the order they were first added
+     * @param hidden names of the series to leave off
+     */
+    private static void syncChartSeries(
+            javafx.scene.chart.LineChart<Number, Number> chart,
+            List<javafx.scene.chart.XYChart.Series<Number, Number>> all,
+            Set<String> hidden) {
+        List<javafx.scene.chart.XYChart.Series<Number, Number>> wanted = new ArrayList<>();
+        for (javafx.scene.chart.XYChart.Series<Number, Number> sr : all) {
+            if (!hidden.contains(sr.getName())) {
+                wanted.add(sr);
+            }
+        }
+        if (!chart.getData().equals(wanted)) {
+            chart.getData().setAll(wanted);
+        }
+    }
+
+    /**
+     * The checkbox column beside the Ripley charts: one tick per cluster, in the
+     * chart's own colour, plus All / None.
+     *
+     * @param names      series names in chart order (clusters only, not the null)
+     * @param hexByName  series name -&gt; CSS colour, for the swatches
+     * @param hidden     the live set of hidden names, mutated in place
+     * @param onChange   run after every change, to re-sync the charts
+     * @return a node to place beside the charts
+     */
+    private static Node buildSeriesVisibilityPane(
+            List<String> names, Map<String, String> hexByName,
+            Set<String> hidden, Runnable onChange) {
+        VBox boxes = new VBox(2);
+        List<CheckBox> checks = new ArrayList<>();
+        for (String name : names) {
+            CheckBox cb = new CheckBox(name);
+            cb.setSelected(true);
+            String hex = hexByName.get(name);
+            if (hex != null && hex.startsWith("#")) {
+                // A swatch in the curve's own colour, so the list reads as the
+                // legend rather than as an unrelated set of names.
+                Region swatch = new Region();
+                swatch.setMinSize(10, 10);
+                swatch.setPrefSize(10, 10);
+                swatch.setMaxSize(10, 10);
+                swatch.setStyle("-fx-background-color: " + hex + ";");
+                cb.setGraphic(swatch);
+            }
+            cb.selectedProperty().addListener((obs, was, now) -> {
+                if (Boolean.TRUE.equals(now)) {
+                    hidden.remove(name);
+                } else {
+                    hidden.add(name);
+                }
+                onChange.run();
+            });
+            checks.add(cb);
+            boxes.getChildren().add(cb);
+        }
+
+        Button all = new Button("All");
+        Button none = new Button("None");
+        all.setStyle("-fx-font-size: 10px;");
+        none.setStyle("-fx-font-size: 10px;");
+        all.setOnAction(e -> checks.forEach(c -> c.setSelected(true)));
+        // Leaves the Poisson null in place: it is the reference the curves are read
+        // against, not one of the things being compared, so "None" clearing it would
+        // make the empty chart unreadable rather than empty.
+        none.setOnAction(e -> checks.forEach(c -> c.setSelected(false)));
+        HBox buttons = new HBox(4, all, none);
+
+        Label head = new Label("Show clusters");
+        head.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+
+        ScrollPane scroll = new ScrollPane(boxes);
+        scroll.setFitToWidth(true);
+        scroll.setPrefViewportHeight(260);
+        scroll.setStyle("-fx-background-color: transparent;");
+
+        VBox pane = new VBox(4, head, buttons, scroll);
+        pane.setMinWidth(150);
+        pane.setPrefWidth(170);
+        pane.setPadding(new Insets(4, 0, 0, 0));
+        return pane;
     }
 
     /**

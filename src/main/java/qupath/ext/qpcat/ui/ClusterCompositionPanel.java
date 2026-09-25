@@ -234,7 +234,8 @@ public class ClusterCompositionPanel extends BorderPane {
             // shared legend above maps each to its cluster + color. A renamed
             // cluster shows its name instead -- "C3" would throw away the very
             // thing the user renamed it for.
-            boolean renamed = !figure.clusterName(c).equals("Cluster " + c);
+            boolean renamed = !figure.clusterName(c)
+                    .equals(figure.defaultClusterName().apply(c));
             TableColumn<String[], String> cc = new TableColumn<>(
                     renamed ? figure.clusterName(c) : "C" + c);
             cc.setPrefWidth(renamed ? 110 : 48);
@@ -354,7 +355,7 @@ public class ClusterCompositionPanel extends BorderPane {
         String base = "composition_by_" + figure.getDimension().toLowerCase();
         // Cluster colors come from the live "Cluster N" (or renamed) classes, so
         // an edit in the Results window is already reflected in every file here.
-        java.util.function.IntUnaryOperator colors = CompositionFigure::defaultColorRgb;
+        java.util.function.IntUnaryOperator colors = figure::defaultColorRgb;
         try {
             Path root = dir.toPath();
             ImageIO.write(figure.render(2.0, colors), "PNG",

@@ -182,8 +182,28 @@ public class ClusteringResult {
         // as a clusterStats row. Both must read as noise, or the heatmap shows a
         // cluster that does not exist anywhere else in the UI.
         if (label < 0 || (noiseRowIndex >= 0 && label == noiseRowIndex)) return NOISE_NAME;
-        return "Cluster " + label;
+        return ClusterNaming.defaultName(label, clusterNameDigits());
     }
+
+    /**
+     * How many digits this run's default cluster names pad their number to, so
+     * that "Cluster 2" sorts before "Cluster 10" wherever names are sorted as
+     * text. Derived from the highest label present, cached because every panel
+     * asks for it once per cluster.
+     *
+     * @return 1 for runs with fewer than eleven clusters, 2 or 3 above that
+     */
+    public int clusterNameDigits() {
+        if (clusterNameDigits == 0) {
+            clusterNameDigits = clusterLabels != null
+                    ? ClusterNaming.digitsForLabels(clusterLabels)
+                    : ClusterNaming.digitsForClusterCount(nClusters);
+        }
+        return clusterNameDigits;
+    }
+
+    /** Lazily computed by {@link #clusterNameDigits()}; 0 means "not yet". */
+    private transient int clusterNameDigits;
 
     /**
      * {@link #clusterName(int)} as a function, for panels that take a name

@@ -2,6 +2,7 @@ package qupath.ext.qpcat.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 
@@ -21,8 +22,6 @@ public class ResultApplier {
 
     private static final Logger logger = LoggerFactory.getLogger(ResultApplier.class);
 
-    /** Prefix for cluster classification names. */
-    private static final String CLUSTER_PREFIX = "Cluster ";
 
     /** Measurement name for the cellular-neighborhood id. */
     public static final String NEIGHBORHOOD_MEASUREMENT = "QPCAT CN";
@@ -71,27 +70,30 @@ public class ResultApplier {
      * @param detections ordered list of detections (same order as labels)
      * @param labels     cluster label for each detection
      */
-    public void applyClusterLabels(List<PathObject> detections, int[] labels) {
-        applyClusterLabels(detections, labels, null);
+    public void applyClusterLabels(List<PathObject> detections, int[] labels, int digits) {
+        applyClusterLabels(detections, labels, null, digits);
     }
 
     /**
-     * As {@link #applyClusterLabels(List, int[])} but namespaces the class names by
+     * As {@link #applyClusterLabels(List, int[], int)} but namespaces the class names by
      * {@code namespace} (e.g. a saved-result name) so labels from different results
      * can coexist on the same detections without colliding on a shared "Cluster N".
      * When {@code namespace} is null/blank the classes are the bare "Cluster N".
      *
      * @param namespace class-name namespace, or null for bare "Cluster N"
+     * @param digits    zero-pad width for the cluster number
      */
-    public void applyClusterLabels(List<PathObject> detections, int[] labels, String namespace) {
-        applyClusterLabelsNamed(detections, labels, label -> clusterClassName(namespace, label));
+    public void applyClusterLabels(List<PathObject> detections, int[] labels, String namespace,
+                                   int digits) {
+        applyClusterLabelsNamed(detections, labels,
+                label -> clusterClassName(namespace, label, digits));
         logger.info("Applied cluster labels to {} detections{}", labels.length,
                 (namespace != null && !namespace.isBlank()) ? " (namespace '" + namespace + "')" : "");
     }
 
     /**
      * Applies cluster labels to detections, deriving each non-noise label's
-     * class name from {@code namer}. Generalizes {@link #applyClusterLabels(List, int[], String)}
+     * class name from {@code namer}. Generalizes {@link #applyClusterLabels(List, int[], String, int)}
      * (whose namer is "Cluster N"/"ns: Cluster N") to arbitrary per-label names --
      * used by "Manage Clusters" to rename ("Cluster 3" -&gt; "Tumor") or merge (two
      * labels -&gt; one name) across a saved result's scope. Noise (label &lt; 0) becomes
@@ -221,13 +223,18 @@ public class ResultApplier {
      * "Cluster N" when the namespace is null/blank; otherwise "&lt;namespace&gt;: Cluster N"
      * (a QuPath derived class). The namespace is stripped of the ": " delimiter so
      * it round-trips through {@link PathClass#fromString(String)}.
+     *
+     * @param namespace class-name namespace, or null for a bare name
+     * @param label     the cluster label
+     * @param digits    zero-pad width, from {@link ClusterNaming}; a run's own
+     *                  width, because this name is what the cells carry
      */
-    public static String clusterClassName(String namespace, int label) {
-        return clusterClassName(namespace, CLUSTER_PREFIX + label);
+    public static String clusterClassName(String namespace, int label, int digits) {
+        return clusterClassName(namespace, ClusterNaming.defaultName(label, digits));
     }
 
     /**
-     * As {@link #clusterClassName(String, int)} but for a cluster's DISPLAY name
+     * As {@link #clusterClassName(String, int, int)} but for a cluster's DISPLAY name
      * rather than its raw label -- so re-applying a result that was renamed gives
      * "&lt;namespace&gt;: Tumor", matching the palette that was saved alongside it
      * (which is keyed by the same display name).

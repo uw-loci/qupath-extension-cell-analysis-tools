@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.service;
 
 import qupath.lib.common.ColorTools;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.objects.classes.PathClass;
 
 import java.awt.BasicStroke;
@@ -44,11 +45,14 @@ public final class CompositionFigure {
     /** Bucket label for cells with no group (outside any annotation, unknown image). */
     public static final String NONE_LABEL = "(none)";
 
-    /** The label a cluster carries when the result was never renamed. */
-    public static final IntFunction<String> DEFAULT_CLUSTER_NAME = c -> "Cluster " + c;
-
     private final String dimension;
     private final int nClusters;
+    /**
+     * Zero-pad width of the default cluster names, from the labels this figure was
+     * tallied over. It is also the width of the PathClass whose colour
+     * {@link #defaultColorRgb(int)} reads, so an exported figure and the viewer agree.
+     */
+    private final int clusterDigits;
     private final List<String> groups = new ArrayList<>();
     private final Map<String, long[]> counts = new LinkedHashMap<>();
     private final long[] clusterTotals;
@@ -57,12 +61,19 @@ public final class CompositionFigure {
     // Cluster label -> display name. Defaults to "Cluster N"; a result that was
     // renamed or merged supplies its own, so an exported figure carries the same
     // names as the screen instead of reverting to the raw label.
-    private IntFunction<String> clusterNames = DEFAULT_CLUSTER_NAME;
+    private IntFunction<String> clusterNames;
 
-    private CompositionFigure(String dimension, int nClusters) {
+    private CompositionFigure(String dimension, int nClusters, int clusterDigits) {
         this.dimension = (dimension == null || dimension.isBlank()) ? "Group" : dimension;
         this.nClusters = Math.max(nClusters, 0);
+        this.clusterDigits = Math.max(1, clusterDigits);
         this.clusterTotals = new long[this.nClusters];
+        this.clusterNames = defaultClusterName();
+    }
+
+    /** The label a cluster carries when the result was never renamed. */
+    public IntFunction<String> defaultClusterName() {
+        return c -> ClusterNaming.defaultName(c, clusterDigits);
     }
 
     /**
@@ -76,7 +87,8 @@ public final class CompositionFigure {
      */
     public static CompositionFigure tally(int[] clusterLabels, int nClusters,
                                           String[] cellGroups, String dimension) {
-        CompositionFigure f = new CompositionFigure(dimension, nClusters);
+        CompositionFigure f = new CompositionFigure(dimension, nClusters,
+                ClusterNaming.digitsForLabels(clusterLabels));
         int n = clusterLabels == null ? 0 : clusterLabels.length;
         for (int i = 0; i < n; i++) {
             int c = clusterLabels[i];
@@ -103,14 +115,15 @@ public final class CompositionFigure {
      * so it chains onto {@link #tally}.
      */
     public CompositionFigure withClusterNames(IntFunction<String> names) {
-        this.clusterNames = names != null ? names : DEFAULT_CLUSTER_NAME;
+        this.clusterNames = names != null ? names : defaultClusterName();
         return this;
     }
 
     /** Display name for one cluster; never null. */
     public String clusterName(int cluster) {
         String n = clusterNames.apply(cluster);
-        return (n == null || n.isBlank()) ? "Cluster " + cluster : n;
+        return (n == null || n.isBlank())
+                ? ClusterNaming.defaultName(cluster, clusterDigits) : n;
     }
 
     // ---- Model ----
@@ -207,13 +220,13 @@ public final class CompositionFigure {
      * @param scale multiplier for the logical layout (use {@link #scaleForDpi}).
      *              Values above 1 give a larger, print-resolution raster with
      *              proportionally scaled text -- not an upsampled one.
-     * @param colorFn cluster id -> packed 0xRRGGBB; null uses {@link #defaultColorRgb}
+     * @param colorFn cluster id -> packed 0xRRGGBB; null uses {@link #defaultColorRgb(int)}
      * @return an opaque RGB image, never null (an empty tally renders a stub
      *         saying so rather than a zero-sized image)
      */
     public BufferedImage render(double scale, IntUnaryOperator colorFn) {
         double s = Math.max(0.5, Math.min(scale, 6.0));
-        IntUnaryOperator colors = colorFn != null ? colorFn : CompositionFigure::defaultColorRgb;
+        IntUnaryOperator colors = colorFn != null ? colorFn : this::defaultColorRgb;
 
         int cols = Math.max(1, Math.min(PIES_PER_ROW, groups.size()));
         int rows = groups.isEmpty() ? 0 : (groups.size() + cols - 1) / cols;
@@ -273,7 +286,7 @@ public final class CompositionFigure {
      */
     public BufferedImage renderSingle(String group, double scale, IntUnaryOperator colorFn) {
         double sc = Math.max(0.5, Math.min(scale, 6.0));
-        IntUnaryOperator colors = colorFn != null ? colorFn : CompositionFigure::defaultColorRgb;
+        IntUnaryOperator colors = colorFn != null ? colorFn : this::defaultColorRgb;
         int w = PIE_SIZE + MARGIN * 2;
         int h = PIE_SIZE + CAPTION_H + MARGIN * 2;
         BufferedImage img = newCanvas(w, h, sc);
@@ -295,7 +308,7 @@ public final class CompositionFigure {
      */
     public BufferedImage renderLegend(double scale, IntUnaryOperator colorFn) {
         double sc = Math.max(0.5, Math.min(scale, 6.0));
-        IntUnaryOperator colors = colorFn != null ? colorFn : CompositionFigure::defaultColorRgb;
+        IntUnaryOperator colors = colorFn != null ? colorFn : this::defaultColorRgb;
 
         // Measure first: the widest name decides the width.
         BufferedImage probeImg = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
@@ -464,9 +477,10 @@ public final class CompositionFigure {
      * color (the single source of truth, so an edit in the Results window shows
      * up in the exported figure), falling back to the default palette.
      */
-    public static int defaultColorRgb(int cluster) {
+    public int defaultColorRgb(int cluster) {
         try {
-            Integer rgb = PathClass.fromString("Cluster " + cluster).getColor();
+            Integer rgb = PathClass.fromString(
+                    ClusterNaming.defaultName(cluster, clusterDigits)).getColor();
             if (rgb != null) return rgb;
         } catch (Exception e) {
             // No PathClass registry available (unit tests / headless) -- palette.

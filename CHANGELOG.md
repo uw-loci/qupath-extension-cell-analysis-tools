@@ -4,6 +4,60 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.13.0] -- 2026-09-25 -- Clustering on an embedding, and reading the result
+
+### Added
+
+- **HDBSCAN cluster selection: "Excess of mass" or "Leaf".** Excess of mass is
+  scikit-learn's default and prefers large, persistent clusters, so where the lobes of a
+  space differ in density it returns their common parent. On a 3D UMAP of 107,282 cells
+  with plainly separated lobes it gave 4 clusters, one holding **97.0%** of them, and
+  only 0.9% noise. "Leaf" reads the leaves of the density tree instead -- scikit-learn's
+  own wording is "the most fine grained and homogeneous clusters" -- and is the setting
+  to use when you can see groups in an embedding and excess of mass returns one.
+- **HDBSCAN `min_samples` is exposed, and defaults to auto.** scikit-learn's own default
+  is `min_samples = min_cluster_size`; QP-CAT forced 5 regardless, so a run asking for
+  clusters of 500 still estimated density over 5 neighbours. `0` now means auto.
+- **Per-cluster visibility on the Ripley charts**, with All / None. Twenty curves on one
+  axis is a thicket; hiding the rest also re-scales the axes onto what is left.
+- **Cluster names are zero-padded past nine clusters** -- `Cluster 00` .. `Cluster 20`,
+  and `Cluster 000` past ninety-nine. Names sort as text everywhere they are shown, so a
+  21-cluster run listed itself as 0, 1, 10, 11 ... 19, 2, 20, 3 and put cluster 2 near
+  the end of its own legend. Ten or fewer clusters are unchanged, because they already
+  sort correctly.
+- **The pre-flight says when you are clustering on a previous run's embedding**, and what
+  that costs: the heatmap and marker rankings then describe the embedding axes rather
+  than your markers. With HDBSCAN it names the cluster-selection setting, and it says to
+  turn normalization off -- z-scoring each axis separately stretches the embedding that
+  the density estimate is measured in.
+
+### Fixed
+
+- **Batch correction (Harmony) is available under "Specific images..."**. The control was
+  gated on the "All project images" radio rather than on how many images were in scope, so
+  choosing six images by hand -- the scope you pick when you want to correct between chosen
+  images -- grayed it out.
+- **Choosing a subset of images now counts as a scope change.** The measurement list and
+  the area preview followed the radio buttons only, so picking six images left the
+  measurements listed for whatever image happened to be open.
+- **The pre-flight no longer reads whole measurement names as compartments.** A name with
+  no colon has no compartment, so selecting three embedding columns reported "3 features =
+  0 markers x 3 compartments (UMAP_Demo1, UMAP_Demo2, UMAP_Demo3)".
+- **The quality banner shows its full text.** A wrapped label asked for its preferred
+  height at an unknown width answers with one line, so `USE_PREF_SIZE` -- the previous fix
+  -- could not work and the second warning still ended in an ellipsis.
+- **HDBSCAN's post-run advice distinguishes the two failures.** Low noise beside one
+  dominant cluster means no split was found at all, not that sparse fringes were written
+  off, and the standing advice described only the second.
+- **`min_cluster_size` is no longer capped at 500**, which on a 107,282-cell run was 0.47%
+  of the cohort and already at the spinner's maximum.
+
+### Changed
+
+- The saved colour map and the classes on the cells are keyed by the padded name. A result
+  saved before 0.13.0 whose colours were customised will fall back to the standard palette
+  when re-applied; re-set those colours once and they persist again.
+
 ## [0.12.3] -- 2026-09-24 -- Run Clustering remembers what you ran
 
 ### Added

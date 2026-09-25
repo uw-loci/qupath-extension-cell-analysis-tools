@@ -105,3 +105,35 @@ def test_without_marker_names_it_gives_no_direction():
     text = " ".join(_warn(labels, "kmeans"))
     assert "Review the measurement selection" in text
     assert "adding more" not in text
+
+
+def test_low_noise_one_big_cluster_names_the_selection_method():
+    """The 2026-09-25 run: HDBSCAN on a 3D UMAP of 107,282 cells.
+
+    4 clusters, one holding 97.0%, and only 0.9% noise. The standing HDBSCAN
+    advice ("it writes off each population's sparse fringe as noise") describes
+    the opposite situation and sent the user looking at their data instead of at
+    excess-of-mass selection, which is what actually returned one cluster.
+    """
+    labels = np.concatenate(
+        [
+            np.zeros(103151, dtype=int),
+            np.full(2000, 1),
+            np.full(1000, 2),
+            np.full(193, 3),
+            -np.ones(938, dtype=int),
+        ]
+    )
+    text = " ".join(_warn(labels, "hdbscan"))
+    assert "holds 97.0% of the clustered cells" in text
+    assert "found no split at all" in text
+    assert "'Leaf'" in text
+    assert "Normalization to None" in text
+
+
+def test_heavy_noise_does_not_get_the_selection_method_advice():
+    """The sparse-fringe case, where the existing advice IS the right one."""
+    labels = np.concatenate([np.zeros(700, dtype=int), -np.ones(300, dtype=int)])
+    text = " ".join(_warn(labels, "hdbscan"))
+    assert "GAP IN DENSITY" in text
+    assert "found no split at all" not in text

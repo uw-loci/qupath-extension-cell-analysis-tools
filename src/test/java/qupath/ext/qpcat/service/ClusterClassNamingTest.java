@@ -16,14 +16,14 @@ class ClusterClassNamingTest {
 
     @Test
     void bareLabelNamingIsUnchanged() {
-        assertThat(ResultApplier.clusterClassName(null, 3)).isEqualTo("Cluster 3");
-        assertThat(ResultApplier.clusterClassName("", 3)).isEqualTo("Cluster 3");
-        assertThat(ResultApplier.clusterClassName("   ", 3)).isEqualTo("Cluster 3");
+        assertThat(ResultApplier.clusterClassName(null, 3, 1)).isEqualTo("Cluster 3");
+        assertThat(ResultApplier.clusterClassName("", 3, 1)).isEqualTo("Cluster 3");
+        assertThat(ResultApplier.clusterClassName("   ", 3, 1)).isEqualTo("Cluster 3");
     }
 
     @Test
     void namespacedLabelNamingIsUnchanged() {
-        assertThat(ResultApplier.clusterClassName("run1", 3)).isEqualTo("run1: Cluster 3");
+        assertThat(ResultApplier.clusterClassName("run1", 3, 1)).isEqualTo("run1: Cluster 3");
     }
 
     @Test

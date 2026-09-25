@@ -22,13 +22,31 @@ plots), so to cluster *on the embedding* you run it in two steps.
    - In the measurement picker, select **only `QPCAT UMAP1` and `QPCAT UMAP2`** (use the
      filter box to find them, Select none, then check just those two).
    - **Algorithm: HDBSCAN.**
+   - **Cluster selection: Leaf.** This is the step that decides whether the recipe
+     works at all -- see the note below.
    - **Normalization: None** (the coordinates are already on a comparable scale;
-     normalizing them again distorts the layout).
+     z-scoring each axis separately stretches the embedding along one axis and
+     squashes it along another, and the geometry is the only thing an embedding
+     carries).
    - Run. The cluster step now fits on the UMAP coordinates rather than the
      markers.
 
 **Notes.**
 
+- **Set Cluster selection to "Leaf", or expect one cluster.** The default,
+  "Excess of mass", is scikit-learn's and keeps the most *persistent* clusters,
+  which favours large ones: where the lobes of an embedding differ in density it
+  returns their common parent instead of the lobes. Measured on a 3D UMAP of
+  107,282 cells with plainly separated lobes, excess of mass returned 4 clusters
+  with one holding **97.0%** of the cells and only 0.9% noise. **The low noise
+  fraction is the tell**: it means no boundary was cut anywhere, not that the
+  populations blur into each other. "Leaf" takes the leaves of the density tree
+  instead -- scikit-learn calls them "the most fine grained and homogeneous
+  clusters".
+- **Leave `min_samples` on auto (0)** unless you have a reason not to. Auto follows
+  scikit-learn and uses `min_cluster_size`. A small `min_samples` beside a large
+  `min_cluster_size` estimates density over a handful of points while demanding
+  clusters of hundreds, which is the other way to get one giant cluster.
 - **HDBSCAN is the DBSCAN to use here.** QP-CAT ships **HDBSCAN** (not plain
   DBSCAN); it is the strict upgrade -- no global `eps` to guess, it handles
   variable density, and it labels low-density points as a noise cluster (shown as

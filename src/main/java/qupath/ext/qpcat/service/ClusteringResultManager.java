@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.lib.common.GeneralTools;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 
@@ -269,9 +270,13 @@ public class ClusteringResultManager {
         if (labels == null) return null;
         Map<String, Integer> colors = new LinkedHashMap<>();
         Set<Integer> seen = new HashSet<>();
+        // Keyed by the class name the cells actually carry, padding included --
+        // applyClusterColors looks each key up with PathClass.fromString, so an
+        // unpadded key would colour a class nothing is classified as.
+        int digits = ClusterNaming.digitsForLabels(labels);
         for (int lab : labels) {
             if (lab < 0 || !seen.add(lab)) continue;
-            String name = "Cluster " + lab;
+            String name = ClusterNaming.defaultName(lab, digits);
             Integer rgb = PathClass.fromString(name).getColor();
             if (rgb != null) colors.put(name, rgb);
         }

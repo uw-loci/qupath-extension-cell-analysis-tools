@@ -952,11 +952,55 @@ elif algorithm == "hdbscan":
     from sklearn.cluster import HDBSCAN
 
     min_cluster_size = algorithm_params.get("min_cluster_size", 15)
+
+    # min_samples 0 means "follow sklearn": its own default is min_samples =
+    # min_cluster_size. A small FIXED min_samples alongside a large
+    # min_cluster_size estimates density over a handful of neighbours while
+    # demanding clusters of hundreds, which leaves the condensed tree shallow
+    # and hands excess-of-mass selection the giant parent. Measured on a 3D
+    # UMAP of 107,282 cells with obvious separated lobes: min_cluster_size=500
+    # with min_samples=5 returned 4 clusters, one holding 97.0% of the cells,
+    # and only 0.9% noise -- the low noise fraction is the tell that no split
+    # was ever found, not that the data lacked structure.
     min_samples = algorithm_params.get("min_samples", pref_hdbscan_min_samples)
+    try:
+        min_samples = int(min_samples)
+    except (TypeError, ValueError):
+        min_samples = 0
+    if min_samples <= 0:
+        min_samples = min_cluster_size
+
+    # How clusters are read off the condensed tree. "eom" (excess of mass, the
+    # sklearn default) favours the largest persistent cluster and under-segments
+    # a space whose lobes differ in density; "leaf" takes the leaves instead --
+    # sklearn's own wording is "the most fine grained and homogeneous clusters".
+    # On embedding coordinates, where the lobes ARE the answer, leaf is usually
+    # what the user means.
+    selection = str(algorithm_params.get("cluster_selection_method", "eom")).lower()
+    if selection not in ("eom", "leaf"):
+        logger.warning("Unknown cluster_selection_method %r; using 'eom'", selection)
+        selection = "eom"
+
+    try:
+        selection_epsilon = float(
+            algorithm_params.get("cluster_selection_epsilon", 0.0) or 0.0
+        )
+    except (TypeError, ValueError):
+        selection_epsilon = 0.0
+
     logger.info(
-        "HDBSCAN: min_cluster_size=%d, min_samples=%d", min_cluster_size, min_samples
+        "HDBSCAN: min_cluster_size=%d, min_samples=%d, selection=%s, epsilon=%g",
+        min_cluster_size,
+        min_samples,
+        selection,
+        selection_epsilon,
     )
-    hdb = HDBSCAN(min_cluster_size=min_cluster_size, min_samples=min_samples)
+    hdb = HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        cluster_selection_method=selection,
+        cluster_selection_epsilon=selection_epsilon,
+    )
     labels = hdb.fit_predict(cluster_matrix)
 
 elif algorithm == "agglomerative":
@@ -1352,6 +1396,24 @@ def cluster_quality_warnings(labels, algorithm, marker_names=None):
             "worse, not better. A tell-tale sign is noise spread evenly across "
             "the whole cohort rather than concentrated in one region."
         )
+        # Distinguish "no density gap exists" from "the gap exists and selection
+        # did not take it". LOW noise beside one dominant cluster is the second:
+        # HDBSCAN found no boundary worth cutting anywhere, rather than cutting
+        # and discarding fringes. The advice above is wrong for that case, so it
+        # gets its own line naming the knob that changes it.
+        if noise_frac < 0.05:
+            out.append(
+                "Only %.1f%% of cells were called noise, so this is NOT the "
+                "sparse-fringe case above -- HDBSCAN found no split at all. That "
+                "is usually the cluster selection method rather than the data: "
+                "'Excess of mass' keeps the largest persistent cluster and "
+                "under-segments a space whose lobes differ in density. Re-run "
+                "with Cluster selection set to 'Leaf', which takes the finest "
+                "clusters in the tree instead. If the input is embedding "
+                "coordinates (UMAP / t-SNE), also set Normalization to None: "
+                "z-scoring each axis separately rescales the embedding that the "
+                "density estimate is measured in." % (noise_frac * 100.0)
+            )
     else:
         # Pointed the same way as the PRE-run caution. The dialog warns before a run
         # when one marker is selected in several compartments, because those columns

@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import javafx.application.Platform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -164,7 +165,7 @@ public final class SavedResultApplier {
 
         applyCore(project, saved, targetIds, openImageId(qupath), qupath.getImageData(),
                 null, null,
-                label -> nameForLabel(nameByLabel, label),
+                label -> nameForLabel(nameByLabel, label, saved.clusterNameDigits()),
                 "rename/merge clusters", report);
 
         // Preserve each cluster's color under its (possibly new/merged) name.
@@ -181,11 +182,12 @@ public final class SavedResultApplier {
      *
      * @param nameByLabel custom names by label; may be null or partial
      * @param label       cluster label
+     * @param digits      zero-pad width for the default name, from the result
      * @return the custom name when there is a non-blank one, else "Cluster N"
      */
-    public static String nameForLabel(Map<Integer, String> nameByLabel, int label) {
+    public static String nameForLabel(Map<Integer, String> nameByLabel, int label, int digits) {
         String n = nameByLabel != null ? nameByLabel.get(label) : null;
-        return (n != null && !n.isBlank()) ? n : "Cluster " + label;
+        return (n != null && !n.isBlank()) ? n : ClusterNaming.defaultName(label, digits);
     }
 
     /**
@@ -202,10 +204,11 @@ public final class SavedResultApplier {
         if (labels == null) return out;
         Map<String, Integer> src = saved.getClusterColors();  // keyed "Cluster L"
         Set<Integer> seen = new java.util.HashSet<>();
+        int digits = saved.clusterNameDigits();
         for (int lab : labels) {
             if (lab < 0 || !seen.add(lab)) continue;
-            String name = nameForLabel(nameByLabel, lab);
-            Integer rgb = src != null ? src.get("Cluster " + lab) : null;
+            String name = nameForLabel(nameByLabel, lab, digits);
+            Integer rgb = src != null ? src.get(ClusterNaming.defaultName(lab, digits)) : null;
             if (rgb == null) rgb = ClusterPalette.rgbFor(lab);
             out.putIfAbsent(name, rgb);
         }

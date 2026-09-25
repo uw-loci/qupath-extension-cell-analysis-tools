@@ -9,6 +9,7 @@ import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.lib.common.GeneralTools;
 
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 
 import java.io.IOException;
@@ -140,7 +141,7 @@ public final class ClusteringRunRecord {
         boolean any = false;
         for (int lab : labels) {
             String before = beforeNames != null ? beforeNames.get(lab) : null;
-            if (before == null) before = "Cluster " + lab;
+            if (before == null) before = ClusterNaming.defaultName(lab, copy.clusterNameDigits());
             String after = copy.displayNameForLabel(lab);
             if (Objects.equals(before, after)) continue;
             any = true;
@@ -167,7 +168,8 @@ public final class ClusteringRunRecord {
                 sb.append("  ").append(quote(e.getKey())).append("  =  ");
                 for (int i = 0; i < e.getValue().size(); i++) {
                     if (i > 0) sb.append(", ");
-                    sb.append("Cluster ").append(e.getValue().get(i));
+                    sb.append(ClusterNaming.defaultName(
+                            e.getValue().get(i), copy.clusterNameDigits()));
                 }
                 sb.append('\n');
             }

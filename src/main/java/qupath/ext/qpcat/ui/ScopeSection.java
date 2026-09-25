@@ -44,6 +44,15 @@ public final class ScopeSection extends VBox {
     private boolean allImagesUnavailable;
     private boolean specificImagesUnavailable;
     private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
+    /**
+     * Scope-change listeners, held so the subset picker can fire them too.
+     * <p>
+     * Binding them to the radio buttons alone made "Specific images..." a scope
+     * change that never announced itself: picking six images fired nothing, so
+     * the measurement list stayed on whatever image was open and the Harmony
+     * gate never saw that there were six batches to correct over.
+     */
+    private final List<Runnable> scopeListeners = new ArrayList<>();
 
     /**
      * @param qupath      the QuPath GUI instance
@@ -166,6 +175,11 @@ public final class ScopeSection extends VBox {
                 int n = selectedSubset.size();
                 specificImagesLabel.setText(n == 0 ? "(none chosen)"
                         : n + " image" + (n == 1 ? "" : "s") + " chosen");
+                // A different subset IS a different scope: different images,
+                // different measurements, a different number of batches.
+                for (Runnable r : scopeListeners) {
+                    r.run();
+                }
             });
     }
 
@@ -243,11 +257,32 @@ public final class ScopeSection extends VBox {
         return scopeSpecificImages.isSelected() && selectedSubset.isEmpty();
     }
 
-    /** Add a listener fired whenever the chosen scope changes. */
+    /**
+     * Add a listener fired whenever the chosen scope changes -- including when the
+     * "Specific images..." subset itself changes, which is a scope change even
+     * though no radio button moved.
+     */
     public void addScopeChangeListener(Runnable r) {
+        scopeListeners.add(r);
         scopeCurrentImage.selectedProperty().addListener((o, a, b) -> r.run());
         scopeAllImages.selectedProperty().addListener((o, a, b) -> r.run());
         scopeSpecificImages.selectedProperty().addListener((o, a, b) -> r.run());
+    }
+
+    /**
+     * How many images the chosen scope covers, for callers that need to know
+     * whether there is more than one -- Harmony has nothing to correct over with
+     * one batch, whichever scope produced it.
+     * <p>
+     * Counts the actual subset for "Specific images...", so six chosen images
+     * read as six. Returns 0 when "Specific images..." is chosen with nothing
+     * picked yet, and 1 for the current-image scope.
+     *
+     * @return the number of images in scope
+     */
+    public int scopeImageCount() {
+        List<ProjectImageEntry<BufferedImage>> entries = resolveEntries();
+        return entries == null ? 1 : entries.size();
     }
 
     /**
