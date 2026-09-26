@@ -42,6 +42,19 @@ plots), so to cluster *on the embedding* you run it in two steps.
    - Run. The cluster step now fits on the UMAP coordinates rather than the
      markers.
 
+**Then find out what the clusters ARE.** This is the step the recipe is incomplete without.
+Clustering on three embedding columns means Marker Rankings, the heatmap and the fingerprints
+can only rank those three columns -- they will tell you a cluster is high in `UMAP2`, which is
+not a phenotype. The markers are still on the cells; nothing has read them yet.
+
+**Extensions > QP-CAT > Results & populations > Analyze current cell classifications...**
+does that read. It takes the classes the cells now carry -- the clusters you just applied --
+and computes the full marker surface over them: heatmap, marker rankings, fingerprints,
+composition. In its **Measurements** list pick your **markers** this time, not the embedding
+columns. It writes nothing back; no classification is added, changed or removed.
+
+So the pair is: cluster in the embedding, characterise in marker space.
+
 **Notes.**
 
 - **Set Cluster selection to "Leaf", or expect one cluster.** The default,
