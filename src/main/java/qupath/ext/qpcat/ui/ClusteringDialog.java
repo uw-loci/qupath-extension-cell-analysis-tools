@@ -380,7 +380,7 @@ public class ClusteringDialog {
                 new Separator(),
                 createEmbeddingSection(),
                 new Separator(),
-                analyzeExisting ? createClassificationsSection() : createAlgorithmSection(),
+                algorithmSectionNode(analyzeExisting),
                 new Separator(),
                 createAnalysisSection(),
                 new Separator(),
@@ -2213,6 +2213,26 @@ public class ClusteringDialog {
         }
     }
 
+    /**
+     * The node for the algorithm slot, ALWAYS building the Algorithm section for
+     * its side effects even when the Classifications list is what gets shown.
+     * <p>
+     * Building it on only one branch left {@code algorithmCombo} and every
+     * algorithm spinner null in {@link RunMode#ANALYZE_EXISTING}, while five call
+     * sites dereferenced them: opening the dialog, pressing Analyze, refreshing
+     * the run-cost line, loading a saved configuration, and showing the results.
+     * The dialog crashed before it could open. Constructing a handful of controls
+     * that are never added to the scene costs less than keeping five null guards
+     * correct for the life of the file.
+     *
+     * @param analyzeExisting true to show the Classifications list instead
+     * @return the node to place in the layout
+     */
+    private Node algorithmSectionNode(boolean analyzeExisting) {
+        Node algorithm = createAlgorithmSection();
+        return analyzeExisting ? createClassificationsSection() : algorithm;
+    }
+
     private void updateAlgorithmParams() {
         algorithmParamsBox.getChildren().clear();
         Algorithm algo = algorithmCombo.getValue();
@@ -2575,8 +2595,13 @@ public class ClusteringDialog {
         }
         config.setEmbeddingParams(embeddingParams);
 
-        // Algorithm
-        Algorithm algo = algorithmCombo.getValue();
+        // Algorithm. In ANALYZE_EXISTING the labels come from the cells, so the
+        // mode IS the algorithm and the (built but unshown) combo must not be
+        // read -- it still holds its default. The parameter switch below has no
+        // case for EXISTING, exactly as it has none for NONE.
+        Algorithm algo = mode == RunMode.ANALYZE_EXISTING
+                ? Algorithm.EXISTING
+                : algorithmCombo.getValue();
         config.setAlgorithm(algo);
         Map<String, Object> algorithmParams = new HashMap<>();
         // The single GUI "Random seed" drives clustering as well as the embedding,
@@ -2878,7 +2903,6 @@ public class ClusteringDialog {
         }
         embeddingModeCombo.setValue(embeddingModeLabel(config.getEmbeddingExecutionMode()));
 
-        // Algorithm params
         Map<String, Object> algoParams = config.getAlgorithmParams();
         if (algoParams != null) {
             if (algoParams.containsKey("n_neighbors")) {

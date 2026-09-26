@@ -4,6 +4,21 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.4] -- 2026-09-26 -- "Analyze current cell classifications" opens
+
+### Fixed
+
+- **"Analyze current cell classifications..." crashed instead of opening**, with
+  `NullPointerException: ... because "this.algorithmCombo" is null`. That mode swaps the
+  Algorithm section for a Classifications list, and the section was only BUILT on the other
+  branch -- so `algorithmCombo` and every algorithm spinner stayed null while five call sites
+  dereferenced them: opening the dialog, pressing Analyze, refreshing the run-cost line,
+  loading a saved configuration, and showing the results. It failed on the first.
+
+  The Algorithm section is now always built and only conditionally shown, so none of those
+  fields can be null and the other four crashes go with the first. In this mode the algorithm
+  comes from the mode itself rather than from the (unshown) combo.
+
 ## [0.14.3] -- 2026-09-26 -- A Ripley chart you can read
 
 ### Changed
