@@ -1,5 +1,14 @@
 package qupath.ext.qpcat.ui;
 
+import javafx.scene.Node;
+import javafx.scene.layout.FlowPane;
+import javafx.stage.Window;
+import javafx.stage.Stage;
+import javafx.stage.Modality;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Pane;
+import javafx.scene.Scene;
+import javafx.geometry.Insets;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
@@ -58,11 +67,21 @@ public class MeasurementSelectionPane extends VBox {
      */
     private int bulkDepth;
 
+    private Button popOutButton;
+    private Stage popOutStage;
+
     public MeasurementSelectionPane() {
         super(5);
 
         list.setItems(filtered);
+        // prefHeight alone pinned the list to about six rows however tall the
+        // section grew, because nothing told the VBox this was the child that
+        // should absorb the extra space. Pref stays as the collapsed size; Vgrow
+        // plus an unbounded max let it fill a taller pane -- and the pop-out
+        // window, where it gets the whole stage.
         list.setPrefHeight(150);
+        list.setMaxHeight(Double.MAX_VALUE);
+        VBox.setVgrow(list, Priority.ALWAYS);
         list.setCellFactory(CheckBoxListCell.forListView(
                 Item::selectedProperty,
                 new StringConverter<Item>() {
@@ -114,10 +133,96 @@ public class MeasurementSelectionPane extends VBox {
         Label scopeHint = new Label("Applies to visible selection, after filtering");
         scopeHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
 
-        HBox buttons = new HBox(
-                5, selectAll, selectNone, selectMean, selectMedian, deselectQpcat, scopeHint);
+        popOutButton = new Button("Expand...");
+        popOutButton.setOnAction(e -> popOut());
+        popOutButton.setTooltip(Tooltips.of(
+                "Open this list in a resizable window.\n\n"
+                + "It is the SAME list, moved -- not a copy -- so the filter, every\n"
+                + "button and every check you make there are already applied when\n"
+                + "you close it."));
+
+        // Expand sits beside the filter, at the top: that is where someone who has
+        // run out of visible rows is already looking, and the button row below is
+        // full.
+        HBox.setHgrow(filterField, Priority.ALWAYS);
+        HBox topRow = new HBox(5, filterField, popOutButton);
+        topRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
+        // FlowPane, not HBox: six controls plus a sentence of hint text do not fit
+        // one line in a 550px dialog, and an HBox squeezes them until the labels
+        // ellipsize instead of wrapping to a second line.
+        FlowPane buttons = new FlowPane(
+                5, 4, selectAll, selectNone, selectMean, selectMedian, deselectQpcat, scopeHint);
         buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        getChildren().addAll(filterField, list, buttons);
+        getChildren().addAll(topRow, list, buttons);
+    }
+
+    /**
+     * Show this pane in a resizable modal window, and put it back when that closes.
+     * <p>
+     * The pane is MOVED, not copied. A second list would need every check, the
+     * filter text and the bulk-operation state mirrored back, and any field that
+     * was missed would silently disagree with the real one. Re-parenting the live
+     * node means there is nothing to synchronise: the buttons act on the same
+     * items because they are the same buttons.
+     */
+    public void popOut() {
+        if (popOutStage != null && popOutStage.isShowing()) {
+            popOutStage.toFront();
+            return;
+        }
+        if (!(getParent() instanceof Pane parent)) {
+            return;   // not in a layout yet; nothing to move
+        }
+        final int index = parent.getChildrenUnmodifiable().indexOf(this);
+        if (index < 0) {
+            return;
+        }
+        Window owner = getScene() == null ? null : getScene().getWindow();
+
+        parent.getChildren().remove(this);
+        VBox content = new VBox(this);
+        content.setPadding(new Insets(10));
+        VBox.setVgrow(this, Priority.ALWAYS);
+
+        popOutStage = new Stage();
+        // Unique title: QuPath's dialog-position memory keys on the title alone,
+        // so reusing the parent window's would make the two share geometry.
+        popOutStage.setTitle("QPCAT - Measurements");
+        if (owner != null) {
+            popOutStage.initOwner(owner);
+        }
+        popOutStage.initModality(Modality.APPLICATION_MODAL);
+        popOutStage.setScene(new Scene(content, 640, 700));
+        popOutStage.setResizable(true);
+        // Restore on ANY close -- the button, the window X, Esc -- or the section
+        // it came from stays empty for the rest of the session.
+        popOutStage.setOnHidden(e -> {
+            content.getChildren().remove(this);
+            restoreInto(parent, this, index);
+            popOutStage = null;
+        });
+        popOutStage.showAndWait();
+    }
+
+    /**
+     * Put {@code node} back into {@code parent} at {@code index}, tolerating a
+     * parent that changed while the node was away.
+     * <p>
+     * Separated from the window so it can be tested without a JavaFX stage: this
+     * is the step that strands the measurement list in an empty section if it goes
+     * wrong, and it goes wrong silently.
+     *
+     * @param parent where the node came from
+     * @param node   the node to restore
+     * @param index  the position it held before
+     */
+    static void restoreInto(Pane parent, Node node, int index) {
+        if (parent == null || node == null || parent.getChildren().contains(node)) {
+            return;
+        }
+        int at = Math.max(0, Math.min(index, parent.getChildren().size()));
+        parent.getChildren().add(at, node);
     }
 
     /** Unchecks the visible rows matching {@code predicate}, leaving the others as they are. */

@@ -4,6 +4,26 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.2] -- 2026-09-25 -- Room to read the measurement list
+
+### Added
+
+- **"Expand..." on the measurement list** opens it in a resizable window, so a 60-marker panel
+  is something you can scroll through rather than peer at. The list is **moved**, not copied:
+  the filter, every button and every check you make in the window are already applied when you
+  close it, because they are the same controls.
+
+### Fixed
+
+- **The measurement list showed about six rows however tall the dialog got.** Its preferred
+  height was doing all the work and nothing told the section which child should absorb the
+  extra space, so growing the window grew everything except the list. It now fills the height
+  it is given.
+
+- **The measurement button row no longer clips.** Six controls plus the "Applies to visible
+  selection" hint did not fit one line at the dialog's width, and an HBox squeezes labels to
+  ellipses rather than wrapping. They wrap now.
+
 ## [0.14.1] -- 2026-09-25 -- The 3D view recognises your embedding's name
 
 ### Fixed

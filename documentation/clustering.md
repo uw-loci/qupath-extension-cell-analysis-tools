@@ -91,6 +91,10 @@ All buttons (**Select All**, **Select None**, **Select 'Mean'**, **Select 'Media
 act on the rows currently shown. Filter the list first and they apply only to what you can see;
 hidden rows keep their ticks.
 
+**Expand...** (beside the filter box) opens the list in a resizable window, which is the easier
+way to work through a large panel. It is the same list moved into that window, not a copy, so
+the filter text, the buttons and every tick carry straight back when you close it.
+
 **Deselect QPCAT** unmarks every measurement QP-CAT wrote itself — embedding coordinates, spatial
 and component columns, cellular-neighborhood labels. These are *output*, not input; feeding them
 back into a later run clusters on a previous run's answer, which is how one run came back with a

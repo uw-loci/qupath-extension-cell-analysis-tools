@@ -5796,7 +5796,10 @@ public class ClusteringDialog {
                                 radii[r], hi[i][r]));
                     }
                 }
-                lChart.getData().addAll(loS, hiS);
+                // add(), not addAll(...): a varargs addAll on a generic Series
+                // is an unchecked generic array creation.
+                lChart.getData().add(loS);
+                lChart.getData().add(hiS);
                 lSeries.add(loS);
                 lSeries.add(hiS);
                 stylePoissonNullSeries(loS);
