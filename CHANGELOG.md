@@ -4,6 +4,37 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.5] -- 2026-09-26 -- Analyze-existing reviewed end to end
+
+Found by reviewing the mode's inputs against how it is actually used, after 0.14.4 made it
+open at all.
+
+### Fixed
+
+- **Spatial feature smoothing is closed in this mode.** It rewrites the normalized matrix the
+  cluster means, heatmap and marker rankings are read from, so a class would have reported a
+  marker its NEIGHBOURS carry. Those means are the entire output of this mode, and nothing
+  was being clustered for smoothing to help.
+- **A saved analyse run recorded itself as a Leiden run.** The Algorithm combo is built but
+  not shown here, and the results window read its default for the save metadata and the
+  suggested file name. Every read now goes through one resolver that returns the mode's own
+  algorithm.
+- **The dialog defaults to all project images**, as sub-clustering already does. The classes
+  being analysed usually span the project, so opening on the current image would have
+  described a subset of every population and looked like a smaller but valid answer.
+
+### Added
+
+- **Select all / Select none for the classifications list**, and the list grows with the
+  dialog instead of showing eight rows however tall the window is.
+- Tooltips on the classifications list, its bulk buttons, and the Ripley chart's All / None.
+
+### Changed
+
+- The Harmony tooltip now says the reported means become CORRECTED values, since it rewrites
+  the same matrix. That is usually what you want across batches, but it should be stated when
+  the numbers are reported.
+
 ## [0.14.4] -- 2026-09-26 -- "Analyze current cell classifications" opens
 
 ### Fixed

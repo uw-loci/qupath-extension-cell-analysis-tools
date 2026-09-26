@@ -359,6 +359,23 @@ public class ClusteringDialog {
                           + "image, which per-image runs cannot."
                         : ""));
         }
+        if (analyzeExisting) {
+            // Project-wide by DEFAULT, for the same reason sub-clustering is: the
+            // classes being analysed almost always came from a project-wide run,
+            // so opening on the current image would compare a SUBSET of each
+            // population and say nothing about it. Reading one image would look
+            // like a smaller but valid answer, which is the failure worth
+            // preventing.
+            boolean pooled = scopeSection.preferAllImages();
+            scopeSection.setScopeTooltip(
+                    "Which images to read classifications from. Counts in the list below "
+                    + "follow this choice."
+                    + (pooled
+                        ? "  All project images is the default: the classes you are "
+                          + "analysing usually span the project, and reading one image "
+                          + "would silently describe a subset of every population."
+                        : ""));
+        }
 
         // Settings live in their own box so the whole group can be disabled
         // during a run; the status row (with Cancel) stays interactive because
@@ -756,7 +773,18 @@ public class ClusteringDialog {
      */
     private TitledPane createClassificationsSection() {
         classificationsList = new ListView<>(classRows);
+        // Pref is the collapsed size; Vgrow and an unbounded max let it use a
+        // taller dialog. A fixed height showed about eight rows however big the
+        // window got, which a sub-clustered project blows past easily.
         classificationsList.setPrefHeight(180);
+        classificationsList.setMaxHeight(Double.MAX_VALUE);
+        VBox.setVgrow(classificationsList, Priority.ALWAYS);
+        classificationsList.setTooltip(Tooltips.of(
+                "Every class found on the cells in the chosen scope, with its cell\n"
+                + "count. Each ticked class becomes one population in the results:\n"
+                + "a heatmap row, a marker-ranking group, a composition column.\n\n"
+                + "Nothing here is written back -- unticking a class leaves it out\n"
+                + "of the comparison, it does not change any cell."));
         classificationsList.setCellFactory(lv -> new ListCell<>() {
             private final CheckBox check = new CheckBox();
 
@@ -782,6 +810,16 @@ public class ClusteringDialog {
         classificationsStatus.setMaxWidth(Double.MAX_VALUE);
         classificationsStatus.setStyle("-fx-text-fill: #555; -fx-font-size: 11px;");
 
+        Button selectAllClasses = new Button("Select all");
+        selectAllClasses.setOnAction(e -> setAllClassesIncluded(true));
+        selectAllClasses.setTooltip(Tooltips.of("Tick every class in the list."));
+        Button selectNoClasses = new Button("Select none");
+        selectNoClasses.setOnAction(e -> setAllClassesIncluded(false));
+        selectNoClasses.setTooltip(Tooltips.of(
+                "Untick every class. The run needs at least one, so this is a\n"
+                + "starting point for picking a few by hand rather than a way to\n"
+                + "run over nothing."));
+
         Button refresh = new Button("Refresh list");
         refresh.setTooltip(Tooltips.of(
                 "Re-read the classes from the cells in the chosen scope. Use this after "
@@ -796,7 +834,9 @@ public class ClusteringDialog {
         hint.setMaxWidth(Double.MAX_VALUE);
         hint.setStyle("-fx-text-fill: #555; -fx-font-size: 11px;");
 
-        VBox box = new VBox(6, hint, classificationsList, classificationsStatus, refresh);
+        HBox classButtons = new HBox(5, selectAllClasses, selectNoClasses, refresh);
+        classButtons.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(6, hint, classificationsList, classificationsStatus, classButtons);
         // Reading classes means opening every image in scope, so it is not done
         // while building the dialog; the first refresh is kicked off after it shows.
         Platform.runLater(this::refreshClassifications);
@@ -807,6 +847,22 @@ public class ClusteringDialog {
         TitledPane pane = new TitledPane("Classifications to analyze", box);
         pane.setCollapsible(false);
         return pane;
+    }
+
+    /**
+     * Tick or untick every class in the list.
+     *
+     * @param included true to include all, false to exclude all
+     */
+    private void setAllClassesIncluded(boolean included) {
+        for (ClassRow r : classRows) {
+            r.included.set(included);
+        }
+        // The cells bind their checkbox on updateItem, so a model change needs a
+        // refresh to reach rows that are already realised.
+        if (classificationsList != null) {
+            classificationsList.refresh();
+        }
     }
 
     /**
@@ -1149,6 +1205,25 @@ public class ClusteringDialog {
                 + "Makes any algorithm spatially-aware (not just BANKSY).\n"
                 + "Approach inspired by LazySlide (Zheng et al. 2026, Nature Methods)."));
 
+        // Smoothing exists to make CLUSTERING spatially aware, and this mode does
+        // not cluster. Worse, it would not be merely pointless: smoothing rewrites
+        // the normalized matrix that the cluster means, heatmap and marker
+        // rankings are computed from, so a class would report a marker its
+        // NEIGHBOURS carry. Those means are the entire output here, so the option
+        // is closed rather than left as a trap.
+        if (mode == RunMode.ANALYZE_EXISTING) {
+            spatialSmoothingCheck.setSelected(false);
+            spatialSmoothingCheck.setDisable(true);
+            spatialSmoothingCheck.setTooltip(Tooltips.of(
+                    "Not available when analysing existing classifications.\n\n"
+                    + "Smoothing blends each cell's markers with its neighbours'\n"
+                    + "before clustering -- but nothing is clustered here, and the\n"
+                    + "blended values would become the marker means this mode\n"
+                    + "reports. A class would look positive for a marker its\n"
+                    + "NEIGHBOURS carry, which is the opposite of what you are\n"
+                    + "asking the tool."));
+        }
+
         smoothingIterationsSpinner = new Spinner<>(1, 5, 1);
         smoothingIterationsSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(smoothingIterationsSpinner);
@@ -1212,7 +1287,12 @@ public class ClusteringDialog {
                 "Apply Harmony batch correction to remove per-image\n"
                 + "technical variation before clustering.\n"
                 + "Needs more than one batch: two or more images in scope,\n"
-                + "or independent areas within one image.\n"
+                + "or independent areas within one image.\n\n"
+                + "Note: correction is applied to the matrix the cluster means,\n"
+                + "heatmap and marker rankings are read from, so those become\n"
+                + "CORRECTED values rather than your raw measurements. That is\n"
+                + "usually what you want when comparing across batches -- but say\n"
+                + "so when you report the numbers.\n"
                 + "Ref: Korsunsky et al. (2019) Nature Methods");
         Tooltip unavailableTooltip = Tooltips.of(
                 "Harmony batch correction is not installed in this\n"
@@ -1961,7 +2041,7 @@ public class ClusteringDialog {
         }
 
         List<String> warns = new ArrayList<>();
-        Algorithm algo = algorithmCombo == null ? null : algorithmCombo.getValue();
+        Algorithm algo = algorithmCombo == null ? null : effectiveAlgorithm();
 
         if (algo == Algorithm.HDBSCAN && n > 12) {
             warns.add("HDBSCAN clusters the full " + n + "-feature space; density-based "
@@ -2231,6 +2311,24 @@ public class ClusteringDialog {
     private Node algorithmSectionNode(boolean analyzeExisting) {
         Node algorithm = createAlgorithmSection();
         return analyzeExisting ? createClassificationsSection() : algorithm;
+    }
+
+    /**
+     * The algorithm this run will actually use.
+     * <p>
+     * In {@link RunMode#ANALYZE_EXISTING} the labels come from the cells, so the
+     * mode IS the algorithm. The Algorithm combo is still BUILT in that mode (so
+     * its controls are never null) but is not shown and still holds its default,
+     * so reading it directly is always wrong there -- it reported an analyse run
+     * as a Leiden one in the saved result's metadata and in the suggested file
+     * name. Every read of the algorithm goes through here.
+     *
+     * @return the algorithm, never null once the dialog is built
+     */
+    private Algorithm effectiveAlgorithm() {
+        return mode == RunMode.ANALYZE_EXISTING
+                ? Algorithm.EXISTING
+                : algorithmCombo.getValue();
     }
 
     private void updateAlgorithmParams() {
@@ -2595,13 +2693,7 @@ public class ClusteringDialog {
         }
         config.setEmbeddingParams(embeddingParams);
 
-        // Algorithm. In ANALYZE_EXISTING the labels come from the cells, so the
-        // mode IS the algorithm and the (built but unshown) combo must not be
-        // read -- it still holds its default. The parameter switch below has no
-        // case for EXISTING, exactly as it has none for NONE.
-        Algorithm algo = mode == RunMode.ANALYZE_EXISTING
-                ? Algorithm.EXISTING
-                : algorithmCombo.getValue();
+        Algorithm algo = effectiveAlgorithm();
         config.setAlgorithm(algo);
         Map<String, Object> algorithmParams = new HashMap<>();
         // The single GUI "Random seed" drives clustering as well as the embedding,
@@ -3715,8 +3807,8 @@ public class ClusteringDialog {
         showResultsDialog(qupath.getStage(), qupath, result,
                 embeddingCombo.getValue() != null
                         ? embeddingCombo.getValue().getDisplayName() : "Embedding",
-                algorithmCombo.getValue() != null
-                        ? algorithmCombo.getValue().getDisplayName() : null,
+                effectiveAlgorithm() != null
+                        ? effectiveAlgorithm().getDisplayName() : null,
                 normalizationCombo.getValue() != null
                         ? normalizationCombo.getValue().getId() : null,
                 null,
@@ -6067,6 +6159,11 @@ public class ClusteringDialog {
         Button none = new Button("None");
         all.setStyle("-fx-font-size: 10px;");
         none.setStyle("-fx-font-size: 10px;");
+        all.setTooltip(Tooltips.of("Show every cluster's curve again."));
+        none.setTooltip(Tooltips.of(
+                "Hide every cluster, then tick the one or two you want to read.\n"
+                + "The axes rescale onto what is left, which is most of the point.\n"
+                + "The simulated-random reference stays either way."));
         all.setOnAction(e -> checks.forEach(c -> c.setSelected(true)));
         // Leaves the Poisson null in place: it is the reference the curves are read
         // against, not one of the things being compared, so "None" clearing it would

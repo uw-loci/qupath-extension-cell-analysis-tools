@@ -746,8 +746,13 @@ def resolve_pca_precursor(enabled, n_features, n_comps, algorithm_name):
 #
 # `cluster_matrix` is what the embedding AND the clustering algorithm consume.
 # Everything interpretable downstream -- cluster_means, the heatmap, the marker
-# ranking, the dotplot values -- keeps reading `df_norm`, so marker identities
-# stay in the user's own measurement units.
+# ranking, the dotplot values -- keeps reading `df_norm`, so the PCA precursor
+# cannot turn marker identities into component numbers.
+#
+# That holds for the PCA precursor ONLY. Spatial smoothing and Harmony both
+# REASSIGN df_norm above, so when either is on the reported means are smoothed
+# or batch-corrected values, not raw measurements. Do not read this comment as a
+# promise that df_norm is untouched.
 cluster_matrix = df_norm.values
 require_finite(cluster_matrix, "Normalization", list(df_norm.columns))
 pca_precursor_info = None
