@@ -4,6 +4,20 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.3] -- 2026-09-26 -- A Ripley chart you can read
+
+### Changed
+
+- **The Ripley L chart plots relative to random by default.** Each curve has its own
+  simulated-random median subtracted, so the flat line at zero IS randomness and the whole
+  y-axis is signal. The fix in 0.14.0 made the numbers right but left them unreadable: L(r) is
+  dominated by r, so seven clusters climbed the diagonal in a bundle with their deviations a
+  few percent of the height, and seven null bands drew fourteen dashed lines through one
+  another with no way to tell which belonged to which curve.
+- **Each band is drawn in its cluster's own colour** and hides when that cluster is unticked,
+  so "is this curve outside its band" is answerable with several on screen.
+- **Untick "Relative to random"** for the raw curves; nothing is hidden, only re-centred.
+
 ## [0.14.2] -- 2026-09-25 -- Room to read the measurement list
 
 ### Added

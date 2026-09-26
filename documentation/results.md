@@ -226,7 +226,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 |---|---|
 | **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. |
 | **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. |
-| **Ripley L** | Read each curve against its dashed band -- complete spatial randomness simulated with that cluster's own cell count. Above the band = clustering at that radius; below = dispersion; inside = random. |
+| **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 

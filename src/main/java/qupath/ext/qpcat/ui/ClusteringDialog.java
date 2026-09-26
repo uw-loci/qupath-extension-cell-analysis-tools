@@ -92,6 +92,13 @@ public class ClusteringDialog {
     /** Legend label for the simulated complete-spatial-randomness band. */
     private static final String CSR_NULL_SERIES = "Random (simulated)";
 
+    /**
+     * Separator marking a series as one edge of a cluster's null band, e.g.
+     * {@code "Cluster 3 \u2014 band lo"}. Derived from the cluster's own series name so
+     * a band hides with its cluster and is drawn in its colour.
+     */
+    private static final String BAND_SUFFIX = " -- band ";
+
     /** HDBSCAN cluster-selection labels, mapped to scikit-learn's ids on the wire. */
     private static final String HDBSCAN_SELECTION_EOM = "Excess of mass (default)";
     private static final String HDBSCAN_SELECTION_LEAF = "Leaf (finest clusters)";
@@ -4163,14 +4170,18 @@ public class ClusteringDialog {
                             ? "Ripley L" : "Ripley K and L",
                     wrapWithGuide(ripleyNode,
                     "Ripley's L(r) cumulates each cluster's neighbour counts within\n"
-                    + "radius r, variance-stabilised. Read each curve against the DASHED\n"
-                    + "BAND: complete spatial randomness simulated with that cluster's own\n"
-                    + "cell count, in the same tissue outline, through the same estimator.\n"
-                    + "Above the band = spatial clustering; below = inhibition / dispersion;\n"
-                    + "inside = indistinguishable from random at that radius.\n\n"
-                    + "The band is the null, NOT the line L(r) = r. That diagonal assumes an\n"
-                    + "edge-corrected estimator; this one is not, so random points sit below\n"
-                    + "the diagonal at every radius and would read as dispersed.",
+                    + "radius r, variance-stabilised. Plotted RELATIVE TO RANDOM: each\n"
+                    + "curve has had its own simulated-random median subtracted, so the\n"
+                    + "flat line at zero is randomness.\n\n"
+                    + "Above zero = spatial clustering at that radius; below = inhibition\n"
+                    + "or dispersion; inside the cluster's own dashed band = not\n"
+                    + "distinguishable from random.\n\n"
+                    + "Randomness is SIMULATED, not the line L(r) = r: that diagonal is the\n"
+                    + "expectation of an edge-corrected estimator, and this one is not, so\n"
+                    + "random points fall below it at every radius. Each band comes from 99\n"
+                    + "random patterns with that cluster's own cell count, in the same\n"
+                    + "tissue outline, through the same estimator.\n\n"
+                    + "Untick 'Relative to random' for the raw L(r) curves.",
                     "ripley-l-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5737,90 +5748,122 @@ public class ClusteringDialog {
                 kSeries.add(series);
             }
         }
-        if (lValues != null && clusterNames != null) {
-            for (int i = 0; i < clusterNames.size() && i < lValues.length; i++) {
-                javafx.scene.chart.XYChart.Series<Number, Number> series =
-                        new javafx.scene.chart.XYChart.Series<>();
-                series.setName(clusterNameForKey(result, clusterNames.get(i)));
-                for (int r = 0; r < radii.length && r < lValues[i].length; r++) {
-                    series.getData().add(new javafx.scene.chart.XYChart.Data<>(
-                            radii[r], lValues[i][r]));
-                }
-                lChart.getData().add(series);
-                lSeries.add(series);
-                seriesNames.add(series.getName());
-            }
-        }
+        // Build (and rebuild) the L chart. Two views of the same numbers:
+        //
+        //   CENTRED (default) -- plot L(r) minus that cluster's own simulated
+        //   median, so zero IS randomness and the whole y-axis is signal.
+        //   ABSOLUTE -- the raw L(r) curves.
+        //
+        // The absolute view is close to unreadable with several clusters, which is
+        // why it is not the default. L(r) is dominated by r itself, so every curve
+        // climbs the diagonal together and the deviation that carries the meaning
+        // is a few percent of the height; worse, each cluster's null band sits on
+        // that same diagonal, so seven clusters draw fourteen dashed lines through
+        // one another and no band can be matched to its curve.
+        final boolean[] centred = {ripley.hasEnvelope()};
+        double[][] envLo = ripley.getEnvelopeLow();
+        double[][] envMid = ripley.getEnvelopeMedian();
+        double[][] envHi = ripley.getEnvelopeHigh();
 
-        // Poisson null overlay (dashed, neutral grey). Style applied via a
-        // node listener so the dash + grey land on the actual rendered Line;
-        // shape (dashed) carries the meaning, not colour alone -- this is
-        // the colorblind-safety contract from the Phase 1 accessibility
-        // pass.
-        if (showK && ripley.getPoissonK() != null && ripley.getPoissonK().length > 0) {
-            javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
-                    new javafx.scene.chart.XYChart.Series<>();
-            nullSeries.setName(POISSON_NULL_SERIES);
-            double[] poissonK = ripley.getPoissonK();
-            for (int r = 0; r < radii.length && r < poissonK.length; r++) {
-                nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
-                        radii[r], poissonK[r]));
-            }
-            kChart.getData().add(nullSeries);
-            kSeries.add(nullSeries);
-            stylePoissonNullSeries(nullSeries);
-        }
-        // The null for L. A simulated band where the run produced one, because the
-        // analytical diagonal is the expectation of an EDGE-CORRECTED estimator and
-        // this one is not: random points fall below r at every radius, so every
-        // cluster reads as dispersed. One band per cluster, since the band depends
-        // on that cluster's point count.
-        if (ripley.hasEnvelope()) {
-            double[][] lo = ripley.getEnvelopeLow();
-            double[][] hi = ripley.getEnvelopeHigh();
-            for (int i = 0; i < lo.length && i < hi.length; i++) {
-                String label = i == 0 ? CSR_NULL_SERIES : CSR_NULL_SERIES + " " + (i + 1);
-                javafx.scene.chart.XYChart.Series<Number, Number> loS =
-                        new javafx.scene.chart.XYChart.Series<>();
-                loS.setName(label);
-                javafx.scene.chart.XYChart.Series<Number, Number> hiS =
-                        new javafx.scene.chart.XYChart.Series<>();
-                hiS.setName(label + " ");   // distinct name, same style
-                for (int r = 0; r < radii.length; r++) {
-                    if (r < lo[i].length) {
-                        loS.getData().add(new javafx.scene.chart.XYChart.Data<>(
-                                radii[r], lo[i][r]));
+        Runnable buildLSeries = () -> {
+            lChart.getData().clear();
+            lSeries.clear();
+            seriesNames.clear();
+            hexByNameEnvelope.clear();
+
+            boolean useCentred = centred[0] && ripley.hasEnvelope();
+            yAxisL.setLabel(useCentred ? "L(r) - random" : "L(r)");
+            lChart.setTitle(useCentred ? "Ripley L(r), relative to random" : "Ripley L(r)");
+
+            if (lValues != null && clusterNames != null) {
+                for (int i = 0; i < clusterNames.size() && i < lValues.length; i++) {
+                    String label = clusterNameForKey(result, clusterNames.get(i));
+                    seriesNames.add(label);
+
+                    javafx.scene.chart.XYChart.Series<Number, Number> series =
+                            new javafx.scene.chart.XYChart.Series<>();
+                    series.setName(label);
+                    boolean haveMid = useCentred && envMid != null && i < envMid.length;
+                    for (int r = 0; r < radii.length && r < lValues[i].length; r++) {
+                        double v = lValues[i][r];
+                        if (haveMid && r < envMid[i].length) {
+                            v -= envMid[i][r];
+                        }
+                        series.getData().add(
+                                new javafx.scene.chart.XYChart.Data<>(radii[r], v));
                     }
-                    if (r < hi[i].length) {
-                        hiS.getData().add(new javafx.scene.chart.XYChart.Data<>(
-                                radii[r], hi[i][r]));
+                    lChart.getData().add(series);
+                    lSeries.add(series);
+
+                    // Each cluster's band in ITS OWN colour, so "is this curve
+                    // outside its band" is answerable with several drawn at once.
+                    if (useCentred && envLo != null && envHi != null
+                            && i < envLo.length && i < envHi.length && haveMid) {
+                        for (int side = 0; side < 2; side++) {
+                            double[] edge = side == 0 ? envLo[i] : envHi[i];
+                            javafx.scene.chart.XYChart.Series<Number, Number> band =
+                                    new javafx.scene.chart.XYChart.Series<>();
+                            // Named from the cluster so the band hides with it.
+                            band.setName(label + BAND_SUFFIX + (side == 0 ? "lo" : "hi"));
+                            for (int r = 0; r < radii.length && r < edge.length
+                                    && r < envMid[i].length; r++) {
+                                band.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                                        radii[r], edge[r] - envMid[i][r]));
+                            }
+                            lChart.getData().add(band);
+                            lSeries.add(band);
+                            hexByNameEnvelope.add(band.getName());
+                        }
                     }
                 }
-                // add(), not addAll(...): a varargs addAll on a generic Series
-                // is an unchecked generic array creation.
-                lChart.getData().add(loS);
-                lChart.getData().add(hiS);
-                lSeries.add(loS);
-                lSeries.add(hiS);
-                stylePoissonNullSeries(loS);
-                stylePoissonNullSeries(hiS);
-                hexByNameEnvelope.add(loS.getName());
-                hexByNameEnvelope.add(hiS.getName());
             }
-        } else if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
-            // Pre-envelope result. Drawn, but named so nobody reads it as the null.
-            javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
-                    new javafx.scene.chart.XYChart.Series<>();
-            nullSeries.setName(POISSON_NULL_SERIES);
-            double[] poissonL = ripley.getPoissonL();
-            for (int r = 0; r < radii.length && r < poissonL.length; r++) {
-                nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
-                        radii[r], poissonL[r]));
+
+            if (useCentred) {
+                // Randomness is a flat line at zero once centred; draw it so the
+                // reading is "above this line = clustering" with nothing to infer.
+                javafx.scene.chart.XYChart.Series<Number, Number> zero =
+                        new javafx.scene.chart.XYChart.Series<>();
+                zero.setName(CSR_NULL_SERIES);
+                for (double radius : radii) {
+                    zero.getData().add(new javafx.scene.chart.XYChart.Data<>(radius, 0.0));
+                }
+                lChart.getData().add(zero);
+                lSeries.add(zero);
+                stylePoissonNullSeries(zero);
+            } else if (ripley.hasEnvelope() && envLo != null && envHi != null) {
+                for (int i = 0; i < envLo.length && i < envHi.length; i++) {
+                    String label = i < seriesNames.size() ? seriesNames.get(i) : ("band " + i);
+                    for (int side = 0; side < 2; side++) {
+                        double[] edge = side == 0 ? envLo[i] : envHi[i];
+                        javafx.scene.chart.XYChart.Series<Number, Number> band =
+                                new javafx.scene.chart.XYChart.Series<>();
+                        band.setName(label + BAND_SUFFIX + (side == 0 ? "lo" : "hi"));
+                        for (int r = 0; r < radii.length && r < edge.length; r++) {
+                            band.getData().add(
+                                    new javafx.scene.chart.XYChart.Data<>(radii[r], edge[r]));
+                        }
+                        lChart.getData().add(band);
+                        lSeries.add(band);
+                        hexByNameEnvelope.add(band.getName());
+                    }
+                }
+            } else if (ripley.getPoissonL() != null && ripley.getPoissonL().length > 0) {
+                // Pre-envelope result: no simulated null exists, so the old
+                // diagonal is all there is. Named so it is not read as the null.
+                javafx.scene.chart.XYChart.Series<Number, Number> nullSeries =
+                        new javafx.scene.chart.XYChart.Series<>();
+                nullSeries.setName(POISSON_NULL_SERIES);
+                double[] poissonL = ripley.getPoissonL();
+                for (int r = 0; r < radii.length && r < poissonL.length; r++) {
+                    nullSeries.getData().add(new javafx.scene.chart.XYChart.Data<>(
+                            radii[r], poissonL[r]));
+                }
+                lChart.getData().add(nullSeries);
+                lSeries.add(nullSeries);
+                stylePoissonNullSeries(nullSeries);
             }
-            lChart.getData().add(nullSeries);
-            lSeries.add(nullSeries);
-            stylePoissonNullSeries(nullSeries);
-        }
+        };
+        buildLSeries.run();
 
         // Colour both charts from the shared cluster palette. Without this JavaFX cycles
         // eight default colours, so a 20-cluster run repeats colours and the null blends in.
@@ -5833,8 +5876,14 @@ public class ClusteringDialog {
             }
         }
         hexByName.put(POISSON_NULL_SERIES, "-fx-text-base-color");
+        hexByName.put(CSR_NULL_SERIES, "-fx-text-base-color");
+        // A band takes its cluster's colour, so several can be on screen at once
+        // and each still belongs to something visible.
         for (String n : hexByNameEnvelope) {
-            hexByName.put(n, "-fx-text-base-color");
+            int cut = n.indexOf(BAND_SUFFIX);
+            String owner = cut > 0 ? n.substring(0, cut) : null;
+            String hex = owner == null ? null : hexByName.get(owner);
+            hexByName.put(n, hex != null ? hex : "-fx-text-base-color");
         }
         applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
         applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
@@ -5849,8 +5898,30 @@ public class ClusteringDialog {
             applySeriesColors(kChart, hexByName, POISSON_NULL_SERIES);
             applySeriesColors(lChart, hexByName, POISSON_NULL_SERIES);
         };
-        Node visibilityControls = buildSeriesVisibilityPane(
+        Node clusterChecks = buildSeriesVisibilityPane(
                 seriesNames, hexByName, hidden, refreshVisible);
+
+        Node visibilityControls = clusterChecks;
+        if (ripley.hasEnvelope()) {
+            CheckBox relative = new CheckBox("Relative to random");
+            relative.setSelected(centred[0]);
+            relative.setTooltip(Tooltips.of(
+                    "Plot each curve minus its OWN simulated-random median, so the\n"
+                    + "flat line at zero is randomness.\n\n"
+                    + "On: the whole y-axis is signal. Above zero = clustering at that\n"
+                    + "radius, below = inhibition, inside the dashed band = random.\n\n"
+                    + "Off: the raw L(r). Every curve climbs with r, so they bunch along\n"
+                    + "the diagonal and each cluster's band lies on top of the others --\n"
+                    + "honest, but hard to read with more than a cluster or two."));
+            relative.selectedProperty().addListener((obs, was, now) -> {
+                centred[0] = Boolean.TRUE.equals(now);
+                buildLSeries.run();
+                refreshVisible.run();
+            });
+            VBox withToggle = new VBox(6, relative, clusterChecks);
+            VBox.setVgrow(clusterChecks, javafx.scene.layout.Priority.ALWAYS);
+            visibilityControls = withToggle;
+        }
 
         if (!showK) {
             // No K from this squidpy build. Its curves would be zero padding, and a chart
@@ -5913,7 +5984,12 @@ public class ClusteringDialog {
             Set<String> hidden) {
         List<javafx.scene.chart.XYChart.Series<Number, Number>> wanted = new ArrayList<>();
         for (javafx.scene.chart.XYChart.Series<Number, Number> sr : all) {
-            if (!hidden.contains(sr.getName())) {
+            String name = sr.getName();
+            int cut = name.indexOf(BAND_SUFFIX);
+            // A band belongs to a cluster, so unticking the cluster takes its
+            // band with it -- otherwise "None" leaves a chart of bare references.
+            String owner = cut > 0 ? name.substring(0, cut) : name;
+            if (!hidden.contains(owner)) {
                 wanted.add(sr);
             }
         }
@@ -6035,17 +6111,29 @@ public class ClusteringDialog {
                 if (hex == null || series.getNode() == null) {
                     continue;
                 }
-                boolean isNull = nullName.equals(series.getName())
-                        || series.getName().startsWith(CSR_NULL_SERIES);
-                series.getNode().setStyle(isNull
-                        ? NULL_SERIES_STYLE
-                        : "-fx-stroke: " + hex + ";");
+                String name = series.getName();
+                if (nullName.equals(name) || CSR_NULL_SERIES.equals(name)) {
+                    series.getNode().setStyle(NULL_SERIES_STYLE);
+                } else if (name.contains(BAND_SUFFIX)) {
+                    // Dashed and thin, in the cluster's colour: the shape says
+                    // "this is a reference", the colour says whose.
+                    series.getNode().setStyle("-fx-stroke: " + hex
+                            + "; -fx-stroke-dash-array: 4 4; -fx-stroke-width: 1px;"
+                            + " -fx-opacity: 0.85;");
+                } else {
+                    series.getNode().setStyle("-fx-stroke: " + hex + ";");
+                }
             }
             // The simulated band is two series per cluster, so a 7-cluster run
             // would put fourteen identical entries in the legend. Keep one.
             boolean keptBand = false;
             for (javafx.scene.Node n : chart.lookupAll(".chart-legend-item")) {
                 if (!(n instanceof Label label)) {
+                    continue;
+                }
+                if (label.getText() != null && label.getText().contains(BAND_SUFFIX)) {
+                    label.setVisible(false);
+                    label.setManaged(false);
                     continue;
                 }
                 if (label.getText() != null && label.getText().startsWith(CSR_NULL_SERIES)) {
