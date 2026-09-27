@@ -66,6 +66,19 @@ public final class QpcatPreferences {
             "qpcat.cluster.lastRunConfig", "");
 
     /**
+     * The same bookkeeping for the other two ways the clustering dialog opens.
+     * One slot each, because the modes disagree about what a sensible setting is:
+     * a normal run stores an algorithm that "analyze current classifications" has
+     * no use for, and restoring one mode's scope into another would hand the user
+     * a set of images they chose for a different question.
+     */
+    private static final StringProperty subclusterLastRunConfig =
+            PathPrefs.createPersistentPreference("qpcat.cluster.lastRunConfig.subcluster", "");
+
+    private static final StringProperty analyzeLastRunConfig =
+            PathPrefs.createPersistentPreference("qpcat.cluster.lastRunConfig.analyze", "");
+
+    /**
      * The directory an environment was last successfully built at. Bookkeeping,
      * not a setting -- deliberately absent from the preference pane.
      *
@@ -383,9 +396,25 @@ public final class QpcatPreferences {
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
 
-    public static String getClusterLastRunConfig() { return clusterLastRunConfig.get(); }
+    private static StringProperty lastRunConfigFor(String modeKey) {
+        if ("subcluster".equals(modeKey)) return subclusterLastRunConfig;
+        if ("analyze".equals(modeKey)) return analyzeLastRunConfig;
+        return clusterLastRunConfig;
+    }
 
-    public static void setClusterLastRunConfig(String v) { clusterLastRunConfig.set(v == null ? "" : v); }
+    /**
+     * The settings the clustering dialog last ran with, for one of its modes.
+     *
+     * @param modeKey "subcluster", "analyze", or anything else for a normal run
+     * @return the stored config JSON, or "" when that mode has not been run
+     */
+    public static String getClusterLastRunConfig(String modeKey) {
+        return lastRunConfigFor(modeKey).get();
+    }
+
+    public static void setClusterLastRunConfig(String modeKey, String v) {
+        lastRunConfigFor(modeKey).set(v == null ? "" : v);
+    }
 
     public static int getAeLatentDim() { return aeLatentDim.get(); }
     public static void setAeLatentDim(int v) { aeLatentDim.set(v); }

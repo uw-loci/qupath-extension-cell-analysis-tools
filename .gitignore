@@ -18,3 +18,7 @@ Thumbs.db
 # Python bytecode
 __pycache__/
 *.pyc
+
+# JVM crash dumps (a killed Gradle daemon leaves these at the repo root)
+hs_err_pid*.log
+replay_pid*.log

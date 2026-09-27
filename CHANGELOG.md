@@ -4,6 +4,41 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.7] -- 2026-09-27 -- The analyse run completes, and the Ripley chart stops throwing
+
+Five reports from one testing session, four of them distinct defects.
+
+### Fixed
+
+- **`NameError: name 'validate_supplied_labels' is not defined` killed every analyse run**,
+  after 0.14.6 got it past the previous failure. The validator was defined BELOW the
+  module-level code that calls it, so it did not exist yet when the dispatch ran. Its eight
+  tests all load it by AST and never execute the module, so they proved the function correct
+  while the script could not reach it. Moved above the dispatch, with a test that walks every
+  shipped script for the same shape.
+- **Hiding a Ripley cluster threw NPE repeatedly on the FX thread** and left stray dashed
+  curves behind. The visibility checkboxes remove series and add the same instances back; with
+  chart animation on, a removal finishes on a later pulse, so toggling two clusters in quick
+  succession let a pending remove-timeline fire against a series that had already been
+  re-added. `XYChart.removeSeriesFromDisplay` then unboxed a null and threw, and the aborted
+  removal left the line node drawn. Both Ripley charts are now non-animated, which makes
+  removal synchronous.
+- **"Analyze current classifications" remembered nothing** -- not the measurements, not the
+  scope -- so "Specific images..." had to be re-picked on every open. Remembering was gated to
+  normal clustering runs only. Each mode now has its own settings slot, because sharing one
+  would let a normal run overwrite the scope with images chosen for a different question.
+  Scope itself was never stored in any mode; it is now, including which images a subset held.
+- **Pre-flight warned that the configuration "may produce too few clusters"** in a mode that
+  forms no clusters. The advice that is only about how clusters form is gone there, the
+  heading says what is actually at stake, and the embedding-columns caution is reworded for a
+  mode where nothing is being clustered on them.
+
+### Changed
+
+- **The Ripley chart opens on one cluster** rather than all of them, with "Recommend 1 at a
+  time" under Show clusters. Each cluster draws its curve plus the two edges of its own
+  simulated-random band, so seven clusters is twenty-one lines and the question the chart
+  answers -- is this curve outside its band -- cannot be read off it.
 ## [0.14.6] -- 2026-09-26 -- Analyze current classifications actually runs
 
 The mode opened, accepted a scope and a class list, then died in Python before analysing

@@ -938,6 +938,62 @@ labels = None
 # The clustering seed is resolved earlier (just after embedding_seed) because
 # the optional PCA precursor consumes it before this point.
 
+
+# Defined here, ABOVE the dispatch below, because the dispatch runs at module
+# level: a def placed after its own top-level call site is never executed in
+# time and the run dies with NameError.
+def validate_supplied_labels(labels, n_cells):
+    """Check externally-supplied cluster labels before anything downstream sees them.
+
+    Refuses rather than degrades. Every consumer below was written against labels
+    produced by one of the algorithms in this file, and three of their assumptions
+    are load-bearing:
+
+    * **Length.** ``df_norm["cluster"] = labels_shifted`` and the exported
+      ``cluster_labels`` NDArray both assume one label per row.
+    * **Non-negative.** A negative label means "HDBSCAN noise" everywhere here:
+      all negatives are collapsed into a single bucket, the noise index is assumed
+      to be the maximum, and the quality warnings attach HDBSCAN-specific advice.
+      Supplied labels must not inherit that meaning by accident.
+    * **Dense 0..k-1.** ``n_clusters_found`` is ``labels.max() + 1`` while
+      ``cluster_means`` is a groupby over the values actually PRESENT. Those agree
+      only for a dense set. With a gap, the representative-cells loop indexes
+      ``cluster_means[_c]`` positionally and either reads another cluster's row or
+      raises IndexError outside any try/except, killing the task after the
+      expensive work is done. Better to refuse here, naming the gap.
+
+    Returns the labels as int32.
+    """
+    if labels is None:
+        raise ValueError(
+            "algorithm='existing' needs a 'supplied_labels' input, which was not sent."
+        )
+    labels = np.asarray(labels).astype(np.int32).ravel()
+    if labels.size != n_cells:
+        raise ValueError(
+            "supplied_labels has %d entries but there are %d cells; they must be "
+            "index-aligned." % (labels.size, n_cells)
+        )
+    if labels.size == 0:
+        raise ValueError("supplied_labels is empty; nothing to analyze.")
+    lo = int(labels.min())
+    if lo < 0:
+        raise ValueError(
+            "supplied_labels contains %d; labels must be non-negative. A negative "
+            "label means 'noise' to the rest of this script." % lo
+        )
+    present = np.unique(labels)
+    expected = np.arange(present.size, dtype=present.dtype)
+    if not np.array_equal(present, expected):
+        missing = sorted(set(range(int(present.max()) + 1)) - set(present.tolist()))
+        raise ValueError(
+            "supplied_labels must be dense 0..k-1; %d distinct values reach %d, "
+            "leaving %s unused. Renumber before sending."
+            % (present.size, int(present.max()), missing[:10])
+        )
+    return labels
+
+
 if algorithm == "leiden":
     import scanpy as sc
     import anndata as ad
@@ -1197,58 +1253,6 @@ elif algorithm == "existing":
 
 else:
     raise ValueError("Unknown clustering algorithm: %s" % algorithm)
-
-
-def validate_supplied_labels(labels, n_cells):
-    """Check externally-supplied cluster labels before anything downstream sees them.
-
-    Refuses rather than degrades. Every consumer below was written against labels
-    produced by one of the algorithms in this file, and three of their assumptions
-    are load-bearing:
-
-    * **Length.** ``df_norm["cluster"] = labels_shifted`` and the exported
-      ``cluster_labels`` NDArray both assume one label per row.
-    * **Non-negative.** A negative label means "HDBSCAN noise" everywhere here:
-      all negatives are collapsed into a single bucket, the noise index is assumed
-      to be the maximum, and the quality warnings attach HDBSCAN-specific advice.
-      Supplied labels must not inherit that meaning by accident.
-    * **Dense 0..k-1.** ``n_clusters_found`` is ``labels.max() + 1`` while
-      ``cluster_means`` is a groupby over the values actually PRESENT. Those agree
-      only for a dense set. With a gap, the representative-cells loop indexes
-      ``cluster_means[_c]`` positionally and either reads another cluster's row or
-      raises IndexError outside any try/except, killing the task after the
-      expensive work is done. Better to refuse here, naming the gap.
-
-    Returns the labels as int32.
-    """
-    if labels is None:
-        raise ValueError(
-            "algorithm='existing' needs a 'supplied_labels' input, which was not sent."
-        )
-    labels = np.asarray(labels).astype(np.int32).ravel()
-    if labels.size != n_cells:
-        raise ValueError(
-            "supplied_labels has %d entries but there are %d cells; they must be "
-            "index-aligned." % (labels.size, n_cells)
-        )
-    if labels.size == 0:
-        raise ValueError("supplied_labels is empty; nothing to analyze.")
-    lo = int(labels.min())
-    if lo < 0:
-        raise ValueError(
-            "supplied_labels contains %d; labels must be non-negative. A negative "
-            "label means 'noise' to the rest of this script." % lo
-        )
-    present = np.unique(labels)
-    expected = np.arange(present.size, dtype=present.dtype)
-    if not np.array_equal(present, expected):
-        missing = sorted(set(range(int(present.max()) + 1)) - set(present.tolist()))
-        raise ValueError(
-            "supplied_labels must be dense 0..k-1; %d distinct values reach %d, "
-            "leaving %s unused. Renumber before sending."
-            % (present.size, int(present.max()), missing[:10])
-        )
-    return labels
 
 
 def select_plot_features(all_features, ranked_by_cluster, max_features):

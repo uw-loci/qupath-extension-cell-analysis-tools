@@ -18,6 +18,8 @@ import qupath.lib.projects.ProjectImageEntry;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * Reusable 3-way image-scope control (Current image / All project images /
@@ -250,6 +252,83 @@ public final class ScopeSection extends VBox {
         scopeCurrentImage.setDisable(disabled || currentImageUnavailable);
         scopeAllImages.setDisable(disabled || allImagesUnavailable);
         scopeSpecificImages.setDisable(disabled || specificImagesUnavailable);
+    }
+
+    /**
+     * The image names chosen under "Specific images...", for storing a scope that
+     * should still be there next time the dialog opens.
+     *
+     * @return the chosen names, or an empty list under any other scope
+     */
+    public List<String> selectedImageNames() {
+        List<String> names = new ArrayList<>();
+        if (!scopeSpecificImages.isSelected()) {
+            return names;
+        }
+        for (ProjectImageEntry<BufferedImage> e : selectedSubset) {
+            names.add(e.getImageName());
+        }
+        return names;
+    }
+
+    /**
+     * Put back a scope the user chose on a previous run.
+     *
+     * <p>Names are matched against the project as it is NOW, so images that have
+     * been removed or renamed are dropped rather than carried as ghosts. If none
+     * of them still exist the stored scope is treated as gone and the current
+     * selection is left alone -- better than silently running over an unrelated
+     * set, or over the whole project, because a name changed.
+     *
+     * <p>The subset is filled BEFORE the radio moves. Selecting "Specific
+     * images..." with nothing chosen pops the image chooser, so the other order
+     * would open a modal picker every time the dialog appeared.
+     *
+     * @param entireProject the stored coarse scope: false means the current image
+     * @param imageNames    the stored subset; empty for the current-image or
+     *                      all-images scopes
+     * @return true when a scope was actually restored
+     */
+    public boolean restoreScope(boolean entireProject, List<String> imageNames) {
+        Project<BufferedImage> project = qupath.getProject();
+        if (imageNames != null && !imageNames.isEmpty() && project != null
+                && !specificImagesUnavailable) {
+            Set<String> wanted = new LinkedHashSet<>(imageNames);
+            List<ProjectImageEntry<BufferedImage>> found = new ArrayList<>();
+            for (ProjectImageEntry<BufferedImage> e : project.getImageList()) {
+                if (wanted.contains(e.getImageName())) {
+                    found.add(e);
+                }
+            }
+            if (!found.isEmpty()) {
+                selectedSubset.clear();
+                selectedSubset.addAll(found);
+                specificImagesLabel.setText(
+                        found.size() + " image" + (found.size() == 1 ? "" : "s") + " chosen");
+                boolean alreadyOnThisScope = scopeSpecificImages.isSelected();
+                scopeSpecificImages.setSelected(true);
+                // Moving the radio already notifies every scope listener. Fire
+                // them by hand ONLY when it did not move, because a subset change
+                // is a scope change too -- and because these listeners re-count
+                // classes across the scope, which reads images.
+                if (alreadyOnThisScope) {
+                    for (Runnable r : scopeListeners) {
+                        r.run();
+                    }
+                }
+                return true;
+            }
+            return false;
+        }
+        if (entireProject && !allImagesUnavailable) {
+            scopeAllImages.setSelected(true);
+            return true;
+        }
+        if (!entireProject && !currentImageUnavailable) {
+            scopeCurrentImage.setSelected(true);
+            return true;
+        }
+        return false;
     }
 
     /** True when "Specific images..." is selected but nothing has been chosen. */

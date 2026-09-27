@@ -93,6 +93,12 @@ public class ClusteringConfig {
     private Map<String, Object> embeddingParams = new HashMap<>();
     private List<String> selectedMeasurements;
     private boolean clusterEntireProject = false;
+    /**
+     * Image names for the "Specific images..." scope. Empty means the scope was
+     * not a subset, and {@link #clusterEntireProject} then distinguishes the
+     * current image from the whole project -- one encoding of the scope, not two.
+     */
+    private List<String> scopeImageNames;
     private boolean generatePlots = true;
     private int topNMarkers = 5;
     private boolean enableSpatialAnalysis = false;
@@ -276,6 +282,9 @@ public class ClusteringConfig {
 
     public List<String> getSelectedMeasurements() { return selectedMeasurements; }
     public void setSelectedMeasurements(List<String> measurements) { this.selectedMeasurements = measurements; }
+
+    public List<String> getScopeImageNames() { return scopeImageNames; }
+    public void setScopeImageNames(List<String> names) { this.scopeImageNames = names; }
 
     public boolean isClusterEntireProject() { return clusterEntireProject; }
     public void setClusterEntireProject(boolean clusterEntireProject) {

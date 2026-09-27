@@ -39,6 +39,45 @@ class AnalyzeExistingModeTest {
     }
 
     @Test
+    void eachModeStoresItsSettingsSomewhereOfItsOwn() {
+        // One shared slot is why this mode remembered nothing: a normal run
+        // would overwrite it with an algorithm and a scope chosen for a
+        // different question, and analyze-existing would push EXISTING back.
+        var keys = new java.util.HashSet<String>();
+        for (ClusteringDialog.RunMode m : ClusteringDialog.RunMode.values()) {
+            assertThat(m.settingsKey()).isNotBlank();
+            keys.add(m.settingsKey());
+        }
+        assertThat(keys).hasSize(ClusteringDialog.RunMode.values().length);
+    }
+
+    @Test
+    void theNormalRunKeepsTheSlotItAlreadyHad() {
+        // Changing this string would silently discard settings every existing
+        // user has already stored under it.
+        assertThat(ClusteringDialog.RunMode.CLUSTER.settingsKey()).isEqualTo("cluster");
+    }
+
+    @Test
+    void aSpecificImageScopeSurvivesARoundTripThroughTheConfig() {
+        // The scope was not stored at all, so "Specific images..." minus one
+        // image had to be re-picked every single time the dialog opened.
+        ClusteringConfig config = new ClusteringConfig();
+        config.setClusterEntireProject(true);
+        config.setScopeImageNames(java.util.List.of("tme_01.tiff", "tme_02.tiff"));
+        assertThat(config.getScopeImageNames()).containsExactly("tme_01.tiff", "tme_02.tiff");
+
+        // Empty names is how "not a subset" is encoded -- clusterEntireProject
+        // then says which of the other two scopes it was, so the scope has one
+        // representation rather than two that can disagree.
+        ClusteringConfig wholeProject = new ClusteringConfig();
+        wholeProject.setClusterEntireProject(true);
+        wholeProject.setScopeImageNames(java.util.List.of());
+        assertThat(wholeProject.getScopeImageNames()).isEmpty();
+        assertThat(wholeProject.isClusterEntireProject()).isTrue();
+    }
+
+    @Test
     void theMenuEntryExists() {
         // The engine shipped without a menu entry for several releases; the string
         // being present is what makes the feature reachable at all.

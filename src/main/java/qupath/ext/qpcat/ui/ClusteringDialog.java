@@ -127,7 +127,20 @@ public class ClusteringDialog {
         /** Re-cluster one class's cells into '<name>.N' sub-labels. */
         SUBCLUSTER,
         /** Analyse the classifications already on the cells. Writes nothing. */
-        ANALYZE_EXISTING
+        ANALYZE_EXISTING;
+
+        /**
+         * The preference slot this mode's last-used settings live in. A stable
+         * string rather than the enum name, so renaming a constant cannot
+         * silently orphan what a user has already stored.
+         */
+        String settingsKey() {
+            switch (this) {
+                case SUBCLUSTER: return "subcluster";
+                case ANALYZE_EXISTING: return "analyze";
+                default: return "cluster";
+            }
+        }
     }
 
     private final RunMode mode;
@@ -2042,6 +2055,12 @@ public class ClusteringDialog {
 
         List<String> warns = new ArrayList<>();
         Algorithm algo = algorithmCombo == null ? null : effectiveAlgorithm();
+        // Most of what follows is advice about how clusters will FORM. Analyzing
+        // current classifications forms none -- the labels are already on the
+        // cells -- so those cautions are not merely unhelpful there, they
+        // contradict what the dialog says it is doing. The ones that survive are
+        // about what the RESULT can be read as, which is still at stake.
+        boolean forming = mode != RunMode.ANALYZE_EXISTING;
 
         if (algo == Algorithm.HDBSCAN && n > 12) {
             warns.add("HDBSCAN clusters the full " + n + "-feature space; density-based "
@@ -2056,7 +2075,7 @@ public class ClusteringDialog {
                     + "(graph-based) is more robust for large panels.");
         }
 
-        if (compartments.size() >= 2 && !markers.isEmpty() && n > markers.size()) {
+        if (forming && compartments.size() >= 2 && !markers.isEmpty() && n > markers.size()) {
             warns.add("Selected " + n + " features = " + markers.size() + " markers x "
                     + compartments.size() + " compartments (" + String.join(", ", compartments)
                     + "). A marker's compartments are highly correlated -- one compartment is "
@@ -2078,17 +2097,23 @@ public class ClusteringDialog {
                     ? String.join(", ", priorEmbeddingCols)
                     : String.join(", ", priorEmbeddingCols.subList(0, 4)) + ", ...";
             boolean onlyEmbedding = priorEmbeddingCols.size() == n;
-            warns.add((onlyEmbedding
+            String whichCols = (onlyEmbedding
                         ? "Every selected measurement is an embedding coordinate"
                         : priorEmbeddingCols.size() + " of the " + n
                                 + " selected measurements are embedding coordinates")
-                    + " from an earlier run (" + cols + "). Clustering on them is a "
-                    + "valid two-step route -- the point of it -- but the heatmap and "
-                    + "marker rankings then describe the embedding axes, not your "
-                    + "markers, so the clusters cannot be read as marker phenotypes. "
-                    + "Add the markers you want to interpret by, or use Marker "
-                    + "Rankings on a separate run over the markers themselves.");
-            if (onlyEmbedding && normalizationCombo != null
+                    + " from an earlier run (" + cols + "). ";
+            warns.add(whichCols + (forming
+                    ? "Clustering on them is a valid two-step route -- the point of it -- "
+                      + "but the heatmap and marker rankings then describe the embedding "
+                      + "axes, not your markers, so the clusters cannot be read as marker "
+                      + "phenotypes. Add the markers you want to interpret by, or use "
+                      + "Marker Rankings on a separate run over the markers themselves."
+                    : "The heatmap and marker rankings describe whatever you select here, "
+                      + "so as it stands they will describe the embedding axes rather than "
+                      + "your markers -- which is the opposite of what this mode is usually "
+                      + "opened for. Select the markers you want each class characterised "
+                      + "by."));
+            if (forming && onlyEmbedding && normalizationCombo != null
                     && normalizationCombo.getValue() != Normalization.NONE) {
                 warns.add("Normalization is "
                         + normalizationCombo.getValue().getDisplayName()
@@ -2167,7 +2192,10 @@ public class ClusteringDialog {
                 if (!warns.isEmpty()) sb.append("\n\n");
             }
             if (!warns.isEmpty()) {
-                sb.append("Heads up -- this configuration may produce too few clusters:\n- ")
+                sb.append(forming
+                                ? "Heads up -- this configuration may produce too few clusters:"
+                                : "Heads up -- this may limit what the analysis can tell you:")
+                        .append("\n- ")
                         .append(String.join("\n- ", warns));
             }
             preflightLabel.setText(sb.toString());
@@ -2610,6 +2638,7 @@ public class ClusteringDialog {
         // multi-image (project) clustering path; runClustering() picks which
         // entries to pass.
         config.setClusterEntireProject(!scopeSection.isCurrentImage());
+        config.setScopeImageNames(scopeSection.selectedImageNames());
 
         // Analysis options
         config.setGeneratePlots(generatePlotsCheck.isSelected());
@@ -2909,12 +2938,9 @@ public class ClusteringDialog {
      * algorithm section at all.
      */
     private void restoreLastRunSettings() {
-        if (mode != RunMode.CLUSTER) {
-            return;
-        }
         try {
             ClusteringConfig last = ClusteringConfigManager.fromJson(
-                    QpcatPreferences.getClusterLastRunConfig());
+                    QpcatPreferences.getClusterLastRunConfig(mode.settingsKey()));
             if (last != null) {
                 applyConfig(last);
             }
@@ -2926,19 +2952,20 @@ public class ClusteringDialog {
 
     /** Remember a config that is about to run, for the next time the dialog opens. */
     private void rememberLastRunSettings(ClusteringConfig config) {
-        if (mode != RunMode.CLUSTER) {
-            return;
-        }
         try {
-            QpcatPreferences.setClusterLastRunConfig(ClusteringConfigManager.toJson(config));
+            QpcatPreferences.setClusterLastRunConfig(
+                    mode.settingsKey(), ClusteringConfigManager.toJson(config));
         } catch (RuntimeException e) {
             logger.debug("Could not store the last run's settings: {}", e.getMessage());
         }
     }
 
     private void applyConfig(ClusteringConfig config) {
-        // Algorithm
-        if (config.getAlgorithm() != null) {
+        // Algorithm. Not in "analyze current classifications": the algorithm
+        // there is always EXISTING, the combo is built but never shown, and
+        // pushing a stored value into it would only give effectiveAlgorithm
+        // something wrong to ignore.
+        if (mode != RunMode.ANALYZE_EXISTING && config.getAlgorithm() != null) {
             algorithmCombo.setValue(config.getAlgorithm());
             updateAlgorithmParams();
         }
@@ -3076,6 +3103,15 @@ public class ClusteringDialog {
         writeNodeMeasurementsCheck.setSelected(config.isWriteNodeMeasurements());
         writeComponentMeasurementsCheck.setSelected(config.isWriteComponentMeasurements());
         limitEdgesBySameClassCheck.setSelected(config.isLimitEdgesBySameClass());
+
+        // Scope. Restored AFTER the mode defaults ran (sub-clustering and
+        // analyze-existing both open on the whole project), so an explicit
+        // choice the user made last time wins over the default -- but only
+        // their choice, not an empty stored value.
+        if (scopeSection != null) {
+            scopeSection.restoreScope(
+                    config.isClusterEntireProject(), config.getScopeImageNames());
+        }
 
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();
@@ -5820,6 +5856,16 @@ public class ClusteringDialog {
                 new javafx.scene.chart.LineChart<>(xAxisK, yAxisK);
         kChart.setTitle("Ripley K(r)");
         kChart.setCreateSymbols(false);
+        // Animation OFF, and not for looks. The visibility checkboxes take series
+        // out of the chart and put the SAME instances back. An animated removal
+        // finishes on a later pulse, so toggling two clusters in quick succession
+        // lets a pending remove-timeline fire against a series that has already
+        // been re-added; XYChart.removeSeriesFromDisplay then unboxes a null out
+        // of its colour map and throws NPE on the FX thread, once per pulse. The
+        // aborted removal also leaves the line node drawn, which is where the
+        // stray dashed curves came from. Non-animated, removal is synchronous
+        // inside the list change and the window does not exist.
+        kChart.setAnimated(false);
         kChart.setAccessibleText(
                 "Ripley K function chart per cluster with Poisson null overlay (dashed)");
 
@@ -5833,6 +5879,7 @@ public class ClusteringDialog {
                 new javafx.scene.chart.LineChart<>(xAxisL, yAxisL);
         lChart.setTitle("Ripley L(r)");
         lChart.setCreateSymbols(false);
+        lChart.setAnimated(false);  // see kChart above
         lChart.setAccessibleText(
                 "Ripley L function chart per cluster with Poisson null overlay (dashed)");
 
@@ -6016,6 +6063,10 @@ public class ClusteringDialog {
         };
         Node clusterChecks = buildSeriesVisibilityPane(
                 seriesNames, hexByName, hidden, refreshVisible);
+        // The pane starts with everything but the first cluster hidden, and it
+        // populated `hidden` while building. The charts still hold every series
+        // from the build above, so they have to be brought into line once here.
+        refreshVisible.run();
 
         Node visibilityControls = clusterChecks;
         if (ripley.hasEnvelope()) {
@@ -6129,9 +6180,18 @@ public class ClusteringDialog {
             Set<String> hidden, Runnable onChange) {
         VBox boxes = new VBox(2);
         List<CheckBox> checks = new ArrayList<>();
-        for (String name : names) {
+        for (int i = 0; i < names.size(); i++) {
+            String name = names.get(i);
+            // One curve to start with. Each cluster brings its own dashed band,
+            // so seven clusters is twenty-one lines and the question the chart
+            // answers -- is THIS curve outside ITS band -- cannot be read off
+            // it. The checkboxes are how you add the next one deliberately.
+            boolean show = i == 0;
+            if (!show) {
+                hidden.add(name);
+            }
             CheckBox cb = new CheckBox(name);
-            cb.setSelected(true);
+            cb.setSelected(show);
             String hex = hexByName.get(name);
             if (hex != null && hex.startsWith("#")) {
                 // A swatch in the curve's own colour, so the list reads as the
@@ -6159,7 +6219,10 @@ public class ClusteringDialog {
         Button none = new Button("None");
         all.setStyle("-fx-font-size: 10px;");
         none.setStyle("-fx-font-size: 10px;");
-        all.setTooltip(Tooltips.of("Show every cluster's curve again."));
+        all.setTooltip(Tooltips.of(
+                "Show every cluster at once. Useful for spotting which clusters differ\n"
+                + "from the rest, but each one also draws its own dashed band, so\n"
+                + "matching a curve to its band gets hard past two or three."));
         none.setTooltip(Tooltips.of(
                 "Hide every cluster, then tick the one or two you want to read.\n"
                 + "The axes rescale onto what is left, which is most of the point.\n"
@@ -6173,13 +6236,21 @@ public class ClusteringDialog {
 
         Label head = new Label("Show clusters");
         head.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+        Label hint = new Label("Recommend 1 at a time");
+        hint.setStyle("-fx-font-size: 10px; -fx-opacity: 0.75;");
+        hint.setTooltip(Tooltips.of(
+                "Each cluster draws its curve plus the two dashed edges of its own\n"
+                + "simulated-random band, so every extra tick adds three lines.\n\n"
+                + "With one cluster shown the axes rescale onto it and the reading is\n"
+                + "direct: outside the dashed band at a radius means the pattern is\n"
+                + "not random at that radius."));
 
         ScrollPane scroll = new ScrollPane(boxes);
         scroll.setFitToWidth(true);
         scroll.setPrefViewportHeight(260);
         scroll.setStyle("-fx-background-color: transparent;");
 
-        VBox pane = new VBox(4, head, buttons, scroll);
+        VBox pane = new VBox(4, head, hint, buttons, scroll);
         pane.setMinWidth(150);
         pane.setPrefWidth(170);
         pane.setPadding(new Insets(4, 0, 0, 0));

@@ -243,9 +243,11 @@ Buttons above each table:
 
 ### Ripley L: controlling cluster visibility
 
-The **Ripley L** chart may have many curves when there are many clusters -- twenty curves on one axis is a thicket. A panel on the right side lists each cluster with checkboxes so you can hide the ones you are not reading. Hiding clusters also re-scales the axes onto what remains, which often makes the pattern clearer.
+The **Ripley L** chart opens showing the first cluster only, with **Recommend 1 at a time** under **Show clusters**. Each cluster draws three lines, not one: its curve, plus the two dashed edges of its own simulated-random band. Seven clusters is therefore twenty-one lines, and the question the chart exists to answer -- is this curve outside *its* band, and at which radii -- cannot be read off it. With one cluster shown the axes rescale onto that cluster and the answer is direct.
 
-Use **All** to show every cluster again, or **None** to hide all (the Poisson null line stays visible as a reference). The Poisson null is never hidden because it is the reference the curves are read against; without it the empty chart is unreadable.
+The panel to the right lists every cluster with a checkbox, each in its curve's own colour. Tick another to compare two; past two or three, matching a curve to its band gets hard. **All** shows every cluster at once, which is useful for spotting which ones differ from the rest. **None** hides them all.
+
+The random reference is never hidden, by either button. It is what the curves are read against, so an empty chart without it would be unreadable. In the default **Relative to random** view it is the flat line at zero labelled *Random (simulated)*; results saved before simulated envelopes existed instead show the analytical *Poisson null* diagonal.
 
 ## Saving a plot
 
