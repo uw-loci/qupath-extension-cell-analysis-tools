@@ -946,6 +946,54 @@ labels = None
 # the optional PCA precursor consumes it before this point.
 
 
+def validate_n_neighbors(n_neighbors, n_cells):
+    """Check a neighbour count before scikit-learn sees it.
+
+    Two ways this goes wrong, and neither produces a readable error downstream:
+
+    * **Zero or negative.** An editable JavaFX Spinner's min/max constrain its
+      arrows, not text typed into it, so a 2-to-500 control could commit 0.
+    * **More neighbours than cells.** A run over a handful of cells -- a stray
+      selection, a tiny annotation -- cannot have 50 neighbours per cell.
+
+    Raises ValueError naming the number and the cell count, so the dialog can
+    show something the user can act on.
+
+    :param n_neighbors: requested neighbour count
+    :param n_cells: rows in the matrix being clustered
+    :return: the neighbour count to use, reduced to fit when necessary
+    """
+    try:
+        k = int(n_neighbors)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "n_neighbors must be a whole number; got %r." % (n_neighbors,)
+        ) from None
+    if k < 1:
+        raise ValueError(
+            "n_neighbors must be at least 1; got %d. Check the 'n_neighbors' box "
+            "in the Clustering Algorithm section." % k
+        )
+    if n_cells < 2:
+        raise ValueError(
+            "Clustering needs at least 2 cells; this run has %d. If you have "
+            "objects selected in the viewer, the run uses only those -- clear "
+            "the selection to use the whole image." % n_cells
+        )
+    # scanpy counts each cell as its own first neighbour, so the most it can ask
+    # for is n_cells - 1. Reduce rather than refuse: the user asked for a graph,
+    # and the largest one this many cells can support is still a graph.
+    if k > n_cells - 1:
+        logger.warning(
+            "n_neighbors=%d exceeds what %d cells can support; using %d",
+            k,
+            n_cells,
+            n_cells - 1,
+        )
+        return n_cells - 1
+    return k
+
+
 # Defined here, ABOVE the dispatch below, because the dispatch runs at module
 # level: a def placed after its own top-level call site is never executed in
 # time and the run dies with NameError.
@@ -1007,6 +1055,11 @@ if algorithm == "leiden":
 
     n_neighbors = algorithm_params.get("n_neighbors", 50)
     resolution = algorithm_params.get("resolution", 1.0)
+    # Refuse here rather than let scikit-learn do it. Its message -- "The
+    # 'n_neighbors' parameter of KNeighborsTransformer must be an int in the
+    # range [1, inf) or None. Got 0 instead" -- names neither the control nor
+    # the dialog, and arrives after the whole extraction has been paid for.
+    n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
     logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
 
     adata = ad.AnnData(X=cluster_matrix)

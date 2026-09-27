@@ -4,6 +4,35 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.0] -- 2026-09-27 -- Typed spinner values respect their own range
+
+A round number after a long testing session: 0.14.4 through 0.14.17 shipped the
+"Analyze current cell classifications" mode and the run of fixes that made it, and the
+results window around it, actually usable.
+
+### Fixed
+
+- **`n_neighbors=0` reached scikit-learn and killed the run** with "The 'n_neighbors' parameter
+  of KNeighborsTransformer must be an int in the range [1, inf) or None. Got 0 instead" -- an
+  error naming neither the control nor the dialog, arriving only after the whole measurement
+  extraction had been paid for. `SpinnerValueFactory.setValue` does NOT enforce the min/max it
+  was built with: those constrain the up/down arrows and nothing else, so text typed into a
+  2-to-500 box committed whatever was in it. Every editable spinner in the extension commits
+  through one helper, so clamping there fixes all 49 of them at once.
+- **A second guard on the Python side**, because a bad neighbour count could also arrive from a
+  saved config or a YAML batch. It now refuses with a message naming the box to look in, says
+  explicitly when too few cells are in scope that a viewer selection may be the cause, and
+  reduces rather than refuses when more neighbours are asked for than the cell count can
+  support.
+
+### Changed
+
+- **Marker Fingerprints bars diverge from a zero line.** They previously all grew rightward
+  from the left edge with depletion shown only as a paler fill, so a negative fold-change read
+  as a positive one at a glance. Negative now goes left, positive right, and the zero line sits
+  at the same x on every card -- the gutter is sized from the largest depletion across all
+  clusters, so two cards can be compared without re-reading the numbers.
+
 ## [0.14.17] -- 2026-09-27 -- Per-cluster channels in 3D, a visible selection scope, and a console that fills
 
 Requires `cluster3d-core` 0.1.10.

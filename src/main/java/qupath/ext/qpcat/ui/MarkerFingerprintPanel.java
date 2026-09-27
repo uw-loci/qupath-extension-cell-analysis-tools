@@ -18,6 +18,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -61,6 +62,10 @@ public class MarkerFingerprintPanel extends BorderPane {
     private static final Logger logger = LoggerFactory.getLogger(MarkerFingerprintPanel.class);
 
     private static final double BAR_MAX_W = 130;   // px at the global-max value
+    /** px per unit, and the two halves of the diverging axis. Set per rebuild. */
+    private double barScale = 1;
+    private double negGutter = 0;
+    private double posExtent = BAR_MAX_W;
     private static final double BAR_H = 11;
     private static final double VAL_W = 46;
     private static final double CARD_W = 300;
@@ -313,16 +318,33 @@ public class MarkerFingerprintPanel extends BorderPane {
 
     private void buildMeasurementCards() {
         noteLabel.setText("One card per cluster, tinted with its color. Bars show each "
-                + "marker's enrichment (log2 fold-change vs. the rest), longest = most "
+                + "marker's enrichment (log2 fold-change vs. the rest) against a zero "
+                + "line: right is enriched, left is depleted, longest is most "
                 + "cluster-defining. Hover a bar for the Wilcoxon score and adjusted p-value.");
 
-        double globalMax = 1e-9;
+        // Two extents, not one. Bars diverge from a shared zero line, so the
+        // gutter left of zero has to be as wide as the biggest DEPLETION and the
+        // space right of it as wide as the biggest enrichment. Measured across
+        // every cluster so the zero line lands in the same place on every card --
+        // the whole point of a common axis is that two cards can be compared
+        // without re-reading the numbers.
+        double negMax = 0;
+        double posMax = 0;
         for (List<Map<String, Object>> markers : rankings.values()) {
             int shown = Math.min(topK, markers.size());
             for (int i = 0; i < shown; i++) {
-                globalMax = Math.max(globalMax, Math.abs(barValue(markers.get(i))));
+                double v = barValue(markers.get(i));
+                if (v < 0) {
+                    negMax = Math.max(negMax, -v);
+                } else {
+                    posMax = Math.max(posMax, v);
+                }
             }
         }
+        double globalMax = Math.max(1e-9, Math.max(negMax, posMax));
+        barScale = BAR_MAX_W / globalMax;
+        negGutter = negMax * barScale;
+        posExtent = Math.max(2, posMax * barScale);
         for (String cid : sortedClusterIds()) {
             cards.getChildren().add(measurementCard(cid, rankings.get(cid), globalMax));
         }
@@ -360,12 +382,31 @@ public class MarkerFingerprintPanel extends BorderPane {
         nameLbl.setWrapText(true);
         nameLbl.setMaxWidth(Double.MAX_VALUE);
 
-        double frac = globalMax > 0 ? Math.min(1.0, Math.abs(val) / globalMax) : 0;
-        double w = Math.max(2, frac * BAR_MAX_W);
+        double w = Math.max(2, Math.abs(val) * barScale);
         Rectangle bar = new Rectangle(w, BAR_H);
         bar.setArcWidth(3);
         bar.setArcHeight(3);
         bar.setFill(val >= 0 ? color : color.deriveColor(0, 0.5, 1.0, 0.6));
+
+        // Fixed-width cells either side of a 1px axis: that, rather than any
+        // per-row arithmetic, is what keeps every zero line at the same x.
+        HBox negCell = new HBox(val < 0 ? bar : new Region());
+        negCell.setAlignment(Pos.CENTER_RIGHT);
+        negCell.setMinWidth(negGutter);
+        negCell.setPrefWidth(negGutter);
+        negCell.setMaxWidth(negGutter);
+
+        Region axis = new Region();
+        axis.setMinSize(1, BAR_H);
+        axis.setPrefSize(1, BAR_H);
+        axis.setMaxSize(1, BAR_H);
+        axis.setStyle("-fx-background-color: derive(-fx-text-base-color, 55%);");
+
+        HBox posCell = new HBox(val >= 0 ? bar : new Region());
+        posCell.setAlignment(Pos.CENTER_LEFT);
+        posCell.setMinWidth(posExtent);
+        posCell.setPrefWidth(posExtent);
+        posCell.setMaxWidth(posExtent);
 
         String valText = Double.isNaN(lfc)
                 ? (Double.isNaN(score) ? "n/a" : String.format("z=%.1f", score))
@@ -373,7 +414,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         Label valLbl = new Label(valText);
         valLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         valLbl.setMinWidth(VAL_W);
-        HBox barLine = new HBox(6, bar, valLbl);
+        HBox barLine = new HBox(4, negCell, axis, posCell, valLbl);
         barLine.setAlignment(Pos.CENTER_LEFT);
 
         VBox cell = new VBox(1, nameLbl, barLine);

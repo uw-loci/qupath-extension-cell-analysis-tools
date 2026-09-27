@@ -37,6 +37,36 @@ public final class SpinnerUtils {
         });
     }
 
+    /**
+     * Bring {@code value} inside the factory's own min/max.
+     * <p>
+     * {@code SpinnerValueFactory.setValue} does NOT enforce the range it was
+     * built with -- min and max constrain the up/down arrows and nothing else.
+     * So committing typed text put whatever was in the box straight through: a
+     * 2-to-500 "n_neighbors" spinner accepted 0, and the run died deep inside
+     * scikit-learn with "The 'n_neighbors' parameter ... Got 0 instead", which
+     * names neither the control nor the dialog it is in.
+     * <p>
+     * Every editable spinner in the extension commits through here, so clamping
+     * at this one point covers all of them.
+     *
+     * @param factory the factory whose range applies
+     * @param value   the parsed value
+     * @return the value, clamped when the factory declares a range for it
+     */
+    @SuppressWarnings("unchecked")
+    static <T> T clampToRange(SpinnerValueFactory<T> factory, T value) {
+        if (factory instanceof SpinnerValueFactory.IntegerSpinnerValueFactory f
+                && value instanceof Integer v) {
+            return (T) Integer.valueOf(Math.max(f.getMin(), Math.min(f.getMax(), v)));
+        }
+        if (factory instanceof SpinnerValueFactory.DoubleSpinnerValueFactory f
+                && value instanceof Double v) {
+            return (T) Double.valueOf(Math.max(f.getMin(), Math.min(f.getMax(), v)));
+        }
+        return value;   // a factory with no declared range: nothing to clamp to
+    }
+
     private static <T> void commitEditorText(Spinner<T> spinner) {
         if (!spinner.isEditable()) {
             return;
@@ -57,7 +87,7 @@ public final class SpinnerUtils {
         try {
             T value = converter.fromString(text);
             if (value != null) {
-                factory.setValue(value);
+                factory.setValue(clampToRange(factory, value));
             }
         } catch (Exception e) {
             // Unparseable input: revert the editor to the last valid value.
