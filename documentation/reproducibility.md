@@ -17,10 +17,15 @@ Every run auto-saves to `<project>/qpcat/cluster_results/`. Four routes back, fr
 statistics exactly as computed.
 
 **2. Re-run in the GUI with the same settings.**
-In the results window click **Open results folder**. Beside the result you will find
-`<name>_config.json` (the exact configuration) and `<name>_RUN_INFO.txt` (a readable
-record of every parameter, plus these steps). In the clustering dialog use **Load Config
-from file...**, pick that JSON, set the **Scope**, and run.
+In the results window click **Open results folder**. Each run leaves three files there:
+`<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and
+`<name>_RUN_INFO.txt` (a readable record of every parameter, plus these steps).
+
+In the clustering dialog use **Load Config from file...**, pick the `<name>_config.json`,
+set the **Scope**, and run. The chooser offers only `_config.json` files, because the
+result sitting beside them is not a configuration. On macOS the file dialog cannot filter
+on a suffix, so it lists every JSON there and refuses a result with a message naming the
+config to pick instead.
 
 The config does **not** pin the image set, so set the scope yourself. That is deliberate:
 a config that silently re-ran on whatever images happened to be selected would produce
