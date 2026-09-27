@@ -47,6 +47,7 @@ import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.ColorTools;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
@@ -2921,9 +2922,10 @@ public class ClusteringDialog {
         loadFileBtn.setOnAction(e -> loadConfigFromFile());
         loadFileBtn.setMaxWidth(Double.MAX_VALUE);
         loadFileBtn.setTooltip(Tooltips.of(
-                "Load a config from any JSON file -- e.g. the '<name>_config.json'\n"
-                + "saved next to a result, to reproduce that exact run. Restores all\n"
-                + "settings here; then pick the Scope and click Run Clustering."));
+                "Load a '<name>_config.json' file -- the settings saved next to a\n"
+                + "result -- to reproduce that exact run. The result itself\n"
+                + "('<name>.json') is not a config; open that with View Past Results.\n"
+                + "Restores all settings here; then pick the Scope and click Run Clustering."));
 
         VBox box = new VBox(4, heading, loadBtn, loadFileBtn);
         box.setAlignment(Pos.TOP_LEFT);
@@ -2946,8 +2948,22 @@ public class ClusteringDialog {
     private void loadConfigFromFile() {
         javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
         chooser.setTitle("Load clustering config from file");
-        chooser.getExtensionFilters().add(
-                new javafx.stage.FileChooser.ExtensionFilter("Config JSON", "*.json"));
+        // The results folder holds TWO json files per run -- '<name>.json' (the
+        // result) and '<name>_config.json' (the config) -- and only the second one
+        // loads here, so offer only that. macOS reduces every filter to the text
+        // after the last dot, which would turn the glob into a type that matches
+        // nothing; there the filter stays '*.json' and
+        // ClusteringConfigManager.loadConfigFromFile refuses a result by content.
+        if (GeneralTools.isMac()) {
+            chooser.getExtensionFilters().add(
+                    new javafx.stage.FileChooser.ExtensionFilter("JSON files", "*.json"));
+        } else {
+            chooser.getExtensionFilters().addAll(
+                    new javafx.stage.FileChooser.ExtensionFilter(
+                            "Clustering config (*" + ClusteringResultManager.CONFIG_SIDECAR_SUFFIX + ")",
+                            "*" + ClusteringResultManager.CONFIG_SIDECAR_SUFFIX),
+                    new javafx.stage.FileChooser.ExtensionFilter("All JSON files", "*.json"));
+        }
         // Default to the project's results folder where *_config.json files live.
         try {
             if (qupath.getProject() != null) {
@@ -2980,8 +2996,9 @@ public class ClusteringDialog {
             }
         } catch (Exception e) {
             logger.error("Failed to load config from file", e);
-            Dialogs.showErrorNotification("QPCAT",
-                    "Failed to load config from file: " + e.getMessage());
+            // A dialog, not a notification: the message names the file to pick
+            // instead, which is too long to read in a toast that fades.
+            Dialogs.showErrorMessage("QPCAT - config not loaded", e.getMessage());
         }
     }
 

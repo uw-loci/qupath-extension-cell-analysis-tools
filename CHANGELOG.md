@@ -4,6 +4,30 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.6] -- 2026-09-27 -- "Load Config from file..." offers only config files
+
+### Fixed
+
+- **The config file chooser no longer offers saved results.** It opens in the project's
+  `cluster_results/` folder, which holds two JSON files per run -- `<name>.json` (the result)
+  and `<name>_config.json` (the settings) -- and its filter was `*.json`, so both were on offer
+  and only one of them loads. The filter is now `*_config.json`, with an "All JSON files" entry
+  for a config saved elsewhere. macOS reduces a filter to the text after the last dot, so the
+  glob would match nothing there; on macOS the filter stays `*.json` and the content check below
+  does the work.
+- **Picking the wrong file now says so.** Gson fills a `ClusteringConfig` from any JSON object,
+  so loading a result silently restored a default config with no error at all --
+  `algorithm` and `normalization` appear in both shapes, which is why it looked plausible.
+  `ClusteringConfigManager.loadConfigFromFile` now refuses anything carrying result-only keys
+  (`clusterLabels`, `clusterStats`, `markerNames`, `nClusters`, `nCells`) and names the
+  `_config.json` to pick instead, and refuses a JSON file that is not a config at all. The
+  refusal is a dialog rather than a notification, because the message names the file to use.
+
+### Changed
+
+- `ClusteringResultManager.CONFIG_SIDECAR_SUFFIX` is public and is now the single definition of
+  the `_config.json` naming shared by the results listing and the chooser filter.
+
 ## [0.15.5] -- 2026-09-27 -- PAGA is not computed when there is nothing to write it to
 
 ### Changed

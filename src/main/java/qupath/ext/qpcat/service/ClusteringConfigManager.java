@@ -2,6 +2,9 @@ package qupath.ext.qpcat.service;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.ToNumberPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -188,12 +191,74 @@ public class ClusteringConfigManager {
             throw new IOException("Config file not found: " + file);
         }
         String json = Files.readString(file);
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(json);
+        } catch (RuntimeException e) {
+            throw new IOException(file.getFileName() + " is not valid JSON");
+        }
+        // An empty file, a bare "null" or a top-level array all land here as "not
+        // an object", which is the same answer to the user.
+        JsonObject obj = parsed != null && parsed.isJsonObject() ? parsed.getAsJsonObject() : null;
+        String rejection = describeIfNotAConfig(file.getFileName().toString(), obj);
+        if (rejection != null) {
+            throw new IOException(rejection);
+        }
         ClusteringConfig config = GSON.fromJson(json, ClusteringConfig.class);
         if (config == null) {
             throw new IOException("Config file did not contain a valid clustering config: " + file);
         }
         logger.info("Loaded clustering config from file {}", file);
         return config;
+    }
+
+    // Keys that appear only in a SAVED RESULT, never in a ClusteringConfig.
+    private static final String[] RESULT_ONLY_KEYS = {
+            "clusterLabels", "clusterStats", "markerNames", "nClusters", "nCells"
+    };
+
+    // Keys that a ClusteringConfig always writes. Gson fills a config from ANY
+    // object, so without this check picking the wrong file silently loads a
+    // default config instead of failing.
+    private static final String[] CONFIG_KEYS = {
+            "algorithm", "selectedMeasurements", "algorithmParams", "embeddingMethod"
+    };
+
+    /**
+     * Why {@code obj} is not a clustering config, or null when it is one.
+     * <p>
+     * A project's {@code cluster_results/} folder holds two JSON files per run --
+     * {@code <name>.json} (the result) and {@code <name>_config.json} (the config) --
+     * and only the second is loadable here.
+     *
+     * @param filename name shown back to the user; the message has to name the file
+     *                 they picked, because the two differ only by a suffix
+     * @param obj      the parsed JSON, or null for an empty file / JSON {@code null}
+     * @return a message naming what the file is and which one to pick instead, or null
+     */
+    static String describeIfNotAConfig(String filename, JsonObject obj) {
+        if (obj == null) {
+            return filename + " is empty, or does not contain a JSON object";
+        }
+        for (String key : RESULT_ONLY_KEYS) {
+            if (obj.has(key)) {
+                String base = filename.endsWith(JSON_EXT)
+                        ? filename.substring(0, filename.length() - JSON_EXT.length())
+                        : filename;
+                return filename + " is a saved clustering RESULT, not a config. Pick '"
+                        + base + "_config" + JSON_EXT + "' instead -- it is saved beside the "
+                        + "result and holds the settings that produced it. To open the result "
+                        + "itself, use View Past Results.";
+            }
+        }
+        for (String key : CONFIG_KEYS) {
+            if (obj.has(key)) {
+                return null;
+            }
+        }
+        return filename + " is not a QP-CAT clustering config (no 'algorithm' or "
+                + "'selectedMeasurements' entry). Pick a '_config" + JSON_EXT + "' file "
+                + "saved beside a result, or a config saved with Save Config...";
     }
 
     /**

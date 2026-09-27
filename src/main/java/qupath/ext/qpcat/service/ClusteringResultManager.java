@@ -111,11 +111,14 @@ public class ClusteringResultManager {
     /**
      * List available saved result names (without extension), most recent first.
      */
-    // Sidecar written next to each result by ClusteringRunRecord. It is a plain
-    // ClusteringConfig (no cluster/cell data), so it must NOT be listed as a
-    // result -- otherwise "View Past Results" shows a phantom "0 clusters" entry
-    // beside the real one.
-    private static final String CONFIG_SIDECAR_SUFFIX = "_config" + JSON_EXT;
+    /**
+     * Filename suffix of the config sidecar written next to each result by
+     * {@link ClusteringRunRecord}. It is a plain {@link qupath.ext.qpcat.model.ClusteringConfig}
+     * (no cluster/cell data), so it must NOT be listed as a result -- otherwise
+     * "View Past Results" shows a phantom "0 clusters" entry beside the real one.
+     * It is also the only kind of file "Load Config from file..." should offer.
+     */
+    public static final String CONFIG_SIDECAR_SUFFIX = "_config" + JSON_EXT;
 
     public static List<String> listResults(Project<?> project) throws IOException {
         Path resultsDir = getResultsDirectory(project);
