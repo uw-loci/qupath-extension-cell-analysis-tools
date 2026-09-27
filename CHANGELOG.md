@@ -11,11 +11,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - **Every violin in the stacked violin plot was drawn as a hairline.** Not a resolution
   problem: at 20 clusters x 34 features each violin had a 62 x 60 px cell to itself and used
   about 2 px of it. scanpy passes `hue=<the same variable as x>` to `seaborn.violinplot` so it
-  can colour each column, and seaborn's `dodge="auto"` then splits the slot between the hue
-  levels, giving each violin 1/34 of its column. The call now passes `dodge=False`, which
-  restores the full width at the same figure size and DPI. Two contract tests MEASURE the drawn
-  width -- one pins the seaborn behaviour, so if a future release stops dodging a redundant hue
-  the workaround can be dropped rather than quietly becoming wrong.
+  can colour each column, and seaborn 0.13's `dodge="auto"` asks `_dodge_needed()`, which
+  compares the number of distinct x values with the number of distinct (x, hue) pairs -- and for
+  a pandas Categorical the second counts unobserved combinations too (12 against 144 on a
+  12-feature panel). So seaborn splits every slot n ways although the hue is redundant. Whether
+  scanpy's melted frame arrives categorical varies between pandas builds, which is why the same
+  scanpy 1.11.5 / seaborn 0.13.2 pair dodges in the shipped Appose env and does not on CI. The
+  call now passes `dodge=False`: full width at the same figure size and DPI, and the figure no
+  longer varies with a detail of dependency resolution. The contract tests MEASURE the drawn
+  width, and one of them prints which way the running environment goes.
 - **The results-tab guide bar was near-white on near-white under the dark theme.** The bar
   painted a fixed light background while its text used `derive(-fx-text-base-color, 25%)`, which
   the dark theme resolves to almost white. Background and foreground are now set together, in

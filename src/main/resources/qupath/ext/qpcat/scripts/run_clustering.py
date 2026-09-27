@@ -2344,11 +2344,15 @@ if do_plots and plot_dir and can_analyze:
                 return_fig=True,
                 # Every violin was drawn as a hairline, whatever the figure size
                 # or DPI. scanpy passes hue=<the same variable as x> to
-                # seaborn.violinplot, and seaborn's dodge="auto" splits the slot
-                # between the hue levels anyway, so each violin got 1/n_features
-                # of its column. dodge=False restores the full width. Measured on
-                # scanpy 1.11.5 / seaborn 0.13.2; a plot_kwds passthrough, not
-                # something scanpy exposes, so it is pinned by a contract test.
+                # seaborn.violinplot, and seaborn's dodge="auto" asks
+                # _dodge_needed(), which compares the number of distinct x values
+                # with the number of distinct (x, hue) pairs. For a Categorical
+                # column the second counts unobserved combinations too (12 vs
+                # 144), so seaborn splits each slot n ways although the hue is
+                # redundant. Whether scanpy's frame arrives categorical varies by
+                # pandas build, so the same library versions dodge in the shipped
+                # env and not on CI -- dodge=False removes the dependence.
+                # Pinned by python_tests/test_stacked_violin_width.py.
                 dodge=False,
             )
             violin_path = os.path.join(plot_dir, "stacked_violin.png")
