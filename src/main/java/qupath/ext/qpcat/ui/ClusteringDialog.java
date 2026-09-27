@@ -2360,10 +2360,18 @@ public class ClusteringDialog {
         phases.add(new PhaseProgressPane.Phase("extract", "Extract measurements"));
         phases.add(new PhaseProgressPane.Phase("normalize", "Normalize"));
         if (embed) phases.add(new PhaseProgressPane.Phase("embed", "Compute embedding"));
-        phases.add(new PhaseProgressPane.Phase("cluster", "Cluster"));
+        // Nothing is clustered when the labels came off the objects, and nothing
+        // is written back either -- so a checklist reading "Cluster" then "Apply
+        // results" described a different run, and the Apply row could never tick
+        // because that phase is never reported in this mode.
+        boolean existing = config.getAlgorithm() == ClusteringConfig.Algorithm.EXISTING;
+        phases.add(new PhaseProgressPane.Phase("cluster",
+                existing ? "Read classifications" : "Cluster"));
         if (spatial) phases.add(new PhaseProgressPane.Phase("spatial", "Spatial statistics"));
         if (plots) phases.add(new PhaseProgressPane.Phase("plots", "Generate plots"));
-        phases.add(new PhaseProgressPane.Phase("apply", "Apply results"));
+        if (!existing) {
+            phases.add(new PhaseProgressPane.Phase("apply", "Apply results"));
+        }
         return phases;
     }
 

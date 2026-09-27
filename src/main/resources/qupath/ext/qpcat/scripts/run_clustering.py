@@ -935,8 +935,18 @@ elif embedding_method == "tsne":
 elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)
 
-# 4. Clustering
-_progress(0.45, "Running %s clustering (%d cells)..." % (str(algorithm), n_cells))
+# 4. Clustering -- or, for algorithm="existing", simply reading the labels that
+# are already on the objects. Saying "Running existing clustering" there was
+# both wrong and alarming: the user chose this mode precisely so that nothing
+# would be re-clustered, and the banner above the dialog says so.
+_progress(
+    0.45,
+    (
+        "Reading existing classifications (%d cells)..." % n_cells
+        if algorithm == "existing"
+        else "Running %s clustering (%d cells)..." % (str(algorithm), n_cells)
+    ),
+)
 
 labels = None
 

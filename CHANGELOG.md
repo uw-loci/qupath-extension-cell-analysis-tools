@@ -4,6 +4,23 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.3] -- 2026-09-27 -- "Analyze current classifications" stops calling itself clustering
+
+### Fixed
+
+- **The progress line read "Running existing clustering..."** in the one mode whose whole point
+  is that nothing is re-clustered -- and whose banner says so two inches above it. It now says
+  "Reading existing classifications".
+- **The phase checklist said "Cluster" and "Apply results".** Neither happens: the labels come
+  off the objects, and the mode writes nothing back. The first is now "Read classifications",
+  and the second is gone -- that phase is never reported in this mode, so the row could never
+  tick and sat unfinished for the whole run.
+
+Note that time spent after that phase begins is real work, just misattributed: the marker
+statistics, the neighbour graph behind the rankings, and any embedding still chosen in the
+Dimensionality Reduction section. Setting **Method: None** there is what skips the embedding --
+it is not skipped automatically, because the plot it produces is sometimes wanted.
+
 ## [0.15.2] -- 2026-09-27 -- Viridis when there is no centre, and two plots that were silently lost
 
 ### Fixed
