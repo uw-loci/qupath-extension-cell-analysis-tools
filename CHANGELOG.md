@@ -4,6 +4,37 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.1] -- 2026-09-27 -- Zero is white on the heatmap
+
+### Fixed
+
+- **The heatmap put white at the MIDPOINT of each column, not at zero.** It rescaled every
+  marker between its own lowest and highest cluster mean, so white landed wherever that
+  midpoint happened to be. With the default Z-score normalization zero is the one value that
+  means something -- this cluster is average for this marker -- and it was being painted an
+  arbitrary colour. A column of entirely below-average values still showed a pure red cell.
+
+  This is also a palette/normalization mismatch, and the mismatch is the part that is contrary
+  to practice: a blue-white-red diverging scale promises a meaningful midpoint, and a min-max
+  rescale to 0..1 has none. (The convention is sequential for min-max, diverging for signed
+  data centred at zero -- which is why scanpy's `matrixplot` defaults to `viridis` and offers
+  `vcenter` separately. QP-CAT's own matrixplot PNG pairs `standard_scale="var"` with viridis
+  and was already correct.)
+
+  Both modes are now symmetric about zero.
+
+### Added
+
+- **A Scale control on the Heatmap tab**, and a matching preference, choosing what the colour
+  reaches to:
+  - **Per marker** (default): each column uses its own strongest value, so a weakly varying
+    marker still shows its pattern. Comparable down a column, not across columns.
+  - **Shared across markers**: one reach for the whole map, so the same colour is the same
+    number anywhere in it -- and a marker that barely varies correctly looks almost white.
+
+  The legend now prints the numbers rather than "Low"/"High" when there is a single scale to
+  put numbers on.
+
 ## [0.15.0] -- 2026-09-27 -- Typed spinner values respect their own range
 
 A round number after a long testing session: 0.14.4 through 0.14.17 shipped the

@@ -4,6 +4,7 @@ import javafx.geometry.Insets;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
+import qupath.ext.qpcat.preferences.QpcatPreferences;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
@@ -36,6 +37,11 @@ public class ClusterHeatmapPanel extends VBox {
     private static final Font LABEL_FONT = Font.font("System", 10);
     private static final Font TITLE_FONT = Font.font("System", 12);
 
+    /** Labels for the two scale modes, also used as the ComboBox items. */
+    static final String SCALE_PER_MARKER = "Per marker";
+    static final String SCALE_SHARED = "Shared across markers";
+
+    private javafx.scene.control.ComboBox<String> scaleCombo;
     private final Canvas canvas;
     private final Button zoomOutBtn;
     private final Button zoomInBtn;
@@ -111,6 +117,20 @@ public class ClusterHeatmapPanel extends VBox {
     /** Multiplier on the cell size; 1.0 is the historical fixed 25px. */
     private double zoom = 1.0;
 
+    /** How cell values are mapped to colour. */
+    enum ScaleMode {
+        /** Each marker rescaled between its own lowest and highest cluster mean. */
+        PER_MARKER,
+        /** One scale for the whole matrix, symmetric about zero. */
+        SHARED_CENTERED
+    }
+
+    private ScaleMode scaleMode = ScaleMode.PER_MARKER;
+    /** Half-width of the shared scale, in the units of the incoming means. */
+    private double sharedExtent = 1;
+    /** Per-column half-widths for PER_MARKER, in those same units. */
+    private double[] columnExtent;
+
     public ClusterHeatmapPanel() {
         setSpacing(5);
         setPadding(new Insets(5));
@@ -151,8 +171,37 @@ public class ClusterHeatmapPanel extends VBox {
         canvas.setOnMouseMoved(this::onMouseMoved);
         canvas.setOnMouseExited(e -> tooltip.hide());
 
+        scaleCombo = new javafx.scene.control.ComboBox<>();
+        scaleCombo.getItems().addAll(SCALE_PER_MARKER, SCALE_SHARED);
+        scaleCombo.setValue(QpcatPreferences.isHeatmapSharedScale()
+                ? SCALE_SHARED : SCALE_PER_MARKER);
+        scaleMode = QpcatPreferences.isHeatmapSharedScale()
+                ? ScaleMode.SHARED_CENTERED : ScaleMode.PER_MARKER;
+        scaleCombo.setStyle("-fx-font-size: 10px;");
+        scaleCombo.setTooltip(Tooltips.of(
+                "How cell values become colours. WHITE IS ZERO in both: with the\n"
+                + "default Z-score normalization, zero means this cluster is average\n"
+                + "for this marker, red is above it and blue below.\n\n"
+                + "What differs is the reach of the colour:\n\n"
+                + "Per marker: each column uses its own strongest value, so a weakly\n"
+                + "varying marker still shows its pattern. Colour is comparable DOWN\n"
+                + "a column, not across columns.\n\n"
+                + "Shared across markers: one reach for the whole map, so the same\n"
+                + "colour is the same number anywhere in it -- and a marker that\n"
+                + "barely varies correctly looks almost white.\n\n"
+                + "With Normalization set to None the values are raw intensities and\n"
+                + "zero is not a meaningful centre, so neither mode is informative."));
+        scaleCombo.valueProperty().addListener((o, a, b) -> {
+            boolean shared = SCALE_SHARED.equals(b);
+            scaleMode = shared ? ScaleMode.SHARED_CENTERED : ScaleMode.PER_MARKER;
+            QpcatPreferences.setHeatmapSharedScale(shared);
+            recomputeScale();
+            redraw();
+        });
+
         javafx.scene.layout.HBox zoomBar = new javafx.scene.layout.HBox(
-                4, titleLabel, new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn);
+                4, titleLabel, new Label("  Scale:"), scaleCombo,
+                new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn);
         zoomBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         getChildren().addAll(zoomBar, canvas);
     }
@@ -169,20 +218,7 @@ public class ClusterHeatmapPanel extends VBox {
         this.nClusters = clusterStats.length;
         this.nMarkers = markerNames.length;
 
-        // Column-normalize for display (min-max per marker)
-        normData = new double[nClusters][nMarkers];
-        for (int j = 0; j < nMarkers; j++) {
-            double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
-            for (int i = 0; i < nClusters; i++) {
-                min = Math.min(min, clusterStats[i][j]);
-                max = Math.max(max, clusterStats[i][j]);
-            }
-            double range = max - min;
-            if (range == 0) range = 1;
-            for (int i = 0; i < nClusters; i++) {
-                normData[i][j] = (clusterStats[i][j] - min) / range;
-            }
-        }
+        recomputeScale();
 
         // Widen the row-label gutter to fit the longest cluster name (measured,
         // not guessed -- names are user text and can be any length).
@@ -234,6 +270,62 @@ public class ClusterHeatmapPanel extends VBox {
         canvas.setWidth(Math.max(canvasW, 300));
         canvas.setHeight(Math.max(canvasH, 200));
         redraw();
+    }
+
+    /**
+     * Recompute the 0..1 display values for the current scale mode.
+     * <p>
+     * PER_MARKER rescales each column between its own lowest and highest cluster
+     * mean. Every marker's extremes then land on pure blue and pure red whatever
+     * its spread, so a marker varying a thousandfold and one varying one percent
+     * are drawn identically -- and the value under the pointer no longer matches
+     * the colour beside it in any other column.
+     * <p>
+     * SHARED_CENTERED puts the whole matrix on ONE scale, symmetric about zero,
+     * so white is zero and the same colour means the same number everywhere.
+     * With the default Z-score normalization those numbers are standard
+     * deviations from each marker's mean across all cells, which is the reading
+     * most people expect from a blue-white-red heatmap.
+     */
+    private void recomputeScale() {
+        if (data == null) {
+            return;
+        }
+        normData = new double[nClusters][nMarkers];
+        if (scaleMode == ScaleMode.SHARED_CENTERED) {
+            double extent = 0;
+            for (int i = 0; i < nClusters; i++) {
+                for (int j = 0; j < nMarkers; j++) {
+                    extent = Math.max(extent, Math.abs(data[i][j]));
+                }
+            }
+            sharedExtent = extent > 0 ? extent : 1;
+            for (int i = 0; i < nClusters; i++) {
+                for (int j = 0; j < nMarkers; j++) {
+                    // -extent..+extent -> 0..1, so 0 lands exactly on white.
+                    normData[i][j] = 0.5 + (data[i][j] / sharedExtent) / 2.0;
+                }
+            }
+            return;
+        }
+        // Per marker, but still SYMMETRIC ABOUT ZERO. The old form stretched each
+        // column between its own min and max, which put white at the midpoint of
+        // whatever that column happened to contain -- so zero, the one value in a
+        // z-scored matrix that means something ("this cluster is average for this
+        // marker"), landed on an arbitrary colour, and a column of all-negative
+        // values still showed a pure red cell. Anchoring zero keeps each column's
+        // own dynamic range while making white mean the same thing everywhere.
+        columnExtent = new double[nMarkers];
+        for (int j = 0; j < nMarkers; j++) {
+            double extent = 0;
+            for (int i = 0; i < nClusters; i++) {
+                extent = Math.max(extent, Math.abs(data[i][j]));
+            }
+            columnExtent[j] = extent > 0 ? extent : 1;
+            for (int i = 0; i < nClusters; i++) {
+                normData[i][j] = 0.5 + (data[i][j] / columnExtent[j]) / 2.0;
+            }
+        }
     }
 
     private void redraw() {
@@ -297,9 +389,16 @@ public class ClusterHeatmapPanel extends VBox {
         }
         gc.setFill(Color.BLACK);
         gc.setTextAlign(TextAlignment.LEFT);
-        gc.fillText("Low", legendX, legendY + 22);
+        boolean shared = scaleMode == ScaleMode.SHARED_CENTERED;
+        // Both modes are centred, so both have a zero to label. Per marker has no
+        // single number for the ends -- each column has its own -- so it says so.
+        gc.fillText(shared ? String.format("%.2f", -sharedExtent) : "- per marker",
+                legendX, legendY + 22);
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.fillText("0", legendX + legendW / 2, legendY + 22);
         gc.setTextAlign(TextAlignment.RIGHT);
-        gc.fillText("High", legendX + legendW, legendY + 22);
+        gc.fillText(shared ? String.format("+%.2f", sharedExtent) : "+ per marker",
+                legendX + legendW, legendY + 22);
 
         // Grid border
         gc.setStroke(Color.gray(0.7));

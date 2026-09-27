@@ -54,6 +54,18 @@ public final class QpcatPreferences {
             "qpcat.cluster.closeDialogAfterRun", false);
 
     /**
+     * Heatmap colour scale: one shared scale centred on zero, or each marker
+     * rescaled between its own extremes.
+     * <p>
+     * Per marker is the default because it answers "which cluster is highest for
+     * this marker" at a glance. It is also the one that misleads: every marker's
+     * extremes land on pure blue and pure red whatever the spread, so the same
+     * colour means different numbers in different columns.
+     */
+    private static final BooleanProperty heatmapSharedScale =
+            PathPrefs.createPersistentPreference("qpcat.heatmap.sharedScale", false);
+
+    /**
      * Pick display channels only from markers whose value implies something
      * visible -- a mean, average or median.
      * <p>
@@ -403,6 +415,10 @@ public final class QpcatPreferences {
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
+
+    /** True when the heatmap uses one shared scale centred on zero. */
+    public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }
+    public static void setHeatmapSharedScale(boolean v) { heatmapSharedScale.set(v); }
 
     /** True when display channels come only from mean/average/median markers. */
     public static boolean isRepVisualChannelsOnly() { return repVisualChannelsOnly.get(); }
@@ -929,6 +945,20 @@ public final class QpcatPreferences {
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(heatmapSharedScale, Boolean.class)
+                .name("Heatmap: shared colour scale centred on 0")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Off (default), each marker is stretched between "
+                        + "its own lowest and highest cluster, so every marker's extremes are "
+                        + "pure blue and pure red whatever the spread -- and the same colour "
+                        + "means different numbers in different columns. On, the whole map "
+                        + "uses ONE scale symmetric about zero, so white is zero and a colour "
+                        + "means the same number everywhere. With the default Z-score "
+                        + "normalization those numbers are standard deviations from each "
+                        + "marker's mean across all cells. Also switchable per results window "
+                        + "from the Scale box on the Heatmap tab."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(repVisualChannelsOnly, Boolean.class)
