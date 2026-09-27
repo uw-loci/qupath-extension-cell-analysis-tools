@@ -12,11 +12,11 @@ When that column is a pandas Categorical the second counts every unobserved
 combination too -- 12 against 144 for a 12-feature panel -- so seaborn concludes
 the hue overlaps and splits each slot n ways, although the hue is redundant.
 
-Whether scanpy's melted frame arrives categorical varies between pandas builds,
-so the same scanpy 1.11.5 / seaborn 0.13.2 pair dodges in the shipped Appose env
-(pandas 3.0.5) and does not on this project's CI runner. ``dodge=False`` removes
-the dependence, which is the real reason to pass it: the figure stops varying
-with a detail of dependency resolution.
+That count is pandas-version-dependent. Measured on the same scanpy 1.11.5 /
+seaborn 0.13.2: pandas 3.0.5 (the shipped Appose env) dodges, pandas 2.3.3 (this
+project's CI runner) does not. ``dodge=False`` removes the dependence, which is
+the real reason to pass it: the figure stops varying with the pandas a user's
+environment happens to resolve.
 
 The tests MEASURE the drawn width rather than asserting the keyword is present.
 The first two hold in either environment; the third records which way this one

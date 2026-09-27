@@ -2349,9 +2349,10 @@ if do_plots and plot_dir and can_analyze:
                 # with the number of distinct (x, hue) pairs. For a Categorical
                 # column the second counts unobserved combinations too (12 vs
                 # 144), so seaborn splits each slot n ways although the hue is
-                # redundant. Whether scanpy's frame arrives categorical varies by
-                # pandas build, so the same library versions dodge in the shipped
-                # env and not on CI -- dodge=False removes the dependence.
+                # redundant. That count is pandas-version-dependent: measured
+                # dodging under pandas 3.0.5 (the shipped env) and not under
+                # 2.3.3 (CI), on the same scanpy 1.11.5 / seaborn 0.13.2.
+                # dodge=False removes the dependence.
                 # Pinned by python_tests/test_stacked_violin_width.py.
                 dodge=False,
             )

@@ -14,9 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   can colour each column, and seaborn 0.13's `dodge="auto"` asks `_dodge_needed()`, which
   compares the number of distinct x values with the number of distinct (x, hue) pairs -- and for
   a pandas Categorical the second counts unobserved combinations too (12 against 144 on a
-  12-feature panel). So seaborn splits every slot n ways although the hue is redundant. Whether
-  scanpy's melted frame arrives categorical varies between pandas builds, which is why the same
-  scanpy 1.11.5 / seaborn 0.13.2 pair dodges in the shipped Appose env and does not on CI. The
+  12-feature panel). So seaborn splits every slot n ways although the hue is redundant. That
+  count is pandas-version-dependent -- measured dodging under pandas 3.0.5, which the shipped
+  Appose env has, and not under 2.3.3, which CI has, on the same scanpy 1.11.5 / seaborn 0.13.2.
+  The
   call now passes `dodge=False`: full width at the same figure size and DPI, and the figure no
   longer varies with a detail of dependency resolution. The contract tests MEASURE the drawn
   width, and one of them prints which way the running environment goes.
