@@ -4,6 +4,22 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.15] -- 2026-09-27 -- The Cluster Explainer banner wraps, and stops claiming it was never run
+
+### Fixed
+
+- **The EXPERIMENTAL banner on the Cluster Explainer tab did not wrap.** A `Label` with
+  `wrapText` set still reports its preferred height as ONE LINE -- `computePrefHeight(-1)` is
+  asked at an unknown width and has nothing better to answer -- so a parent that sizes it by
+  preferred height gives it one line and clips the rest. `Region.USE_PREF_SIZE` does not help;
+  it resolves to the same call. The height is now recomputed against the width the label
+  actually got, which is the same fix the results-window quality banner needed in 0.13.1.
+  Both sites now share one `WrapHeight` helper rather than a copied listener.
+- **That banner still said the explainer "has never been run end-to-end by the QP-CAT
+  developers".** 0.14.10 corrected that claim in the README and the feature page and missed the
+  one place a user actually reads it. It now says what is true: run once, against one provider
+  on one dataset, with the OUTPUT unvalidated.
+
 ## [0.14.14] -- 2026-09-27 -- Two layout bugs in the results tabs
 
 ### Fixed

@@ -168,13 +168,16 @@ public class ClusterExplainerPanel {
     /** Prominent banner: this LLM-based feature is experimental and unvalidated. */
     private Node buildUntestedBanner() {
         Label warn = new Label(
-                "EXPERIMENTAL / UNTESTED: the Cluster Explainer has never been run "
-                + "end-to-end by the QP-CAT developers -- treat it as unproven, not "
-                + "merely unvalidated. Every suggestion is an unverified hint, not a "
-                + "conclusion: confirm it against the Marker Rankings tab and your own "
-                + "domain knowledge before relying on it.");
+                "EXPERIMENTAL: the Cluster Explainer has been run end-to-end once, "
+                + "against one provider on one dataset. Its OUTPUT is unvalidated. "
+                + "Every suggestion is a hint to check, not a conclusion: confirm it "
+                + "against the Marker Rankings tab and your own domain knowledge "
+                + "before relying on it.");
         warn.setWrapText(true);
         warn.setMaxWidth(Double.MAX_VALUE);
+        // Without this the banner is one line tall and the sentence is clipped --
+        // a wrapping Label reports its preferred height as a single line.
+        WrapHeight.bind(warn);
         warn.setStyle("-fx-background-color: #fff3cd; -fx-text-fill: #7a5b00; "
                 + "-fx-border-color: #ffe08a; -fx-border-width: 1; "
                 + "-fx-background-radius: 4; -fx-border-radius: 4; -fx-padding: 8;");
@@ -276,6 +279,7 @@ public class ClusterExplainerPanel {
                 "-fx-text-fill: -fx-text-base-color; -fx-font-style: italic; "
                 + "-fx-font-size: 11px;");
         keyWarningLabel.setWrapText(true);
+        WrapHeight.bind(keyWarningLabel);
 
         // Naming an environment variable and leaving the reader to work out how
         // to set one is half an instruction. This is the other half.

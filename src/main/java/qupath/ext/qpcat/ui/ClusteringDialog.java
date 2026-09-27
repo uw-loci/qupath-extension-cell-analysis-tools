@@ -5190,11 +5190,7 @@ public class ClusteringDialog {
             // height at an UNKNOWN width answers with ONE LINE. The height has to be
             // recomputed against the width the label actually got, so it is set from
             // a width listener instead.
-            l.widthProperty().addListener((obs, oldW, newW) -> {
-                if (newW != null && newW.doubleValue() > 0) {
-                    l.setMinHeight(l.prefHeight(newW.doubleValue()));
-                }
-            });
+            WrapHeight.bind(l);
             details.getChildren().add(l);
         }
 
