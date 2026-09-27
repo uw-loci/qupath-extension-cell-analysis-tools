@@ -27,6 +27,18 @@ public final class QpcatPaths {
     /** Saved, user-named run configurations. */
     public static final String CLUSTER_CONFIGS = ROOT + "/cluster_configs";
 
+    /**
+     * What the clustering dialog was last run with, one file per mode, so it
+     * reopens on the user's own choices instead of the hard-coded defaults.
+     * <p>
+     * Hidden, and separate from {@link #CLUSTER_CONFIGS}, because these are not
+     * configurations the user named and would want offered in a load list.
+     * <p>
+     * Per PROJECT rather than per user: the bulk of it is measurement names and
+     * image names, and neither means anything in a different project.
+     */
+    public static final String LAST_RUN = ROOT + "/.last_run";
+
     /** Saved phenotyping rule sets. */
     public static final String PHENOTYPE_RULES = ROOT + "/phenotype_rules";
 

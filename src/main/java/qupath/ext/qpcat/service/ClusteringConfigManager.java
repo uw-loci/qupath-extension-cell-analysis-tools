@@ -53,6 +53,68 @@ public class ClusteringConfigManager {
     }
 
     /**
+     * Store what the clustering dialog was just run with, so it reopens on those
+     * choices rather than the hard-coded defaults.
+     *
+     * <p>A file, not a preference. The bulk of a config is the measurement
+     * selection -- 262 names in one reported case -- and {@code java.util.prefs}
+     * refuses any value over 8192 characters (on Windows it is the registry).
+     * It refuses from a property listener, so the caller's own try/catch never
+     * sees it: the run logged an IllegalArgumentException with the whole config
+     * in the message and silently remembered nothing.
+     *
+     * <p>Per project, because measurement names and image names mean nothing in
+     * a different one. Failure is never fatal -- not remembering a setting must
+     * not stop a run -- so problems are logged and swallowed.
+     *
+     * @param project the open project; nothing is stored when null
+     * @param modeKey which dialog mode these settings belong to
+     * @param config  the config about to run
+     */
+    public static void saveLastRun(Project<?> project, String modeKey, ClusteringConfig config) {
+        if (project == null || config == null || modeKey == null) {
+            return;
+        }
+        try {
+            Path dir = project.getPath().getParent().resolve(QpcatPaths.LAST_RUN);
+            Files.createDirectories(dir);
+            Path file = dir.resolve(modeKey + JSON_EXT);
+            Path tmp = dir.resolve(modeKey + JSON_EXT + ".tmp");
+            // Write then move: an interrupted write would otherwise leave a
+            // truncated file that reads as a corrupt config on next open.
+            Files.writeString(tmp, GSON.toJson(config));
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | RuntimeException e) {
+            logger.debug("Could not store the last run's settings: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * The settings the clustering dialog last ran with in this mode.
+     *
+     * @param project the open project
+     * @param modeKey which dialog mode to read
+     * @return the stored config, or null when there is none or it cannot be read
+     */
+    public static ClusteringConfig loadLastRun(Project<?> project, String modeKey) {
+        if (project == null || modeKey == null) {
+            return null;
+        }
+        try {
+            Path file = project.getPath().getParent()
+                    .resolve(QpcatPaths.LAST_RUN).resolve(modeKey + JSON_EXT);
+            if (!Files.exists(file)) {
+                return null;
+            }
+            return GSON.fromJson(Files.readString(file), ClusteringConfig.class);
+        } catch (IOException | RuntimeException e) {
+            // A stale or hand-edited file must never stop the dialog opening.
+            logger.debug("Could not restore the last run's settings: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * List available config names (without file extension).
      */
     public static List<String> listConfigs(Project<?> project) throws IOException {
@@ -147,31 +209,4 @@ public class ClusteringConfigManager {
         }
     }
 
-    /**
-     * Serialize a config exactly as a saved config file stores it.
-     *
-     * @param config the config
-     * @return JSON, or null if {@code config} is null
-     */
-    public static String toJson(ClusteringConfig config) {
-        return config == null ? null : GSON.toJson(config);
-    }
-
-    /**
-     * Parse a config written by {@link #toJson(ClusteringConfig)}.
-     *
-     * @param json the JSON, may be null or blank
-     * @return the config, or null if it cannot be parsed
-     */
-    public static ClusteringConfig fromJson(String json) {
-        if (json == null || json.isBlank()) {
-            return null;
-        }
-        try {
-            return GSON.fromJson(json, ClusteringConfig.class);
-        } catch (RuntimeException e) {
-            logger.debug("Could not parse stored clustering config: {}", e.getMessage());
-            return null;
-        }
-    }
 }

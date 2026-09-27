@@ -4,6 +4,32 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.8] -- 2026-09-27 -- Last-used settings are a file, not a preference
+
+0.14.7 made the clustering dialog remember what you last ran with. It stored that in a single
+`java.util.prefs` string, which refuses any value over 8192 characters -- and a real run's 262
+selected measurements are far past it.
+
+### Fixed
+
+- **`IllegalArgumentException: Value too long` on every run, with the entire config in the log
+  message.** The refusal comes from a property listener, so the calling code's own try/catch
+  never saw it: the run itself was unaffected, the log filled with the whole config, and
+  nothing was remembered. Last-used settings now live in a file under
+  `<project>/qpcat/.last_run/`, which has no size limit.
+
+### Changed
+
+- **These settings are now per project**, one file per dialog mode. The bulk of them is
+  measurement names and image names, and neither means anything in a different project --
+  restoring `tme_01.tif` into a project that has never heard of it was never useful. A
+  consequence: settings stored by an earlier version are not carried over, so the first run in
+  each project starts from the defaults again.
+- The stored files are not offered in the load-config list. They are not configurations anyone
+  named, and a hidden folder keeps them out of the way.
+- `ClusteringConfigManager.toJson` / `fromJson` are gone. They existed only to feed the
+  preference, and leaving them would leave two ways to store one thing.
+
 ## [0.14.7] -- 2026-09-27 -- The analyse run completes, and the Ripley chart stops throwing
 
 Five reports from one testing session, four of them distinct defects.

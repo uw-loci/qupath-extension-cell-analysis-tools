@@ -2939,8 +2939,8 @@ public class ClusteringDialog {
      */
     private void restoreLastRunSettings() {
         try {
-            ClusteringConfig last = ClusteringConfigManager.fromJson(
-                    QpcatPreferences.getClusterLastRunConfig(mode.settingsKey()));
+            ClusteringConfig last = ClusteringConfigManager.loadLastRun(
+                    qupath.getProject(), mode.settingsKey());
             if (last != null) {
                 applyConfig(last);
             }
@@ -2950,14 +2950,13 @@ public class ClusteringDialog {
         }
     }
 
-    /** Remember a config that is about to run, for the next time the dialog opens. */
+    /**
+     * Remember a config that is about to run, for the next time the dialog opens.
+     * Stored with the project, so measurement and image names are read back in
+     * the project they were chosen in.
+     */
     private void rememberLastRunSettings(ClusteringConfig config) {
-        try {
-            QpcatPreferences.setClusterLastRunConfig(
-                    mode.settingsKey(), ClusteringConfigManager.toJson(config));
-        } catch (RuntimeException e) {
-            logger.debug("Could not store the last run's settings: {}", e.getMessage());
-        }
+        ClusteringConfigManager.saveLastRun(qupath.getProject(), mode.settingsKey(), config);
     }
 
     private void applyConfig(ClusteringConfig config) {
