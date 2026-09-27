@@ -32,8 +32,13 @@ Training infrastructure (adapted from DL pixel classifier):
 
 Inputs (injected by Appose 0.10.0):
   measurements: NDArray (N_cells x N_markers, float64)  [measurement mode]
-  tile_images: NDArray (N_cells x C x H x W, float32)   [tile mode]
   marker_names: list[str]
+  tile_file_path: str -- raw little-endian float32 tiles, shape
+    (n_cells, n_channels, tile_size, tile_size), memory-mapped rather than
+    transferred; Java deletes the file after the run   [tile mode]
+  n_channels: int, tile_size: int, n_cells: int -- the memmap's shape   [tile mode]
+  tile_measurements: NDArray (N_cells x N_markers, float64) -- optional
+    per-cell measurements alongside the tiles (hybrid mode)   [tile mode]
   labels: list[int] -- class index per cell (-1 = unlabeled)
   label_names: list[str] -- class name for each index
   input_mode: str ("measurements" or "tiles")

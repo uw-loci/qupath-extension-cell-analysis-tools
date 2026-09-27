@@ -4,6 +4,36 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.6] -- 2026-09-26 -- Analyze current classifications actually runs
+
+The mode opened, accepted a scope and a class list, then died in Python before analysing
+anything. Reported with two runs, one over 25 classes and one over 6; both failed identically,
+so the class set was never the problem.
+
+### Fixed
+
+- **`TypeError: int() argument must be ... not 'NDArray'` on every analyse run.** The cluster
+  labels Java sends arrive as an Appose `NDArray` -- a wrapper around a shared-memory buffer --
+  and the script read it as if it were already a numpy array. `np.asarray()` on the wrapper
+  builds a 0-d object array instead of failing, so the error surfaced later, naming neither the
+  input nor the line. It now calls `.ndarray()` like every other array input.
+
+### Added
+
+- **A guard for that whole bug class**, in two parts: every input a script's own docstring
+  declares as `NDArray` must be dereferenced with `.ndarray()`, and every array `inputs.put`
+  on the Java side must be dereferenced by some shipped script. The second is what would have
+  caught this one -- the input was undocumented, so a doc-driven check passed it. The pair
+  found two further discrepancies on the first run.
+
+### Changed
+
+- **`train_autoencoder.py` and `infer_autoencoder.py` documented an input that does not
+  exist.** Both listed a `tile_images` NDArray; tile mode has never read one, it memory-maps a
+  raw float32 file Java writes and deletes. The docstrings now describe the real contract
+  (`tile_file_path` plus the memmap shape, and the optional `tile_measurements` array).
+- `run_clustering.py`'s docstring now lists `supplied_labels` and the `existing` algorithm id.
+
 ## [0.14.5] -- 2026-09-26 -- Analyze-existing reviewed end to end
 
 Found by reviewing the mode's inputs against how it is actually used, after 0.14.4 made it

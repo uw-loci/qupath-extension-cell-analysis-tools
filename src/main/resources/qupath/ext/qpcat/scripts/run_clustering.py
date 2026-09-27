@@ -4,7 +4,9 @@ Main clustering script for QP-CAT Appose tasks.
 Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   measurements: NDArray (N_cells x N_markers, float64)
   marker_names: list[str]
-  algorithm: str ("leiden", "kmeans", "hdbscan", "agglomerative", "minibatchkmeans", "gmm")
+  algorithm: str ("leiden", "kmeans", "hdbscan", "agglomerative", "minibatchkmeans",
+    "gmm", "existing"). "existing" computes no clusters: it analyses the labels
+    sent in supplied_labels, which are the classifications already on the objects.
   algorithm_params: dict (algorithm-specific parameters)
   normalization: str ("zscore", "minmax", "percentile", "none")
   embedding_method: str ("umap", "pca", "tsne", "none")
@@ -43,6 +45,9 @@ Optional inputs:
   image_labels: list[int] -- image index per cell (multi-image runs); splits the
     spatial distribution plot per image instead of overlaying coordinate frames
   image_names: list[str] -- image name per index, for the per-image plot titles/keys
+  supplied_labels: NDArray (N_cells,) int32 -- cluster label per cell, supplied by
+    the caller instead of computed here. Required when algorithm == "existing",
+    ignored otherwise. Must be dense 0..k-1; see validate_supplied_labels.
 
 Outputs (via task.outputs):
   cluster_labels: NDArray (N_cells,) int32
@@ -240,7 +245,16 @@ except NameError:
 # classifications already on the cells" path. Only read when algorithm ==
 # "existing"; absent for every normal run.
 try:
-    supplied_labels_arr = np.asarray(supplied_labels).astype(np.int32).ravel()
+    # Arrives as an int32 Appose NDArray backed by shared memory, so it needs
+    # .ndarray() like every other array input; np.asarray() on the wrapper makes
+    # a 0-d object array and int() then refuses it. astype() also copies the
+    # values out of the shared buffer. A plain list is tolerated for callers
+    # (tests, scripts) that do not go through Appose.
+    try:
+        raw_supplied = supplied_labels.ndarray()
+    except AttributeError:
+        raw_supplied = list(supplied_labels)
+    supplied_labels_arr = np.asarray(raw_supplied).astype(np.int32).ravel()
 except NameError:
     supplied_labels_arr = None
 

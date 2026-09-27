@@ -7,8 +7,11 @@ Used for applying a trained model across project images.
 
 Inputs (injected by Appose 0.10.0):
   measurements: NDArray (N_cells x N_markers, float64)  [measurement mode]
-  tile_images: NDArray (N_cells x C x H x W, float32)   [tile mode]
   marker_names: list[str]  [measurement mode]
+  tile_file_path: str -- raw little-endian float32 tiles, memory-mapped; the
+    channel count and tile size come from the checkpoint, not from an input,
+    so they cannot disagree with the model   [tile mode]
+  n_cells: int -- row count of the memmap   [tile mode]
   model_state_base64: str -- base64-encoded model checkpoint
 
 Outputs (via task.outputs):
