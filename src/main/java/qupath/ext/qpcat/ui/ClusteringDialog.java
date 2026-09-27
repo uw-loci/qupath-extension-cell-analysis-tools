@@ -1229,14 +1229,17 @@ public class ClusteringDialog {
 
     private VBox createAnalysisSection() {
         generatePlotsCheck = new CheckBox(
-                "Generate analysis plots (dotplot, matrix plot, violin, embedding, PAGA)");
+                "Generate analysis plots (dotplot, matrix plot, violin, embedding)");
         generatePlotsCheck.setSelected(true);
         generatePlotsCheck.setTooltip(Tooltips.of(
-                "Write the static PNG plots: dotplot, matrix plot, stacked violin,\n"
-                + "the embedding scatter and the PAGA graph.\n\n"
+                "Write the static PNG plots: dotplot, matrix plot, stacked violin\n"
+                + "and the embedding scatter.\n\n"
                 + "It does NOT gate the Marker Rankings or Marker Fingerprints tabs.\n"
                 + "Those are computed either way -- the old label said 'marker\n"
                 + "ranking', which read as though unticking this would remove them.\n\n"
+                + "PAGA has its own box below, because it is the only thing that\n"
+                + "needs a per-cell neighbour graph and that graph is the expensive\n"
+                + "part. Its picture follows that box, not this one.\n\n"
                 + "Applies to every run, including Analyze current classifications:\n"
                 + "the plots do not depend on how the labels were produced."));
 
@@ -1254,7 +1257,14 @@ public class ClusteringDialog {
                 + "NOTHING ELSE in the run uses that graph. The marker rankings, the\n"
                 + "heatmap and the dendrogram are all computed without it.\n\n"
                 + "Turn it off if you do not read the PAGA tab; the rest of the\n"
-                + "results are identical and the run is measurably shorter."));
+                + "results are identical and the run is measurably shorter.\n\n"
+                + "The PAGA tab IS this picture -- nothing else reads the graph -- so\n"
+                + "with 'Generate analysis plots' off there is no output to collect\n"
+                + "and this box is disabled rather than computing it for nothing."));
+        // PAGA's only output is its PNG, so it cannot do anything with the plots
+        // switched off. Disabling says that, instead of letting someone tick a
+        // box that silently does nothing.
+        pagaCheck.disableProperty().bind(generatePlotsCheck.selectedProperty().not());
         pagaCheck.selectedProperty().addListener((o, a, b) -> {
             QpcatPreferences.setComputePaga(b);
             refreshRunCostLabel();

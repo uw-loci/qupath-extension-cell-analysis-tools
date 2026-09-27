@@ -1692,6 +1692,17 @@ try:
 except NameError:
     pref_compute_paga = True
 
+# PAGA's ONLY consumer is its PNG -- the "PAGA Trajectory" tab is that image, and
+# nothing reads the connectivity matrix itself. So with plots off there is no
+# output to collect, and computing it (plus the neighbour graph, the slowest step
+# in the run) buys nothing at all.
+try:
+    _plots_wanted = bool(generate_plots)
+except NameError:
+    _plots_wanted = False
+if not _plots_wanted:
+    pref_compute_paga = False
+
 n_neigh = min(15, n_cells - 1)
 embedding_only = algorithm == "none"
 can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only

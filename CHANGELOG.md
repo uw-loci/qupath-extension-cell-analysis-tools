@@ -4,6 +4,26 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.5] -- 2026-09-27 -- PAGA is not computed when there is nothing to write it to
+
+### Changed
+
+- **PAGA, and the neighbour graph it needs, are skipped entirely when "Generate analysis plots"
+  is off.** PAGA's only consumer is its PNG: the "PAGA Trajectory" tab IS that image, and
+  nothing reads the connectivity matrix itself. With plots off there was no output to collect,
+  so the slowest step in the run was being paid for nothing. Its checkbox is now disabled in
+  that state rather than letting it be ticked to no effect.
+- **PAGA appears in one place, not two.** 0.15.4 gave it its own box but left it listed in the
+  "Generate analysis plots" label as well, which read as two controls for one thing. The plots
+  label now reads "(dotplot, matrix plot, violin, embedding)".
+
+### Known remaining
+
+Four result fields are written and never read: `pagaConnectivity`, `pagaClusterNames`,
+`representativesJson` (the gallery uses the typed accessors instead) and `triangleAreas`. They
+cost little now that PAGA is gated, and removing them changes the saved-result schema, so they
+are recorded here rather than cut.
+
 ## [0.15.4] -- 2026-09-27 -- The neighbour graph is only built when something needs it
 
 ### Changed
