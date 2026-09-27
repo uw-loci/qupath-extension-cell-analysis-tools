@@ -39,6 +39,8 @@ OpenAI is **not** supported in v1.
 
 The results are also persisted to `SavedClusteringResult` so reopening past results shows the same table without re-paying the API call.
 
+The **"Use as cluster names..."** button takes the suggested phenotypes into **Modify cell populations** with the rename boxes pre-filled, after a preview of every old → new pair. Names are cleaned for use as class names: a trailing parenthetical like "(CD4+ T cell, inferred)" is dropped (the rationale keeps it), and colons and slashes are replaced with hyphens (a colon makes QuPath read the name as a derived class). Colliding suggestions get a numeric suffix to keep them distinct. Nothing is written by this button -- the rename dialog is where you review them and press Apply, which writes a renamed copy and leaves the original result alone.
+
 ![The Cluster Explainer tab after a run. Provider is set to ANTHROPIC with model claude-sonnet-5, the API key field is masked, and the status line reads "Done. 7 clusters explained (23s)". A Suggestions table gives one row per cluster: proliferating epithelial/tumor cell from Ki67 and PanCK, myofibroblast/smooth muscle cell from aSMA, B cell from CD20, epithelial/tumor cell from PanCK, macrophage from CD68, and cytotoxic T cell from CD8 and CD3, all at HI confidence; helper T cell from CD3 and CD8 at MD confidence. Below, a Rationale box explains cluster 0, and buttons offer Copy results as TSV and Regenerate selected cluster](images/cluster-explainer-suggestions.png)
 
 The run above is the one the warning at the top refers to, on the synthetic demo dataset whose

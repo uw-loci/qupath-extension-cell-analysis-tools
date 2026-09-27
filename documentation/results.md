@@ -44,9 +44,9 @@ Three views of the same per-cluster-per-marker matrix, side by side deliberately
 
 | View | Shows | Use for |
 |---|---|---|
-| **Heatmap** (interactive) | Column-normalised mean expression per cluster. Hover for values, scroll to zoom. | Exploring |
-| **Matrix Plot** (PNG) | The same, plus row and column dendrograms. | Figures |
-| **Dot plot** (PNG) | Dot size = fraction of cells expressing; colour = mean expression. | When fraction-expressing changes the reading |
+| **Heatmap** (interactive) | Column-normalised mean expression per cluster. Hover for values and cell counts; Ctrl+scroll or the zoom buttons to resize. | Exploring |
+| **Matrix Plot** (PNG) | The same, plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
+| **Dot plot** (PNG) | Dot size = fraction of cells expressing; colour = mean expression. Same zoom controls. | When fraction-expressing changes the reading |
 
 Matrix Plot for figures, Heatmap for exploration, Dot plot when a marker is high in a few
 cells rather than low in many -- a distinction the other two cannot show, because they
@@ -54,7 +54,11 @@ collapse to per-cluster means.
 
 In the Heatmap, red is high relative expression and blue is low, per marker across
 clusters. This is the tab that tells you which markers define each cluster, and the one
-to work from when annotating cell types.
+to work from when annotating cell types. Hover over a square for the mean value and the number
+of cells in that cluster -- a mean over 40 cells and a mean over 4,000 look identical here and
+are not equally trustworthy. Zoom with the **-** / **+** / **Reset** buttons or Ctrl+scroll;
+zooming out past the point where the labels are legible is deliberate, because the pattern
+across the whole panel is what this view is for.
 
 <a name="embedding-tab-interactive"></a>
 <a name="embedding-plot-tab"></a>
@@ -211,6 +215,12 @@ T cells -- then validate against the heatmap.
 **Marker Fingerprints** draws the same information per cluster as a compact profile, for
 comparing clusters at a glance rather than reading a table.
 
+> **These tabs may be missing.** The ranking compares each cluster against all others,
+> so a result with only one group has nothing to compare against and the tabs do not appear.
+> Other reasons include having too few cells to build a neighbor graph, or the ranking itself
+> failing. If the tabs are absent, check the **quality warnings** shown at the top of the
+> results window for why.
+
 <a name="spatial-autocorrelation-tab"></a>
 <a name="gearys-c-tab"></a>
 <a name="ripley-l-tab"></a>
@@ -224,10 +234,10 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 
 | Tab | Reads as |
 |---|---|
-| **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. |
-| **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. |
+| **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. Zoom controls available. |
+| **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. Zoom controls available. |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). |
-| **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. |
+| **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. Zoom controls available. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 
 ### Exporting spatial statistics tables

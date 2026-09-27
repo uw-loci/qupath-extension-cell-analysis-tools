@@ -124,6 +124,16 @@ public class ClusterHeatmapPanel extends VBox {
         for (Button b : new Button[] {zoomOutBtn, zoomInBtn, zoomResetBtn}) {
             b.setStyle("-fx-font-size: 10px;");
         }
+        // Ctrl + wheel, matching the generated-plot tabs. results.md has claimed
+        // "scroll to zoom" here since before the zoom buttons existed; this is
+        // what makes that true. A plain wheel is left to the enclosing
+        // ScrollPane so a zoomed-in map can still be scrolled.
+        canvas.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
+            if (e.isControlDown() && e.getDeltaY() != 0) {
+                setZoom(zoom * (e.getDeltaY() > 0 ? 1.1 : 1 / 1.1));
+                e.consume();
+            }
+        });
         tooltip = Tooltips.of();
         tooltip.setShowDelay(Duration.millis(100));
         Tooltip.install(canvas, tooltip);

@@ -26,6 +26,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   thousands of pixels wide that could only be scrolled. It has its own zoom, and deliberately
   zooms out past the point where labels are legible, because the pattern across the whole panel
   is what that view is for.
+- **The compartment-redundancy caution fired when nothing was redundant.** It tested "more
+  selected features than distinct markers", which is true the moment any measurement without a
+  compartment is selected -- a shape ratio, an embedding column -- so a panel of nuclear Ki67
+  and cytoplasmic CD45, which shares no marker at all, was told it had a redundant
+  cross-product. It now names the markers actually taken in more than one compartment, and says
+  that single-compartment markers are unaffected.
+- **The Heatmap did not respond to Ctrl+scroll**, which `results.md` had claimed since before
+  the zoom buttons existed. It does now.
 - **PAGA drew almost every edge.** scanpy's default threshold (0.01) keeps very nearly all of
   them, and PAGA can connect every cluster to every other, so a run with many clusters arrives
   as a solid black mass. A new preference sets the weakest edge to draw (default 0.05; 0

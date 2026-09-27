@@ -2032,7 +2032,6 @@ public class ClusteringDialog {
         List<String> selected = measurementPane != null
                 ? measurementPane.getSelected() : new ArrayList<>();
         int n = selected.size();
-        java.util.Set<String> compartments = new java.util.LinkedHashSet<>();
         java.util.Set<String> markers = new java.util.LinkedHashSet<>();
         List<String> priorEmbeddingCols = new ArrayList<>();
         boolean hasBackground = false;
@@ -2046,7 +2045,6 @@ public class ClusteringDialog {
             // reading the whole name as one turned three embedding columns into
             // "0 markers x 3 compartments (UMAP_Demo1, UMAP_Demo2, UMAP_Demo3)".
             if (parts.length >= 2) {
-                compartments.add(parts[0].trim());
                 String marker = parts[1].trim();
                 markers.add(marker);
                 String ml = marker.toLowerCase();
@@ -2080,11 +2078,21 @@ public class ClusteringDialog {
                     + "(graph-based) is more robust for large panels.");
         }
 
-        if (forming && compartments.size() >= 2 && !markers.isEmpty() && n > markers.size()) {
-            warns.add("Selected " + n + " features = " + markers.size() + " markers x "
-                    + compartments.size() + " compartments (" + String.join(", ", compartments)
-                    + "). A marker's compartments are highly correlated -- one compartment is "
-                    + "usually cleaner and lower-dimensional.");
+        // Only the markers taken in MORE THAN ONE compartment are redundant. The
+        // old test was "more features than distinct markers", which is true the
+        // moment any measurement without a colon is selected -- so a panel of
+        // nuclear Ki67 and cytoplasmic CD45, which shares no marker at all, was
+        // told it had a redundant cross-product.
+        List<String> doubledMarkers = markersInSeveralCompartments(selected);
+        if (forming && !doubledMarkers.isEmpty()) {
+            String shown = doubledMarkers.size() <= 4
+                    ? String.join(", ", doubledMarkers)
+                    : String.join(", ", doubledMarkers.subList(0, 4)) + ", ...";
+            warns.add(doubledMarkers.size() + " of the " + markers.size()
+                    + " markers are selected in more than one compartment (" + shown
+                    + "). A marker's compartments are highly correlated, so those add "
+                    + "dimensions without adding information -- one compartment is usually "
+                    + "cleaner. Markers taken in a single compartment are not affected.");
         }
 
         if (hasBackground) {
@@ -5235,6 +5243,45 @@ public class ClusteringDialog {
             }
         }
         return counts;
+    }
+
+    /**
+     * Markers that were selected in more than one compartment.
+     * <p>
+     * Redundancy is the SAME marker measured twice -- {@code Nucleus: Ki67 mean}
+     * beside {@code Cytoplasm: Ki67 mean} -- because a marker's compartments are
+     * highly correlated. Two DIFFERENT markers from different compartments,
+     * nuclear Ki67 and cytoplasmic CD45, share nothing and are not redundant.
+     * <p>
+     * The earlier test was "more selected features than distinct markers", which
+     * is true the moment any measurement without a colon is selected (a shape
+     * ratio, an embedding column), so a panel with no shared marker at all was
+     * told it had a redundant cross-product.
+     *
+     * @param selected measurement names as they appear in the list
+     * @return markers appearing in 2+ compartments, in selection order
+     */
+    static List<String> markersInSeveralCompartments(List<String> selected) {
+        Map<String, java.util.Set<String>> byMarker = new LinkedHashMap<>();
+        if (selected != null) {
+            for (String s : selected) {
+                if (s == null) {
+                    continue;
+                }
+                String[] parts = s.split(":\\s*");
+                if (parts.length >= 2) {
+                    byMarker.computeIfAbsent(parts[1].trim(),
+                            k -> new java.util.LinkedHashSet<>()).add(parts[0].trim());
+                }
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (var e : byMarker.entrySet()) {
+            if (e.getValue().size() > 1) {
+                out.add(e.getKey());
+            }
+        }
+        return out;
     }
 
     private static void reorderLeadingTabs(TabPane tabPane, String... orderedTitles) {
