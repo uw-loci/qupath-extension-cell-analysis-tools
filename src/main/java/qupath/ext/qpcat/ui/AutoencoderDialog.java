@@ -307,6 +307,7 @@ public class AutoencoderDialog {
                 + "-fx-border-color: #F5C6CB; -fx-border-radius: 4; "
                 + "-fx-background-radius: 4; -fx-font-size: 11px;");
         warning.setWrapText(true);
+        WrapHeight.bind(warning);
         warning.setMaxWidth(Double.MAX_VALUE);
         HBox box = new HBox(warning);
         HBox.setHgrow(warning, Priority.ALWAYS);
@@ -438,6 +439,7 @@ public class AutoencoderDialog {
     private VBox createLabelSummarySection() {
         labelSummaryLabel = new Label("Scanning...");
         labelSummaryLabel.setWrapText(true);
+        WrapHeight.bind(labelSummaryLabel);
 
         // Pie chart for class distribution
         classDistributionChart = new PieChart();
@@ -474,6 +476,7 @@ public class AutoencoderDialog {
                 + "Unlabeled cells contribute to reconstruction but not classification.");
         hint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
+        WrapHeight.bind(hint);
 
         return new VBox(5, labelSummaryLabel, classDistributionChart, classWeightsBox, hint);
     }
@@ -585,6 +588,7 @@ public class AutoencoderDialog {
         downsampleWarning = new Label("");
         downsampleWarning.setStyle("-fx-text-fill: #CC6600; -fx-font-size: 10px;");
         downsampleWarning.setWrapText(true);
+        WrapHeight.bind(downsampleWarning);
         downsampleCombo.setOnAction(e -> updateDownsampleWarning());
         updateDownsampleWarning();
 
@@ -921,6 +925,7 @@ public class AutoencoderDialog {
                 "Evaluate: runs inference on checked images and shows accuracy vs existing labels. "
                 + "Read-only -- does NOT change any classifications.");
         evalHint.setWrapText(true);
+        WrapHeight.bind(evalHint);
         evalHint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Label applyHint = new Label(
@@ -928,6 +933,7 @@ public class AutoencoderDialog {
                 + "DESTRUCTIVE -- replaces existing classifications. If the current image is "
                 + "affected, you will be prompted to reload it.");
         applyHint.setWrapText(true);
+        WrapHeight.bind(applyHint);
         applyHint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(5, trainRow, applyRow, evalHint, applyHint);

@@ -192,8 +192,10 @@ public final class VestExportDialog {
         int[] sizes = VestExporter.clusterSizes(qupath);
         Label estimate = new Label();
         estimate.setWrapText(true);
+        WrapHeight.bind(estimate);
         Label budgetWarn = new Label();
         budgetWarn.setWrapText(true);
+        WrapHeight.bind(budgetWarn);
         budgetWarn.setStyle("-fx-text-fill: #a15c00;");
         Runnable updateEstimate = () -> {
             int budget = isCustom(budgetBox.getValue())
@@ -213,6 +215,7 @@ public final class VestExportDialog {
 
         Label status = new Label("");
         status.setWrapText(true);
+        WrapHeight.bind(status);
         status.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox content = new VBox(10,

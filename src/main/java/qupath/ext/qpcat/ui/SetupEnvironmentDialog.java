@@ -52,6 +52,7 @@ public class SetupEnvironmentDialog {
         statusLabel = new Label("Click 'Setup' to download and configure the Python environment.\n"
                 + "This requires an internet connection and approximately 1.5-2.5 GB of disk space.");
         statusLabel.setWrapText(true);
+        WrapHeight.bind(statusLabel);
 
         // Location and variant are offered HERE, before anything is downloaded.
         // Both are far cheaper to choose now than to change later: changing
@@ -59,6 +60,7 @@ public class SetupEnvironmentDialog {
         // preferences remain the way to change them afterwards.
         locationLabel = new Label();
         locationLabel.setWrapText(true);
+        WrapHeight.bind(locationLabel);
         locationLabel.setStyle("-fx-font-family: monospace; -fx-font-size: 11px;");
         refreshLocationLabel();
 

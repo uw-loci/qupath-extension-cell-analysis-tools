@@ -177,6 +177,7 @@ public class EmbeddingScatterPanel extends VBox {
         // Interaction hint ABOVE the plot, readable (not the old tiny/faint line).
         helpLabel = new Label("Scroll to zoom  -  middle-drag to pan  -  click a point to select");
         helpLabel.setWrapText(true);
+        WrapHeight.bind(helpLabel);
         helpLabel.setStyle("-fx-font-size: 11.5px; -fx-text-fill: #2b6cb0; "
                 + "-fx-background-color: #eef4fb; -fx-padding: 4 8 4 8; "
                 + "-fx-background-radius: 4;");

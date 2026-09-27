@@ -302,6 +302,7 @@ public class BatchFigureExportDialog {
                         + "result's clusters split across images or annotations. Table kinds "
                         + "always write .csv regardless of the raster format below.");
         compNote.setWrapText(true);
+        WrapHeight.bind(compNote);
         compNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         compBox.getChildren().add(compNote);
         VBox fxBox = new VBox(4);
@@ -313,6 +314,7 @@ public class BatchFigureExportDialog {
                 "These rows are listed for visibility; v1 records them as failures at export time. "
                         + "Planned for v1.1.");
         fxNote.setWrapText(true);
+        WrapHeight.bind(fxNote);
         fxNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         fxBox.getChildren().add(fxNote);
         for (PlotKind plot : PlotKind.values()) {

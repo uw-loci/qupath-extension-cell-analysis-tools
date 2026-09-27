@@ -2323,16 +2323,28 @@ if do_plots and plot_dir and can_analyze:
 
     # Spatial plots (if spatial coordinates were provided)
     if has_spatial:
-        # Neighborhood enrichment heatmap
-        try:
-            sq.pl.nhood_enrichment(adata, cluster_key="cluster", show=False)
-            nhood_path = os.path.join(plot_dir, "nhood_enrichment.png")
-            plt.savefig(nhood_path, dpi=pref_plot_dpi, bbox_inches="tight")
-            plt.close("all")
-            plot_paths["nhood_enrichment"] = nhood_path
-            logger.info("Saved neighborhood enrichment heatmap: %s", nhood_path)
-        except Exception as e:
-            logger.warning("Failed to generate nhood enrichment plot: %s", e)
+        # Neighborhood enrichment heatmap. Only when the matrix EXISTS: the
+        # computation above is gated on the spatial-analysis tick-box, while this
+        # block is gated only on coordinates being present -- so a run with
+        # Ripley on and neighborhood enrichment off asked squidpy to plot
+        # something nobody had computed, and logged
+        # "Unable to get the data from adata.uns['cluster_nhood_enrichment']"
+        # as though a plot had failed rather than never having been requested.
+        if "cluster_nhood_enrichment" not in adata.uns:
+            logger.info(
+                "Neighborhood enrichment was not computed, so no heatmap is drawn "
+                "(tick 'Neighborhood enrichment + Moran's I' to get one)"
+            )
+        else:
+            try:
+                sq.pl.nhood_enrichment(adata, cluster_key="cluster", show=False)
+                nhood_path = os.path.join(plot_dir, "nhood_enrichment.png")
+                plt.savefig(nhood_path, dpi=pref_plot_dpi, bbox_inches="tight")
+                plt.close("all")
+                plot_paths["nhood_enrichment"] = nhood_path
+                logger.info("Saved neighborhood enrichment heatmap: %s", nhood_path)
+            except Exception as e:
+                logger.warning("Failed to generate nhood enrichment plot: %s", e)
 
         # Spatial scatter colored by cluster. For multi-image runs produce ONE plot PER
         # IMAGE -- cells from different images share no coordinate frame, so overlaying
@@ -2341,7 +2353,10 @@ if do_plots and plot_dir and can_analyze:
         try:
             clusters_cat = adata.obs["cluster"].cat.categories
             n_cats = len(clusters_cat)
-            cmap = plt.cm.get_cmap("tab20" if n_cats > 10 else "tab10", n_cats)
+            # plt.cm.get_cmap was removed in matplotlib 3.9; plt.get_cmap is the
+            # supported spelling and works on the older versions too. Losing this
+            # cost the whole Spatial Scatter tab, with only a warning in the log.
+            cmap = plt.get_cmap("tab20" if n_cats > 10 else "tab10", n_cats)
             clusters_series = adata.obs["cluster"].values
 
             def _spatial_fig(coords, cluster_vals, title):

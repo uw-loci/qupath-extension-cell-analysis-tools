@@ -441,6 +441,7 @@ public class ClusteringDialog {
 
         runCostLabel = new Label();
         runCostLabel.setWrapText(true);
+        WrapHeight.bind(runCostLabel);
         runCostLabel.setStyle("-fx-font-size: 11px;");
         refreshRunCostLabel();
         pcaPrecursorCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
@@ -509,6 +510,7 @@ public class ClusteringDialog {
         measurementPane.setOnSelectionChanged(this::updatePreflight);
         measurementStatusLabel = new Label();
         measurementStatusLabel.setWrapText(true);
+        WrapHeight.bind(measurementStatusLabel);
         measurementStatusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         measurementStatusLabel.setVisible(false);
         measurementStatusLabel.setManaged(false);
@@ -713,6 +715,7 @@ public class ClusteringDialog {
         Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
                 + "accepts; they apply to GUI and headless (YAML) runs alike.");
         advNote.setWrapText(true);
+        WrapHeight.bind(advNote);
         advNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 10.5px;");
         VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, embModeRow, advNote);
         TitledPane advancedPane = new TitledPane("Advanced", advBox);
@@ -848,6 +851,7 @@ public class ClusteringDialog {
 
         classificationsStatus = new Label();
         classificationsStatus.setWrapText(true);
+        WrapHeight.bind(classificationsStatus);
         classificationsStatus.setMaxWidth(Double.MAX_VALUE);
         classificationsStatus.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
@@ -872,6 +876,7 @@ public class ClusteringDialog {
                 + "mixture, not a population, and would distort every marker mean. Untick a "
                 + "class to leave it out of the comparison entirely.");
         hint.setWrapText(true);
+        WrapHeight.bind(hint);
         hint.setMaxWidth(Double.MAX_VALUE);
         hint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
@@ -1193,6 +1198,7 @@ public class ClusteringDialog {
                 + "trust a result: re-run with different seeds and parameters, confirm boundary "
                 + "cells stay put, and read the marker heatmap rather than a single labeling.");
         warn.setWrapText(true);
+        WrapHeight.bind(warn);
         warn.setMaxWidth(520);
         warn.setStyle("-fx-font-size: 11px; -fx-text-fill: #6b4e00; "
                 + "-fx-background-color: #fff8e1; -fx-padding: 8; "
@@ -1209,6 +1215,7 @@ public class ClusteringDialog {
     private void addMethodInfo(String text, String anchor) {
         Label info = new Label(text);
         info.setWrapText(true);
+        WrapHeight.bind(info);
         info.setMaxWidth(520);
         info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%); "
                 + "-fx-background-color: #f5f5f0; -fx-padding: 6; "
@@ -1590,6 +1597,7 @@ public class ClusteringDialog {
                 + "the statistics above) do not affect it.");
         banksyNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         banksyNote.setWrapText(true);
+        WrapHeight.bind(banksyNote);
 
         // ---- v0.3 Viewer overlay + measurements block ----
         VBox overlayBlock = createViewerOverlayBlock();
@@ -1730,6 +1738,7 @@ public class ClusteringDialog {
                 "See View -> Show object connections to toggle the overlay.");
         overlayNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         overlayNote.setWrapText(true);
+        WrapHeight.bind(overlayNote);
 
         // ---- Listeners ----
         pushConnectionsCheck.selectedProperty().addListener((obs, oldV, newV) ->
@@ -1985,6 +1994,7 @@ public class ClusteringDialog {
                 + "config (reload via \"Load Config from file...\"). Headless / scripted "
                 + "runs use the YAML batch.");
         reproNote.setWrapText(true);
+        WrapHeight.bind(reproNote);
         reproNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         HBox reproLinks = new HBox(12,
@@ -2002,6 +2012,7 @@ public class ClusteringDialog {
         // known under-clustering pattern. Hidden when there is nothing to flag.
         preflightLabel = new Label();
         preflightLabel.setWrapText(true);
+        WrapHeight.bind(preflightLabel);
         preflightLabel.setVisible(false);
         preflightLabel.setManaged(false);
         preflightLabel.setStyle("-fx-text-fill: #7a5c00; -fx-background-color: #fff8e1; "
@@ -4020,6 +4031,8 @@ public class ClusteringDialog {
         // Interactive heatmap tab (cluster-marker means)
         if (result.getClusterStats() != null && result.getNClusters() > 1) {
             ClusterHeatmapPanel heatmap = new ClusterHeatmapPanel();
+            // Only Z-scored values have a zero worth diverging about.
+            heatmap.setNormalization(result.getNormalization());
             heatmap.setClusterNames(result.clusterNameFn());
             heatmap.setClusterCounts(clusterCellCounts(result));
             heatmap.setData(result.getClusterStats(), result.getMarkerNames());
@@ -4563,6 +4576,7 @@ public class ClusteringDialog {
                     + "was saved; enable analysis plots or spatial analysis to populate "
                     + "the richer tabs.");
             summary.setWrapText(true);
+            WrapHeight.bind(summary);
             summary.setPadding(new Insets(12));
             Tab tab = new Tab("Summary", summary);
             tab.setClosable(false);
@@ -5039,6 +5053,11 @@ public class ClusteringDialog {
         guide.setWrapText(true);
         guide.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         guide.setMaxWidth(Double.MAX_VALUE);
+        // Same one-line trap as the banners: a wrapping Label reports its
+        // preferred height as a single line, and BorderPane sizes the centre by
+        // that, so a two-line guide lost its second line. This bar is on every
+        // results tab, so it was the most-seen instance of the bug.
+        WrapHeight.bind(guide);
         HBox.setHgrow(guide, Priority.ALWAYS);
 
         // A BorderPane, not an HBox: the right-hand region is laid out at its
@@ -5531,6 +5550,7 @@ public class ClusteringDialog {
                 + "result covers.");
         hint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
+        WrapHeight.bind(hint);
 
         HBox bar = new HBox(10, new Label("Cluster colors:"), editBtn, manageBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
@@ -5666,6 +5686,7 @@ public class ClusteringDialog {
                 + "plot. The palette is saved with this result and restored when you reopen it.");
         hint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
+        WrapHeight.bind(hint);
 
         ScrollPane scroll = new ScrollPane(swatches);
         scroll.setFitToWidth(true);

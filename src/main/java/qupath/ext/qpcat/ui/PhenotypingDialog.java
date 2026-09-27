@@ -167,6 +167,7 @@ public class PhenotypingDialog {
                 + "fluorescence, brightfield/IHC, and H&E (after stain separation). Run cell "
                 + "detection first.");
         info.setWrapText(true);
+        WrapHeight.bind(info);
         info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         info.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(info, Priority.ALWAYS);
@@ -244,6 +245,7 @@ public class PhenotypingDialog {
                 + "-fx-background-color: #eaf4ec; -fx-border-color: #b6d8c0; "
                 + "-fx-border-radius: 3; -fx-background-radius: 3; -fx-padding: 6 8 6 8;");
         gateInfoLabel.setWrapText(true);
+        WrapHeight.bind(gateInfoLabel);
         gateInfoLabel.setMaxWidth(Double.MAX_VALUE);
         updateGateInfo();
 
@@ -465,6 +467,7 @@ public class PhenotypingDialog {
                     + "\n(click to view this marker's histogram)"));
             header.setMaxWidth(Double.MAX_VALUE);
             header.setWrapText(true);
+            WrapHeight.bind(header);
 
             // Make header clickable to show histogram
             header.setOnMouseClicked(e -> showHistogramForMarker(marker));

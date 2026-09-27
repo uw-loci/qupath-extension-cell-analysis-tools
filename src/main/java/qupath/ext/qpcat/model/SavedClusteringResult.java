@@ -445,6 +445,7 @@ public class SavedClusteringResult {
     public ClusteringResult toClusteringResult() {
         ClusteringResult result = new ClusteringResult(
                 clusterLabels, nClusters, embedding, clusterStats, markerNames);
+        result.setNormalization(normalization);
         result.setMarkerRankingsJson(markerRankingsJson);
         result.setPagaConnectivity(pagaConnectivity);
         result.setPagaClusterNames(pagaClusterNames);

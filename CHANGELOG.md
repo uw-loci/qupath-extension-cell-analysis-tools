@@ -4,6 +4,31 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.2] -- 2026-09-27 -- Viridis when there is no centre, and two plots that were silently lost
+
+### Fixed
+
+- **The Spatial Scatter plot never rendered**, with only
+  `module 'matplotlib.cm' has no attribute 'get_cmap'` in the log. `plt.cm.get_cmap` was
+  removed in matplotlib 3.9; the shipped environment has 3.11. `plt.get_cmap` is the supported
+  spelling and works on older versions too.
+- **The neighborhood-enrichment heatmap logged a failure when nothing had failed.** The matrix
+  is computed only when "Neighborhood enrichment + Moran's I" is ticked, but the PLOT was
+  attempted whenever spatial coordinates existed -- so a run with Ripley on and enrichment off
+  asked squidpy to draw something nobody had computed. It now checks the data is there and
+  says plainly that the box was not ticked.
+- **56 wrapping labels reported their height as one line**, so a parent sizing them by
+  preferred height clipped everything after the first. The guide bar at the top of every
+  results tab was among them, which is why it kept turning up. All now recompute against the
+  width they are given.
+
+### Changed
+
+- **The heatmap uses viridis, and says "no centre", when the values are not Z-scored.** A
+  blue-white-red diverging scale promises a meaningful midpoint; raw or min-max values have
+  none. Diverging-and-centred is now used only where zero means something, which is the rule
+  scanpy follows by defaulting `matrixplot` to viridis and exposing `vcenter` separately.
+
 ## [0.15.1] -- 2026-09-27 -- Zero is white on the heatmap
 
 ### Fixed

@@ -196,6 +196,7 @@ public class EmbeddingDialog {
                 + "detection. Existing classifications are preserved. Reusing a name "
                 + "overwrites those columns.");
         infoLabel.setWrapText(true);
+        WrapHeight.bind(infoLabel);
         infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(5, methodRow, paramsRow, infoLabel);

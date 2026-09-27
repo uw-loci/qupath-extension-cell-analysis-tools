@@ -211,6 +211,7 @@ public class ClusterManagementDialog {
         // when there is no saved-result JSON to target.
         Label manualHint = new Label();
         manualHint.setWrapText(true);
+        WrapHeight.bind(manualHint);
         manualHint.setMaxWidth(Double.MAX_VALUE);
         manualHint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         if (hasSaved) {
@@ -368,6 +369,7 @@ public class ClusterManagementDialog {
         Label infoLabel = new Label("Select one cluster to rename, split or sub-cluster, or "
                 + "several to merge. Edits are staged; click Apply to write them.");
         infoLabel.setWrapText(true);
+        WrapHeight.bind(infoLabel);
         infoLabel.setMaxWidth(Double.MAX_VALUE);
         infoLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
@@ -835,6 +837,7 @@ public class ClusterManagementDialog {
         Label help = new Label("All are selected, which undoes the merge completely. "
                 + "Deselect any that should stay in '" + row.displayName + "'.");
         help.setWrapText(true);
+        WrapHeight.bind(help);
         help.setMaxWidth(420);
         help.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 

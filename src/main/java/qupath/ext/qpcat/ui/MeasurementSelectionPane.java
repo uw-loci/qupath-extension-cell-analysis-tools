@@ -141,6 +141,7 @@ public class MeasurementSelectionPane extends VBox {
         Label scopeHint = new Label(
                 "These five buttons act only on the rows shown above, after filtering.");
         scopeHint.setWrapText(true);
+        WrapHeight.bind(scopeHint);
         scopeHint.setStyle(
                 "-fx-font-size: 11px; -fx-font-weight: bold; "
                 + "-fx-text-fill: -fx-text-base-color;");

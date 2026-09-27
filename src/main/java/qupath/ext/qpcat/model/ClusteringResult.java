@@ -49,6 +49,7 @@ public class ClusteringResult {
     // renamed -- a label with no entry displays as "Cluster <label>". This is
     // display metadata only: the raw clusterLabels ints are never rewritten, so
     // a merge stays reversible and a rename never invalidates the embedding.
+    private String normalization;
     private Map<Integer, String> clusterNames;
 
     // Display-only provenance, copied off the saved result when one is reopened:
@@ -147,6 +148,16 @@ public class ClusteringResult {
     public boolean hasCellRefs() { return cellRefs != null && cellRefs.length > 0; }
 
     // --- Cluster display names (rename / merge) ---
+
+    /**
+     * The normalization id the run used, e.g. "zscore".
+     * <p>
+     * The heatmap needs it to decide whether zero means anything: only Z-scored
+     * values have a centre worth diverging about. Null on an older saved result,
+     * which the heatmap treats as "not centred".
+     */
+    public String getNormalization() { return normalization; }
+    public void setNormalization(String v) { this.normalization = v; }
 
     public Map<Integer, String> getClusterNames() { return clusterNames; }
 

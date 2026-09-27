@@ -131,6 +131,7 @@ public class BugReportDialog {
                 + "on the issue yourself on GitHub. Adding a GitHub username below mentions you on the issue, "
                 + "which does notify you.");
         anonymityNote.setWrapText(true);
+        WrapHeight.bind(anonymityNote);
         anonymityNote.setStyle("-fx-text-fill: -fx-accent;");
 
         Label summaryHeading = new Label("Summary (used as the issue title):");
@@ -185,6 +186,7 @@ public class BugReportDialog {
         imageScUserField.setPromptText("image.sc forum username (e.g. alice)");
         Label contactNote = new Label("Both are shown publicly in the issue.");
         contactNote.setWrapText(true);
+        WrapHeight.bind(contactNote);
         VBox contactBox =
                 new VBox(6, contactHeading, githubUserField, imageScUserField, contactNote);
 
@@ -205,6 +207,7 @@ public class BugReportDialog {
         if (!BugReportService.isConfigured()) {
             Label notConfigured = new Label("Bug reporting is not set up yet: the Worker URL has not been configured.");
             notConfigured.setWrapText(true);
+            WrapHeight.bind(notConfigured);
             notConfigured.setStyle("-fx-text-fill: -fx-accent;");
             submitButton.setDisable(true);
             root.getChildren().add(notConfigured);
@@ -336,6 +339,7 @@ public class BugReportDialog {
                 ? "Your bug report was submitted. Thank you!"
                 : "Your bug report was submitted as issue " + number + ". Thank you!");
         message.setWrapText(true);
+        WrapHeight.bind(message);
 
         VBox content = new VBox(10, message);
         content.setPadding(new Insets(4));
@@ -343,6 +347,7 @@ public class BugReportDialog {
         if (url != null && !url.isEmpty()) {
             Label hint = new Label("View it or add more detail here:");
             hint.setWrapText(true);
+            WrapHeight.bind(hint);
             Hyperlink link = new Hyperlink(url);
             link.setTooltip(Tooltips.of("Open the issue in your browser"));
             link.setOnAction(e -> QuPathGUI.openInBrowser(url));
@@ -386,6 +391,7 @@ public class BugReportDialog {
         Label note = new Label("This is exactly what will be attached to the bug report. "
                 + "Anything visible here is uploaded. OK to include it?");
         note.setWrapText(true);
+        WrapHeight.bind(note);
         note.setMaxWidth(720);
         ImageView view = new ImageView(image);
         view.setPreserveRatio(true);

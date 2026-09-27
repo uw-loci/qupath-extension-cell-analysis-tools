@@ -29,7 +29,7 @@ public class ClusterHeatmapPanel extends VBox {
     /** Gap between the grid and the start of the rotated labels. */
     private static final double LABEL_GAP = 5;
     /** Reserved strip under the labels for the colour-scale bar and its text. */
-    private static final double LEGEND_BAND = 34;
+    private static final double LEGEND_BAND = 46;
     /** Rotation applied to the column labels, in degrees. */
     private static final double LABEL_ANGLE = 45;
     private static final double MIN_CELL_W = 18;
@@ -101,6 +101,25 @@ public class ClusterHeatmapPanel extends VBox {
         return text;
     }
 
+    /**
+     * Tell the panel which normalization produced its values.
+     * <p>
+     * Only Z-scored values have a meaningful zero, so only they get a diverging
+     * blue-white-red scale centred on it. Anything else is painted with viridis
+     * and the legend says there is no centre, because a diverging palette over
+     * data with no midpoint is exactly the mismatch that made white land on an
+     * arbitrary number.
+     *
+     * @param normalizationId the config's normalization id, e.g. "zscore"
+     */
+    public void setNormalization(String normalizationId) {
+        this.centred = "zscore".equalsIgnoreCase(normalizationId);
+        if (data != null) {
+            recomputeScale();
+            redraw();
+        }
+    }
+
     /** Set the cell-size multiplier, clamped to a range that still renders. */
     private void setZoom(double z) {
         zoom = Math.max(0.3, Math.min(4.0, z));
@@ -126,8 +145,15 @@ public class ClusterHeatmapPanel extends VBox {
     }
 
     private ScaleMode scaleMode = ScaleMode.PER_MARKER;
+    /**
+     * True when zero is a meaningful centre, i.e. the run was Z-scored. False for
+     * raw / min-max / percentile values, which have no centre to diverge about.
+     */
+    private boolean centred = true;
     /** Half-width of the shared scale, in the units of the incoming means. */
     private double sharedExtent = 1;
+    /** Low end of the shared scale when the data has no centre. */
+    private double sharedLow = 0;
     /** Per-column half-widths for PER_MARKER, in those same units. */
     private double[] columnExtent;
 
@@ -292,6 +318,43 @@ public class ClusterHeatmapPanel extends VBox {
             return;
         }
         normData = new double[nClusters][nMarkers];
+        if (!centred) {
+            // No zero to anchor: plain min-max, over the column or the whole
+            // matrix depending on the Scale choice. Painted with viridis, so
+            // nothing about the picture claims a midpoint.
+            if (scaleMode == ScaleMode.SHARED_CENTERED) {
+                double lo = Double.MAX_VALUE;
+                double hi = -Double.MAX_VALUE;
+                for (int i = 0; i < nClusters; i++) {
+                    for (int j = 0; j < nMarkers; j++) {
+                        lo = Math.min(lo, data[i][j]);
+                        hi = Math.max(hi, data[i][j]);
+                    }
+                }
+                sharedLow = lo;
+                sharedExtent = hi;
+                double range = (hi - lo) == 0 ? 1 : hi - lo;
+                for (int i = 0; i < nClusters; i++) {
+                    for (int j = 0; j < nMarkers; j++) {
+                        normData[i][j] = (data[i][j] - lo) / range;
+                    }
+                }
+                return;
+            }
+            for (int j = 0; j < nMarkers; j++) {
+                double lo = Double.MAX_VALUE;
+                double hi = -Double.MAX_VALUE;
+                for (int i = 0; i < nClusters; i++) {
+                    lo = Math.min(lo, data[i][j]);
+                    hi = Math.max(hi, data[i][j]);
+                }
+                double range = (hi - lo) == 0 ? 1 : hi - lo;
+                for (int i = 0; i < nClusters; i++) {
+                    normData[i][j] = (data[i][j] - lo) / range;
+                }
+            }
+            return;
+        }
         if (scaleMode == ScaleMode.SHARED_CENTERED) {
             double extent = 0;
             for (int i = 0; i < nClusters; i++) {
@@ -390,8 +453,20 @@ public class ClusterHeatmapPanel extends VBox {
         gc.setFill(Color.BLACK);
         gc.setTextAlign(TextAlignment.LEFT);
         boolean shared = scaleMode == ScaleMode.SHARED_CENTERED;
-        // Both modes are centred, so both have a zero to label. Per marker has no
-        // single number for the ends -- each column has its own -- so it says so.
+        if (!centred) {
+            // Say so, rather than leave a sequential ramp to be read as diverging.
+            gc.fillText(shared ? String.format("%.3g", sharedLow) : "low (per marker)",
+                    legendX, legendY + 22);
+            gc.setTextAlign(TextAlignment.CENTER);
+            gc.fillText("no centre -- values are not Z-scored",
+                    legendX + legendW / 2, legendY + 34);
+            gc.setTextAlign(TextAlignment.RIGHT);
+            gc.fillText(shared ? String.format("%.3g", sharedExtent) : "high (per marker)",
+                    legendX + legendW, legendY + 22);
+            return;
+        }
+        // Both centred modes have a zero to label. Per marker has no single
+        // number for the ends -- each column has its own -- so it says so.
         gc.fillText(shared ? String.format("%.2f", -sharedExtent) : "- per marker",
                 legendX, legendY + 22);
         gc.setTextAlign(TextAlignment.CENTER);
@@ -411,6 +486,14 @@ public class ClusterHeatmapPanel extends VBox {
      */
     private Color valueToColor(double val) {
         val = Math.max(0, Math.min(1, val));
+        if (!centred) {
+            // No meaningful zero -> SEQUENTIAL. A blue-white-red scale promises a
+            // midpoint that means something, and un-normalized intensities have
+            // none: painting them diverging invites reading the middle of an
+            // arbitrary range as "average". This is the same rule scanpy follows
+            // by defaulting matrixplot to viridis and exposing vcenter separately.
+            return viridis(val);
+        }
         if (val < 0.5) {
             // Blue to white
             double t = val * 2;
@@ -420,6 +503,32 @@ public class ClusterHeatmapPanel extends VBox {
             double t = (val - 0.5) * 2;
             return Color.color(1.0, 1 - t, 1 - t);
         }
+    }
+
+    /**
+     * Viridis, as eight sampled stops with linear interpolation between them.
+     * <p>
+     * Perceptually uniform and colour-blind safe, which is why it is matplotlib's
+     * and scanpy's default for data that only goes one way.
+     *
+     * @param t position along the scale, 0..1
+     * @return the colour at that position
+     */
+    private static Color viridis(double t) {
+        final double[][] stops = {
+            {0.267, 0.005, 0.329}, {0.283, 0.141, 0.458}, {0.254, 0.265, 0.530},
+            {0.207, 0.372, 0.553}, {0.164, 0.471, 0.558}, {0.128, 0.567, 0.551},
+            {0.135, 0.659, 0.518}, {0.267, 0.749, 0.441}, {0.478, 0.821, 0.318},
+            {0.741, 0.873, 0.150}, {0.993, 0.906, 0.144},
+        };
+        double x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+        int i = (int) Math.floor(x);
+        int j = Math.min(i + 1, stops.length - 1);
+        double f = x - i;
+        return Color.color(
+                stops[i][0] + f * (stops[j][0] - stops[i][0]),
+                stops[i][1] + f * (stops[j][1] - stops[i][1]),
+                stops[i][2] + f * (stops[j][2] - stops[i][2]));
     }
 
     private void onMouseMoved(MouseEvent e) {

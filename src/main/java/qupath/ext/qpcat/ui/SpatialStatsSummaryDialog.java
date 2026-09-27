@@ -87,6 +87,7 @@ public final class SpatialStatsSummaryDialog {
                 + (ran < results.size() ? " (" + (results.size() - ran) + " skipped)" : "")
                 + ". Double-click a row or use Open to see its full result.");
         header.setWrapText(true);
+        WrapHeight.bind(header);
 
         Button saveCsv = new Button("Save combined CSV...");
         saveCsv.setOnAction(e -> saveCsv(qupath, results));

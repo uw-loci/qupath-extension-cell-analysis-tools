@@ -317,6 +317,7 @@ public class ClusterCompositionPanel extends BorderPane {
 
         Label caption = new Label(group + "  (" + total + " cells)");
         caption.setWrapText(true);
+        WrapHeight.bind(caption);
         caption.setMaxWidth(220);
         caption.setStyle("-fx-font-size: 11px;");
         VBox box = new VBox(2, chart, caption);

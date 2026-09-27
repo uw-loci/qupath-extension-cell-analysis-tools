@@ -111,6 +111,7 @@ public class PlotAndGateDialog {
                 + "group of points, and select or assign a class to those cells -- across every "
                 + "image in scope. Points are colored by their current classification.");
         body.setWrapText(true);
+        WrapHeight.bind(body);
         return new VBox(4, title, body, QpcatDocLinks.linkBar("clusters.md", "gating-cells-on-a-2d-plot"));
     }
 
@@ -135,6 +136,7 @@ public class PlotAndGateDialog {
                 + "(perplexity, n_neighbors, ...), use 'Map cells in 2D' or clustering."));
         Label embHint = new Label();
         embHint.setWrapText(true);
+        WrapHeight.bind(embHint);
         embHint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 10.5px;");
         List<String> availableEmb = availableEmbeddingMethods(measurements);
         if (!availableEmb.isEmpty()) {
@@ -191,6 +193,7 @@ public class PlotAndGateDialog {
     private VBox createStatusSection() {
         statusLabel = new Label("Pick a scope and axis, then Plot.");
         statusLabel.setWrapText(true);
+        WrapHeight.bind(statusLabel);
         statusLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         return new VBox(4, statusLabel);
     }

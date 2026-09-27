@@ -145,6 +145,7 @@ public class CellularNeighborhoodDialog {
                 + "This uses your existing cell-type column (from clustering or phenotyping). "
                 + "It is fast and scales to very large slides.");
         body.setWrapText(true);
+        WrapHeight.bind(body);
         VBox box = new VBox(4, title, body);
         return box;
     }
@@ -175,6 +176,7 @@ public class CellularNeighborhoodDialog {
         // overflowing horizontally (it rarely fits on one line).
         classSummaryLabel = new Label();
         classSummaryLabel.setWrapText(true);
+        WrapHeight.bind(classSummaryLabel);
         classSummaryLabel.setMaxWidth(Double.MAX_VALUE);
         return new VBox(4, headerRow, classSummaryLabel);
     }
@@ -196,6 +198,7 @@ public class CellularNeighborhoodDialog {
                 + "clustering or phenotyping across the same images first so the cell-type "
                 + "labels are consistent.)");
         explain.setWrapText(true);
+        WrapHeight.bind(explain);
         explain.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         // The shared control, not a fourth copy of it. This dialog carried its
@@ -330,6 +333,7 @@ public class CellularNeighborhoodDialog {
     private VBox createStatusSection() {
         statusLabel = new Label("Ready.");
         statusLabel.setWrapText(true);
+        WrapHeight.bind(statusLabel);
         progressBar = new ProgressBar(0);
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
@@ -576,12 +580,14 @@ public class CellularNeighborhoodDialog {
                 + "(cell-type classifications are preserved). Color cells by neighborhood "
                 + "with Measure > Show measurement maps.");
         storeNote.setWrapText(true);
+        WrapHeight.bind(storeNote);
         storeNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         box.getChildren().add(storeNote);
 
         if (result.getDivergenceWarning() != null) {
             Label warn = new Label("Heads up: " + result.getDivergenceWarning());
             warn.setWrapText(true);
+            WrapHeight.bind(warn);
             warn.setStyle("-fx-text-fill: #a05000;");
             box.getChildren().add(warn);
         }

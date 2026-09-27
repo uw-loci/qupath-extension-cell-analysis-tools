@@ -1995,6 +1995,11 @@ public class ClusteringWorkflow {
 
             ClusteringResult result = new ClusteringResult(labels, nClusters, embedding,
                     clusterStats, extraction.getMeasurementNames());
+            // The heatmap needs to know whether zero means anything in these
+            // numbers; only Z-scored values have a centre to diverge about.
+            if (config.getNormalization() != null) {
+                result.setNormalization(config.getNormalization().getId());
+            }
 
             // Noise is a row of clusterStats but not a cluster -- carry the index
             // so every label downstream says so, instead of naming a population

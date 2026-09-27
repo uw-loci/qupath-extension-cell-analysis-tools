@@ -247,6 +247,7 @@ public class RepresentativeGalleryPanel extends VBox {
                 "THESE IMAGES CANNOT BE COMPARED WITH EACH OTHER. EACH CLUSTER IS SHOWN "
                 + "IN DIFFERENT CHANNELS WITH DIFFERENT DISPLAY SETTINGS.");
         comparabilityWarning.setWrapText(true);
+        WrapHeight.bind(comparabilityWarning);
         comparabilityWarning.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a2e00; "
                 + "-fx-background-color: #fff3cd; -fx-border-color: #d9a400; "
                 + "-fx-border-width: 1; -fx-padding: 6;");

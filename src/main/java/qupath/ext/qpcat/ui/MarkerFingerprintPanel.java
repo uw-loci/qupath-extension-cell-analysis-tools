@@ -380,6 +380,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         Label nameLbl = new Label(mName);
         nameLbl.setStyle("-fx-font-size: 11px;");
         nameLbl.setWrapText(true);
+        WrapHeight.bind(nameLbl);
         nameLbl.setMaxWidth(Double.MAX_VALUE);
 
         double w = Math.max(2, Math.abs(val) * barScale);

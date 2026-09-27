@@ -409,6 +409,7 @@ public class SpatialStatsDialog {
                 + "radii come out in um); images without a pixel size fall back to pixels.");
         l.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         l.setWrapText(true);
+        WrapHeight.bind(l);
         return l;
     }
 
