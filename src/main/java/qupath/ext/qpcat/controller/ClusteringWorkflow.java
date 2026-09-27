@@ -1887,6 +1887,7 @@ public class ClusteringWorkflow {
         }
         // Absent from an older saved config -> isPcaPrecursor() is false, so the
         // run reproduces on the full feature matrix as it originally did.
+        inputs.put("compute_paga", config.isComputePaga());
         inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
         inputs.put("pca_precursor_n_comps", QpcatPreferences.getClusterPcaPrecursorComponents());
 

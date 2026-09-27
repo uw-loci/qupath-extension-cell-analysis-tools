@@ -100,6 +100,15 @@ public class ClusteringConfig {
      */
     private List<String> scopeImageNames;
     private boolean generatePlots = true;
+    /**
+     * Build the PAGA cluster-connectivity graph.
+     * <p>
+     * Defaults true so an older saved config reproduces its original run. It is
+     * the only consumer of the per-cell nearest-neighbour graph, which is the
+     * slowest step after clustering itself -- the marker rankings, heatmap and
+     * dendrogram are all computed without it.
+     */
+    private boolean computePaga = true;
     private int topNMarkers = 5;
     private boolean enableSpatialAnalysis = false;
     private boolean enableBatchCorrection = false;
@@ -290,6 +299,9 @@ public class ClusteringConfig {
     public void setClusterEntireProject(boolean clusterEntireProject) {
         this.clusterEntireProject = clusterEntireProject;
     }
+
+    public boolean isComputePaga() { return computePaga; }
+    public void setComputePaga(boolean v) { this.computePaga = v; }
 
     public boolean isGeneratePlots() { return generatePlots; }
     public void setGeneratePlots(boolean generatePlots) { this.generatePlots = generatePlots; }

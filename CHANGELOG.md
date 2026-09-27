@@ -4,6 +4,34 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.15.4] -- 2026-09-27 -- The neighbour graph is only built when something needs it
+
+### Changed
+
+- **PAGA is now a checkbox, and it is the only thing that builds the per-cell nearest-neighbour
+  graph.** That graph was computed on every run, and measured on 4,000 cells x 30 markers it
+  costs **7.4 s** -- more than the marker ranking it was assumed to serve. It does not serve it:
+  `rank_genes_groups` reads `adata.X` and the group labels (5.7 s without any graph), and
+  `sc.tl.dendrogram` correlates group means in the chosen representation (0.03 s without one).
+  Only `sc.tl.paga` needs it, and it fails outright without it.
+
+  The box is **on by default**, so nothing changes for anyone who has not looked. Unticking it
+  removes the PAGA tab and nothing else, and makes the run measurably shorter -- which matters
+  most in "Analyze current classifications", where there is no clustering to hide the cost
+  behind.
+
+  It is deliberately NOT filed under Spatial statistics: those are computed from cell
+  coordinates, and this graph lives in expression space.
+
+### Fixed
+
+- **The "Generate analysis plots" label listed the wrong things.** It read "(marker ranking,
+  PAGA, dotplot)", which implied unticking it would remove the Marker Rankings tab -- it does
+  not, that tab is computed either way. It now names what it actually gates: dotplot, matrix
+  plot, violin, embedding, PAGA. (This is also the answer to "why no violin plot": the box was
+  unticked. The plots do not depend on how the labels were produced, so
+  Analyze current classifications gets exactly the same set.)
+
 ## [0.15.3] -- 2026-09-27 -- "Analyze current classifications" stops calling itself clustering
 
 ### Fixed

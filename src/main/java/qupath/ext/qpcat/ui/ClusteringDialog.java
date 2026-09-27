@@ -215,6 +215,7 @@ public class ClusteringDialog {
     private ComboBox<Algorithm> algorithmCombo;
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
+    private CheckBox pagaCheck;
     private CheckBox spatialAnalysisCheck;
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
@@ -1227,12 +1228,37 @@ public class ClusteringDialog {
     }
 
     private VBox createAnalysisSection() {
-        generatePlotsCheck = new CheckBox("Generate analysis plots (marker ranking, PAGA, dotplot)");
+        generatePlotsCheck = new CheckBox(
+                "Generate analysis plots (dotplot, matrix plot, violin, embedding, PAGA)");
         generatePlotsCheck.setSelected(true);
         generatePlotsCheck.setTooltip(Tooltips.of(
-                "Generate static PNG plots for marker rankings (Wilcoxon rank-sum),\n"
-                + "a PAGA (partition-based graph abstraction) trajectory graph, dotplot,\n"
-                + "and stacked violin plots."));
+                "Write the static PNG plots: dotplot, matrix plot, stacked violin,\n"
+                + "the embedding scatter and the PAGA graph.\n\n"
+                + "It does NOT gate the Marker Rankings or Marker Fingerprints tabs.\n"
+                + "Those are computed either way -- the old label said 'marker\n"
+                + "ranking', which read as though unticking this would remove them.\n\n"
+                + "Applies to every run, including Analyze current classifications:\n"
+                + "the plots do not depend on how the labels were produced."));
+
+        // Its own control, NOT one of the spatial statistics: those are computed
+        // from cell coordinates, this graph is in expression space. Filing it
+        // there would put the slowest step of the run under a heading that has
+        // nothing to do with it.
+        pagaCheck = new CheckBox("Cluster connectivity graph (PAGA)");
+        pagaCheck.setSelected(QpcatPreferences.isComputePaga());
+        pagaCheck.setTooltip(Tooltips.of(
+                "Build the PAGA graph: which clusters sit next to each other in\n"
+                + "expression space, drawn as a node-and-edge diagram.\n\n"
+                + "This is usually the slowest step after the clustering itself,\n"
+                + "because it needs a nearest-neighbour graph over every cell -- and\n"
+                + "NOTHING ELSE in the run uses that graph. The marker rankings, the\n"
+                + "heatmap and the dendrogram are all computed without it.\n\n"
+                + "Turn it off if you do not read the PAGA tab; the rest of the\n"
+                + "results are identical and the run is measurably shorter."));
+        pagaCheck.selectedProperty().addListener((o, a, b) -> {
+            QpcatPreferences.setComputePaga(b);
+            refreshRunCostLabel();
+        });
 
         spatialAnalysisCheck = new CheckBox("Neighborhood enrichment + Moran's I");
         spatialAnalysisCheck.setSelected(false);
@@ -1415,7 +1441,7 @@ public class ClusteringDialog {
         areasSection.addChangeListener(refreshBatchGate);
         refreshBatchGate.run();
 
-        VBox box = new VBox(5, generatePlotsCheck, spatialAnalysisCheck,
+        VBox box = new VBox(5, generatePlotsCheck, pagaCheck, spatialAnalysisCheck,
                 smoothingRow, pcaPrecursorCheck, batchCorrectionCheck, batchKeyRow,
                 areasPane, spatialStatsPane);
         return box;
@@ -2744,6 +2770,7 @@ public class ClusteringDialog {
         config.setSpatialSmoothingIterations(smoothingIterationsSpinner.getValue());
         config.setPcaPrecursor(pcaPrecursorCheck.isSelected());
         config.setEnableBatchCorrection(batchCorrectionCheck.isSelected());
+        config.setComputePaga(pagaCheck.isSelected());
         config.setAreaLevels(areasSection.getAreaLevels());
         config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
                 ? ClusteringConfig.BATCH_KEY_AREAS : ClusteringConfig.BATCH_KEY_IMAGES);
@@ -3164,6 +3191,7 @@ public class ClusteringDialog {
         // silently switching on a step that changes labels.
         pcaPrecursorCheck.setSelected(config.isPcaPrecursor());
         batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
+        pagaCheck.setSelected(config.isComputePaga());
         areasSection.setAreaLevels(config.getAreaLevels());
         batchKeyCombo.setValue(
                 ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey())

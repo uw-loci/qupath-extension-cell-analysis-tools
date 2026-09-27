@@ -54,6 +54,17 @@ public final class QpcatPreferences {
             "qpcat.cluster.closeDialogAfterRun", false);
 
     /**
+     * Default for the PAGA cluster-connectivity graph.
+     * <p>
+     * On, to match the behaviour every earlier version had. It is worth knowing
+     * that PAGA is the ONLY consumer of the per-cell nearest-neighbour graph,
+     * and building that graph is the slowest step of a run after the clustering
+     * itself.
+     */
+    private static final BooleanProperty computePaga =
+            PathPrefs.createPersistentPreference("qpcat.cluster.computePaga", true);
+
+    /**
      * Heatmap colour scale: one shared scale centred on zero, or each marker
      * rescaled between its own extremes.
      * <p>
@@ -415,6 +426,10 @@ public final class QpcatPreferences {
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
+
+    /** Default for the PAGA graph, which alone needs the neighbour graph. */
+    public static boolean isComputePaga() { return computePaga.get(); }
+    public static void setComputePaga(boolean v) { computePaga.set(v); }
 
     /** True when the heatmap uses one shared scale centred on zero. */
     public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }

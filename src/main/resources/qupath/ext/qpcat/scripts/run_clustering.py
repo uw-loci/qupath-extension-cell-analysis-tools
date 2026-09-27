@@ -1684,7 +1684,14 @@ if pca_precursor_info is not None and cluster_matrix.shape[0] == adata.n_obs:
     adata.obsm["X_pca"] = cluster_matrix
     _analysis_rep = "X_pca"
 
-# Compute neighbor graph (needed for PAGA and dendrogram)
+# Whether to build the PAGA graph, and with it the per-cell nearest-neighbour
+# graph it needs. Default True so a config written before this option existed
+# reproduces its original run.
+try:
+    pref_compute_paga = bool(compute_paga)
+except NameError:
+    pref_compute_paga = True
+
 n_neigh = min(15, n_cells - 1)
 embedding_only = algorithm == "none"
 can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
@@ -1710,7 +1717,15 @@ if not can_analyze:
         )
 
 if can_analyze:
-    sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep=_analysis_rep)
+    # ONLY PAGA needs this. Measured on 4,000 cells x 30 markers: sc.pp.neighbors
+    # 7.4s, while the dendrogram (0.03s) and rank_genes_groups (5.7s) both run
+    # without it -- rank_genes_groups reads adata.X and the group labels, and the
+    # dendrogram correlates group means in the chosen representation. Building it
+    # unconditionally made the slowest step of the run a cost nothing collected
+    # unless the user opened the PAGA tab.
+    if pref_compute_paga:
+        _progress(0.64, "Building cluster connectivity graph for PAGA...")
+        sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep=_analysis_rep)
     sc.tl.dendrogram(adata, groupby="cluster")
 
     # 6a. Marker ranking (Wilcoxon rank-sum test)
@@ -1781,6 +1796,11 @@ if can_analyze:
 
     # 6b. PAGA (cluster connectivity / trajectory graph)
     try:
+        if not pref_compute_paga:
+            raise RuntimeError(
+                "PAGA was not requested (the 'Cluster connectivity graph' box is "
+                "unticked), so its neighbour graph was not built"
+            )
         sc.tl.paga(adata, groups="cluster")
         paga_conn = adata.uns["paga"]["connectivities"].toarray()
 
@@ -1796,7 +1816,10 @@ if can_analyze:
             paga_conn.shape[1],
         )
     except Exception as e:
-        logger.warning("PAGA computation failed: %s", e)
+        if pref_compute_paga:
+            logger.warning("PAGA computation failed: %s", e)
+        else:
+            logger.info("PAGA skipped: %s", e)
 else:
     logger.info("Skipping post-analysis (too few cells or clusters)")
 
@@ -2278,21 +2301,25 @@ if do_plots and plot_dir and can_analyze:
     except Exception as e:
         logger.warning("Failed to generate matrixplot: %s", e)
 
-    # PAGA graph -- cluster connectivity / trajectory
-    try:
-        # Drop the weakest edges. scanpy's own default (0.01) keeps very nearly
-        # all of them, and PAGA can connect every cluster to every other, so a
-        # run with many clusters draws k(k-1)/2 lines and arrives as a solid
-        # black mass. scanpy's documented lever for exactly this is `threshold`;
-        # 0 restores every edge.
-        sc.pl.paga(adata, threshold=pref_paga_edge_threshold, show=False)
-        paga_path = os.path.join(plot_dir, "paga_graph.png")
-        plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches="tight")
-        plt.close("all")
-        plot_paths["paga"] = paga_path
-        logger.info("Saved PAGA graph: %s", paga_path)
-    except Exception as e:
-        logger.warning("Failed to generate PAGA graph: %s", e)
+    # PAGA graph -- cluster connectivity / trajectory. Nothing to draw when the
+    # connectivity graph was not requested.
+    if not pref_compute_paga:
+        logger.info("PAGA plot skipped: the connectivity graph was not requested")
+    else:
+        try:
+            # Drop the weakest edges. scanpy's own default (0.01) keeps very nearly
+            # all of them, and PAGA can connect every cluster to every other, so a
+            # run with many clusters draws k(k-1)/2 lines and arrives as a solid
+            # black mass. scanpy's documented lever for exactly this is `threshold`;
+            # 0 restores every edge.
+            sc.pl.paga(adata, threshold=pref_paga_edge_threshold, show=False)
+            paga_path = os.path.join(plot_dir, "paga_graph.png")
+            plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["paga"] = paga_path
+            logger.info("Saved PAGA graph: %s", paga_path)
+        except Exception as e:
+            logger.warning("Failed to generate PAGA graph: %s", e)
 
     # Stacked violin plot -- expression distribution per cluster
     if n_clusters_found > 1:
