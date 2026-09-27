@@ -271,6 +271,12 @@ public class ClusterHeatmapPanel extends VBox {
         this.markerVisible = new boolean[markerNames.length];
         java.util.Arrays.fill(clusterVisible, true);
         java.util.Arrays.fill(markerVisible, true);
+        // A picker built for the previous matrix holds listeners writing into the
+        // arrays just replaced, so it would silently edit nothing. Drop it.
+        if (filterStage != null) {
+            filterStage.close();
+            filterStage = null;
+        }
         filterBtn.setDisable(false);
         applyVisibility();
     }
