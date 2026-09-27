@@ -1265,6 +1265,17 @@ def run_ripley(
                     # reads as a measured result. Draw L alone instead.
                     fig, ax_l = plt.subplots(1, 1, figsize=(7, 5))
                     ax_k = None
+
+                # Centre on each cluster's OWN simulated-random median, which is
+                # what the in-app Ripley L tab plots. Until now this PNG drew the
+                # analytical Poisson diagonal instead, so a figure exported for a
+                # paper disagreed with the chart it was exported from -- and the
+                # diagonal is the weaker reference: it assumes an unbounded plane
+                # with no edge correction, which is why the simulated envelope
+                # was added in the first place.
+                centred = bool(envelope_median) and len(envelope_median) == len(
+                    l_curves
+                )
                 n_clusters = len(cluster_names)
                 cmap_name = "tab20" if n_clusters > 10 else "tab10"
                 cmap = plt.get_cmap(cmap_name, max(n_clusters, 1))
@@ -1280,13 +1291,36 @@ def run_ripley(
                             linewidth=1.2,
                         )
                     if idx < len(l_curves):
+                        curve = l_curves[idx]
+                        if centred:
+                            curve = centre_on_median(curve, envelope_median[idx])
                         ax_l.plot(
-                            radii,
-                            l_curves[idx],
+                            radii[: len(curve)],
+                            curve,
                             color=color,
                             label=str(cname),
                             linewidth=1.2,
                         )
+                        # Each cluster's band in its own colour, so "is this
+                        # curve outside ITS band" is answerable with several
+                        # drawn at once.
+                        if (
+                            centred
+                            and idx < len(envelope_low)
+                            and idx < len(envelope_high)
+                        ):
+                            med = envelope_median[idx]
+                            for edge in (envelope_low[idx], envelope_high[idx]):
+                                band = centre_on_median(edge, med)
+                                n_e = min(len(band), len(radii))
+                                ax_l.plot(
+                                    radii[:n_e],
+                                    band[:n_e],
+                                    "--",
+                                    color=color,
+                                    linewidth=0.8,
+                                    alpha=0.7,
+                                )
 
                 # Poisson null overlays (dashed black for visibility)
                 if ax_k is not None:
@@ -1298,14 +1332,26 @@ def run_ripley(
                         label="Poisson null",
                         linewidth=1.0,
                     )
-                ax_l.plot(
-                    radii,
-                    poisson_l,
-                    "--",
-                    color="black",
-                    label="Poisson null",
-                    linewidth=1.0,
-                )
+                if centred:
+                    # Randomness is a flat line at zero once centred.
+                    ax_l.axhline(
+                        0.0,
+                        linestyle="--",
+                        color="black",
+                        linewidth=1.0,
+                        label="Random (simulated)",
+                    )
+                else:
+                    # Pre-envelope fallback: the analytical diagonal is all there
+                    # is. Named so it is not read as the simulated null.
+                    ax_l.plot(
+                        radii,
+                        poisson_l,
+                        "--",
+                        color="black",
+                        label="Poisson null (analytical)",
+                        linewidth=1.0,
+                    )
 
                 if ax_k is not None:
                     ax_k.set_xlabel("Radius (%s)" % coord_unit)
@@ -1315,16 +1361,36 @@ def run_ripley(
                     ax_k.grid(True, alpha=0.3)
 
                 ax_l.set_xlabel("Radius (%s)" % coord_unit)
-                ax_l.set_ylabel("L(r)")
-                ax_l.set_title("Ripley L")
+                ax_l.set_ylabel("L(r) - random" if centred else "L(r)")
+                if ax_k is not None:
+                    ax_l.set_title(
+                        "Ripley L(r), relative to random" if centred else "Ripley L(r)"
+                    )
                 ax_l.legend(fontsize="small", loc="best")
                 ax_l.grid(True, alpha=0.3)
 
-                title = "Ripley L"
-                fig.suptitle(
-                    "%s (graph: %s, perms: %d)"
-                    % (title, graph_type, int(n_permutations))
+                # Parameters belong under the axis title on a one-panel figure;
+                # a suptitle there just repeats "Ripley L" above itself.
+                params = "graph: %s, perms: %d%s" % (
+                    graph_type,
+                    int(n_permutations),
+                    ", %d CSR sims" % RIPLEY_ENVELOPE_SIMS if centred else "",
                 )
+                if ax_k is not None:
+                    fig.suptitle("Ripley K and L (%s)" % params)
+                else:
+                    ax_l.set_title(
+                        "%s\n%s"
+                        % (
+                            (
+                                "Ripley L(r), relative to random"
+                                if centred
+                                else "Ripley L(r)"
+                            ),
+                            params,
+                        ),
+                        fontsize="medium",
+                    )
                 out_path = os.path.join(plot_dir, PLOT_FILE_RIPLEY)
                 fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
                 plt.close(fig)
@@ -1333,6 +1399,24 @@ def run_ripley(
                 logger.warning("Ripley L plot failed: %s", e)
     except Exception as e:
         logger.warning("Ripley L failed: %s", e)
+
+
+def centre_on_median(curve, median):
+    """Subtract a cluster's own simulated-random median from its L curve.
+
+    This is what makes zero mean "random" on the Ripley plot. Both the in-app
+    chart and the exported PNG draw the centred form; they disagreed until
+    0.14.11, when the PNG still drew the analytical Poisson diagonal.
+
+    Truncates to the shorter of the two rather than raising: a ragged pair means
+    a partial envelope, and half a curve drawn correctly beats no plot at all.
+
+    :param curve: L(r) for one cluster
+    :param median: that cluster's simulated-CSR median, same r-axis
+    :return: list of curve - median, length min(len(curve), len(median))
+    """
+    n = min(len(curve), len(median))
+    return [curve[j] - median[j] for j in range(n)]
 
 
 def run_geary_c(

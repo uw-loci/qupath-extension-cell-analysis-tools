@@ -4,6 +4,27 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.11] -- 2026-09-27 -- The exported Ripley PNG draws the same null as the chart
+
+### Fixed
+
+- **The saved `ripley_k_l.png` disagreed with the Ripley L tab it came from.** The chart plots
+  each curve relative to that cluster's own simulated-CSR median, so zero is randomness; the
+  PNG still drew the raw curve against the analytical Poisson diagonal. A figure exported for a
+  paper therefore contradicted the screen it was exported from, and the diagonal is the weaker
+  reference -- it assumes an unbounded plane with no edge correction, which is why the
+  simulated envelope was added in 0.14.0. The PNG now draws the centred curves, each cluster's
+  band in its own colour, and a flat "Random (simulated)" line at zero. A result with no
+  envelope (saved before 0.14.0) still falls back to the diagonal, labelled
+  "Poisson null (analytical)" so it cannot be mistaken for the simulated one.
+- The one-panel figure drew a suptitle and an axis title that repeated each other. Parameters
+  now sit under the axis title, and the suptitle is used only for the two-panel layout.
+
+### Added
+
+- `centre_on_median` is a top-level function with its own tests. The subtraction is one line,
+  but it lives inside a broad try/except whose failure mode is a silently missing PNG.
+
 ## [0.14.10] -- 2026-09-27 -- Cluster Explainer: current models, and how to set the key
 
 ### Fixed
