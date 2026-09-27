@@ -85,7 +85,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
 - **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/setup.md#cpu-or-gpu) for details on what does and doesn't benefit.
-- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (which has never been successfully run end-to-end by the developers). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
+- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (run end-to-end once, against Anthropic, on 2026-09-27). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
 
@@ -324,7 +324,7 @@ This is a lighter-weight alternative to BANKSY when you want spatial awareness w
 
 > **[UNTESTED]** This feature has not yet been validated end-to-end on real data. The LLM calls, provider integrations (Anthropic / Ollama), and rendered output are unverified -- treat any phenotype suggestion as provisional and validate it independently before relying on it. Behavior may change.
 
-**This feature has never been successfully run end-to-end by the QP-CAT developers** -- "experimental" means the path is unproven, not merely that its output is unvalidated. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
+**Run end-to-end once, on 2026-09-27** -- Anthropic, `claude-sonnet-5`, seven clusters, 23 seconds. One run, one provider, one dataset: "experimental" now means the OUTPUT is unvalidated, and the suggestions are proposals to check rather than labels to publish. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
 Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See [the LLM explainer documentation](documentation/llm-explainer.md) for the workflow.
 
@@ -332,7 +332,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 
 | Provider | Pros | Cons | Default model |
 |---|---|---|---|
-| **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-sonnet-4-5` (also `claude-opus-4-7`) |
+| **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
 OpenAI is intentionally **not** supported in v1.

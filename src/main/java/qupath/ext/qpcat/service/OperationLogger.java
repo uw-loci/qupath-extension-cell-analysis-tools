@@ -148,7 +148,7 @@ public class OperationLogger {
      *   QPCAT version: 0.2.5
      *   QuPath version: 0.7.0
      *   Provider: ANTHROPIC
-     *   Model: claude-sonnet-4-5
+     *   Model: claude-sonnet-5
      *   Prompt template: cluster_phenotype_v1
      *   Prompt hash: 5e9f2c...
      *   Cluster ids: 0, 1, 2, 3, 4

@@ -4,6 +4,51 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.10] -- 2026-09-27 -- Cluster Explainer: current models, and how to set the key
+
+### Fixed
+
+- **A model typed into the Model box was silently ignored.** The box is editable, but an
+  editable JavaFX ComboBox only commits its text to the value on Enter -- type an id, click
+  Explain without pressing Enter, and the run used the PREVIOUS model. It now commits on focus
+  loss and again when the run starts, which is the case a person typing a model id is trying
+  to get right.
+- **The model list was two generations old** (`claude-sonnet-4-5`, `claude-opus-4-7`), and
+  nothing said the box was editable, so it read as the only choice available. The list is now
+  current, the tooltip says outright that it is a set of suggestions rather than a whitelist,
+  and the default preference moves to `claude-sonnet-5`.
+- **The key warning named `QPCAT_ANTHROPIC_KEY` and offered nowhere to learn how to set one.**
+  There is now a "How do I set that?" link beside it, and a documentation link on the panel.
+
+### Added
+
+- Per-platform instructions for setting the environment variable in
+  `documentation/llm-explainer.md`: `setx` on Windows and why it does not affect the window you
+  typed it in, `~/.zshrc` / `~/.bashrc` on macOS and Linux and why a Dock launch does not read
+  them, how to verify it took, and a note that a key stored this way sits in plain text.
+  QuPath reads the variable once at launch, which the page now states where it matters.
+
+### Documentation
+
+- **The explainer has now been run end-to-end**, once: Anthropic, `claude-sonnet-5`, seven
+  clusters, 23 seconds, on the synthetic demo dataset. The README and the feature page both
+  said it never had. Corrected to what is now true, and no further: one run, one provider, one
+  dataset, and the *output* still unvalidated. The troubleshooting page's warning is narrowed
+  rather than removed, because a successful run exercised none of the error states it lists.
+- A screenshot of that run, with the two rows worth checking called out: cluster 6 came back
+  at `MD` confidence reading "CD4+ T cell, **inferred**" -- CD4 was never measured, so the
+  call rests on CD3 present and CD8 absent -- and clusters 0 and 3 both read as tumor,
+  separated by proliferation rather than lineage.
+- Stale `claude-sonnet-4-5` / `claude-opus-4-7` ids replaced in the README table, two YAML
+  examples, an audit-log javadoc, and the preference description, which claimed a default the
+  code no longer has.
+
+### Note
+
+`documentation/spatial-statistics.md` now records that the exported `ripley_k_l.png` draws the
+analytical Poisson diagonal while the in-app Ripley L tab draws a simulated envelope. The two
+have disagreed since 0.14.0; the PNG is the weaker reference.
+
 ## [0.14.9] -- 2026-09-27 -- Ripley K is gone, including from the places it still promised itself
 
 Both shipped environments pin `squidpy >= 1.6.6`, and 1.6.6 dropped `mode='K'`. K therefore

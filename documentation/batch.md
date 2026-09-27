@@ -447,7 +447,7 @@ The YAML file contains a literal `sk-ant-*` string. Committing this to a repo le
      llm_explainer:
        enabled: true
        provider: anthropic
-       model: claude-sonnet-4-5
+       model: claude-sonnet-5
        key_from_env: QPCAT_ANTHROPIC_KEY
    ```
 

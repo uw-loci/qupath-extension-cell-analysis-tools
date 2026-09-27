@@ -3,11 +3,12 @@
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
 
-> **This feature has never been successfully run end-to-end by the QP-CAT developers.**
-> "Experimental" here does not mean "works, but the output is unvalidated" -- it means the
-> path has not been exercised against a live provider at all. Expect to hit problems no one
-> has hit yet, and please [report them](troubleshooting.md#reporting-a-bug) if you do. Everything below
-> describes the intended design, not observed behaviour.
+> **Run end-to-end once, on 2026-09-27.** Anthropic provider, `claude-sonnet-5`, seven
+> clusters from the synthetic demo dataset, 23 seconds. That is the whole of the evidence:
+> one run, one provider, one dataset. "Experimental" no longer means the path has never been
+> exercised -- it means it has been exercised once, and the *output* is unvalidated. The
+> suggestions it returns are proposals to check, not labels to publish. Please
+> [report](troubleshooting.md#reporting-a-bug) anything that breaks.
 
 The prompt template, output JSON shape, and audit-log row format may also change.
 
@@ -17,7 +18,7 @@ The prompt template, output JSON shape, and audit-log row format may also change
 
 - **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
 - **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
-- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 4.5 (`claude-sonnet-4-5`) on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
+- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 5 (`claude-sonnet-5`) on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
 
 ### Requirements
 
@@ -38,6 +39,20 @@ OpenAI is **not** supported in v1.
 
 The results are also persisted to `SavedClusteringResult` so reopening past results shows the same table without re-paying the API call.
 
+![The Cluster Explainer tab after a run. Provider is set to ANTHROPIC with model claude-sonnet-5, the API key field is masked, and the status line reads "Done. 7 clusters explained (23s)". A Suggestions table gives one row per cluster: proliferating epithelial/tumor cell from Ki67 and PanCK, myofibroblast/smooth muscle cell from aSMA, B cell from CD20, epithelial/tumor cell from PanCK, macrophage from CD68, and cytotoxic T cell from CD8 and CD3, all at HI confidence; helper T cell from CD3 and CD8 at MD confidence. Below, a Rationale box explains cluster 0, and buttons offer Copy results as TSV and Regenerate selected cluster](images/cluster-explainer-suggestions.png)
+
+The run above is the one the warning at the top refers to, on the synthetic demo dataset whose
+ground truth is known. All seven suggestions matched it. Two details are worth noticing rather
+than taking on trust:
+
+- **Cluster 6 came back at `MD` confidence, not `HI`**, and its phenotype reads "Helper T cell
+  (CD4+ T cell, **inferred**)". CD4 was never measured in this panel; the call rests on CD3
+  being present while CD8 is not. That is the correct inference and the correct hedge, and it
+  is the row a reader should check hardest.
+- **Clusters 0 and 3 both read as tumor**, separated by proliferation rather than by lineage.
+  The explainer sees marker statistics only, so it cannot tell you whether splitting a
+  population by cell state was what you wanted.
+
 ### Provider Setup
 
 <details>
@@ -45,11 +60,40 @@ The results are also persisted to `SavedClusteringResult` so reopening past resu
 
 1. Go to [console.anthropic.com](https://console.anthropic.com/), create an account if needed, and create a new API key
 2. In the explainer tab, set **Provider** to "Anthropic"
-3. Set **Model** to the default `claude-sonnet-4-5` (or pick `claude-opus-4-7` from the dropdown for a stronger model)
+3. Set **Model**. The dropdown lists a few current ids as suggestions; it is **editable**, so you can type any id the provider accepts, including a model released after your version of QP-CAT. The id is sent verbatim, and an unrecognised one comes back as a provider error rather than falling back to something else. Anthropic's [model overview](https://docs.claude.com/en/docs/about-claude/models/overview) lists the current ids.
 4. Paste your API key into the **API Key** field. The key is held in memory only for this QuPath session and is never written to disk
 5. Click **Run Explainer**
 
-**Environment variable shortcut:** set `QPCAT_ANTHROPIC_KEY=<your-key>` before launching QuPath. The explainer tab will show the key as masked text and you can leave the field alone. This is the recommended setup for shared workstations where you want the key to follow your user account rather than the QuPath GUI.
+**Environment variable shortcut:** set `QPCAT_ANTHROPIC_KEY` to your key before launching QuPath, and the field fills itself. This is the better setup on a machine you use regularly -- the key follows your user account rather than being retyped every session.
+
+QuPath reads the variable **once, at launch**, so set it first and start QuPath afterwards. Launching from a terminal that has the variable also works.
+
+<details>
+<summary>How to set it, per platform</summary>
+
+**Windows (persistent).** In a Command Prompt:
+
+```
+setx QPCAT_ANTHROPIC_KEY "sk-ant-..."
+```
+
+`setx` writes to your user environment, so it survives a reboot -- but it does **not** affect the window you typed it in. Close that window, then start QuPath. The GUI equivalent is Settings > System > About > Advanced system settings > Environment Variables > New under "User variables".
+
+**Windows (this session only).** `set QPCAT_ANTHROPIC_KEY=sk-ant-...`, then launch QuPath from that same Command Prompt.
+
+**macOS / Linux (persistent).** Add to `~/.zshrc` (macOS default) or `~/.bashrc`:
+
+```
+export QPCAT_ANTHROPIC_KEY="sk-ant-..."
+```
+
+Then open a new terminal and start QuPath from it. An app launched from the Dock or a desktop icon does **not** read your shell profile, so on macOS either launch QuPath from the terminal or use `launchctl setenv QPCAT_ANTHROPIC_KEY "sk-ant-..."` for GUI launches.
+
+**Check it took.** `echo %QPCAT_ANTHROPIC_KEY%` (Windows) or `echo $QPCAT_ANTHROPIC_KEY` (macOS / Linux) in a NEW terminal. If that prints nothing, QuPath will not see it either.
+
+A key set this way is stored in plain text in your user environment. On a shared or managed machine, prefer pasting it into the field each session.
+
+</details>
 
 **Note:** the API key field is session-scoped -- there is no "remember this key" checkbox, and no keychain integration. Re-enter it, or set the environment variable.
 
@@ -124,7 +168,7 @@ LLM output is **not deterministic** unless the provider exposes a temperature=0 
 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
-1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-4-5`)
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`)
 2. Record the **prompt template version** (e.g. `cluster_phenotype_v1`)
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
@@ -197,7 +241,7 @@ morphology-level reasoning.
 
 Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail is safe to share but does not contain the API key. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
-- **Provider and exact model string** (e.g. `claude-sonnet-4-5`, not just "Claude")
+- **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
 - **Prompt template version** as logged (currently `cluster_phenotype_v1`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
 - **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories
@@ -209,9 +253,9 @@ Archive the audit log alongside your other reproducibility artifacts (clustering
 ## Troubleshooting
 
 
-> **This feature has never been successfully run end-to-end by the QP-CAT
-> developers.** The error states below are derived from the code, not from
-> observed failures, so the list is neither complete nor confirmed.
+> **The error states below are derived from the code, not from observed
+> failures**, so the list is neither complete nor confirmed. The one successful
+> run on record exercised none of them.
 
 This page covers the error states you may see in the **Cluster Explainer (LLM)** tab of the cluster results dialog, what each one typically means, and what to do about it.
 

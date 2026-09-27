@@ -29,6 +29,7 @@ import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -203,9 +204,22 @@ public class ClusterExplainerPanel {
         modelCombo = new ComboBox<>();
         modelCombo.setEditable(true);
         modelCombo.setTooltip(Tooltips.of(
-                "Which model the chosen provider uses. Larger models give "
-                + "better suggestions but cost more or are slower."));
+                "Which model the chosen provider uses. Larger models give better\n"
+                + "suggestions but cost more or are slower.\n\n"
+                + "The list is a set of suggestions, not a whitelist: this box is\n"
+                + "editable, so you can TYPE any model id your provider accepts --\n"
+                + "including one released after this version of QP-CAT. The id is\n"
+                + "sent verbatim, and an unknown one comes back as a provider error."));
         populateModelsForProvider(initial);
+        // An editable ComboBox commits its editor text to valueProperty only on
+        // Enter. Type a model id, click Explain without pressing Enter, and the
+        // run silently uses the PREVIOUS model -- the one thing a user typing a
+        // model id is trying not to do. Commit on focus loss as well.
+        modelCombo.focusedProperty().addListener((obs, was, nowFocused) -> {
+            if (!nowFocused) {
+                commitModelEditorText();
+            }
+        });
         modelCombo.valueProperty().addListener((obs, oldV, newV) -> {
             Provider p = providerCombo.getValue();
             if (newV == null) return;
@@ -261,6 +275,18 @@ public class ClusterExplainerPanel {
                 + "-fx-font-size: 11px;");
         keyWarningLabel.setWrapText(true);
 
+        // Naming an environment variable and leaving the reader to work out how
+        // to set one is half an instruction. This is the other half.
+        Hyperlink keyHelpLink = QpcatDocLinks.page(
+                "How do I set that?", "llm-explainer.md", "provider-setup");
+        keyHelpLink.setStyle("-fx-font-size: 11px;");
+        keyHelpLink.setTooltip(Tooltips.of(
+                "Per-platform instructions for setting QPCAT_ANTHROPIC_KEY, plus\n"
+                + "where to create the key. QuPath reads the variable once at\n"
+                + "launch, so set it BEFORE starting QuPath."));
+        HBox keyWarningRow = new HBox(6, keyWarningLabel, keyHelpLink);
+        keyWarningRow.setAlignment(Pos.CENTER_LEFT);
+
         HBox providerRow = new HBox(8,
                 new Label("Provider:"), providerCombo,
                 new Label("Model:"), modelCombo);
@@ -275,7 +301,8 @@ public class ClusterExplainerPanel {
                 new Label("API key:"), apiKeyField, clearKeyBtn, keyStatusLabel);
         keyRow.setAlignment(Pos.CENTER_LEFT);
 
-        return new VBox(6, heading, providerRow, endpointRow, keyRow, keyWarningLabel);
+        return new VBox(6, heading, providerRow, endpointRow, keyRow, keyWarningRow,
+                QpcatDocLinks.linkBar("llm-explainer.md", null));
     }
 
     private VBox buildRunSection() {
@@ -513,6 +540,9 @@ public class ClusterExplainerPanel {
         req.markerTableJson = result.getMarkerRankingsJson();
         req.topN = topMarkersSpinner.getValue();
         req.timeoutSec = QpcatPreferences.getLlmTimeoutSec();
+        // Also commit here: the button can be fired from the keyboard without
+        // the model box ever losing focus.
+        commitModelEditorText();
         req.model = modelCombo.getValue();
         req.resultName = resultName != null ? resultName : "";
         // Best-effort context capture: no exceptions cross the boundary.
@@ -722,10 +752,32 @@ public class ClusterExplainerPanel {
         };
     }
 
+    /**
+     * Push whatever is typed in the model box into the combo's value, so a run
+     * uses it. No-op when the editor text already matches, so it does not fight
+     * the selection listener.
+     */
+    private void commitModelEditorText() {
+        if (modelCombo == null || !modelCombo.isEditable()) {
+            return;
+        }
+        String typed = modelCombo.getEditor().getText();
+        if (typed == null) {
+            return;
+        }
+        typed = typed.trim();
+        if (!typed.isEmpty() && !typed.equals(modelCombo.getValue())) {
+            modelCombo.setValue(typed);
+        }
+    }
+
     private void populateModelsForProvider(Provider p) {
         if (p == Provider.ANTHROPIC) {
+            // Suggestions, not a whitelist -- the box is editable and any id
+            // the provider accepts will be sent as typed. Listed newest first;
+            // a model released after this build simply will not appear here.
             modelCombo.setItems(FXCollections.observableArrayList(
-                    "claude-sonnet-4-5", "claude-opus-4-7"));
+                    "claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"));
             modelCombo.setValue(QpcatPreferences.getLlmAnthropicModel());
             modelCombo.setDisable(false);
         } else if (p == Provider.OLLAMA) {
