@@ -1219,9 +1219,7 @@ public class ClusteringDialog {
         info.setWrapText(true);
         WrapHeight.bind(info);
         info.setMaxWidth(520);
-        info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%); "
-                + "-fx-background-color: #f5f5f0; -fx-padding: 6; "
-                + "-fx-border-color: #ddd; -fx-border-width: 1;");
+        info.setStyle(BannerStyles.GUIDE_TEXT + BannerStyles.GUIDE_BOX);
         Hyperlink learn = new Hyperlink("Learn more");
         styleGuideHyperlink(learn);
         learn.setOnAction(e -> QuPathGUI.openInBrowser(BEST_PRACTICES_BASE + "#" + anchor));
@@ -5114,7 +5112,7 @@ public class ClusteringDialog {
                                       java.util.List<Hyperlink> extras) {
         Label guide = new Label(guideText);
         guide.setWrapText(true);
-        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
+        guide.setStyle(BannerStyles.GUIDE_TEXT);
         guide.setMaxWidth(Double.MAX_VALUE);
         // Same one-line trap as the banners: a wrapping Label reports its
         // preferred height as a single line, and BorderPane sizes the centre by
@@ -5129,8 +5127,7 @@ public class ClusteringDialog {
         // is how the Documentation link ended up as "..." (or clipped away
         // entirely) whenever the window was narrower than the guide text.
         BorderPane bar = new BorderPane();
-        bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
-                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        bar.setStyle(BannerStyles.GUIDE_BAR);
         bar.setCenter(guide);
         BorderPane.setAlignment(guide, Pos.TOP_LEFT);
 
@@ -5255,7 +5252,7 @@ public class ClusteringDialog {
     }
 
     private static void styleGuideHyperlink(Hyperlink h) {
-        h.setStyle("-fx-font-size: 11px; -fx-padding: 0 0 0 0;");
+        h.setStyle(BannerStyles.GUIDE_LINK);
         h.setBorder(null);
         // Never ellipsize a link the user is meant to find and click.
         h.setMinWidth(Region.USE_PREF_SIZE);

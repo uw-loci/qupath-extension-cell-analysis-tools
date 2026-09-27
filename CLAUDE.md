@@ -6,7 +6,7 @@ notes; see `README.md` for the full feature set and `THIRD_PARTY_NOTICES.md` for
 ## Build order (cluster3d-core publishToMavenLocal FIRST)
 
 QP-CAT depends on the Apache-2.0 shared 3D-viewer library `cluster3d-core`
-(`io.github.uw-loci:cluster3d-core:0.1.0`) for its **"3D View"** results tab. Publish that
+(`io.github.uw-loci:cluster3d-core:0.1.11`) for its **"3D View"** results tab. Publish that
 library to Maven Local before building QP-CAT:
 
 ```bash
@@ -24,7 +24,7 @@ that hook picks ONE JDK for every repo, so the clamp can only go once they have 
 moved.
 
 - The dependency is a **non-transitive `implementation`**:
-  `implementation("io.github.uw-loci:cluster3d-core:0.1.0") { isTransitive = false }`. It gets
+  `implementation("io.github.uw-loci:cluster3d-core:0.1.11") { isTransitive = false }`. It gets
   SHADED into the `-all.jar` (its own code); QuPath + JavaFX are host-provided, so `isTransitive
   = false` keeps them out of the bundle (core's published POM lists them because qupath-conventions
   injects them). Confirm the shaded classes with:
@@ -32,7 +32,7 @@ moved.
   RELOCATED package (`build.gradle.kts` rewrites `qupath.ext.cluster3d` into it), so
   grepping the original name finds nothing and looks like a failed shade.
 - A user with BOTH QP-CAT and the standalone `qupath-extension-cluster-3d-navigator` installed
-  has `cluster3d-core` shaded into both jars at the same pinned version 0.1.0 -> identical
+  has `cluster3d-core` shaded into both jars at the same pinned version 0.1.11 -> identical
   bytecode, harmless.
 
 ### Gradle 9 + shadow 9 (do not "harmonise" the shadow version down)

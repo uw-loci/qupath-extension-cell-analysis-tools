@@ -168,7 +168,7 @@ public class PhenotypingDialog {
                 + "detection first.");
         info.setWrapText(true);
         WrapHeight.bind(info);
-        info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
+        info.setStyle(BannerStyles.GUIDE_TEXT);
         info.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(info, Priority.ALWAYS);
 
@@ -178,8 +178,7 @@ public class PhenotypingDialog {
         links.setAlignment(Pos.TOP_RIGHT);
 
         HBox bar = new HBox(8, info, links);
-        bar.setStyle("-fx-background-color: #f5f5f0; -fx-padding: 8; "
-                + "-fx-border-color: #ddd; -fx-border-width: 0 0 1 0;");
+        bar.setStyle(BannerStyles.GUIDE_BAR);
         bar.setAlignment(Pos.TOP_LEFT);
         return bar;
     }

@@ -6,12 +6,14 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 
 /**
@@ -46,13 +48,26 @@ public class ClusterHeatmapPanel extends VBox {
     private final Button zoomOutBtn;
     private final Button zoomInBtn;
     private final Button zoomResetBtn;
+    private final Button filterBtn;
     private final Label titleLabel;
     private final Tooltip tooltip;
 
-    private double[][] data;        // nClusters x nMarkers (raw means)
+    private double[][] data;        // nClusters x nMarkers (raw means), VISIBLE subset
     private double[][] normData;    // column-normalized for display
-    private String[] markerNames;
-    private int nClusters;
+    private String[] markerNames;   // VISIBLE subset
+    private int nClusters;          // visible row count
+
+    // The full matrix as it arrived, kept so hiding a row or column is a view
+    // change rather than a loss: every filter is recomputed from these.
+    private double[][] fullData;
+    private String[] fullMarkerNames;
+    private boolean[] clusterVisible;
+    private boolean[] markerVisible;
+    /** Display row -> cluster index in the full matrix. */
+    private int[] rowSource = new int[0];
+    /** Display column -> marker index in the full matrix. */
+    private int[] colSource = new int[0];
+    private Stage filterStage;
 
     // Row-label width, grown to fit the longest cluster name. A renamed cluster
     // ("Tumor-associated macrophage") does not fit the default gutter, and a
@@ -126,7 +141,9 @@ public class ClusterHeatmapPanel extends VBox {
         resize();
     }
 
-    private String clusterName(int i) {
+    /** Name of a DISPLAY row, mapped back through the row filter. */
+    private String clusterName(int displayRow) {
+        int i = displayRow >= 0 && displayRow < rowSource.length ? rowSource[displayRow] : displayRow;
         String n = clusterNames.apply(i);
         return (n == null || n.isBlank()) ? "Cluster " + i : n;
     }
@@ -177,7 +194,15 @@ public class ClusterHeatmapPanel extends VBox {
         zoomResetBtn = new Button("Reset");
         zoomResetBtn.setTooltip(Tooltips.of("Back to the default cell size."));
         zoomResetBtn.setOnAction(e -> setZoom(1.0));
-        for (Button b : new Button[] {zoomOutBtn, zoomInBtn, zoomResetBtn}) {
+        filterBtn = new Button("Rows/columns...");
+        filterBtn.setDisable(true);
+        filterBtn.setTooltip(Tooltips.of(
+                "Choose which clusters (rows) and measurements (columns) the map\n"
+                + "draws. Hiding the rest brings the ones you are comparing next to\n"
+                + "each other, instead of ten rows apart in a 40-measurement panel.\n"
+                + "Nothing is recomputed -- the same means are shown alone."));
+        filterBtn.setOnAction(e -> showFilterWindow());
+        for (Button b : new Button[] {zoomOutBtn, zoomInBtn, zoomResetBtn, filterBtn}) {
             b.setStyle("-fx-font-size: 10px;");
         }
         // Ctrl + wheel, matching the generated-plot tabs. results.md has claimed
@@ -227,7 +252,8 @@ public class ClusterHeatmapPanel extends VBox {
 
         javafx.scene.layout.HBox zoomBar = new javafx.scene.layout.HBox(
                 4, titleLabel, new Label("  Scale:"), scaleCombo,
-                new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn);
+                new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn,
+                new Label("  Show:"), filterBtn);
         zoomBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         getChildren().addAll(zoomBar, canvas);
     }
@@ -239,10 +265,73 @@ public class ClusterHeatmapPanel extends VBox {
      * @param markerNames  marker names (length = nMarkers)
      */
     public void setData(double[][] clusterStats, String[] markerNames) {
+        this.fullData = clusterStats;
+        this.fullMarkerNames = markerNames;
+        this.clusterVisible = new boolean[clusterStats.length];
+        this.markerVisible = new boolean[markerNames.length];
+        java.util.Arrays.fill(clusterVisible, true);
+        java.util.Arrays.fill(markerVisible, true);
+        filterBtn.setDisable(false);
+        applyVisibility();
+    }
+
+    /**
+     * Rebuild the drawn matrix from the current row / column filter.
+     * <p>
+     * Everything downstream -- the scale, the margins, the canvas size, the
+     * tooltip -- reads the visible subset, so hiding two thirds of a 40-marker
+     * panel brings the markers that are left next to each other instead of ten
+     * rows apart. Nothing is recomputed from the cells: these are the same means,
+     * shown alone. With the per-marker scale that is exactly the same colour for
+     * a kept column; with the shared scale the reach is taken over what is shown,
+     * so colours do change, which is the point of that mode.
+     */
+    private void applyVisibility() {
+        if (fullData == null) {
+            return;
+        }
+        rowSource = indicesOf(clusterVisible);
+        colSource = indicesOf(markerVisible);
+        // Never leave nothing to draw: an empty selection would divide by zero in
+        // the scale and paint a blank canvas with no way back.
+        if (rowSource.length == 0 || colSource.length == 0) {
+            if (rowSource.length == 0) {
+                java.util.Arrays.fill(clusterVisible, true);
+                rowSource = indicesOf(clusterVisible);
+            }
+            if (colSource.length == 0) {
+                java.util.Arrays.fill(markerVisible, true);
+                colSource = indicesOf(markerVisible);
+            }
+        }
+        double[][] sub = new double[rowSource.length][colSource.length];
+        for (int i = 0; i < rowSource.length; i++) {
+            for (int j = 0; j < colSource.length; j++) {
+                sub[i][j] = fullData[rowSource[i]][colSource[j]];
+            }
+        }
+        String[] names = new String[colSource.length];
+        for (int j = 0; j < colSource.length; j++) {
+            names[j] = fullMarkerNames[colSource[j]];
+        }
+        layoutFor(sub, names);
+    }
+
+    private static int[] indicesOf(boolean[] flags) {
+        int n = 0;
+        for (boolean b : flags) if (b) n++;
+        int[] out = new int[n];
+        int k = 0;
+        for (int i = 0; i < flags.length; i++) if (flags[i]) out[k++] = i;
+        return out;
+    }
+
+    private void layoutFor(double[][] clusterStats, String[] markerNames) {
         this.data = clusterStats;
         this.markerNames = markerNames;
         this.nClusters = clusterStats.length;
         this.nMarkers = markerNames.length;
+        updateTitle();
 
         recomputeScale();
 
@@ -531,6 +620,161 @@ public class ClusterHeatmapPanel extends VBox {
                 stops[i][2] + f * (stops[j][2] - stops[i][2]));
     }
 
+    /** Title says what is drawn, so a filtered map cannot be mistaken for the whole panel. */
+    private void updateTitle() {
+        boolean filtered = fullData != null
+                && (nClusters < fullData.length || nMarkers < fullMarkerNames.length);
+        if (!filtered) {
+            titleLabel.setText("Cluster-Marker Heatmap (hover for values)");
+            return;
+        }
+        titleLabel.setText(String.format(
+                "Cluster-Marker Heatmap -- showing %d of %d clusters, %d of %d measurements",
+                nClusters, fullData.length, nMarkers, fullMarkerNames.length));
+    }
+
+    /**
+     * The row / column picker. Toggling a box redraws immediately rather than
+     * waiting for an OK: the whole point is to try subsets, and a map you cannot
+     * see while choosing is the thing that made this hard in the first place.
+     */
+    private void showFilterWindow() {
+        if (filterStage != null) {
+            filterStage.show();
+            filterStage.toFront();
+            return;
+        }
+        filterStage = new Stage();
+        // Unique title: the Dialog Position Manager keys saved geometry on title alone.
+        filterStage.setTitle("QPCAT - Heatmap rows and columns");
+        javafx.scene.Scene ownerScene = getScene();
+        if (ownerScene != null && ownerScene.getWindow() != null) {
+            filterStage.initOwner(ownerScene.getWindow());
+        }
+
+        javafx.scene.layout.HBox columns = new javafx.scene.layout.HBox(12,
+                buildCheckColumn("Clusters (rows)", i -> clusterNames.apply(i),
+                        clusterVisible),
+                buildCheckColumn("Measurements (columns)",
+                        i -> fullMarkerNames[i], markerVisible));
+        columns.setPadding(new Insets(10));
+
+        Label note = new Label(
+                "Every measurement the run clustered on is listed -- size and shape "
+                + "measurements included, if they were selected for the run. Unticking "
+                + "the last row or column is undone, because an empty map has nothing "
+                + "to click back.");
+        note.setWrapText(true);
+        note.setMaxWidth(560);
+        WrapHeight.bind(note);
+        note.setStyle(BannerStyles.GUIDE_TEXT);
+
+        Button close = new Button("Close");
+        close.setOnAction(e -> filterStage.hide());
+        javafx.scene.layout.HBox footer = new javafx.scene.layout.HBox(8, close);
+        footer.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+        footer.setPadding(new Insets(0, 10, 10, 10));
+
+        VBox root = new VBox(8, note, columns, footer);
+        root.setPadding(new Insets(10));
+        filterStage.setScene(new javafx.scene.Scene(root));
+        filterStage.setOnCloseRequest(e -> {
+            e.consume();
+            filterStage.hide();
+        });
+        filterStage.show();
+    }
+
+    /**
+     * One scrollable checkbox list with select-all / none / invert and a text
+     * filter, over the indices of {@code flags}.
+     *
+     * @param heading  column heading
+     * @param labeller index -> display text
+     * @param flags    the visibility array this column edits IN PLACE
+     */
+    private VBox buildCheckColumn(String heading,
+                                  java.util.function.IntFunction<String> labeller,
+                                  boolean[] flags) {
+        Label head = new Label(heading);
+        head.setStyle("-fx-font-weight: bold;");
+
+        VBox list = new VBox(2);
+        list.setPadding(new Insets(4));
+        java.util.List<javafx.scene.control.CheckBox> boxes = new java.util.ArrayList<>();
+        for (int i = 0; i < flags.length; i++) {
+            final int idx = i;
+            String text = labeller.apply(i);
+            javafx.scene.control.CheckBox cb = new javafx.scene.control.CheckBox(
+                    text == null || text.isBlank() ? "(" + i + ")" : text);
+            cb.setSelected(flags[i]);
+            cb.setStyle("-fx-font-size: 11px;");
+            cb.selectedProperty().addListener((o, a, b) -> {
+                flags[idx] = b;
+                applyVisibility();
+                // applyVisibility puts everything back when the last box is
+                // cleared; reflect that here rather than letting the tick and
+                // the map disagree.
+                if (flags[idx] != b) {
+                    cb.setSelected(flags[idx]);
+                }
+            });
+            boxes.add(cb);
+            list.getChildren().add(cb);
+        }
+
+        ScrollPane scroll = new ScrollPane(list);
+        scroll.setFitToWidth(true);
+        scroll.setPrefViewportHeight(320);
+        scroll.setPrefViewportWidth(260);
+
+        javafx.scene.control.TextField search = new javafx.scene.control.TextField();
+        search.setPromptText("Filter this list...");
+        search.setStyle("-fx-font-size: 11px;");
+        search.textProperty().addListener((o, a, b) -> {
+            String q = b == null ? "" : b.trim().toLowerCase();
+            for (javafx.scene.control.CheckBox cb : boxes) {
+                boolean show = q.isEmpty() || cb.getText().toLowerCase().contains(q);
+                cb.setVisible(show);
+                cb.setManaged(show);
+            }
+        });
+
+        // The quick buttons act on what the text filter is SHOWING, so "Mean" +
+        // "Only these" is one gesture. Acting on the whole list instead would
+        // make the search box decorative.
+        Button all = new Button("All");
+        all.setOnAction(e -> setVisibleBoxes(boxes, true));
+        Button none = new Button("None");
+        none.setOnAction(e -> setVisibleBoxes(boxes, false));
+        Button only = new Button("Only these");
+        only.setOnAction(e -> {
+            for (javafx.scene.control.CheckBox cb : boxes) {
+                cb.setSelected(cb.isManaged());
+            }
+        });
+        for (Button b : new Button[] {all, none, only}) {
+            b.setStyle("-fx-font-size: 10px;");
+        }
+        all.setTooltip(Tooltips.of("Tick everything currently listed."));
+        none.setTooltip(Tooltips.of("Untick everything currently listed."));
+        only.setTooltip(Tooltips.of(
+                "Tick what the filter above is showing and untick everything else."));
+        javafx.scene.layout.HBox buttons = new javafx.scene.layout.HBox(4, all, none, only);
+
+        VBox box = new VBox(4, head, search, buttons, scroll);
+        return box;
+    }
+
+    private static void setVisibleBoxes(java.util.List<javafx.scene.control.CheckBox> boxes,
+                                        boolean selected) {
+        for (javafx.scene.control.CheckBox cb : boxes) {
+            if (cb.isManaged()) {
+                cb.setSelected(selected);
+            }
+        }
+    }
+
     private void onMouseMoved(MouseEvent e) {
         if (normData == null) return;
 
@@ -544,8 +788,9 @@ public class ClusterHeatmapPanel extends VBox {
             String marker = PhenotypingDialog.shortenMarkerName(markerNames[col]);
             double rawVal = data[row][col];
             String cells = "";
-            if (clusterCounts != null && row < clusterCounts.length) {
-                cells = String.format("%n%,d cells", clusterCounts[row]);
+            int sourceRow = row < rowSource.length ? rowSource[row] : row;
+            if (clusterCounts != null && sourceRow < clusterCounts.length) {
+                cells = String.format("%n%,d cells", clusterCounts[sourceRow]);
             }
             tooltip.setText(String.format("%s | %s%nMean: %.4f%s",
                     clusterName(row), marker, rawVal, cells));

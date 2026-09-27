@@ -60,6 +60,18 @@ are not equally trustworthy. Zoom with the **-** / **+** / **Reset** buttons or 
 zooming out past the point where the labels are legible is deliberate, because the pattern
 across the whole panel is what this view is for.
 
+The heatmap draws **every measurement the run clustered on**, whatever kind it is -- size and
+shape measurements appear alongside intensities if they were selected for the run. A map showing
+only `...: Mean` columns is a run in which only those were ticked.
+
+**Rows/columns...** opens a picker with one checkbox per cluster and one per measurement, each
+list with a text filter and **All** / **None** / **Only these**. Ticking redraws straight away.
+Use it when the two measurements you want to compare sit ten rows apart in a 40-measurement
+panel: hide the rest and they end up side by side. Nothing is recomputed -- these are the same
+means, shown alone -- but note that with **Scale** set to *Shared across markers* the reach of
+the colour is taken over what is shown, so colours do change when you filter. The title says
+"showing N of M" whenever a filter is on.
+
 <a name="embedding-tab-interactive"></a>
 <a name="embedding-plot-tab"></a>
 <a name="spatial-scatter-tab"></a>

@@ -4,6 +4,52 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.16.0] -- 2026-09-27 -- violins that are actually violins, a filterable heatmap, readable banners
+
+### Fixed
+
+- **Every violin in the stacked violin plot was drawn as a hairline.** Not a resolution
+  problem: at 20 clusters x 34 features each violin had a 62 x 60 px cell to itself and used
+  about 2 px of it. scanpy passes `hue=<the same variable as x>` to `seaborn.violinplot` so it
+  can colour each column, and seaborn's `dodge="auto"` then splits the slot between the hue
+  levels, giving each violin 1/34 of its column. The call now passes `dodge=False`, which
+  restores the full width at the same figure size and DPI. Two contract tests MEASURE the drawn
+  width -- one pins the seaborn behaviour, so if a future release stops dodging a redundant hue
+  the workaround can be dropped rather than quietly becoming wrong.
+- **The results-tab guide bar was near-white on near-white under the dark theme.** The bar
+  painted a fixed light background while its text used `derive(-fx-text-base-color, 25%)`, which
+  the dark theme resolves to almost white. Background and foreground are now set together, in
+  one place (`BannerStyles`), for the bar, its hyperlinks, the clustering-dialog info box and the
+  phenotyping header -- the four places that had the same mismatch.
+
+### Added
+
+- **Heatmap: choose which rows and columns it draws.** A "Rows/columns..." button opens a picker
+  with one checkbox per cluster and one per measurement, each list with a text filter and
+  All / None / "Only these". Toggling redraws immediately. Hiding the rest brings the two
+  measurements you are comparing next to each other instead of ten rows apart in a
+  40-measurement panel. Nothing is recomputed -- the same means are shown alone -- and the title
+  says "showing N of M" whenever a filter is on, so a filtered map cannot be mistaken for the
+  whole panel. Unticking the last row or column is undone, because an empty map has nothing to
+  click back.
+
+### Changed
+
+- The 3D View tab keeps its class selection when you change an axis measurement
+  (`cluster3d-core` 0.1.11). Changing an axis re-reads the detections and rebuilt the legend,
+  which turned every class back on.
+
+### Not a defect
+
+- **The heatmap does not ignore size or shape measurements.** It draws exactly the measurement
+  set the run clustered on, whatever is in it: `marker_names` reaches the heatmap unfiltered
+  from the selection, and `MeasurementExtractor.getAllMeasurements` offers every measurement the
+  detections carry with nothing pre-ticked. A map showing only `...: Mean` columns is a run in
+  which only those were selected. The new row/column picker names every one of them, and says so.
+- **Dotplot, matrix plot and violin already hold a constant pixel budget per element.** Measured
+  across 34 / 100 / 200 features: 62, 58 and 57 px per column at 150 DPI, because scanpy sizes
+  the figure from the data. No minimum-resolution floor, pyramid or paging is needed.
+
 ## [0.15.6] -- 2026-09-27 -- "Load Config from file..." offers only config files
 
 ### Fixed
