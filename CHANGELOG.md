@@ -4,6 +4,25 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.14] -- 2026-09-27 -- Two layout bugs in the results tabs
+
+### Fixed
+
+- **"Channels -> clusters" drew its cards on top of each other.** Each card holds a wrapping
+  row of chips, and a JavaFX FlowPane computes its preferred height for its preferred WIDTH,
+  which is unbounded -- so it reported the height of a single row, the card was laid out that
+  tall, and the chips then wrapped inside it and spilled over the card below. The chip rows now
+  wrap at the width they are actually given. The same latent bug was in the other two views; it
+  showed here first because these chips carry a cluster name AND a fold-change, so they wrap,
+  while bare channel names usually fit one row.
+- **The Heatmap was cut off at the bottom and right, and the colour-scale legend never
+  appeared.** Its bottom and right margins were fixed at 100px and 15px, but the column labels
+  are drawn at 45 degrees, so a label of width L reaches L x cos(45) BOTH down and to the right
+  -- past both edges for anything longer than about 90px. The legend, drawn in that same bottom
+  band, had its "Low"/"High" text placed 4px BELOW the canvas, so only the bare tip of the
+  colour bar was ever visible. Both margins are now measured from the longest label, as the
+  left gutter already was, and the legend sits inside a reserved strip.
+
 ## [0.14.13] -- 2026-09-27 -- Five things from a testing session
 
 ### Fixed

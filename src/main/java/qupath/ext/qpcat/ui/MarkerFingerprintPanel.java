@@ -64,6 +64,8 @@ public class MarkerFingerprintPanel extends BorderPane {
     private static final double BAR_H = 11;
     private static final double VAL_W = 46;
     private static final double CARD_W = 300;
+    /** Card padding, subtracted when sizing anything that wraps inside one. */
+    private static final double CARD_PADDING = 8;
 
     private enum View { MEASUREMENTS, CHANNELS, CHANNELS_TO_CLUSTERS }
 
@@ -410,7 +412,7 @@ public class MarkerFingerprintPanel extends BorderPane {
                 else hasOther = true;
             }
 
-            FlowPane chips = new FlowPane(6, 6);
+            FlowPane chips = chipRow();
             if (chans.isEmpty() && !hasOther) {
                 chips.getChildren().add(muted("(no markers)"));
             }
@@ -492,7 +494,7 @@ public class MarkerFingerprintPanel extends BorderPane {
                 if (r != 0) return r;
                 return Double.compare(y[1], x[1]);
             });
-            FlowPane chips = new FlowPane(6, 6);
+            FlowPane chips = chipRow();
             for (double[] c : clusters) {
                 int clusterId = (int) c[0];
                 String label = clusterName(clusterId);
@@ -509,7 +511,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             HBox header = new HBox(6, colorChip(gray, 14), boldLabel("Other (non-channel markers)"));
             header.setAlignment(Pos.CENTER_LEFT);
             card.getChildren().add(header);
-            FlowPane chips = new FlowPane(6, 6);
+            FlowPane chips = chipRow();
             for (double[] c : otherClusters) {
                 int clusterId = (int) c[0];
                 chips.getChildren().add(chip(clusterColorFor(clusterId), clusterName(clusterId)));
@@ -521,9 +523,31 @@ public class MarkerFingerprintPanel extends BorderPane {
 
     // ---------- shared building blocks ----------
 
+    /**
+     * A wrapping row of chips sized for the card it goes in.
+     * <p>
+     * A FlowPane computes its preferred height for its preferred WIDTH, which
+     * is unbounded by default -- so it reports the height of a single row, the
+     * card is laid out that tall, and the chips then wrap inside it and spill
+     * over the card below. In the outer FlowPane of cards that reads as boxes
+     * drawn on top of each other.
+     * <p>
+     * Setting the wrap length to the width the pane will actually get makes the
+     * reported height the real one. It shows in "Channels -&gt; clusters" first
+     * because those chips carry a cluster name AND a fold-change, so they wrap;
+     * the bare channel names in "Channels" usually fit one row and hid it.
+     *
+     * @return an empty chip container, wrapping at the card's content width
+     */
+    private static FlowPane chipRow() {
+        FlowPane row = new FlowPane(6, 6);
+        row.setPrefWrapLength(CARD_W - CARD_PADDING * 2);
+        return row;
+    }
+
     private VBox card(Color tint) {
         VBox card = new VBox(6);
-        card.setPadding(new Insets(8));
+        card.setPadding(new Insets(CARD_PADDING));
         card.setPrefWidth(CARD_W);
         card.setStyle(String.format(
                 "-fx-background-color: %s; -fx-border-color: #ccc; -fx-border-radius: 5; "

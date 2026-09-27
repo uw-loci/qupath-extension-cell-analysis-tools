@@ -23,8 +23,14 @@ public class ClusterHeatmapPanel extends VBox {
 
     private static final double MARGIN_LEFT_MIN = 70;
     private static final double MARGIN_TOP = 10;
-    private static final double MARGIN_BOTTOM = 100;
-    private static final double MARGIN_RIGHT = 15;
+    /** Smallest right margin; grows to fit the rotated column labels. */
+    private static final double MARGIN_RIGHT_MIN = 15;
+    /** Gap between the grid and the start of the rotated labels. */
+    private static final double LABEL_GAP = 5;
+    /** Reserved strip under the labels for the colour-scale bar and its text. */
+    private static final double LEGEND_BAND = 34;
+    /** Rotation applied to the column labels, in degrees. */
+    private static final double LABEL_ANGLE = 45;
     private static final double MIN_CELL_W = 18;
     private static final double MIN_CELL_H = 22;
     private static final Font LABEL_FONT = Font.font("System", 10);
@@ -46,6 +52,10 @@ public class ClusterHeatmapPanel extends VBox {
     // ("Tumor-associated macrophage") does not fit the default gutter, and a
     // clipped row label is worse than a wide one.
     private double marginLeft = MARGIN_LEFT_MIN;
+    /** Grown to fit the rotated column labels plus the legend band. */
+    private double marginBottom = LABEL_GAP + LEGEND_BAND;
+    /** Grown to fit the rightward reach of the last column's rotated label. */
+    private double marginRight = MARGIN_RIGHT_MIN;
 
     // Cluster id -> display name; custom for a renamed / merged result.
     private java.util.function.IntFunction<String> clusterNames = i -> "Cluster " + i;
@@ -185,6 +195,21 @@ public class ClusterHeatmapPanel extends VBox {
         }
         marginLeft = Math.min(marginLeft, 260);   // cap: a runaway name must not eat the plot
 
+        // Column labels are drawn at 45 degrees from the bottom of the grid, so a
+        // label of width L reaches L*cos(45) BOTH down and to the right. The
+        // bottom and right margins were fixed at 100 and 15, so a long marker
+        // name ran off both edges -- and the colour-scale legend, drawn in that
+        // same bottom band, had its "Low"/"High" text placed 4px BELOW the canvas
+        // and so never appeared at all. Measure, as the left gutter already does.
+        double widest = 0;
+        for (String name : markerNames) {
+            probe.setText(PhenotypingDialog.shortenMarkerName(name));
+            widest = Math.max(widest, probe.getLayoutBounds().getWidth());
+        }
+        double reach = Math.min(widest * Math.cos(Math.toRadians(LABEL_ANGLE)), 200);
+        marginBottom = LABEL_GAP + reach + LEGEND_BAND;
+        marginRight = Math.max(MARGIN_RIGHT_MIN, reach + 8);
+
         resize();
     }
 
@@ -204,8 +229,8 @@ public class ClusterHeatmapPanel extends VBox {
         }
         cellW = Math.max(MIN_CELL_W, 25) * zoom;
         cellH = Math.max(MIN_CELL_H, 25) * zoom;
-        double canvasW = marginLeft + nMarkers * cellW + MARGIN_RIGHT;
-        double canvasH = MARGIN_TOP + nClusters * cellH + MARGIN_BOTTOM;
+        double canvasW = marginLeft + nMarkers * cellW + marginRight;
+        double canvasH = MARGIN_TOP + nClusters * cellH + marginBottom;
         canvas.setWidth(Math.max(canvasW, 300));
         canvas.setHeight(Math.max(canvasH, 200));
         redraw();
@@ -248,11 +273,11 @@ public class ClusterHeatmapPanel extends VBox {
         gc.setTextAlign(TextAlignment.LEFT);
         for (int j = 0; j < nMarkers; j++) {
             double x = marginLeft + j * cellW + cellW / 2;
-            double y = MARGIN_TOP + nClusters * cellH + 5;
+            double y = MARGIN_TOP + nClusters * cellH + LABEL_GAP;
 
             gc.save();
             gc.translate(x, y);
-            gc.rotate(45);
+            gc.rotate(LABEL_ANGLE);
             String shortName = PhenotypingDialog.shortenMarkerName(markerNames[j]);
             gc.fillText(shortName, 0, 0);
             gc.restore();
@@ -261,7 +286,9 @@ public class ClusterHeatmapPanel extends VBox {
 
         // Color scale legend
         double legendX = marginLeft;
-        double legendY = MARGIN_TOP + nClusters * cellH + MARGIN_BOTTOM - 18;
+        // Sit the bar inside the reserved band so its text lands ABOVE the bottom
+        // edge: at the old offset the baseline fell 4px past it and was clipped.
+        double legendY = canvas.getHeight() - LEGEND_BAND + 4;
         double legendW = Math.min(nMarkers * cellW, 150);
         for (int px = 0; px < (int) legendW; px++) {
             double frac = px / legendW;
