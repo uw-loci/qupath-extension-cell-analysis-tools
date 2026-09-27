@@ -6,6 +6,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
@@ -124,6 +125,13 @@ public class EmbeddingScatterPanel extends VBox {
     private CellRef[] cellRefs;
     private QuPathGUI qupath;
     private CellCropService cropService;
+    /**
+     * Cluster id -&gt; display channels, matching the Representative cells tab.
+     * Null means "use the viewer's own channel selection", which is what the
+     * preview did before the option existed.
+     */
+    private java.util.function.IntFunction<java.util.List<String>> previewChannels;
+    private CheckBox useRepChannelsCheck;
     private double cropScale = CellCropService.DEFAULT_CROP_SCALE;
     private int selectedIndex = -1;
     // Monotonic token so a slow crop read for an old click is discarded.
@@ -236,7 +244,29 @@ public class EmbeddingScatterPanel extends VBox {
         previewView.setVisible(false);
         previewView.setManaged(false);
 
-        VBox rightColumn = new VBox(6, legendTitle, legendScroll, previewLabel, previewView);
+        useRepChannelsCheck = new CheckBox("Use Representative Cells tab channels");
+        useRepChannelsCheck.setStyle("-fx-font-size: 10px;");
+        useRepChannelsCheck.setWrapText(true);
+        useRepChannelsCheck.setTooltip(Tooltips.of(
+                "Render the clicked cell's preview in the channels the Representative\n"
+                + "cells tab picked for ITS cluster -- that cluster's top-ranked markers --\n"
+                + "rather than whatever the viewer happens to be showing.\n\n"
+                + "Off, the preview follows the viewer, so every cluster is drawn in the\n"
+                + "same channels and a cluster defined by a channel you have hidden looks\n"
+                + "blank.\n\n"
+                + "Hidden when there are no marker rankings to pick channels from."));
+        // Re-read the crop so the change is visible without another click.
+        useRepChannelsCheck.selectedProperty().addListener((o, a, b) -> {
+            if (selectedIndex >= 0 && cellRefs != null
+                    && selectedIndex < cellRefs.length && cellRefs[selectedIndex] != null) {
+                loadPreview(cellRefs[selectedIndex]);
+            }
+        });
+        // Only meaningful once a channel source is wired in.
+        setShown(useRepChannelsCheck, false);
+
+        VBox rightColumn = new VBox(6, legendTitle, legendScroll,
+                useRepChannelsCheck, previewLabel, previewView);
         rightColumn.setPadding(new Insets(0, 0, 0, 6));
         rightColumn.setMinWidth(130);
         rightColumn.setPrefWidth(160);
@@ -259,6 +289,26 @@ public class EmbeddingScatterPanel extends VBox {
      * @param qupath      the QuPath GUI instance
      * @param cropService shared crop reader (owned by the dialog; not closed here)
      */
+    /**
+     * Supply per-cluster display channels for the crop preview, and reveal the
+     * option that turns them on.
+     * <p>
+     * The preview otherwise renders in whatever the viewer is showing, so every
+     * cluster is drawn in the same channels and one defined by a hidden channel
+     * looks blank. These are the same channels the Representative cells tab
+     * picks for that cluster.
+     *
+     * @param channelsForCluster cluster id -&gt; channel names, or null to hide
+     *                           the option (no marker rankings to pick from)
+     */
+    public void setPreviewChannels(
+            java.util.function.IntFunction<java.util.List<String>> channelsForCluster) {
+        this.previewChannels = channelsForCluster;
+        if (useRepChannelsCheck != null) {
+            setShown(useRepChannelsCheck, channelsForCluster != null);
+        }
+    }
+
     public void setNavigation(CellRef[] cellRefs, QuPathGUI qupath, CellCropService cropService) {
         this.cellRefs = cellRefs;
         this.qupath = qupath;
@@ -948,7 +998,13 @@ public class EmbeddingScatterPanel extends VBox {
         setShown(previewView, false);
 
         Thread t = new Thread(() -> {
-            BufferedImage crop = cropService.readCrop(ref, cropScale);
+            java.util.List<String> channels =
+                    (previewChannels != null && useRepChannelsCheck != null
+                            && useRepChannelsCheck.isSelected()
+                            && selectedIndex >= 0 && selectedIndex < labels.length)
+                            ? previewChannels.apply(labels[selectedIndex])
+                            : null;   // null = keep the viewer's own selection
+            BufferedImage crop = cropService.readCrop(ref, cropScale, channels);
             Image fx = (crop != null) ? SwingFXUtils.toFXImage(crop, null) : null;
             Platform.runLater(() -> {
                 if (token != previewToken) return;  // superseded by a newer click

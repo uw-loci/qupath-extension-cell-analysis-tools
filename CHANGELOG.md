@@ -4,6 +4,28 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.16] -- 2026-09-27 -- Representative cells pick channels you can actually see
+
+### Added
+
+- **A preference, on by default: pick display channels only from mean / average / median
+  markers.** A standard deviation, max or range can be the single most cluster-defining
+  measurement while the channel itself is blank where that cluster lives -- so a cluster
+  defined by "PanCK std dev" rendered as an empty crop, which reads as a broken image rather
+  than as a result. Turn it off to let any top-ranked marker supply a channel.
+- **"Use Representative Cells tab channels" on the 2D embedding.** The clicked-cell preview
+  otherwise renders in whatever the viewer is showing, so every cluster is drawn in the same
+  channels and one defined by a channel you have hidden looks blank. On, each cell is previewed
+  in the channels that tab picked for ITS cluster. Hidden when there are no marker rankings to
+  pick from, and it re-reads the crop immediately so the change is visible without another
+  click.
+
+### Known remaining
+
+The same option is not yet on the **3D View**. Its crop reader lives in `cluster3d-core` and
+has no channel override at all, so that half needs an API change and a release of that library
+rather than a setting here.
+
 ## [0.14.15] -- 2026-09-27 -- The Cluster Explainer banner wraps, and stops claiming it was never run
 
 ### Fixed

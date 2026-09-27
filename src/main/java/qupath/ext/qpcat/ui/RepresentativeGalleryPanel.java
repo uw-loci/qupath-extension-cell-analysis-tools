@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.service.CellCropService;
+import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ChannelMatcher;
 import qupath.ext.qpcat.service.ViewerNavigator;
 import qupath.fx.dialogs.Dialogs;
@@ -495,9 +496,21 @@ public class RepresentativeGalleryPanel extends VBox {
      * mean something different from what it says.
      */
     private List<String> channelsForCluster(int cluster) {
-        if (!perClusterChannels) {
-            return null;
-        }
+        return perClusterChannels ? displayChannelsForCluster(cluster) : null;
+    }
+
+    /**
+     * The display channels this tab would render {@code cluster} in: its fixed
+     * channel, if any, then the channels matched from its top-ranked markers.
+     * <p>
+     * Public so the 2D embedding preview can render a clicked cell in the same
+     * channels, instead of whatever the viewer happens to be showing. Ignores
+     * this tab's own per-cluster toggle -- the caller has its own.
+     *
+     * @param cluster cluster id
+     * @return channel names, or null when there is nothing to pick from
+     */
+    public List<String> displayChannelsForCluster(int cluster) {
         List<String> out = new ArrayList<>();
         if (fixedChannel != null && !fixedChannel.isBlank()
                 && !NO_FIXED_CHANNEL.equals(fixedChannel)) {
@@ -591,7 +604,13 @@ public class RepresentativeGalleryPanel extends VBox {
                         if (nm != null) names.add(String.valueOf(nm));
                     }
                 }
-                out.put(e.getKey(), names);
+                // Drop markers whose value does not imply something visible, so a
+                // cluster defined by "PanCK std dev" is not rendered in a channel
+                // that is blank where it lives. Preference, default on.
+                out.put(e.getKey(),
+                        QpcatPreferences.isRepVisualChannelsOnly()
+                                ? ChannelMatcher.visuallyMeaningful(names)
+                                : names);
             }
         } catch (Exception e) {
             logger.warn("Could not parse marker rankings for channel legend: {}", e.getMessage());

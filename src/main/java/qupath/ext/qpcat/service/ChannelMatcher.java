@@ -41,6 +41,48 @@ public final class ChannelMatcher {
      * @param maxChannels      maximum channels to return
      * @return matched channel names in rank order; empty when nothing matches
      */
+    /**
+     * Statistics whose value implies the channel is worth LOOKING at.
+     * <p>
+     * A mean, average or median is high when the stain is present. A standard
+     * deviation, a max or a range can be highly discriminative while the channel
+     * itself is visually blank or negative for that population -- so a cluster
+     * defined by "PanCK std dev" renders as an empty crop, which tells the
+     * viewer nothing and looks like a bug.
+     */
+    private static final String[] VISUAL_STATISTICS = {"mean", "average", "median"};
+
+    /**
+     * Keep only the measurements whose value implies something visible.
+     *
+     * <p>Used to pick display channels from a cluster's ranked markers. A
+     * measurement is kept when its name mentions a mean, an average or a median;
+     * everything else (std dev, max, min, range) is dropped, because those can
+     * rank highly on a channel that is blank where the cluster lives.
+     *
+     * @param measurementNames ranked marker names, most discriminative first
+     * @return the subset worth rendering, in the order given
+     */
+    public static List<String> visuallyMeaningful(List<String> measurementNames) {
+        List<String> out = new ArrayList<>();
+        if (measurementNames == null) {
+            return out;
+        }
+        for (String name : measurementNames) {
+            if (name == null) {
+                continue;
+            }
+            String lower = name.toLowerCase(java.util.Locale.ROOT);
+            for (String stat : VISUAL_STATISTICS) {
+                if (lower.contains(stat)) {
+                    out.add(name);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
     public static List<String> matchChannels(List<String> channelNames,
                                              List<String> rankedMarkerNames,
                                              int maxChannels) {

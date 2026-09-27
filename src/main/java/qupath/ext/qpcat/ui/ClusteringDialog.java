@@ -4249,6 +4249,11 @@ public class ClusteringDialog {
         if (result.hasRepresentatives() && cropService != null) {
             RepresentativeGalleryPanel gallery =
                     new RepresentativeGalleryPanel(result, qupath, cropService);
+            // The 2D preview can now render a clicked cell in the channels this
+            // tab picked for ITS cluster. Built after the scatter, hence the field.
+            if (scatterHolder[0] != null) {
+                scatterHolder[0].setPreviewChannels(gallery::displayChannelsForCluster);
+            }
             Tab tab = new Tab("Representative cells", wrapWithGuide(gallery,
                     "Image crops of the most representative cells per cluster -- the medoid "
                     + "(outlined) is the real cell closest to the cluster center, followed by "

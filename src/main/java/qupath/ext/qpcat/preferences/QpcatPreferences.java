@@ -54,6 +54,18 @@ public final class QpcatPreferences {
             "qpcat.cluster.closeDialogAfterRun", false);
 
     /**
+     * Pick display channels only from markers whose value implies something
+     * visible -- a mean, average or median.
+     * <p>
+     * On by default. A standard deviation or a max can be highly discriminative
+     * while the channel is blank where that cluster lives, so a crop rendered in
+     * it shows nothing and reads as a broken image. Off lets any ranked marker
+     * supply a channel.
+     */
+    private static final BooleanProperty repVisualChannelsOnly =
+            PathPrefs.createPersistentPreference("qpcat.representative.visualChannelsOnly", true);
+
+    /**
      * Weakest PAGA edge to draw. scanpy's own default is 0.01, which keeps very
      * nearly every edge; PAGA can connect every cluster to every other, so a run
      * with many clusters draws k(k-1)/2 lines and arrives as a solid black mass.
@@ -391,6 +403,10 @@ public final class QpcatPreferences {
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
+
+    /** True when display channels come only from mean/average/median markers. */
+    public static boolean isRepVisualChannelsOnly() { return repVisualChannelsOnly.get(); }
+    public static void setRepVisualChannelsOnly(boolean v) { repVisualChannelsOnly.set(v); }
 
     /** Weakest PAGA edge to draw; 0 draws every edge. */
     public static double getPagaEdgeThreshold() { return pagaEdgeThreshold.get(); }
@@ -913,6 +929,18 @@ public final class QpcatPreferences {
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(repVisualChannelsOnly, Boolean.class)
+                .name("Representative cells: only mean/median channels")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("When picking which channels to render a cluster's "
+                        + "crops in, use only markers whose name mentions a mean, an average "
+                        + "or a median. On by default. A standard deviation, max or range can "
+                        + "rank highly for a cluster while the channel is blank where that "
+                        + "cluster lives -- the crop then shows nothing, which reads as a "
+                        + "broken image rather than as a result. Turn off to let any "
+                        + "top-ranked marker supply a channel."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(pagaEdgeThreshold, Double.class)
