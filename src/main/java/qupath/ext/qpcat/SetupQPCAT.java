@@ -176,6 +176,16 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             OperationLogger.getInstance().setProject(qupath.getProject());
         });
 
+        // Wire the Python console UNCONDITIONALLY, not inside the environment-ready
+        // branch below. The service is a singleton and reads this field at the
+        // moment it emits a line, so wiring early always works -- but wiring it
+        // only when the environment happens to be built at extension load meant
+        // that a first run, or a rebuild, left the listener null for the rest of
+        // the session and the console permanently blank, with the same output
+        // still going to the QuPath log.
+        ApposeClusteringService.getInstance().setDebugListener(
+                PythonConsoleWindow.getInstance().asListener());
+
         if (environmentReady.get()) {
             // Check if environment dependencies have changed since last build
             if (ApposeClusteringService.isEnvironmentStale()) {
@@ -200,10 +210,6 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
     }
 
     private void startBackgroundInitialization() {
-        // Wire the Python console listener before initialization
-        ApposeClusteringService.getInstance().setDebugListener(
-                PythonConsoleWindow.getInstance().asListener());
-
         Thread initThread = new Thread(() -> {
             try {
                 ApposeClusteringService.getInstance().initialize();

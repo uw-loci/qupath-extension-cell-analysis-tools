@@ -143,6 +143,9 @@ public class ClusteringDialog {
         }
     }
 
+    /** Shown in place of the settings while a run is in flight. */
+    private Label collapsedNote;
+
     /** The settings window itself, so a finished run can close it. Null until shown. */
     private Dialog<ButtonType> settingsDialog;
 
@@ -426,6 +429,16 @@ public class ClusteringDialog {
         // time before committing to it; this covers the rest of the settings that
         // are not free, so the trades are visible at the moment of pressing Run
         // rather than only in the tooltips of the controls that caused them.
+        collapsedNote = new Label(
+                "Settings are hidden while this runs. They come back when it finishes, "
+                + "with whatever you last ran still filled in.");
+        collapsedNote.setWrapText(true);
+        WrapHeight.bind(collapsedNote);
+        collapsedNote.setStyle("-fx-font-size: 11px; "
+                + "-fx-text-fill: derive(-fx-text-base-color, 25%);");
+        collapsedNote.setVisible(false);
+        collapsedNote.setManaged(false);
+
         runCostLabel = new Label();
         runCostLabel.setWrapText(true);
         runCostLabel.setStyle("-fx-font-size: 11px;");
@@ -441,7 +454,8 @@ public class ClusteringDialog {
         content.setPadding(new Insets(10));
         content.setPrefWidth(550);
         content.getChildren().addAll(
-                settingsBox, new Separator(), runCostLabel, createStatusSection());
+                settingsBox, new Separator(), runCostLabel, collapsedNote,
+                createStatusSection());
 
         ScrollPane scrollPane = new ScrollPane(content);
         scrollPane.setFitToWidth(true);
@@ -468,6 +482,15 @@ public class ClusteringDialog {
 
         // Show algorithm params for default selection
         updateAlgorithmParams();
+
+        // Keep the scope note honest: the selection can change while this dialog
+        // is open, and the note is the only place that says a selection narrows
+        // the run.
+        if (qupath.getImageData() != null) {
+            qupath.getImageData().getHierarchy().getSelectionModel()
+                    .addPathObjectSelectionListener((prev, now, all) ->
+                            Platform.runLater(this::updatePreflight));
+        }
 
         // Restore whatever the last run used, now that the controls and the
         // measurement list exist.
@@ -2163,6 +2186,13 @@ public class ClusteringDialog {
                     + "types into one cluster. Turn it off if you are after cell types.");
         }
 
+        // A live selection silently narrows a current-image run to the selected
+        // objects, and nothing on screen said so -- a stray single cell produced
+        // a 1-row matrix whose only symptom was a log line about the shape.
+        // That behaviour is deliberate (selecting annotations to restrict a run
+        // is useful), so this states it rather than removing it.
+        String selectionNote = describeSelectionScope();
+
         // Scale hazards are a separate class of problem from under-clustering:
         // these do not give a poor answer, they give no answer at all. Shown in
         // the same box but under their own heading, and a BLOCK also disables
@@ -2188,11 +2218,18 @@ public class ClusteringDialog {
         }
         boolean blocked = scalingBlocked || capabilityBlock != null;
 
-        if (warns.isEmpty() && scaling.isEmpty() && capabilityBlock == null) {
+        if (warns.isEmpty() && scaling.isEmpty() && capabilityBlock == null
+                && selectionNote == null) {
             preflightLabel.setVisible(false);
             preflightLabel.setManaged(false);
         } else {
             StringBuilder sb = new StringBuilder();
+            if (selectionNote != null) {
+                sb.append(selectionNote);
+                if (capabilityBlock != null || !scaling.isEmpty() || !warns.isEmpty()) {
+                    sb.append("\n\n");
+                }
+            }
             if (capabilityBlock != null) {
                 sb.append(capabilityBlock);
                 if (!scaling.isEmpty() || !warns.isEmpty()) sb.append("\n\n");
@@ -2326,8 +2363,33 @@ public class ClusteringDialog {
         cancelButton.setManaged(active);
         cancelButton.setDisable(false);
         runButton.setDisable(active);
-        // Lock the settings during a run so nothing can be changed mid-run.
-        if (settingsBox != null) settingsBox.setDisable(active);
+        // Lock AND collapse the settings during a run. Disabling alone left a
+        // half-screen panel of controls nobody can use sitting over the image
+        // the run is about to change. Hidden (and unmanaged, so the dialog
+        // actually shrinks) it keeps only the progress, the phase list and
+        // Cancel -- enough to say what is happening and to stop it.
+        if (settingsBox != null) {
+            settingsBox.setDisable(active);
+            settingsBox.setVisible(!active);
+            settingsBox.setManaged(!active);
+        }
+        if (runCostLabel != null) {
+            // Its estimate is about a run you are no longer choosing.
+            runCostLabel.setVisible(!active);
+            runCostLabel.setManaged(!active);
+        }
+        if (collapsedNote != null) {
+            collapsedNote.setVisible(active);
+            collapsedNote.setManaged(active);
+        }
+        // Let the window shrink to what is left, and grow back afterwards.
+        if (settingsDialog != null && settingsDialog.getDialogPane() != null) {
+            javafx.stage.Window w = settingsDialog.getDialogPane().getScene() == null
+                    ? null : settingsDialog.getDialogPane().getScene().getWindow();
+            if (w != null) {
+                Platform.runLater(w::sizeToScene);
+            }
+        }
         if (phasePane != null) {
             phasePane.setVisible(active);
             phasePane.setManaged(active);
@@ -3943,6 +4005,9 @@ public class ClusteringDialog {
         // Held so the Cluster-colors panel can live-refresh the interactive plot
         // and reload the regenerated PNGs after a color edit (PathClass = truth).
         final EmbeddingScatterPanel[] scatterHolder = {null};
+        // The Representative cells tab owns the per-cluster channel choice. The 3D
+        // tab is built lazily, after this, so it reaches it through a holder.
+        final RepresentativeGalleryPanel[] galleryHolder = {null};
         final Map<String, ImageView> pngViews = new LinkedHashMap<>();
         // Other panels that also draw with cluster colors (composition pies +
         // legend, fingerprints); the color editor calls these on every edit.
@@ -4193,6 +4258,12 @@ public class ClusteringDialog {
             // user named it. The pane validates the names against the measurements present,
             // so a stale or missing prefix just falls back to auto-detection.
             final String[] axes3d = embeddingAxisNames(result);
+            // Name -> cluster id, so the 3D pane can ask for a class's channels
+            // without either side depending on the other's ordering.
+            final Map<String, Integer> clusterIdByName = new LinkedHashMap<>();
+            for (int c = 0; c < result.getNClusters(); c++) {
+                clusterIdByName.put(result.clusterNameFn().apply(c), c);
+            }
             final qupath.ext.cluster3d.ui.Cluster3DNavigatorPane[] pane3dHolder = {null};
             Label placeholder3d = new Label("Loading the interactive 3D view...");
             placeholder3d.setPadding(new Insets(12));
@@ -4213,6 +4284,16 @@ public class ClusteringDialog {
                 VBox with3dNote = new VBox(4, note3d, pane3d);
                 VBox.setVgrow(pane3d, Priority.ALWAYS);
                 tab3d.setContent(with3dNote);
+                // Offer the same per-cluster channels the Representative cells tab
+                // uses. Keyed by display NAME: the pane indexes the classes it
+                // finds in its own order, which this side cannot predict.
+                if (galleryHolder[0] != null) {
+                    pane3d.setPreviewChannels(name -> {
+                        Integer id = clusterIdByName.get(name);
+                        return id == null ? null
+                                : galleryHolder[0].displayChannelsForCluster(id);
+                    });
+                }
                 // Host owns the scope (the clustered images) -> no picker prompt.
                 pane3d.initializeForHost(scope3d, axes3d);
             };
@@ -4249,6 +4330,7 @@ public class ClusteringDialog {
         if (result.hasRepresentatives() && cropService != null) {
             RepresentativeGalleryPanel gallery =
                     new RepresentativeGalleryPanel(result, qupath, cropService);
+            galleryHolder[0] = gallery;
             // The 2D preview can now render a clicked cell in the channels this
             // tab picked for ITS cluster. Built after the scatter, hence the field.
             if (scatterHolder[0] != null) {
@@ -5244,6 +5326,48 @@ public class ClusteringDialog {
             }
         }
         return counts;
+    }
+
+    /**
+     * What the current object selection does to a current-image run, or null
+     * when it does nothing.
+     * <p>
+     * {@code runClustering} narrows to the selection when there is one: selected
+     * annotations contribute the detections inside them, selected detections are
+     * used directly. That is deliberate and useful, but it happened silently --
+     * a single cell left selected produced a one-row matrix, and the only sign
+     * was a log line about the matrix shape.
+     *
+     * @return a sentence for the pre-flight box, or null when the whole image
+     *         will be used
+     */
+    private String describeSelectionScope() {
+        if (mode == RunMode.ANALYZE_EXISTING || scopeSection == null
+                || !scopeSection.isCurrentImage() || qupath.getImageData() == null) {
+            return null;   // project scopes ignore the viewer selection entirely
+        }
+        var hierarchy = qupath.getImageData().getHierarchy();
+        var selected = hierarchy.getSelectionModel().getSelectedObjects();
+        if (selected == null || selected.isEmpty()) {
+            return null;
+        }
+        long annotations = selected.stream().filter(PathObject::isAnnotation).count();
+        long detections = selected.stream().filter(PathObject::isDetection).count();
+        int total = hierarchy.getDetectionObjects().size();
+        if (annotations > 0) {
+            return String.format(
+                    "Scope: %,d annotation(s) are selected, so this run uses only the "
+                    + "detections inside them, not all %,d in the image. Clear the "
+                    + "selection to use the whole image.", annotations, total);
+        }
+        if (detections > 0) {
+            return String.format(
+                    "Scope: %,d of the %,d detections in this image are SELECTED, so this "
+                    + "run uses only those.%s Clear the selection to use the whole image.",
+                    detections, total,
+                    detections < 3 ? "  That is too few to cluster." : "");
+        }
+        return null;
     }
 
     /**

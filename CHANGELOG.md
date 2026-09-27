@@ -4,6 +4,37 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.17] -- 2026-09-27 -- Per-cluster channels in 3D, a visible selection scope, and a console that fills
+
+Requires `cluster3d-core` 0.1.10.
+
+### Fixed
+
+- **The Python Console was blank for a whole session.** Its listener was wired only inside
+  `if (environmentReady.get())` at extension load, so a first run, or any session where the
+  environment was not yet built at that moment, left it null for good -- while the same output
+  kept going to the QuPath log. It is now wired unconditionally, at one site.
+- **A live object selection silently narrowed a current-image run**, and nothing on screen said
+  so: a single cell left selected produced a one-row matrix whose only symptom was a log line
+  about the matrix shape. The behaviour is deliberate and useful -- selecting annotations to
+  restrict a run is a feature -- so the pre-flight box now states what the selection will do,
+  updates as the selection changes, and says outright when fewer than three detections are
+  selected that it is too few to cluster.
+
+### Added
+
+- **"Use per-cluster channels" on the 3D View**, the counterpart to the 2D option added in
+  0.14.16. `cluster3d-core` gained a channel override on its crop reader and a host hook;
+  QP-CAT supplies the same channels the Representative cells tab picked, keyed by class display
+  name because the pane indexes the classes it finds in its own order.
+
+### Changed
+
+- **The clustering dialog collapses while a run is in flight.** Disabling the settings left a
+  half-screen panel of unusable controls over the image the run is about to change. They are
+  now hidden and unmanaged, so the window shrinks to the progress bar, the phase list and
+  Cancel, with a line saying the settings come back when it finishes.
+
 ## [0.14.16] -- 2026-09-27 -- Representative cells pick channels you can actually see
 
 ### Added

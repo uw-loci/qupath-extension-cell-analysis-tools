@@ -318,6 +318,12 @@ public class ApposeClusteringService {
                     Consumer<String> listener = debugListener;
                     if (listener != null) {
                         listener.accept(logMsg);
+                    } else {
+                        // Belt and braces. The console was blank for a whole
+                        // session whenever this field happened to be unwired,
+                        // with the same text going to the QuPath log -- so a
+                        // missing listener must not be a silent data loss.
+                        logger.debug("Python console listener not wired; line only in the log");
                     }
                 });
 
