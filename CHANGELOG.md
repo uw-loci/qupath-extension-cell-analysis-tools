@@ -51,6 +51,11 @@ have disagreed since 0.14.0; the PNG is the weaker reference.
 
 ## [0.14.9] -- 2026-09-27 -- Ripley K is gone, including from the places it still promised itself
 
+> **Never released as its own version.** The version was bumped and committed, then the
+> Cluster Explainer work landed before a tag was cut, so everything below shipped in
+> **0.14.10**. Recorded separately because it is a distinct change, not because there is
+> a 0.14.9 to install.
+
 Both shipped environments pin `squidpy >= 1.6.6`, and 1.6.6 dropped `mode='K'`. K therefore
 never arrives, and the leftover references were promising a statistic that cannot appear.
 
