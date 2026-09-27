@@ -481,7 +481,7 @@ public class ClusteringDialog {
         measurementPane.setOnSelectionChanged(this::updatePreflight);
         measurementStatusLabel = new Label();
         measurementStatusLabel.setWrapText(true);
-        measurementStatusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        measurementStatusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         measurementStatusLabel.setVisible(false);
         measurementStatusLabel.setManaged(false);
         VBox body = new VBox(4, measurementStatusLabel, measurementPane);
@@ -685,7 +685,7 @@ public class ClusteringDialog {
         Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
                 + "accepts; they apply to GUI and headless (YAML) runs alike.");
         advNote.setWrapText(true);
-        advNote.setStyle("-fx-text-fill: #666; -fx-font-size: 10.5px;");
+        advNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 10.5px;");
         VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, embModeRow, advNote);
         TitledPane advancedPane = new TitledPane("Advanced", advBox);
         advancedPane.setExpanded(false);
@@ -744,7 +744,7 @@ public class ClusteringDialog {
                 + "2D..., then run clustering with those columns as the measurements.");
         embeddingUseNote.setWrapText(true);
         embeddingUseNote.setMinHeight(Region.USE_PREF_SIZE);
-        embeddingUseNote.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        embeddingUseNote.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane, embeddingUseNote);
         TitledPane pane = new TitledPane("Dimensionality Reduction", box);
@@ -821,7 +821,7 @@ public class ClusteringDialog {
         classificationsStatus = new Label();
         classificationsStatus.setWrapText(true);
         classificationsStatus.setMaxWidth(Double.MAX_VALUE);
-        classificationsStatus.setStyle("-fx-text-fill: #555; -fx-font-size: 11px;");
+        classificationsStatus.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         Button selectAllClasses = new Button("Select all");
         selectAllClasses.setOnAction(e -> setAllClassesIncluded(true));
@@ -845,7 +845,7 @@ public class ClusteringDialog {
                 + "class to leave it out of the comparison entirely.");
         hint.setWrapText(true);
         hint.setMaxWidth(Double.MAX_VALUE);
-        hint.setStyle("-fx-text-fill: #555; -fx-font-size: 11px;");
+        hint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         HBox classButtons = new HBox(5, selectAllClasses, selectNoClasses, refresh);
         classButtons.setAlignment(Pos.CENTER_LEFT);
@@ -1182,7 +1182,7 @@ public class ClusteringDialog {
         Label info = new Label(text);
         info.setWrapText(true);
         info.setMaxWidth(520);
-        info.setStyle("-fx-font-size: 11px; -fx-text-fill: #444; "
+        info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%); "
                 + "-fx-background-color: #f5f5f0; -fx-padding: 6; "
                 + "-fx-border-color: #ddd; -fx-border-width: 1;");
         Hyperlink learn = new Hyperlink("Learn more");
@@ -1957,7 +1957,7 @@ public class ClusteringDialog {
                 + "config (reload via \"Load Config from file...\"). Headless / scripted "
                 + "runs use the YAML batch.");
         reproNote.setWrapText(true);
-        reproNote.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+        reproNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         HBox reproLinks = new HBox(12,
                 QpcatDocLinks.page("How-To: Reproducing a run",
@@ -2463,7 +2463,7 @@ public class ClusteringDialog {
                         tipLabel("resolution:", banksyResolutionSpinner), banksyResolutionSpinner);
                 row2.setAlignment(Pos.CENTER_LEFT);
                 Label note = new Label("Uses cell centroid coordinates for spatially-aware clustering");
-                note.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+                note.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
                 algorithmParamsBox.getChildren().addAll(row1, row2, note);
                 addMethodInfo(
                         "Augments each cell with a summary of its spatial neighbourhood, then "
@@ -2774,7 +2774,7 @@ public class ClusteringDialog {
      */
     private VBox createLoadConfigColumn() {
         Label heading = new Label("Start from a saved configuration:");
-        heading.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        heading.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Button loadBtn = new Button("Load Config...");
         loadBtn.setOnAction(e -> loadConfig());
@@ -4185,7 +4185,7 @@ public class ClusteringDialog {
                 Label note3d = new Label(clusteringSpaceNote(result));
                 note3d.setWrapText(true);
                 note3d.setMinHeight(Region.USE_PREF_SIZE);
-                note3d.setStyle("-fx-font-size: 11px; -fx-text-fill: #666; -fx-padding: 4 8 4 8;");
+                note3d.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%); -fx-padding: 4 8 4 8;");
                 VBox with3dNote = new VBox(4, note3d, pane3d);
                 VBox.setVgrow(pane3d, Priority.ALWAYS);
                 tab3d.setContent(with3dNote);
@@ -4926,7 +4926,7 @@ public class ClusteringDialog {
                                       java.util.List<Hyperlink> extras) {
         Label guide = new Label(guideText);
         guide.setWrapText(true);
-        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: #444;");
+        guide.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         guide.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(guide, Priority.ALWAYS);
 
@@ -5327,7 +5327,7 @@ public class ClusteringDialog {
                 + "the palette is saved with this result and restored when you reopen it. "
                 + "Renaming, merging and sub-clustering apply across the same images this "
                 + "result covers.");
-        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        hint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
 
         HBox bar = new HBox(10, new Label("Cluster colors:"), editBtn, manageBtn);
@@ -5462,7 +5462,7 @@ public class ClusteringDialog {
         Label hint = new Label("Each cluster's color is its QuPath class color (\"Cluster N\", or "
                 + "the name you gave it) -- editing here recolors the image overlay and every "
                 + "plot. The palette is saved with this result and restored when you reopen it.");
-        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
 
         ScrollPane scroll = new ScrollPane(swatches);
@@ -6492,7 +6492,7 @@ public class ClusteringDialog {
         clear.disableProperty().bind(field.textProperty().isEmpty());
 
         Label count = new Label();
-        count.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        count.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Runnable refresh = () -> {
             String q = field.getText();
@@ -6504,7 +6504,7 @@ public class ClusteringDialog {
                 count.setStyle("-fx-font-size: 11px; -fx-text-fill: #a33;");
                 count.setText("no matches");
             } else {
-                count.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+                count.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
                 count.setText(rt.rows() + (rt.rows() == 1 ? " row in " : " rows in ")
                         + rt.clusters() + (rt.clusters() == 1 ? " cluster" : " clusters"));
             }

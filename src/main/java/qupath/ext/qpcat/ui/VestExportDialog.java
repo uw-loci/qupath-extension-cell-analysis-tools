@@ -213,7 +213,7 @@ public final class VestExportDialog {
 
         Label status = new Label("");
         status.setWrapText(true);
-        status.setStyle("-fx-text-fill: #555;");
+        status.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox content = new VBox(10,
                 new Label("Export the open image's clustered cells as a VEST 3D bundle "

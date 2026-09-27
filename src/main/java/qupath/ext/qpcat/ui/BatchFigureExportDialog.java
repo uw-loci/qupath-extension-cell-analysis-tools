@@ -302,7 +302,7 @@ public class BatchFigureExportDialog {
                         + "result's clusters split across images or annotations. Table kinds "
                         + "always write .csv regardless of the raster format below.");
         compNote.setWrapText(true);
-        compNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
+        compNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         compBox.getChildren().add(compNote);
         VBox fxBox = new VBox(4);
         Label fxHeader = new Label(
@@ -313,7 +313,7 @@ public class BatchFigureExportDialog {
                 "These rows are listed for visibility; v1 records them as failures at export time. "
                         + "Planned for v1.1.");
         fxNote.setWrapText(true);
-        fxNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
+        fxNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         fxBox.getChildren().add(fxNote);
         for (PlotKind plot : PlotKind.values()) {
             String label = plot.getDisplayName();
@@ -388,7 +388,7 @@ public class BatchFigureExportDialog {
 
         Label vectorNote = new Label("[ SVG / PDF / EPS planned for v1.1 ]");
         // #595959 reaches 7:1 against white -- WCAG AA-safe for small text.
-        vectorNote.setStyle("-fx-text-fill: #595959; -fx-font-size: 11px;");
+        vectorNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         dpiSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(dpiSpinner);
@@ -435,7 +435,7 @@ public class BatchFigureExportDialog {
 
         Label tokensLabel = new Label(
                 "Tokens: {image}, {plot}, {result_name}, {date}, {ext}");
-        tokensLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #595959;");
+        tokensLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(4, row, tokensLabel, patternErrorLabel);
 
@@ -450,7 +450,7 @@ public class BatchFigureExportDialog {
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressBar.setAccessibleText("Export progress");
         // #555 is 7.46:1 on white -- WCAG AA-safe.
-        statusLabel.setStyle("-fx-text-fill: #555;");
+        statusLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         statusLabel.setAccessibleText("Export status");
         HBox.setHgrow(progressBar, Priority.ALWAYS);
 

@@ -196,7 +196,7 @@ public class CellularNeighborhoodDialog {
                 + "clustering or phenotyping across the same images first so the cell-type "
                 + "labels are consistent.)");
         explain.setWrapText(true);
-        explain.setStyle("-fx-text-fill: #555;");
+        explain.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         // The shared control, not a fourth copy of it. This dialog carried its
         // own transcription of the scope block, which is why the layout bug
@@ -240,7 +240,7 @@ public class CellularNeighborhoodDialog {
         groupRow.setAlignment(Pos.CENTER_LEFT);
         if (metaKeys.isEmpty()) {
             Label none = new Label("(no image metadata keys in this project)");
-            none.setStyle("-fx-text-fill: #888;");
+            none.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
             groupRow.getChildren().add(none);
         }
 
@@ -576,7 +576,7 @@ public class CellularNeighborhoodDialog {
                 + "(cell-type classifications are preserved). Color cells by neighborhood "
                 + "with Measure > Show measurement maps.");
         storeNote.setWrapText(true);
-        storeNote.setStyle("-fx-text-fill: #444; -fx-font-size: 11px;");
+        storeNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         box.getChildren().add(storeNote);
 
         if (result.getDivergenceWarning() != null) {

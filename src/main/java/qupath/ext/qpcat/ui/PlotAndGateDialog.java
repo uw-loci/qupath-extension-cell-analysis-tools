@@ -135,7 +135,7 @@ public class PlotAndGateDialog {
                 + "(perplexity, n_neighbors, ...), use 'Map cells in 2D' or clustering."));
         Label embHint = new Label();
         embHint.setWrapText(true);
-        embHint.setStyle("-fx-text-fill: #888; -fx-font-size: 10.5px;");
+        embHint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 10.5px;");
         List<String> availableEmb = availableEmbeddingMethods(measurements);
         if (!availableEmb.isEmpty()) {
             methodCombo.getItems().addAll(availableEmb);
@@ -191,7 +191,7 @@ public class PlotAndGateDialog {
     private VBox createStatusSection() {
         statusLabel = new Label("Pick a scope and axis, then Plot.");
         statusLabel.setWrapText(true);
-        statusLabel.setStyle("-fx-text-fill: #555;");
+        statusLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         return new VBox(4, statusLabel);
     }
 

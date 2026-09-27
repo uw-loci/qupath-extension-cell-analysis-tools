@@ -167,7 +167,7 @@ public class PhenotypingDialog {
                 + "fluorescence, brightfield/IHC, and H&E (after stain separation). Run cell "
                 + "detection first.");
         info.setWrapText(true);
-        info.setStyle("-fx-font-size: 11px; -fx-text-fill: #444;");
+        info.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         info.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(info, Priority.ALWAYS);
 
@@ -321,7 +321,7 @@ public class PhenotypingDialog {
                 + "ONLY that marker to pos and leave the others as '--'. Cells matching no rule "
                 + "are labeled 'Unknown'.");
         infoLabel.setWrapText(true);
-        infoLabel.setStyle("-fx-text-fill: #444;");
+        infoLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         rulesTable = new TableView<>(rulesList);
         rulesTable.setEditable(true);

@@ -4,6 +4,42 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.12] -- 2026-09-27 -- Readable hint text in dark mode, and a way out of the pop-out
+
+### Fixed
+
+- **Grey-on-grey hint text.** 61 labels across 20 dialogs set `-fx-text-fill` to a hardcoded
+  mid-grey (`#444` to `#999`), which is unreadable on a dark theme. All of them now use
+  `derive(-fx-text-base-color, 25%)`, the theme-aware form already used elsewhere in the
+  codebase. None of the 61 sat on an explicitly-coloured background, so none of them were
+  correct as they were.
+- **The measurement buttons' scope note was the worst of them**, because it explains the one
+  genuinely surprising thing about that panel: the five bulk buttons act on the rows currently
+  SHOWN, not on everything. It now reads "These five buttons act only on the rows shown above,
+  after filtering", in bold, on its own line under the buttons rather than wrapped in among
+  them, with a tooltip saying what to do about it.
+
+### Added
+
+- **An "Accept N measurements" button on the popped-out measurement window.** Closing it with
+  the window X was the only way out, which reads as unfinished. The count is live, so the
+  button says what you are about to take back. Nothing is committed by it -- the window holds
+  the real list, not a copy -- and the tooltip says so.
+- `SelectionListeners`, a small multicast registry, because the pane has a single
+  `onSelectionChanged` slot that the clustering dialog owns: it is what refreshes the
+  pre-flight caution and the run-cost line. Had the pop-out taken that slot, the pre-flight
+  would have stopped updating for the rest of the session with nothing on screen to say so.
+  Separated from the pane so it can be tested without a JavaFX toolkit.
+
+### Known remaining
+
+Ten labels use a semantic colour (amber caution, red error, green success) with no background
+behind it, so they are still dark-on-dark in a dark theme. Fixing those needs a theme-aware
+palette rather than a substitution, so they are listed rather than guessed at:
+`AutoencoderDialog:586`, `BatchFigureExportDialog:434`, `CellularNeighborhoodDialog:585`,
+`ClusteringDialog:5158`, `:5164`, `:6504`, `MarkerFingerprintPanel:285`, `PhaseProgressPane:206`,
+`:209`, `VestExportDialog:197`.
+
 ## [0.14.11] -- 2026-09-27 -- The exported Ripley PNG draws the same null as the chart
 
 ### Fixed

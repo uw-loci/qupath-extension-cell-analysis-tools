@@ -190,7 +190,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         title.setStyle("-fx-font-weight: bold;");
 
         noteLabel.setWrapText(true);
-        noteLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        noteLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Spinner<Integer> topSpinner = new Spinner<>(1, 12, topK, 1);
         topSpinner.setPrefWidth(70);
@@ -255,7 +255,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         clear.setOnAction(e -> field.clear());
         clear.disableProperty().bind(field.textProperty().isEmpty());
 
-        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         field.textProperty().addListener((o, was, now) -> {
             query = now == null ? "" : now;
@@ -285,7 +285,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #a33;");
             return;
         }
-        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        matchLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         matchLabel.setText(matchCount + (matchCount == 1 ? " match in " : " matches in ")
                 + matchCards + (matchCards == 1 ? " card" : " cards"));
     }
@@ -369,7 +369,7 @@ public class MarkerFingerprintPanel extends BorderPane {
                 ? (Double.isNaN(score) ? "n/a" : String.format("z=%.1f", score))
                 : String.format("%+.1f", lfc);
         Label valLbl = new Label(valText);
-        valLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
+        valLbl.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         valLbl.setMinWidth(VAL_W);
         HBox barLine = new HBox(6, bar, valLbl);
         barLine.setAlignment(Pos.CENTER_LEFT);
@@ -542,7 +542,7 @@ public class MarkerFingerprintPanel extends BorderPane {
 
     private HBox clusterHeader(String cid, int clusterId, Color color) {
         Label size = new Label(sizeText(clusterId));
-        size.setStyle("-fx-font-size: 10.5px; -fx-text-fill: #777;");
+        size.setStyle("-fx-font-size: 10.5px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         HBox header = new HBox(6, colorChip(color, 13), boldLabel(clusterName(clusterId)), size);
         header.setAlignment(Pos.CENTER_LEFT);
         return header;
@@ -594,7 +594,7 @@ public class MarkerFingerprintPanel extends BorderPane {
 
     private static Label muted(String text) {
         Label l = new Label(text);
-        l.setStyle("-fx-font-size: 10.5px; -fx-text-fill: #999;");
+        l.setStyle("-fx-font-size: 10.5px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         return l;
     }
 

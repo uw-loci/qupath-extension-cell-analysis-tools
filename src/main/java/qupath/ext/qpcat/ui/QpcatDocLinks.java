@@ -73,7 +73,7 @@ public final class QpcatDocLinks {
         Label spacer = new Label();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         Label help = new Label("Help:");
-        help.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        help.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         HBox bar = new HBox(4, spacer, help, page("Documentation", file, anchor));
         bar.setAlignment(Pos.CENTER_RIGHT);
         return bar;

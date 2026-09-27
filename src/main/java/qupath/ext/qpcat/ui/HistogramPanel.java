@@ -95,7 +95,7 @@ public class HistogramPanel extends VBox {
         });
 
         statsLabel = new Label("Pos: - | Neg: -");
-        statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
+        statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Label methodLabel = new Label("Method:");
         if (methodCombo.getTooltip() != null) {

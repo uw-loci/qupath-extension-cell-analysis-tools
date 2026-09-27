@@ -76,7 +76,7 @@ public final class ScopeSection extends VBox {
         chooseImagesButton = new Button("Choose images...");
         chooseImagesButton.setOnAction(e -> openImageChooser());
         specificImagesLabel = new Label("(none chosen)");
-        specificImagesLabel.setStyle("-fx-text-fill: #666;");
+        specificImagesLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Project<BufferedImage> project = qupath.getProject();
         // "Current image" means nothing with no image open. Rather than refusing
@@ -143,7 +143,7 @@ public final class ScopeSection extends VBox {
             unavailableHint.setText("Unavailable here: " + String.join("; ", reasons) + ".");
         }
         unavailableHint.setWrapText(true);
-        unavailableHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        unavailableHint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         chooseImagesButton.disableProperty().bind(scopeSpecificImages.selectedProperty().not());
         scopeSpecificImages.selectedProperty().addListener((obs, was, now) -> {

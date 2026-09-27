@@ -193,7 +193,7 @@ public class ClusterManagementDialog {
         Label manualHint = new Label();
         manualHint.setWrapText(true);
         manualHint.setMaxWidth(Double.MAX_VALUE);
-        manualHint.setStyle("-fx-text-fill: #777; -fx-font-size: 11px;");
+        manualHint.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         if (hasSaved) {
             savedResultRadio.setSelected(true);
             manualRadio.setDisable(true);
@@ -350,13 +350,13 @@ public class ClusterManagementDialog {
                 + "several to merge. Edits are staged; click Apply to write them.");
         infoLabel.setWrapText(true);
         infoLabel.setMaxWidth(Double.MAX_VALUE);
-        infoLabel.setStyle("-fx-text-fill: #555;");
+        infoLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         busy = new ProgressIndicator();
         busy.setPrefSize(18, 18);
         busy.setVisible(false);
         statusLabel = new Label();
-        statusLabel.setStyle("-fx-text-fill: #555;");
+        statusLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         HBox statusBar = new HBox(8, busy, statusLabel);
         statusBar.setAlignment(Pos.CENTER_LEFT);
 
@@ -810,7 +810,7 @@ public class ClusterManagementDialog {
                 + "Deselect any that should stay in '" + row.displayName + "'.");
         help.setWrapText(true);
         help.setMaxWidth(420);
-        help.setStyle("-fx-text-fill: #555;");
+        help.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Dialog<ButtonType> d = new Dialog<>();
         d.setTitle("QPCAT - Split Cluster");

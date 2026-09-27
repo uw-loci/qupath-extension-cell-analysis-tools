@@ -164,7 +164,7 @@ public class EmbeddingScatterPanel extends VBox {
         titleLabel.setStyle("-fx-font-weight: bold;");
 
         statsLabel = new Label("");
-        statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #555;");
+        statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         // Interaction hint ABOVE the plot, readable (not the old tiny/faint line).
         helpLabel = new Label("Scroll to zoom  -  middle-drag to pan  -  click a point to select");
@@ -226,7 +226,7 @@ public class EmbeddingScatterPanel extends VBox {
         VBox.setVgrow(legendScroll, Priority.ALWAYS);
 
         previewLabel = new Label();
-        previewLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
+        previewLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         previewLabel.setVisible(false);
         previewLabel.setManaged(false);
         previewView = new ImageView();
@@ -557,7 +557,7 @@ public class EmbeddingScatterPanel extends VBox {
         Label lbl = new Label(name);
         lbl.setStyle("-fx-font-size: 10.5px;");
         Label cnt = new Label(String.valueOf(count));
-        cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        cnt.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox row = new HBox(5, sw, lbl, spacer, cnt);

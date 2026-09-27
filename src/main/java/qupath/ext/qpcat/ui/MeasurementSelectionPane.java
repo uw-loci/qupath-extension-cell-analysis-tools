@@ -26,6 +26,7 @@ import javafx.util.StringConverter;
 
 import qupath.ext.qpcat.service.MeasurementExtractor;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -53,6 +54,8 @@ public class MeasurementSelectionPane extends VBox {
         BooleanProperty selectedProperty() { return selected; }
     }
 
+    /** Listeners beyond the single {@code onSelectionChanged} slot the dialog owns. */
+    private final SelectionListeners extraListeners = new SelectionListeners();
     private final ObservableList<Item> items = FXCollections.observableArrayList();
     private final FilteredList<Item> filtered = new FilteredList<>(items, m -> true);
     private final TextField filterField = new TextField();
@@ -130,8 +133,22 @@ public class MeasurementSelectionPane extends VBox {
                 + "These are OUTPUT: clustering on them clusters on a previous run's\n"
                 + "answer. Other checks are left alone."));
 
-        Label scopeHint = new Label("Applies to visible selection, after filtering");
-        scopeHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        // The buttons act on the rows CURRENTLY SHOWN, not on the whole panel --
+        // filter to "mean", press Select All, and only those are ticked. That is
+        // the point of them, and it is the one thing here that surprises people,
+        // so it gets the theme's own text colour at full strength rather than
+        // the #666 it used to have, which was grey on grey in dark mode.
+        Label scopeHint = new Label(
+                "These five buttons act only on the rows shown above, after filtering.");
+        scopeHint.setWrapText(true);
+        scopeHint.setStyle(
+                "-fx-font-size: 11px; -fx-font-weight: bold; "
+                + "-fx-text-fill: -fx-text-base-color;");
+        scopeHint.setTooltip(Tooltips.of(
+                "Filter the list first, then press one of these, and only the rows\n"
+                + "you can see change. Rows hidden by the filter keep whatever they\n"
+                + "already had.\n\n"
+                + "Clear the filter first to act on every measurement."));
 
         popOutButton = new Button("Expand...");
         popOutButton.setOnAction(e -> popOut());
@@ -152,9 +169,9 @@ public class MeasurementSelectionPane extends VBox {
         // one line in a 550px dialog, and an HBox squeezes them until the labels
         // ellipsize instead of wrapping to a second line.
         FlowPane buttons = new FlowPane(
-                5, 4, selectAll, selectNone, selectMean, selectMedian, deselectQpcat, scopeHint);
+                5, 4, selectAll, selectNone, selectMean, selectMedian, deselectQpcat);
         buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        getChildren().addAll(topRow, list, buttons);
+        getChildren().addAll(topRow, list, buttons, scopeHint);
     }
 
     /**
@@ -181,7 +198,37 @@ public class MeasurementSelectionPane extends VBox {
         Window owner = getScene() == null ? null : getScene().getWindow();
 
         parent.getChildren().remove(this);
-        VBox content = new VBox(this);
+
+        // A way out that is not the window's X. Nothing is "accepted" in the
+        // sense of being committed here -- the pane is the SAME node, so every
+        // tick already applies to the run -- but a modal window with no button
+        // reads as unfinished, and closing it is the step people look for.
+        Button accept = new Button();
+        accept.setDefaultButton(true);
+        accept.setTooltip(Tooltips.of(
+                "Close this window and put the list back in the dialog.\n\n"
+                + "Your choices are already applied -- this window holds the real\n"
+                + "list, not a copy -- so there is nothing to confirm and nothing\n"
+                + "to lose by closing it."));
+        Runnable refreshAccept = () -> {
+            int n = getSelected().size();
+            accept.setText(n == 1
+                    ? "Accept 1 measurement"
+                    : "Accept " + n + " measurements");
+        };
+        refreshAccept.run();
+        // The count is the useful part: it says what you are about to take back.
+        addSelectionListener(refreshAccept);
+        accept.setOnAction(e -> {
+            if (popOutStage != null) {
+                popOutStage.close();
+            }
+        });
+        HBox acceptRow = new HBox(accept);
+        acceptRow.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+        acceptRow.setPadding(new Insets(8, 0, 0, 0));
+
+        VBox content = new VBox(8, this, acceptRow);
         content.setPadding(new Insets(10));
         VBox.setVgrow(this, Priority.ALWAYS);
 
@@ -198,6 +245,7 @@ public class MeasurementSelectionPane extends VBox {
         // Restore on ANY close -- the button, the window X, Esc -- or the section
         // it came from stays empty for the rest of the session.
         popOutStage.setOnHidden(e -> {
+            removeSelectionListener(refreshAccept);
             content.getChildren().remove(this);
             restoreInto(parent, this, index);
             popOutStage = null;
@@ -319,6 +367,31 @@ public class MeasurementSelectionPane extends VBox {
         this.onSelectionChanged = r;
     }
 
+    /**
+     * Add a selection listener without displacing an existing one.
+     *
+     * <p>{@link #setOnSelectionChanged(Runnable)} is a single slot, and the
+     * dialog owns it -- it is what refreshes the pre-flight. A second caller
+     * needing notifications (the pop-out window's Accept button, which shows a
+     * live count) must not take that slot away.
+     *
+     * @param r run after every selection change
+     */
+    public void addSelectionListener(Runnable r) {
+        extraListeners.add(r);
+    }
+
+    /**
+     * Remove a listener added with {@link #addSelectionListener(Runnable)}.
+     * A window that has closed must stop being notified, or its controls are
+     * kept alive by the pane for the rest of the session.
+     *
+     * @param r the same instance that was added
+     */
+    public void removeSelectionListener(Runnable r) {
+        extraListeners.remove(r);
+    }
+
     private void fireChanged() {
         if (bulkDepth > 0) {
             return;     // one event at the end of the bulk change, not one per row
@@ -326,5 +399,6 @@ public class MeasurementSelectionPane extends VBox {
         if (onSelectionChanged != null) {
             try { onSelectionChanged.run(); } catch (Exception ignore) { /* UI sink */ }
         }
+        extraListeners.fire();
     }
 }

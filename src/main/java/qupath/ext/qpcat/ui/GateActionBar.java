@@ -56,7 +56,7 @@ public final class GateActionBar {
         clearAllBtn.setDisable(true);
         clearAllBtn.setTooltip(Tooltips.of("Remove all gate outlines drawn on the plot."));
         Label countLabel = new Label("0 cells gated");
-        countLabel.setStyle("-fx-text-fill: #555;");
+        countLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         Button selectBtn = new Button("Select in open image");
         selectBtn.setDisable(true);
         selectBtn.setTooltip(Tooltips.of(

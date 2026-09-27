@@ -108,7 +108,7 @@ public class PythonConsoleWindow {
         textArea.setPrefHeight(400);
 
         lineCountLabel = new Label("0 lines");
-        lineCountLabel.setStyle("-fx-text-fill: #666;");
+        lineCountLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Button clearBtn = new Button("Clear");
         clearBtn.setOnAction(e -> doClear());

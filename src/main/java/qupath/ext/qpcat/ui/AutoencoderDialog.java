@@ -387,7 +387,7 @@ public class AutoencoderDialog {
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || project.getImageList().isEmpty()) {
             Label noProject = new Label("No project open -- training on current image only.");
-            noProject.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+            noProject.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
             return new VBox(5, heading, noProject);
         }
 
@@ -472,7 +472,7 @@ public class AutoencoderDialog {
         Label hint = new Label(
                 "Tip: Label 100-200 cells per class for best results. "
                 + "Unlabeled cells contribute to reconstruction but not classification.");
-        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        hint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         hint.setWrapText(true);
 
         return new VBox(5, labelSummaryLabel, classDistributionChart, classWeightsBox, hint);
@@ -554,7 +554,7 @@ public class AutoencoderDialog {
                 + "Auto-computed from 95th percentile cell size + context."));
 
         Label tileInfo = new Label("Channels: " + nChannels + tileSizeHint);
-        tileInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        tileInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         includeMaskCheck = new CheckBox("Include cell mask channel");
         includeMaskCheck.setSelected(QpcatPreferences.isAeIncludeMask());
@@ -921,14 +921,14 @@ public class AutoencoderDialog {
                 "Evaluate: runs inference on checked images and shows accuracy vs existing labels. "
                 + "Read-only -- does NOT change any classifications.");
         evalHint.setWrapText(true);
-        evalHint.setStyle("-fx-font-size: 10px; -fx-text-fill: #666;");
+        evalHint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Label applyHint = new Label(
                 "Apply: classifies all cells in checked images and saves to their qpdata files. "
                 + "DESTRUCTIVE -- replaces existing classifications. If the current image is "
                 + "affected, you will be prompted to reload it.");
         applyHint.setWrapText(true);
-        applyHint.setStyle("-fx-font-size: 10px; -fx-text-fill: #666;");
+        applyHint.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(5, trainRow, applyRow, evalHint, applyHint);
         box.setPadding(new Insets(10, 0, 5, 0));

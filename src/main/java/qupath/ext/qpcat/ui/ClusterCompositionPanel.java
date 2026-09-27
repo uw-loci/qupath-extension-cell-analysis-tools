@@ -204,7 +204,7 @@ public class ClusterCompositionPanel extends BorderPane {
 
         Label tableCaption = new Label("Per-" + groupDimensionLabel.toLowerCase()
                 + " cluster counts (Cn = cluster n):");
-        tableCaption.setStyle("-fx-font-size: 11px; -fx-text-fill: #555;");
+        tableCaption.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         FlowPane pies = new FlowPane(14, 14);
         pies.setPadding(new Insets(10, 0, 0, 0));

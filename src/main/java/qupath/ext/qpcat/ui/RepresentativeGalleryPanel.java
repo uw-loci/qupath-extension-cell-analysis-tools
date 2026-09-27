@@ -433,7 +433,7 @@ public class RepresentativeGalleryPanel extends VBox {
             strip.setAlignment(Pos.CENTER_LEFT);
             if (idx.length == 0) {
                 Label none = new Label("(no representatives)");
-                none.setStyle("-fx-text-fill: #999; -fx-font-style: italic;");
+                none.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-style: italic;");
                 strip.getChildren().add(none);
             } else {
                 for (int rank = 0; rank < idx.length; rank++) {
@@ -540,7 +540,7 @@ public class RepresentativeGalleryPanel extends VBox {
         VBox rows = new VBox(2);
         rows.setAlignment(Pos.CENTER_LEFT);
         Label title = new Label("Channels");
-        title.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #555;");
+        title.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         rows.getChildren().add(title);
         for (String name : matched) {
             Color color = channelColors.getOrDefault(name, Color.GRAY);
@@ -637,7 +637,7 @@ public class RepresentativeGalleryPanel extends VBox {
         iv.setSmooth(true);
 
         Label caption = new Label((isMedoid ? "medoid" : "cell " + cellIdx));
-        caption.setStyle("-fx-font-size: 10px; -fx-text-fill: #555;");
+        caption.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         VBox box = new VBox(2, iv, caption);
         box.setAlignment(Pos.CENTER);

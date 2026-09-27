@@ -64,7 +64,7 @@ public final class ClusterColorPaletteDialog {
         FlowPane preview = new FlowPane(6, 6);
         preview.setPadding(new Insets(6));
         Label countLbl = new Label("");
-        countLbl.setStyle("-fx-text-fill: #555;");
+        countLbl.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         // Cache the cluster count per target so changing only the palette does not
         // re-read the saved-result file (the count depends on the target, not the palette).

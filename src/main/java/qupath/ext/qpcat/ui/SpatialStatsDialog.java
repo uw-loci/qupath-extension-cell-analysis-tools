@@ -64,7 +64,7 @@ public class SpatialStatsDialog {
         labelSourceBox.getItems().addAll(LBL_CURRENT, LBL_SAVED);
         labelSourceBox.setValue(LBL_CURRENT);
         Label labelSourceInfo = new Label("");
-        labelSourceInfo.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        labelSourceInfo.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         labelSourceBox.valueProperty().addListener((o, a, b) -> {
             if (!LBL_SAVED.equals(b)) { savedLabels[0] = null; labelSourceInfo.setText(""); return; }
             SavedClusteringResult chosen = pickSavedResult(qupath);
@@ -233,7 +233,7 @@ public class SpatialStatsDialog {
         graph.add(permSpin, 1, r++);
 
         Label status = new Label(" ");
-        status.setStyle("-fx-text-fill: #555;");
+        status.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
         ProgressBar progressBar = new ProgressBar();
         progressBar.setMaxWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
@@ -407,7 +407,7 @@ public class SpatialStatsDialog {
     private static Label unitNote() {
         Label l = new Label("Distances are in microns for calibrated images (results and "
                 + "radii come out in um); images without a pixel size fall back to pixels.");
-        l.setStyle("-fx-font-size: 10px; -fx-text-fill: #777;");
+        l.setStyle("-fx-font-size: 10px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
         l.setWrapText(true);
         return l;
     }
