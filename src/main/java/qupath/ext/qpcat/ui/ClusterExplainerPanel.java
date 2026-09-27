@@ -37,11 +37,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusterExplanation;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.PhenotypeNames;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.LlmExplainerService;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainRequest;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainResult;
 import qupath.ext.qpcat.service.LlmExplainerService.Provider;
+import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.projects.Project;
@@ -467,7 +469,22 @@ public class ClusterExplainerPanel {
         regenSelectedBtn.disableProperty().bind(
                 resultsTable.getSelectionModel().selectedItemProperty().isNull());
 
-        HBox btnRow = new HBox(8, copyTsvBtn, regenSelectedBtn);
+        Button useAsNamesBtn = new Button("Use as cluster names...");
+        useAsNamesBtn.setTooltip(Tooltips.of(
+                "Take the suggested phenotypes into Modify cell populations, with\n"
+                + "the rename boxes already filled in.\n\n"
+                + "Nothing is written by this button. You review the names next to\n"
+                + "the clusters they landed on and press Apply there, which writes a\n"
+                + "renamed COPY and leaves this result alone.\n\n"
+                + "Names are shortened for the legend: a trailing '(CD4+ T cell,\n"
+                + "inferred)' is dropped -- the rationale keeps it -- and ':' and '/'\n"
+                + "are replaced, because a colon makes QuPath read the name as a\n"
+                + "derived class."));
+        useAsNamesBtn.setOnAction(e -> onUseAsClusterNames());
+        useAsNamesBtn.disableProperty().bind(
+                javafx.beans.binding.Bindings.isEmpty(tableRows));
+
+        HBox btnRow = new HBox(8, copyTsvBtn, regenSelectedBtn, useAsNamesBtn);
         btnRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox box = new VBox(6, heading, resultsTable,
@@ -479,6 +496,51 @@ public class ClusterExplainerPanel {
     // ---------------------------------------------------------------------
     // Actions
     // ---------------------------------------------------------------------
+
+    /**
+     * Hand the suggested phenotypes to Modify cell populations as staged renames.
+     * <p>
+     * Deliberately does NOT write anything: the rename path there already writes
+     * a renamed copy rather than editing in place, asks for the copy's name, and
+     * relabels across every image the result covered. Reproducing any of that
+     * here would be a second way to do one thing, and this is the path where the
+     * names came from a model and most need a human read.
+     */
+    private void onUseAsClusterNames() {
+        Map<Integer, String> names = PhenotypeNames.cleanAll(new ArrayList<>(tableRows));
+        if (names.isEmpty()) {
+            Dialogs.showWarningNotification("QPCAT",
+                    "No usable phenotype names. The explainer declines a cluster when "
+                    + "the markers do not support a call, and those keep their "
+                    + "current names.");
+            return;
+        }
+        int declined = tableRows.size() - names.size();
+        StringBuilder sb = new StringBuilder();
+        sb.append("Take these ").append(names.size()).append(" name(s) into ")
+          .append("Modify cell populations?\n\n");
+        for (var e : names.entrySet()) {
+            sb.append("  ").append(result.clusterNameFn().apply(e.getKey()))
+              .append("  ->  ").append(e.getValue()).append('\n');
+        }
+        if (declined > 0) {
+            sb.append('\n').append(declined)
+              .append(" cluster(s) had no usable suggestion and keep their current name.\n");
+        }
+        sb.append("\nNothing is written yet. You review them there and press Apply, ")
+          .append("which writes a renamed COPY and leaves this result unchanged.");
+        if (!Dialogs.showConfirmDialog("QPCAT - Use suggested names", sb.toString())) {
+            return;
+        }
+        QuPathGUI gui = QuPathGUI.getInstance();
+        if (gui == null) {
+            Dialogs.showErrorNotification("QPCAT", "QuPath is not available.");
+            return;
+        }
+        ClusterManagementDialog dlg = new ClusterManagementDialog(gui, resultName);
+        dlg.seedNames(names);
+        dlg.show();
+    }
 
     private void onRunPressed() {
         Provider provider = providerCombo.getValue();

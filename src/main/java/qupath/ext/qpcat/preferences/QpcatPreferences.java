@@ -43,6 +43,25 @@ public final class QpcatPreferences {
      * where a multi-gigabyte env fails with "Quota exceeded (os error 122)".
      * Reported in issue #15.
      */
+    /**
+     * Close the Run Clustering dialog once a run finishes and its results open.
+     * <p>
+     * Off by default: the dialog reopens on what it last ran, so leaving it up is
+     * how you change one setting and go again. On, for the case where the results
+     * window is the thing you want and the settings dialog is now in front of it.
+     */
+    private static final BooleanProperty closeDialogAfterRun = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.closeDialogAfterRun", false);
+
+    /**
+     * Weakest PAGA edge to draw. scanpy's own default is 0.01, which keeps very
+     * nearly every edge; PAGA can connect every cluster to every other, so a run
+     * with many clusters draws k(k-1)/2 lines and arrives as a solid black mass.
+     * 0 restores every edge.
+     */
+    private static final DoubleProperty pagaEdgeThreshold = PathPrefs.createPersistentPreference(
+            "qpcat.plot.pagaEdgeThreshold", 0.05);
+
     private static final StringProperty envBaseDir = PathPrefs.createPersistentPreference(
             "qpcat.env.baseDir", "");
 
@@ -372,6 +391,14 @@ public final class QpcatPreferences {
     /** Selected environment variant id ("CPU" or "GPU"). */
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
+
+    /** Weakest PAGA edge to draw; 0 draws every edge. */
+    public static double getPagaEdgeThreshold() { return pagaEdgeThreshold.get(); }
+    public static void setPagaEdgeThreshold(double v) { pagaEdgeThreshold.set(v); }
+
+    /** True when the Run Clustering dialog should close as its results open. */
+    public static boolean isCloseDialogAfterRun() { return closeDialogAfterRun.get(); }
+    public static void setCloseDialogAfterRun(boolean v) { closeDialogAfterRun.set(v); }
 
     public static int getAeLatentDim() { return aeLatentDim.get(); }
     public static void setAeLatentDim(int v) { aeLatentDim.set(v); }
@@ -886,6 +913,28 @@ public final class QpcatPreferences {
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(pagaEdgeThreshold, Double.class)
+                .name("PAGA: weakest edge to draw")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("PAGA can connect every cluster to every other, "
+                        + "so a run with many clusters draws hundreds of lines and arrives as "
+                        + "a solid black mass. Edges weaker than this are not drawn. "
+                        + "Default 0.05. Set 0 to draw every edge (scanpy's own default is "
+                        + "0.01, which keeps very nearly all of them); raise it to keep only "
+                        + "the strongest connections."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(closeDialogAfterRun, Boolean.class)
+                .name("Close the clustering dialog when a run finishes")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("When a run completes and its results window "
+                        + "opens, also close the Run Clustering dialog. Off by default: the "
+                        + "dialog reopens on whatever you last ran in that project, so "
+                        + "leaving it up is how you change one setting and go again. Turn it "
+                        + "on if you would rather not have it sitting in front of the "
+                        + "results. A cancelled or failed run never closes the dialog."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialPersistPlots, Boolean.class)

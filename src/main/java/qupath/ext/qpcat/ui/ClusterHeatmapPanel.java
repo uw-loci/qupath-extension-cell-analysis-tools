@@ -3,6 +3,7 @@ package qupath.ext.qpcat.ui;
 import javafx.geometry.Insets;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.MouseEvent;
@@ -30,6 +31,9 @@ public class ClusterHeatmapPanel extends VBox {
     private static final Font TITLE_FONT = Font.font("System", 12);
 
     private final Canvas canvas;
+    private final Button zoomOutBtn;
+    private final Button zoomInBtn;
+    private final Button zoomResetBtn;
     private final Label titleLabel;
     private final Tooltip tooltip;
 
@@ -45,6 +49,19 @@ public class ClusterHeatmapPanel extends VBox {
 
     // Cluster id -> display name; custom for a renamed / merged result.
     private java.util.function.IntFunction<String> clusterNames = i -> "Cluster " + i;
+    /** Cells per cluster, index-aligned to the heatmap rows; null when unknown. */
+    private int[] clusterCounts;
+
+    /**
+     * Cell count per cluster, so the hover can say how much each square rests on.
+     * A mean over 40 cells and a mean over 4,000 look identical in a heatmap and
+     * are not equally trustworthy.
+     *
+     * @param counts per-cluster counts, index-aligned to the rows; null to omit
+     */
+    public void setClusterCounts(int[] counts) {
+        this.clusterCounts = counts;
+    }
 
     /**
      * Label rows with custom cluster names (from a rename / merge) instead of
@@ -68,6 +85,12 @@ public class ClusterHeatmapPanel extends VBox {
         return text;
     }
 
+    /** Set the cell-size multiplier, clamped to a range that still renders. */
+    private void setZoom(double z) {
+        zoom = Math.max(0.3, Math.min(4.0, z));
+        resize();
+    }
+
     private String clusterName(int i) {
         String n = clusterNames.apply(i);
         return (n == null || n.isBlank()) ? "Cluster " + i : n;
@@ -75,6 +98,8 @@ public class ClusterHeatmapPanel extends VBox {
     private int nMarkers;
     private double cellW;
     private double cellH;
+    /** Multiplier on the cell size; 1.0 is the historical fixed 25px. */
+    private double zoom = 1.0;
 
     public ClusterHeatmapPanel() {
         setSpacing(5);
@@ -85,6 +110,20 @@ public class ClusterHeatmapPanel extends VBox {
         titleLabel.setStyle("-fx-font-weight: bold;");
 
         canvas = new Canvas(600, 400);
+        zoomOutBtn = new Button("-");
+        zoomOutBtn.setTooltip(Tooltips.of(
+                "Smaller cells, so more of the panel fits on screen. Labels stop\n"
+                + "being legible before the pattern does."));
+        zoomOutBtn.setOnAction(e -> setZoom(zoom / 1.25));
+        zoomInBtn = new Button("+");
+        zoomInBtn.setTooltip(Tooltips.of("Larger cells, for reading individual values."));
+        zoomInBtn.setOnAction(e -> setZoom(zoom * 1.25));
+        zoomResetBtn = new Button("Reset");
+        zoomResetBtn.setTooltip(Tooltips.of("Back to the default cell size."));
+        zoomResetBtn.setOnAction(e -> setZoom(1.0));
+        for (Button b : new Button[] {zoomOutBtn, zoomInBtn, zoomResetBtn}) {
+            b.setStyle("-fx-font-size: 10px;");
+        }
         tooltip = Tooltips.of();
         tooltip.setShowDelay(Duration.millis(100));
         Tooltip.install(canvas, tooltip);
@@ -92,7 +131,10 @@ public class ClusterHeatmapPanel extends VBox {
         canvas.setOnMouseMoved(this::onMouseMoved);
         canvas.setOnMouseExited(e -> tooltip.hide());
 
-        getChildren().addAll(titleLabel, canvas);
+        javafx.scene.layout.HBox zoomBar = new javafx.scene.layout.HBox(
+                4, titleLabel, new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn);
+        zoomBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        getChildren().addAll(zoomBar, canvas);
     }
 
     /**
@@ -133,14 +175,29 @@ public class ClusterHeatmapPanel extends VBox {
         }
         marginLeft = Math.min(marginLeft, 260);   // cap: a runaway name must not eat the plot
 
-        // Size the canvas based on data dimensions
-        cellW = Math.max(MIN_CELL_W, 25);
-        cellH = Math.max(MIN_CELL_H, 25);
+        resize();
+    }
+
+    /**
+     * Recompute the canvas for the current zoom and redraw.
+     * <p>
+     * The cell size was a fixed 25px, which on a compartment-heavy panel (262
+     * measurements in one reported run) makes a canvas thousands of pixels wide
+     * that can only be scrolled -- there was no way to see the whole map at once.
+     * Zooming out below MIN_CELL_W is allowed deliberately: at that size
+     * individual labels stop being legible, and the pattern across the whole
+     * panel is what you are looking for.
+     */
+    private void resize() {
+        if (normData == null) {
+            return;
+        }
+        cellW = Math.max(MIN_CELL_W, 25) * zoom;
+        cellH = Math.max(MIN_CELL_H, 25) * zoom;
         double canvasW = marginLeft + nMarkers * cellW + MARGIN_RIGHT;
         double canvasH = MARGIN_TOP + nClusters * cellH + MARGIN_BOTTOM;
         canvas.setWidth(Math.max(canvasW, 300));
         canvas.setHeight(Math.max(canvasH, 200));
-
         redraw();
     }
 
@@ -241,7 +298,12 @@ public class ClusterHeatmapPanel extends VBox {
         if (row >= 0 && row < nClusters && col >= 0 && col < nMarkers) {
             String marker = PhenotypingDialog.shortenMarkerName(markerNames[col]);
             double rawVal = data[row][col];
-            tooltip.setText(String.format("%s | %s\nMean: %.4f", clusterName(row), marker, rawVal));
+            String cells = "";
+            if (clusterCounts != null && row < clusterCounts.length) {
+                cells = String.format("%n%,d cells", clusterCounts[row]);
+            }
+            tooltip.setText(String.format("%s | %s%nMean: %.4f%s",
+                    clusterName(row), marker, rawVal, cells));
         } else {
             tooltip.setText("");
         }

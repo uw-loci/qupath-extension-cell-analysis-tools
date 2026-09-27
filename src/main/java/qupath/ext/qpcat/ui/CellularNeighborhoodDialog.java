@@ -151,7 +151,7 @@ public class CellularNeighborhoodDialog {
 
     /**
      * Independent areas. A window is built within an area and never across
-     * one: a cell in the next TMA core is not a neighbour, so counting it in
+     * one: a cell in the next TMA core is not a neighbor, so counting it in
      * a composition vector invents a mixture the tissue does not contain.
      */
     private VBox createAreasSection() {

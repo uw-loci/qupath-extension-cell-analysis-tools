@@ -37,13 +37,13 @@ final class SpatialStatTooltips {
             + "one population is spatially organised at all.";
 
     static final String NHOOD_ENRICHMENT =
-            "Permutation test on the neighbour graph: are cells of class A adjacent to\n"
+            "Permutation test on the neighbor graph: are cells of class A adjacent to\n"
             + "class B more (or less) often than chance? Reported as a z-score per pair.\n"
             + "Unlike co-occurrence this uses the GRAPH, so it follows whatever graph\n"
             + "constructor is set above rather than a radius sweep.";
 
     static final String GEARY =
-            "Geary's C per marker: local spatial autocorrelation. Near 0 means neighbouring\n"
+            "Geary's C per marker: local spatial autocorrelation. Near 0 means neighboring\n"
             + "cells have similar values (clustered); near 2 means they differ (dispersed);\n"
             + "1 is no spatial structure.\n\n"
             + "Computed from the cells' MEASUREMENTS, not their labels, so it needs numeric\n"
@@ -58,12 +58,12 @@ final class SpatialStatTooltips {
             + "Computed from MEASUREMENTS, so it needs numeric measurements present.";
 
     static final String GRAPH_TYPE =
-            "How neighbours are defined -- this decides what every graph-based statistic\n"
+            "How neighbors are defined -- this decides what every graph-based statistic\n"
             + "below actually measures.\n\n"
-            + "knn: each cell's k nearest cells. Density-adaptive, so a neighbour in dense\n"
+            + "knn: each cell's k nearest cells. Density-adaptive, so a neighbor in dense\n"
             + "tissue is physically closer than one in sparse tissue.\n"
             + "radius: every cell within a fixed distance. A fixed physical scale, but\n"
-            + "sparse regions can end up with no neighbours at all.\n"
+            + "sparse regions can end up with no neighbors at all.\n"
             + "delaunay: the triangulation's edges. Parameter-free, but produces long\n"
             + "edges across gaps unless you cap the maximum edge length.";
 

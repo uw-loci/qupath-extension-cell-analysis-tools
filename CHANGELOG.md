@@ -4,6 +4,58 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.13] -- 2026-09-27 -- Five things from a testing session
+
+### Fixed
+
+- **A missing Marker Rankings tab now says why.** Every path that skips the marker ranking --
+  only one group analysed, too few cells, or the ranking itself throwing -- did so with nothing
+  but a log line, so the tabs were simply absent and the user had to guess. The reasons are now
+  added to the quality warnings the results window already shows. The single-group case is
+  named explicitly, because it is the likely one: the ranking compares each group with all the
+  others, so one group has nothing to compare against.
+- **No generated plot could be enlarged.** They scaled to fit the window, and because the
+  image was always smaller than the viewport the scrollbars never engaged -- so a forty-marker
+  dotplot or a twenty-node PAGA graph shrank to unreadable with no way back. Every PNG plot tab
+  (Dotplot, Matrix Plot, PAGA, violin, neighborhood, Geary's C, co-occurrence, embedding) now
+  has Zoom -/+/Fit/100% and Ctrl + scroll, through one shared `ZoomableImagePane`. Fit remains
+  the default; past the window size the scrollbars take over.
+- **Spatial Scatter had the same clamp** -- its image width was bound to the scroll width --
+  and now uses the same pane.
+- **The Heatmap was a fixed 25px per cell**, so a 262-measurement panel became a canvas
+  thousands of pixels wide that could only be scrolled. It has its own zoom, and deliberately
+  zooms out past the point where labels are legible, because the pattern across the whole panel
+  is what that view is for.
+- **PAGA drew almost every edge.** scanpy's default threshold (0.01) keeps very nearly all of
+  them, and PAGA can connect every cluster to every other, so a run with many clusters arrives
+  as a solid black mass. A new preference sets the weakest edge to draw (default 0.05; 0
+  restores scanpy's behaviour).
+
+### Changed
+
+- **The Leiden description said it "splits the graph into connected communities".** Connected
+  components are a different thing, and a tooltip in the same dialog exists specifically to say
+  they are NOT Leiden clusters. Rewritten to what it does: joins each cell to its `n_neighbors`
+  nearest neighbors, then finds groups more densely connected inside than out.
+- British spellings in 12 UI strings ("neighbour", "neighbourhood") now match the American
+  spelling used by the controls beside them, which are labelled `n_neighbors`.
+
+### Added
+
+- **Cell counts in the heatmap hover.** A mean over 40 cells and a mean over 4,000 look
+  identical in a heatmap and are not equally trustworthy.
+- **"Use as cluster names..." in the Cluster Explainer.** Takes the suggested phenotypes into
+  Modify cell populations with the rename boxes pre-filled, after a preview of every
+  old -> new pair. It writes nothing itself: the rename path there already writes a renamed
+  COPY, asks what to call it, and relabels across every image, and reproducing any of that
+  would be a second way to do one thing. Names are cleaned for use as classes -- a trailing
+  "(CD4+ T cell, inferred)" is dropped, since the rationale keeps it, and `:` and `/` are
+  replaced because a colon makes QuPath read the name as a DERIVED class. Colliding
+  suggestions get a numeric suffix rather than silently merging two populations into one name.
+- **A preference to close the clustering dialog when a run finishes** (off by default, under
+  QP-CAT: Run Clustering). A cancelled or failed run never closes it -- the settings that
+  produced it are what you want to change.
+
 ## [0.14.12] -- 2026-09-27 -- Readable hint text in dark mode, and a way out of the pop-out
 
 ### Fixed

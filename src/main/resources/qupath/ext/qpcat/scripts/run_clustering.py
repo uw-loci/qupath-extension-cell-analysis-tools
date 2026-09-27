@@ -241,6 +241,13 @@ try:
 except NameError:
     pref_plot_max_features = 40
 
+# Weakest PAGA edge to draw. See the plotting call for why this is not scanpy's
+# default; 0 draws every edge.
+try:
+    pref_paga_edge_threshold = float(paga_edge_threshold)
+except NameError:
+    pref_paga_edge_threshold = 0.05
+
 # Cluster labels supplied by Java instead of computed here, for the "analyze the
 # classifications already on the cells" path. Only read when algorithm ==
 # "existing"; absent for every normal run.
@@ -1619,6 +1626,26 @@ n_neigh = min(15, n_cells - 1)
 embedding_only = algorithm == "none"
 can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
 
+# Why the Marker Rankings / Marker Fingerprints tabs might not appear. Both come
+# from the ranking below, and every path that skips it used to do so with
+# nothing but a log line -- so the tabs were simply absent and the user had to
+# guess. These are appended to the quality warnings the results window shows.
+_analysis_notes = []
+if not can_analyze:
+    if n_clusters_found <= 1:
+        _analysis_notes.append(
+            "Only ONE group was analysed, so there is nothing to rank it against: "
+            "the marker ranking compares each group with all the others. The Marker "
+            "Rankings and Marker Fingerprints tabs are absent for that reason. Check "
+            "the class list -- analysing a single classification, or unticking all but "
+            "one, gives this."
+        )
+    elif n_neigh < 2:
+        _analysis_notes.append(
+            "Too few cells (%d) to build a neighbour graph, so the marker ranking, "
+            "PAGA and the per-feature plots were all skipped." % n_cells
+        )
+
 if can_analyze:
     sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep=_analysis_rep)
     sc.tl.dendrogram(adata, groupby="cluster")
@@ -1683,6 +1710,11 @@ if can_analyze:
         logger.info("Marker ranking complete: top %d markers per cluster", top_n)
     except Exception as e:
         logger.warning("Marker ranking failed: %s", e)
+        _analysis_notes.append(
+            "The marker ranking failed (%s: %s), so the Marker Rankings and Marker "
+            "Fingerprints tabs are absent. Everything else in this result is "
+            "unaffected." % (type(e).__name__, e)
+        )
 
     # 6b. PAGA (cluster connectivity / trajectory graph)
     try:
@@ -1704,6 +1736,16 @@ if can_analyze:
         logger.warning("PAGA computation failed: %s", e)
 else:
     logger.info("Skipping post-analysis (too few cells or clusters)")
+
+# The analysis notes above are only known now, after the ranking has been tried,
+# so the quality-warning output is rewritten rather than appended to at source.
+if _analysis_notes:
+    import json as _json_an
+
+    _all_warnings = list(_quality) + _analysis_notes
+    task.outputs["quality_warnings"] = _json_an.dumps(_all_warnings)
+    for _note in _analysis_notes:
+        logger.warning("Analysis: %s", _note)
 
 # 6c. Spatial analysis (if coordinates provided)
 has_spatial = has_spatial_coords
@@ -2175,7 +2217,12 @@ if do_plots and plot_dir and can_analyze:
 
     # PAGA graph -- cluster connectivity / trajectory
     try:
-        sc.pl.paga(adata, show=False)
+        # Drop the weakest edges. scanpy's own default (0.01) keeps very nearly
+        # all of them, and PAGA can connect every cluster to every other, so a
+        # run with many clusters draws k(k-1)/2 lines and arrives as a solid
+        # black mass. scanpy's documented lever for exactly this is `threshold`;
+        # 0 restores every edge.
+        sc.pl.paga(adata, threshold=pref_paga_edge_threshold, show=False)
         paga_path = os.path.join(plot_dir, "paga_graph.png")
         plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches="tight")
         plt.close("all")

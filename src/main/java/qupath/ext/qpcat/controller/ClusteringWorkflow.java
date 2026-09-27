@@ -1879,6 +1879,7 @@ public class ClusteringWorkflow {
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
         inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
+        inputs.put("paga_edge_threshold", QpcatPreferences.getPagaEdgeThreshold());
         // Labels read off the objects, for the analyze-existing-classifications
         // path. Python validates length, sign and density before using them.
         if (suppliedLabels != null) {

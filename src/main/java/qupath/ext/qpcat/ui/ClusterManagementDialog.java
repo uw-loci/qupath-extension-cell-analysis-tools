@@ -70,6 +70,8 @@ public class ClusterManagementDialog {
     private String activeSourceName;              // its on-disk base name
     private final Map<Integer, Integer> countByLabel = new LinkedHashMap<>();
     private final Map<Integer, String> workingName = new LinkedHashMap<>();  // label -> current display name
+    /** Names proposed by a caller (the LLM explainer), applied once the result loads. */
+    private final Map<Integer, String> seededNames = new LinkedHashMap<>();
 
     // --- Manual working state ---
     // original class name (as on the live detections) -> current display name.
@@ -128,6 +130,23 @@ public class ClusterManagementDialog {
         this.qupath = qupath;
         this.owner = qupath.getStage();
         this.presetResultName = presetResultName;
+    }
+
+    /**
+     * Pre-fill the rename boxes, e.g. with the phenotype names the LLM explainer
+     * suggested.
+     * <p>
+     * They are STAGED, exactly as if typed: nothing is written until Apply, which
+     * still writes a renamed copy and leaves the original result alone. That
+     * matters here more than usual, because the names come from a model and the
+     * user needs the chance to read them next to the cluster they landed on.
+     *
+     * @param names label -&gt; proposed name; labels not present keep their own
+     */
+    public void seedNames(Map<Integer, String> names) {
+        if (names != null) {
+            seededNames.putAll(names);
+        }
     }
 
     public void show() {
@@ -518,6 +537,13 @@ public class ClusterManagementDialog {
             if (lab < 0) continue;
             countByLabel.merge(lab, 1, Integer::sum);
             workingName.putIfAbsent(lab, activeSaved.displayNameForLabel(lab));
+        }
+        // A seeded name wins over the saved one: the caller is proposing an edit,
+        // which is the whole point of having been handed it.
+        for (var e : seededNames.entrySet()) {
+            if (countByLabel.containsKey(e.getKey())) {
+                workingName.put(e.getKey(), e.getValue());
+            }
         }
         rebuildSavedRows();
         updateStepBackButton();

@@ -143,6 +143,9 @@ public class ClusteringDialog {
         }
     }
 
+    /** The settings window itself, so a finished run can close it. Null until shown. */
+    private Dialog<ButtonType> settingsDialog;
+
     private final RunMode mode;
     private final String subclusterParentClass;
     // Saved result the parent class came from, so the sub-cluster records a real
@@ -336,6 +339,8 @@ public class ClusteringDialog {
         boolean analyzeExisting = mode == RunMode.ANALYZE_EXISTING;
 
         Dialog<ButtonType> dialog = new Dialog<>();
+        // Held so the run callback can close it when the preference asks.
+        this.settingsDialog = dialog;
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
         dialog.setTitle(subcluster
@@ -1062,14 +1067,14 @@ public class ClusteringDialog {
 
         // 0 = follow scikit-learn, whose own default is min_samples =
         // min_cluster_size. QP-CAT used to force 5 regardless, which estimates
-        // density over five neighbours while demanding clusters of hundreds.
+        // density over five neighbors while demanding clusters of hundreds.
         hdbscanMinSamplesSpinner = new Spinner<>(0, 100000,
                 Math.max(0, QpcatPreferences.getClusterHdbscanMinSamples()));
         hdbscanMinSamplesSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(hdbscanMinSamplesSpinner);
         hdbscanMinSamplesSpinner.setPrefWidth(80);
         hdbscanMinSamplesSpinner.setTooltip(Tooltips.of(
-                "How many neighbours the density estimate is built from.\n"
+                "How many neighbors the density estimate is built from.\n"
                 + "0 = auto, which follows scikit-learn and uses min_cluster_size.\n\n"
                 + "A small value with a large min_cluster_size is the combination\n"
                 + "that returns one giant cluster and almost no noise: density is\n"
@@ -1229,7 +1234,7 @@ public class ClusteringDialog {
             spatialSmoothingCheck.setDisable(true);
             spatialSmoothingCheck.setTooltip(Tooltips.of(
                     "Not available when analysing existing classifications.\n\n"
-                    + "Smoothing blends each cell's markers with its neighbours'\n"
+                    + "Smoothing blends each cell's markers with its neighbors'\n"
                     + "before clustering -- but nothing is clustered here, and the\n"
                     + "blended values would become the marker means this mode\n"
                     + "reports. A class would look positive for a marker its\n"
@@ -2372,10 +2377,13 @@ public class ClusteringDialog {
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
                 addMethodInfo(
-                        "Builds a neighbour graph and splits it into connected communities; "
-                        + "scales to millions of cells and does not need k. Assigns each cell to "
-                        + "exactly one community, so it cannot express gradients. There is no "
-                        + "single correct resolution - sweep it; n_neighbors matters as much.",
+                        "Joins each cell to its n_neighbors nearest neighbors, then finds groups "
+                        + "that are more densely connected inside than out. It settles on the "
+                        + "number of clusters itself, and scales to millions of cells. Every "
+                        + "cell lands in exactly one group, so a gradual change between two "
+                        + "states is reported as a boundary. Resolution has no single right "
+                        + "value: raise it for more and smaller clusters, and expect "
+                        + "n_neighbors to matter just as much.",
                         "caution-leiden");
             }
             case KMEANS, MINIBATCHKMEANS -> {
@@ -2466,7 +2474,7 @@ public class ClusteringDialog {
                 note.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
                 algorithmParamsBox.getChildren().addAll(row1, row2, note);
                 addMethodInfo(
-                        "Augments each cell with a summary of its spatial neighbourhood, then "
+                        "Augments each cell with a summary of its spatial neighborhood, then "
                         + "clusters - unifying cell typing and tissue-domain detection. lambda "
                         + "trades 'cell type' vs 'tissue domain' emphasis; over-weighting the "
                         + "spatial term smooths away true boundaries. Needs accurate coordinates "
@@ -3522,6 +3530,13 @@ public class ClusteringDialog {
                     // stats) now opens, since the result was auto-saved and is
                     // reloadable via "View Past Results".
                     showResultsDialog(finalResult, clusteredScope);
+
+                    // Only on SUCCESS, and only after the results window exists:
+                    // a cancelled or failed run leaves the dialog up, because the
+                    // settings that produced it are what you want to change.
+                    if (QpcatPreferences.isCloseDialogAfterRun() && settingsDialog != null) {
+                        settingsDialog.close();
+                    }
                 });
             } catch (Exception e) {
                 // Cancellation is not a failure: nothing was written to objects.
@@ -3816,7 +3831,7 @@ public class ClusteringDialog {
         return "Clusters were computed in " + space + ", NOT from this layout. "
                 + "A cluster can therefore appear in more than one place here, and that is "
                 + "not a fault in the run. Distances between groups are not meaningful; "
-                + "local neighbourhoods are.";
+                + "local neighborhoods are.";
     }
 
     private static String[] embeddingAxisNames(ClusteringResult result) {
@@ -3933,6 +3948,7 @@ public class ClusteringDialog {
         if (result.getClusterStats() != null && result.getNClusters() > 1) {
             ClusterHeatmapPanel heatmap = new ClusterHeatmapPanel();
             heatmap.setClusterNames(result.clusterNameFn());
+            heatmap.setClusterCounts(clusterCellCounts(result));
             heatmap.setData(result.getClusterStats(), result.getMarkerNames());
             ScrollPane heatmapScroll = new ScrollPane(heatmap);
             heatmapScroll.setFitToWidth(true);
@@ -4319,7 +4335,7 @@ public class ClusteringDialog {
             // "K and L" holding one curve is its own small lie.
             Tab tab = new Tab("Ripley L",
                     wrapWithGuide(ripleyNode,
-                    "Ripley's L(r) cumulates each cluster's neighbour counts within\n"
+                    "Ripley's L(r) cumulates each cluster's neighbor counts within\n"
                     + "radius r, variance-stabilised. Plotted RELATIVE TO RANDOM: each\n"
                     + "curve has had its own simulated-random median subtracted, so the\n"
                     + "flat line at zero is randomness.\n\n"
@@ -5101,13 +5117,7 @@ public class ClusteringDialog {
      * images share no frame, so they are never overlaid -- the user picks one image.
      */
     private static Tab buildSpatialScatterTab(java.util.LinkedHashMap<String, String> byImage) {
-        ImageView view = new ImageView();
-        view.setPreserveRatio(true);
-
-        ScrollPane scroll = new ScrollPane(view);
-        scroll.setFitToWidth(true);
-        scroll.setPannable(true);
-        view.fitWidthProperty().bind(scroll.widthProperty().subtract(20));
+        ZoomableImagePane pane = new ZoomableImagePane();
 
         ComboBox<String> imageBox = new ComboBox<>();
         imageBox.getItems().addAll(byImage.keySet());
@@ -5117,7 +5127,7 @@ public class ClusteringDialog {
             if (path != null) {
                 java.io.File f = new java.io.File(path);
                 if (f.exists()) {
-                    view.setImage(new javafx.scene.image.Image(f.toURI().toString(), true));
+                    pane.setImage(new javafx.scene.image.Image(f.toURI().toString(), true));
                 }
             }
         };
@@ -5131,8 +5141,8 @@ public class ClusteringDialog {
         picker.setAlignment(Pos.CENTER_LEFT);
         picker.setPadding(new Insets(6));
 
-        VBox box = new VBox(4, picker, scroll);
-        VBox.setVgrow(scroll, Priority.ALWAYS);
+        VBox box = new VBox(4, picker, pane);
+        VBox.setVgrow(pane, Priority.ALWAYS);
         return new Tab("Spatial Scatter", box);
     }
 
@@ -5205,6 +5215,26 @@ public class ClusteringDialog {
         box.setStyle("-fx-font-size: 11px; -fx-background-color: #fff3cd; -fx-padding: 8; "
                 + "-fx-border-color: #d9a400; -fx-border-width: 1;");
         return box;
+    }
+
+    /**
+     * Cells per cluster, index-aligned to the heatmap rows.
+     *
+     * @param result the run to count
+     * @return counts indexed by cluster id, or null when the labels are absent
+     */
+    private static int[] clusterCellCounts(ClusteringResult result) {
+        int[] labels = result.getClusterLabels();
+        if (labels == null || result.getNClusters() <= 0) {
+            return null;
+        }
+        int[] counts = new int[result.getNClusters()];
+        for (int label : labels) {
+            if (label >= 0 && label < counts.length) {
+                counts[label]++;
+            }
+        }
+        return counts;
     }
 
     private static void reorderLeadingTabs(TabPane tabPane, String... orderedTitles) {
@@ -5635,27 +5665,9 @@ public class ClusteringDialog {
         try {
             javafx.scene.image.Image img = new javafx.scene.image.Image(
                     new File(filePath).toURI().toString());
-            javafx.scene.image.ImageView iv = new javafx.scene.image.ImageView(img);
-            if (viewSink != null) viewSink.put(key, iv);
-            iv.setPreserveRatio(true);
-            iv.setSmooth(true);
-            iv.setFitWidth(700);
-            iv.setFitHeight(500);
-
-            ScrollPane sp = new ScrollPane(iv);
-            // Fit the WHOLE plot inside the viewport regardless of aspect ratio.
-            // Binding BOTH fit dimensions with preserveRatio scales to the smaller
-            // one, so wide plots (heatmap/dotplot) fill the width while tall/narrow
-            // plots (Geary, co-occurrence) fill the height instead of overflowing
-            // it -- widening the dialog no longer stretches tall plots off the
-            // bottom. The ScrollPane keeps a scrollbar as a safety net on tiny
-            // windows.
-            sp.viewportBoundsProperty().addListener((obs, oldV, newV) -> {
-                if (newV != null) {
-                    iv.setFitWidth(Math.max(50.0, newV.getWidth() - 4.0));
-                    iv.setFitHeight(Math.max(50.0, newV.getHeight() - 4.0));
-                }
-            });
+            ZoomableImagePane plotBox = new ZoomableImagePane();
+            plotBox.setImage(img);
+            if (viewSink != null) viewSink.put(key, plotBox.getView());
 
             String tabName;
             String guide;
@@ -5754,9 +5766,9 @@ public class ClusteringDialog {
                 java.util.List<Hyperlink> extras = withCompareLink
                         ? java.util.List.of(makeCompareExpressionViewsLink())
                         : java.util.List.of();
-                tab = new Tab(tabName, wrapWithGuide(sp, guide, docAnchor, extras));
+                tab = new Tab(tabName, wrapWithGuide(plotBox, guide, docAnchor, extras));
             } else {
-                tab = new Tab(tabName, sp);
+                tab = new Tab(tabName, plotBox);
             }
             tab.setClosable(false);
             return tab;
