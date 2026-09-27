@@ -270,7 +270,7 @@ class BatchYamlValidatorTest {
         assertThat(figs).isInstanceOf(List.class);
         @SuppressWarnings("unchecked")
         List<String> expanded = (List<String>) figs;
-        assertThat(expanded).contains("ripley_k", "ripley_l");
+        assertThat(expanded).contains("ripley_l");
     }
 
     @Test

@@ -19,10 +19,10 @@ final class SpatialStatTooltips {
     private SpatialStatTooltips() {}
 
     static final String RIPLEY =
-            "Ripley's K and L per class, against a Poisson (complete spatial randomness)\n"
-            + "null. The curve above the null means clustering at that radius; below it\n"
-            + "means inhibition. K and L carry the same information -- L just flattens the\n"
-            + "null to a horizontal line, which is easier to read.\n\n"
+            "Ripley's L per class, against a simulated complete-spatial-randomness\n"
+            + "null. Above the null means clustering at that radius; below it means\n"
+            + "inhibition. L is the variance-stabilised form of Ripley's K, which flattens\n"
+            + "the null to a horizontal line and is easier to read.\n\n"
             + "Sensitive to the shape and size of the area, so compare curves only between\n"
             + "areas of similar size.";
 

@@ -256,7 +256,7 @@ Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, stat
 | `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. |
 | `persist_plots` | boolean | `true` | Write per-stat PNGs to the saved-result's plot directory so `figure_export` can pick them up. |
 
-Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_k` + `ripley_l`), `ripley_k`, `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
+Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
 
 ### Graph constructor sub-table
 
@@ -287,7 +287,7 @@ Dispatches into `BatchFigureExporter`. Skipped entirely if omitted or `enabled: 
 
 ### Filename slug shorthand
 
-The slug `ripley` in `figure_export.figures` is shorthand that **expands to both** `ripley_k` and `ripley_l` at validation time. The expansion is deduplicated: `[ripley_k, ripley, ripley_l]` is equivalent to `[ripley_k, ripley_l]`.
+The slug `ripley` in `figure_export.figures` is shorthand for `ripley_l`, the one Ripley figure QP-CAT produces. The expansion is deduplicated: `[ripley, ripley_l]` is equivalent to `[ripley_l]`.
 
 > **Note:** JavaFX-only plot kinds (`heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) cannot be exported headlessly and fail E011 at validation time. Drop them or use the interactive Export Figures dialog.
 
@@ -419,7 +419,7 @@ clustering:
 spatial_stats:
   enabled: true
   graph: { type: delaunay, max_edge: 80.0 }
-  statistics: [ripley_k, ripley_l, geary_c, cooccurrence_pairwise]
+  statistics: [ripley_l, geary_c, cooccurrence_pairwise]
   permutations: 1000
   persist_plots: true
 figure_export:

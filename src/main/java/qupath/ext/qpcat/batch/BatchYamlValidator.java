@@ -60,7 +60,7 @@ public final class BatchYamlValidator {
             Arrays.asList("auto", "reproducible", "fast"));
 
     private static final Set<String> STATISTIC_SLUGS = new HashSet<>(Arrays.asList(
-            "moran_i", "geary_c", "ripley", "ripley_k", "ripley_l",
+            "moran_i", "geary_c", "ripley", "ripley_l",
             "co_occurrence_pairwise", "co_occurrence_one_vs_rest",
             "cooccurrence_pairwise", "cooccurrence_one_vs_rest",
             "neighborhood_enrichment"));
@@ -552,8 +552,7 @@ public final class BatchYamlValidator {
                 if (o == null) continue;
                 String slug = o.toString().toLowerCase();
                 if (slug.equals("ripley")) {
-                    // Cross-feature shorthand: expand to both K and L slugs.
-                    seenSlugs.add("ripley_k");
+                    // Cross-feature shorthand for the one Ripley figure there is.
                     seenSlugs.add("ripley_l");
                 } else {
                     seenSlugs.add(slug);

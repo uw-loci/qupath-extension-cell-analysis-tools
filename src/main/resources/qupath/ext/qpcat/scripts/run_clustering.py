@@ -1906,7 +1906,7 @@ if has_spatial and n_clusters_found > 1:
     if pref_enable_ripley:
         _progress(
             0.86,
-            "Computing Ripley K and L (%d permutations on %d cells, %d area(s)) "
+            "Computing Ripley L (%d permutations on %d cells, %d area(s)) "
             "-- this can take several minutes..." % (n_perms, n_cells, n_areas),
         )
         if _per_area_stats:
@@ -1943,7 +1943,6 @@ if has_spatial and n_clusters_found > 1:
                 # The single PNG carries both K and L panels; expose under
                 # both PlotKind savedPlotKey values so either checkbox in
                 # Feature B's exporter finds it.
-                plot_paths["ripley_k"] = _ripley_path
                 plot_paths["ripley_l"] = _ripley_path
 
     if pref_enable_geary:

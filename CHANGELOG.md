@@ -4,6 +4,36 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.14.9] -- 2026-09-27 -- Ripley K is gone, including from the places it still promised itself
+
+Both shipped environments pin `squidpy >= 1.6.6`, and 1.6.6 dropped `mode='K'`. K therefore
+never arrives, and the leftover references were promising a statistic that cannot appear.
+
+### Fixed
+
+- **"Computing Ripley K and L..." on every run**, in the progress line and in the standalone
+  spatial-statistics script. It computes L.
+- **A `Ripley K` checkbox in Multi-Figure Batch Export** that exported the L plot: both
+  scripts registered the one PNG under a `ripley_k` slug as well.
+- **A warning in the log on every Ripley run** -- "Ripley K unavailable in this squidpy" --
+  from an attempt that could only ever fail. The attempt is gone.
+- The results tab, the spatial-statistics checkbox, the "no data" label, the statistic's
+  tooltip, the figure title, the preference description and four log lines all named K.
+
+### Changed
+
+- YAML: `ripley_k` is no longer a statistic or figure slug, and `ripley` is shorthand for
+  `ripley_l` rather than for both.
+- The tooltip still explains that L is the variance-stabilised form of Ripley's K, because
+  that is what L *is*; what it no longer does is offer K as something QP-CAT can give you.
+
+### Known remaining
+
+`RipleyResult` still carries `kValues` / `poissonK` / `kUnavailable`, the K chart branch is
+still compiled but unreachable, and the saved PNG is still named `ripley_k_l.png`. None of it
+is reachable from the UI. Removing it touches the saved-result schema and a filename, so it is
+a deliberate change rather than one to slip in mid-testing.
+
 ## [0.14.8] -- 2026-09-27 -- Last-used settings are a file, not a preference
 
 0.14.7 made the clustering dialog remember what you last ran with. It stored that in a single

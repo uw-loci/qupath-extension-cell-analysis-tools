@@ -726,7 +726,7 @@ public final class YamlBatchOrchestrator {
             for (String s : ss.getStatistics()) {
                 if (s != null) stats.add(s.toLowerCase(Locale.ROOT));
             }
-            config.setEnableRipley(stats.contains("ripley") || stats.contains("ripley_k")
+            config.setEnableRipley(stats.contains("ripley")
                     || stats.contains("ripley_l"));
             config.setEnableGeary(stats.contains("geary_c"));
             config.setEnableCoOccurrencePairwise(stats.contains("co_occurrence_pairwise")

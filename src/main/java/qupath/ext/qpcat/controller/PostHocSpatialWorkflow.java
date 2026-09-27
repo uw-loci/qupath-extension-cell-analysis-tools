@@ -772,7 +772,7 @@ public class PostHocSpatialWorkflow {
             } catch (Exception e) { logger.warn("Parse Ripley failed: {}", e.getMessage()); }
         } else if (outputs.containsKey("ripley_error")) {
             // Extraction failed; Python deliberately did not emit zero-filled curves.
-            logger.error("Ripley K/L failed: {}", String.valueOf(outputs.get("ripley_error")));
+            logger.error("Ripley L failed: {}", String.valueOf(outputs.get("ripley_error")));
         }
         if (outputs.containsKey("geary_c")) {
             try {

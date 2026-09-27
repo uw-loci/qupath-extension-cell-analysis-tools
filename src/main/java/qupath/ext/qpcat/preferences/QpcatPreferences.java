@@ -892,7 +892,7 @@ public final class QpcatPreferences {
                 .name("Spatial Stats: Save Matplotlib PNGs")
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("When enabled (default), each spatial statistic that runs "
-                        + "(Ripley K/L, Geary's C, co-occurrence) also writes a matplotlib PNG "
+                        + "(Ripley L, Geary's C, co-occurrence) also writes a matplotlib PNG "
                         + "into the per-result plot directory. Filenames: ripley_k_l.png, "
                         + "geary_c.png, co_occurrence_pairwise.png, co_occurrence_one_vs_rest.png. "
                         + "Required for the Multi-Figure Batch Export dialog to include these "

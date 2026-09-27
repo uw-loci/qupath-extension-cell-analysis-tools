@@ -2129,12 +2129,12 @@ public class ClusteringWorkflow {
                     qupath.ext.qpcat.model.RipleyResult ripley = parseRipley(
                             (String) task.outputs.get("ripley"), spatialGson);
                     result.setRipley(ripley);
-                    logger.info("Received Ripley K/L for {} clusters",
+                    logger.info("Received Ripley L for {} clusters",
                             ripley.pairCount());
                     OperationLogger.getInstance().logOperation(
                             "SPATIAL STATS RIPLEY",
                             OperationLogger.spatialStatsParams(
-                                    "Ripley K/L",
+                                    "Ripley L",
                                     result.getSpatialGraphType(),
                                     spatialPermsUsed > 0 ? spatialPermsUsed
                                             : ripley.getNPermutations(),
@@ -2150,7 +2150,7 @@ public class ClusteringWorkflow {
                 // real null result), so surface the failure instead of silently
                 // dropping the panel.
                 String msg = String.valueOf(task.outputs.get("ripley_error"));
-                logger.error("Ripley K/L failed: {}", msg);
+                logger.error("Ripley L failed: {}", msg);
                 OperationLogger.getInstance().logEvent("SPATIAL STATS RIPLEY FAILED", msg);
             }
 

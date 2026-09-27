@@ -113,7 +113,7 @@ Stages Ripley's L for every cluster (or the subset listed in `clusters`).
 | `nSteps` | int | 50 | Number of r values between 0 and `maxRadius`. |
 | `nPermutations` | int | -1 (adaptive) | Permutation count. -1 = adaptive default (1000 / 100 / 50 by cell count). |
 | `clusters` | List<String> | empty = all | Cluster labels to evaluate. Empty = all clusters present on detections. |
-| `persistPlots` | boolean | true | Also write `ripley_k_l.png` to the per-result plot directory so the Multi-Figure Batch Export dialog can pick it up. Defaults to the `qpcat.spatial.persistPlots` preference when omitted. |
+| `persistPlots` | boolean | true | Also write the Ripley L PNG to the per-result plot directory so the Multi-Figure Batch Export dialog can pick it up (filename: `ripley_k_l.png`). Defaults to the `qpcat.spatial.persistPlots` preference when omitted. |
 
 **Example:**
 
@@ -250,7 +250,7 @@ Exports figures from one or more images to a directory.
 | Option key | Type | Default | Notes |
 |---|---|---|---|
 | `imageNames` | `List<String>` | empty = current image only | Image names within the project. Empty = current image; explicit list = those images; `["*"]` = every image in the project. |
-| `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
+| `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
 | `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. Unrecognised values are warned and skipped; there is no vector format. |
 | `dpi` | int | 300 | Output DPI. Range 72-1200. Applies to the Java-rendered composition figures; matplotlib PNGs are copied at the DPI they were written with. |
 | `outputDir` | `String` or `Path` | required | Directory to write into. Created if it does not exist. |
@@ -317,7 +317,7 @@ println result.summary()
 | `embedding_scanpy` | scanpy `sc.pl.embedding` saved PNG | No |
 | `neighborhood` | squidpy `sq.pl.nhood_enrichment` saved PNG | No |
 | `spatial_scatter` | scanpy `sc.pl.spatial` saved PNG | No |
-| `ripley_k`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Spatial-statistics PNGs, saved with the result | No (when persisted) |
+| `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Spatial-statistics PNGs, saved with the result | No (when persisted) |
 | `heatmap`, `embedding_interactive` | JavaFX `Canvas.snapshot()` | **Yes -- requires open dialog** |
 | `autoencoder_pie`, `histogram` | JavaFX `PieChart` / `Canvas` snapshot | **Yes -- requires open dialog** |
 
@@ -325,7 +325,7 @@ If `plotKinds` includes a JavaFX-only key when called from script mode, the call
 
 ### Ripley slug shorthand
 
-The YAML schema accepts `ripley` in `figure_export.figures` as shorthand that expands to both `ripley_k` and `ripley_l` at validation time. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass both slugs explicitly (`plotKinds: ["ripley_k", "ripley_l"]`) or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](yaml-reference.md#filename-slug-shorthand) for the YAML-side rule.
+The YAML schema accepts `ripley` in `figure_export.figures` as shorthand for `ripley_l`, the one Ripley figure there is. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass `plotKinds: ["ripley_l"]` explicitly, or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](yaml-reference.md#filename-slug-shorthand) for the YAML-side rule.
 
 ### Integration with the YAML batch
 

@@ -197,7 +197,7 @@ public class SpatialStatsDialog {
         syncGraph.run();
 
         // --- statistics ---
-        CheckBox cRipley = new CheckBox("Ripley K / L");
+        CheckBox cRipley = new CheckBox("Ripley L");
         CheckBox cCoocP = new CheckBox("Co-occurrence (pairwise)");
         CheckBox cCoocO = new CheckBox("Co-occurrence (one vs rest)");
         CheckBox cNhood = new CheckBox("Neighborhood enrichment");

@@ -52,10 +52,10 @@ class FigureExportScriptsTest {
     @Test
     void buildOptionsParsesPlotKindSlugs() {
         Map<String, Object> opts = new LinkedHashMap<>();
-        opts.put("plotKinds", List.of("dotplot", "matrixplot", "ripley_k"));
+        opts.put("plotKinds", List.of("dotplot", "matrixplot", "ripley_l"));
         ExportOptions result = FigureExportScripts.buildOptions(opts);
         assertThat(result.getPlotKinds()).containsExactly(
-                PlotKind.DOTPLOT, PlotKind.MATRIXPLOT, PlotKind.RIPLEY_K);
+                PlotKind.DOTPLOT, PlotKind.MATRIXPLOT, PlotKind.RIPLEY_L);
     }
 
     @Test

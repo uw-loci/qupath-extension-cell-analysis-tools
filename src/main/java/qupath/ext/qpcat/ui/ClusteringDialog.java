@@ -4314,11 +4314,10 @@ public class ClusteringDialog {
                     null,
                     () -> SpatialStatsCsv.ripleyCsv(result.getRipley(), k -> clusterNameForKey(result, k)),
                     "qpcat_ripley_l.csv");
-            // Named for what it shows: a tab called "K and L" holding only L is its own
-            // small lie, and the user has no way to act on the difference.
-            Tab tab = new Tab(
-                    result.getRipley() != null && result.getRipley().isKUnavailable()
-                            ? "Ripley L" : "Ripley K and L",
+            // Named for what it shows. Every shipped environment pins squidpy >= 1.6.6,
+            // which dropped mode='K', so only L is ever measured -- and a tab called
+            // "K and L" holding one curve is its own small lie.
+            Tab tab = new Tab("Ripley L",
                     wrapWithGuide(ripleyNode,
                     "Ripley's L(r) cumulates each cluster's neighbour counts within\n"
                     + "radius r, variance-stabilised. Plotted RELATIVE TO RANDOM: each\n"
@@ -4425,7 +4424,7 @@ public class ClusteringDialog {
                 // are the SAME PNG and are already covered by the interactive
                 // "Ripley K and L" chart tab above -- skip all four here.
                 if ("dotplot".equals(pk) || "matrixplot".equals(pk)
-                        || "ripley_k".equals(pk) || "ripley_l".equals(pk)) {
+                        || "ripley_l".equals(pk)) {
                     continue;
                 }
                 // Per-image spatial scatters are combined into one dropdown tab below;
@@ -5841,7 +5840,7 @@ public class ClusteringDialog {
             ClusteringResult result) {
         if (ripley == null || ripley.getRadii() == null
                 || ripley.getRadii().length == 0) {
-            return new Label("No Ripley K/L data available.");
+            return new Label("No Ripley L data available.");
         }
         String u = (unit == null || unit.isBlank()) ? "px" : unit;
 

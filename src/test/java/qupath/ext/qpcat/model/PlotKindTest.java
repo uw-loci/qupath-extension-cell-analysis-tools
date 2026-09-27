@@ -102,7 +102,7 @@ class PlotKindTest {
     void featureASpatialStatsKindsArePresent() {
         // Phase 2 contract: the Feature A spatial-stats persisted PNGs are
         // exportable via dedicated PlotKind members.
-        assertThat(PlotKind.fromSlug("ripley_k")).isNotNull();
+        assertThat(PlotKind.fromSlug("ripley_l")).isNotNull();
         assertThat(PlotKind.fromSlug("ripley_l")).isNotNull();
         assertThat(PlotKind.fromSlug("geary_c")).isNotNull();
         assertThat(PlotKind.fromSlug("cooc_pairwise")).isNotNull();

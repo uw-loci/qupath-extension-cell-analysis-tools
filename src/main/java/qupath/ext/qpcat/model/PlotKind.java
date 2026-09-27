@@ -34,7 +34,6 @@ public enum PlotKind {
     // ---- Feature A spatial-stats plots (Feature A's PNG-output enhancement) ----
     // Saved under the same per-result plots/ directory by spatial_stats.py
     // when qpcat.spatial.persistPlots is true.
-    RIPLEY_K("ripley_k", "Ripley K", Source.MATPLOTLIB, true, "ripley_k"),
     RIPLEY_L("ripley_l", "Ripley L", Source.MATPLOTLIB, true, "ripley_l"),
     GEARY_C("geary_c", "Geary C", Source.MATPLOTLIB, true, "geary_c"),
     COOC_PAIRWISE("cooc_pairwise", "Co-occurrence (pairwise)", Source.MATPLOTLIB, true, "cooc_pairwise"),

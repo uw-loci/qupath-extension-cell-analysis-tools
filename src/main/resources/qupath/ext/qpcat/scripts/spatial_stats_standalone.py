@@ -325,7 +325,7 @@ if want_moran:
 
 # 5. v1 expansion stats (Ripley / Geary / co-occurrence)
 if want_ripley:
-    _update("Computing Ripley K and L (%d permutations)..." % n_perms)
+    _update("Computing Ripley L (%d permutations)..." % n_perms)
     _spatial.run_ripley(
         adata,
         task,
@@ -341,7 +341,6 @@ if want_ripley:
     if persist:
         p = os.path.join(out_dir, _spatial.PLOT_FILE_RIPLEY)
         if os.path.exists(p):
-            plot_paths["ripley_k"] = p
             plot_paths["ripley_l"] = p
 
 if want_geary:

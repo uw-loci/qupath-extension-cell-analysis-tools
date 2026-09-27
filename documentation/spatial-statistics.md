@@ -167,7 +167,11 @@ Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPAT
 
 When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplotlib PNGs** is enabled (the default), each spatial statistic that runs also writes a PNG alongside the existing clustering plots under `<project>/qpcat/cluster_results/<result_name>_plots/`:
 
-- `ripley_k_l.png` -- Ripley L against its Poisson null
+- `ripley_k_l.png` -- Ripley L against the **analytical Poisson** null. Note this is not
+  what the in-app Ripley L tab plots: that one is drawn relative to a **simulated**
+  complete-spatial-randomness envelope per cluster (0.14.0 and later). The analytical
+  diagonal assumes an unbounded plane with no edge correction, so the exported PNG is
+  the weaker of the two references.
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
 - `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (mean over radius)
 - `co_occurrence_one_vs_rest.png` -- cluster x radius heatmap
@@ -275,8 +279,8 @@ to the object hierarchy -- this is read-only.
 **Interpretation caveats (important):**
 - **Ripley L** on an irregular annotation uses a bounding-box intensity and an
   unbounded-plane null with no edge correction, and graph neighbors are truncated
-  at the ROI edge. Treat K/L as valid only at radii small relative to the window,
-  and do **not** compare K/L across areas of different size/shape.
+  at the ROI edge. Treat L as valid only at radii small relative to the window,
+  and do **not** compare L curves across areas of different size/shape.
 - **Co-occurrence** is a descriptive ratio -- there is **no** significance test.
 - Distances are reported in **microns** for calibrated images (radius/Delaunay
   inputs, Ripley radii, co-occurrence intervals, and distances are all in um), which

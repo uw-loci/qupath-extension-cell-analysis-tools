@@ -101,13 +101,13 @@ class BatchYamlExamplesTest {
                 "spatial_stats:\n" +
                 "  enabled: true\n" +
                 "  graph: { type: delaunay, max_edge: 80.0 }\n" +
-                "  statistics: [ripley_k, ripley_l, geary_c, cooccurrence_pairwise]\n" +
+                "  statistics: [ripley_l, geary_c, cooccurrence_pairwise]\n" +
                 "  permutations: 1000\n" +
                 "  persist_plots: true\n" +
                 "figure_export:\n" +
                 "  enabled: true\n" +
                 "  output_dir: ./qpcat/figures/spatial_addendum\n" +
-                "  figures: [ripley_k, ripley_l, geary_c, cooc_pairwise]\n" +
+                "  figures: [ripley_l, geary_c, cooc_pairwise]\n" +
                 "  formats: [png, tiff]\n" +
                 "  dpi: 600\n";
         assertParsesWithoutSchemaErrors("spatial-stats-only", yaml);

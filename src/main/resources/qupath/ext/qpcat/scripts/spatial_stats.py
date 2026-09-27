@@ -923,17 +923,14 @@ def run_ripley(
             _safe_kwargs(sq.gr.ripley, seed=0, n_jobs=1, show_progress_bar=False)
         )
 
-        # Compute K and L separately - squidpy's mode='K' / mode='L' branches
-        # share underlying state via adata.uns['<cluster_key>_ripley_K'] etc.
-        # Newer squidpy (RipleyStat) dropped mode='K' (only F/G/L remain); K is
-        # optional -- L (the variance-stabilized transform) carries the same
-        # clustering-vs-dispersion signal, so skip K if unsupported.
-        k_available = True
-        try:
-            sq.gr.ripley(adata, mode="K", **kwargs)
-        except Exception as e:
-            logger.warning("Ripley K unavailable in this squidpy (%s); using L only", e)
-            k_available = False
+        # L only. squidpy's RipleyStat dropped mode='K' (F, G and L remain), and
+        # both shipped environments pin squidpy >= 1.6.6, so the K call could
+        # only ever raise -- and it did, logging a warning on every single run
+        # about a statistic nobody asked for. L is the variance-stabilized
+        # transform and carries the same clustering-vs-dispersion signal.
+        # k_available stays False so the extraction below reports K as absent
+        # rather than emitting zeros that would read as a measured result.
+        k_available = False
         sq.gr.ripley(adata, mode="L", **kwargs)
 
         k_data = adata.uns.get("%s_ripley_K" % cluster_key, {})
@@ -1246,7 +1243,7 @@ def run_ripley(
         }
         task.outputs["ripley"] = json.dumps(payload)
         logger.info(
-            "Ripley K/L computed for %d clusters (%d radii, %d perms)",
+            "Ripley L computed for %d clusters (%d radii, %d perms)",
             len(cluster_names),
             n_r,
             n_permutations,
@@ -1323,7 +1320,7 @@ def run_ripley(
                 ax_l.legend(fontsize="small", loc="best")
                 ax_l.grid(True, alpha=0.3)
 
-                title = "Ripley K and L" if k_available else "Ripley L"
+                title = "Ripley L"
                 fig.suptitle(
                     "%s (graph: %s, perms: %d)"
                     % (title, graph_type, int(n_permutations))
@@ -1331,11 +1328,11 @@ def run_ripley(
                 out_path = os.path.join(plot_dir, PLOT_FILE_RIPLEY)
                 fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
                 plt.close(fig)
-                logger.info("Saved Ripley K/L PNG: %s", out_path)
+                logger.info("Saved Ripley L PNG: %s", out_path)
             except Exception as e:
-                logger.warning("Ripley K/L plot failed: %s", e)
+                logger.warning("Ripley L plot failed: %s", e)
     except Exception as e:
-        logger.warning("Ripley K/L failed: %s", e)
+        logger.warning("Ripley L failed: %s", e)
 
 
 def run_geary_c(
