@@ -57,6 +57,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [0.15.6] -- 2026-09-27 -- "Load Config from file..." offers only config files
 
+**Never released.** The version was bumped again before a tag was cut, so everything
+below shipped in 0.16.0. There is no v0.15.6 tag, release or catalog entry, and
+nothing was installed at that version.
+
 ### Fixed
 
 - **The config file chooser no longer offers saved results.** It opens in the project's
