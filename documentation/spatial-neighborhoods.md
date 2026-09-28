@@ -68,6 +68,13 @@ is not a neighbor of a cell in the next core, even if they are in the same image
 By default, the **image is the area** -- cells stay separate across images, but
 any two cells within one image can end up in the same neighborhood window.
 
+The rule is the same in [clustering](clustering.md), the spatial statistics and the
+neighborhood workflow: cells in different areas never share a spatial graph. Two statistics
+need more than that. Ripley L and co-occurrence read the coordinates directly rather than the
+graph, so they are computed once per area and shown behind an **Area** selector. Moran's I,
+Geary's C and neighbourhood enrichment read the graph, so partitioning it is enough and each
+stays a single figure for the run.
+
 You can partition cells **below** the image level by configuring **Independent areas**.
 Each area gets its own neighborhood windows (no window ever crosses an area boundary),
 and the cohort tables automatically group results per area instead of per image.

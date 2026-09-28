@@ -364,6 +364,14 @@ Two things to watch:
   you have clustered by batch rather than by phenotype. See
   [Results](results.md#composition-by-image) for the diagnosis and the remedies.
 
+**Several images in one run:** each image is its own area, whether or not you configure
+anything under **Independent areas**. Cell centroids are per-image pixel coordinates with no
+offset between images, so pooling them would stack the images on top of each other and hand
+every cell neighbours from a different slide. No spatial graph edge crosses an image, and
+Ripley L and co-occurrence -- which read the coordinates rather than the graph -- are computed
+once per image and shown behind an **Area** selector. Moran's I, Geary's C and neighbourhood
+enrichment read the graph, so partitioning it is all they need and they stay as one figure.
+
 For physically separate tissue on one slide -- TMA cores, multiple sections -- see
 [independent areas](spatial-neighborhoods.md#independent-areas), which also lets Harmony
 treat those areas as the batch.

@@ -16,6 +16,8 @@ Every run auto-saves to `<project>/qpcat/cluster_results/`. Four routes back, fr
 **Results & populations > View Past Results...** reloads the labels, plots and spatial
 statistics exactly as computed.
 
+**Note: Multi-image results from v0.16.x and earlier.** A saved result from before v0.17.0 carries whatever it stored at the time. If it was a multi-image run, the spatial statistics are pooled (images stacked in one coordinate frame) rather than partitioned. Re-run the analysis to get the corrected, per-image spatial statistics; the pooled results cannot be repaired in-place.
+
 **2. Re-run in the GUI with the same settings.**
 In the results window click **Open results folder**. Each run leaves three files there:
 `<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and

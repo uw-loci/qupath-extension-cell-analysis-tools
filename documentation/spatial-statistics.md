@@ -155,7 +155,13 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
 
-Each table tab has **Copy CSV** and **Save CSV...** buttons to export the data in long form (one row per observation), which is more suitable for re-analysis than the on-screen fixed-width layout.
+**Several images in one run:** each image is its own area. Ripley L and co-occurrence are
+computed once per image and the tabs gain an **Area** selector to read them one at a time;
+no combined curve is offered, because a combined point pattern describes how the images were
+laid out rather than anything in the tissue. Moran's I and Geary's C stay a single figure --
+they read the spatial graph, which is already partitioned.
+
+Each table tab has **Copy CSV** and **Save CSV...** buttons to export the data in long form (one row per observation), which is more suitable for re-analysis than the on-screen fixed-width layout. For multi-image runs, **Save CSV...** writes every area in a single file with the area as the first column, so rows can be concatenated with post-hoc spatial results from other tools.
 
 After the run completes, see [Chapter 21 -- Spatial graph overlay](spatial-neighborhoods.md) for how to view the underlying graph in the QuPath viewer.
 
