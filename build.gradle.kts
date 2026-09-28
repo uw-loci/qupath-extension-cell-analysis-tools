@@ -14,7 +14,7 @@ plugins {
 qupathExtension {
     name = "qupath-extension-cell-analysis-tools"
     group = "io.github.uw-loci"
-    version = "0.16.2"
+    version = "0.16.3"
     description = "QP-CAT: Cell Analysis Tools for QuPath. Python-powered clustering, phenotyping, classification, and spatial analysis for multiplexed imaging data."
     automaticModule = "io.github.uw-loci.extension.qpcat"
 }
@@ -34,6 +34,8 @@ val javafxVersion = "17.0.2"
 
 dependencies {
     shadow(libs.bundles.qupath)
+    // QuPath ships this at runtime but does not export it; used to watch for in-session updates
+    shadow(libs.extensionmanager)
     shadow(libs.bundles.logging)
     shadow(libs.qupath.fxtras)
     shadow(libs.gson)

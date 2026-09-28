@@ -4,6 +4,19 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.16.3] -- 2026-09-28 -- the restart advice comes when you update, not after you restart
+
+### Fixed
+
+- **"QP-CAT - restart recommended" appeared on the launch after an update, i.e. after you had
+  already restarted.** QuPath installs an updated jar in the running session but keeps running
+  the classes it has already loaded, and only runs the new version's start-up code at the next
+  launch, so a version check at start-up could only ever fire after the restart it asked for.
+  QP-CAT now watches for its own jar being replaced while QuPath runs and advises the restart
+  then, once. Nothing shows at start-up any more, including after a fresh install (a fresh
+  install has no old code loaded to mix with). The first update *to* 0.16.3 still gets one stray
+  notice on the next launch, from the old version's check.
+
 ## [0.16.2] -- 2026-09-27 -- a post-hoc spatial result says which image it is
 
 ### Fixed

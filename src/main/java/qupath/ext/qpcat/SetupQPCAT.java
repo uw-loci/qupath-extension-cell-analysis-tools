@@ -84,57 +84,106 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
     @Override
     public GitHubRepo getRepository() { return EXTENSION_REPOSITORY; }
 
-    // Last extension version that completed installExtension. Lets a one-time "restart QuPath"
-    // advisory fire when the packaged version changes (fresh install / update), not on every launch.
-    private static final javafx.beans.property.StringProperty LAST_LOADED_VERSION =
-            qupath.lib.gui.prefs.PathPrefs.createPersistentPreference("qpcatLastLoadedVersion", "");
+    // Set once the in-session update advisory has shown, so it shows once per session
+    private static final java.util.concurrent.atomic.AtomicBoolean UPDATE_ADVISORY_SHOWN =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     /**
-     * Shows a one-time "restart QuPath" advisory when the packaged extension version differs from
-     * the version recorded on the previous launch -- i.e. the extension was just installed or
-     * updated. QuPath can install/update an extension jar in a running session without a restart,
-     * leaving the old classes loaded; this nudges the user to restart so the new code takes effect.
-     * The current version is always persisted so the advisory fires once per install/update.
-     * Unpackaged IDE/dev runs report no manifest version and are skipped.
+     * Advises a restart in the session where this extension is updated. QuPath installs the
+     * new jar but keeps running the classes it already loaded, and only runs the new version's
+     * installExtension at the next launch, so a version check at startup would only ever fire
+     * after the restart it asks for. Watches the installed-jar lists for a jar holding this
+     * extension at another version instead. Unpackaged IDE/dev runs are skipped.
      */
-    private void warnIfExtensionRecentlyUpdated(QuPathGUI qupath) {
+    private void watchForInSessionUpdate(QuPathGUI qupath) {
         String current = GeneralTools.getPackageVersion(SetupQPCAT.class);
         if (current == null || current.isBlank() || "dev".equals(current)) {
             return;
         }
-        String last = LAST_LOADED_VERSION.get();
-        LAST_LOADED_VERSION.set(current);
-        if (current.equals(last)) {
-            return; // normal relaunch of an already-recorded version
-        }
-        boolean firstInstall = last == null || last.isBlank();
-        logger.info("Extension version changed ('{}' -> '{}'); showing restart advisory", last, current);
-        Platform.runLater(() -> {
-            javafx.scene.control.Alert alert =
-                    new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
-            alert.setTitle(EXTENSION_NAME + " - restart recommended");
-            alert.setHeaderText(
-                    firstInstall
-                            ? EXTENSION_NAME + " " + current + " was installed"
-                            : EXTENSION_NAME + " was updated to " + current);
-            String body = firstInstall
-                    ? "If you installed " + EXTENSION_NAME + " while QuPath was already running, please "
-                            + "restart QuPath once so the extension loads completely before you use it."
-                    : "You were previously running " + last + "; the installed version is now " + current
-                            + ". Please restart QuPath so the updated extension loads completely before you "
-                            + "use it. Running without restarting can mix old and new code and cause "
-                            + "confusing errors.\n\nIf you also updated companion extensions or QuPath "
-                            + "itself, restart once more so everything loads together.";
-            alert.setContentText(body);
-            alert.getButtonTypes().setAll(javafx.scene.control.ButtonType.OK);
-            alert.getDialogPane().setMinWidth(500);
-            javafx.scene.control.Label content =
-                    (javafx.scene.control.Label) alert.getDialogPane().lookup(".content");
-            if (content != null) {
-                content.setWrapText(true);
+        try {
+            var manager = QuPathGUI.getExtensionCatalogManager();
+            if (manager == null) {
+                return;
             }
-            showStartupAlert(qupath, alert);
-        });
+            javafx.collections.ListChangeListener<java.nio.file.Path> listener = change -> {
+                while (change.next()) {
+                    for (java.nio.file.Path jar : change.getAddedSubList()) {
+                        Thread check = new Thread(() -> checkForUpdate(qupath, current, jar), "update-check");
+                        check.setDaemon(true);
+                        check.start();
+                    }
+                }
+            };
+            manager.getCatalogManagedInstalledJars().addListener(listener);
+            manager.getManuallyInstalledJars().addListener(listener);
+        } catch (LinkageError | RuntimeException e) {
+            // The extension-manager API is QuPath-internal; never let it stop the extension loading
+            logger.warn("Cannot watch for in-session updates: {}", e.toString());
+        }
+    }
+
+    /**
+     * Shows the advisory if {@code jar} holds this extension at another version. Retries while
+     * the jar is unreadable: the folder watcher reports a file before a copy into it finishes.
+     */
+    private static void checkForUpdate(QuPathGUI qupath, String current, java.nio.file.Path jar) {
+        for (int attempt = 0; attempt < 40; attempt++) {
+            String installed;
+            try {
+                installed = versionOfThisExtensionIn(jar);
+            } catch (java.io.IOException | RuntimeException e) {
+                try {
+                    Thread.sleep(250);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                continue;
+            }
+            if (installed != null
+                    && !installed.equals(current)
+                    && UPDATE_ADVISORY_SHOWN.compareAndSet(false, true)) {
+                logger.info(
+                        "{} {} installed while {} is running; advising a restart",
+                        EXTENSION_NAME,
+                        installed,
+                        current);
+                Platform.runLater(() -> showUpdateAdvisory(qupath, current, installed));
+            }
+            return;
+        }
+        logger.debug("Could not read {} to check for an update", jar);
+    }
+
+    /** @return the version packaged in {@code jar} if it holds this extension, else null */
+    private static String versionOfThisExtensionIn(java.nio.file.Path jar) throws java.io.IOException {
+        String entry = SetupQPCAT.class.getName().replace('.', '/') + ".class";
+        try (java.util.jar.JarFile file = new java.util.jar.JarFile(jar.toFile())) {
+            if (file.getEntry(entry) == null) {
+                return null;
+            }
+            java.util.jar.Manifest manifest = file.getManifest();
+            String version = manifest == null
+                    ? null
+                    : manifest.getMainAttributes().getValue("Implementation-Version");
+            return version == null || version.isBlank() ? "unknown" : version;
+        }
+    }
+
+    private static void showUpdateAdvisory(QuPathGUI qupath, String running, String installed) {
+        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+        alert.setTitle(EXTENSION_NAME + " - restart recommended");
+        alert.setHeaderText(EXTENSION_NAME + " " + installed + " is installed");
+        alert.setContentText("QuPath is still running " + EXTENSION_NAME + " " + running
+                + ". Restart QuPath before you use it, so the new version loads; until then old "
+                + "and new code can mix and cause confusing errors.\n\nIf you are updating other extensions or QuPath too, finish those first, then restart once.");
+        alert.getButtonTypes().setAll(javafx.scene.control.ButtonType.OK);
+        alert.getDialogPane().setMinWidth(500);
+        javafx.scene.control.Label content = (javafx.scene.control.Label) alert.getDialogPane().lookup(".content");
+        if (content != null) {
+            content.setWrapText(true);
+        }
+        showStartupAlert(qupath, alert);
     }
 
     /**
@@ -165,7 +214,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         updateEnvironmentState();
         QpcatPreferences.installPreferences(qupath);
-        warnIfExtensionRecentlyUpdated(qupath);
+        watchForInSessionUpdate(qupath);
         Platform.runLater(() -> {
             addMenuItem(qupath);
 
