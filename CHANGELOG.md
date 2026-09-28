@@ -4,6 +4,18 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.16.2] -- 2026-09-27 -- a post-hoc spatial result says which image it is
+
+### Fixed
+
+- **A results window opened from the spatial-statistics summary now names its image and area
+  in the title bar**, after the cluster and cell counts. Open three rows of the summary side by
+  side and the windows were identical down to those counts, with nothing to tell them apart.
+  The identity was being passed all along -- as the `algorithm` argument, which is save
+  metadata and never reaches the title -- so `showResultsDialog` gained a `contextLabel` for
+  what the window is a result FOR, and the three post-hoc callers pass
+  `<image> / <area>` to it.
+
 ## [0.16.1] -- 2026-09-27 -- spatial statistics without an open image; honest per-provider LLM status
 
 ### Fixed

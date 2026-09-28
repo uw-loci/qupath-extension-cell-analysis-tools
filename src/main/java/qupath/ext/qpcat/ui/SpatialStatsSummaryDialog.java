@@ -65,7 +65,8 @@ public final class SpatialStatsSummaryDialog {
                     if (wr.result != null) {
                         ClusteringDialog.showResultsDialog(wr.result,
                                 "Embedding", "Post-hoc spatial: " + wr.imageName
-                                        + " / " + wr.regionLabel, null);
+                                        + " / " + wr.regionLabel, null,
+                                wr.imageName + " / " + wr.regionLabel);
                     }
                 });
             }
@@ -98,7 +99,8 @@ public final class SpatialStatsSummaryDialog {
                 if (ev.getClickCount() == 2 && !row.isEmpty() && row.getItem().result != null) {
                     WindowResult wr = row.getItem();
                     ClusteringDialog.showResultsDialog(wr.result, "Embedding",
-                            "Post-hoc spatial: " + wr.imageName + " / " + wr.regionLabel, null);
+                            "Post-hoc spatial: " + wr.imageName + " / " + wr.regionLabel, null,
+                            wr.imageName + " / " + wr.regionLabel);
                 }
             });
             return row;

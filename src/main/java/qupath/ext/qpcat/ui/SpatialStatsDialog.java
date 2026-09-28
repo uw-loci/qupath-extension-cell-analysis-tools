@@ -374,7 +374,8 @@ public class SpatialStatsDialog {
         if (results.size() == 1) {
             PostHocSpatialWorkflow.WindowResult wr = results.get(0);
             ClusteringDialog.showResultsDialog(wr.result, "Embedding",
-                    "Post-hoc spatial: " + wr.imageName + " / " + wr.regionLabel, null);
+                    "Post-hoc spatial: " + wr.imageName + " / " + wr.regionLabel, null,
+                    wr.imageName + " / " + wr.regionLabel);
             status.setText("Done -- results opened." + savedNote);
             return;
         }

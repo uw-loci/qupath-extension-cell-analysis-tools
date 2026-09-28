@@ -4017,9 +4017,27 @@ public class ClusteringDialog {
      */
     public static void showResultsDialog(ClusteringResult result, String embName,
                                           String algorithm, String normalization) {
+        showResultsDialog(result, embName, algorithm, normalization, null);
+    }
+
+    /**
+     * As above, plus a label naming what this window is a result FOR -- e.g. the
+     * image and area a post-hoc spatial run produced it from.
+     * <p>
+     * It goes in the title bar. Several of these windows are opened side by side
+     * from one summary table, and without it they are identical down to the
+     * cluster and cell counts, so there is no way to tell which image you are
+     * looking at.
+     *
+     * @param contextLabel shown after the cluster / cell counts; null to omit
+     */
+    public static void showResultsDialog(ClusteringResult result, String embName,
+                                          String algorithm, String normalization,
+                                          String contextLabel) {
         // External / reload callers have no clustered-scope context -> null (the 3D tab
         // then reads the current image only, still without a picker).
-        showResultsDialog(null, null, result, embName, algorithm, normalization, null, null);
+        showResultsDialog(null, null, result, embName, algorithm, normalization, null, null,
+                contextLabel);
     }
 
     /**
@@ -4034,6 +4052,16 @@ public class ClusteringDialog {
                                            String algorithm, String normalization,
                                            String loadedResultName,
                                            List<ProjectImageEntry<BufferedImage>> clusteredEntries) {
+        showResultsDialog(ownerStage, qupathRef, result, embName, algorithm, normalization,
+                loadedResultName, clusteredEntries, null);
+    }
+
+    private static void showResultsDialog(Stage ownerStage, QuPathGUI qupathRef,
+                                           ClusteringResult result, String embName,
+                                           String algorithm, String normalization,
+                                           String loadedResultName,
+                                           List<ProjectImageEntry<BufferedImage>> clusteredEntries,
+                                           String contextLabel) {
         // Resolve owner and qupath from static context if needed
         Stage dialogOwner = ownerStage;
         QuPathGUI qupath = qupathRef;
@@ -4059,7 +4087,9 @@ public class ClusteringDialog {
                 + (result.getDerivedFrom() != null
                     ? "  --  " + (result.getDerivedOp() != null ? result.getDerivedOp() : "edit")
                       + " of '" + result.getDerivedFrom() + "'"
-                    : ""));
+                    : "")
+                + (contextLabel != null && !contextLabel.isBlank()
+                    ? "  --  " + contextLabel : ""));
         stage.setResizable(true);
 
         if (embName == null) embName = "Embedding";
