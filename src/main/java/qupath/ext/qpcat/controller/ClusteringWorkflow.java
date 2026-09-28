@@ -503,13 +503,22 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Resolves independent analysis areas for an extraction, or null when the
-     * configured levels cannot split anything below the image level.
+     * Resolves independent analysis areas for an extraction, or null when there
+     * is only one area to resolve.
      * <p>
-     * Returning null rather than a single-area assignment is deliberate: it
-     * keeps {@code area_ids} off the wire entirely for ordinary
-     * single-section runs, so those take byte-for-byte the same Python path
-     * as before this feature existed.
+     * Two ways to have more than one: the user configured a level below the
+     * image, or the run simply spans several images. An image IS an area -- it
+     * is a physically separate piece of tissue, and cell centroids are per-image
+     * pixel coordinates with no offset between images, so pooling two images
+     * stacks them on top of each other. Gating this on the configured levels
+     * alone meant a multi-image run with nothing configured pooled every image
+     * into one coordinate frame: measured on two 500-cell images, 49.3% of the
+     * kNN graph's edges joined cells in different images.
+     * <p>
+     * Returning null for the genuinely single-area case is still deliberate: it
+     * keeps {@code area_ids} off the wire entirely for a single-image run with
+     * no levels, so those take byte-for-byte the same Python path as before this
+     * feature existed.
      * <p>
      * Note this is NOT {@link #buildParentNames}. That reads a cell's
      * immediate parent and feeds "Composition by annotation", where the
@@ -519,7 +528,9 @@ public class ClusteringWorkflow {
      */
     private AreaResolver.AreaAssignment resolveAreas(
             MeasurementExtractor.ExtractionResult extraction, ClusteringConfig config) {
-        if (!config.hasSubImageAreaLevels()) {
+        int nImages = extraction.getImageSegments() == null
+                ? 1 : extraction.getImageSegments().size();
+        if (!config.hasSubImageAreaLevels() && nImages < 2) {
             return null;
         }
         List<String> imageNames = new ArrayList<>();
@@ -2151,7 +2162,36 @@ public class ClusteringWorkflow {
                 } catch (Exception e) {
                     logger.warn("Failed to parse Ripley result: {}", e.getMessage());
                 }
-            } else if (task.outputs.containsKey("ripley_error")) {
+            }
+
+            // A partitioned run has no pooled curve: Python loops the areas and
+            // writes this instead. Reading only "ripley" left the Ripley tab
+            // empty for every multi-image run.
+            if (task.outputs.containsKey("ripley_per_area")) {
+                try {
+                    java.util.Map<String, qupath.ext.qpcat.model.RipleyResult> byArea =
+                            parsePerArea((String) task.outputs.get("ripley_per_area"),
+                                    spatialGson, "Ripley result",
+                                    ClusteringWorkflow::parseRipley);
+                    if (!byArea.isEmpty()) {
+                        result.setRipleyByArea(byArea);
+                        logger.info("Received Ripley L for {} area(s)", byArea.size());
+                        OperationLogger.getInstance().logOperation(
+                                "SPATIAL STATS RIPLEY",
+                                OperationLogger.spatialStatsParams(
+                                        "Ripley L (per area)",
+                                        result.getSpatialGraphType(),
+                                        spatialPermsUsed,
+                                        nCells),
+                                "Curves for " + byArea.size() + " area(s)",
+                                System.currentTimeMillis() - spatialStartTs);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Failed to parse per-area Ripley result: {}", e.getMessage());
+                }
+            }
+
+            if (!result.hasRipley() && task.outputs.containsKey("ripley_error")) {
                 // Ripley was requested but its extraction failed. The Python side
                 // deliberately did NOT emit zero-filled curves (which would look like a
                 // real null result), so surface the failure instead of silently
@@ -2159,6 +2199,19 @@ public class ClusteringWorkflow {
                 String msg = String.valueOf(task.outputs.get("ripley_error"));
                 logger.error("Ripley L failed: {}", msg);
                 OperationLogger.getInstance().logEvent("SPATIAL STATS RIPLEY FAILED", msg);
+            }
+
+            if (task.outputs.containsKey("co_occurrence_one_vs_rest_per_area")) {
+                java.util.Map<String, qupath.ext.qpcat.model.CoOccurrenceResult> byArea =
+                        parsePerArea(
+                                (String) task.outputs.get("co_occurrence_one_vs_rest_per_area"),
+                                spatialGson, "one-vs-rest co-occurrence",
+                                ClusteringWorkflow::parseCoOccurrence);
+                if (!byArea.isEmpty()) {
+                    result.setCoOccurrenceOneVsRestByArea(byArea);
+                    logger.info("Received co-occurrence (one vs rest) for {} area(s)",
+                            byArea.size());
+                }
             }
 
             if (task.outputs.containsKey("geary_c")) {
@@ -2203,6 +2256,19 @@ public class ClusteringWorkflow {
                 } catch (Exception e) {
                     logger.warn("Failed to parse co-occurrence pairwise: {}",
                             e.getMessage());
+                }
+            }
+
+            if (task.outputs.containsKey("co_occurrence_pairwise_per_area")) {
+                java.util.Map<String, qupath.ext.qpcat.model.CoOccurrenceResult> byArea =
+                        parsePerArea(
+                                (String) task.outputs.get("co_occurrence_pairwise_per_area"),
+                                spatialGson, "pairwise co-occurrence",
+                                ClusteringWorkflow::parseCoOccurrence);
+                if (!byArea.isEmpty()) {
+                    result.setCoOccurrencePairwiseByArea(byArea);
+                    logger.info("Received co-occurrence (pairwise) for {} area(s)",
+                            byArea.size());
                 }
             }
 
@@ -4407,6 +4473,46 @@ public class ClusteringWorkflow {
     }
 
     // ==================== Spatial Stats Expansion (v1) parsers ====================
+
+    /**
+     * Parses the {@code ripley_per_area} payload: a JSON object mapping an area
+     * label to that area's Ripley blob, itself a JSON string.
+     *
+     * @param json the payload; null or blank yields an empty map
+     * @param gson the parser to reuse
+     * @return area label -> curves, in the payload's own order
+     */
+    static <T> java.util.Map<String, T> parsePerArea(
+            String json, Gson gson, String what,
+            java.util.function.BiFunction<String, Gson, T> parser) {
+        java.util.Map<String, T> out = new java.util.LinkedHashMap<>();
+        if (json == null || json.isBlank()) {
+            return out;
+        }
+        com.google.gson.JsonObject obj = gson.fromJson(json, com.google.gson.JsonObject.class);
+        if (obj == null) {
+            return out;
+        }
+        for (String area : obj.keySet()) {
+            com.google.gson.JsonElement el = obj.get(area);
+            if (el == null || el.isJsonNull()) {
+                continue;
+            }
+            // Each value is a STRING holding the same blob the single-area parser
+            // reads, because run_per_area collects what each call wrote to its
+            // outputs rather than re-serialising them.
+            String blob = el.isJsonPrimitive() ? el.getAsString() : el.toString();
+            try {
+                T parsed = parser.apply(blob, gson);
+                if (parsed != null) {
+                    out.put(area, parsed);
+                }
+            } catch (Exception e) {
+                logger.warn("Area '{}': could not parse its {} ({})", area, what, e.getMessage());
+            }
+        }
+        return out;
+    }
 
     static qupath.ext.qpcat.model.RipleyResult parseRipley(String json, Gson gson) {
         Map<String, Object> raw = gson.fromJson(json,

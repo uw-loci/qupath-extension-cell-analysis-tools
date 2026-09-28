@@ -445,21 +445,78 @@ public class ClusteringResult {
     private String spatialGraphType;       // "knn" | "radius" | "delaunay"
     private String spatialUnit = "px";     // distance unit for spatial stats: "px" or "um"
 
+    /**
+     * Per-area Ripley curves, keyed by area label, when the run was partitioned.
+     * <p>
+     * A run spanning several images or cores has no single pooled curve to show:
+     * pooling separate pieces of tissue into one point pattern measures the
+     * layout of the slide, not the biology of any piece. So a partitioned run
+     * fills this map and leaves {@link #ripley} null, and an un-partitioned run
+     * does the opposite.
+     */
+    private java.util.Map<String, RipleyResult> ripleyByArea;
+
     public RipleyResult getRipley() { return ripley; }
     public void setRipley(RipleyResult v) { this.ripley = v; }
-    public boolean hasRipley() { return ripley != null; }
+
+    public java.util.Map<String, RipleyResult> getRipleyByArea() { return ripleyByArea; }
+
+    public void setRipleyByArea(java.util.Map<String, RipleyResult> v) {
+        this.ripleyByArea = v;
+    }
+
+    public boolean hasRipleyByArea() {
+        return ripleyByArea != null && !ripleyByArea.isEmpty();
+    }
+
+    public boolean hasRipley() { return ripley != null || hasRipleyByArea(); }
 
     public GearyCResult getGeary() { return geary; }
     public void setGeary(GearyCResult v) { this.geary = v; }
     public boolean hasGeary() { return geary != null; }
 
+    /** Per-area pairwise co-occurrence; see {@link #getRipleyByArea()}. */
+    private java.util.Map<String, CoOccurrenceResult> coOccurrencePairwiseByArea;
+    /** Per-area one-vs-rest co-occurrence; see {@link #getRipleyByArea()}. */
+    private java.util.Map<String, CoOccurrenceResult> coOccurrenceOneVsRestByArea;
+
     public CoOccurrenceResult getCoOccurrencePairwise() { return coOccurrencePairwise; }
     public void setCoOccurrencePairwise(CoOccurrenceResult v) { this.coOccurrencePairwise = v; }
-    public boolean hasCoOccurrencePairwise() { return coOccurrencePairwise != null; }
+
+    public java.util.Map<String, CoOccurrenceResult> getCoOccurrencePairwiseByArea() {
+        return coOccurrencePairwiseByArea;
+    }
+
+    public void setCoOccurrencePairwiseByArea(java.util.Map<String, CoOccurrenceResult> v) {
+        this.coOccurrencePairwiseByArea = v;
+    }
+
+    public boolean hasCoOccurrencePairwiseByArea() {
+        return coOccurrencePairwiseByArea != null && !coOccurrencePairwiseByArea.isEmpty();
+    }
+
+    public boolean hasCoOccurrencePairwise() {
+        return coOccurrencePairwise != null || hasCoOccurrencePairwiseByArea();
+    }
 
     public CoOccurrenceResult getCoOccurrenceOneVsRest() { return coOccurrenceOneVsRest; }
     public void setCoOccurrenceOneVsRest(CoOccurrenceResult v) { this.coOccurrenceOneVsRest = v; }
-    public boolean hasCoOccurrenceOneVsRest() { return coOccurrenceOneVsRest != null; }
+
+    public java.util.Map<String, CoOccurrenceResult> getCoOccurrenceOneVsRestByArea() {
+        return coOccurrenceOneVsRestByArea;
+    }
+
+    public void setCoOccurrenceOneVsRestByArea(java.util.Map<String, CoOccurrenceResult> v) {
+        this.coOccurrenceOneVsRestByArea = v;
+    }
+
+    public boolean hasCoOccurrenceOneVsRestByArea() {
+        return coOccurrenceOneVsRestByArea != null && !coOccurrenceOneVsRestByArea.isEmpty();
+    }
+
+    public boolean hasCoOccurrenceOneVsRest() {
+        return coOccurrenceOneVsRest != null || hasCoOccurrenceOneVsRestByArea();
+    }
 
     public String getSpatialGraphType() { return spatialGraphType; }
     public void setSpatialGraphType(String v) { this.spatialGraphType = v; }

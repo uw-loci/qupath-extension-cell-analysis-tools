@@ -4,6 +4,52 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.17.0] -- 2026-09-28 -- an image is an area, whether or not you say so
+
+### Fixed
+
+- **A clustering run over several images pooled them into one coordinate frame unless the
+  Independent areas control had a row in it.** Cell centroids are per-image pixel coordinates
+  with no offset between images, so pooling stacks the images on top of each other. Measured on
+  two 500-cell images: **49.3% of the kNN graph's edges joined cells in different images** --
+  neighbours that exist only because of how the files were laid out.
+
+  The gate was `resolveAreas`, which asked `hasSubImageAreaLevels()`: "did the user configure a
+  level BELOW the image?" An empty control answered no, and `area_ids` never reached Python, so
+  `area_slices` fell back to one slice over everything. Configuring a TMA-core or annotation
+  level worked; leaving the box empty on a multi-image run did not -- and an empty box is what
+  the control's own preview line describes as "one area per image". It now resolves areas
+  whenever there is more than one image OR a sub-image level is configured. A single image with
+  no levels still sends nothing, so those runs take byte-for-byte the previous path.
+
+  Everything that reads the graph moves with it: the neighbour graph itself, Geary's C,
+  Moran's I, neighbourhood enrichment and spatial smoothing. Ripley L and co-occurrence, which
+  read the coordinates directly, are now computed per area.
+
+- **The per-area spatial results were computed and then thrown away.** Python has written
+  `ripley_per_area`, `co_occurrence_pairwise_per_area` and `co_occurrence_one_vs_rest_per_area`
+  since independent areas shipped, and nothing on the Java side ever read them -- so a run with
+  configured area levels showed an *empty* Ripley tab. All three are now parsed, persisted with
+  the saved result, and rendered.
+
+- **"Composition by area" did not appear for a multi-image run.** Same cause: the tab is built
+  from `cellAreaNames`, which was only filled when areas resolved.
+
+### Added
+
+- **An `Area:` picker on the Ripley L and both co-occurrence tabs** when a run was partitioned.
+  One area at a time, with no combined curve offered -- pooling separate pieces of tissue into
+  one point pattern measures the layout of the slide, not the biology of any piece, so a
+  combined curve would be a number with no meaning presented as the default.
+- **`Save CSV...` on those tabs writes every area in one file**, area as the first column, so
+  the rows concatenate with the post-hoc spatial CSVs. Both per-area writers prefix the
+  single-area writer's own output rather than re-deriving the columns.
+
+### Note for existing results
+
+A saved result from an earlier version keeps whatever it stored. Re-run a multi-image analysis
+to get the corrected, per-area numbers; the pooled ones cannot be repaired after the fact.
+
 ## [0.16.3] -- 2026-09-28 -- the restart advice comes when you update, not after you restart
 
 ### Fixed

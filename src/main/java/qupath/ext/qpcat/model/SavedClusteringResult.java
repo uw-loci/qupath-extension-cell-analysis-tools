@@ -425,9 +425,12 @@ public class SavedClusteringResult {
             SpatialStatsBundle bundle = new SpatialStatsBundle();
             bundle.setGraphType(result.getSpatialGraphType());
             bundle.setRipley(result.getRipley());
+            bundle.setRipleyByArea(result.getRipleyByArea());
             bundle.setGeary(result.getGeary());
             bundle.setCoOccurrencePairwise(result.getCoOccurrencePairwise());
+            bundle.setCoOccurrencePairwiseByArea(result.getCoOccurrencePairwiseByArea());
             bundle.setCoOccurrenceOneVsRest(result.getCoOccurrenceOneVsRest());
+            bundle.setCoOccurrenceOneVsRestByArea(result.getCoOccurrenceOneVsRestByArea());
             saved.setSpatialStats(bundle);
         }
 
@@ -499,9 +502,12 @@ public class SavedClusteringResult {
         if (spatialStats != null) {
             result.setSpatialGraphType(spatialStats.getGraphType());
             result.setRipley(spatialStats.getRipley());
+            result.setRipleyByArea(spatialStats.getRipleyByArea());
             result.setGeary(spatialStats.getGeary());
             result.setCoOccurrencePairwise(spatialStats.getCoOccurrencePairwise());
+            result.setCoOccurrencePairwiseByArea(spatialStats.getCoOccurrencePairwiseByArea());
             result.setCoOccurrenceOneVsRest(spatialStats.getCoOccurrenceOneVsRest());
+            result.setCoOccurrenceOneVsRestByArea(spatialStats.getCoOccurrenceOneVsRestByArea());
         }
 
         return result;

@@ -41,23 +41,52 @@ public class SpatialStatsBundle {
     public int getNPermutations() { return nPermutations; }
     public void setNPermutations(int v) { this.nPermutations = v; }
 
+    /** Per-area curves for a partitioned run; see ClusteringResult.getRipleyByArea(). */
+    private java.util.Map<String, RipleyResult> ripleyByArea;
+
     public RipleyResult getRipley() { return ripley; }
     public void setRipley(RipleyResult v) { this.ripley = v; }
+
+    public java.util.Map<String, RipleyResult> getRipleyByArea() { return ripleyByArea; }
+
+    public void setRipleyByArea(java.util.Map<String, RipleyResult> v) { this.ripleyByArea = v; }
 
     public GearyCResult getGeary() { return geary; }
     public void setGeary(GearyCResult v) { this.geary = v; }
 
+    private java.util.Map<String, CoOccurrenceResult> coOccurrencePairwiseByArea;
+    private java.util.Map<String, CoOccurrenceResult> coOccurrenceOneVsRestByArea;
+
     public CoOccurrenceResult getCoOccurrencePairwise() { return coOccurrencePairwise; }
     public void setCoOccurrencePairwise(CoOccurrenceResult v) { this.coOccurrencePairwise = v; }
 
+    public java.util.Map<String, CoOccurrenceResult> getCoOccurrencePairwiseByArea() {
+        return coOccurrencePairwiseByArea;
+    }
+
+    public void setCoOccurrencePairwiseByArea(java.util.Map<String, CoOccurrenceResult> v) {
+        this.coOccurrencePairwiseByArea = v;
+    }
+
     public CoOccurrenceResult getCoOccurrenceOneVsRest() { return coOccurrenceOneVsRest; }
     public void setCoOccurrenceOneVsRest(CoOccurrenceResult v) { this.coOccurrenceOneVsRest = v; }
+
+    public java.util.Map<String, CoOccurrenceResult> getCoOccurrenceOneVsRestByArea() {
+        return coOccurrenceOneVsRestByArea;
+    }
+
+    public void setCoOccurrenceOneVsRestByArea(java.util.Map<String, CoOccurrenceResult> v) {
+        this.coOccurrenceOneVsRestByArea = v;
+    }
 
     /**
      * True if at least one of the four statistic slots is populated.
      */
     public boolean isAnyPresent() {
-        return ripley != null || geary != null
+        return ripley != null || (ripleyByArea != null && !ripleyByArea.isEmpty())
+                || (coOccurrencePairwiseByArea != null && !coOccurrencePairwiseByArea.isEmpty())
+                || (coOccurrenceOneVsRestByArea != null && !coOccurrenceOneVsRestByArea.isEmpty())
+                || geary != null
                 || coOccurrencePairwise != null
                 || coOccurrenceOneVsRest != null;
     }

@@ -4524,10 +4524,19 @@ public class ClusteringDialog {
         // and co-occurrence use a monospaced TextArea mirroring the
         // Moran's I rendering style.
         if (result.hasRipley()) {
+            boolean perArea = result.hasRipleyByArea();
             javafx.scene.Node ripleyNode = withCsvExport(
-                    buildRipleyChartPane(result.getRipley(), result.getSpatialUnit(), result),
+                    perArea
+                        ? buildPerAreaPane(result.getRipleyByArea(),
+                                r -> buildRipleyChartPane(r, result.getSpatialUnit(), result),
+                                "curves")
+                        : buildRipleyChartPane(result.getRipley(), result.getSpatialUnit(), result),
                     null,
-                    () -> SpatialStatsCsv.ripleyCsv(result.getRipley(), k -> clusterNameForKey(result, k)),
+                    perArea
+                        ? () -> SpatialStatsCsv.ripleyCsvPerArea(result.getRipleyByArea(),
+                                k -> clusterNameForKey(result, k))
+                        : () -> SpatialStatsCsv.ripleyCsv(result.getRipley(),
+                                k -> clusterNameForKey(result, k)),
                     "qpcat_ripley_l.csv");
             // Named for what it shows. Every shipped environment pins squidpy >= 1.6.6,
             // which dropped mode='K', so only L is ever measured -- and a tab called
@@ -4574,16 +4583,19 @@ public class ClusteringDialog {
         }
 
         if (result.hasCoOccurrencePairwise()) {
-            TextArea cooText = new TextArea(formatCoOccurrence(
-                    result.getCoOccurrencePairwise()));
-            cooText.setEditable(false);
-            cooText.setWrapText(false);
-            cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            boolean getCoOccurrencePairwisePerArea = result.hasCoOccurrencePairwiseByArea();
+            javafx.scene.Node cooNode = getCoOccurrencePairwisePerArea
+                    ? buildPerAreaPane(result.getCoOccurrencePairwiseByArea(),
+                            c -> coOccurrenceTextArea(formatCoOccurrence(c)), "table")
+                    : coOccurrenceTextArea(formatCoOccurrence(result.getCoOccurrencePairwise()));
             Tab tab = new Tab("Co-occurrence (pairwise)", wrapWithGuide(withCsvExport(
-                    cooText,
-                    cooText::getText,
-                    () -> SpatialStatsCsv.coOccurrenceCsv(
-                            result.getCoOccurrencePairwise(), k -> clusterNameForKey(result, k)),
+                    cooNode,
+                    getCoOccurrencePairwisePerArea ? null : () -> ((TextArea) cooNode).getText(),
+                    getCoOccurrencePairwisePerArea
+                        ? () -> SpatialStatsCsv.coOccurrencePerAreaCsv(result.getCoOccurrencePairwiseByArea(),
+                                k -> clusterNameForKey(result, k))
+                        : () -> SpatialStatsCsv.coOccurrenceCsv(
+                                result.getCoOccurrencePairwise(), k -> clusterNameForKey(result, k)),
                     "qpcat_cooccurrence_pairwise.csv"),
                     "For each pair of clusters (A, B), the table reports the ratio\n"
                     + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
@@ -4596,16 +4608,19 @@ public class ClusteringDialog {
         }
 
         if (result.hasCoOccurrenceOneVsRest()) {
-            TextArea cooText = new TextArea(formatCoOccurrence(
-                    result.getCoOccurrenceOneVsRest()));
-            cooText.setEditable(false);
-            cooText.setWrapText(false);
-            cooText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+            boolean getCoOccurrenceOneVsRestPerArea = result.hasCoOccurrenceOneVsRestByArea();
+            javafx.scene.Node cooNode = getCoOccurrenceOneVsRestPerArea
+                    ? buildPerAreaPane(result.getCoOccurrenceOneVsRestByArea(),
+                            c -> coOccurrenceTextArea(formatCoOccurrence(c)), "table")
+                    : coOccurrenceTextArea(formatCoOccurrence(result.getCoOccurrenceOneVsRest()));
             Tab tab = new Tab("Co-occurrence (one vs rest)", wrapWithGuide(withCsvExport(
-                    cooText,
-                    cooText::getText,
-                    () -> SpatialStatsCsv.coOccurrenceCsv(
-                            result.getCoOccurrenceOneVsRest(), k -> clusterNameForKey(result, k)),
+                    cooNode,
+                    getCoOccurrenceOneVsRestPerArea ? null : () -> ((TextArea) cooNode).getText(),
+                    getCoOccurrenceOneVsRestPerArea
+                        ? () -> SpatialStatsCsv.coOccurrencePerAreaCsv(result.getCoOccurrenceOneVsRestByArea(),
+                                k -> clusterNameForKey(result, k))
+                        : () -> SpatialStatsCsv.coOccurrenceCsv(
+                                result.getCoOccurrenceOneVsRest(), k -> clusterNameForKey(result, k)),
                     "qpcat_cooccurrence_one_vs_rest.csv"),
                     "For each cluster A, the table reports the ratio of A's neighborhood\n"
                     + "composition vs all-other-clusters combined, as a function of radius.\n"
@@ -6130,6 +6145,56 @@ public class ClusteringDialog {
      * Responsive layout: side-by-side above ~700 px width, stacked
      * vertically below.
      */
+    /**
+     * The Ripley tab for a run that was partitioned into areas: one chart at a
+     * time, chosen from a list of the areas.
+     * <p>
+     * There is deliberately no "all areas" curve. Pooling separate pieces of
+     * tissue into one point pattern measures the layout of the slide rather than
+     * the biology of any piece, so a combined curve here would be a number with
+     * no meaning, offered as the default.
+     */
+    /** The monospaced, non-wrapping view both co-occurrence tabs render into. */
+    private static TextArea coOccurrenceTextArea(String text) {
+        TextArea area = new TextArea(text);
+        area.setEditable(false);
+        area.setWrapText(false);
+        area.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
+        return area;
+    }
+
+    private static <T> javafx.scene.Node buildPerAreaPane(
+            java.util.Map<String, T> byArea,
+            java.util.function.Function<T, javafx.scene.Node> builder,
+            String what) {
+        ComboBox<String> areaCombo = new ComboBox<>();
+        areaCombo.getItems().addAll(byArea.keySet());
+        areaCombo.getSelectionModel().selectFirst();
+        areaCombo.setTooltip(Tooltips.of(
+                "Which area's " + what + " to show. Each area -- an image, a TMA core,\n"
+                + "a section -- is measured on its own, because a distance between two\n"
+                + "separate pieces of tissue is not a distance through tissue. Save CSV\n"
+                + "writes every area in one file."));
+
+        Label countLabel = new Label(byArea.size() + " area(s) measured separately");
+        countLabel.setStyle(BannerStyles.GUIDE_TEXT);
+
+        HBox bar = new HBox(8, new Label("Area:"), areaCombo, countLabel);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(6, 8, 0, 8));
+
+        BorderPane host = new BorderPane();
+        host.setTop(bar);
+        Runnable draw = () -> {
+            String area = areaCombo.getValue();
+            T v = area == null ? null : byArea.get(area);
+            host.setCenter(v == null ? new Label("No result for this area.") : builder.apply(v));
+        };
+        areaCombo.valueProperty().addListener((o, a, b) -> draw.run());
+        draw.run();
+        return host;
+    }
+
     private static javafx.scene.Node buildRipleyChartPane(
             qupath.ext.qpcat.model.RipleyResult ripley, String unit,
             ClusteringResult result) {

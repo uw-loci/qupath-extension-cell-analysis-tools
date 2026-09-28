@@ -137,6 +137,63 @@ public final class SpatialStatsCsv {
         return sb.toString();
     }
 
+    /**
+     * One CSV for a partitioned run: every area's co-occurrence table, with the
+     * area as the first column. The remaining columns depend on the mode, so the
+     * header is taken from the first area's own writer rather than assumed.
+     *
+     * @param byArea       area label -> that area's table
+     * @param nameResolver maps a stored cluster key to its display name, or null
+     */
+    public static String coOccurrencePerAreaCsv(Map<String, CoOccurrenceResult> byArea,
+                                                UnaryOperator<String> nameResolver) {
+        return perAreaCsv(byArea, r -> coOccurrenceCsv(r, nameResolver));
+    }
+
+    /**
+     * Prefixes each area's own CSV rows with the area, keeping that writer's
+     * header. Re-deriving the rows here would be a second definition of every
+     * column, which is how two exports of the same numbers drift apart.
+     */
+    private static <T> String perAreaCsv(Map<String, T> byArea,
+                                         java.util.function.Function<T, String> writer) {
+        StringBuilder sb = new StringBuilder();
+        if (byArea == null || byArea.isEmpty()) {
+            return "area\n";
+        }
+        boolean headerWritten = false;
+        for (Map.Entry<String, T> e : byArea.entrySet()) {
+            String[] lines = writer.apply(e.getValue()).split("\n", -1);
+            if (!headerWritten) {
+                sb.append("area,").append(lines[0]).append('\n');
+                headerWritten = true;
+            }
+            for (int i = 1; i < lines.length; i++) {
+                if (lines[i].isEmpty()) {
+                    continue;
+                }
+                sb.append(escape(e.getKey())).append(',').append(lines[i]).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * One CSV for a partitioned run: every area's curves, long format, with the
+     * area as the first column so the rows can be concatenated with the post-hoc
+     * spatial CSVs or grouped in any tool.
+     *
+     * @param byArea       area label -> that area's curves
+     * @param nameResolver maps a stored cluster key to its display name, or null
+     */
+    public static String ripleyCsvPerArea(Map<String, RipleyResult> byArea,
+                                          UnaryOperator<String> nameResolver) {
+        if (byArea == null || byArea.isEmpty()) {
+            return "area,cluster,radius,k,l\n";
+        }
+        return perAreaCsv(byArea, r -> ripleyCsv(r, nameResolver));
+    }
+
     private static double at(double[][] values, int i, int r) {
         if (values == null || i >= values.length || values[i] == null || r >= values[i].length) {
             return Double.NaN;
