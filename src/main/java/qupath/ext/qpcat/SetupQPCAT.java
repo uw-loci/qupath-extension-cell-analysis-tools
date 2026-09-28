@@ -302,20 +302,13 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         });
         cellularNeighborhoodsItem.visibleProperty().bind(environmentReady);
 
-        // Spatial statistics on existing clusters (post-hoc, ROI-scoped; no re-cluster)
+        // Spatial statistics on existing clusters (post-hoc, ROI-scoped; no re-cluster).
+        // The dialog does its own checking: it has a project scope, so what counts as
+        // "nothing to run on" depends on the scope the user picks, which only it knows.
+        // Gating here as well meant two different messages for one condition, and
+        // refused a project-wide run that would never have touched the open image.
         MenuItem spatialStatsItem = new MenuItem(res.getString("menu.spatialStats"));
-        spatialStatsItem.setOnAction(e -> {
-            if (qupath.getImageData() == null) {
-                Dialogs.showWarningNotification(EXTENSION_NAME, "No image is open.");
-                return;
-            }
-            if (qupath.getImageData().getHierarchy().getDetectionObjects().isEmpty()) {
-                Dialogs.showWarningNotification(EXTENSION_NAME,
-                        "No detections found. Run cell detection first.");
-                return;
-            }
-            new SpatialStatsDialog(qupath).show();
-        });
+        spatialStatsItem.setOnAction(e -> new SpatialStatsDialog(qupath).show());
         spatialStatsItem.visibleProperty().bind(environmentReady);
         // Autoencoder Classifier
         MenuItem autoencoderItem = new MenuItem(res.getString("menu.autoencoderClassifier"));

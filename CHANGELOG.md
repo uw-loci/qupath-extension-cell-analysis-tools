@@ -4,6 +4,38 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.16.1] -- 2026-09-27 -- spatial statistics without an open image; honest per-provider LLM status
+
+### Fixed
+
+- **"Spatial statistics on existing clusters..." no longer requires an open image.** The
+  dialog has a full project scope and `PostHocSpatialWorkflow` reads each chosen entry itself
+  (`buildTargets`), using the open image only as a fast path for the one entry that happens to
+  be loaded -- so a project-wide run was being refused over an image it would never have
+  touched. Three things enforced it and only one was real:
+  - the menu handler gated on `getImageData() != null` and on that image having detections,
+    then the dialog gated again with a different message for the same condition. The menu
+    handler now just opens the dialog: what counts as "nothing to run on" depends on the scope,
+    which only the dialog knows.
+  - the dialog refuses now only when there is neither an open image nor a project, or when the
+    open image is the only possible scope and has no detections.
+  - the **Exclude cells inside annotation classes** list was built from the open image's
+    annotations. It now offers the project's classes as well, with the ones actually on
+    annotations in the open image listed first and labelled as such -- the same problem, and
+    the same fix, that `IndependentAreasSection` already had for its own class list. That
+    logic now has one definition (`AnnotationClasses`) instead of two.
+  - *Selected annotations (current image)* is offered only when an image is open, which is the
+    one option that genuinely needs one.
+
+### Changed
+
+- **The Cluster Explainer's status is now stated per provider, because it differs per
+  provider.** Anthropic (Claude API) has been run end-to-end against the live API with a real
+  key. Ollama has never been run by anyone. The banner, the provider tooltip, the provider list
+  itself ("Ollama (local) -- never run"), the README and `llm-explainer.md` all say which is
+  which, and all keep the separate point that the *output* is unvalidated either way -- "never
+  run" is a claim about the code path, "unvalidated" a claim about the answer.
+
 ## [0.16.0] -- 2026-09-27 -- violins that are actually violins, a filterable heatmap, readable banners
 
 ### Fixed

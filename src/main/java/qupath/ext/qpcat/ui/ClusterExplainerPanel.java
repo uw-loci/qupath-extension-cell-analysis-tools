@@ -57,9 +57,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Tab content for the "Cluster Explainer (LLM) [Experimental]" results tab.
  * <p>
- * EXPERIMENTAL means UNPROVEN: no developer has completed a successful run of
- * this path against a live provider. That is a stronger claim than "the output
- * is unvalidated", and the UI says so.
+ * EXPERIMENTAL here is per provider, and the UI says which is which. The
+ * Anthropic path has been run end-to-end against the live API with a real key.
+ * The Ollama path has never been run at all -- a stronger claim than "the output
+ * is unvalidated", and the one users need before choosing it. Output is
+ * unvalidated either way.
  * <p>
  * One instance per parent {@code showResultsDialog} call (state must NOT be
  * static -- the dialog is shared between live and reloaded results and we
@@ -165,14 +167,19 @@ public class ClusterExplainerPanel {
         return root;
     }
 
-    /** Prominent banner: this LLM-based feature is experimental and unvalidated. */
+    /**
+     * Prominent banner: which providers have actually been run, and the standing
+     * warning that a suggestion is not a finding. The two claims are separate --
+     * "never run" is about the code path, "unvalidated" is about the answer.
+     */
     private Node buildUntestedBanner() {
         Label warn = new Label(
-                "EXPERIMENTAL: the Cluster Explainer has been run end-to-end once, "
-                + "against one provider on one dataset. Its OUTPUT is unvalidated. "
-                + "Every suggestion is a hint to check, not a conclusion: confirm it "
-                + "against the Marker Rankings tab and your own domain knowledge "
-                + "before relying on it.");
+                "EXPERIMENTAL. Anthropic (Claude): this path has been run end-to-end "
+                + "against the live API with a real key. Ollama: never run, by anyone -- "
+                + "expect to be the first, and please report what happens. In both cases "
+                + "the OUTPUT is unvalidated: every suggestion is a hint to check, not a "
+                + "conclusion. Confirm it against the Marker Rankings tab and your own "
+                + "domain knowledge before relying on it.");
         warn.setWrapText(true);
         warn.setMaxWidth(Double.MAX_VALUE);
         // Without this the banner is one line tall and the sentence is clipped --
@@ -194,12 +201,34 @@ public class ClusterExplainerPanel {
 
         providerCombo = new ComboBox<>(FXCollections.observableArrayList(
                 Provider.NONE, Provider.ANTHROPIC, Provider.OLLAMA));
+        // Say which path has been run IN the list, not only in the tooltip: the
+        // choice is made here, and a tooltip is not read before choosing.
+        providerCombo.setConverter(new javafx.util.StringConverter<Provider>() {
+            @Override
+            public String toString(Provider p) {
+                if (p == null) return "";
+                switch (p) {
+                    case ANTHROPIC: return "Anthropic (Claude API)";
+                    case OLLAMA: return "Ollama (local) -- never run";
+                    default: return "None";
+                }
+            }
+
+            @Override
+            public Provider fromString(String s) {
+                return providerCombo.getValue();
+            }
+        });
         Provider initial = parseProvider(QpcatPreferences.getLlmProvider());
         providerCombo.getSelectionModel().select(initial);
         providerCombo.setTooltip(Tooltips.of(
-                "Which LLM service to call. Anthropic = remote Claude API "
-                + "(paid, requires a key). Ollama = local server "
-                + "(free, requires 'ollama serve' running)."));
+                "Which LLM service to call.\n\n"
+                + "Anthropic = remote Claude API (paid, requires a key). Run\n"
+                + "end-to-end against the live API, so the path works.\n\n"
+                + "Ollama = local server (free, requires 'ollama serve' running).\n"
+                + "NEVER RUN: the request is built from the documented API and has\n"
+                + "not been exercised once, so a first failure is as likely to be\n"
+                + "ours as yours. Please report it if it is."));
         providerCombo.valueProperty().addListener((obs, oldV, newV) -> {
             QpcatPreferences.setLlmProvider(newV != null ? newV.name() : "NONE");
             populateModelsForProvider(newV);

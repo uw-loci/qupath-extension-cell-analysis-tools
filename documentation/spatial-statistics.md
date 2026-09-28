@@ -190,6 +190,12 @@ classification (from clustering, phenotyping, or any classifier) **without
 re-running clustering or embedding**. This is the tool for "I already have my cell
 types -- now test spatial hypotheses, per image and per region across the project."
 
+**No image needs to be open.** Pick the scope inside the dialog: the open image, or
+any set of project images, each read directly. An open image only adds two things --
+the *Selected annotations (current image)* region option, and the knowledge of which
+classes are actually on annotations here, which the exclusion list marks separately
+from the rest of the project's classes.
+
 **Each analysis area is computed independently** -- with its own spatial graph.
 An area is a whole image, one TMA core, one tissue section, or a single selected
 annotation. Cells from different images or different areas are never joined into

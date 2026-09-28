@@ -17,19 +17,19 @@ import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
-import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
-import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 
 import java.awt.image.BufferedImage;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
- * Dialog for running post-hoc spatial statistics over the CURRENT image's cells
- * using their existing classifications, optionally restricted to selected
- * annotation ROIs and excluding cells in chosen annotation classes. No
- * clustering / embedding is recomputed and the object hierarchy is not modified.
+ * Dialog for running post-hoc spatial statistics over cells using their existing
+ * classifications, optionally restricted to selected annotation ROIs and
+ * excluding cells in chosen annotation classes. No clustering / embedding is
+ * recomputed and the object hierarchy is not modified.
+ * <p>
+ * The scope may be the open image or any set of project images, each analysed
+ * independently. An open image is therefore NOT required: with a project scope
+ * {@link PostHocSpatialWorkflow} reads each entry itself, and the open image is
+ * only a fast path for the one entry that happens to be loaded.
  */
 public class SpatialStatsDialog {
 
@@ -43,14 +43,21 @@ public class SpatialStatsDialog {
 
     public void show() {
         ImageData<BufferedImage> imageData = qupath.getImageData();
-        if (imageData == null) {
-            Dialogs.showWarningNotification("QP-CAT", "Open an image first.");
+        boolean haveProject = qupath.getProject() != null
+                && !qupath.getProject().getImageList().isEmpty();
+        // An open image is needed only when it is the ONLY thing that could be
+        // analysed. With a project, the scope below can pick images to read
+        // directly, which is what the workflow does anyway.
+        if (imageData == null && !haveProject) {
+            Dialogs.showWarningNotification("QP-CAT - spatial statistics",
+                    "Open an image, or a project, first.");
             return;
         }
-        PathObjectHierarchy hierarchy = imageData.getHierarchy();
-        if (hierarchy.getDetectionObjects().isEmpty()) {
-            Dialogs.showWarningNotification("QP-CAT",
-                    "No detections in this image. Detect and classify cells first.");
+        if (imageData != null && !haveProject
+                && imageData.getHierarchy().getDetectionObjects().isEmpty()) {
+            Dialogs.showWarningNotification("QP-CAT - spatial statistics",
+                    "No detections in this image, and no project to run across. "
+                    + "Detect and classify cells first.");
             return;
         }
 
@@ -92,30 +99,36 @@ public class SpatialStatsDialog {
         final String REGION_SELECTED = "Selected annotations (current image)";
         ComboBox<String> regionBox = new ComboBox<>();
         regionBox.getItems().add(REGION_WHOLE);
-        regionBox.getItems().add(REGION_SELECTED);
-
-        // Exclusion classes: annotation classes present in this image.
-        Set<String> annoClasses = new LinkedHashSet<>();
-        for (PathObject a : hierarchy.getAnnotationObjects()) {
-            PathClass pc = a.getPathClass();
-            if (pc != null && pc != PathClass.getNullClass()) annoClasses.add(pc.toString());
+        if (imageData != null) {
+            regionBox.getItems().add(REGION_SELECTED);
         }
-        FlowPane excludeFlow = new FlowPane(8, 4);
-        excludeFlow.setPadding(new Insets(4));
+
+        // Exclusion classes. Offering only the open image's annotation classes made
+        // a multi-image run unconfigurable whenever the class to exclude lived in
+        // another image -- and left nothing at all to tick with no image open. So
+        // offer the project's classes too, with the ones actually on annotations
+        // here listed first and labelled, because that is the difference between
+        // "this will exclude something" and "this might".
         java.util.List<CheckBox> excludeBoxes = new java.util.ArrayList<>();
-        for (String cn : annoClasses) {
-            CheckBox cb = new CheckBox(cn);
-            // Pre-check the usual "ignore these" classes as a convenience.
-            String low = cn.toLowerCase();
-            if (low.contains("ignore") || low.contains("necros") || low.contains("exclude")) {
-                cb.setSelected(true);
-            }
-            excludeBoxes.add(cb);
-            excludeFlow.getChildren().add(cb);
+        VBox excludeContent = new VBox(4);
+        java.util.List<String> here = AnnotationClasses.onOpenImageAnnotations(qupath);
+        java.util.List<String> elsewhere = AnnotationClasses.elsewhereInProject(qupath);
+        if (!here.isEmpty()) {
+            excludeContent.getChildren().addAll(
+                    excludeGroupLabel("On annotations in the open image:"),
+                    excludeFlowFor(here, excludeBoxes));
+        }
+        if (!elsewhere.isEmpty()) {
+            excludeContent.getChildren().addAll(
+                    excludeGroupLabel(here.isEmpty()
+                            ? "Classes in this project (an image is not open, so which of "
+                              + "these mark annotations cannot be checked from here):"
+                            : "Other classes in this project, for images that are not open:"),
+                    excludeFlowFor(elsewhere, excludeBoxes));
         }
         TitledPane excludeTitled = new TitledPane(
                 "Exclude cells inside annotation classes", excludeBoxes.isEmpty()
-                    ? new Label("(no classified annotations in this image)") : excludeFlow);
+                    ? new Label("(no classes to choose from)") : excludeContent);
         excludeTitled.setExpanded(!excludeBoxes.isEmpty()
                 && excludeBoxes.stream().anyMatch(CheckBox::isSelected));
         excludeTitled.setAnimated(false);
@@ -402,6 +415,35 @@ public class SpatialStatsDialog {
             Dialogs.showErrorNotification("QP-CAT", "Could not load saved result: " + e.getMessage());
             return null;
         }
+    }
+
+    private static Label excludeGroupLabel(String text) {
+        Label l = new Label(text);
+        l.setWrapText(true);
+        WrapHeight.bind(l);
+        l.setStyle(BannerStyles.GUIDE_TEXT);
+        return l;
+    }
+
+    /**
+     * One row of exclusion checkboxes, appended to {@code collected} so the run
+     * reads every group from a single list.
+     */
+    private static FlowPane excludeFlowFor(java.util.List<String> classNames,
+                                           java.util.List<CheckBox> collected) {
+        FlowPane flow = new FlowPane(8, 4);
+        flow.setPadding(new Insets(4));
+        for (String cn : classNames) {
+            CheckBox cb = new CheckBox(cn);
+            // Pre-check the usual "ignore these" classes as a convenience.
+            String low = cn.toLowerCase();
+            if (low.contains("ignore") || low.contains("necros") || low.contains("exclude")) {
+                cb.setSelected(true);
+            }
+            collected.add(cb);
+            flow.getChildren().add(cb);
+        }
+        return flow;
     }
 
     private static Label unitNote() {

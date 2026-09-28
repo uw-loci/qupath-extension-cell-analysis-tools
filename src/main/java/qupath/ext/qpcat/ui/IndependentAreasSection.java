@@ -394,29 +394,7 @@ public final class IndependentAreasSection extends VBox {
      * current image's classes made those runs unconfigurable.
      */
     private List<String> annotationClassesInScope() {
-        Set<String> names = new LinkedHashSet<>();
-        ImageData<BufferedImage> imageData = currentImageData();
-        if (imageData != null) {
-            for (PathObject annotation : imageData.getHierarchy().getAnnotationObjects()) {
-                PathClass pc = annotation.getPathClass();
-                if (pc != null && pc != PathClass.getNullClass()) {
-                    names.add(pc.toString());
-                }
-            }
-        }
-        if (qupath != null) {
-            try {
-                for (PathClass pc : qupath.getAvailablePathClasses()) {
-                    if (pc != null && pc != PathClass.getNullClass()
-                            && pc.toString() != null && !pc.toString().isBlank()) {
-                        names.add(pc.toString());
-                    }
-                }
-            } catch (Exception e) {
-                logger.debug("Could not read the project class list: {}", e.getMessage());
-            }
-        }
-        return new ArrayList<>(names);
+        return AnnotationClasses.inScope(qupath);
     }
 
     private static void setShown(javafx.scene.Node node, boolean shown) {

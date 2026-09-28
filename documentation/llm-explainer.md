@@ -3,12 +3,16 @@
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
 
-> **Run end-to-end once, on 2026-09-27.** Anthropic provider, `claude-sonnet-5`, seven
-> clusters from the synthetic demo dataset, 23 seconds. That is the whole of the evidence:
-> one run, one provider, one dataset. "Experimental" no longer means the path has never been
-> exercised -- it means it has been exercised once, and the *output* is unvalidated. The
-> suggestions it returns are proposals to check, not labels to publish. Please
-> [report](troubleshooting.md#reporting-a-bug) anything that breaks.
+> **What has actually been run, per provider.** *Anthropic (Claude API)*: run end-to-end
+> against the live API with a real key, on 2026-09-27 -- `claude-sonnet-5`, seven clusters
+> from the synthetic demo dataset, 23 seconds. *Ollama*: **never run, by anyone.** It is
+> built from the documented API and has not been exercised once, so if you are the first to
+> try it, a failure is as likely to be ours as yours -- please
+> [report](troubleshooting.md#reporting-a-bug) it.
+>
+> The two claims are separate. "Never run" is about the code path. *Unvalidated* is about
+> the answer, and applies to both providers: the suggestions are proposals to check, not
+> labels to publish.
 
 The prompt template, output JSON shape, and audit-log row format may also change.
 
@@ -192,15 +196,16 @@ A **Cancel** button is exposed during the in-flight call. Cancelled calls are st
 
 ### [Experimental] notice
 
-**Status: unproven.** No QP-CAT developer has completed a successful run of this feature.
-It is shipped because the code path is complete and self-contained, not because it has been
-demonstrated to work. Treat every statement below as design intent.
+**Status: one provider proven to run, one not.** The Anthropic path has been run
+end-to-end against the live API. The Ollama path has not been run at all, so treat
+everything below about Ollama as design intent rather than observed behaviour. Neither
+provider's *output* has been validated against ground truth.
 
 This is the first feature in QP-CAT that calls a remote LLM API. The surface area is
 intentionally narrow:
 
 - One prompt template (`cluster_phenotype_v1`); not user-editable yet
-- Two providers (Anthropic, Ollama); OpenAI deferred
+- Two providers (Anthropic, run; Ollama, never run); OpenAI deferred
 - One batched call per Run Explainer click; per-cluster async deferred
 - API key is session-scoped; OS-keychain integration deferred
 
