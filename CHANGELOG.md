@@ -4,6 +4,33 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.17.1] -- 2026-09-28 -- the clustering dialog stops forgetting three settings
+
+### Fixed
+
+- **Dimensionality Reduction fell back from 3D to 2D every time the dialog reopened.**
+  `buildConfig` writes the choice as `embeddingParams["n_components"]`, and `applyConfig`
+  restored `n_neighbors`, `min_dist`, `metric`, `name`, `perplexity`, `learning_rate`,
+  `n_iter`, `early_exaggeration` and `random_state` from that map -- but never this one, so the
+  combo showed its constructor default. It is restored first in the block, because changing it
+  rewrites the default embedding name and the saved name has to be the one that survives.
+- **BANKSY's `lambda_param` and `k_geom` were forgotten the same way.**
+
+### Added
+
+- `ConfigRoundTripCoverageTest` asserts that every key `buildConfig` writes into
+  `embeddingParams` / `algorithmParams` is read back by `applyConfig`. A source-level test,
+  because both are private members of a JavaFX dialog and this repo has no FX toolkit in its
+  test runtime -- but the failure is otherwise invisible, since a forgotten setting just shows
+  its default, which looks like a choice. It found `lambda_param` and `k_geom` on its first
+  run.
+
+### Worth knowing
+
+The two parameter maps share the key `n_components` for different things: embedding
+dimensionality in `embeddingParams`, GMM's cluster count in `algorithmParams`. They are read
+from their own maps and the test attributes them separately.
+
 ## [0.17.0] -- 2026-09-28 -- an image is an area, whether or not you say so
 
 ### Fixed

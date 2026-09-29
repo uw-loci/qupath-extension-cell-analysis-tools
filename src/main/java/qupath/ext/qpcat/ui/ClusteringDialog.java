@@ -3131,6 +3131,15 @@ public class ClusteringDialog {
         // Embedding params
         Map<String, Object> embParams = config.getEmbeddingParams();
         if (embParams != null) {
+            // Embedding dimensionality. Restored BEFORE "name" below, because
+            // changing this combo rewrites the default embedding name, and the
+            // saved name has to be the one that survives.
+            // NOTE the key collides: embeddingParams["n_components"] is 2-or-3
+            // here, while algorithmParams["n_components"] is GMM's cluster
+            // count. Read each from its own map.
+            if (embParams.get("n_components") instanceof Number dims) {
+                embeddingDimCombo.setValue(dims.intValue() >= 3 ? "3D" : "2D");
+            }
             if (embParams.containsKey("n_neighbors")) {
                 umapNeighborsSpinner.getValueFactory().setValue(
                         ((Number) embParams.get("n_neighbors")).intValue());
@@ -3203,6 +3212,14 @@ public class ClusteringDialog {
             }
             if (algoParams.containsKey("linkage")) {
                 aggLinkageCombo.setValue((String) algoParams.get("linkage"));
+            }
+            if (algoParams.containsKey("lambda_param")) {
+                banksyLambdaSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("lambda_param")).doubleValue());
+            }
+            if (algoParams.containsKey("k_geom")) {
+                banksyKGeomSpinner.getValueFactory().setValue(
+                        ((Number) algoParams.get("k_geom")).intValue());
             }
         }
 
