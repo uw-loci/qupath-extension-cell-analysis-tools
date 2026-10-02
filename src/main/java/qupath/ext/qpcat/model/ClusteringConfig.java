@@ -191,6 +191,19 @@ public class ClusteringConfig {
     // 0 = adaptive default (1000 / 100 / 50 by cell count); positive = fixed.
     private int spatialPermutations = 0;
 
+    /**
+     * Radius the pairwise co-occurrence MATRIX is drawn at, in the image's
+     * coordinate unit; -1 picks a default near five median nearest-neighbour
+     * distances.
+     * <p>
+     * The matrix has to name one radius rather than average them: squidpy's bins
+     * are cumulative discs, so a mean is dominated by the large-radius bins where
+     * the ratio has already decayed toward 1.0. It also makes the figure
+     * comparable with a published value, which is always quoted at a distance.
+     * Only the figure is affected -- the table and the CSV keep every bin.
+     */
+    private double coOccurrenceMatrixRadius = -1.0;
+
     // ---- Spatial graph overlay (v0.3) ----
     // pushConnectionsToViewer: when true, materialise the spatial graph as
     // PathObjectConnections after the run; the user toggles the overlay via
@@ -317,6 +330,14 @@ public class ClusteringConfig {
 
     public List<String> getScopeImageNames() { return scopeImageNames; }
     public void setScopeImageNames(List<String> names) { this.scopeImageNames = names; }
+
+    /** @see #coOccurrenceMatrixRadius */
+    public double getCoOccurrenceMatrixRadius() { return coOccurrenceMatrixRadius; }
+
+    /** @see #coOccurrenceMatrixRadius */
+    public void setCoOccurrenceMatrixRadius(double radius) {
+        this.coOccurrenceMatrixRadius = radius;
+    }
 
     /** @see #includedClasses */
     public List<String> getIncludedClasses() { return includedClasses; }

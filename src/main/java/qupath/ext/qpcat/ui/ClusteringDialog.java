@@ -255,6 +255,8 @@ public class ClusteringDialog {
     private CheckBox enableGearyCheck;
     private CheckBox enableCoOccPairwiseCheck;
     private CheckBox enableCoOccOneVsRestCheck;
+    /** Radius the pairwise co-occurrence matrix figure is drawn at; 0 = auto. */
+    private Spinner<Double> coOccMatrixRadiusSpinner;
     private Label permutationLabel;
 
     // Spatial Graph Overlay (v0.3) controls
@@ -1745,10 +1747,33 @@ public class ClusteringDialog {
         enableCoOccOneVsRestCheck.setAccessibleText(
                 "Enable one-vs-rest co-occurrence");
 
+        // The pairwise co-occurrence FIGURE has to be drawn at one radius: the
+        // bins are cumulative discs, so averaging them is dominated by the large
+        // radii where the ratio has already decayed toward 1.0. The table and the
+        // CSV are unaffected -- they keep every bin.
+        coOccMatrixRadiusSpinner = new Spinner<>(0.0, 100000.0, 0.0, 5.0);
+        coOccMatrixRadiusSpinner.setEditable(true);
+        coOccMatrixRadiusSpinner.setPrefWidth(110);
+        SpinnerUtils.commitOnFocusLoss(coOccMatrixRadiusSpinner);
+        coOccMatrixRadiusSpinner.setTooltip(Tooltips.of(
+                "Radius the pairwise co-occurrence MATRIX is drawn at, in the image's\n"
+                + "units (um when calibrated, otherwise pixels).\n\n"
+                + "0 = auto: about five median nearest-neighbour distances, which keeps\n"
+                + "the figure in the short-range part of the profile where the statistic\n"
+                + "discriminates. The figure title always states the radius it used.\n\n"
+                + "Affects the matrix figure only. The Co-occurrence tables, the CSV and\n"
+                + "the curves figure keep every radius bin."));
+        coOccMatrixRadiusSpinner.disableProperty().bind(
+                enableCoOccPairwiseCheck.selectedProperty().not());
+        HBox matrixRadiusRow = new HBox(8,
+                new Label("Matrix radius (0 = auto):"), coOccMatrixRadiusSpinner);
+        matrixRadiusRow.setAlignment(Pos.CENTER_LEFT);
+
         VBox statsBox = new VBox(4,
                 new Label("Statistics:"),
                 enableRipleyCheck, enableGearyCheck,
-                enableCoOccPairwiseCheck, enableCoOccOneVsRestCheck);
+                enableCoOccPairwiseCheck, enableCoOccOneVsRestCheck,
+                matrixRadiusRow);
 
         // ---- Adaptive-permutation indicator ----
         permutationLabel = new Label(formatPermutationsLabel(-1));
@@ -3023,6 +3048,11 @@ public class ClusteringDialog {
         config.setSpatialGraphDelaunayMaxEdge(
                 spatialGraphDelaunayMaxEdgeSpinner.getValue());
         config.setEnableRipley(enableRipleyCheck.isSelected());
+        // 0 in the UI means "pick one"; the config says that with -1 so a value of
+        // zero cannot be mistaken for a radius of zero.
+        double matrixRadius = coOccMatrixRadiusSpinner.getValue() == null
+                ? 0.0 : coOccMatrixRadiusSpinner.getValue();
+        config.setCoOccurrenceMatrixRadius(matrixRadius > 0 ? matrixRadius : -1.0);
         config.setEnableGeary(enableGearyCheck.isSelected());
         config.setEnableCoOccurrencePairwise(enableCoOccPairwiseCheck.isSelected());
         config.setEnableCoOccurrenceOneVsRest(enableCoOccOneVsRestCheck.isSelected());
@@ -3451,6 +3481,11 @@ public class ClusteringDialog {
         // Analysis options
         generatePlotsCheck.setSelected(config.isGeneratePlots());
         spatialAnalysisCheck.setSelected(config.isEnableSpatialAnalysis());
+        if (coOccMatrixRadiusSpinner != null) {
+            double saved = config.getCoOccurrenceMatrixRadius();
+            coOccMatrixRadiusSpinner.getValueFactory()
+                    .setValue(saved > 0 ? saved : 0.0);
+        }
         spatialSmoothingCheck.setSelected(config.isEnableSpatialSmoothing());
         smoothingIterationsSpinner.getValueFactory().setValue(config.getSpatialSmoothingIterations());
         // A config written before this option existed records no choice; leave it
@@ -6297,13 +6332,22 @@ public class ClusteringDialog {
                     // averaged over every bin. Saying "as a function of radius"
                     // described the TABLE and sent people looking for a radius
                     // axis that is not there.
-                    guide = "One co-occurrence ratio per cluster pair, MEANED over every "
-                            + "radius bin: > 1 = enriched as neighbors, < 1 = depleted, "
-                            + "1.0 = no association. The bins are cumulative, so this mean "
-                            + "is a SHRUNKEN short-range signal (measured: about 18% of the "
-                            + "excess over 1 retained). Use it to spot which pairs are worth "
-                            + "a look, then read the Co-occurrence (pairwise) TABLE for the "
-                            + "value at a distance. The title states the radius bins used.";
+                    guide = "One co-occurrence ratio per cluster pair AT A SINGLE RADIUS, "
+                            + "named in the title: > 1 = enriched as neighbors, < 1 = "
+                            + "depleted, 1.0 = no association (white on the diverging scale). "
+                            + "Set it with 'Matrix radius' under Spatial statistics; 0 picks "
+                            + "about five median nearest-neighbour distances. For the whole "
+                            + "profile see the Co-occurrence curves tab or the pairwise "
+                            + "TABLE.";
+                    docAnchor = "co-occurrence-tabs";
+                }
+                case "cooc_curves" -> {
+                    tabName = "Co-occurrence curves";
+                    guide = "Co-occurrence against distance, one panel per cluster, with a "
+                            + "dashed line at 1.0 (no association). This is how squidpy "
+                            + "presents the statistic and how its tutorials read it: a "
+                            + "conclusion is quoted AT a distance. Read a pair's curve here, "
+                            + "then use the matrix for the overview at one radius.";
                     docAnchor = "co-occurrence-tabs";
                 }
                 case "cooc_one_vs_rest" -> {

@@ -1727,6 +1727,7 @@ public class ClusteringWorkflow {
         inputs.put("enable_ripley", config.isEnableRipley());
         inputs.put("enable_geary", config.isEnableGeary());
         inputs.put("enable_co_occurrence_pairwise", config.isEnableCoOccurrencePairwise());
+        inputs.put("cooc_matrix_radius", config.getCoOccurrenceMatrixRadius());
         inputs.put("enable_co_occurrence_one_vs_rest", config.isEnableCoOccurrenceOneVsRest());
         inputs.put("spatial_graph_type", config.getSpatialGraphType());
         inputs.put("spatial_graph_k", config.getSpatialGraphK());
@@ -2036,6 +2037,7 @@ public class ClusteringWorkflow {
                 config.isEnableCoOccurrencePairwise());
         inputs.put("enable_co_occurrence_one_vs_rest",
                 config.isEnableCoOccurrenceOneVsRest());
+        inputs.put("cooc_matrix_radius", config.getCoOccurrenceMatrixRadius());
         // ---- Spatial graph overlay (v0.3) inputs ----
         inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
         inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
@@ -4688,12 +4690,48 @@ public class ClusteringWorkflow {
                 new qupath.ext.qpcat.model.CoOccurrenceResult();
         if (raw.get("mode") != null) out.setMode(raw.get("mode").toString());
         out.setClusterNames(asStringList(raw.get("cluster_names")));
-        out.setIntervals(asDoubleArray(raw.get("intervals")));
-        out.setData(asDouble3D(raw.get("data")));
+        double[][][] data = asDouble3D(raw.get("data"));
+        out.setIntervals(binRadii(asDoubleArray(raw.get("intervals")), data));
+        out.setData(data);
         Object n = raw.get("n_permutations");
         if (n instanceof Number num) out.setNPermutations(num.intValue());
         if (raw.get("coord_unit") != null) out.setCoordUnit(raw.get("coord_unit").toString());
         return out;
+    }
+
+    /**
+     * One radius per data bin, dropping the leading interval EDGE when a result
+     * carries the raw squidpy interval array.
+     *
+     * <p>squidpy returns one fewer bin than it is given interval points: bin
+     * {@code i} is the disc of radius {@code interval[i+1]}. Results saved before
+     * this was noticed stored all the edges, so every table row and CSV line was
+     * labelled with the radius of the bin before it and a trailing all-NaN row was
+     * written. Normalising here heals those on load, so the table, the CSV and the
+     * figure caption agree without each of them knowing about it.
+     *
+     * @param intervals radii as stored (bin radii, or one more edge than bins)
+     * @param data      the ratio tensor, whose last axis is the bin count
+     * @return one radius per bin
+     */
+    private static double[] binRadii(double[] intervals, double[][][] data) {
+        int bins = 0;
+        if (data != null) {
+            for (double[][] perCentre : data) {
+                if (perCentre == null) {
+                    continue;
+                }
+                for (double[] perPartner : perCentre) {
+                    if (perPartner != null) {
+                        bins = Math.max(bins, perPartner.length);
+                    }
+                }
+            }
+        }
+        if (intervals != null && bins > 0 && intervals.length == bins + 1) {
+            return java.util.Arrays.copyOfRange(intervals, 1, intervals.length);
+        }
+        return intervals;
     }
 
     private static List<String> asStringList(Object raw) {

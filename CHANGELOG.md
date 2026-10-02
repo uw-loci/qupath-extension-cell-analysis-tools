@@ -4,6 +4,55 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.20.0] -- 2026-10-02 -- co-occurrence at a radius you can name, and squidpy's curves
+
+### Fixed
+
+- **Every co-occurrence radius label was off by one bin, and each table and CSV ended in a
+  row of NaN.** squidpy returns one fewer bin than it is given interval points:
+  `_co_occurrence_helper` sets `l_val = len(interval) - 1` and squares `interval[1:]`, so bin
+  `i` is the disc of radius `interval[i+1]`. QP-CAT stored all the edges, so the results
+  table, the exported CSV's `radius` column and the one-vs-rest heatmap's x labels each named
+  a bin with the radius of the one before it, and the extra edge produced a trailing all-NaN
+  row. The `Radius:` caption also counted 50 bins where there were 49 and reported a low
+  bound that was not a bin at all. Python now stores one radius per bin, and
+  `ClusteringWorkflow.parseCoOccurrence` normalises results saved before this, so old saved
+  runs are corrected on load rather than keeping the shifted labels.
+
+### Changed
+
+- **The pairwise co-occurrence figure is now drawn at one named radius instead of averaged
+  over every bin.** The title states it: `within r = 58.3 um (bin 10 of 49; 1.0 = no
+  association)`. Set it with **Spatial statistics > Matrix radius**; left at 0 it picks about
+  five median nearest-neighbour distances, the near end of the profile where the ratio still
+  discriminates. The tables, the CSV and the curves keep every bin. This replaces a summary
+  that no published work uses and that measurement showed retained only ~18% of a short-range
+  signal.
+- **Both co-occurrence heatmaps now use a diverging colour scale centred on 1.0.** The null of
+  this statistic is 1.0, and on a sequential map the eye can only read "more" and "less", not
+  enrichment versus depletion. Falls back to the sequential map when the data lies entirely on
+  one side of the null.
+
+### Added
+
+- **A "Co-occurrence curves" tab and figure** (`co_occurrence_curves.png`): score against
+  distance, one panel per cluster, one line per partner, with a dashed line at 1.0. This is
+  the presentation `squidpy.pl.co_occurrence` uses and the one squidpy's tutorials interpret,
+  where a conclusion is quoted *at a distance*. Drawn by QP-CAT rather than by calling
+  squidpy's plotting function so the panel count, figure size and DPI match the other figures;
+  capped at 12 panels, and the caption says so when it truncates.
+- `ClusteringConfig.coOccurrenceMatrixRadius`, so the chosen radius round-trips through saved
+  configs and `RUN_INFO.txt` like every other parameter.
+
+### Worth knowing
+
+- **The first bins are noisy.** Few pairs fall inside the smallest discs, so the leftmost
+  points of a curve swing on small counts. Judge a curve by its shape over several bins.
+- **Choosing the radius RANGE** (as opposed to which radius the matrix shows) remains a
+  scripting-API option -- `SpatialStatsScripts.coOccurrence` takes `minRadius`, `maxRadius`
+  and `nIntervals`. 0.19.1's documentation implied a dialog control for it that has never
+  existed; that is corrected.
+
 ## [0.19.2] -- 2026-10-02 -- what the averaged co-occurrence heatmap is actually worth
 
 ### Fixed

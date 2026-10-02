@@ -383,6 +383,9 @@ if want_cooc_pair:
         p = os.path.join(out_dir, _spatial.PLOT_FILE_COOC_PAIRWISE)
         if os.path.exists(p):
             plot_paths["cooc_pairwise"] = p
+        p = os.path.join(out_dir, _spatial.PLOT_FILE_COOC_CURVES)
+        if os.path.exists(p):
+            plot_paths["cooc_curves"] = p
 
 if want_cooc_ovr:
     _update("Computing co-occurrence (one vs rest)...")

@@ -202,6 +202,7 @@ PLOT_FILE_RIPLEY = "ripley_k_l.png"
 PLOT_FILE_GEARY = "geary_c.png"
 PLOT_FILE_COOC_PAIRWISE = "co_occurrence_pairwise.png"
 PLOT_FILE_COOC_ONE_VS_REST = "co_occurrence_one_vs_rest.png"
+PLOT_FILE_COOC_CURVES = "co_occurrence_curves.png"
 
 
 def _should_persist(plot_dir, persist_plots):
@@ -1529,6 +1530,39 @@ def run_geary_c(
         logger.warning("Geary's C failed: %s", e)
 
 
+# Panels in the curves figure. Past this the grid is taller than it is useful
+# and the per-panel legend stops being readable; the caption says it truncated.
+MAX_COOC_CURVE_PANELS = 12
+
+def pick_radius_bin(intervals, requested, median_nn=None, nn_multiple=5.0):
+    """Which radius bin a cluster-by-cluster matrix should be drawn at.
+
+    The bins are cumulative discs, so a matrix has to name one radius rather
+    than average them: the mean is dominated by the large-radius bins, where the
+    ratio has already decayed toward 1.0.
+
+    :param intervals: bin radii, ascending, one per data bin
+    :param requested: radius asked for in coord units, or <= 0 for the default
+    :param median_nn: median nearest-neighbour distance, or None
+    :param nn_multiple: default radius as a multiple of median_nn -- "about five
+        cell diameters", the near end of the profile, because the ratio decays
+        toward 1.0 as the disc grows
+    :return: (index, radius) of the chosen bin, or (None, None) if there are none
+    """
+    if intervals is None or len(intervals) == 0:
+        return None, None
+    radii = [float(v) for v in intervals]
+    if requested is not None and float(requested) > 0:
+        target = float(requested)
+    elif median_nn is not None and float(median_nn) > 0:
+        target = float(median_nn) * float(nn_multiple)
+    else:
+        idx = len(radii) // 2
+        return idx, radii[idx]
+    idx = min(range(len(radii)), key=lambda i: abs(radii[i] - target))
+    return idx, radii[idx]
+
+
 def radius_caption(intervals, coord_unit):
     """One line naming the radius bins a co-occurrence figure actually used.
 
@@ -1546,6 +1580,113 @@ def radius_caption(intervals, coord_unit):
     )
 
 
+def ratio_colour_scale(values, center=1.0):
+    """Colour mapping for a ratio whose null value is meaningful.
+
+    Co-occurrence is a ratio with a null of 1.0, so the colour scale has to put
+    the null in the middle: on a sequential map the eye cannot tell enrichment
+    from depletion, only "more" from "less". Returns a diverging map centred on
+    the null, and falls back to the sequential one when the data lies entirely on
+    one side of it (TwoSlopeNorm requires vmin < vcenter < vmax).
+
+    :param values: the array being drawn
+    :param center: the null value
+    :return: (cmap_name, norm or None)
+    """
+    try:
+        import numpy as _np
+        from matplotlib.colors import TwoSlopeNorm
+
+        finite = _np.asarray(values, dtype=float)
+        finite = finite[_np.isfinite(finite)]
+        if finite.size == 0:
+            return "viridis", None
+        vmin = float(finite.min())
+        vmax = float(finite.max())
+        if vmin < center < vmax:
+            return "RdBu_r", TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
+        return "viridis", None
+    except Exception:
+        return "viridis", None
+
+
+def _save_co_occurrence_curves(
+    plt, arr, intervals, cluster_names, coord_unit, plot_dir, plot_dpi
+):
+    """Score against distance, one panel per reference cluster.
+
+    This is how squidpy presents co-occurrence (`squidpy.pl.co_occurrence`, a
+    lineplot per cluster) and how its tutorials read it -- conclusions are quoted
+    at a distance, not as a single summary. Drawn here rather than by calling
+    squidpy's plotting function so the panel count, the figure size and the DPI
+    match the rest of QP-CAT's figures.
+
+    :param plt: the pyplot module (already configured for Agg)
+    :param arr: pairwise ratio tensor, (clusters x clusters x bins)
+    :param intervals: bin radii, one per bin
+    :param cluster_names: display names, index-aligned with arr
+    :param coord_unit: unit the radii carry
+    :param plot_dir: directory to write into
+    :param plot_dpi: output resolution
+    """
+    try:
+        if arr.ndim != 3 or not intervals or not cluster_names:
+            return
+        n = min(arr.shape[0], len(cluster_names))
+        shown = min(n, MAX_COOC_CURVE_PANELS)
+        if shown == 0:
+            return
+        ncols = min(3, shown)
+        nrows = int(math.ceil(shown / float(ncols)))
+        fig, axes = plt.subplots(
+            nrows,
+            ncols,
+            figsize=(4.2 * ncols, 3.2 * nrows),
+            squeeze=False,
+            sharex=True,
+        )
+        r = list(intervals)[: arr.shape[2]]
+        for pos in range(nrows * ncols):
+            ax = axes[pos // ncols][pos % ncols]
+            if pos >= shown:
+                ax.axis("off")
+                continue
+            for b in range(n):
+                ax.plot(
+                    r,
+                    arr[pos, b, : len(r)],
+                    linewidth=1.2,
+                    label=cluster_names[b],
+                )
+            # 1.0 is the null: the partner is as common near this cluster as it
+            # is anywhere. Without the line the eye has no reference.
+            ax.axhline(1.0, color="0.4", linestyle="--", linewidth=0.8)
+            ax.set_title("around %s" % cluster_names[pos], fontsize="small")
+            ax.set_xlabel("Radius (%s)" % coord_unit)
+            ax.set_ylabel("Ratio")
+            ax.tick_params(labelsize="small")
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(
+            handles,
+            labels,
+            loc="center left",
+            bbox_to_anchor=(1.0, 0.5),
+            fontsize="small",
+            title="Neighbour",
+        )
+        caption = "Co-occurrence vs distance (descriptive; 1.0 = no association)"
+        if shown < n:
+            caption += "\nfirst %d of %d clusters" % (shown, n)
+        fig.suptitle(caption)
+        fig.tight_layout()
+        out_path = os.path.join(plot_dir, PLOT_FILE_COOC_CURVES)
+        fig.savefig(out_path, dpi=int(plot_dpi), bbox_inches="tight")
+        plt.close(fig)
+        logger.info("Saved co-occurrence curves PNG: %s", out_path)
+    except Exception as e:
+        logger.warning("Co-occurrence curves plot failed: %s", e)
+
+
 def run_co_occurrence(
     adata,
     task,
@@ -1554,6 +1695,7 @@ def run_co_occurrence(
     min_radius=-1.0,
     max_radius=-1.0,
     n_intervals=50,
+    matrix_radius=-1.0,
     n_permutations=1000,
     spatial_data=None,
     plot_dir=None,
@@ -1594,6 +1736,7 @@ def run_co_occurrence(
     ):
         return
 
+    median_nn = None
     try:
         kwargs = {"cluster_key": cluster_key, "n_splits": 1}
         if (
@@ -1603,6 +1746,8 @@ def run_co_occurrence(
             and max_radius > 0
         ):
             kwargs["interval"] = np.linspace(min_radius, max_radius, int(n_intervals))
+            if spatial_data is not None:
+                median_nn = _median_nn_distance(np.asarray(spatial_data))
         elif spatial_data is not None and n_intervals > 0:
             # Auto-derive the interval from CELL DENSITY, not the bounding box. A
             # fixed fraction of the bbox diagonal degenerates on thin/elongated or
@@ -1613,6 +1758,7 @@ def run_co_occurrence(
             ymin, ymax = float(coords[:, 1].min()), float(coords[:, 1].max())
             diag = math.hypot(xmax - xmin, ymax - ymin)
             med_nn = _median_nn_distance(coords)
+            median_nn = med_nn
             if med_nn is not None and med_nn > 0:
                 # Span ~1 cell spacing up to ~20 spacings, never past half the ROI.
                 r_min = med_nn
@@ -1639,7 +1785,16 @@ def run_co_occurrence(
             return
 
         ratio_np = np.asarray(ratio, dtype=np.float64)
-        intervals_list = [float(v) for v in np.asarray(intervals).ravel()]
+        # squidpy returns one fewer bin than it was given interval points:
+        # _co_occurrence_helper sets l_val = len(interval) - 1 and squares
+        # interval[1:] for its thresholds, so bin i is the disc of radius
+        # interval[i+1]. Store THOSE radii, one per bin, so every consumer --
+        # the caption, the heatmap ticks, the results table, the CSV -- zips
+        # 1:1 with the data instead of each labelling a bin with the radius of
+        # the one before it and emitting a trailing all-NaN row.
+        edges = [float(v) for v in np.asarray(intervals).ravel()]
+        n_bins = int(ratio_np.shape[2]) if ratio_np.ndim == 3 else len(edges)
+        intervals_list = edges[1:] if len(edges) == n_bins + 1 else edges
 
         if mode == "oneVsRest":
             # Collapse axis 1: for each cluster A, ratio at "rest" = mean
@@ -1669,10 +1824,13 @@ def run_co_occurrence(
         }
         task.outputs[output_key] = json.dumps(payload)
         logger.info(
-            "Co-occurrence (%s) computed: %d clusters, %d intervals",
+            "Co-occurrence (%s) computed: %d clusters, %d radius bin(s) from %.1f to %.1f %s",
             payload["mode"],
             len(cluster_names),
             len(intervals_list),
+            intervals_list[0] if intervals_list else float("nan"),
+            intervals_list[-1] if intervals_list else float("nan"),
+            coord_unit,
         )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).
@@ -1698,11 +1856,15 @@ def run_co_occurrence(
                     if arr.ndim == 3 and arr.shape[1] == 1:
                         arr = arr[:, 0, :]
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    im = ax.imshow(arr, aspect="auto", cmap="viridis", origin="lower")
+                    cmap_name, norm = ratio_colour_scale(arr)
+                    im = ax.imshow(
+                        arr, aspect="auto", cmap=cmap_name, norm=norm, origin="lower"
+                    )
                     ax.set_yticks(np.arange(len(cluster_names)))
                     ax.set_yticklabels(cluster_names, fontsize="small")
-                    # Sparse x ticks at evenly spaced intervals (max ~10)
-                    n_iv = len(intervals_list)
+                    # Sparse x ticks at evenly spaced bins (max ~10). intervals_list
+                    # is now one radius per column, so tick i labels column i.
+                    n_iv = min(len(intervals_list), arr.shape[1])
                     step = max(1, n_iv // 10)
                     x_ticks = np.arange(0, n_iv, step)
                     ax.set_xticks(x_ticks)
@@ -1721,17 +1883,27 @@ def run_co_occurrence(
                     fig.colorbar(im, ax=ax, label="Ratio")
                     out_name = PLOT_FILE_COOC_ONE_VS_REST
                 else:
-                    # Pairwise: average across the radius axis to get a
-                    # (n_clusters x n_clusters) square heatmap. The full
-                    # per-radius tensor remains in the JSON output for
-                    # interactive viewing.
+                    # Pairwise: a square heatmap AT ONE RADIUS, not averaged over
+                    # them. The bins are cumulative discs, so a mean is dominated
+                    # by the large-radius bins where the ratio has already decayed
+                    # toward 1.0 -- measured on synthetic tissue, a short-range
+                    # ratio of 1.75 averaged to 1.13. A named radius is also the
+                    # form a published co-occurrence value takes ("within 30 um"),
+                    # so it can be compared. The full per-radius tensor stays in
+                    # the JSON for the table.
                     arr = np.asarray(data_list, dtype=np.float64)
-                    if arr.ndim == 3:
-                        heat = arr.mean(axis=2)
+                    bin_idx, bin_r = pick_radius_bin(
+                        intervals_list, matrix_radius, median_nn
+                    )
+                    if arr.ndim == 3 and bin_idx is not None:
+                        heat = arr[:, :, bin_idx]
                     else:
                         heat = arr
                     fig, ax = plt.subplots(figsize=(8, 7))
-                    im = ax.imshow(heat, aspect="equal", cmap="viridis", origin="lower")
+                    cmap_name, norm = ratio_colour_scale(heat)
+                    im = ax.imshow(
+                        heat, aspect="equal", cmap=cmap_name, norm=norm, origin="lower"
+                    )
                     ax.set_xticks(np.arange(len(cluster_names)))
                     ax.set_yticks(np.arange(len(cluster_names)))
                     ax.set_xticklabels(
@@ -1740,12 +1912,20 @@ def run_co_occurrence(
                     ax.set_yticklabels(cluster_names, fontsize="small")
                     ax.set_xlabel("Cluster B")
                     ax.set_ylabel("Cluster A")
-                    ax.set_title(
-                        "Co-occurrence (pairwise, descriptive): "
-                        "MEAN over every radius bin\n%s"
-                        % radius_caption(intervals_list, coord_unit)
-                    )
-                    fig.colorbar(im, ax=ax, label="Mean ratio")
+                    if bin_idx is None:
+                        ax.set_title("Co-occurrence (pairwise, descriptive)")
+                    else:
+                        ax.set_title(
+                            "Co-occurrence (pairwise, descriptive)\n"
+                            "within r = %.1f %s  (bin %d of %d; 1.0 = no association)"
+                            % (
+                                bin_r,
+                                coord_unit,
+                                bin_idx + 1,
+                                len(intervals_list),
+                            )
+                        )
+                    fig.colorbar(im, ax=ax, label="Ratio at r")
                     out_name = PLOT_FILE_COOC_PAIRWISE
 
                 out_path = os.path.join(plot_dir, out_name)
@@ -1754,6 +1934,17 @@ def run_co_occurrence(
                 logger.info(
                     "Saved co-occurrence (%s) PNG: %s", payload["mode"], out_path
                 )
+
+                if mode != "oneVsRest":
+                    _save_co_occurrence_curves(
+                        plt,
+                        np.asarray(data_list, dtype=np.float64),
+                        intervals_list,
+                        cluster_names,
+                        coord_unit,
+                        plot_dir,
+                        plot_dpi,
+                    )
             except Exception as e:
                 logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
     except Exception as e:

@@ -304,9 +304,15 @@ says which.
 | View | Rows / cells | Radius |
 |---|---|---|
 | Co-occurrence (pairwise) **table** | one column per ordered cluster pair | one row **per radius bin** |
-| `co_occurrence_pairwise.png` **figure** | cluster x cluster heatmap | **mean over every radius bin** |
+| `co_occurrence_pairwise.png` **figure** | cluster x cluster heatmap | **one named radius** |
+| `co_occurrence_curves.png` **figure** | one panel per cluster, one line per partner | per radius bin |
 | Co-occurrence (one vs rest) **table** | one column per cluster | one row **per radius bin** |
 | `co_occurrence_one_vs_rest.png` **figure** | cluster x radius heatmap | per radius bin |
+
+The **curves** figure is the one to read a conclusion off: it is the presentation
+`squidpy.pl.co_occurrence` uses and the one its tutorials interpret, and a conclusion
+from this statistic is always quoted *at a distance*. The **matrix** is the overview at
+a single radius, which its title names.
 
 **The bins are cumulative discs, not rings.** squidpy counts every pair within
 distance r (`d2 <= thresholds[r]`), so bin 30 contains everything bins 1-29 counted.
@@ -317,18 +323,23 @@ Two consequences:
   ring of depletion just outside a cluster cannot appear as a dip below 1 -- the
   short-range enrichment is still inside the count. If you need ring-shaped structure,
   that is Ripley's L, not this.
-- **The mean over bins is a shrunken short-range signal, not an average of independent
-  scales.** Measured on a synthetic tissue where one partner was tightly wrapped around
-  the reference type: short-range ratio **1.75**, mean over the 50 auto-chosen bins
-  **1.13** -- about 18% of the excess over 1 retained. With the auto interval, only
-  about **4% of the bins sit at or below twice the median nearest-neighbour distance**,
-  so the mean is dominated by radii of 2 to 20 cell spacings.
+- **Averaging over the bins is therefore not an average of independent scales**, and QP-CAT
+  no longer does it. Measured on a synthetic tissue where one partner was tightly wrapped
+  around the reference type: short-range ratio **1.75**, mean over the 50 auto-chosen bins
+  **1.13** -- about 18% of the excess over 1 retained. With the auto interval only about
+  **4% of the bins sit at or below twice the median nearest-neighbour distance**, so a mean
+  is dominated by radii of 2 to 20 cell spacings. The matrix is drawn **at one radius**
+  instead, named in its title.
 
-So read the pairwise **figure** as a *screen* and the **table** as the number. On the
-same synthetic test the figure ranked five partners of graded association in the correct
-order, so it is useful for spotting which pairs deserve a look; its absolute values are
-not comparable with a published co-occurrence ratio, which is always quoted at a
-distance.
+**Which radius the matrix uses.** *Spatial statistics > Matrix radius* in Run Clustering,
+in the image's units. Left at **0** it picks about five median nearest-neighbour distances
+-- the near end of the profile, where the ratio still discriminates. The figure title
+always states the radius and bin it used, so the number can be quoted the way a published
+co-occurrence value is.
+
+**The first bins are noisy.** Few pairs fall inside the smallest discs, so the leftmost
+points of a curve can swing widely on small counts. Judge a curve by its shape over
+several bins, not by its first point.
 
 **The ratio is compositional.** `p(exp|cond)` is the share of a neighbourhood made up of
 the partner type, so enriching some partners necessarily dilutes the others. In the same
@@ -345,10 +356,12 @@ squidpy's API or examples. The conventional cluster-by-cluster *matrix* in this 
 also computes and shows in its own tab. If what you want is a square matrix to read
 associations off, that tab is the one with an established interpretation.
 
-**Choosing radii yourself.** Set Min and Max radius when you have a distance scale in
-mind (20 um for cell-contact-level questions, 50-100 um for niche-level). The bin count
-stays 50 unless you change it. Keep the range inside the tissue: bins wider than the
-area contain few pairs and the ratio becomes noisy.
+**Choosing the radius range itself** (as opposed to which radius the matrix shows) is
+available from the [scripting API](scripting.md#spatialstatsscripts), not the dialog:
+`SpatialStatsScripts.coOccurrence` takes `minRadius`, `maxRadius` and `nIntervals`. Pick a
+range with a distance scale in mind -- 20 um for cell-contact-level questions, 50-100 um
+for niche-level -- and keep it inside the tissue, since bins wider than the area contain
+few pairs.
 
 See [Spatial statistics](spatial-statistics.md#when-to-use-each-statistic) for when to
 reach for co-occurrence rather than neighbourhood enrichment or Ripley's L.

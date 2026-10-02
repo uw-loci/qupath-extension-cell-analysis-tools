@@ -312,6 +312,10 @@ try:
 except NameError:
     pref_enable_co_occurrence_pairwise = False
 try:
+    pref_cooc_matrix_radius = float(cooc_matrix_radius)
+except NameError:
+    pref_cooc_matrix_radius = -1.0
+try:
     pref_enable_co_occurrence_one_vs_rest = enable_co_occurrence_one_vs_rest
 except NameError:
     pref_enable_co_occurrence_one_vs_rest = False
@@ -2139,6 +2143,7 @@ if has_spatial and n_clusters_found > 1:
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
                 persist_plots=_spatial_persist,
+                matrix_radius=pref_cooc_matrix_radius,
             )
         if _spatial_persist and not _per_area_stats:
             _cooc_p_path = os.path.join(
@@ -2146,6 +2151,12 @@ if has_spatial and n_clusters_found > 1:
             )
             if os.path.exists(_cooc_p_path):
                 plot_paths["cooc_pairwise"] = _cooc_p_path
+            # Same statistic, squidpy's own presentation: score vs distance.
+            _cooc_c_path = os.path.join(
+                _spatial_plot_dir, _qpcat_spatial.PLOT_FILE_COOC_CURVES
+            )
+            if os.path.exists(_cooc_c_path):
+                plot_paths["cooc_curves"] = _cooc_c_path
 
     if pref_enable_co_occurrence_one_vs_rest:
         _progress(0.97, "Computing co-occurrence, one-vs-rest (%d cells)..." % n_cells)
