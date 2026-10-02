@@ -159,6 +159,7 @@ Stages co-occurrence as a function of radius.
 | `minRadius` | double | -1 (auto) | Smallest r (pixel units). |
 | `maxRadius` | double | -1 (auto) | Largest r (pixel units). |
 | `nIntervals` | int | 50 | Number of radius bins. |
+| `matrixRadius` | double | -1 (auto) | (Pairwise only) Radius at which to draw the cluster x cluster heatmap figure. -1 = auto: about five median nearest-neighbour distances. Affects the figure only; the table and curves keep every bin. |
 | `persistPlots` | boolean | true | Also write `co_occurrence_pairwise.png` or `co_occurrence_one_vs_rest.png` (per `mode`) to the per-result plot directory. |
 
 **Example:**

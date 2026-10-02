@@ -98,7 +98,7 @@ The selector is intentionally mandatory in v1 -- batch export across a 50+ image
 Not every plot exists for every image / clustering result. The dialog shows this honestly:
 
 - **Saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter) -- written to disk when `Run Clustering` completes and persisted with the project. These export with or without the results dialog open.
-- **Spatial-stats plots** (Ripley L, Geary's C, co-occurrence pairwise / one-vs-rest) -- saved with the result when the spatial statistics ran. If they weren't, the rows in the plot list show as missing for that image.
+- **Spatial-stats plots** (Ripley L, Geary's C, co-occurrence pairwise / one-vs-rest / curves) -- saved with the result when the spatial statistics ran. If they weren't, the rows in the plot list show as missing for that image.
 - **Cluster composition** (composition pies by image / by annotation, and the matching CSV tables) -- **always available**, because QP-CAT draws them from the saved result itself rather than reading a PNG the run happened to write. They need no open image, no results dialog, and no plotting options ticked at run time. The two "by annotation" kinds need a result that was clustered on annotation input; they are off by default for that reason. See [Exporting the composition figures](#exporting-the-composition-figures) below.
 - **Live JavaFX plots** (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) -- only exportable when the results dialog is open for that image. Default off in the checklist for v1; flip on if you have the right dialog open.
 

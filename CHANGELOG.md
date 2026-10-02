@@ -43,6 +43,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   capped at 12 panels, and the caption says so when it truncates.
 - `ClusteringConfig.coOccurrenceMatrixRadius`, so the chosen radius round-trips through saved
   configs and `RUN_INFO.txt` like every other parameter.
+- The curves figure is registered in `PlotKind`, so **Batch Figure Export** writes it
+  alongside the other spatial-stats PNGs.
 
 ### Worth knowing
 

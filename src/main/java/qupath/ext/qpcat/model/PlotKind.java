@@ -38,6 +38,7 @@ public enum PlotKind {
     GEARY_C("geary_c", "Geary C", Source.MATPLOTLIB, true, "geary_c"),
     COOC_PAIRWISE("cooc_pairwise", "Co-occurrence (pairwise)", Source.MATPLOTLIB, true, "cooc_pairwise"),
     COOC_ONE_VS_REST("cooc_one_vs_rest", "Co-occurrence (one vs rest)", Source.MATPLOTLIB, true, "cooc_one_vs_rest"),
+    COOC_CURVES("cooc_curves", "Co-occurrence (curves)", Source.MATPLOTLIB, true, "cooc_curves"),
 
     // ---- Cluster composition, rendered in Java from the saved result ----
     // Everything these need (per-cell cluster labels, per-cell image ids/names,
