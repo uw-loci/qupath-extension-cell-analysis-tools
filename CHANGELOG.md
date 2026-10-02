@@ -4,6 +4,35 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.18.1] -- 2026-10-02 -- a gate now belongs to the data, not to the window
+
+### Fixed
+
+- **A gate drifted away from its points as soon as you zoomed or panned the 2D scatter.**
+  Gate vertices in `EmbeddingScatterPanel` were stored as canvas pixels, so scrolling to zoom
+  or middle-dragging to pan moved every point while the outline stayed nailed to the window.
+  Vertices are now held in **data coordinates** and projected at paint time, which is what the
+  committed gate outlines already did, so a gate stays around the cells it encloses through
+  zoom, pan and window resize. Three consequences of the old storage, worst first:
+  - **Adding vertices after a zoom mixed two coordinate frames.** The earlier vertices meant
+    their old screen positions, which now pointed at different cells, so closing the polygon
+    selected a region nobody had drawn. The same applied to resizing the window mid-polygon.
+    You can now sketch a rough gate, zoom in, and keep adding vertices.
+  - **"Assign class..." could file the labelled outline in the wrong place.** The outline was
+    converted to data coordinates at commit time, so zooming between closing a gate and
+    naming it left "Gate 1" drawn around cells that were never in Gate 1.
+  - **The outline no longer matched the highlight.** The cell count and the cells that got
+    classified were always correct -- `gatedMask` is stored per cell index and computed once
+    when the polygon closes -- so this part was cosmetic, but it made a correct selection look
+    broken.
+  The membership test now runs in data space against the data coordinates directly, so no view
+  transform takes part in deciding which cells are gated. `PlotTransform` holds the one
+  definition of the data-to-pixel mapping, replacing the six copies of that arithmetic the
+  panel had grown.
+- **New scatter data no longer leaves a stale gate behind.** `setData` dropped neither the
+  active gate nor the committed outlines, so a `gatedMask` sized to the previous cell count
+  would have been indexed against the new one.
+
 ## [0.18.0] -- 2026-10-01 -- plots you can zoom into, and two labels that were not true
 
 ### Fixed

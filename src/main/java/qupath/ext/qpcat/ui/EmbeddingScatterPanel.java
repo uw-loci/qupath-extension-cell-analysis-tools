@@ -144,11 +144,13 @@ public class EmbeddingScatterPanel extends VBox {
     private double dragViewMinX, dragViewMinY;
     private boolean dragging = false;
 
-    // Polygon gating. In gate mode, left-clicks add polygon vertices (canvas
-    // pixels); double-click / right-click closes it and computes the enclosed
-    // cells. Pan (middle-drag) and zoom still work while gating.
+    // Polygon gating. In gate mode, left-clicks add polygon vertices; double-click
+    // / right-click closes it and computes the enclosed cells. Pan (middle-drag)
+    // and zoom still work while gating, and the gate tracks them because every
+    // vertex is stored in DATA coordinates, not canvas pixels -- a gate drawn
+    // around a group of points stays around those points.
     private boolean gateMode = false;
-    private final List<double[]> gatePolygon = new ArrayList<>();  // screen-space vertices
+    private final List<double[]> gatePolygon = new ArrayList<>();  // data-space vertices
     private boolean gateClosed = false;
     private boolean[] gatedMask;                                    // per-cell, nCells
     private int gatedCount = 0;
@@ -156,7 +158,7 @@ public class EmbeddingScatterPanel extends VBox {
     // Committed gates: previously drawn-and-labelled polygons kept visible on the
     // plot (in DATA coords so they survive zoom/pan) so you can annotate many
     // populations without losing track of where earlier gates were.
-    private final List<double[][]> committedPolys = new ArrayList<>();
+    private final List<List<double[]>> committedPolys = new ArrayList<>();
     private final List<String> committedLabels = new ArrayList<>();
     private static final Color[] COMMITTED_COLORS = {
             Color.rgb(200, 30, 30), Color.rgb(30, 120, 200), Color.rgb(30, 150, 70),
@@ -348,6 +350,11 @@ public class EmbeddingScatterPanel extends VBox {
         this.nCells = embedding.length;
         this.embeddingName = embeddingName;
 
+        // Gates belong to the data they were drawn on: a stale gatedMask is also
+        // the wrong length for the new cell count. No repaint here -- drawOrder
+        // and the data bounds below still describe the previous data.
+        resetAllGates();
+
         drawOrder = buildDrawOrder();
 
         String pretty = prettyEmbeddingName(embeddingName);
@@ -402,6 +409,63 @@ public class EmbeddingScatterPanel extends VBox {
         }
     }
 
+    /**
+     * Affine data -&gt; canvas pixel mapping for the current view, plus its inverse.
+     * Rebuilt per interaction, so anything held in data coordinates (the points, a
+     * gate polygon) lands in the same place after a zoom, a pan or a window resize.
+     */
+    static final class PlotTransform {
+        final double offX, scaleX, offY, scaleY;
+        final double rangeX, rangeY;
+
+        PlotTransform(double canvasW, double canvasH,
+                      double viewMinX, double viewMaxX, double viewMinY, double viewMaxY) {
+            double plotW = Math.max(1, canvasW - 2 * MARGIN);
+            double plotH = Math.max(1, canvasH - 2 * MARGIN);
+            double rx = viewMaxX - viewMinX;
+            double ry = viewMaxY - viewMinY;
+            rangeX = rx == 0 ? 1 : rx;
+            rangeY = ry == 0 ? 1 : ry;
+            scaleX = plotW / rangeX;
+            scaleY = plotH / rangeY;
+            offX = MARGIN - viewMinX * scaleX;
+            offY = MARGIN - viewMinY * scaleY;
+        }
+
+        double screenX(double dataX) {
+            return offX + dataX * scaleX;
+        }
+
+        double screenY(double dataY) {
+            return offY + dataY * scaleY;
+        }
+
+        double dataX(double screenX) {
+            return (screenX - offX) / scaleX;
+        }
+
+        double dataY(double screenY) {
+            return (screenY - offY) / scaleY;
+        }
+    }
+
+    private PlotTransform transform() {
+        return new PlotTransform(canvas.getWidth(), canvas.getHeight(),
+                viewMinX, viewMaxX, viewMinY, viewMaxY);
+    }
+
+    /** Project data-space polygon vertices to canvas pixels, as {xs, ys}. */
+    private static double[][] toScreen(List<double[]> dataPoly, PlotTransform t) {
+        int n = dataPoly.size();
+        double[] xs = new double[n];
+        double[] ys = new double[n];
+        for (int i = 0; i < n; i++) {
+            xs[i] = t.screenX(dataPoly.get(i)[0]);
+            ys[i] = t.screenY(dataPoly.get(i)[1]);
+        }
+        return new double[][]{xs, ys};
+    }
+
     /** Reset zoom/pan to show all data. */
     public void resetView() {
         viewMinX = dataMinX;
@@ -431,10 +495,7 @@ public class EmbeddingScatterPanel extends VBox {
 
         double plotW = cw - 2 * MARGIN;
         double plotH = ch - 2 * MARGIN;
-        double rangeX = viewMaxX - viewMinX;
-        double rangeY = viewMaxY - viewMinY;
-        if (rangeX == 0) rangeX = 1;
-        if (rangeY == 0) rangeY = 1;
+        PlotTransform t = transform();
 
         // Draw points. When a gate is active, dim cells outside it and emphasize
         // the gated ones so the selection reads clearly.
@@ -455,13 +516,20 @@ public class EmbeddingScatterPanel extends VBox {
         // share), and fall back to every point once the user has zoomed in far
         // enough that the sample would look sparse. drawOrder is null below the
         // threshold, in which case this is the original all-points loop.
-        int[] order = currentDrawOrder(rangeX, rangeY);
+        int[] order = currentDrawOrder(t.rangeX, t.rangeY);
         int drawn = order != null ? order.length : nCells;
+
+        // Hoist the transform into locals: this loop runs once per drawn point per
+        // repaint, so the mapping has to be a multiply-add and nothing else.
+        final double offX = t.offX;
+        final double offY = t.offY;
+        final double scaleX = t.scaleX;
+        final double scaleY = t.scaleY;
 
         for (int k = 0; k < drawn; k++) {
             int i = order != null ? order[k] : k;
-            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
-            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
+            double px = offX + embedding[i][0] * scaleX;
+            double py = offY + embedding[i][1] * scaleY;
 
             // Skip points outside canvas
             if (px < MARGIN - r || px > cw - MARGIN + r
@@ -478,8 +546,8 @@ public class EmbeddingScatterPanel extends VBox {
 
         // Selection ring around the clicked point
         if (selectedIndex >= 0 && selectedIndex < nCells) {
-            double sx = MARGIN + ((embedding[selectedIndex][0] - viewMinX) / rangeX) * plotW;
-            double sy = MARGIN + ((embedding[selectedIndex][1] - viewMinY) / rangeY) * plotH;
+            double sx = t.screenX(embedding[selectedIndex][0]);
+            double sy = t.screenY(embedding[selectedIndex][1]);
             if (sx >= MARGIN && sx <= cw - MARGIN && sy >= MARGIN && sy <= ch - MARGIN) {
                 gc.setStroke(Color.BLACK);
                 gc.setLineWidth(2);
@@ -487,50 +555,43 @@ public class EmbeddingScatterPanel extends VBox {
             }
         }
 
-        // Gate polygon (in-progress or closed)
+        // Gate polygon (in-progress or closed), reprojected from data space so it
+        // stays on the points it encloses through zoom, pan and resize.
         if (!gatePolygon.isEmpty()) {
+            int n = gatePolygon.size();
+            double[][] p = toScreen(gatePolygon, t);
+            double[] xs = p[0];
+            double[] ys = p[1];
             gc.setStroke(Color.rgb(20, 20, 20, 0.9));
             gc.setLineWidth(1.5);
-            int n = gatePolygon.size();
             for (int i = 0; i < n - 1; i++) {
-                double[] a = gatePolygon.get(i);
-                double[] b = gatePolygon.get(i + 1);
-                gc.strokeLine(a[0], a[1], b[0], b[1]);
+                gc.strokeLine(xs[i], ys[i], xs[i + 1], ys[i + 1]);
             }
             if (gateClosed && n >= 3) {
-                double[] first = gatePolygon.get(0);
-                double[] last = gatePolygon.get(n - 1);
-                gc.strokeLine(last[0], last[1], first[0], first[1]);
+                gc.strokeLine(xs[n - 1], ys[n - 1], xs[0], ys[0]);
                 gc.setFill(Color.rgb(30, 90, 200, 0.10));
-                double[] xs = new double[n];
-                double[] ys = new double[n];
-                for (int i = 0; i < n; i++) {
-                    xs[i] = gatePolygon.get(i)[0];
-                    ys[i] = gatePolygon.get(i)[1];
-                }
                 gc.fillPolygon(xs, ys, n);
             }
             gc.setFill(Color.rgb(20, 20, 20, 0.9));
-            for (double[] v : gatePolygon) {
-                gc.fillOval(v[0] - 2.5, v[1] - 2.5, 5, 5);
+            for (int i = 0; i < n; i++) {
+                gc.fillOval(xs[i] - 2.5, ys[i] - 2.5, 5, 5);
             }
         }
 
-        // Committed gates -- prior labelled selections, reprojected from data
-        // space so they track zoom/pan. Drawn as thin colored outlines + label.
+        // Committed gates -- prior labelled selections, same projection.
+        // Drawn as thin colored outlines + label.
         for (int gi = 0; gi < committedPolys.size(); gi++) {
-            double[][] dp = committedPolys.get(gi);
-            int m = dp.length;
+            List<double[]> dp = committedPolys.get(gi);
+            int m = dp.size();
             if (m < 2) continue;
             Color col = COMMITTED_COLORS[gi % COMMITTED_COLORS.length];
             gc.setStroke(col);
             gc.setLineWidth(1.5);
-            double[] sx = new double[m];
-            double[] sy = new double[m];
+            double[][] p = toScreen(dp, t);
+            double[] sx = p[0];
+            double[] sy = p[1];
             double cx = 0, cy = 0;
             for (int i = 0; i < m; i++) {
-                sx[i] = MARGIN + ((dp[i][0] - viewMinX) / rangeX) * plotW;
-                sy[i] = MARGIN + ((dp[i][1] - viewMinY) / rangeY) * plotH;
                 cx += sx[i];
                 cy += sy[i];
             }
@@ -919,20 +980,13 @@ public class EmbeddingScatterPanel extends VBox {
     /** Nearest plotted point to a canvas pixel, within a 5px radius; -1 if none. */
     private int findNearestPointIndex(double mouseX, double mouseY) {
         if (embedding == null) return -1;
-        double cw = canvas.getWidth();
-        double ch = canvas.getHeight();
-        double plotW = cw - 2 * MARGIN;
-        double plotH = ch - 2 * MARGIN;
-        double rangeX = viewMaxX - viewMinX;
-        double rangeY = viewMaxY - viewMinY;
-        if (rangeX == 0) rangeX = 1;
-        if (rangeY == 0) rangeY = 1;
+        PlotTransform t = transform();
 
         double bestDist = 25; // 5px squared
         int bestIdx = -1;
         for (int i = 0; i < nCells; i++) {
-            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
-            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
+            double px = t.screenX(embedding[i][0]);
+            double py = t.screenY(embedding[i][1]);
             double dist = (px - mouseX) * (px - mouseX) + (py - mouseY) * (py - mouseY);
             if (dist < bestDist) {
                 bestDist = dist;
@@ -958,7 +1012,8 @@ public class EmbeddingScatterPanel extends VBox {
                     gatePolygon.clear();
                     gateClosed = false;
                 }
-                gatePolygon.add(new double[]{e.getX(), e.getY()});
+                PlotTransform t = transform();
+                gatePolygon.add(new double[]{t.dataX(e.getX()), t.dataY(e.getY())});
                 if (e.getClickCount() >= 2) {
                     finalizeGate();          // the pair's first click added the closing vertex
                 } else {
@@ -1040,7 +1095,8 @@ public class EmbeddingScatterPanel extends VBox {
             canvas.requestFocus();
         }
         helpLabel.setText(on
-                ? "Gate: click to add points, double-click (or right-click) to close, Esc to cancel"
+                ? "Gate: click to add points, double-click (or right-click) to close, "
+                  + "Esc to cancel  -  scroll/middle-drag still zoom and pan"
                 : (cellRefs != null && qupath != null
                     ? "Scroll to zoom  -  middle-drag to pan  -  click a point to center + select its cell"
                     : "Scroll to zoom  -  drag to pan"));
@@ -1074,42 +1130,37 @@ public class EmbeddingScatterPanel extends VBox {
 
     /** Clear the active gate polygon and highlight (committed gates remain). */
     public void clearGate() {
-        gatePolygon.clear();
-        gateClosed = false;
-        gatedMask = null;
-        gatedCount = 0;
+        resetActiveGate();
         redraw();
     }
 
-    /**
-     * Commit the active gate as a persistent, labelled outline (kept in data
-     * coordinates so it tracks zoom/pan) and reset the active gate so the next
-     * one can be drawn. Used to annotate many populations in turn without losing
-     * track of earlier gates. No-op if no closed gate is active.
-     */
-    public void commitCurrentGate(String label) {
-        if (gatePolygon.size() < 3) return;
-        double cw = canvas.getWidth();
-        double ch = canvas.getHeight();
-        double plotW = cw - 2 * MARGIN;
-        double plotH = ch - 2 * MARGIN;
-        double rangeX = viewMaxX - viewMinX;
-        double rangeY = viewMaxY - viewMinY;
-        if (rangeX == 0) rangeX = 1;
-        if (rangeY == 0) rangeY = 1;
-        double[][] data = new double[gatePolygon.size()][2];
-        for (int i = 0; i < gatePolygon.size(); i++) {
-            double[] s = gatePolygon.get(i);
-            data[i][0] = viewMinX + (s[0] - MARGIN) / plotW * rangeX;
-            data[i][1] = viewMinY + (s[1] - MARGIN) / plotH * rangeY;
-        }
-        committedPolys.add(data);
-        committedLabels.add(label == null ? ("gate " + committedPolys.size()) : label);
-        // Reset the active gate (stay in gate mode for the next selection).
+    /** Drop the gate being drawn and its highlight, without repainting. */
+    private void resetActiveGate() {
         gatePolygon.clear();
         gateClosed = false;
         gatedMask = null;
         gatedCount = 0;
+    }
+
+    /** Drop every gate, active and committed, without repainting. */
+    private void resetAllGates() {
+        committedPolys.clear();
+        committedLabels.clear();
+        resetActiveGate();
+    }
+
+    /**
+     * Commit the active gate as a persistent, labelled outline and reset the
+     * active gate so the next one can be drawn. Used to annotate many populations
+     * in turn without losing track of earlier gates. No-op if no closed gate is
+     * active.
+     */
+    public void commitCurrentGate(String label) {
+        if (gatePolygon.size() < 3) return;
+        committedPolys.add(new ArrayList<>(gatePolygon));
+        committedLabels.add(label == null ? ("gate " + committedPolys.size()) : label);
+        // Reset the active gate (stay in gate mode for the next selection).
+        resetActiveGate();
         redraw();
     }
 
@@ -1120,9 +1171,8 @@ public class EmbeddingScatterPanel extends VBox {
 
     /** Remove all committed gate outlines and the active gate. */
     public void clearAllGates() {
-        committedPolys.clear();
-        committedLabels.clear();
-        clearGate();
+        resetAllGates();
+        redraw();
     }
 
     /** Toggle visible + managed together so hidden nodes reclaim layout space. */
@@ -1137,22 +1187,12 @@ public class EmbeddingScatterPanel extends VBox {
             return;
         }
         gateClosed = true;
-        double cw = canvas.getWidth();
-        double ch = canvas.getHeight();
-        double plotW = cw - 2 * MARGIN;
-        double plotH = ch - 2 * MARGIN;
-        double rangeX = viewMaxX - viewMinX;
-        double rangeY = viewMaxY - viewMinY;
-        if (rangeX == 0) rangeX = 1;
-        if (rangeY == 0) rangeY = 1;
-
         gatedMask = new boolean[nCells];
         gatedCount = 0;
-        // Test each cell's on-screen position against the screen-space polygon.
+        // Both the polygon and the coordinates are in data space, so no view
+        // transform is involved and the answer cannot depend on the zoom.
         for (int i = 0; i < nCells; i++) {
-            double px = MARGIN + ((embedding[i][0] - viewMinX) / rangeX) * plotW;
-            double py = MARGIN + ((embedding[i][1] - viewMinY) / rangeY) * plotH;
-            if (pointInPolygon(px, py)) {
+            if (pointInPolygon(gatePolygon, embedding[i][0], embedding[i][1])) {
                 gatedMask[i] = true;
                 gatedCount++;
             }
@@ -1163,13 +1203,22 @@ public class EmbeddingScatterPanel extends VBox {
         }
     }
 
-    /** Ray-casting point-in-polygon test against {@link #gatePolygon} (screen space). */
-    private boolean pointInPolygon(double x, double y) {
+    /**
+     * Ray-casting point-in-polygon test. Both the polygon and the point are in the
+     * same coordinate space; gating uses data space, so the answer does not depend
+     * on the current zoom, pan or canvas size.
+     *
+     * @param poly polygon vertices, implicitly closed
+     * @param x    point x
+     * @param y    point y
+     * @return true when the point lies inside the polygon
+     */
+    static boolean pointInPolygon(List<double[]> poly, double x, double y) {
         boolean inside = false;
-        int n = gatePolygon.size();
+        int n = poly.size();
         for (int i = 0, j = n - 1; i < n; j = i++) {
-            double xi = gatePolygon.get(i)[0], yi = gatePolygon.get(i)[1];
-            double xj = gatePolygon.get(j)[0], yj = gatePolygon.get(j)[1];
+            double xi = poly.get(i)[0], yi = poly.get(i)[1];
+            double xj = poly.get(j)[0], yj = poly.get(j)[1];
             boolean intersect = ((yi > y) != (yj > y))
                     && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
             if (intersect) inside = !inside;

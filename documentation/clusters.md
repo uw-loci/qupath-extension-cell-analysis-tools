@@ -338,7 +338,10 @@ survives reload.
    - **Assign class...** -- type a name (default "Gate 1") and it is applied to
      **all** gated cells across **every** image they came from, saving each. The
      cells take that classification (coloring them in QuPath) and it persists.
-5. **Clear** removes the gate to start another.
+5. **Clear** removes the gate you are drawing so you can start another.
+   **Assign class...** also leaves the gate behind as a labelled coloured
+   outline, so you can work through several populations in turn and still see
+   where the earlier ones were; **Clear all** removes those outlines.
 
 > Assigning a class **overwrites** the gated cells' current classification (a
 > detection has one class). Gate on a copy or note the original classes first if
@@ -353,6 +356,10 @@ survives reload.
   images in the plot. Choose by whether you want a transient look or a saved
   population.
 - The standalone tool reads existing coordinates only -- it never runs Python.
+- A gate is anchored to the plot's own coordinates, not to the window, so
+  scrolling to zoom, middle-dragging to pan or resizing the window moves the
+  outline with the points it encloses. You can draw a rough gate, zoom in and
+  keep adding vertices.
 
 ---
 ## Applying a saved result to detections
