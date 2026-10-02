@@ -21,6 +21,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementExtractor;
@@ -28,7 +29,6 @@ import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -402,8 +402,7 @@ public class PlotAndGateDialog {
             xy.add(new double[]{vx.doubleValue(), vy.doubleValue()});
             double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
             refs.add(new CellRef(imageId, imageName, roi.getCentroidX(), roi.getCentroidY(), half));
-            PathClass pc = det.getPathClass();
-            classOf.add((pc == null || pc == PathClass.getNullClass()) ? "Unclassified" : pc.toString());
+            classOf.add(CellClasses.displayNameOf(det));
         }
         return examined;
     }

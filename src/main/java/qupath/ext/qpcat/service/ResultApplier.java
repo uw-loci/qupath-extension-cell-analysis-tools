@@ -199,9 +199,9 @@ public class ResultApplier {
             return names;
         }
         for (PathObject det : detections) {
-            PathClass pc = det.getPathClass();
-            if (pc != null && pc != PathClass.getNullClass()) {
-                names.add(pc.toString());
+            String name = CellClasses.nameOf(det);
+            if (name != null) {
+                names.add(name);
             }
         }
         return names;

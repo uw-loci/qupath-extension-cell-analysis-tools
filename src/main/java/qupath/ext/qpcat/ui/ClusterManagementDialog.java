@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.ext.qpcat.service.ImageDataResources;
@@ -676,6 +677,15 @@ public class ClusterManagementDialog {
         rows.addAll(byName.values());
     }
 
+    /**
+     * Row label for cells with no classification, which doubles as the sentinel
+     * meaning "clear the class" in {@link #relabelOne}. Parenthesised so it cannot
+     * collide with a real class: QuPath calls the absence of a class
+     * "Unclassified" too, so an unparenthesised sentinel would make merging into
+     * this row create a genuine PathClass of that name instead of clearing it.
+     */
+    private static final String UNCLASSIFIED_ROW = "(Unclassified)";
+
     private void loadManualClusters() {
         applyButton.setDisable(false);
         ImageData<BufferedImage> imageData = qupath.getImageData();
@@ -684,8 +694,8 @@ public class ClusterManagementDialog {
             return;
         }
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            PathClass pc = det.getPathClass();
-            String name = pc != null ? pc.toString() : "(Unclassified)";
+            String name = CellClasses.isUnclassified(det)
+                    ? UNCLASSIFIED_ROW : det.getPathClass().toString();
             manualCount.merge(name, 1, Integer::sum);
             workingManual.putIfAbsent(name, name);
         }
@@ -1203,20 +1213,20 @@ public class ClusterManagementDialog {
                            Map<String, Integer> nameToIndex, String imageId) {
         int changed = 0;
         for (PathObject det : data.getHierarchy().getDetectionObjects()) {
-            PathClass pc = det.getPathClass();
-            String orig = pc != null ? pc.toString() : "(Unclassified)";
+            String orig = CellClasses.isUnclassified(det)
+                    ? UNCLASSIFIED_ROW : det.getPathClass().toString();
             String finalName = renames.getOrDefault(orig, orig);
             if (!finalName.equals(orig)) {
                 // resetPathClass() for the unclassified case -- setPathClass(null
                 // class) draws a per-object deprecation WARN from QuPath, once
                 // per cell on a merge-to-unclassified.
-                if ("(Unclassified)".equals(finalName)) det.resetPathClass();
+                if (UNCLASSIFIED_ROW.equals(finalName)) det.resetPathClass();
                 else ResultApplier.setClassification(det, PathClass.fromString(finalName));
                 changed++;
             }
             if (snapLabels != null) {
                 int label;
-                if ("(Unclassified)".equals(finalName)) {
+                if (UNCLASSIFIED_ROW.equals(finalName)) {
                     label = -1;
                 } else {
                     label = nameToIndex.computeIfAbsent(finalName, n -> nameToIndex.size());

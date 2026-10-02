@@ -4,6 +4,57 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.19.0] -- 2026-10-02 -- cluster the tumour cells only
+
+### Added
+
+- **Run a clustering on a subset of cells chosen by classification.** The Run Clustering
+  dialog gained a **Cells to cluster (by classification)** section: tick *Restrict this run to
+  chosen classifications* and pick from every class found in the scope, with cell counts.
+  Until now the only scope controls were which images and which measurements, so
+  "cluster the tumour cells only" meant deleting or hiding every other detection first.
+  - **Off by default.** Leaving it off runs exactly as before, and a config saved before
+    this option existed reads as unrestricted rather than as an empty selection.
+  - **Cells with no classification are a choice of their own**, listed last in italics --
+    "the ones nothing has labelled yet" is a legitimate population. This is deliberately
+    the opposite of *Analyze current classifications*, which must exclude them, because
+    there they would be a group to compare markers across and a heterogeneous remainder
+    cannot be one. The two share one class picker, configured per mode.
+  - **Nothing is written back** by the choice itself: it selects which cells enter the run.
+  - **`RUN_INFO.txt` states the subset beside the scope**, not among the parameters,
+    because it changes which cells were clustered and two results can otherwise differ for
+    a reason no parameter explains. The saved `_config.json` carries it, so **Load Config
+    from file...** restores the same ticks -- and says so if a class it names is no longer
+    on any cell in scope.
+- **Spatial statistics are disabled while subsetting**, with the reason on screen rather
+  than in a tooltip. Removing cells punches holes in the neighbour graph, so enrichment,
+  Moran's I, Geary's C, Ripley and co-occurrence would describe the subset's own
+  arrangement while reading as a statement about the tissue. `ClusteringWorkflow` refuses
+  the combination as well as the dialog preventing it, because a hand-edited
+  `_config.json` or a scripted config never passes through the dialog. BANKSY and spatial
+  feature smoothing stay allowed -- their output is cluster labels, not a number reported
+  about the tissue -- and `RUN_INFO.txt` then notes that the graph spanned only the subset.
+
+### Fixed
+
+- **Manage Clusters listed cells with no classification twice, and merging into that row
+  created a real class called "Unclassified".** A detection can lack a class two ways: a
+  null `PathClass`, or `PathClass.getNullClass()`, which is a singleton object and not
+  null. Its `toString()` is `"Unclassified"`, so the dialog's `pc != null` test read those
+  cells as carrying a class of that name while genuinely-null cells went to the
+  `(Unclassified)` row. The parenthesised name is also the sentinel that means "clear the
+  classification", so cells in the wrong row were relabelled with `PathClass.fromString`
+  instead of being reset -- producing a genuine class named "Unclassified" that then
+  appeared as a population in every class-based tool, and a real label instead of noise
+  (`-1`) in the labels snapshot.
+- **Phenotyping's overwrite prompt could fire when nothing was classified**, counting
+  null-class cells as classified through the same half-test.
+- The test now has one home: `CellClasses.isUnclassified` / `nameOf` / `displayNameOf`.
+  Seven call sites across six files route through it, including the five that were already
+  correct. The remaining half-tests elsewhere were checked and are harmless -- a regex or
+  an `equals` against a cluster name rejects `"Unclassified"` anyway -- but they are gone
+  too rather than left as a trap.
+
 ## [0.18.1] -- 2026-10-02 -- a gate now belongs to the data, not to the window
 
 ### Fixed

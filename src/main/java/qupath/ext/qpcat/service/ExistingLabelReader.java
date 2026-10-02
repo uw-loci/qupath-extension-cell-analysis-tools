@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
 
 /**
  * Turns the classifications already on the detections into cluster labels.
@@ -197,18 +196,8 @@ public final class ExistingLabelReader {
         return new LabelSet(labels, names, analysed, counts, unclassified);
     }
 
-    /**
-     * The class name of a detection, or null when it has none.
-     *
-     * <p>Tests the null-class singleton as well as {@code null}: it is a real value
-     * a cell can carry, and treating it as a class would create a population named
-     * after the absence of one.
-     */
+    /** The class name of a detection, or null when it has none. */
     private static String classNameOf(PathObject det) {
-        PathClass pc = det.getPathClass();
-        if (pc == null || pc == PathClass.getNullClass()) {
-            return null;
-        }
-        return pc.toString();
+        return CellClasses.nameOf(det);
     }
 }

@@ -99,6 +99,29 @@ public class ClusteringConfig {
      * current image from the whole project -- one encoding of the scope, not two.
      */
     private List<String> scopeImageNames;
+
+    /**
+     * Class names the run is restricted to, or null for every cell.
+     * <p>
+     * Nullable on purpose, like {@link #pcaPrecursor}: a subset CHANGES WHICH
+     * CELLS ARE CLUSTERED, so a config saved before this option existed must read
+     * as "no restriction" rather than as an empty selection. An empty list is
+     * therefore not the same thing as null -- it means every named class was
+     * deselected, which {@link #isClassSubsetActive()} still treats as a subset so
+     * the run refuses instead of silently clustering everything.
+     */
+    private List<String> includedClasses;
+
+    /**
+     * Whether cells carrying no classification are part of the subset.
+     * <p>
+     * Separate from {@link #includedClasses} rather than a reserved name in it:
+     * QuPath calls the absence of a class "Unclassified", so a project can hold a
+     * real class of that name and a name-based encoding could not tell them apart.
+     * Only consulted when {@link #includedClasses} is non-null.
+     */
+    private boolean includeUnclassified;
+
     private boolean generatePlots = true;
     /**
      * Build the PAGA cluster-connectivity graph.
@@ -294,6 +317,57 @@ public class ClusteringConfig {
 
     public List<String> getScopeImageNames() { return scopeImageNames; }
     public void setScopeImageNames(List<String> names) { this.scopeImageNames = names; }
+
+    /** @see #includedClasses */
+    public List<String> getIncludedClasses() { return includedClasses; }
+
+    /** @see #includedClasses */
+    public void setIncludedClasses(List<String> includedClasses) {
+        this.includedClasses = includedClasses;
+    }
+
+    /** @see #includeUnclassified */
+    public boolean isIncludeUnclassified() { return includeUnclassified; }
+
+    /** @see #includeUnclassified */
+    public void setIncludeUnclassified(boolean includeUnclassified) {
+        this.includeUnclassified = includeUnclassified;
+    }
+
+    /**
+     * True when the run is restricted to chosen classifications.
+     *
+     * @return whether a class subset applies
+     */
+    public boolean isClassSubsetActive() {
+        return includedClasses != null;
+    }
+
+    /**
+     * True when the subset would admit no cell at all -- no class chosen and
+     * unclassified not chosen either. Worth its own question because the run must
+     * refuse rather than fall back to clustering everything.
+     *
+     * @return whether the subset selects nothing
+     */
+    public boolean isClassSubsetEmpty() {
+        return isClassSubsetActive() && includedClasses.isEmpty() && !includeUnclassified;
+    }
+
+    /**
+     * One-line description of the chosen classifications, for error messages and
+     * the run record.
+     *
+     * @return e.g. {@code "Tumor, Stroma plus unclassified"}, or "every class"
+     */
+    public String describeClassSubset() {
+        if (!isClassSubsetActive()) {
+            return "every class";
+        }
+        String listed = includedClasses.isEmpty()
+                ? "no named class" : String.join(", ", includedClasses);
+        return includeUnclassified ? listed + " plus unclassified" : listed;
+    }
 
     public boolean isClusterEntireProject() { return clusterEntireProject; }
     public void setClusterEntireProject(boolean clusterEntireProject) {

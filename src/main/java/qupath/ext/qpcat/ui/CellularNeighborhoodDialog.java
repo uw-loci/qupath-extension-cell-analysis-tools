@@ -26,11 +26,11 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.CellularNeighborhoodWorkflow;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -368,11 +368,11 @@ public class CellularNeighborhoodDialog {
         Set<String> classes = new LinkedHashSet<>();
         int unclassified = 0;
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            PathClass pc = det.getPathClass();
-            if (pc == null || pc == PathClass.getNullClass()) {
+            String pcName = CellClasses.nameOf(det);
+            if (pcName == null) {
                 unclassified++;
             } else {
-                classes.add(pc.toString());
+                classes.add(pcName);
             }
         }
         int n = classes.size();
@@ -396,8 +396,8 @@ public class CellularNeighborhoodDialog {
         if (imageData == null) return 0;
         Set<String> classes = new LinkedHashSet<>();
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            PathClass pc = det.getPathClass();
-            if (pc != null && pc != PathClass.getNullClass()) classes.add(pc.toString());
+            String name = CellClasses.nameOf(det);
+            if (name != null) classes.add(name);
         }
         return classes.size();
     }

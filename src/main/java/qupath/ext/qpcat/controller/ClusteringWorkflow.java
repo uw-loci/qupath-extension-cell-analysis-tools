@@ -233,8 +233,94 @@ public class ClusteringWorkflow {
      * @return the clustering result
      * @throws IOException if clustering fails
      */
+    /**
+     * Refuse a config that asks for both a class subset and a reported spatial
+     * statistic, and refuse a subset that admits no cell.
+     *
+     * <p><b>Why refuse rather than quietly switch the statistics off.</b> The
+     * dialog greys them out, so a run started there cannot ask for both. A config
+     * that did not come from the dialog can: a hand-edited {@code _config.json}
+     * fed through "Load Config from file...", a scripted {@code ClusteringConfig},
+     * or a future YAML key (the batch schema has no field for the subset yet).
+     * Changing someone's requested analysis without saying so is worse than
+     * stopping. Dropping cells punches holes in the
+     * neighbour graph, so enrichment, Moran's I, Geary's C, Ripley and
+     * co-occurrence computed over a subset answer a question about the subset's
+     * own arrangement while reading as a statement about the tissue.
+     *
+     * <p><b>What is deliberately still allowed.</b> BANKSY and spatial smoothing
+     * also use the graph, but their output is cluster labels, not a reported
+     * tissue-level number -- "sub-structure within this population, using its own
+     * spatial arrangement" is a coherent analysis. Both are recorded in
+     * RUN_INFO.txt as having been built over the subset.
+     *
+     * @param config the run configuration
+     * @throws IOException when the combination cannot be honoured
+     */
+    static void enforceClassSubsetRules(ClusteringConfig config) throws IOException {
+        if (config == null || !config.isClassSubsetActive()) {
+            return;
+        }
+        if (config.isClassSubsetEmpty()) {
+            throw new IOException("No classifications are selected, so there are no cells to "
+                    + "cluster. Choose at least one class, or include unclassified cells.");
+        }
+        List<String> asked = new ArrayList<>();
+        if (config.isEnableSpatialAnalysis()) asked.add("neighborhood enrichment / Moran's I");
+        if (config.isEnableRipley()) asked.add("Ripley's L");
+        if (config.isEnableGeary()) asked.add("Geary's C");
+        if (config.isEnableCoOccurrencePairwise()) asked.add("co-occurrence (pairwise)");
+        if (config.isEnableCoOccurrenceOneVsRest()) asked.add("co-occurrence (one vs rest)");
+        if (!asked.isEmpty()) {
+            throw new IOException("Spatial statistics cannot be computed on a subset chosen by "
+                    + "classification: removing cells changes the neighbour graph, so "
+                    + String.join(", ", asked) + " would describe the subset's own arrangement "
+                    + "rather than the tissue. Either clear the classification restriction or "
+                    + "turn these statistics off.");
+        }
+    }
+
+    /**
+     * Apply the config's classification subset to already cell-filtered objects.
+     *
+     * @param config  the run configuration
+     * @param cells   cells to choose from
+     * @param context short label for the log line
+     * @return the cells to analyze (the input when no subset is active)
+     */
+    private static List<PathObject> applyClassSubset(ClusteringConfig config,
+                                                     List<PathObject> cells, String context) {
+        if (config == null || !config.isClassSubsetActive()) {
+            return cells;
+        }
+        DetectionSelector.ClassSubset subset = DetectionSelector.selectClasses(
+                cells, config.getIncludedClasses(), config.isIncludeUnclassified());
+        logger.info("{}: classification subset keeps {} of {} cells "
+                        + "({} excluded by class, {} unclassified)",
+                context, subset.getObjects().size(), cells.size(),
+                subset.getExcludedByClass(), subset.getExcludedUnclassified());
+        return subset.getObjects();
+    }
+
+    /**
+     * Message for "nothing left to analyze", naming the subset when one is active
+     * so the user is not told to run cell detection on an image full of cells.
+     *
+     * @param config      the run configuration
+     * @param cellsBefore how many cells existed before the subset was applied
+     * @return the message for the thrown IOException
+     */
+    private static String noCellsMessage(ClusteringConfig config, int cellsBefore) {
+        if (config != null && config.isClassSubsetActive() && cellsBefore > 0) {
+            return "None of the " + cellsBefore + " cell(s) carry a selected classification. "
+                    + "Chosen: " + config.describeClassSubset() + ".";
+        }
+        return "No detection objects found. Run cell detection first.";
+    }
+
     public ClusteringResult runClustering(ClusteringConfig config,
                                            Consumer<String> progressCallback) throws IOException {
+        enforceClassSubsetRules(config);
         long startTime = System.currentTimeMillis();
         reportPhase(progressCallback, "extract", "Extracting measurements...");
 
@@ -281,10 +367,13 @@ public class ClusteringWorkflow {
         // If cells are present, analyze only cells so subcellular detections
         // (spots nested inside cells) are not treated as cells. Nucleus-only
         // pipelines (no cell objects) keep every detection. See DetectionSelector.
-        detections = DetectionSelector.filterToCellsWhenPresent(detections, "clustering");
+        List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
+                detections, "clustering");
+        int cellsBeforeSubset = cells.size();
+        detections = applyClassSubset(config, cells, "clustering");
 
         if (detections.isEmpty()) {
-            throw new IOException("No detection objects found. Run cell detection first.");
+            throw new IOException(noCellsMessage(config, cellsBeforeSubset));
         }
 
         // Extract measurements
@@ -699,6 +788,7 @@ public class ClusteringWorkflow {
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
+        enforceClassSubsetRules(config);
 
         if (imageEntries == null || imageEntries.isEmpty()) {
             throw new IOException("No project images selected for clustering.");
@@ -709,6 +799,7 @@ public class ClusteringWorkflow {
 
         // Build detection groups from each image
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        int cellsBeforeSubset = 0;
         for (int idx = 0; idx < imageEntries.size(); idx++) {
             ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
             report(progressCallback, "Loading image " + (idx + 1) + "/" + imageEntries.size()
@@ -731,8 +822,19 @@ public class ClusteringWorkflow {
             }
             // Per-image: drop subcellular / non-cell detections when this image
             // has cell objects; keep all when it is a nucleus-only image.
-            detections = DetectionSelector.filterToCellsWhenPresent(
+            List<PathObject> imageCells = DetectionSelector.filterToCellsWhenPresent(
                     detections, entry.getImageName());
+            cellsBeforeSubset += imageCells.size();
+            detections = applyClassSubset(config, imageCells, entry.getImageName());
+
+            if (detections.isEmpty()) {
+                // Same close-the-copy rule as the no-detections case above: an
+                // image that contributes nothing never reaches closeGroups().
+                closeReadImageData(imageData);
+                logger.info("Skipping {} - no cell carries a selected classification",
+                        entry.getImageName());
+                continue;
+            }
 
             groups.add(new MeasurementExtractor.ImageDetectionGroup(
                     entry, imageData, detections));
@@ -740,7 +842,12 @@ public class ClusteringWorkflow {
         }
 
         if (groups.isEmpty()) {
-            throw new IOException("No detection objects found in any selected images. Run cell detection first.");
+            throw new IOException(config.isClassSubsetActive() && cellsBeforeSubset > 0
+                    ? "None of the " + cellsBeforeSubset + " cell(s) across the selected images "
+                      + "carry a selected classification. Chosen: "
+                      + config.describeClassSubset() + "."
+                    : "No detection objects found in any selected images. "
+                      + "Run cell detection first.");
         }
         try {
 

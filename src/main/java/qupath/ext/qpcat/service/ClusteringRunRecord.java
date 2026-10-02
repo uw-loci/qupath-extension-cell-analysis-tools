@@ -201,6 +201,13 @@ public final class ClusteringRunRecord {
         sb.append("=====================\n\n");
         sb.append("Result name : ").append(savedName).append('\n');
         sb.append("Scope       : ").append(scopeLabel != null ? scopeLabel : "(unknown)").append('\n');
+        // A class subset changes WHICH CELLS were clustered, so it belongs beside
+        // the scope rather than buried in the parameters: a reader comparing two
+        // results has to see immediately that they covered different cells.
+        if (config.isClassSubsetActive()) {
+            sb.append("Cell subset : classifications ")
+                    .append(config.describeClassSubset()).append('\n');
+        }
         if (result != null) {
             // Report the number of CLUSTERS, not the row count of clusterStats:
             // a noise row is not a population and counting it made a run that
@@ -270,6 +277,17 @@ public final class ClusteringRunRecord {
                     .append(config.getSpatialGraphType()).append(")");
         }
         sb.append('\n');
+        // The graph was built over the subset, not the tissue. Spatial statistics
+        // are refused outright on a subset; these two are allowed because their
+        // output is cluster labels rather than a tissue-level number, which only
+        // holds if the record says what the graph spanned.
+        if (config.isClassSubsetActive()
+                && (config.isEnableSpatialSmoothing()
+                    || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY)) {
+            sb.append("      NOTE       : the spatial graph spans ONLY the subset above,\n");
+            sb.append("                   so a cell's neighbours exclude every cell whose\n");
+            sb.append("                   classification was not selected.\n");
+        }
         // The precursor changes cluster labels, so a record headed "How to
         // reproduce this run" has to state whether it ran and what it did.
         sb.append("PCA precursor    : ").append(config.isPcaPrecursor());

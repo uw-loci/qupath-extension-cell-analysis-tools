@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.service.CellClasses;
 import static qupath.ext.qpcat.ui.UiLabels.tipLabel;
 
 import com.google.gson.Gson;
@@ -790,7 +791,7 @@ public class PhenotypingDialog {
             var imageData = qupath.getImageData();
             if (imageData != null) {
                 long classified = imageData.getHierarchy().getDetectionObjects().stream()
-                        .filter(d -> d.getPathClass() != null)
+                        .filter(d -> !CellClasses.isUnclassified(d))
                         .count();
                 if (classified > 0) {
                     boolean proceed = Dialogs.showConfirmDialog("QPCAT",

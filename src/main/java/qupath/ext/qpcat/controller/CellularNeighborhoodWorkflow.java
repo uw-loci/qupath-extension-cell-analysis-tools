@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -699,9 +700,7 @@ public class CellularNeighborhoodWorkflow {
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         String[] assigned = new String[detections.size()];
         for (int i = 0; i < detections.size(); i++) {
-            PathClass pc = detections.get(i).getPathClass();
-            String name = (pc == null || pc == PathClass.getNullClass())
-                    ? "Unclassified" : pc.toString();
+            String name = CellClasses.displayNameOf(detections.get(i));
             assigned[i] = name;
             unique.add(name);
         }

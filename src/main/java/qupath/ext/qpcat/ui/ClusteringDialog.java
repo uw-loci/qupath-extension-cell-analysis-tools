@@ -33,6 +33,7 @@ import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import qupath.ext.qpcat.service.SpatialStatsCsv;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusteringConfigManager;
 import qupath.ext.qpcat.service.ClusterPalette;
@@ -218,6 +219,8 @@ public class ClusteringDialog {
     private CheckBox generatePlotsCheck;
     private CheckBox pagaCheck;
     private CheckBox spatialAnalysisCheck;
+    /** Why the spatial statistics are greyed out; shown only while subsetting. */
+    private Label spatialStatsSubsetNote;
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
     private CheckBox pcaPrecursorCheck;
@@ -413,7 +416,15 @@ public class ClusteringDialog {
 
         settingsBox.getChildren().addAll(
                 topRow,
-                new Separator(),
+                new Separator());
+        if (!analyzeExisting) {
+            // Which cells, right after which images: both are scope decisions, and
+            // the measurement list below depends on neither.
+            settingsBox.getChildren().addAll(
+                    createClassificationsSection(),
+                    new Separator());
+        }
+        settingsBox.getChildren().addAll(
                 createMeasurementSection(),
                 new Separator(),
                 createNormalizationSection(),
@@ -798,18 +809,42 @@ public class ClusteringDialog {
     private static final class ClassRow {
         final String name;
         final int count;
+        /**
+         * True for the synthetic "cells with no classification" row. A flag rather
+         * than a reserved name, because QuPath calls the absence of a class
+         * "Unclassified" and a project can hold a real class of that name.
+         */
+        final boolean unclassified;
         final javafx.beans.property.BooleanProperty included =
                 new javafx.beans.property.SimpleBooleanProperty(true);
 
         ClassRow(String name, int count) {
+            this(name, count, false);
+        }
+
+        ClassRow(String name, int count, boolean unclassified) {
             this.name = name;
             this.count = count;
+            this.unclassified = unclassified;
         }
     }
 
     private ListView<ClassRow> classificationsList;
     private final ObservableList<ClassRow> classRows = FXCollections.observableArrayList();
     private Label classificationsStatus;
+    /**
+     * Opt-in for restricting a clustering run to chosen classes. Null in
+     * {@link RunMode#ANALYZE_EXISTING}, where choosing classes IS the mode rather
+     * than a restriction on top of it.
+     *
+     * <p>Explicitly opt-in because an all-ticked list is not the same thing as no
+     * restriction: a subset switches the spatial statistics off, so defaulting to
+     * "restricted to everything" would take them away for no benefit.
+     */
+    private CheckBox restrictToClassesCheck;
+    /** Classes a restored config asked for, held until the class list is read. */
+    private Set<String> pendingClassSubset;
+    private boolean pendingIncludeUnclassified;
 
     /**
      * The classes to analyse, in place of the algorithm picker.
@@ -818,6 +853,7 @@ public class ClusteringDialog {
      * choice is which of them to include, so the run is legible before it starts.
      */
     private TitledPane createClassificationsSection() {
+        boolean subsetMode = mode != RunMode.ANALYZE_EXISTING;
         classificationsList = new ListView<>(classRows);
         // Pref is the collapsed size; Vgrow and an unbounded max let it use a
         // taller dialog. A fixed height showed about eight rows however big the
@@ -842,6 +878,7 @@ public class ClusteringDialog {
                     return;
                 }
                 check.setText(row.name + "  (" + row.count + " cells)");
+                check.setStyle(row.unclassified ? "-fx-font-style: italic;" : null);
                 // Unbind before rebinding: cells are recycled across rows, and a
                 // stale bidirectional binding would tick the wrong class.
                 check.selectedProperty().unbind();
@@ -873,10 +910,14 @@ public class ClusteringDialog {
                 + "changing the scope, or after renaming or sub-clustering."));
         refresh.setOnAction(e -> refreshClassifications());
 
-        Label hint = new Label(
-                "Cells with no classification are excluded -- an unclassified bucket is a "
-                + "mixture, not a population, and would distort every marker mean. Untick a "
-                + "class to leave it out of the comparison entirely.");
+        Label hint = new Label(subsetMode
+                ? "Cluster only the cells you tick -- \"cluster the tumour cells only\" without "
+                  + "deleting or hiding anything. Cells with no classification are a choice of "
+                  + "their own, listed last. Nothing is written back: this chooses which cells "
+                  + "ENTER the run."
+                : "Cells with no classification are excluded -- an unclassified bucket is a "
+                  + "mixture, not a population, and would distort every marker mean. Untick a "
+                  + "class to leave it out of the comparison entirely.");
         hint.setWrapText(true);
         WrapHeight.bind(hint);
         hint.setMaxWidth(Double.MAX_VALUE);
@@ -885,6 +926,32 @@ public class ClusteringDialog {
         HBox classButtons = new HBox(5, selectAllClasses, selectNoClasses, refresh);
         classButtons.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(6, hint, classificationsList, classificationsStatus, classButtons);
+        if (subsetMode) {
+            restrictToClassesCheck = new CheckBox("Restrict this run to chosen classifications");
+            restrictToClassesCheck.setSelected(false);
+            restrictToClassesCheck.setTooltip(Tooltips.of(
+                    "Off, every cell in the scope is clustered -- the behaviour when this\n"
+                    + "option did not exist.\n\n"
+                    + "On, only the cells whose classification you tick enter the run. This\n"
+                    + "DISABLES the spatial statistics: removing cells changes the neighbour\n"
+                    + "graph, so enrichment, Moran's I, Geary's C, Ripley and co-occurrence\n"
+                    + "would describe the subset's own arrangement while reading as a\n"
+                    + "statement about the tissue."));
+            // The list is meaningless until the restriction is on, and leaving it
+            // live would invite ticking classes that do nothing.
+            hint.disableProperty().bind(restrictToClassesCheck.selectedProperty().not());
+            classificationsList.disableProperty()
+                    .bind(restrictToClassesCheck.selectedProperty().not());
+            classificationsStatus.disableProperty()
+                    .bind(restrictToClassesCheck.selectedProperty().not());
+            classButtons.disableProperty()
+                    .bind(restrictToClassesCheck.selectedProperty().not());
+            restrictToClassesCheck.selectedProperty().addListener((o, was, now) -> {
+                refreshSpatialStatsAvailability();
+                refreshRunCostLabel();
+            });
+            box.getChildren().add(0, restrictToClassesCheck);
+        }
         // Reading classes means opening every image in scope, so it is not done
         // while building the dialog; the first refresh is kicked off after it shows.
         Platform.runLater(this::refreshClassifications);
@@ -892,9 +959,41 @@ public class ClusteringDialog {
             scopeSection.addScopeChangeListener(this::refreshClassifications);
         }
 
-        TitledPane pane = new TitledPane("Classifications to analyze", box);
+        TitledPane pane = new TitledPane(subsetMode
+                ? "Cells to cluster (by classification)" : "Classifications to analyze", box);
         pane.setCollapsible(false);
         return pane;
+    }
+
+    /**
+     * Grey out the spatial statistics while a class subset is in force, and say
+     * why on the first one so the reason is on screen rather than in a tooltip.
+     *
+     * <p>{@code ClusteringWorkflow.enforceClassSubsetRules} refuses the same
+     * combination, for configs that never passed through this dialog.
+     */
+    private void refreshSpatialStatsAvailability() {
+        boolean restricted = restrictToClassesCheck != null
+                && restrictToClassesCheck.isSelected();
+        CheckBox[] spatialStats = {
+                spatialAnalysisCheck, enableRipleyCheck, enableGearyCheck,
+                enableCoOccPairwiseCheck, enableCoOccOneVsRestCheck,
+        };
+        for (CheckBox cb : spatialStats) {
+            if (cb == null) {
+                continue;
+            }
+            cb.setDisable(restricted);
+            if (restricted) {
+                // Untick as well as disable: a disabled-but-ticked box would still
+                // reach buildConfig and the run would refuse instead of starting.
+                cb.setSelected(false);
+            }
+        }
+        if (spatialStatsSubsetNote != null) {
+            spatialStatsSubsetNote.setVisible(restricted);
+            spatialStatsSubsetNote.setManaged(restricted);
+        }
     }
 
     /**
@@ -935,9 +1034,18 @@ public class ClusteringDialog {
         }
 
         Set<String> keep = new LinkedHashSet<>();
+        boolean keepUnclassifiedTick = false;
         for (ClassRow r : classRows) {
-            if (r.included.get()) keep.add(r.name);
+            if (!r.included.get()) {
+                continue;
+            }
+            if (r.unclassified) {
+                keepUnclassifiedTick = true;
+            } else {
+                keep.add(r.name);
+            }
         }
+        final boolean keptUnclassified = keepUnclassifiedTick;
         boolean hadRows = !classRows.isEmpty();
 
         classificationsStatus.setText("Reading classifications...");
@@ -982,6 +1090,7 @@ public class ClusteringDialog {
             final Map<String, Integer> found = counts;
             final int unclassifiedCount = unclassified;
             Platform.runLater(() -> {
+                boolean subsetMode = mode != RunMode.ANALYZE_EXISTING;
                 classRows.clear();
                 for (Map.Entry<String, Integer> e : found.entrySet()) {
                     ClassRow row = new ClassRow(e.getKey(), e.getValue());
@@ -990,14 +1099,26 @@ public class ClusteringDialog {
                     row.included.set(!hadRows || keep.contains(e.getKey()));
                     classRows.add(row);
                 }
+                // Subsetting treats "nothing has labelled these yet" as a
+                // population you may want; analysing existing classes cannot,
+                // because a heterogeneous remainder is not a group to compare.
+                if (subsetMode && unclassifiedCount > 0) {
+                    ClassRow row = new ClassRow(CellClasses.UNCLASSIFIED_DISPLAY,
+                            unclassifiedCount, true);
+                    row.included.set(!hadRows || keptUnclassified);
+                    classRows.add(row);
+                }
                 StringBuilder sb = new StringBuilder();
                 sb.append(found.size()).append(" class(es) found");
                 if (unclassifiedCount > 0) {
-                    sb.append("; ").append(unclassifiedCount)
-                      .append(" unclassified cell(s) will be excluded");
+                    sb.append("; ").append(unclassifiedCount).append(" unclassified cell(s)")
+                      .append(subsetMode ? " listed last" : " will be excluded");
                 }
                 sb.append('.');
                 classificationsStatus.setText(sb.toString());
+                // A config applied before this read finished could not tick rows
+                // that did not exist; do it now.
+                applyPendingClassSubset();
                 refreshRunCostLabel();
             });
         }, "QPCAT-ReadClassifications");
@@ -1450,9 +1571,25 @@ public class ClusteringDialog {
         areasSection.addChangeListener(refreshBatchGate);
         refreshBatchGate.run();
 
-        VBox box = new VBox(5, generatePlotsCheck, pagaCheck, spatialAnalysisCheck,
+        spatialStatsSubsetNote = new Label(
+                "Spatial statistics are off because this run is restricted to chosen "
+                + "classifications. Removing cells changes the neighbour graph, so these "
+                + "statistics would describe the subset's own arrangement while reading as "
+                + "a statement about the tissue. Clear the restriction above to use them.");
+        spatialStatsSubsetNote.setWrapText(true);
+        WrapHeight.bind(spatialStatsSubsetNote);
+        spatialStatsSubsetNote.setMaxWidth(Double.MAX_VALUE);
+        spatialStatsSubsetNote.setStyle(BannerStyles.GUIDE_TEXT + BannerStyles.GUIDE_BOX);
+        spatialStatsSubsetNote.setVisible(false);
+        spatialStatsSubsetNote.setManaged(false);
+
+        VBox box = new VBox(5, generatePlotsCheck, pagaCheck, spatialStatsSubsetNote,
+                spatialAnalysisCheck,
                 smoothingRow, pcaPrecursorCheck, batchCorrectionCheck, batchKeyRow,
                 areasPane, spatialStatsPane);
+        // The class picker is built before this section, so its listener could not
+        // reach these controls yet; settle the gate now that they exist.
+        refreshSpatialStatsAvailability();
         return box;
     }
 
@@ -2763,6 +2900,93 @@ public class ClusteringDialog {
      * @param notify whether to tell the user what is missing; false for passive refreshes
      * @return the config, or null when the controls are not yet a runnable configuration
      */
+    /**
+     * Copy the class restriction onto a config, leaving it null when the
+     * restriction is off so the run behaves exactly as it did before the option
+     * existed.
+     *
+     * @param config the config being built
+     */
+    private void applyClassSubsetToConfig(ClusteringConfig config) {
+        if (restrictToClassesCheck == null || !restrictToClassesCheck.isSelected()) {
+            config.setIncludedClasses(null);
+            config.setIncludeUnclassified(false);
+            return;
+        }
+        List<String> names = new ArrayList<>();
+        boolean unclassified = false;
+        for (ClassRow row : classRows) {
+            if (!row.included.get()) {
+                continue;
+            }
+            if (row.unclassified) {
+                unclassified = true;
+            } else {
+                names.add(row.name);
+            }
+        }
+        config.setIncludedClasses(names);
+        config.setIncludeUnclassified(unclassified);
+    }
+
+    /**
+     * Restore a saved config's class restriction.
+     *
+     * <p>The class list is read from the images asynchronously, so the rows may not
+     * exist yet; this ticks whatever is present and re-applies once the read
+     * finishes. A class named in the config that no longer exists on any cell is
+     * reported rather than dropped silently -- the run would otherwise cover
+     * different cells than the config says.
+     *
+     * @param config the config being applied
+     */
+    private void restoreClassSubset(ClusteringConfig config) {
+        if (restrictToClassesCheck == null) {
+            return;
+        }
+        List<String> wanted = config.getIncludedClasses();
+        if (wanted == null) {
+            restrictToClassesCheck.setSelected(false);
+            return;
+        }
+        restrictToClassesCheck.setSelected(true);
+        pendingClassSubset = new LinkedHashSet<>(wanted);
+        pendingIncludeUnclassified = config.isIncludeUnclassified();
+        applyPendingClassSubset();
+    }
+
+    /**
+     * Tick exactly the classes a restored config asked for, if the list has been
+     * read. Called again from {@link #refreshClassifications} so a config applied
+     * before the first read still takes effect.
+     */
+    private void applyPendingClassSubset() {
+        if (pendingClassSubset == null || classRows.isEmpty()) {
+            return;
+        }
+        Set<String> found = new LinkedHashSet<>();
+        for (ClassRow row : classRows) {
+            boolean on = row.unclassified
+                    ? pendingIncludeUnclassified : pendingClassSubset.contains(row.name);
+            row.included.set(on);
+            if (on && !row.unclassified) {
+                found.add(row.name);
+            }
+        }
+        List<String> missing = new ArrayList<>(pendingClassSubset);
+        missing.removeAll(found);
+        if (!missing.isEmpty()) {
+            classificationsStatus.setText("The saved configuration restricts the run to "
+                    + String.join(", ", missing)
+                    + ", which no cell in this scope carries. Check the scope before running.");
+        }
+        if (classificationsList != null) {
+            classificationsList.refresh();
+        }
+        pendingClassSubset = null;
+        refreshSpatialStatsAvailability();
+    }
+
     private ClusteringConfig buildConfig(boolean notify) {
         ClusteringConfig config = new ClusteringConfig();
 
@@ -2771,6 +2995,7 @@ public class ClusteringDialog {
         // entries to pass.
         config.setClusterEntireProject(!scopeSection.isCurrentImage());
         config.setScopeImageNames(scopeSection.selectedImageNames());
+        applyClassSubsetToConfig(config);
 
         // Analysis options
         config.setGeneratePlots(generatePlotsCheck.isSelected());
@@ -3278,6 +3503,8 @@ public class ClusteringDialog {
             scopeSection.restoreScope(
                     config.isClusterEntireProject(), config.getScopeImageNames());
         }
+
+        restoreClassSubset(config);
 
         // Measurements - select matching items
         List<String> configMeasurements = config.getSelectedMeasurements();

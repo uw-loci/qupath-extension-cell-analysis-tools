@@ -6,7 +6,9 @@ import qupath.lib.objects.PathObject;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Chooses which objects in a gathered detection set QP-CAT should actually
@@ -31,6 +33,12 @@ import java.util.List;
  * a pure-cell set stays whole, and a pure-detection set stays whole. It only
  * changes behavior when cells and non-cell detections are mixed in one set,
  * which is exactly the subcellular case.</p>
+ *
+ * <p><b>Classification subsetting</b> ({@link #filterToCellsAndClasses}) sits here
+ * rather than in each dialog for the same reason: "which objects does QP-CAT
+ * analyze" should have one answer, and the cells-not-spots rule has to be applied
+ * first -- restricting to a class before dropping subcellular spots would count
+ * a classified spot as a cell.</p>
  */
 public final class DetectionSelector {
 
@@ -91,6 +99,105 @@ public final class DetectionSelector {
         }
         int dropped = detections.size() - cells.size();
         return new Selection(cells, dropped, true);
+    }
+
+    /**
+     * Immutable result of {@link #selectClasses}: the chosen cells plus what the
+     * choice cost, so a caller can report it instead of letting cells vanish.
+     */
+    public static final class ClassSubset {
+        private final List<PathObject> objects;
+        private final int excludedByClass;
+        private final int excludedUnclassified;
+
+        ClassSubset(List<PathObject> objects, int excludedByClass, int excludedUnclassified) {
+            this.objects = objects;
+            this.excludedByClass = excludedByClass;
+            this.excludedUnclassified = excludedUnclassified;
+        }
+
+        /** The cells to analyze. */
+        public List<PathObject> getObjects() { return objects; }
+
+        /** Cells dropped for carrying a class that was not chosen. */
+        public int getExcludedByClass() { return excludedByClass; }
+
+        /** Cells dropped for carrying no class, when unclassified was not chosen. */
+        public int getExcludedUnclassified() { return excludedUnclassified; }
+
+        /** Total cells dropped by the class choice. */
+        public int getExcluded() { return excludedByClass + excludedUnclassified; }
+    }
+
+    /**
+     * Restrict cells to a chosen set of classifications.
+     *
+     * <p>Unclassified cells are a choice of their own, not a leftover: a user
+     * selecting a population may well mean "the ones nothing has labelled yet", so
+     * {@code includeUnclassified} is separate from the name list rather than
+     * encoded as a reserved name that a real class could collide with. This
+     * differs deliberately from {@code ExistingLabelReader}, which always excludes
+     * them -- there they would become a group to compare markers across, which a
+     * heterogeneous remainder cannot be; here they are simply cells to analyze.
+     *
+     * @param cells               cells to choose from; nothing is modified
+     * @param includedClasses     class names to keep, or null to keep every class
+     * @param includeUnclassified keep cells with no classification
+     * @return the chosen cells and the counts dropped; never null
+     */
+    public static ClassSubset selectClasses(Collection<PathObject> cells,
+                                            Collection<String> includedClasses,
+                                            boolean includeUnclassified) {
+        if (cells == null || cells.isEmpty()) {
+            return new ClassSubset(new ArrayList<>(), 0, 0);
+        }
+        Set<String> wanted = includedClasses == null ? null : new HashSet<>(includedClasses);
+        List<PathObject> kept = new ArrayList<>();
+        int byClass = 0;
+        int unclassified = 0;
+        for (PathObject p : cells) {
+            String name = CellClasses.nameOf(p);
+            if (name == null) {
+                if (includeUnclassified) {
+                    kept.add(p);
+                } else {
+                    unclassified++;
+                }
+            } else if (wanted == null || wanted.contains(name)) {
+                kept.add(p);
+            } else {
+                byClass++;
+            }
+        }
+        return new ClassSubset(kept, byClass, unclassified);
+    }
+
+    /**
+     * Apply the cells-present rule and then the classification choice, logging
+     * both. Pass a null class list to get {@link #filterToCellsWhenPresent}.
+     *
+     * @param detections          objects pulled from the hierarchy
+     * @param context             short label for the log line (e.g. an image name)
+     * @param includedClasses     class names to keep, or null to keep every class
+     * @param includeUnclassified keep cells with no classification
+     * @return the objects to analyze
+     */
+    public static List<PathObject> filterToCellsAndClasses(Collection<PathObject> detections,
+                                                           String context,
+                                                           Collection<String> includedClasses,
+                                                           boolean includeUnclassified) {
+        List<PathObject> cells = filterToCellsWhenPresent(detections, context);
+        if (includedClasses == null) {
+            return cells;
+        }
+        ClassSubset subset = selectClasses(cells, includedClasses, includeUnclassified);
+        logger.info("{}: restricted to {} classification(s){} -- analyzing {} of {} cells "
+                        + "({} excluded by class, {} unclassified)",
+                context, includedClasses.size(),
+                includeUnclassified ? " plus unclassified" : "",
+                subset.getObjects().size(), cells.size(),
+                subset.getExcludedByClass(), subset.getExcludedUnclassified());
+        return subset.getObjects();
     }
 
     /**

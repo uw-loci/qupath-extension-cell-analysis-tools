@@ -21,15 +21,18 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
    You do not need an image open: with a project open, pick the images first and
    QP-CAT reads their measurements directly, so the measurement list reflects what
    you picked rather than whatever was in the viewer.
-2. **Measurements** -- **Select 'Mean' only** is the right default. See
+2. **Cells to cluster (by classification)** -- off by default, so every cell in the
+   scope is clustered. Tick **Restrict this run to chosen classifications** to cluster
+   only some of them. See [Clustering a subset of cells](#clustering-a-subset-of-cells).
+3. **Measurements** -- **Select 'Mean' only** is the right default. See
    [Choosing measurements](#choosing-measurements).
-3. **Normalization** -- Z-score unless you have a reason otherwise. See
+4. **Normalization** -- Z-score unless you have a reason otherwise. See
    [Choosing a normalization](#choosing-a-normalization).
-4. **Embedding** -- UMAP by default; `n_neighbors` 15, `min_dist` 0.1. Choose **2D** or **3D** for
+5. **Embedding** -- UMAP by default; `n_neighbors` 15, `min_dist` 0.1. Choose **2D** or **3D** for
    the number of embedding components (default 2D); the dimensionality is part of the measurement
    name so both can coexist without overwriting.
-5. **Algorithm** -- Leiden by default. See [Choosing an algorithm](#choosing-an-algorithm).
-6. **Analysis options** (the untitled block below the algorithm section):
+6. **Algorithm** -- Leiden by default. See [Choosing an algorithm](#choosing-an-algorithm).
+7. **Analysis options** (the untitled block below the algorithm section):
    - *Generate analysis plots* -- the static PNGs (marker ranking, PAGA, dotplot)
    - *Neighborhood enrichment + Moran's I* -- the two spatial statistics that run
      alongside clustering
@@ -38,7 +41,7 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
      [below](#reducing-features-with-pca-first)
    - *Batch correction (Harmony)* -- enabled when the run spans several images **or**
      several independent areas within one image; the **Batch key** dropdown picks which
-7. **Run Clustering**.
+8. **Run Clustering**.
 
 A line above the Run button says what this run trades -- reproducibility,
 comparability, or nothing. See [Reproducibility and run cost](reproducibility.md).
@@ -348,6 +351,59 @@ no dialog. Good for a first look.
 | Quick HDBSCAN (auto) | HDBSCAN, min_cluster_size 15 |
 | Quick Delaunay | Leiden on features smoothed over a Delaunay graph |
 | Quick Delaunay (custom)... | the same, with the graph and smoothing parameters exposed |
+
+## Clustering a subset of cells
+
+**"Cluster the tumour cells only"** -- without deleting, hiding or re-detecting
+anything.
+
+Tick **Restrict this run to chosen classifications** in the *Cells to cluster* section
+and the list below it becomes live: every classification found on the cells in your
+scope, with its cell count. Untick what you do not want. Cells with **no**
+classification are listed last, in italics, and are a choice of their own -- "the ones
+nothing has labelled yet" is a legitimate population to cluster.
+
+The restriction is off by default, and leaving it off runs exactly as it did before this
+option existed.
+
+**Nothing is written back.** This chooses which cells *enter* the run. No
+classification is created, changed or removed by the choice itself. (The run's own
+results are applied as usual.)
+
+### Spatial statistics are unavailable while subsetting
+
+Ticking the restriction greys out *Neighborhood enrichment + Moran's I*, *Ripley's L*,
+*Geary's C* and both co-occurrence statistics, and says why on screen.
+
+Removing cells punches holes in the neighbour graph. A cell's neighbours then exclude
+every cell whose class you did not pick, so the statistic describes **the subset's own
+arrangement** while reading as a statement about the tissue. Enrichment between two
+classes is meaningless when one of them is not in the graph.
+
+If you want a spatial statistic over a population, cluster or phenotype the whole
+tissue and use [post-hoc spatial statistics](spatial.md), which keeps every cell in the
+graph and asks the question about the labels.
+
+**BANKSY and spatial feature smoothing are still allowed**, because their output is
+cluster labels rather than a number reported about the tissue -- "sub-structure within
+this population, using its own spatial arrangement" is a coherent analysis.
+`RUN_INFO.txt` then carries an explicit note that the graph spanned only the subset.
+
+### What gets recorded
+
+`<result>_RUN_INFO.txt` states the subset on its own line, beside the scope rather than
+among the parameters, because it changes *which cells* were clustered and two results
+can otherwise differ for a reason no parameter explains:
+
+```
+Scope       : All project images
+Cell subset : classifications Tumor, Stroma plus unclassified
+```
+
+The saved `<result>_config.json` carries it too, so **Load Config from file...**
+restores the restriction with the same classes ticked. If a class named in the config is
+not on any cell in the current scope, the dialog says so instead of quietly running over
+fewer cells.
 
 ## Clustering several images together
 
