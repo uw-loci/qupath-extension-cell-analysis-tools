@@ -308,10 +308,42 @@ says which.
 | Co-occurrence (one vs rest) **table** | one column per cluster | one row **per radius bin** |
 | `co_occurrence_one_vs_rest.png` **figure** | cluster x radius heatmap | per radius bin |
 
-So the pairwise *figure* and the pairwise *table* answer different questions. The figure
-is a single summary number per pair and will hide a pair that is enriched at short range
-and depleted at long range; the table is where that shows up. The figure title says
-`MEAN over every radius bin` for this reason.
+**The bins are cumulative discs, not rings.** squidpy counts every pair within
+distance r (`d2 <= thresholds[r]`), so bin 30 contains everything bins 1-29 counted.
+Two consequences:
+
+- The profile decays **monotonically toward 1.0** as r grows, because at a large enough
+  radius the neighbourhood is the whole tissue and the ratio is 1 by construction. A
+  ring of depletion just outside a cluster cannot appear as a dip below 1 -- the
+  short-range enrichment is still inside the count. If you need ring-shaped structure,
+  that is Ripley's L, not this.
+- **The mean over bins is a shrunken short-range signal, not an average of independent
+  scales.** Measured on a synthetic tissue where one partner was tightly wrapped around
+  the reference type: short-range ratio **1.75**, mean over the 50 auto-chosen bins
+  **1.13** -- about 18% of the excess over 1 retained. With the auto interval, only
+  about **4% of the bins sit at or below twice the median nearest-neighbour distance**,
+  so the mean is dominated by radii of 2 to 20 cell spacings.
+
+So read the pairwise **figure** as a *screen* and the **table** as the number. On the
+same synthetic test the figure ranked five partners of graded association in the correct
+order, so it is useful for spotting which pairs deserve a look; its absolute values are
+not comparable with a published co-occurrence ratio, which is always quoted at a
+distance.
+
+**The ratio is compositional.** `p(exp|cond)` is the share of a neighbourhood made up of
+the partner type, so enriching some partners necessarily dilutes the others. In the same
+test a partner distributed *uniformly* at random read as **0.81** -- apparent depletion
+-- purely because the reference type's neighbourhoods were crowded with the partners
+that were genuinely enriched. Depletion of one type is not independent evidence of
+avoidance when another type is strongly enriched.
+
+**How this compares with how co-occurrence is usually shown.** squidpy's own
+`squidpy.pl.co_occurrence` plots the score **against distance**, one panel per cluster,
+and its tutorials interpret it that way -- there is no mean-over-radii matrix in
+squidpy's API or examples. The conventional cluster-by-cluster *matrix* in this field is
+**neighbourhood enrichment**, a permutation z-score at one graph definition, which QP-CAT
+also computes and shows in its own tab. If what you want is a square matrix to read
+associations off, that tab is the one with an established interpretation.
 
 **Choosing radii yourself.** Set Min and Max radius when you have a distance scale in
 mind (20 um for cell-contact-level questions, 50-100 um for niche-level). The bin count

@@ -179,7 +179,7 @@ When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplot
   diagonal assumes an unbounded plane with no edge correction, so the exported PNG is
   the weaker of the two references.
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
-- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (**mean over every radius bin**, so it hides a pair enriched at short range and depleted at long range; the table is per radius -- [why](results.md#co-occurrence-tabs))
+- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (**mean over every radius bin**: a shrunken short-range signal, measured to retain about 18% of the excess over 1, so treat it as a screen and read the per-radius table for the number -- [why](results.md#co-occurrence-tabs))
 - `co_occurrence_one_vs_rest.png` -- cluster x radius heatmap
 
 These are picked up by the Multi-Figure Batch Export dialog so they can be exported alongside the other clustering plots. Disable the preference to keep the in-dialog charts but skip the savefig step.

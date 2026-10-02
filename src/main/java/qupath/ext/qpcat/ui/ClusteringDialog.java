@@ -6299,10 +6299,11 @@ public class ClusteringDialog {
                     // axis that is not there.
                     guide = "One co-occurrence ratio per cluster pair, MEANED over every "
                             + "radius bin: > 1 = enriched as neighbors, < 1 = depleted, "
-                            + "1.0 = no association. A pair enriched at short range and "
-                            + "depleted at long range averages out here -- the "
-                            + "Co-occurrence (pairwise) TABLE is the per-radius view. "
-                            + "The title states the radius bins used.";
+                            + "1.0 = no association. The bins are cumulative, so this mean "
+                            + "is a SHRUNKEN short-range signal (measured: about 18% of the "
+                            + "excess over 1 retained). Use it to spot which pairs are worth "
+                            + "a look, then read the Co-occurrence (pairwise) TABLE for the "
+                            + "value at a distance. The title states the radius bins used.";
                     docAnchor = "co-occurrence-tabs";
                 }
                 case "cooc_one_vs_rest" -> {

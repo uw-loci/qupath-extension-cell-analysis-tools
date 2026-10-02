@@ -4,6 +4,39 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.19.2] -- 2026-10-02 -- what the averaged co-occurrence heatmap is actually worth
+
+### Fixed
+
+- **0.19.1 described a failure mode that cannot happen, and I had not measured it.** It said
+  the mean-over-radius pairwise figure "hides a pair that is enriched at short range and
+  depleted at long range; the table is where that shows up". squidpy counts cumulative discs
+  (`d2 <= thresholds[r]`), not rings, so bin 30 contains everything bins 1-29 counted: the
+  profile decays monotonically toward 1.0 and a ring of depletion outside a cluster cannot
+  appear as a dip below 1 in the table either. Ring-shaped structure is Ripley's L's question,
+  not this one. The docs and the tab guide now say what the cumulative binning does mean.
+
+### Changed
+
+- **The averaged pairwise heatmap is now documented as a screen, with the cost measured.** On a
+  synthetic tissue with one partner tightly wrapped around the reference type, the short-range
+  ratio was **1.75** and the mean over the 50 auto-chosen bins was **1.13** -- about **18% of
+  the excess over 1 retained**. Only about **4% of the auto-derived bins** sit at or below
+  twice the median nearest-neighbour distance, so the mean is dominated by radii of 2 to 20
+  cell spacings. Ranking was preserved across five partners of graded association, so the
+  figure is useful for spotting which pairs deserve a look; its absolute values are not
+  comparable with a published co-occurrence ratio, which is always quoted at a distance.
+- **The compositional caveat is now stated.** `p(exp|cond)` is a share of a neighbourhood, so
+  enriching some partners dilutes the others. In the same test a partner distributed
+  **uniformly at random** read as **0.81** -- apparent depletion -- purely because the
+  reference type's neighbourhoods were crowded with genuinely enriched partners. Depletion of
+  one type is not independent evidence of avoidance when another is strongly enriched.
+- **The docs now say how co-occurrence is conventionally shown**: `squidpy.pl.co_occurrence`
+  plots the score against distance, one panel per cluster, and squidpy's API and examples
+  contain no mean-over-radii matrix. The established cluster-by-cluster matrix in this field is
+  neighbourhood enrichment, which QP-CAT already computes and shows in its own tab, and which
+  is the tab to read associations off a square matrix.
+
 ## [0.19.1] -- 2026-10-02 -- the co-occurrence tabs now link to a description of co-occurrence
 
 ### Changed
