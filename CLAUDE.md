@@ -98,3 +98,18 @@ no shared code, so **a change here almost certainly belongs in the other two as 
 touching the scrubber, the payload, or the artifact set, read the contract and the change protocol
 in `claude-reports/design/2026-08-19_bug-reporter-architecture.md` (invariants INV-1..INV-9).
 User-submitted reports become public GitHub issues -- redaction is a privacy surface.
+
+## Manual test queue
+
+Checks only a human can make for this repo -- reading a figure, real data volumes,
+Windows/macOS, the microscope -- live in the project-wide queue,
+`/home/msnelson/QPSC_Project/claude-reports/MANUAL_TEST_QUEUE.md`, tagged
+**Repo:** `qupath-extension-cell-analysis-tools`.
+
+- **Add an item whenever you ship something here that you could not check yourself.**
+  "Visual check owed" in a commit message or a report gets lost; the queue does not.
+- Before calling a release verified, read this repo's open items:
+  `python3 /home/msnelson/QPSC_Project/tools/manual_test_queue.py list --repo qupath-extension-cell-analysis-tools`
+- Coding work does not go there -- that is `claude-reports/TODO_LIST.md`.
+
+The pre-push hook prints this repo's open items whenever a release tag is pushed.
