@@ -16,9 +16,8 @@ import qupath.lib.gui.QuPathGUI;
  * <p>Each call names its PAGE as well as its anchor. An earlier version hard-coded
  * one page per helper, which meant the links could only ever point into a single
  * monolithic guide -- and when a heading was renamed, they broke silently, because
- * nothing opens them except a user clicking. {@code tools/check_doc_links.py}
- * verifies every call site against the actual headings, and needs the page name to
- * do it.
+ * nothing opens them except a user clicking. {@code DocLinkAnchorsTest} verifies
+ * every call site against the actual headings, and needs the page name to do it.
  */
 public final class QpcatDocLinks {
 

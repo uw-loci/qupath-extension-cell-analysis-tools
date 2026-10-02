@@ -4843,8 +4843,9 @@ public class ClusteringDialog {
                     "qpcat_cooccurrence_pairwise.csv"),
                     "For each pair of clusters (A, B), the table reports the ratio\n"
                     + "P(neighbor is B | center is A) / P(neighbor is B | center is anything)\n"
-                    + "as a function of radius. Values > 1 mean A's neighborhood is enriched\n"
-                    + "for B at that radius; < 1 means depleted; ~ 1 means random.\n"
+                    + "at each radius. Values > 1 mean A's neighborhood is enriched for B at\n"
+                    + "that radius; < 1 means depleted; 1.0 means no association.\n"
+                    + "The Radius line above the table states the bins actually used.\n"
                     + "This is a descriptive ratio -- there is no permutation / significance test.",
                     "co-occurrence-tabs"));
             tab.setClosable(false);
@@ -6292,15 +6293,24 @@ public class ClusteringDialog {
                 }
                 case "cooc_pairwise" -> {
                     tabName = "Co-occurrence pairwise (plot)";
-                    guide = "Co-occurrence ratio for each cluster pair as a function of radius: "
-                            + "> 1 = enriched as neighbors at that distance, < 1 = depleted, "
-                            + "~ 1 = random.";
+                    // This figure is NOT per-radius: it is one number per pair,
+                    // averaged over every bin. Saying "as a function of radius"
+                    // described the TABLE and sent people looking for a radius
+                    // axis that is not there.
+                    guide = "One co-occurrence ratio per cluster pair, MEANED over every "
+                            + "radius bin: > 1 = enriched as neighbors, < 1 = depleted, "
+                            + "1.0 = no association. A pair enriched at short range and "
+                            + "depleted at long range averages out here -- the "
+                            + "Co-occurrence (pairwise) TABLE is the per-radius view. "
+                            + "The title states the radius bins used.";
                     docAnchor = "co-occurrence-tabs";
                 }
                 case "cooc_one_vs_rest" -> {
                     tabName = "Co-occurrence one-vs-rest (plot)";
                     guide = "Each cluster's neighborhood composition vs all other clusters "
-                            + "combined, as a function of radius. Same scale as the pairwise plot.";
+                            + "combined, one column per radius bin. > 1 = enriched, "
+                            + "< 1 = depleted, 1.0 = no association. The title states the "
+                            + "radius bins used.";
                     docAnchor = "co-occurrence-tabs";
                 }
                 default -> {

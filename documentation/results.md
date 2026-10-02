@@ -236,7 +236,6 @@ comparing clusters at a glance rather than reading a table.
 <a name="spatial-autocorrelation-tab"></a>
 <a name="gearys-c-tab"></a>
 <a name="ripley-l-tab"></a>
-<a name="co-occurrence-tabs"></a>
 <a name="neighborhood-enrichment-tab"></a>
 <a name="cluster-explainer-llm-tab"></a>
 ## Spatial tabs
@@ -249,8 +248,78 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 | **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. Zoom controls available. |
 | **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. Zoom controls available. |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
-| **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted. "One vs rest" is the smaller read when you care about one cluster. Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
+| **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
+
+<a name="co-occurrence-tabs"></a>
+### Co-occurrence: the value, the radius, and what each view aggregates
+
+Four tabs come from this one statistic -- a table and a figure, each pairwise and
+one-vs-rest -- and they do not all show the same thing. This is where the in-app
+**Documentation** link on all four lands.
+
+**The value.** For an ordered pair of clusters (A, B) at radius r:
+
+```
+P(a cell within r of an A cell is a B cell)
+-------------------------------------------
+P(any cell is a B cell)
+```
+
+So **1.0 means no association**: B is as common near A as it is anywhere. Above 1 means
+A's neighbourhood is enriched for B at that radius, below 1 means depleted. The
+denominator is the tissue-wide frequency of B, which is why a rare cluster can show a
+large ratio from few cells -- read it alongside the cluster's cell count.
+
+**It is descriptive. There is no permutation test and no p-value**, unlike Ripley's L
+and Geary's C. A ratio of 1.4 is not "significant enrichment"; it is 1.4.
+
+**No neighbour graph is involved.** `squidpy.gr.co_occurrence` takes coordinates and
+distances, not a connectivity graph -- it has no `connectivity_key` parameter. So
+**changing the kNN k, the radius or the Delaunay pruning does not change these numbers.**
+Those settings drive neighbourhood enrichment, Moran's I and Geary's C. Before QP-CAT
+0.18.0 the figures and the table printed a `graph: knn` line, which was simply untrue;
+it has been replaced by the radius line described next.
+
+**Where the radii come from.** Leave **Min radius** and **Max radius** unset and QP-CAT
+derives them from cell density rather than the image size: **50 linearly spaced bins**,
+from the **median nearest-neighbour distance** up to
+`min(20 x median_nn, max(2 x median_nn, 0.5 x diagonal))` -- roughly one cell spacing to
+twenty, never past half the area's diagonal. Density, not the bounding box, because a
+fixed fraction of a bounding-box diagonal degenerates on thin, elongated or sparse
+regions, where every bin comes out empty or saturated.
+
+Each figure's title and the top of each table state **the bins actually used**, so you
+never have to infer them:
+
+```
+Radius: 12.4 to 248.6 px, 50 bins
+```
+
+Units follow the image: **um** for a calibrated image, **px** otherwise, and the line
+says which.
+
+**What each view aggregates -- the one that catches people out:**
+
+| View | Rows / cells | Radius |
+|---|---|---|
+| Co-occurrence (pairwise) **table** | one column per ordered cluster pair | one row **per radius bin** |
+| `co_occurrence_pairwise.png` **figure** | cluster x cluster heatmap | **mean over every radius bin** |
+| Co-occurrence (one vs rest) **table** | one column per cluster | one row **per radius bin** |
+| `co_occurrence_one_vs_rest.png` **figure** | cluster x radius heatmap | per radius bin |
+
+So the pairwise *figure* and the pairwise *table* answer different questions. The figure
+is a single summary number per pair and will hide a pair that is enriched at short range
+and depleted at long range; the table is where that shows up. The figure title says
+`MEAN over every radius bin` for this reason.
+
+**Choosing radii yourself.** Set Min and Max radius when you have a distance scale in
+mind (20 um for cell-contact-level questions, 50-100 um for niche-level). The bin count
+stays 50 unless you change it. Keep the range inside the tissue: bins wider than the
+area contain few pairs and the ratio becomes noisy.
+
+See [Spatial statistics](spatial-statistics.md#when-to-use-each-statistic) for when to
+reach for co-occurrence rather than neighbourhood enrichment or Ripley's L.
 
 ### Exporting spatial statistics tables
 

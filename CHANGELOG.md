@@ -4,6 +4,36 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.19.1] -- 2026-10-02 -- the co-occurrence tabs now link to a description of co-occurrence
+
+### Changed
+
+- **The four co-occurrence tabs' "Documentation" link now lands on an actual description.**
+  All four already pointed at `results.md#co-occurrence-tabs`, but that anchor sat on a
+  one-row table in the spatial-tabs summary. It now opens
+  **"Co-occurrence: the value, the radius, and what each view aggregates"**, which states:
+  the ratio and that **1.0 means no association**; that it is descriptive with no p-value;
+  that **no neighbour graph is involved**, so changing the kNN k, radius or Delaunay
+  pruning does not move these numbers (and that the pre-0.18.0 `graph: knn` line was
+  simply untrue); where the 50 radius bins come from
+  (`median_nn` to `min(20 x median_nn, max(2 x median_nn, 0.5 x diagonal))`, derived from
+  cell density because a fraction of a bounding-box diagonal degenerates on thin or sparse
+  regions); and that the figure title and table header state the bins actually used.
+
+### Fixed
+
+- **The pairwise co-occurrence PLOT tab described the table's behaviour, not its own.** Its
+  guide read "ratio for each cluster pair as a function of radius", but that figure is a
+  cluster-by-cluster heatmap **meaned over every radius bin** -- one number per pair, with
+  no radius axis to look for. A pair enriched at short range and depleted at long range
+  averages away there and only shows up in the table. The guide now says so and points at
+  the table as the per-radius view; the one-vs-rest plot, which genuinely is per bin, says
+  that instead of "as a function of radius".
+- Both co-occurrence text tabs now name the `Radius:` line they have carried since 0.18.0,
+  and say `1.0 means no association` rather than `~ 1 means random`.
+- `QpcatDocLinks` cited a `tools/check_doc_links.py` that does not exist; the validator is
+  `DocLinkAnchorsTest`.
+
 ## [0.19.0] -- 2026-10-02 -- cluster the tumour cells only
 
 ### Added

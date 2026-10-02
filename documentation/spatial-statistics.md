@@ -108,7 +108,7 @@ Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the re
   - **squidpy's L is scaled by `n_cluster / N`.** Its `_ripley.py` takes each cluster's pairwise distances but passes the *total* cell count to the estimator. On complete spatial randomness it returned `0.10 * r` for a cluster holding 15% of the points, so curves ordered by cluster size rather than by clustering. QP-CAT no longer uses it for L.
   - **The estimator has no edge correction.** `L(r) = r` is the expectation of an edge-corrected estimator. Without one, part of every disc near the tissue boundary falls outside the study region, and random points measure `0.70 * r` at the largest radius -- so the diagonal would call randomness dispersion. Simulating the null through the same code cancels the bias.
 - **Geary's C** -- per-marker spatial autocorrelation, dual to Moran's I but weighted toward *local* differences. Use Geary's C when you suspect a marker is structured at short range (sharp tissue boundaries, immune infiltrates) and Moran's I when the structure is global.
-- **Co-occurrence (pairwise)** -- *radius profile* for every cluster pair: "as we expand the radius from r1 to r2, how does the probability of finding a cluster-B cell near a cluster-A cell change?"
+- **Co-occurrence (pairwise)** -- *radius profile* for every cluster pair: "as we expand the radius from r1 to r2, how does the probability of finding a cluster-B cell near a cluster-A cell change?" **1.0 means no association.** It reads the coordinates, not the neighbour graph, so the graph constructor above does not affect it. Where the radius bins come from, and which view averages over them, is in [Co-occurrence: the value, the radius, and what each view aggregates](results.md#co-occurrence-tabs).
 - **Co-occurrence (one-vs-rest)** -- the same radius profile but with "all other clusters" collapsed into a single comparison. Useful when a single cluster is what you care about.
 
 ### Graph constructor choice
@@ -179,7 +179,7 @@ When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplot
   diagonal assumes an unbounded plane with no edge correction, so the exported PNG is
   the weaker of the two references.
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
-- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (mean over radius)
+- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap (**mean over every radius bin**, so it hides a pair enriched at short range and depleted at long range; the table is per radius -- [why](results.md#co-occurrence-tabs))
 - `co_occurrence_one_vs_rest.png` -- cluster x radius heatmap
 
 These are picked up by the Multi-Figure Batch Export dialog so they can be exported alongside the other clustering plots. Disable the preference to keep the in-dialog charts but skip the savefig step.
@@ -293,7 +293,10 @@ to the object hierarchy -- this is read-only.
   unbounded-plane null with no edge correction, and graph neighbors are truncated
   at the ROI edge. Treat L as valid only at radii small relative to the window,
   and do **not** compare L curves across areas of different size/shape.
-- **Co-occurrence** is a descriptive ratio -- there is **no** significance test.
+- **Co-occurrence** is a descriptive ratio -- there is **no** significance test, and
+  **1.0 means no association**. See
+  [the full description](results.md#co-occurrence-tabs) for the radius bins and what
+  each view aggregates.
 - Distances are reported in **microns** for calibrated images (radius/Delaunay
   inputs, Ripley radii, co-occurrence intervals, and distances are all in um), which
   makes areas comparable across images. Uncalibrated images fall back to pixels
