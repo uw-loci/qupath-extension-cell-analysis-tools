@@ -9,8 +9,8 @@ import java.util.List;
  * length 1 and indexed by the synthetic "rest" label).
  * <p>
  * {@link #mode} mirrors the Python option key: {@code "pairwise"} or
- * {@code "oneVsRest"}. {@link #intervals} is the radius vector in pixel
- * units of detection centroids (length == data[i][j].length).
+ * {@code "oneVsRest"}. {@link #intervals} is the radius vector in
+ * {@link #coordUnit} units (length == data[i][j].length).
  * <p>
  * Gson-friendly POJO; older saves load with null fields.
  */
@@ -22,7 +22,7 @@ public class CoOccurrenceResult {
     private double[][][] data;            // observed/expected ratio per (a, b, r)
     private double[][] pValues;           // [a][b] permutation p-values; null when not run
     private int nPermutations = -1;
-    private String graphType;
+    private String coordUnit;             // "px" or "um": the unit of intervals
 
     public CoOccurrenceResult() {}
 
@@ -44,8 +44,8 @@ public class CoOccurrenceResult {
     public int getNPermutations() { return nPermutations; }
     public void setNPermutations(int v) { this.nPermutations = v; }
 
-    public String getGraphType() { return graphType; }
-    public void setGraphType(String v) { this.graphType = v; }
+    public String getCoordUnit() { return coordUnit; }
+    public void setCoordUnit(String v) { this.coordUnit = v; }
 
     /**
      * Number of cells the analysis ran on. Returns 0 when not yet populated.

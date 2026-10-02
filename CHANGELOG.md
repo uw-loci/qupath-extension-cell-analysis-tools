@@ -4,6 +4,41 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.18.0] -- 2026-10-01 -- plots you can zoom into, and two labels that were not true
+
+### Fixed
+
+- **Ripley and co-occurrence claimed a spatial graph they never used.** Both figures and the
+  co-occurrence text tab printed `graph: knn`, and both payloads carried `graph_type`. But
+  `sq.gr.ripley` and `sq.gr.co_occurrence` (squidpy 1.6.6) take `spatial_key` and distance
+  parameters and have **no `connectivity_key`** -- verified against the installed signatures --
+  and our own `run_ripley` / `run_co_occurrence` accepted `graph_type` and never passed it on.
+  So changing the kNN k and re-running produced an identical curve while the label said the
+  graph had shaped it. The parameter, the payload field and the label are gone from both
+  statistics, and from `RipleyResult` / `CoOccurrenceResult`. Neighborhood enrichment, Moran's I
+  and Geary's C do take `connectivity_key`, so they keep theirs.
+- **A post-hoc spatial result labelled every Ripley series `Cluster Cluster 0`.**
+  `clusterNameForKey` parsed the key as an integer to look up a renamed cluster and, on failure,
+  prefixed `"Cluster "` again -- but that route keys by PathClass name, which is already a
+  display name. A renamed cluster suffered worse: `CD8 T cell` became `Cluster CD8 T cell`.
+
+### Changed
+
+- **Saved figures now render at 300 DPI, up from 150, and the setting is finally reachable.**
+  At 150 a stacked violin over 34 markers gave about 42 pixels per violin, which no amount of
+  zooming recovers; 300 gives about 85. Measured across panel sizes: 34, 60 and 100 markers
+  land at 85, 78 and 74 pixels per violin, because scanpy already scales the figure with the
+  data. The cost is file size, roughly 0.7 MB to 2.1 MB per figure. `qpcat.cluster.plotDpi`
+  existed but appeared in no preferences pane, so nobody could change it; it is now under
+  **QP-CAT: Run Clustering** as *Plot resolution (DPI)*.
+- **Co-occurrence figures now say which radii they used.** The one-vs-rest plot already had a
+  radius axis; the pairwise plot has none because it averages over every bin, and said so only
+  in passing. Both titles now carry `radius <min> to <max> <unit>, <n> bins`, the pairwise title
+  states plainly that it is a MEAN over every radius bin, and the payload carries `coord_unit`
+  so the text tab can print the same line. Unless a min and max are set in the dialog, those
+  bins are derived per run from the median nearest-neighbour distance, so two runs on different
+  tissue were never comparable and nothing said so.
+
 ## [0.17.1] -- 2026-09-28 -- the clustering dialog stops forgetting three settings
 
 ### Fixed

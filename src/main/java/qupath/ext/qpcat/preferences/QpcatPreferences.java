@@ -271,7 +271,7 @@ public final class QpcatPreferences {
             "qpcat.cluster.banksyPcaDims", 20);
 
     private static final IntegerProperty clusterPlotDpi = PathPrefs.createPersistentPreference(
-            "qpcat.cluster.plotDpi", 150);
+            "qpcat.cluster.plotDpi", 300);
 
     // How many principal components the PCA precursor keeps when the "Reduce
     // features with PCA before clustering" option is on. Doubles as the engage
@@ -1187,6 +1187,15 @@ public final class QpcatPreferences {
                 .category(CATEGORY_GENERAL)
                 .description(Tooltips.wrap("Milliseconds to wait for Python service shutdown (default: 5000). "
                         + "Increase if Python tasks take longer to stop gracefully."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(clusterPlotDpi, Integer.class)
+                .name("Plot resolution (DPI)")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Resolution of the saved analysis figures "
+                        + "(default: 300). At 150 a stacked violin on 34 markers gives only "
+                        + "about 42 pixels per violin, which no amount of zooming recovers. "
+                        + "Higher costs disk and render time. Range: 100-600."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(acknowledgedBackupWarning, Boolean.class)

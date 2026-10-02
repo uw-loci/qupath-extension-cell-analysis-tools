@@ -241,7 +241,6 @@ for s in sizes:
                     task,
                     cluster_key="cluster",
                     n_permutations=n_perms,
-                    graph_type=graph_type,
                     plot_dir=None,
                     persist_plots=False,
                 )
@@ -269,7 +268,6 @@ for s in sizes:
                     mode="pairwise",
                     n_permutations=n_perms,
                     spatial_data=sub_coords,
-                    graph_type=graph_type,
                     plot_dir=None,
                     persist_plots=False,
                 )
@@ -284,7 +282,6 @@ for s in sizes:
                     mode="oneVsRest",
                     n_permutations=n_perms,
                     spatial_data=sub_coords,
-                    graph_type=graph_type,
                     plot_dir=None,
                     persist_plots=False,
                 )

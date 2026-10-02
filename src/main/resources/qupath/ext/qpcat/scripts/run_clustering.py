@@ -2057,7 +2057,6 @@ if has_spatial and n_clusters_found > 1:
                 "ripley",
                 cluster_key="cluster",
                 n_permutations=n_perms,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
             )
@@ -2069,7 +2068,6 @@ if has_spatial and n_clusters_found > 1:
                 task,
                 cluster_key="cluster",
                 n_permutations=n_perms,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
                 persist_plots=_spatial_persist,
@@ -2123,7 +2121,6 @@ if has_spatial and n_clusters_found > 1:
                 mode="pairwise",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
             )
@@ -2139,7 +2136,6 @@ if has_spatial and n_clusters_found > 1:
                 mode="pairwise",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
                 persist_plots=_spatial_persist,
@@ -2164,7 +2160,6 @@ if has_spatial and n_clusters_found > 1:
                 mode="oneVsRest",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
             )
@@ -2180,7 +2175,6 @@ if has_spatial and n_clusters_found > 1:
                 mode="oneVsRest",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
-                graph_type=pref_spatial_graph_type,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
                 persist_plots=_spatial_persist,

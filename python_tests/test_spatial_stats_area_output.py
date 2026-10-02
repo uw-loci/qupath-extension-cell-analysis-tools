@@ -273,7 +273,6 @@ def test_ripley_returns_non_empty_curves():
         task,
         cluster_key="cluster",
         n_permutations=5,
-        graph_type="knn",
         persist_plots=False,
     )
     assert "ripley_error" not in task.outputs
@@ -296,7 +295,6 @@ def test_ripley_emits_per_cluster_p_value_curves_not_an_invented_scalar():
         task,
         cluster_key="cluster",
         n_permutations=5,
-        graph_type="knn",
         persist_plots=False,
     )
     payload = json.loads(task.outputs["ripley"])
@@ -329,3 +327,29 @@ def test_noise_is_named_noise_and_left_out_of_the_cluster_count():
     assert values["n_clusters_present"] == "2"  # noise is not the third
     assert values["Noise_count"] == "4"
     assert values["Noise_frac"] == "0.400000"
+
+
+@requires("squidpy")
+@requires("anndata")
+def test_ripley_payload_claims_no_graph():
+    module = _run_ripley()
+    task = _Task()
+    module.run_ripley(
+        _ripley_adata(),
+        task,
+        cluster_key="cluster",
+        n_permutations=5,
+        persist_plots=False,
+    )
+    payload = json.loads(task.outputs["ripley"])
+    assert "graph_type" not in payload, (
+        "sq.gr.ripley takes no connectivity_key, so naming a graph in the "
+        "result tells the user the kNN setting shaped a curve it never touched"
+    )
+
+
+def test_run_ripley_takes_no_graph_argument():
+    import inspect
+
+    module = _run_ripley()
+    assert "graph_type" not in inspect.signature(module.run_ripley).parameters

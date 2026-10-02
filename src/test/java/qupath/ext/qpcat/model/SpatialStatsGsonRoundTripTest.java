@@ -34,7 +34,6 @@ class SpatialStatsGsonRoundTripTest {
         pvs.put("1", 0.20);
         original.setPValues(pvs);
         original.setNPermutations(100);
-        original.setGraphType("knn");
 
         String json = gson.toJson(original);
         RipleyResult restored = gson.fromJson(json, RipleyResult.class);
@@ -46,7 +45,6 @@ class SpatialStatsGsonRoundTripTest {
         assertThat(restored.getPoissonK()).hasSize(3);
         assertThat(restored.getPValues()).containsEntry("0", 0.01);
         assertThat(restored.getNPermutations()).isEqualTo(100);
-        assertThat(restored.getGraphType()).isEqualTo("knn");
     }
 
     @Test
@@ -70,6 +68,7 @@ class SpatialStatsGsonRoundTripTest {
     @Test
     void coOccurrenceResultRoundTripsThroughGson() {
         CoOccurrenceResult original = new CoOccurrenceResult();
+        original.setCoordUnit("um");
         original.setMode("pairwise");
         original.setClusterNames(List.of("0", "1"));
         original.setIntervals(new double[]{10.0, 20.0});
@@ -78,7 +77,6 @@ class SpatialStatsGsonRoundTripTest {
                 {{0.8, 1.1}, {1.5, 1.3}},
         });
         original.setNPermutations(100);
-        original.setGraphType("delaunay");
 
         String json = gson.toJson(original);
         CoOccurrenceResult restored = gson.fromJson(json, CoOccurrenceResult.class);
@@ -87,7 +85,7 @@ class SpatialStatsGsonRoundTripTest {
         assertThat(restored.getIntervals()).hasSize(2);
         assertThat(restored.getData()).hasDimensions(2, 2);
         assertThat(restored.getData()[0][0]).containsExactly(1.4, 0.9);
-        assertThat(restored.getGraphType()).isEqualTo("delaunay");
+        assertThat(restored.getCoordUnit()).isEqualTo("um");
     }
 
     @Test

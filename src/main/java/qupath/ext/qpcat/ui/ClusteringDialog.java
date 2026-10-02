@@ -5605,19 +5605,26 @@ public class ClusteringDialog {
 
     /**
      * Display name for a cluster identified by its label as a STRING, which is how
-     * the Python-side spatial results and marker rankings key their clusters. Falls
-     * back to "Cluster &lt;key&gt;" when the key is not a plain integer (so a future
-     * non-numeric key degrades rather than throws).
+     * the Python-side spatial results and marker rankings key their clusters.
+     * A non-numeric key is already a display name (the post-hoc spatial route keys
+     * by PathClass name), so it is returned as-is rather than prefixed again.
+     *
+     * @param result source of renamed cluster labels; may be null
+     * @param key    cluster label, either a plain integer or a class name
+     * @return the name to show
      */
-    private static String clusterNameForKey(ClusteringResult result, String key) {
-        if (result != null && key != null) {
-            try {
-                return result.clusterName(Integer.parseInt(key.trim()));
-            } catch (NumberFormatException ignore) {
-                // Not a plain label -- fall through to the literal form.
-            }
+    static String clusterNameForKey(ClusteringResult result, String key) {
+        if (key == null) {
+            return "Cluster null";
         }
-        return "Cluster " + key;
+        String trimmed = key.trim();
+        try {
+            int label = Integer.parseInt(trimmed);
+            return result != null ? result.clusterName(label) : "Cluster " + label;
+        } catch (NumberFormatException ignore) {
+            // Not a plain label -- it is already a name.
+        }
+        return trimmed.isEmpty() ? "Cluster " + key : trimmed;
     }
 
     /**
@@ -6793,8 +6800,11 @@ public class ClusteringDialog {
         StringBuilder sb = new StringBuilder();
         sb.append("Mode: ").append(coo.getMode() == null ? "pairwise" : coo.getMode())
                 .append("\n");
-        if (coo.getGraphType() != null) {
-            sb.append("Graph: ").append(coo.getGraphType()).append("\n");
+        if (intervals != null && intervals.length > 0) {
+            sb.append(String.format("Radius: %.1f to %.1f %s, %d bins",
+                    intervals[0], intervals[intervals.length - 1],
+                    coo.getCoordUnit() == null ? "px" : coo.getCoordUnit(),
+                    intervals.length)).append("\n");
         }
         if (coo.getNPermutations() > 0) {
             sb.append("Permutations: ").append(coo.getNPermutations()).append("\n");

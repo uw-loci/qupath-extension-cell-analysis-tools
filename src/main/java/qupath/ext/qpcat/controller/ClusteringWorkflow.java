@@ -4542,7 +4542,6 @@ public class ClusteringWorkflow {
         }
         Object n = raw.get("n_permutations");
         if (n instanceof Number num) out.setNPermutations(num.intValue());
-        if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
         // Set when squidpy has no mode='K'; k_values are then zero padding, not data.
         Object ku = raw.get("k_unavailable");
         if (ku instanceof Boolean b) {
@@ -4586,7 +4585,7 @@ public class ClusteringWorkflow {
         out.setData(asDouble3D(raw.get("data")));
         Object n = raw.get("n_permutations");
         if (n instanceof Number num) out.setNPermutations(num.intValue());
-        if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        if (raw.get("coord_unit") != null) out.setCoordUnit(raw.get("coord_unit").toString());
         return out;
     }
 

@@ -874,7 +874,6 @@ def run_ripley(
     n_permutations=1000,
     max_radius=-1.0,
     n_steps=50,
-    graph_type="knn",
     plot_dir=None,
     plot_dpi=150,
     persist_plots=True,
@@ -894,9 +893,11 @@ def run_ripley(
         "envelope_median": [[...], ...],  # per-cluster CSR band, median
         "envelope_high":   [[...], ...],  # per-cluster CSR band, high percentile
         "p_values": {"0": p0, ...},
-        "n_permutations": N,
-        "graph_type": "..."
+        "n_permutations": N
       }
+
+    Takes no graph argument: sq.gr.ripley reads spatial coordinates, so the
+    kNN/Delaunay choice cannot reach it.
 
     On failure, logs a warning and does not set task.outputs["ripley"].
     """
@@ -1234,7 +1235,6 @@ def run_ripley(
             # and p_values stays empty unless a build supplies real scalars.
             "p_value_curves": p_value_curves,
             "n_permutations": int(n_permutations),
-            "graph_type": graph_type,
             # True when this squidpy build dropped mode='K'. The k_values above
             # are then ZERO PADDING, not a measurement, and a chart of zeros
             # reads exactly like a real "no clustering at any radius" result --
@@ -1371,8 +1371,7 @@ def run_ripley(
 
                 # Parameters belong under the axis title on a one-panel figure;
                 # a suptitle there just repeats "Ripley L" above itself.
-                params = "graph: %s, perms: %d%s" % (
-                    graph_type,
+                params = "perms: %d%s" % (
                     int(n_permutations),
                     ", %d CSR sims" % RIPLEY_ENVELOPE_SIMS if centred else "",
                 )
@@ -1530,6 +1529,23 @@ def run_geary_c(
         logger.warning("Geary's C failed: %s", e)
 
 
+def radius_caption(intervals, coord_unit):
+    """One line naming the radius bins a co-occurrence figure actually used.
+
+    :param intervals: radius bin positions, ascending
+    :param coord_unit: unit the spatial coordinates carry
+    :return: e.g. "radius 12.4 to 248.6 px, 50 bins"
+    """
+    if intervals is None or len(intervals) == 0:
+        return "radius bins unavailable"
+    return "radius %.1f to %.1f %s, %d bins" % (
+        float(min(intervals)),
+        float(max(intervals)),
+        coord_unit,
+        len(intervals),
+    )
+
+
 def run_co_occurrence(
     adata,
     task,
@@ -1540,7 +1556,6 @@ def run_co_occurrence(
     n_intervals=50,
     n_permutations=1000,
     spatial_data=None,
-    graph_type="knn",
     plot_dir=None,
     plot_dpi=150,
     persist_plots=True,
@@ -1560,8 +1575,11 @@ def run_co_occurrence(
         "intervals": [...],
         "data": [[[...]]] | [[[...]]],
         "n_permutations": N,
-        "graph_type": "..."
+        "coord_unit": "px" | "um"
       }
+
+    Takes no graph argument: sq.gr.co_occurrence reads spatial coordinates
+    and distance bins, so the kNN/Delaunay choice cannot reach it.
     """
     import squidpy as sq
 
@@ -1647,7 +1665,7 @@ def run_co_occurrence(
             "cluster_names": cluster_names,
             "intervals": intervals_list,
             "data": data_list,
-            "graph_type": graph_type,
+            "coord_unit": coord_unit,
         }
         task.outputs[output_key] = json.dumps(payload)
         logger.info(
@@ -1697,8 +1715,8 @@ def run_co_occurrence(
                     ax.set_xlabel("Radius (%s)" % coord_unit)
                     ax.set_ylabel("Cluster")
                     ax.set_title(
-                        "Co-occurrence (one vs rest, descriptive) - "
-                        "graph: %s" % graph_type
+                        "Co-occurrence (one vs rest, descriptive)\n%s"
+                        % radius_caption(intervals_list, coord_unit)
                     )
                     fig.colorbar(im, ax=ax, label="Ratio")
                     out_name = PLOT_FILE_COOC_ONE_VS_REST
@@ -1723,8 +1741,9 @@ def run_co_occurrence(
                     ax.set_xlabel("Cluster B")
                     ax.set_ylabel("Cluster A")
                     ax.set_title(
-                        "Co-occurrence (pairwise, mean over radius, descriptive) - "
-                        "graph: %s" % graph_type
+                        "Co-occurrence (pairwise, descriptive): "
+                        "MEAN over every radius bin\n%s"
+                        % radius_caption(intervals_list, coord_unit)
                     )
                     fig.colorbar(im, ax=ax, label="Mean ratio")
                     out_name = PLOT_FILE_COOC_PAIRWISE

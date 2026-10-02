@@ -27,7 +27,6 @@ public class RipleyResult {
     private double[] poissonL;        // analytical null L(r) (zero line)
     private Map<String, Double> pValues;
     private int nPermutations = -1;
-    private String graphType;         // "knn" | "radius" | "delaunay" used to build the graph
 
     public RipleyResult() {}
 
@@ -100,8 +99,6 @@ public class RipleyResult {
     public int getNPermutations() { return nPermutations; }
     public void setNPermutations(int v) { this.nPermutations = v; }
 
-    public String getGraphType() { return graphType; }
-    public void setGraphType(String v) { this.graphType = v; }
 
     /**
      * Number of cluster curves carried. Returns 0 when not yet populated.
