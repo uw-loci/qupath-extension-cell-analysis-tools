@@ -454,6 +454,21 @@ public class EmbeddingScatterPanel extends VBox {
                 viewMinX, viewMaxX, viewMinY, viewMaxY);
     }
 
+    /**
+     * The mapping a click is interpreted through right now. Exposed so a test can
+     * place a click at a known data coordinate and read back where a gate vertex
+     * landed, which is the only way to drive the gate handlers rather than
+     * re-deriving their arithmetic.
+     */
+    PlotTransform currentTransform() {
+        return transform();
+    }
+
+    /** Vertices of the gate being drawn, in data coordinates. */
+    List<double[]> currentGateVertices() {
+        return new ArrayList<>(gatePolygon);
+    }
+
     /** Project data-space polygon vertices to canvas pixels, as {xs, ys}. */
     private static double[][] toScreen(List<double[]> dataPoly, PlotTransform t) {
         int n = dataPoly.size();
