@@ -78,10 +78,13 @@ Probabilistic clustering assuming data is generated from a mixture of Gaussian d
 > Baudry J-P, Raftery AE, Celeux G, Lo K, Gottardo R. "Combining Mixture Components for Clustering." *Journal of Computational and Graphical Statistics* 19(2), 332-353 (2010).
 > https://doi.org/10.1198/jcgs.2010.08111
 
-> Note: QP-CAT's GMM assigns each cell to its most-likely component as a HARD label
-> (`run_clustering.py` calls `GaussianMixture.fit_predict`); it does not export per-component
-> probabilities, and `n_components` is set by the user (not chosen by BIC/AIC). The mclust /
-> Baudry references describe model-based component selection and merging in general.
+> Note: QP-CAT's GMM assigns each cell's CLASS from its most-likely component, a hard label
+> (`run_clustering.py` calls `GaussianMixture.fit_predict`). It does additionally export
+> summaries of the posterior behind that label -- the component's probability, the runner-up
+> component, and a normalised entropy -- as per-cell measurements and the Cluster confidence
+> results tab; the full per-cell by per-component probability matrix is not exported.
+> `n_components` is set by the user, not chosen by BIC/AIC. The mclust / Baudry references
+> describe model-based component selection and merging in general.
 
 **Used in:** Clustering Dialog (GMM algorithm), Auto-thresholding (2-component GMM for gate estimation)
 

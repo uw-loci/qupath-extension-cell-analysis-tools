@@ -113,6 +113,13 @@ Four items off the backlog. **Not released** -- version stays 0.21.0 until there
 - `test_colour_map_choice.py` asserts there is **no** parameter that can force a diverging map
   onto one-sided data.
 
+- **The dialog contradicted itself about soft membership.** Adding the Cluster confidence
+  feature left five copies of the old claim in place -- including the amber banner above the
+  algorithm picker, which every user reads before running, still saying "QP-CAT does not
+  export soft/continuous membership" while the results window showed a posterior. The banner,
+  the GMM info box, the algorithm tooltip, `clustering.md` and `references.md` now say which
+  three algorithms report it and which three do not.
+
 ### Known gaps
 
 - `DocLinkAnchorsTest` reads `documentation/` at runtime but Gradle does not treat those files

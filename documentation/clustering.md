@@ -286,10 +286,11 @@ weaken in high dimensions. (McInnes & Healy 2017.)
 
 <a name="caution-gmm"></a>
 **Gaussian Mixture (GMM)** -- fits elliptical, unequal-size clusters that defeat KMeans, so
-it helps when populations overlap. **QP-CAT assigns each cell to its most likely component
-as a hard label** and does not export the per-component probabilities, so it cannot by
-itself represent "partly A, partly B". You set the number of components directly; it is not
-chosen by BIC or AIC. GMM assumes roughly Gaussian markers, and QP-CAT offers no
+it helps when populations overlap. The cell's *class* is still its most likely component, a
+hard label -- but GMM is the one algorithm here that also reports **the posterior behind
+that label**, so "partly A, partly B" is visible rather than lost. See
+[Cluster confidence](results.md#cluster-confidence-tab). You set the number of components
+directly; it is not chosen by BIC or AIC. GMM assumes roughly Gaussian markers, and QP-CAT offers no
 transform that fixes skew -- the available normalizations rescale but do not reshape a
 distribution. Transform outside QuPath if that matters.
 (Scrucca et al. 2016; Baudry et al. 2010.)

@@ -1171,7 +1171,7 @@ public class ClusteringDialog {
                 + "  KMeans - centroid-based, requires k (Lloyd 1982)\n"
                 + "  HDBSCAN - density-based, auto-detects + noise (Campello et al. 2013)\n"
                 + "  Agglomerative - hierarchical, requires k\n"
-                + "  GMM - Gaussian mixture, elliptical clusters, hard labels\n"
+                + "  GMM - Gaussian mixture, elliptical clusters; reports its posterior\n"
                 + "  BANKSY - spatially-aware (Singhal et al. 2024, Nature Genetics)\n"
                 + "  None - embedding only, no clustering\n"
                 + "See documentation/REFERENCES.md for full citations."));
@@ -1360,17 +1360,19 @@ public class ClusteringDialog {
 
     /** Global, method-agnostic caution shown above the algorithm picker. A
      *  cluster label is a hypothesis: every algorithm here hard-assigns each
-     *  cell to one cluster and QP-CAT does not export soft/continuous
-     *  membership, so gradients must be probed by re-running and reading the
-     *  heatmap. See BEST_PRACTICES.md#cluster-labels-are-hypotheses. */
+     *  cell to one cluster. GMM, HDBSCAN and KMeans also report HOW MARGINAL
+     *  each call was (the Cluster confidence tab); Leiden, Agglomerative and
+     *  BANKSY compute no such quantity. See clustering.md#cluster-labels-are-hypotheses. */
     private VBox createClusteringWarningBanner() {
         Label warn = new Label(
                 "A cluster label is a hypothesis, not a measured cell type. Every method here "
                 + "assigns each cell to exactly one cluster, which hides gradients (e.g. an "
-                + "epithelial-mesenchymal transition, EMT). QP-CAT does not export soft/continuous "
-                + "membership, so to probe gradients and "
-                + "trust a result: re-run with different seeds and parameters, confirm boundary "
-                + "cells stay put, and read the marker heatmap rather than a single labeling.");
+                + "epithelial-mesenchymal transition, EMT). GMM, HDBSCAN and KMeans also report "
+                + "how marginal each call was -- see the Cluster confidence tab in the results "
+                + "-- but Leiden (the default), Agglomerative and BANKSY give hard labels only. "
+                + "Either way, to trust a result: re-run with different seeds and parameters, "
+                + "confirm boundary cells stay put, and read the marker heatmap rather than a "
+                + "single labeling.");
         warn.setWrapText(true);
         WrapHeight.bind(warn);
         warn.setMaxWidth(520);
@@ -2790,11 +2792,13 @@ public class ClusteringDialog {
                 algorithmParamsBox.getChildren().add(row);
                 addMethodInfo(
                         "Fits elliptical, unequal-size clusters that defeat KMeans, so it helps "
-                        + "when populations overlap. In QP-CAT it assigns each cell to its "
-                        + "most-likely component as a HARD label - it does not export "
-                        + "per-component probabilities, so it cannot represent 'partly A, partly "
-                        + "B'. You set n_components directly (not chosen by BIC/AIC). Transform "
-                        + "skewed markers first (e.g. arcsinh via Normalization).",
+                        + "when populations overlap. The cell's CLASS is still its most-likely "
+                        + "component - a hard label - but GMM is the one algorithm here that "
+                        + "also reports the posterior behind it: the Cluster confidence tab and "
+                        + "a per-cell measurement show which cells were close to a coin flip, "
+                        + "which is how 'partly A, partly B' shows up. You set n_components "
+                        + "directly (not chosen by BIC/AIC). Transform skewed markers first "
+                        + "(e.g. arcsinh via Normalization).",
                         "caution-gmm");
             }
             case BANKSY -> {

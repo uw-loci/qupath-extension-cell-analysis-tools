@@ -50,10 +50,6 @@ so `testRuntimeOnly("org.junit.platform:junit-platform-launcher")` is required; 
 it `test` fails with *"Could not start Gradle Test Executor 1: Failed to load JUnit
 Platform"*, which does not name the missing dependency.
 
-Verified on the 8.12 -> 9.2.1 move: 317 tests / 36 classes pass identically on JDK 21 and
-JDK 25, and the shaded jar has the same 9,335 entries as the 8.12-built release jar minus
-a stray `META-INF/versions/9/module-info.class` that shadow 9 correctly drops.
-
 ## The "3D View" tab
 
 `ClusteringDialog.showResultsDialog(...)` builds the results `TabPane`. Next to the interactive
