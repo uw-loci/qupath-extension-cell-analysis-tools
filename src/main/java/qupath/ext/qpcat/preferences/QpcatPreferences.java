@@ -91,6 +91,29 @@ public final class QpcatPreferences {
             PathPrefs.createPersistentPreference("qpcat.heatmap.colorMap.sequential",
                     QpcatColorMaps.DEFAULT_SEQUENTIAL);
 
+    /**
+     * Cell cap for the silhouette inside the "Choose k..." sweep.
+     * <p>
+     * The silhouette needs the full pairwise distance matrix, so it is O(n^2) in
+     * time AND memory: at 300,000 cells that is 720 GB, which is not a slow
+     * computation but an impossible one. 10,000 cells is 0.8 GB and runs in
+     * seconds, and the dialog states the subsample size beside the number so the
+     * reader knows what it was computed on.
+     */
+    private static final IntegerProperty chooseKSilhouetteCap =
+            PathPrefs.createPersistentPreference("qpcat.chooseK.silhouetteCap", 10000);
+
+    /**
+     * Reference datasets per k for the gap statistic; 0 skips it.
+     * <p>
+     * Tibshirani's B. Each one costs a full KMeans fit, so this multiplies the
+     * sweep's run time by roughly B -- and the gap is the only statistic in the
+     * sweep that can report "no cluster structure at all", which is why the
+     * default is 10 rather than 0.
+     */
+    private static final IntegerProperty chooseKGapReferences =
+            PathPrefs.createPersistentPreference("qpcat.chooseK.gapReferences", 10);
+
     /** @see #heatmapColorMapSequential */
     private static final StringProperty heatmapColorMapDiverging =
             PathPrefs.createPersistentPreference("qpcat.heatmap.colorMap.diverging",
@@ -454,6 +477,18 @@ public final class QpcatPreferences {
     /** True when the heatmap uses one shared scale centred on zero. */
     public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }
     public static void setHeatmapSharedScale(boolean v) { heatmapSharedScale.set(v); }
+
+    /** @see #chooseKSilhouetteCap */
+    public static int getChooseKSilhouetteCap() { return chooseKSilhouetteCap.get(); }
+
+    /** @see #chooseKSilhouetteCap */
+    public static void setChooseKSilhouetteCap(int v) { chooseKSilhouetteCap.set(v); }
+
+    /** @see #chooseKGapReferences */
+    public static int getChooseKGapReferences() { return chooseKGapReferences.get(); }
+
+    /** @see #chooseKGapReferences */
+    public static void setChooseKGapReferences(int v) { chooseKGapReferences.set(v); }
 
     /**
      * Remembered colour map for one family.
@@ -1003,6 +1038,29 @@ public final class QpcatPreferences {
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(chooseKSilhouetteCap, Integer.class)
+                .name("Choose k: silhouette cell cap")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Cells the silhouette is computed on inside "
+                        + "\"Choose k...\". It needs the full pairwise distance matrix, so it "
+                        + "is O(n^2) in memory as well as time: 10,000 cells needs 0.8 GB, "
+                        + "300,000 would need 720 GB. The subsample is seeded, so the answer "
+                        + "is reproducible, and the dialog says how many cells it used. 0 "
+                        + "removes the cap, which on a large run will exhaust memory."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(chooseKGapReferences, Integer.class)
+                .name("Choose k: gap-statistic reference datasets")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Tibshirani's B: how many uniform reference "
+                        + "datasets to fit per k. Each costs a KMeans fit, so the sweep takes "
+                        + "roughly B times longer with the gap than without it. Worth paying: "
+                        + "the gap is the only statistic in the sweep that can report NO "
+                        + "cluster structure -- measured on pure noise it said k = 1 in five "
+                        + "runs out of five, while the elbow and silhouette both named a k. "
+                        + "0 skips it."))
                 .build());
 
         // Colour maps are offered PER FAMILY, so there are two preferences rather

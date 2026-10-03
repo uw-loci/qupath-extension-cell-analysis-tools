@@ -7,6 +7,7 @@ import org.apposed.appose.Service.ResponseType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.MembershipConfidence;
@@ -1714,6 +1715,104 @@ public class ClusteringWorkflow {
         } finally {
             measurementsNd.close();
             if (labelsNd != null) labelsNd.close();
+        }
+    }
+
+    /**
+     * Extract the current image's matrix and sweep k over it.
+     *
+     * <p>The convenience the "Choose k..." button needs: the sweep is only
+     * meaningful on the matrix the real run would cluster, so the extraction and
+     * the measurement list come from the same config rather than from the dialog's
+     * controls read a second time. Normalization is applied by the Python side
+     * exactly as it is for a run.
+     *
+     * @param imageData        image whose detections to read
+     * @param config           the configuration a run would use
+     * @param kMin             smallest k; 1 is meaningful only for the gap
+     * @param kMax             largest k
+     * @param silhouetteCap    cell cap for the O(n^2) silhouette; 0 for no cap
+     * @param gapReferences    reference datasets per k; 0 skips the gap
+     * @param progressCallback receives progress messages
+     * @return the sweep, or null when the script produced nothing
+     * @throws IOException when there are no cells, or the Appose task fails
+     */
+    public ChooseKResult sweepKForImage(ImageData<BufferedImage> imageData,
+                                        ClusteringConfig config, int kMin, int kMax,
+                                        int silhouetteCap, int gapReferences,
+                                        Consumer<String> progressCallback)
+            throws IOException {
+        // Same selection chain as a real run, so the sweep sees the same cells.
+        List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
+                imageData.getHierarchy().getDetectionObjects(), "k sweep");
+        int before = cells.size();
+        List<PathObject> detections = applyClassSubset(config, cells, "k sweep");
+        if (detections.isEmpty()) {
+            throw new IOException(noCellsMessage(config, before));
+        }
+        report(progressCallback, "Reading " + detections.size() + " cells...");
+        MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor()
+                .extract(detections, config.getSelectedMeasurements());
+        // The run's own seed, so the sweep and the run that follows it agree.
+        Object seed = config.getAlgorithmParams().get("random_state");
+        int seedValue = seed instanceof Number n ? n.intValue() : 42;
+        return sweepK(extraction, kMin, kMax, seedValue, silhouetteCap,
+                gapReferences, 0, progressCallback);
+    }
+
+    /**
+     * Sweep k and compute the three statistics people are told to choose it with.
+     *
+     * <p>Runs on the SAME matrix a real run would cluster -- same measurements,
+     * same normalization, same PCA precursor -- because a k chosen on a different
+     * matrix is a k chosen for a different problem. Must be called with the
+     * extension class loader set (Appose).
+     *
+     * @param extraction       the extracted, normalized matrix
+     * @param kMin             smallest k to try; 1 is meaningful only for the gap
+     * @param kMax             largest k to try
+     * @param seed             KMeans seed and the seed for every subsample
+     * @param silhouetteCap    cell cap for the O(n^2) silhouette; 0 for no cap
+     * @param gapReferences    reference datasets per k; 0 skips the gap
+     * @param sweepCap         cell cap for the whole sweep; 0 for no cap
+     * @param progressCallback receives the per-k progress messages
+     * @return the parsed sweep, or null when the script produced nothing
+     * @throws IOException if the Appose task fails
+     */
+    public ChooseKResult sweepK(MeasurementExtractor.ExtractionResult extraction,
+                                int kMin, int kMax, int seed, int silhouetteCap,
+                                int gapReferences, int sweepCap,
+                                Consumer<String> progressCallback) throws IOException {
+        int nCells = extraction.getNCells();
+        int nMeasurements = extraction.getNMeasurements();
+        NDArray measurementsNd =
+                buildMeasurementNDArray(extraction.getData(), nCells, nMeasurements);
+
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("k_min", kMin);
+        inputs.put("k_max", kMax);
+        inputs.put("random_seed", seed);
+        inputs.put("silhouette_max_cells", silhouetteCap);
+        inputs.put("gap_n_references", gapReferences);
+        inputs.put("sweep_max_cells", sweepCap);
+
+        try {
+            Task task = ApposeClusteringService.getInstance().runTaskWithListener(
+                    "choose_k", inputs,
+                    event -> {
+                        if (event.responseType == ResponseType.UPDATE
+                                && event.message != null) {
+                            report(progressCallback, event.message);
+                        }
+                    },
+                    t -> currentTask = t);
+            return ChooseKResult.fromJson((String) task.outputs.get("sweep_json"));
+        } finally {
+            // Shared-memory segment: unclosed it stays mapped for the JVM's
+            // lifetime, which at 1M cells x 40 markers is ~336 MB per sweep.
+            measurementsNd.close();
         }
     }
 

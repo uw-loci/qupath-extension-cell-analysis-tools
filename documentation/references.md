@@ -42,6 +42,97 @@ Classic centroid-based partitioning algorithm.
 
 ---
 
+<a name="choosing-k"></a>
+### Choosing the number of clusters (elbow / silhouette / gap)
+
+What **"Choose k..."** computes, with primary sources, one reputable argument against part of
+it, implementation guides, and places these statistics are actually used in single-cell and
+imaging work. Every DOI below was resolved against Crossref on 2026-10-03 and checked for
+retractions and corrections; where a paper carries an editorial notice it is named.
+
+**Original sources:**
+
+> Thorndike RL. "Who belongs in the family?" *Psychometrika* 18(4), 267-276 (1953).
+> https://doi.org/10.1007/BF02289263
+
+The origin of the elbow idea. Worth reading for how tentative it is in the original compared
+with how it is now cited.
+
+> Rousseeuw PJ. "Silhouettes: a graphical aid to the interpretation and validation of cluster analysis." *Journal of Computational and Applied Mathematics* 20, 53-65 (1987).
+> https://doi.org/10.1016/0377-0427(87)90125-7
+
+> Tibshirani R, Walther G, Hastie T. "Estimating the number of clusters in a data set via the gap statistic." *Journal of the Royal Statistical Society Series B* 63(2), 411-423 (2001).
+> https://doi.org/10.1111/1467-9868.00293
+
+Source of the rule QP-CAT applies -- the *smallest* k whose gap reaches the next k's less its
+standard error, not the argmax -- and of the PCA-aligned uniform reference box used as the
+null.
+
+**The argument against the elbow, which we show anyway and label:**
+
+> Schubert E. "Stop using the elbow criterion for k-means and how to choose the number of clusters instead." *ACM SIGKDD Explorations Newsletter* 25(1), 36-42 (2023).
+> https://doi.org/10.1145/3606274.3606278
+
+**Why the three disagree, and an alternative to all of them:**
+
+> Fu W, Perry PO. "Estimating the Number of Clusters Using Cross-Validation." *Journal of Computational and Graphical Statistics* 29(1), 162-173 (2019).
+> https://doi.org/10.1080/10618600.2019.1647846
+
+**Used in single-cell and imaging practice:**
+
+> Kiselev VY, Andrews TS, Hemberg M. "Challenges in unsupervised clustering of single-cell RNA-seq data." *Nature Reviews Genetics* 20, 273-282 (2019).
+> https://doi.org/10.1038/s41576-018-0088-9
+
+The standard review of exactly this problem for single-cell data, including how cluster number
+is chosen in practice and why stability matters more than any single index.
+*Editorial notice:* carries a publisher correction --
+
+> Kiselev VY, Andrews TS, Hemberg M. "Publisher Correction: Challenges in unsupervised clustering of single-cell RNA-seq data." *Nature Reviews Genetics* (2019).
+> https://doi.org/10.1038/s41576-019-0095-5
+
+-- a production fix from the publisher two weeks after the paper appeared, not an author
+amendment to the science. Named here because it exists, not because it changes the content.
+
+> Duò A, Robinson MD, Soneson C. "A systematic performance evaluation of clustering methods for single-cell RNA-seq data." *F1000Research* 7, 1141 (2020).
+> https://doi.org/10.12688/f1000research.15666.3
+
+Benchmarks fourteen clustering methods and, directly relevant here, how badly each one's
+accuracy depends on the number of clusters requested. *Note:* F1000Research publishes in
+versions; the DOI above is **version 3**, the current peer-reviewed version of record. The two
+`new_version` notices Crossref reports are that model, not corrections.
+
+> Windhager J, Zanotelli VRT, Schulz D, et al. "An end-to-end workflow for multiplexed image processing and analysis." *Nature Protocols* 18, 3565-3613 (2023).
+> https://doi.org/10.1038/s41596-023-00881-0
+
+The reference protocol for multiplexed imaging, which is the closest published practice to
+what QP-CAT does.
+
+**Implementation guides from the projects themselves:**
+
+- scikit-learn, [Selecting the number of clusters with silhouette analysis](https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html)
+  -- the clearest worked example, and `silhouette_score` is literally the function QP-CAT calls.
+- scikit-learn, [Clustering performance evaluation](https://scikit-learn.org/stable/modules/clustering.html#silhouette-coefficient)
+  -- the silhouette's stated weaknesses, including that it favours convex clusters and so reads
+  high for KMeans on data KMeans suits whether or not the clusters are real.
+- R, [`cluster::clusGap`](https://search.r-project.org/CRAN/refmans/cluster/html/clusGap.html)
+  -- the reference implementation of the gap statistic, including the `firstSEmax` rule QP-CAT
+  follows.
+
+**Video, for the algorithm itself:**
+
+- StatQuest with Josh Starmer, [*StatQuest: K-means clustering*](https://www.youtube.com/watch?v=4b5d3muPQmA)
+  -- k-means from scratch, with the elbow plot from 4:26. The clearest short explanation we
+  found from an established source.
+
+3Blue1Brown has **no** video on clustering or k-means; several "3Blue1Brown-style" Manim
+animations of k-means circulate, but they are unaffiliated and we have not vetted them, so
+none is linked here.
+
+**Used in:** the "Choose k..." dialog (`scripts/choose_k.py`), and
+[Choosing k](clustering.md#choosing-k)
+
+---
+
 ### HDBSCAN
 
 Hierarchical Density-Based Spatial Clustering of Applications with Noise. Extends DBSCAN to find clusters of varying densities.

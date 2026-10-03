@@ -23,6 +23,7 @@ import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
 import qupath.ext.qpcat.model.ClusteringResult;
@@ -1388,6 +1389,100 @@ public class ClusteringDialog {
 
     /** Append a per-method info box (code-accurate caution + a "Learn more"
      *  link into BEST_PRACTICES.md) to the algorithm parameter box. */
+    /**
+     * "Choose k..." -- sweep k and show the elbow, silhouette and gap curves.
+     *
+     * <p>Sits beside the k spinner because that is where the question arises. The
+     * sweep runs on the matrix THIS configuration would cluster, so changing the
+     * measurement list or the normalization and sweeping again gives a different
+     * and correct answer; a k chosen on a different matrix is a k for a different
+     * problem.
+     *
+     * @param target the spinner an applied suggestion is written back to
+     * @return the button
+     */
+    private Button chooseKButton(Spinner<Integer> target) {
+        Button btn = new Button("Choose k...");
+        btn.setTooltip(Tooltips.of(
+                "Fit this algorithm across a range of k on the SAME matrix this run "
+                + "would cluster, and plot the three statistics people are told to\n"
+                + "choose k with: the elbow (inertia), the mean silhouette, and the gap\n"
+                + "statistic.\n\n"
+                + "They regularly disagree. Measured on 400 cells of pure noise with no\n"
+                + "clusters in it, over five seeds: the elbow said 3 or 4 every time, the\n"
+                + "silhouette said 6 to 8 every time, and the gap statistic said k = 1\n"
+                + "all five times -- it is the only one of the three that can tell you\n"
+                + "there is nothing to divide.\n\n"
+                + "Costs one KMeans fit per k, plus 10 more per k for the gap. The\n"
+                + "silhouette is O(n^2) so it is computed on a capped subsample, and the\n"
+                + "dialog says how many cells it used."));
+        btn.setOnAction(e -> runChooseK(target));
+        return btn;
+    }
+
+    /** Run the sweep off the FX thread, then show {@link ChooseKDialog}. */
+    private void runChooseK(Spinner<Integer> target) {
+        if (qupath == null || qupath.getImageData() == null) {
+            Dialogs.showWarningNotification("QPCAT - Choose k",
+                    "Open an image first: the sweep needs cells to read.");
+            return;
+        }
+        ClusteringConfig config = buildConfig();
+        if (config == null) {
+            return;   // buildConfig already said what was missing
+        }
+        int current = target.getValue() == null ? 10 : target.getValue();
+        // Range around the current choice, wide enough to show a curve and
+        // starting at 1 so the gap statistic can report "no structure".
+        final int kMin = 1;
+        final int kMax = Math.max(current + 5, 12);
+
+        final ImageData<BufferedImage> imageData = qupath.getImageData();
+        final Stage owner = chooseKOwner();
+        Dialogs.showInfoNotification("QPCAT - Choose k",
+                "Sweeping k = " + kMin + " to " + kMax + "; this runs "
+                + (kMax - kMin + 1) + " fits plus the gap references.");
+        Thread t = new Thread(() -> {
+            ClassLoader previous = Thread.currentThread().getContextClassLoader();
+            try {
+                Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+                ChooseKResult result = new ClusteringWorkflow(qupath).sweepKForImage(
+                        imageData, config, kMin, kMax,
+                        QpcatPreferences.getChooseKSilhouetteCap(),
+                        QpcatPreferences.getChooseKGapReferences(),
+                        msg -> logger.info("Choose k: {}", msg));
+                Platform.runLater(() -> {
+                    if (result == null) {
+                        Dialogs.showErrorMessage("QPCAT - Choose k",
+                                "The sweep produced no result. See the log for details.");
+                    } else {
+                        ChooseKDialog.show(owner, result, k -> {
+                            target.getValueFactory().setValue(k);
+                            updatePreflight();
+                        });
+                    }
+                });
+            } catch (Exception ex) {
+                logger.error("Choose k failed", ex);
+                Platform.runLater(() -> Dialogs.showErrorMessage("QPCAT - Choose k",
+                        "Could not sweep k:\n" + ex.getMessage()));
+            } finally {
+                Thread.currentThread().setContextClassLoader(previous);
+            }
+        }, "qpcat-choose-k");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** The window the sweep dialog should be owned by, or null. */
+    private Stage chooseKOwner() {
+        try {
+            return qupath == null ? null : qupath.getStage();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void addMethodInfo(String text, String anchor) {
         Label info = new Label(text);
         info.setWrapText(true);
@@ -2725,7 +2820,8 @@ public class ClusteringDialog {
             }
             case KMEANS, MINIBATCHKMEANS -> {
                 HBox row = new HBox(10,
-                        tipLabel("n_clusters:", kmeansClusterSpinner), kmeansClusterSpinner);
+                        tipLabel("n_clusters:", kmeansClusterSpinner), kmeansClusterSpinner,
+                        chooseKButton(kmeansClusterSpinner));
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
                 if (algo == Algorithm.MINIBATCHKMEANS) {
@@ -2739,10 +2835,11 @@ public class ClusteringDialog {
                     addMethodInfo(
                             "Partitions cells into k clusters around centroids. Fast, but assumes "
                             + "round, equal-size clusters and is sensitive to initialisation "
-                            + "(QP-CAT runs 10 inits). QP-CAT does not compute elbow, silhouette "
-                            + "or gap statistics for you -- pick k by running a few values and "
-                            + "comparing the results, and re-run with different seeds to confirm "
-                            + "stability.",
+                            + "(QP-CAT runs 10 inits). Use \"Choose k...\" for the elbow, "
+                            + "silhouette and gap statistics computed on this run's own matrix -- "
+                            + "they regularly disagree, and only the gap statistic can tell you "
+                            + "there is no cluster structure at all. Then re-run with different "
+                            + "seeds to confirm the boundaries hold.",
                             "caution-kmeans");
                 }
             }
@@ -2775,7 +2872,8 @@ public class ClusteringDialog {
             case AGGLOMERATIVE -> {
                 HBox row = new HBox(10,
                         tipLabel("n_clusters:", aggClusterSpinner), aggClusterSpinner,
-                        tipLabel("linkage:", aggLinkageCombo), aggLinkageCombo);
+                        tipLabel("linkage:", aggLinkageCombo), aggLinkageCombo,
+                        chooseKButton(aggClusterSpinner));
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
                 addMethodInfo(
@@ -2787,7 +2885,8 @@ public class ClusteringDialog {
             }
             case GMM -> {
                 HBox row = new HBox(10,
-                        tipLabel("n_components:", kmeansClusterSpinner), kmeansClusterSpinner);
+                        tipLabel("n_components:", kmeansClusterSpinner), kmeansClusterSpinner,
+                        chooseKButton(kmeansClusterSpinner));
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
                 addMethodInfo(

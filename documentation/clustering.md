@@ -201,6 +201,79 @@ This is the same family of problem as
 [a cluster label being a hypothesis](#cluster-labels-are-hypotheses): both are about not
 over-trusting a boundary the method was free to draw wherever it liked.
 
+<a name="choosing-k"></a>
+### Choosing k
+
+KMeans, MiniBatch KMeans, Agglomerative and GMM all make you name the number of clusters.
+**"Choose k..."**, beside that spinner, fits the algorithm across a range of k and plots the
+three statistics the literature recommends for the decision. It runs on **the matrix this
+configuration would cluster** -- same measurements, same normalization, same PCA precursor --
+because a k chosen on a different matrix is a k chosen for a different problem.
+
+Earlier versions of this page recommended these three and did not provide them, which was
+the actual complaint: a user reasonably read the recommendation as a claim the tool computed
+them.
+
+#### The three, and what each is worth
+
+| | What it is | Has an optimum? | Can it say "no clusters"? |
+|---|---|---|---|
+| **Elbow** (inertia) | Within-cluster sum of squares | **No** -- falls forever | No |
+| **Silhouette** | Mean of `(b-a)/max(a,b)` per cell, -1 to 1 | Yes, so it can be argmaxed | No |
+| **Gap statistic** | `log(expected inertia under a null) - log(observed)` | Yes, but use the rule below | **Yes** |
+
+**The elbow has no optimum.** Inertia decreases monotonically with k, always, so there is
+nothing to maximise -- the "elbow" is a kink read off a shape, and the kink is often absent
+or ambiguous. QP-CAT computes it as the point farthest from the chord joining the curve's
+ends, with both axes normalised so the answer does not change with your units. That makes it
+reproducible, not correct. Erich Schubert's [*Stop using the elbow criterion for k-means*](https://doi.org/10.1145/3606274.3606278)
+argues it should not be used at all; we show it because it is asked for, and we say this.
+
+**The gap statistic uses Tibshirani's rule, not the argmax.** The suggestion is the
+*smallest* k whose gap reaches the next k's gap minus that k's standard error. Taking the
+argmax instead overestimates k, which is precisely why the original paper states the rule
+this way. When no k satisfies it, QP-CAT reports **no suggestion** rather than k_max -- the
+range was too small, and naming the largest value tried would present a boundary artifact as
+a result.
+
+#### The measurement worth reading before you trust any of them
+
+Run on **400 cells of 5-feature Gaussian noise -- data with no clusters in it at all** --
+five seeds, using this sweep:
+
+| | pure noise (no structure) | three well-separated blobs |
+|---|---|---|
+| Elbow | said k = 3 or 4, **every run** | k = 3, 5/5 |
+| Silhouette | said k = 6 to 8, **every run** | k = 3, 5/5 |
+| **Gap statistic** | **said k = 1, 5 of 5 runs** | k = 3, 5/5 |
+
+So on structureless data the elbow and the silhouette both confidently name a k, and nothing
+about their output hints that the answer is meaningless. **The gap statistic is the only one
+of the three that can tell you there is nothing to divide**, which is why it is on by default
+despite costing ten extra fits per k.
+
+When all three agree, that agreement is informative. When they disagree -- the normal case --
+prefer the silhouette and the gap over the elbow, then decide with what you know about the
+tissue. None of them knows what a cell type is.
+
+#### Practical limits
+
+- **The silhouette is O(n^2) in memory as well as time.** The full pairwise distance matrix
+  for 10,000 cells is 0.8 GB; for 300,000 it is 720 GB. QP-CAT computes it on a seeded
+  subsample (10,000 cells by default, a preference) and the dialog states the number it used.
+- **The sweep starts at k = 1** so the gap statistic can report "no structure". Sweeping from
+  k = 2 removes that possibility and the dialog says so.
+- **It costs one fit per k, plus B fits per k for the gap** (B = 10 by default). Both caps are
+  preferences under *Clustering*.
+- **k is not transferable between normalizations.** Change the normalization and sweep again.
+
+#### Where to read more
+
+Primary sources for each statistic, an argument against one of them, implementation guides,
+and places they are used in single-cell and imaging work: see
+[Choosing the number of clusters](references.md#choosing-k) in the references, which the
+dialog links to directly.
+
 ### Decision tree
 
 ```
@@ -226,11 +299,10 @@ of cells, does not need k. Hard labels, so no gradients. There is no single corr
 
 <a name="caution-kmeans"></a>
 **KMeans** -- partitions around k centroids. Fast, but assumes round, equal-size clusters
-and is sensitive to initialisation (QP-CAT runs 10 inits). **QP-CAT computes no elbow,
-silhouette or gap statistic** -- the algorithm exposes `n_clusters` and nothing else, so
-choosing k means running a few values and comparing; the Heatmap and Marker Rankings tabs
-are the quickest read. Those statistics are worth knowing about
-([References](references.md)) and routinely disagree with each other. (Fu & Perry 2017.)
+and is sensitive to initialisation (QP-CAT runs 10 inits). **"Choose k..." beside the
+`n_clusters` spinner** computes the elbow, silhouette and gap statistics on this run's own
+matrix -- see [Choosing k](#choosing-k), which also explains why they disagree and which to
+believe. (Fu & Perry 2020.)
 
 <a name="caution-minibatch-kmeans"></a>
 **MiniBatch KMeans** -- KMeans on small random batches. Much faster, slightly noisier

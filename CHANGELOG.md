@@ -120,12 +120,79 @@ Four items off the backlog. **Not released** -- version stays 0.21.0 until there
   the GMM info box, the algorithm tooltip, `clustering.md` and `references.md` now say which
   three algorithms report it and which three do not.
 
-### Known gaps
+### Added
 
-- `DocLinkAnchorsTest` reads `documentation/` at runtime but Gradle does not treat those files
-  as task inputs, so a docs-only change leaves the test `UP-TO-DATE` and it does not run. The
-  pre-push hook only runs the suite when a `.java` or gradle file changed, so a docs-only push
-  skips the anchor check entirely.
+- **"Choose k..." -- the elbow, silhouette and gap statistics, computed.** QP-CAT's KMeans
+  note recommended choosing k "with elbow/silhouette/gap methods" and provided none of them,
+  which a user reasonably read as a claim the tool did. The button sits beside the
+  `n_clusters` / `n_components` spinner (KMeans, MiniBatch KMeans, Agglomerative, GMM) and
+  sweeps k on **the matrix this configuration would cluster** -- same measurements, same
+  normalization, same PCA precursor, because a k chosen on a different matrix is a k chosen
+  for a different problem.
+
+  **The measurement worth knowing, and what the dialog leads with.** Run on 400 cells of
+  5-feature Gaussian noise -- data with no clusters in it at all -- over five seeds:
+
+  | | pure noise | three clean blobs |
+  |---|---|---|
+  | Elbow | said k = 3 or 4, every run | k = 3, 5/5 |
+  | Silhouette | said k = 6 to 8, every run | k = 3, 5/5 |
+  | **Gap statistic** | **k = 1, 5 of 5 runs** | k = 3, 5/5 |
+
+  So on structureless data the elbow and the silhouette both confidently name a k and nothing
+  in their output hints the answer is meaningless. The gap statistic is the only one of the
+  three that can say there is nothing to divide, which is why it is on by default despite
+  costing ten extra fits per k.
+
+  Honest about each statistic rather than presenting three equal options: the elbow curve
+  **has no optimum** (inertia falls monotonically, so the "elbow" is a kink read off a shape),
+  and the dialog links Schubert's *Stop using the elbow criterion for k-means* alongside it.
+  The gap uses **Tibshirani's rule** -- the smallest k reaching the next k's gap less its
+  standard error, not the argmax, which overestimates k -- and reports **no suggestion** when
+  no k satisfies it, rather than naming k_max and turning a boundary artifact into a result.
+  The silhouette is O(n^2) in memory as well as time (10,000 cells needs 0.8 GB; 300,000 would
+  need 720 GB), so it runs on a seeded subsample whose size the dialog states.
+
+  **Directly clickable sources in the dialog footer**, and a full review in
+  [`documentation/references.md`](documentation/references.md#choosing-k): Thorndike 1953,
+  Rousseeuw 1987, Tibshirani/Walther/Hastie 2001, Schubert 2023, Fu and Perry 2019, plus where
+  these are used in single-cell and imaging practice (Kiselev 2019, Duo 2020, Windhager 2023),
+  the scikit-learn and R `clusGap` implementation guides, and StatQuest's K-means video. Every
+  DOI was resolved against Crossref and checked for retractions and corrections; the one paper
+  carrying an editorial notice (a publisher correction) has it named. 3Blue1Brown has no
+  clustering video, so none is cited -- several "3Blue1Brown-style" imitations circulate and
+  are unaffiliated.
+
+### Fixed (tooling)
+
+- **`check_citations.py` reported two correct citations as wrong.** Both were false positives
+  of the kind the tool's own history warns about, since a false DEAD invites deleting a good
+  citation.
+  - Its DOI pattern excluded `)`, so any DOI *containing* parentheses was truncated at the
+    first one. Rousseeuw's silhouette paper is `10.1016/0377-0427(87)90125-7`; the checker
+    resolved `10.1016/0377-0427(87` and called it dead. Elsevier minted a great many DOIs in
+    that shape. Parentheses are now matched and only an *unbalanced* trailing one is stripped.
+  - Its author check used a 4-line context window, so a wrapped docstring citation that names
+    its author further above the DOI read as a mismatch -- `ppm_library`'s PS-TACS reference
+    names "Qian et al. (2025)" five lines up. It now retries against a 10-line window **only
+    when the narrow one fails**, so the narrow window still decides every citation that
+    already agrees and cannot absorb a neighbouring reference's author.
+  - It also no longer scans itself. Its own source necessarily contains DOI-shaped text, and
+    it had always reported its internal arXiv prefix as a dead DOI on a full run.
+
+### Fixed (build)
+
+- **A docs-only push skipped the in-app documentation-link check.** `DocLinkAnchorsTest` reads
+  `documentation/` at runtime and `build.gradle.kts` has declared it a test input since
+  `0812431`, so a markdown edit does invalidate the task -- verified by touching a page and
+  watching `:test` re-run. What was missing is upstream of that: `tools/pre-push-checks.sh`
+  phase 1e only invoked gradle when the push range touched a `.java` file or a build script, so
+  a docs-only push never ran the suite and the input never got the chance. A renamed heading
+  silently breaks every in-app Documentation link pointing at it, and a docs-only commit was
+  the likeliest way to do that. The trigger now includes `documentation/` and `docs/`.
+
+  An earlier draft of this changelog described the Gradle input as the missing piece. That was
+  wrong -- I had misread a cached task result as a skipped one.
 
 ## [0.21.0] -- 2026-10-03 -- does a cluster differ between conditions?
 
