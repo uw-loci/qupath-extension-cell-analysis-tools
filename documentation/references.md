@@ -335,6 +335,7 @@ Fast, scalable batch correction algorithm that projects cells into a shared embe
 
 ## Trajectory Analysis
 
+<a name="paga"></a>
 ### PAGA
 
 Partition-based Graph Abstraction. Constructs a connectivity graph between cell clusters to infer developmental trajectories.
