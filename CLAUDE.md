@@ -18,10 +18,8 @@ cd ../qupath-extension-cell-analysis-tools
 
 **No `-Dorg.gradle.java.home` pin is needed here any more.** Both repos run Gradle
 9.2.1, which works on JDK 25 -- the pin existed only because Gradle 8.12 aborts on Java
-25 with a bare `* What went wrong: 25.0.3`. The eleven monorepo repos still on 8.12 do
-still need it, which is why `tools/pre-push-checks.sh` keeps hunting for a JDK 17-23:
-that hook picks ONE JDK for every repo, so the clamp can only go once they have all
-moved.
+25 with a bare `* What went wrong: 25.0.3`. Every Java repo in the monorepo is on the
+9.2.1 wrapper, and `tools/pre-push-checks.sh` accepts any JDK 17-25.
 
 - The dependency is a **non-transitive `implementation`**:
   `implementation("io.github.uw-loci:cluster3d-core:0.1.11") { isTransitive = false }`. It gets
@@ -32,8 +30,9 @@ moved.
   RELOCATED package (`build.gradle.kts` rewrites `qupath.ext.cluster3d` into it), so
   grepping the original name finds nothing and looks like a failed shade.
 - A user with BOTH QP-CAT and the standalone `qupath-extension-cluster-3d-navigator` installed
-  has `cluster3d-core` shaded into both jars at the same pinned version 0.1.11 -> identical
-  bytecode, harmless.
+  has `cluster3d-core` shaded into both jars, possibly at different pinned versions. That is
+  harmless: QP-CAT's copy is relocated to `qupath.ext.qpcat.internal.cluster3d`, so the two
+  class sets never collide.
 
 ### Gradle 9 + shadow 9 (do not "harmonise" the shadow version down)
 
