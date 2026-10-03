@@ -14,7 +14,7 @@ Per the Phase 2 design contract (02_design.md, Carried-forward contracts):
   * `Authorization:` headers / bearer tokens are scrubbed from any error
     payload BEFORE the value crosses the Appose boundary back into Java.
     This is a tested invariant (see LlmKeyRedactionTest.java).
-  * The prompt template id `cluster_phenotype_v1` is a constant in this
+  * The prompt template id `cluster_phenotype_v2` is a constant in this
     module and is surfaced in the audit log via `prompt_template`.
   * The LLM is allowed to emit phenotype=null / confidence=null with a
     rationale explaining why ("insufficient signal" path).
@@ -34,7 +34,7 @@ Outputs (task.outputs):
                                 confidence, rationale, supporting_markers}
   prompt               str   -- full rendered prompt (for audit log)
   prompt_hash          str   -- sha256 of the prompt
-  prompt_template      str   -- "cluster_phenotype_v1"
+  prompt_template      str   -- "cluster_phenotype_v2"
   response_raw         str   -- raw response text from the LLM
   token_count          int   -- total tokens (input + output) if reported, else -1
   input_tokens         int   -- input/prompt tokens if reported, else -1
@@ -51,7 +51,7 @@ import sys
 
 logger = logging.getLogger("qpcat.llm")
 
-PROMPT_TEMPLATE_ID = "cluster_phenotype_v1"
+PROMPT_TEMPLATE_ID = "cluster_phenotype_v2"
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +133,16 @@ rank-sum marker rankings per cluster. For each cluster, suggest the most \
 likely phenotype (cell type / state) given the top markers and their \
 Wilcoxon scores.
 
+IMPORTANT about the numbers you are given. The clusters were defined FROM
+these same marker measurements, so the ranking is a description of the
+clusters, not a test of them. Treat each score as an ORDERING of markers
+within its cluster. Do NOT describe a marker or a cluster as significant,
+statistically supported, or validated, and do not cite a p-value as
+evidence -- no p-values are provided for exactly that reason. A positive
+score means the marker is higher in this cluster than in the rest; a
+negative score means lower, which is informative and should be read as
+absence rather than as a weak result.
+
 Output STRICTLY as a JSON array. Each element is an object with these keys:
   cluster_id          integer
   phenotype           string OR null (use null if signal is insufficient)
@@ -152,7 +162,7 @@ Cluster data:
 
 
 def build_prompt(marker_table, cluster_ids, top_n):
-    """Render the cluster_phenotype_v1 prompt for the given cluster ids."""
+    """Render the cluster_phenotype_v2 prompt for the given cluster ids."""
     blocks = []
     for cid in cluster_ids:
         markers = marker_table.get(str(cid), [])
@@ -165,10 +175,13 @@ def build_prompt(marker_table, cluster_ids, top_n):
             name = m.get("name", "?")
             score = m.get("score", 0.0)
             log2fc = m.get("logfoldchange", 0.0)
-            pval = m.get("pval_adj", 1.0)
+            # pval_adj is deliberately NOT sent. It is the p-value of a test whose
+            # null hypothesis the clustering already falsified, and handing it to a
+            # language model invites exactly the significance language the prompt
+            # forbids. The score carries the ranking; the p-value adds nothing to it.
             lines.append(
-                "  - {0}  score={1:.2f}  log2fc={2:.2f}  pval_adj={3:.2e}".format(
-                    name, float(score), float(log2fc), float(pval)))
+                "  - {0}  score={1:.2f}  log2fc={2:.2f}".format(
+                    name, float(score), float(log2fc)))
         blocks.append("\n".join(lines))
     return PROMPT_TEMPLATE.format(cluster_blocks="\n\n".join(blocks))
 

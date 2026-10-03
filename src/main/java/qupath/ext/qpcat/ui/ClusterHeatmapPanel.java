@@ -5,6 +5,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.service.QpcatColorMaps;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
@@ -44,6 +45,10 @@ public class ClusterHeatmapPanel extends VBox {
     static final String SCALE_SHARED = "Shared across markers";
 
     private javafx.scene.control.ComboBox<String> scaleCombo;
+    /** Colour-map picker; its items are the family matching {@link #centred}. */
+    private javafx.scene.control.ComboBox<String> colorMapCombo;
+    /** The map currently painting, resolved from the picker. */
+    private qupath.lib.color.ColorMaps.ColorMap colorMap;
     private final Canvas canvas;
     private final Button zoomOutBtn;
     private final Button zoomInBtn;
@@ -129,6 +134,8 @@ public class ClusterHeatmapPanel extends VBox {
      */
     public void setNormalization(String normalizationId) {
         this.centred = "zscore".equalsIgnoreCase(normalizationId);
+        // Which colour-map family is correct follows from this, so reload it.
+        refreshColorMaps();
         if (data != null) {
             recomputeScale();
             redraw();
@@ -250,8 +257,34 @@ public class ClusterHeatmapPanel extends VBox {
             redraw();
         });
 
+        // Colour-map picker. Only the family matching the data is offered: a
+        // diverging map promises a meaningful midpoint, and un-normalized
+        // intensities have none, so offering blue-white-red for them would invite
+        // reading the middle of an arbitrary range as "average".
+        colorMapCombo = new javafx.scene.control.ComboBox<>();
+        colorMapCombo.setStyle("-fx-font-size: 10px;");
+        colorMapCombo.setTooltip(Tooltips.of(
+                "Colour map for the cells. Only maps suited to THIS data are listed:\n\n"
+                + "Z-scored values have a meaningful zero, so diverging maps are\n"
+                + "offered and the midpoint is zero.\n\n"
+                + "Raw / min-max / percentile values have no centre, so sequential\n"
+                + "maps are offered instead -- a diverging map would put its pale\n"
+                + "midpoint on an arbitrary number and invite reading it as average.\n\n"
+                + "Includes any colour maps you have added to QuPath's colormaps\n"
+                + "directory. The choice is remembered per family."));
+        colorMapCombo.valueProperty().addListener((o, a, b) -> {
+            if (b == null) {
+                return;
+            }
+            QpcatPreferences.setHeatmapColorMap(centred, b);
+            colorMap = QpcatColorMaps.resolve(b, centred);
+            redraw();
+        });
+        refreshColorMaps();
+
         javafx.scene.layout.HBox zoomBar = new javafx.scene.layout.HBox(
                 4, titleLabel, new Label("  Scale:"), scaleCombo,
+                new Label("  Colours:"), colorMapCombo,
                 new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn,
                 new Label("  Show:"), filterBtn);
         zoomBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
@@ -577,10 +610,50 @@ public class ClusterHeatmapPanel extends VBox {
     }
 
     /**
-     * Map a [0,1] value to a blue-white-red color.
+     * Reload the picker with the family that suits the current data.
+     * <p>
+     * Called on construction and whenever the normalization changes, because
+     * which family is correct follows from whether zero means anything. A
+     * remembered name from the other family is not carried over --
+     * {@link QpcatColorMaps#resolve} falls back to that family's default.
+     */
+    private void refreshColorMaps() {
+        if (colorMapCombo == null) {
+            return;
+        }
+        java.util.Map<String, qupath.lib.color.ColorMaps.ColorMap> family =
+                QpcatColorMaps.forData(centred);
+        String wanted = QpcatPreferences.getHeatmapColorMap(centred);
+        if (!family.containsKey(wanted)) {
+            wanted = QpcatColorMaps.defaultFor(centred);
+        }
+        colorMap = QpcatColorMaps.resolve(wanted, centred);
+        // Set the items first, then the value, or the listener fires against a
+        // combo whose items do not yet contain it and the selection is dropped.
+        colorMapCombo.getItems().setAll(family.keySet());
+        colorMapCombo.setValue(family.containsKey(wanted) ? wanted : null);
+        colorMapCombo.setDisable(family.size() <= 1);
+    }
+
+    /**
+     * Map a [0,1] value to a colour using the chosen map.
+     *
+     * <p>Falls back to the hand-written scales when the QuPath registry gives
+     * nothing, so the heatmap always paints: a blank figure is a worse failure
+     * than a figure in the previous default colours.
+     *
+     * @param val position along the scale, 0..1
+     * @return the colour at that position
      */
     private Color valueToColor(double val) {
         val = Math.max(0, Math.min(1, val));
+        if (colorMap != null) {
+            Integer packed = colorMap.getColor(val, 0, 1);
+            if (packed != null) {
+                int rgb = packed;
+                return Color.rgb((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
+            }
+        }
         if (!centred) {
             // No meaningful zero -> SEQUENTIAL. A blue-white-red scale promises a
             // midpoint that means something, and un-normalized intensities have

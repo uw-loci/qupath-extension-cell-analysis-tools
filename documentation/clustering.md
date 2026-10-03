@@ -139,14 +139,67 @@ Z-score, 0.3-0.7 for Min-Max and Percentile, and raw intensity units for None.
 
 The number of clusters depends on the parameters you choose, and **every method here
 assigns each cell to exactly one cluster** -- which hides gradients such as
-epithelial-mesenchymal transitions. QP-CAT does not export soft or continuous
-membership. So:
+epithelial-mesenchymal transitions.
+
+QP-CAT now reports how marginal each assignment was, for the algorithms that compute such a
+quantity: GMM (posterior probability), HDBSCAN (membership strength) and KMeans /
+MiniBatch KMeans (separation margin). See
+[Cluster confidence](results.md#cluster-confidence-tab) -- it is a results tab and a per-cell
+measurement you can map in the viewer, which is how you tell a real boundary from a line
+through the middle of a continuum. **Leiden, Agglomerative and BANKSY produce no such
+quantity and none is invented for them**, so with those you still have hard labels only.
+
+Either way:
 
 - **Re-run with different seeds and parameters** and check the boundary cells stay put.
   A cell that jumps clusters between runs does not have a reliable label.
 - **Read the marker heatmap** rather than trusting one labelling; it shows which markers
   actually separate the clusters.
 - Treat labels as a hypothesis to validate.
+
+<a name="marker-pvalues-are-circular"></a>
+### The marker p-values are circular -- read the ranking, not the p
+
+The **Marker Rankings** and **Marker Fingerprints** tabs run scanpy's Wilcoxon rank-sum
+test (`rank_genes_groups`) comparing each cluster against the rest. The ranking is standard
+practice and it is how candidate cell types get found. **The p-value beside it is not
+evidence that the cluster is real**, and QP-CAT used to label it "smaller is more
+significant", which invited exactly that reading.
+
+The reason is circularity, sometimes called *double dipping*: the clusters were built
+**from these same measurements**, and the test then asks whether those measurements differ
+between the clusters. They were chosen to. The test's null hypothesis -- that the groups
+are exchangeable with respect to these markers -- was already false before the test ran.
+
+**Measured, in the environment QP-CAT ships** (scanpy 1.11.5): 600 cells, 20 markers, every
+value drawn i.i.d. from a standard normal, so **no clusters exist at all**. Leiden still
+found 11 to 13 of them, and across five seeds **47% of the rows a Marker Rankings table
+would display came back at adjusted p < 0.05**, the smallest at 2e-14. The adjustment does
+not help: Benjamini-Hochberg corrects for testing many markers, not for having chosen the
+groups using those markers.
+
+It is worst exactly when it matters most. A clean, well-separated clustering barely needs
+the p-value; an ambiguous one is where a user leans on it, and that is where the inflation
+is largest.
+
+**What to do instead:**
+
+- **Use the ranking to pick candidates**, which is what it is good for. Top markers CD3 and
+  CD8 make a cytotoxic-T-cell hypothesis worth checking.
+- **Confirm on something the clustering did not see.** Hold measurements out of the
+  clustering input and check they separate the clusters too, or confirm on a second sample.
+  Either gives a number that means what it appears to mean.
+- **Note the sign of Score.** It is a signed statistic: negative means the marker is *lower*
+  in this cluster. A large magnitude with a tiny p can mean strongly depleted, which is
+  informative but is not "a marker for" that cluster.
+- **For a formally valid post-clustering test**, see
+  [ClusterDE](references.md#post-clustering-inference) (a synthetic one-cluster null as a
+  parallel negative control) or the selective-inference and data-thinning literature in the
+  same section. QP-CAT does not implement any of them.
+
+This is the same family of problem as
+[a cluster label being a hypothesis](#cluster-labels-are-hypotheses): both are about not
+over-trusting a boundary the method was free to draw wherever it liked.
 
 ### Decision tree
 

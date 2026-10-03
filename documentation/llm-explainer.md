@@ -22,7 +22,7 @@ The prompt template, output JSON shape, and audit-log row format may also change
 
 - **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
 - **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
-- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 5 (`claude-sonnet-5`) on $DATE using prompt template `cluster_phenotype_v1`; the full prompt and response are archived in the project log")
+- **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 5 (`claude-sonnet-5`) on $DATE using prompt template `cluster_phenotype_v2`; the full prompt and response are archived in the project log")
 
 ### Requirements
 
@@ -128,7 +128,7 @@ A key set this way is stored in plain text in your user environment. On a shared
 The prompt contains, per cluster:
 
 - The cluster id (e.g. `Cluster 3`) and cell count
-- The top-N (default 10) markers by Wilcoxon score, each with score, log fold change, and adjusted p-value
+- The top-N (default 10) markers by Wilcoxon score, each with score and log fold change. **Adjusted p-values are deliberately NOT sent** -- the clusters were defined from these same measurements, so the p-value is circular, and handing it to a language model invites it to write "significantly enriched". The prompt explicitly instructs the model not to claim significance. See [the marker p-values are circular](clustering.md#marker-pvalues-are-circular).
 - The cluster-by-marker mean expression table for those markers (so the LLM can see "this cluster is high in CD8 and low in CD20" without needing to compute it)
 
 The prompt **does not** contain:
@@ -153,7 +153,7 @@ Each row of the result table has:
 | **Supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
 | **Rationale** | One-paragraph explanation of why the LLM made this call |
 
-**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale column still explains *why* the model refused (e.g. "insufficient signal: top markers are mutually inconsistent and adjusted p-values are above 0.5 across the board"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer.
+**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale column still explains *why* the model refused (e.g. "insufficient signal: the top markers are mutually inconsistent, spanning myeloid and epithelial lineages"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer.
 
 **The LLM may be wrong.** Common failure modes:
 - **Marker name confusion** -- if your panel uses a non-standard naming convention (e.g. `MarkerCh01` or `tumor_marker_1`), the LLM has no way to know what the marker actually targets. Use real marker names in measurement columns whenever possible
@@ -175,7 +175,7 @@ LLM output is **not deterministic** unless the provider exposes a temperature=0 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
 1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`)
-2. Record the **prompt template version** (e.g. `cluster_phenotype_v1`)
+2. Record the **prompt template version** (e.g. `cluster_phenotype_v2`)
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
 The goal is **reproducibility of input** -- anyone reading your paper can run the same prompt against the same model and judge the answer for themselves. Reproducibility of *output* is not a property the LLM provides.
@@ -204,7 +204,7 @@ provider's *output* has been validated against ground truth.
 This is the first feature in QP-CAT that calls a remote LLM API. The surface area is
 intentionally narrow:
 
-- One prompt template (`cluster_phenotype_v1`); not user-editable yet
+- One prompt template (`cluster_phenotype_v2`); not user-editable yet
 - Two providers (Anthropic, run; Ollama, never run); OpenAI deferred
 - One batched call per Run Explainer click; per-cluster async deferred
 - API key is session-scoped; OS-keychain integration deferred
@@ -249,7 +249,7 @@ morphology-level reasoning.
 Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail is safe to share but does not contain the API key. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
 - **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
-- **Prompt template version** as logged (currently `cluster_phenotype_v1`)
+- **Prompt template version** as logged (currently `cluster_phenotype_v2`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
 - **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories
 

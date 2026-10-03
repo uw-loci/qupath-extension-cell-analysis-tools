@@ -177,7 +177,7 @@ public class LlmExplainerService {
         String prompt = stringOr(out.get("prompt"), "");
         String promptHash = stringOr(out.get("prompt_hash"), "");
         String promptTemplate = stringOr(out.get("prompt_template"),
-                "cluster_phenotype_v1");
+                "cluster_phenotype_v2");
         String responseRaw = stringOr(out.get("response_raw"), "");
         int tokenCount = intOr(out.get("token_count"), -1);
         int inputTokens = intOr(out.get("input_tokens"), -1);
@@ -197,7 +197,7 @@ public class LlmExplainerService {
     }
 
     private static ExplainResult cancelledResult() {
-        return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v1",
+        return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v2",
                 "", "", "", -1, -1, -1, "REQUEST_CANCELLED",
                 "Cancelled by user; result discarded.");
     }

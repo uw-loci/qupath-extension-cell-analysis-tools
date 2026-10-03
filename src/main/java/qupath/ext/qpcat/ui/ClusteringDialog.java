@@ -213,7 +213,8 @@ public class ClusteringDialog {
     // Refreshes the embedding "Advanced" pane's row visibility (incl. the shared
     // seed row). Set when the embedding section is built; called by the algorithm
     // section, which is built afterwards.
-    private Runnable embeddingAdvancedVisibilityUpdater;
+    /** Refreshes whether the random-seed row is enabled; set by the algorithm section. */
+    private Runnable seedRelevanceUpdater;
     private ComboBox<Algorithm> algorithmCombo;
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
@@ -636,16 +637,23 @@ public class ClusteringDialog {
                 "Distance metric UMAP uses to find neighbors. 'euclidean' is the default;\n"
                 + "'cosine' / 'correlation' compare profile shape rather than magnitude."));
 
-        // Shared advanced param: random seed (was hardcoded to 42).
+        // The run's one random seed. BUILT here because the embedding is one of its
+        // two consumers, but PLACED in the Clustering Algorithm section -- see the
+        // comment at its row for why.
         embeddingSeedSpinner = new Spinner<>(0, Integer.MAX_VALUE, 42, 1);
         embeddingSeedSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(embeddingSeedSpinner);
         embeddingSeedSpinner.setPrefWidth(110);
         embeddingSeedSpinner.setTooltip(Tooltips.of(
-                "Random seed for the embedding (UMAP / t-SNE / PCA) AND the stochastic\n"
-                + "clustering algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY).\n"
-                + "Keep it fixed for reproducible layouts and cluster assignments; change\n"
-                + "it to check a result is stable. Default 42."));
+                "One seed for the whole run: the embedding (UMAP / t-SNE / PCA) AND the\n"
+                + "stochastic clustering algorithms (KMeans, MiniBatch KMeans, GMM,\n"
+                + "Leiden, BANKSY). Leiden is the default, so this normally decides\n"
+                + "whether your cluster assignments are reproducible.\n\n"
+                + "Keep it fixed to reproduce a result. CHANGE IT to check the result is\n"
+                + "stable -- a cluster boundary that moves when only the seed moves was\n"
+                + "never a real boundary. Default 42.\n\n"
+                + "Greyed out only when the algorithm is deterministic (HDBSCAN,\n"
+                + "Agglomerative) and no embedding is being computed."));
 
         // Reproducibility vs speed. umap-learn turns OFF all parallelism the moment
         // a random seed is supplied (it forces n_jobs=1 and drops numba prange from
@@ -722,8 +730,6 @@ public class ClusteringDialog {
                 tipLabel("iterations:", tsneIterationsSpinner), tsneIterationsSpinner,
                 tipLabel("early_exag:", tsneEarlyExaggerationSpinner), tsneEarlyExaggerationSpinner);
         tsneAdvRow.setAlignment(Pos.CENTER_LEFT);
-        HBox seedRow = new HBox(10, tipLabel("random seed (embedding + clustering):", embeddingSeedSpinner), embeddingSeedSpinner);
-        seedRow.setAlignment(Pos.CENTER_LEFT);
         HBox embModeRow = new HBox(10,
                 tipLabel("UMAP speed vs reproducibility:", embeddingModeCombo), embeddingModeCombo);
         embModeRow.setAlignment(Pos.CENTER_LEFT);
@@ -732,7 +738,11 @@ public class ClusteringDialog {
         advNote.setWrapText(true);
         WrapHeight.bind(advNote);
         advNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 10.5px;");
-        VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, seedRow, embModeRow, advNote);
+        // The random seed used to live here, two levels down a collapsed pane
+        // belonging to a section the user may have set to None -- while it governs
+        // whether the CLUSTERING is reproducible. It is now a visible row in the
+        // Clustering Algorithm section, which owns its main consumer.
+        VBox advBox = new VBox(6, umapAdvRow, tsneAdvRow, embModeRow, advNote);
         TitledPane advancedPane = new TitledPane("Advanced", advBox);
         advancedPane.setExpanded(false);
         advancedPane.setCollapsible(true);
@@ -742,27 +752,24 @@ public class ClusteringDialog {
             EmbeddingMethod m = embeddingCombo.getValue();
             boolean isUmap = m == EmbeddingMethod.UMAP;
             boolean isTsne = m == EmbeddingMethod.TSNE;
-            // The seed drives the embedding AND stochastic clustering, so show it
-            // whenever either is in play (e.g. KMeans with no embedding). The
-            // algorithm combo is built after this section, so guard for null on
-            // the initial pass.
-            boolean hasSeed = m != EmbeddingMethod.NONE
-                    || (algorithmCombo != null && isStochasticAlgorithm(algorithmCombo.getValue()));
             // Dimensionality is meaningless with no embedding; disable for None.
             embeddingDimCombo.setDisable(m == EmbeddingMethod.NONE);
             setRowShown(umapRow, isUmap);
             setRowShown(tsneRow, isTsne);
             setRowShown(umapAdvRow, isUmap);
             setRowShown(tsneAdvRow, isTsne);
-            setRowShown(seedRow, hasSeed);
             // Hide the Advanced pane entirely when there is nothing to configure.
-            boolean anyAdvanced = isUmap || isTsne || hasSeed;
+            // Only UMAP and t-SNE have anything here now that the seed has moved.
+            boolean anyAdvanced = isUmap || isTsne;
             advancedPane.setVisible(anyAdvanced);
             advancedPane.setManaged(anyAdvanced);
+            // The seed row lives in the algorithm section and its relevance
+            // depends on this choice too, so refresh it. Null on the first pass:
+            // that section is built after this one.
+            if (seedRelevanceUpdater != null) {
+                seedRelevanceUpdater.run();
+            }
         };
-        // Exposed so the (later-built) algorithm section can refresh seed visibility
-        // when a stochastic algorithm is chosen with no embedding.
-        this.embeddingAdvancedVisibilityUpdater = updateVisibility;
         embeddingCombo.setOnAction(e -> {
             updateVisibility.run();
             // Track the method name until the user customizes it.
@@ -1153,10 +1160,9 @@ public class ClusteringDialog {
         algorithmCombo.setOnAction(e -> {
             updateAlgorithmParams();
             updatePreflight();
-            // Seed row lives in the embedding section; refresh it so a stochastic
-            // algorithm reveals the seed even when no embedding is computed.
-            if (embeddingAdvancedVisibilityUpdater != null) {
-                embeddingAdvancedVisibilityUpdater.run();
+            // Whether the seed does anything depends on this choice.
+            if (seedRelevanceUpdater != null) {
+                seedRelevanceUpdater.run();
             }
         });
         algorithmCombo.setTooltip(Tooltips.of(
@@ -1302,7 +1308,50 @@ public class ClusteringDialog {
         HBox algoRow = new HBox(10, tipLabel("Algorithm:", algorithmCombo), algorithmCombo);
         algoRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(5, createClusteringWarningBanner(), algoRow, algorithmParamsBox);
+        // The random seed, visible and in the section that owns it.
+        //
+        // It used to sit inside a collapsed "Advanced" pane inside the
+        // Dimensionality Reduction section -- so the control deciding whether a
+        // Leiden / KMeans / GMM / BANKSY run is reproducible was two levels down a
+        // pane belonging to a different section, one the user may have set to None.
+        // Found when a workshop reader was told "leave the random seed at 42" and
+        // could not find the setting.
+        //
+        // Shown always and DISABLED when it has no effect, rather than hidden: a
+        // visible control that does nothing is a far smaller problem than a hidden
+        // one that does, and the disabled tooltip says which case you are in.
+        HBox seedRow = new HBox(10,
+                tipLabel("Random seed (clustering + embedding):", embeddingSeedSpinner),
+                embeddingSeedSpinner);
+        seedRow.setAlignment(Pos.CENTER_LEFT);
+        Label seedNote = new Label();
+        seedNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); "
+                + "-fx-font-size: 10.5px;");
+        seedNote.setWrapText(true);
+        WrapHeight.bind(seedNote);
+        seedRow.getChildren().add(seedNote);
+
+        Runnable refreshSeed = () -> {
+            boolean stochasticAlgo = isStochasticAlgorithm(algorithmCombo.getValue());
+            boolean stochasticEmbedding = embeddingCombo != null
+                    && embeddingCombo.getValue() != null
+                    && embeddingCombo.getValue() != EmbeddingMethod.NONE;
+            boolean relevant = stochasticAlgo || stochasticEmbedding;
+            embeddingSeedSpinner.setDisable(!relevant);
+            if (relevant) {
+                seedNote.setText(stochasticAlgo
+                        ? "This run is reproducible only while this is fixed."
+                        : "Fixes the embedding layout; this algorithm is deterministic.");
+            } else {
+                seedNote.setText("Not used: this algorithm is deterministic and no "
+                        + "embedding is being computed.");
+            }
+        };
+        this.seedRelevanceUpdater = refreshSeed;
+        refreshSeed.run();
+
+        VBox box = new VBox(5, createClusteringWarningBanner(), algoRow, seedRow,
+                algorithmParamsBox);
         TitledPane pane = new TitledPane("Clustering Algorithm", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -4822,17 +4871,53 @@ public class ClusteringDialog {
             colorRefreshers.add(fingerprints::refreshColors);
         }
 
+        // Membership confidence tab -- only when the algorithm actually computed
+        // one. Leiden, Agglomerative and BANKSY produce no such quantity, and an
+        // empty tab would imply the run found every label certain.
+        if (result.hasMembershipConfidence()) {
+            var mc = result.getMembershipConfidence();
+            ClusterConfidencePanel confPanel = new ClusterConfidencePanel(
+                    mc, result.getClusterLabels(), result.getNClusters(),
+                    result.getNoiseRowIndex(), result.clusterNameFn());
+            Tab confTab = new Tab("Cluster confidence", wrapWithGuide(confPanel,
+                    "How marginal each cell's cluster label was. Every algorithm here "
+                    + "assigns one cluster per cell, so a cell at 0.51/0.49 reads "
+                    + "exactly like one at 1.00/0.00 -- this tab is the difference, and "
+                    + "it is how you tell a real boundary from a line drawn through the "
+                    + "middle of a gradient (EMT, maturation, activation).\n"
+                    + "READ THE AMBIGUOUS SHARE, NOT THE MEDIAN. Measured on a "
+                    + "two-component GMM: separated blobs gave a median of 1.0000 and a "
+                    + "uniform continuum gave 0.9925 -- indistinguishable -- while the "
+                    + "share of cells below 0.90 was 0.0% against 22.5%.\n"
+                    + "The number means different things per algorithm and the column "
+                    + "says which: a GMM posterior is a probability, HDBSCAN's "
+                    + "membership strength is a tree persistence, and a KMeans margin is "
+                    + "a distance ratio with no calibration at all -- 0.8 there does NOT "
+                    + "mean 80% confident.\n"
+                    + "It is also written to every cell as a measurement, so Measure > "
+                    + "Show measurement maps will show you WHERE the uncertain cells "
+                    + "are. A band of them between two clusters is a gradient.",
+                    "cluster-confidence-tab"));
+            confTab.setClosable(false);
+            tabPane.getTabs().add(confTab);
+        }
+
         // Marker rankings tab
         if (result.hasMarkerRankings()) {
             javafx.scene.Node rankingsPane = buildMarkerRankingsPane(result);
             Tab tab = new Tab("Marker Rankings", wrapWithGuide(rankingsPane,
-                    "Top differentially expressed markers per cluster (Wilcoxon rank-sum test).\n"
-                    + "  Score: test statistic -- higher values indicate stronger differential expression.\n"
-                    + "  Log2FC: log2 fold change vs. all other clusters -- positive means upregulated "
-                    + "in this cluster.\n"
-                    + "  Adj. P-val: Benjamini-Hochberg corrected p-value -- smaller is more significant.\n"
-                    + "Use the top-scoring markers for each cluster as starting points for cell type "
-                    + "annotation. A cluster with high CD3 and CD8 scores likely represents cytotoxic T cells.",
+                    "Which markers best separate each cluster from the rest, ranked by a Wilcoxon "
+                    + "rank-sum statistic. This is how candidate cell types are found, and the "
+                    + "ranking is standard practice.\n"
+                    + "  Score: the rank-sum statistic. Its SIGN matters -- positive means higher in "
+                    + "this cluster, negative means lower.\n"
+                    + "  Log2FC: log2 fold change of mean raw intensity vs. all other clusters.\n"
+                    + "  Adj. P-val: what scanpy returns, kept so you can cross-reference it. "
+                    + "It is NOT evidence that the cluster is real, and it is not a significance "
+                    + "test of anything you did -- see the note above the table.\n"
+                    + "Read the ranking, not the p-value: a cluster whose top markers are CD3 and "
+                    + "CD8 is a cytotoxic-T-cell candidate to confirm, and the number that should "
+                    + "convince you is an independent measurement, not a smaller p.",
                     "marker-rankings-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -7260,6 +7345,31 @@ public class ClusteringDialog {
         return box;
     }
 
+    /**
+     * Header printed above every marker-ranking table.
+     * <p>
+     * The clusters were defined from the same measurements this test compares, so the
+     * p-value's null hypothesis was already false before it ran. The 47% figure was
+     * measured on scanpy 1.11.5 in the shipped environment, not estimated.
+     */
+    private static final String MARKER_RANKING_CAVEAT =
+            "The ranking is the useful part. The p-value is not a significance test."
+            + System.lineSeparator()
+            + "These clusters were built FROM these measurements, so a test of whether the"
+            + System.lineSeparator()
+            + "same measurements differ between them cannot be valid -- its null hypothesis"
+            + System.lineSeparator()
+            + "was already false. Measured on 600 cells of pure noise with no clusters in it:"
+            + System.lineSeparator()
+            + "Leiden still found 11-13 groups and 47% of the rows a table like this would"
+            + System.lineSeparator()
+            + "show came back at adj p < 0.05, the smallest at 2e-14. Use the ranking to pick"
+            + System.lineSeparator()
+            + "candidate markers; confirm a cluster with measurements held out of clustering,"
+            + System.lineSeparator()
+            + "or on a second sample. Note the SIGN of Score: negative means lower here."
+            + System.lineSeparator() + System.lineSeparator();
+
     /** Formatted rankings plus what the current filter kept, for the count readout. */
     private record RankingsText(String text, int rows, int clusters) {}
 
@@ -7284,6 +7394,10 @@ public class ClusteringDialog {
             Map<String, List<Map<String, Object>>> rankings = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
+            // The caveat is part of the TEXT, not just the guide bar: this pane is
+            // read by copying out of it, and a warning that does not travel with
+            // the numbers is a warning that will be separated from them.
+            sb.append(MARKER_RANKING_CAVEAT);
             sb.append(String.format("%-12s  %-30s  %10s  %10s  %12s%n",
                     "Cluster", "Marker", "Score", "Log2FC", "Adj. P-val"));
             sb.append("-".repeat(80)).append(System.lineSeparator());

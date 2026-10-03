@@ -64,6 +64,33 @@ The heatmap draws **every measurement the run clustered on**, whatever kind it i
 shape measurements appear alongside intensities if they were selected for the run. A map showing
 only `...: Mean` columns is a run in which only those were ticked.
 
+<a name="heatmap-colours"></a>
+### Choosing the colour map
+
+The **Colours** box offers the colour maps QuPath has installed, **including any `.tsv` maps
+you have added to QuPath's `colormaps` directory** -- so a lab palette shows up here too. The
+choice is remembered.
+
+**Only maps suited to the data are listed**, and that is the point of the control rather than a
+limitation of it:
+
+| Your normalization | Family offered | Default | Why |
+|---|---|---|---|
+| **Z-score** (the default) | diverging | Blue-White-Red | Zero means "average for this marker", so a scale with a pale midpoint states something true |
+| None, Min-Max, Percentile | sequential | Viridis | There is no meaningful zero. A diverging map would put its pale middle on an arbitrary number and invite reading it as average -- a false claim made in colour |
+
+QuPath ships no diverging map (Viridis, Inferno, Magma, Plasma and Svidro2 are all sequential),
+so QP-CAT registers its own: **Blue-White-Red** (what it has always drawn, kept as the default
+so an upgrade does not recolour an existing figure), **Red-Blue (RdBu)** and **Orange-Purple
+(PuOr)**. The last two are ColorBrewer scales and are the safer choices for colour-blind
+readers.
+
+The same two choices also colour the figures Python renders -- the scanpy dot plot and matrix
+plot, and the [co-occurrence](#co-occurrence-tabs) heatmaps -- wherever matplotlib has the same
+map. A map of your own has no matplotlib equivalent, so those figures keep their defaults
+rather than failing. Co-occurrence picks its family from the data for the same reason as above:
+diverging only when the values actually straddle the null of 1.0.
+
 **Rows/columns...** opens a picker with one checkbox per cluster and one per measurement, each
 list with a text filter and **All** / **None** / **Only these**. Ticking redraws straight away.
 Use it when the two measurements you want to compare sit ten rows apart in a 40-measurement
@@ -268,20 +295,88 @@ nothing matches, the crops fall back to the viewer's current channels.
 A medoid is a real observed cell, not a synthetic prototype, and "representative" means
 typical, not pure. Read these alongside the heatmap and marker rankings.
 
+<a name="cluster-confidence-tab"></a>
+## Cluster confidence -- how marginal was each label?
+
+Every algorithm here assigns each cell to exactly **one** cluster, so a cell the method
+thought was 51/49 reads identically to one it thought was 100/0. That is how a gradient --
+an EMT-like transition, a maturation or activation axis -- becomes an arbitrary line drawn
+through the middle of a continuum, with nothing in the output to say so.
+
+Three of the algorithms already compute a per-cell quantity that says which of those a cell
+was. This tab reports it, and the run writes it to every cell as a measurement.
+
+| Algorithm | Quantity | Is it a probability? |
+|---|---|---|
+| **GMM** | posterior probability of the assigned component | **Yes** -- calibrated |
+| **HDBSCAN** | condensed-tree membership strength (noise cells are 0) | No, but bounded 0-1 |
+| **KMeans / MiniBatch KMeans** | separation margin `(d2-d1)/d2` over the nearest two centroids | **No** -- a distance ratio with no calibration |
+| Leiden, Agglomerative, BANKSY | none exists | -- |
+
+**The tab does not appear for the bottom row.** That is the honest outcome: those methods
+produce no such quantity, and an empty column would imply every label was certain. Nothing
+is fabricated for them.
+
+**The three are not merged into one column**, and the measurement name says which you have
+(`QPCAT confidence: Posterior`, `... Membership strength`, `... Separation margin`).
+A margin of 0.8 does **not** mean 80% confident.
+
+### Read the ambiguous share, not the median
+
+The table's headline column is the **percentage of cells below 0.90**, because the average
+is nearly useless here. Measured with a two-component GMM on synthetic data:
+
+| statistic | two separated blobs | one uniform continuum |
+|---|---|---|
+| median confidence | 1.0000 | 0.9925 |
+| mean confidence | 1.0000 | 0.9293 |
+| 10th percentile | 1.0000 | 0.7329 |
+| **share below 0.90** | **0.0%** | **22.5%** |
+
+The medians are indistinguishable. The share is not. Most points on a line are still nearer
+one end than the other, so the cells that carry the information are a minority and any
+average buries them.
+
+The 0.90 threshold is a reporting convention, not a test. It was chosen because it separates
+those two cases.
+
+### What to do with it
+
+- **Map it.** The measurement is on every cell, so **Measure > Show measurement maps** will
+  show you *where* the uncertain cells are. Scattered uncertainty is noise. A **band** of it
+  between two clusters is a gradient, and that boundary should not be read as a cell-type
+  distinction.
+- **Read the "Most likely alternative" column.** For the ambiguous cells in a cluster, it
+  names the cluster they would most likely have joined instead. Two clusters that are each
+  other's alternative are candidates to merge.
+- **GMM also gets an entropy column** (`QPCAT confidence: Entropy`, 0 certain to 1 uniform).
+  It uses the whole posterior rather than just the top component, so it separates "0.5 / 0.5"
+  from "0.5 / 0.25 / 0.25".
+
 <a name="marker-rankings-tab"></a>
 <a name="marker-fingerprints-tab"></a>
 ## Marker rankings and fingerprints
 
-**Marker Rankings** gives the top differentially expressed markers per cluster from
+**Marker Rankings** ranks the markers that best separate each cluster from the rest, using
 scanpy's Wilcoxon rank-sum test:
 
-- **Score** -- test statistic; higher means stronger differential expression vs all
-  other clusters.
-- **Log2FC** -- log2 fold change vs all others; positive means upregulated here.
-- **Adj. P-val** -- Benjamini-Hochberg adjusted; smaller is more significant.
+- **Score** -- the rank-sum statistic. **Its sign matters**: positive means the marker is
+  higher in this cluster, negative means lower.
+- **Log2FC** -- log2 fold change of mean raw intensity vs all others.
+- **Adj. P-val** -- what scanpy returns, kept so you can cross-reference it.
+  **It is not evidence that the cluster is real.**
 
 Use the top markers as cell-type starting points -- high CD3 and CD8 suggests cytotoxic
 T cells -- then validate against the heatmap.
+
+> **Why the p-value is not a significance test.** The clusters were built from these same
+> measurements, so a test of whether those measurements differ between the clusters is
+> circular: its null hypothesis was already false before it ran. Measured in the shipped
+> environment on 600 cells of pure noise containing no clusters at all, Leiden still found
+> 11-13 groups and **47% of the rows a table like this would show came back at adjusted
+> p < 0.05**, the smallest at 2e-14. The tab prints this caveat above the table so it
+> travels with any numbers you copy out. Full explanation, and what to do instead, in
+> [the marker p-values are circular](clustering.md#marker-pvalues-are-circular).
 
 **Marker Fingerprints** draws the same information per cluster as a compact profile, for
 comparing clusters at a glance rather than reading a table.

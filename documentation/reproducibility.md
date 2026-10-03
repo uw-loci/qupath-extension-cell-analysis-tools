@@ -126,7 +126,17 @@ This is the only group where running the same thing twice can give you a differe
 
 | Setting | Where | Effect |
 |---|---|---|
+| **Random seed** | Run Clustering > **Clustering Algorithm** | One seed for the whole run: the embedding *and* the stochastic algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). Leiden is the default, so this normally decides whether your cluster assignments repeat. Default 42. Greyed out only when the algorithm is deterministic (HDBSCAN, Agglomerative) **and** no embedding is being computed. |
 | **UMAP speed vs reproducibility** | Run Clustering > Embedding > Advanced | `auto` (default) pins the seed below 200,000 cells and uses every core above it. `reproducible` always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. `fast` never pins it. |
+
+> **The seed moved.** It used to sit under *Embedding > Advanced*, a collapsed pane
+> in a section you may have set to **None** -- while it governed whether the *clustering*
+> repeated. It is now a visible row in the Clustering Algorithm section.
+
+**Changing the seed is a test, not a nuisance.** Re-run with a different seed and compare: a
+cluster boundary that moves when nothing but the seed moved was never a real boundary. The
+[Cluster confidence](results.md#cluster-confidence-tab) tab answers the same question within a
+single run, for the algorithms that can.
 
 The run records which path it took, so a layout that is not bit-reproducible is never silently
 non-reproducible. See [Reproducing a run](#reproducing-a-run).

@@ -217,6 +217,20 @@ try:
 except NameError:
     pref_plot_dpi = 150
 
+# Colour maps for the figures matplotlib renders here, as matplotlib names. The
+# Java side sends only names matplotlib actually has -- a user's own QuPath .tsv
+# map has no equivalent and is sent as None rather than as a name that would
+# raise. Defaults are what these figures have always used, so omitting the
+# inputs reproduces an existing figure exactly.
+try:
+    pref_cmap_sequential = sequential_cmap or "viridis"
+except NameError:
+    pref_cmap_sequential = "viridis"
+try:
+    pref_cmap_diverging = diverging_cmap or "bwr"
+except NameError:
+    pref_cmap_diverging = "bwr"
+
 # PCA precursor: reduce a high-feature matrix to N principal components before
 # the embedding + clustering step (the canonical scanpy flow). Sent per run as
 # pca_precursor_enabled; the component count is a preference. Defaults to False
@@ -1011,6 +1025,118 @@ def validate_n_neighbors(n_neighbors, n_cells):
 # Defined here, ABOVE the dispatch below, because the dispatch runs at module
 # level: a def placed after its own top-level call site is never executed in
 # time and the run dies with NameError.
+# ---- Cluster membership confidence ------------------------------------------
+#
+# Reporting threshold for "this label was close to a coin flip". A convention for
+# summarising, not a test: 0.9 was chosen because it separates the cases a user
+# cares about. Measured with a 2-component GMM -- two separated blobs left 0.0%
+# of cells below it, a uniform continuum left 22.5%, while their MEDIAN
+# confidences were 1.0000 and 0.9925 and so told the two apart not at all.
+AMBIGUOUS_BELOW = 0.9
+
+#
+# Every algorithm here assigns each cell to exactly ONE cluster, which hides
+# gradients -- an EMT-like transition becomes an arbitrary line through the
+# middle of a continuum. Three of the algorithms already compute a per-cell
+# quantity that says how marginal the assignment was, and QP-CAT used to throw
+# all three away.
+#
+# They are NOT the same quantity and are deliberately not merged into one
+# column. A GMM posterior is a probability; an HDBSCAN membership strength is a
+# condensed-tree persistence; a KMeans margin is a distance ratio. Averaging
+# them, or presenting a distance ratio as a probability, would be inventing a
+# number. Leiden, Agglomerative and BANKSY produce no such quantity at all, and
+# none is fabricated for them.
+
+
+def posterior_confidence(proba):
+    """Per-cell summary of a soft-assignment posterior.
+
+    Parameters
+    ----------
+    proba : array (n_cells, n_components)
+        Rows are per-cell distributions over components. Rows need not be exactly
+        normalised; each is divided by its own sum.
+
+    Returns
+    -------
+    dict with keys ``best`` (max probability), ``runner_up`` (index of the
+    second-most-likely component, -1 when there is only one), ``runner_up_prob``
+    and ``entropy`` (Shannon entropy divided by log(n_components), so 0 means a
+    certain assignment and 1 means every component equally likely).
+    """
+    proba = np.asarray(proba, dtype=np.float64)
+    if proba.ndim != 2 or proba.shape[0] == 0:
+        raise ValueError("proba must be a non-empty (n_cells, n_components) array")
+    n_components = proba.shape[1]
+    totals = proba.sum(axis=1, keepdims=True)
+    # A row that sums to zero carries no information; leave it uniform rather
+    # than dividing by zero and reporting a confident NaN.
+    safe = np.where(totals > 0, totals, 1.0)
+    p = np.where(totals > 0, proba / safe, 1.0 / max(1, n_components))
+
+    order = np.argsort(-p, axis=1, kind="stable")
+    best = p[np.arange(p.shape[0]), order[:, 0]]
+    if n_components >= 2:
+        runner_up = order[:, 1].astype(np.int32)
+        runner_up_prob = p[np.arange(p.shape[0]), order[:, 1]]
+    else:
+        runner_up = np.full(p.shape[0], -1, dtype=np.int32)
+        runner_up_prob = np.zeros(p.shape[0], dtype=np.float64)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        terms = np.where(p > 0, p * np.log(p), 0.0)
+    raw_entropy = -terms.sum(axis=1)
+    denom = np.log(n_components) if n_components > 1 else 1.0
+    entropy = np.clip(raw_entropy / denom, 0.0, 1.0)
+
+    return {
+        "best": best,
+        "runner_up": runner_up,
+        "runner_up_prob": runner_up_prob,
+        "entropy": entropy,
+    }
+
+
+def distance_margin(distances):
+    """Per-cell separation margin from distances to each cluster centre.
+
+    ``(d2 - d1) / d2`` where d1 is the nearest centre and d2 the next nearest:
+    dimensionless, 0 when a cell sits exactly between two centres and approaching
+    1 when it sits on one. **This is not a probability** and must never be
+    labelled as one -- it has no calibration and depends on the feature scaling.
+
+    Parameters
+    ----------
+    distances : array (n_cells, n_clusters)
+        Distance from each cell to each cluster centre.
+
+    Returns
+    -------
+    dict with keys ``margin`` and ``runner_up`` (index of the second-nearest
+    centre, -1 when there is only one).
+    """
+    distances = np.asarray(distances, dtype=np.float64)
+    if distances.ndim != 2 or distances.shape[0] == 0:
+        raise ValueError("distances must be a non-empty (n_cells, n_clusters) array")
+    n = distances.shape[0]
+    if distances.shape[1] < 2:
+        # One cluster: nothing to be marginal between. Report full confidence
+        # rather than a zero that would read as maximal ambiguity.
+        return {
+            "margin": np.ones(n, dtype=np.float64),
+            "runner_up": np.full(n, -1, dtype=np.int32),
+        }
+    order = np.argsort(distances, axis=1, kind="stable")
+    d1 = distances[np.arange(n), order[:, 0]]
+    d2 = distances[np.arange(n), order[:, 1]]
+    margin = np.where(d2 > 0, (d2 - d1) / np.where(d2 > 0, d2, 1.0), 0.0)
+    return {
+        "margin": np.clip(margin, 0.0, 1.0),
+        "runner_up": order[:, 1].astype(np.int32),
+    }
+
+
 def validate_supplied_labels(labels, n_cells):
     """Check externally-supplied cluster labels before anything downstream sees them.
 
@@ -1063,6 +1189,15 @@ def validate_supplied_labels(labels, n_cells):
     return labels
 
 
+# Membership confidence, filled in by whichever branch below can compute one.
+# Left as None by Leiden / Agglomerative / BANKSY / supplied labels, which have
+# no such quantity -- the UI says so rather than showing an empty column.
+confidence_kind = None
+confidence_values = None
+confidence_runner_up = None
+confidence_runner_up_value = None
+confidence_entropy = None
+
 if algorithm == "leiden":
     import scanpy as sc
     import anndata as ad
@@ -1096,6 +1231,13 @@ elif algorithm == "kmeans":
     logger.info("KMeans: n_clusters=%d", n_clusters)
     km = KMeans(n_clusters=n_clusters, n_init=10, random_state=clustering_seed)
     labels = km.fit_predict(cluster_matrix)
+    try:
+        _margin = distance_margin(km.transform(cluster_matrix))
+        confidence_kind = "margin"
+        confidence_values = _margin["margin"]
+        confidence_runner_up = _margin["runner_up"]
+    except Exception as _e:
+        logger.warning("KMeans separation margin could not be computed: %s", _e)
 
 elif algorithm == "hdbscan":
     from sklearn.cluster import HDBSCAN
@@ -1151,6 +1293,11 @@ elif algorithm == "hdbscan":
         cluster_selection_epsilon=selection_epsilon,
     )
     labels = hdb.fit_predict(cluster_matrix)
+    # sklearn's HDBSCAN exposes the condensed-tree membership strength. Noise
+    # points get 0, which is correct and is what the tab reports as unassigned.
+    if getattr(hdb, "probabilities_", None) is not None:
+        confidence_kind = "strength"
+        confidence_values = np.asarray(hdb.probabilities_, dtype=np.float64)
 
 elif algorithm == "agglomerative":
     from sklearn.cluster import AgglomerativeClustering
@@ -1171,6 +1318,13 @@ elif algorithm == "minibatchkmeans":
         n_clusters=n_clusters, batch_size=batch_size, random_state=clustering_seed
     )
     labels = mbkm.fit_predict(cluster_matrix)
+    try:
+        _margin = distance_margin(mbkm.transform(cluster_matrix))
+        confidence_kind = "margin"
+        confidence_values = _margin["margin"]
+        confidence_runner_up = _margin["runner_up"]
+    except Exception as _e:
+        logger.warning("MiniBatchKMeans separation margin could not be computed: %s", _e)
 
 elif algorithm == "gmm":
     from sklearn.mixture import GaussianMixture
@@ -1186,6 +1340,18 @@ elif algorithm == "gmm":
         random_state=clustering_seed,
     )
     labels = gmm.fit_predict(cluster_matrix)
+    # The whole point of fitting a mixture is the posterior, and fit_predict
+    # discards it. A cell at 0.51/0.49 and one at 1.00/0.00 carry the same hard
+    # label; this is the only output that tells them apart.
+    try:
+        _post = posterior_confidence(gmm.predict_proba(cluster_matrix))
+        confidence_kind = "posterior"
+        confidence_values = _post["best"]
+        confidence_runner_up = _post["runner_up"]
+        confidence_runner_up_value = _post["runner_up_prob"]
+        confidence_entropy = _post["entropy"]
+    except Exception as _e:
+        logger.warning("GMM posterior could not be computed: %s", _e)
 
 elif algorithm == "banksy":
     if not has_spatial_coords:
@@ -2127,6 +2293,8 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                sequential_cmap=pref_cmap_sequential,
+                diverging_cmap=pref_cmap_diverging,
             )
             if _cooc_p_by_area:
                 task.outputs["co_occurrence_pairwise_per_area"] = _json_rep.dumps(
@@ -2142,6 +2310,8 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                sequential_cmap=pref_cmap_sequential,
+                diverging_cmap=pref_cmap_diverging,
                 persist_plots=_spatial_persist,
                 matrix_radius=pref_cooc_matrix_radius,
             )
@@ -2173,6 +2343,8 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                sequential_cmap=pref_cmap_sequential,
+                diverging_cmap=pref_cmap_diverging,
             )
             if _cooc_o_by_area:
                 task.outputs["co_occurrence_one_vs_rest_per_area"] = _json_rep.dumps(
@@ -2188,6 +2360,8 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                sequential_cmap=pref_cmap_sequential,
+                diverging_cmap=pref_cmap_diverging,
                 persist_plots=_spatial_persist,
             )
         if _spatial_persist and not _per_area_stats:
@@ -2281,12 +2455,15 @@ if do_plots and plot_dir and can_analyze:
 
     # Dotplot with dendrogram -- fraction expressing + mean expression per cluster
     try:
+        # standard_scale="var" rescales each marker to [0,1], so there is no
+        # meaningful zero here and the sequential family is the correct one.
         dp = sc.pl.dotplot(
             adata,
             var_names=plot_var_names,
             groupby="cluster",
             dendrogram=True,
             standard_scale="var",
+            cmap=pref_cmap_sequential,
             show=False,
             return_fig=True,
         )
@@ -2306,6 +2483,7 @@ if do_plots and plot_dir and can_analyze:
             groupby="cluster",
             dendrogram=True,
             standard_scale="var",
+            cmap=pref_cmap_sequential,
             show=False,
             return_fig=True,
         )
@@ -2521,6 +2699,56 @@ labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), labels.astype(np.int32))
 task.outputs["cluster_labels"] = labels_nd
 task.outputs["n_clusters"] = n_clusters_found
+
+# Membership confidence, when the algorithm produced one. The KIND travels with
+# the numbers: a posterior probability, a condensed-tree membership strength and
+# a distance margin are three different quantities and the Java side names the
+# measurement column after whichever it got.
+if confidence_kind is not None and confidence_values is not None:
+    try:
+        _conf = np.asarray(confidence_values, dtype=np.float64).ravel()
+        if _conf.size != n_cells:
+            raise ValueError(
+                "confidence has %d entries but there are %d cells" % (_conf.size, n_cells)
+            )
+        _conf_nd = PyNDArray(dtype="float64", shape=[n_cells])
+        np.copyto(_conf_nd.ndarray(), _conf)
+        task.outputs["cluster_confidence"] = _conf_nd
+        task.outputs["cluster_confidence_kind"] = confidence_kind
+
+        if confidence_runner_up is not None:
+            _ru = np.asarray(confidence_runner_up, dtype=np.int32).ravel()
+            if _ru.size == n_cells:
+                _ru_nd = PyNDArray(dtype="int32", shape=[n_cells])
+                np.copyto(_ru_nd.ndarray(), _ru)
+                task.outputs["cluster_runner_up"] = _ru_nd
+        if confidence_runner_up_value is not None:
+            _ruv = np.asarray(confidence_runner_up_value, dtype=np.float64).ravel()
+            if _ruv.size == n_cells:
+                _ruv_nd = PyNDArray(dtype="float64", shape=[n_cells])
+                np.copyto(_ruv_nd.ndarray(), _ruv)
+                task.outputs["cluster_runner_up_confidence"] = _ruv_nd
+        if confidence_entropy is not None:
+            _ent = np.asarray(confidence_entropy, dtype=np.float64).ravel()
+            if _ent.size == n_cells:
+                _ent_nd = PyNDArray(dtype="float64", shape=[n_cells])
+                np.copyto(_ent_nd.ndarray(), _ent)
+                task.outputs["cluster_entropy"] = _ent_nd
+
+        # The ambiguous SHARE, not the average. Measured on a GMM fitted to a
+        # uniform continuum against one fitted to two separated blobs: the
+        # medians were 0.9925 and 1.0000 -- indistinguishable in a report --
+        # while the share below 0.9 was 22.5% against 0.0%.
+        logger.info(
+            "Membership confidence (%s): median %.3f, %.1f%% of cells below %.2f",
+            confidence_kind,
+            float(np.median(_conf)),
+            100.0 * float(np.mean(_conf < AMBIGUOUS_BELOW)),
+            AMBIGUOUS_BELOW,
+        )
+    except Exception as _e:
+        # A diagnostic must never fail a run that already produced its clusters.
+        logger.warning("Membership confidence could not be packaged: %s", _e)
 
 # Per-area composition. Emitted whenever there is more than one area, not
 # only when spatial statistics ran: "what is in each core" is the question

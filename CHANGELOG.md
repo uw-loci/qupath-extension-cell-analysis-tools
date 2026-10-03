@@ -4,6 +4,122 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+Four items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+
+### Fixed
+
+- **The marker p-value was labelled as significance, and it cannot be.** The Marker Rankings
+  tab ran scanpy's Wilcoxon test on clusters built from the same measurements the test
+  compares, then told the user "Adj. P-val: Benjamini-Hochberg corrected p-value -- smaller is
+  more significant". That is circular: the null hypothesis was already false before the test
+  ran.
+
+  **Measured in the shipped environment** (scanpy 1.11.5) rather than argued: 600 cells, 20
+  markers, every value i.i.d. standard normal, so no clusters exist. Leiden found 11-13 of
+  them, and across five seeds **47% of the rows a Marker Rankings table would display came
+  back at adjusted p < 0.05**, the smallest at 2e-14.
+
+  The ranking stays -- it is how candidate markers get found, and it is standard practice.
+  What changed is every place the number was presented as evidence: the tab guide, a caveat
+  printed **above the table** so it travels with anything copied out, the Marker Fingerprints
+  tooltips, `clusters.md`, `results.md`, and a new section in `clustering.md` with the
+  measurement and the honest alternatives. The guide now also says the Score is **signed** --
+  a large magnitude with a tiny p can mean strongly *depleted*.
+
+  **The LLM explainer no longer receives the p-value at all.** Handing an invalid number to a
+  language model invites "significantly enriched", and our own docs contained an example
+  rationale citing p-values. The prompt now states that the clusters were defined from these
+  measurements and forbids significance language; the template id moved to
+  `cluster_phenotype_v2`, because two different prompts under one id would make every archived
+  run ambiguous.
+
+- **The random seed was filed under the wrong section.** One spinner drives both the embedding
+  and the stochastic algorithms, but it lived two levels down a collapsed **Advanced** pane
+  inside **Dimensionality Reduction** -- a section the user may have set to *None* -- while it
+  governed whether a Leiden / KMeans / GMM / BANKSY run was reproducible. Found when a
+  workshop reader was told "leave the random seed at 42" and could not find it.
+
+  It is now a visible row in the **Clustering Algorithm** section, which owns its main
+  consumer. Still one control, not two: nobody wants a different seed for the embedding than
+  for the clustering, and splitting it would have raised a config-compatibility question for
+  no gain. It is **disabled rather than hidden** when it has no effect (deterministic algorithm
+  and no embedding), with a line saying which case you are in -- a visible control that does
+  nothing is a far smaller problem than a hidden one that does.
+
+### Added
+
+- **Cluster confidence: how marginal each cell's label was.** Every algorithm here assigns one
+  cluster per cell, so a cell the method thought was 51/49 reads exactly like one it thought
+  was 100/0. That is how an EMT-like gradient becomes an arbitrary line through the middle of a
+  continuum. Three algorithms already computed a per-cell quantity saying which a cell was, and
+  QP-CAT discarded all three.
+
+  | Algorithm | Quantity | Probability? |
+  |---|---|---|
+  | GMM | posterior of the assigned component, plus normalised entropy | yes |
+  | HDBSCAN | condensed-tree membership strength | no, but bounded |
+  | KMeans / MiniBatch | separation margin `(d2-d1)/d2` | **no** -- a distance ratio |
+  | Leiden, Agglomerative, BANKSY | none exists | -- |
+
+  The three are **not merged into one column** and the measurement name says which you have, so
+  a distance ratio cannot be read as "80% confident". For the bottom row the tab does not
+  appear and nothing is invented.
+
+  New **Cluster confidence** results tab, and a per-cell `QPCAT confidence: ...` measurement so
+  it can be mapped in the viewer -- a *band* of uncertain cells between two clusters is a
+  gradient, scattered uncertainty is noise.
+
+  **The headline statistic is the ambiguous share, not an average**, and that was measured
+  before it was chosen. A two-component GMM on two separated blobs versus one uniform
+  continuum: medians 1.0000 and 0.9925 (indistinguishable), means 1.0000 and 0.9293, **share
+  below 0.90 of 0.0% against 22.5%**. Most points on a line are still nearer one end, so the
+  informative cells are a minority and any average buries them.
+
+- **Colour map choice for the heatmap, offered per family.** Every map was hard-coded. The
+  heatmap now has a **Colours** box listing QuPath's installed maps, including any `.tsv` you
+  added to its `colormaps` directory, remembered per family.
+
+  **Only the correct family is offered.** Z-scored values have a meaningful zero and get
+  diverging maps; raw, min-max and percentile values get sequential ones, because a diverging
+  map's pale midpoint would land on an arbitrary number and invite reading it as "average" --
+  a false statement made in colour. QuPath ships no diverging map at all (Viridis, Inferno,
+  Magma, Plasma, Svidro2 are all sequential), so QP-CAT registers Blue-White-Red (the
+  historical default, unchanged so no existing figure is recoloured), Red-Blue (RdBu) and
+  Orange-Purple (PuOr).
+
+  The choice also reaches the figures Python renders -- scanpy dot plot and matrix plot, and
+  the co-occurrence heatmaps -- wherever matplotlib has the same map. A map of your own has no
+  matplotlib equivalent, so the input is **omitted** and those figures keep their defaults
+  rather than raising. Co-occurrence still picks its *family* from the data, never from the
+  preference: diverging only when the values straddle the null of 1.0.
+
+### Testing
+
+- 34 new Java tests and 14 new Python tests; 714 Java and 276 Python now pass.
+- `MembershipConfidenceTest` pins the statistic choice itself: a test asserts that the median
+  does **not** separate a continuum from separated populations while the share does, so a later
+  "simplification" to a mean would fail rather than quietly stop working.
+- `test_cluster_confidence.py` verifies the library contracts the feature rests on against real
+  sklearn -- that `fit_predict` is the argmax of `predict_proba` (or the confidence column would
+  describe a different cluster), that `KMeans.transform` returns distances in cluster-index
+  order, and that HDBSCAN scores noise as 0.
+- `test_llm_prompt_no_pvalues.py` holds the prompt contract: no p-value in the data rows, the
+  anti-significance instruction present, and the template id bumped alongside the text.
+- `QpcatColorMapsTest` checks the diverging maps are actually pale in the middle and saturated
+  at both ends, rather than trusting that they were entered correctly, and that no translatable
+  name is missing from what the picker offers.
+- `test_colour_map_choice.py` asserts there is **no** parameter that can force a diverging map
+  onto one-sided data.
+
+### Known gaps
+
+- `DocLinkAnchorsTest` reads `documentation/` at runtime but Gradle does not treat those files
+  as task inputs, so a docs-only change leaves the test `UP-TO-DATE` and it does not run. The
+  pre-push hook only runs the suite when a `.java` or gradle file changed, so a docs-only push
+  skips the anchor check entirely.
+
 ## [0.21.0] -- 2026-10-03 -- does a cluster differ between conditions?
 
 ### Added

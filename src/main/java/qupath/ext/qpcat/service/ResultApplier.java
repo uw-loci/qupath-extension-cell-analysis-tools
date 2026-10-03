@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusterNaming;
+import qupath.ext.qpcat.model.MembershipConfidence;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 
@@ -320,6 +321,86 @@ public class ResultApplier {
 
         logger.info("Applied {} embedding ({} components) to {} detections",
                 prefix, nComponents, detections.size());
+    }
+
+    /** Measurement-name prefix for every membership-confidence column. */
+    public static final String CONFIDENCE_PREFIX = "QPCAT confidence: ";
+
+    /**
+     * Writes per-cell membership confidence as measurements.
+     *
+     * <p>Column names carry the KIND, not a generic "confidence": a GMM posterior,
+     * an HDBSCAN membership strength and a KMeans distance margin are three
+     * different quantities, and one shared column name would invite averaging them
+     * or reading a distance ratio as a probability. See
+     * {@link MembershipConfidence} for what each is.
+     *
+     * @param detections ordered list of detections, index-aligned with the confidence
+     * @param confidence the confidence to write; ignored when null or unusable
+     * @param offset     index of the first detection within the whole run, for the
+     *                   per-image path that applies one segment at a time
+     * @return the measurement names written; empty when nothing was
+     */
+    public List<String> applyMembershipConfidence(List<PathObject> detections,
+                                                  MembershipConfidence confidence,
+                                                  int offset) {
+        List<String> written = new ArrayList<>();
+        if (confidence == null || !confidence.isUsable() || detections == null) {
+            return written;
+        }
+        String valueName = CONFIDENCE_PREFIX + confidence.getKind().getColumnName();
+        written.add(valueName);
+        boolean hasRunnerUp = confidence.getRunnerUp() != null;
+        boolean hasRunnerUpValue = confidence.getRunnerUpValues() != null;
+        boolean hasEntropy = confidence.getEntropy() != null;
+        if (hasRunnerUp) {
+            written.add(CONFIDENCE_PREFIX + "Runner-up cluster");
+        }
+        if (hasRunnerUpValue) {
+            written.add(CONFIDENCE_PREFIX + "Runner-up "
+                    + confidence.getKind().getColumnName().toLowerCase());
+        }
+        if (hasEntropy) {
+            written.add(CONFIDENCE_PREFIX + "Entropy");
+        }
+        warnOnMeasurementOverwrite(detections, written.toArray(new String[0]));
+
+        double[] values = confidence.getValues();
+        int[] runnerUp = confidence.getRunnerUp();
+        double[] runnerUpValues = confidence.getRunnerUpValues();
+        double[] entropy = confidence.getEntropy();
+
+        int applied = 0;
+        for (int i = 0; i < detections.size(); i++) {
+            int src = offset + i;
+            if (src < 0 || src >= values.length) {
+                continue;
+            }
+            var ml = detections.get(i).getMeasurementList();
+            if (Double.isFinite(values[src])) {
+                ml.put(valueName, values[src]);
+            }
+            // -1 means "no runner-up exists" (a single cluster), which is not a
+            // cluster id and must not be written as one.
+            if (hasRunnerUp && src < runnerUp.length && runnerUp[src] >= 0) {
+                ml.put(CONFIDENCE_PREFIX + "Runner-up cluster", runnerUp[src]);
+            }
+            if (hasRunnerUpValue && src < runnerUpValues.length
+                    && Double.isFinite(runnerUpValues[src])) {
+                ml.put(CONFIDENCE_PREFIX + "Runner-up "
+                        + confidence.getKind().getColumnName().toLowerCase(),
+                        runnerUpValues[src]);
+            }
+            if (hasEntropy && src < entropy.length && Double.isFinite(entropy[src])) {
+                ml.put(CONFIDENCE_PREFIX + "Entropy", entropy[src]);
+            }
+            ml.close();
+            applied++;
+        }
+
+        logger.info("Applied {} membership confidence to {} detections ({} column(s))",
+                confidence.getKind().getId(), applied, written.size());
+        return written;
     }
 
     /**

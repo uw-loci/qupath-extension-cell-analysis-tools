@@ -22,9 +22,15 @@ or push it onto another image's detections.
 
 ### Marker Rankings
 
-- Top differentially expressed markers per cluster (Wilcoxon rank-sum test)
-- **High scores with low p-values** indicate strong markers for that cluster
-- If no markers are significantly different, the clustering may be too fine-grained
+- Top markers per cluster, ranked by a Wilcoxon rank-sum statistic (scanpy
+  `rank_genes_groups`)
+- **Read the ranking and the sign of the score** -- positive means higher in this cluster,
+  negative means lower
+- **The p-value is not evidence the cluster is real.** The clusters were built from these
+  same measurements, so the test is circular; measured on pure noise with no clusters in it,
+  47% of displayed rows still came back at adjusted p < 0.05. See
+  [the marker p-values are circular](clustering.md#marker-pvalues-are-circular)
+- If no marker separates a cluster even by rank, the clustering may be too fine-grained
 
 ### Embedding Scatter Plot
 

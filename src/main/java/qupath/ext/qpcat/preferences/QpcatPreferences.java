@@ -2,6 +2,7 @@ package qupath.ext.qpcat.preferences;
 
 import javafx.beans.property.*;
 import javafx.collections.ObservableList;
+import qupath.ext.qpcat.service.QpcatColorMaps;
 import qupath.ext.qpcat.ui.Tooltips;
 import qupath.fx.prefs.controlsfx.PropertyItemBuilder;
 import qupath.lib.gui.QuPathGUI;
@@ -75,6 +76,25 @@ public final class QpcatPreferences {
      */
     private static final BooleanProperty heatmapSharedScale =
             PathPrefs.createPersistentPreference("qpcat.heatmap.sharedScale", false);
+
+    /**
+     * Remembered heatmap colour map, per family.
+     * <p>
+     * Two preferences rather than one, because only the matching FAMILY may be
+     * offered for a given display: a diverging map promises a meaningful midpoint,
+     * and un-normalized intensities have none. A single remembered name would
+     * carry a diverging choice over to raw data, which is the mismatch the split
+     * exists to prevent. Defaults are the maps QP-CAT drew before the choice
+     * existed, so an upgrade does not recolour an existing figure.
+     */
+    private static final StringProperty heatmapColorMapSequential =
+            PathPrefs.createPersistentPreference("qpcat.heatmap.colorMap.sequential",
+                    QpcatColorMaps.DEFAULT_SEQUENTIAL);
+
+    /** @see #heatmapColorMapSequential */
+    private static final StringProperty heatmapColorMapDiverging =
+            PathPrefs.createPersistentPreference("qpcat.heatmap.colorMap.diverging",
+                    QpcatColorMaps.DEFAULT_DIVERGING);
 
     /**
      * Pick display channels only from markers whose value implies something
@@ -434,6 +454,29 @@ public final class QpcatPreferences {
     /** True when the heatmap uses one shared scale centred on zero. */
     public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }
     public static void setHeatmapSharedScale(boolean v) { heatmapSharedScale.set(v); }
+
+    /**
+     * Remembered colour map for one family.
+     *
+     * @param centred true for data with a meaningful zero (diverging family)
+     * @return the remembered map name; never null or blank
+     */
+    public static String getHeatmapColorMap(boolean centred) {
+        StringProperty p = centred ? heatmapColorMapDiverging : heatmapColorMapSequential;
+        String v = p.get();
+        return (v == null || v.isBlank()) ? QpcatColorMaps.defaultFor(centred) : v;
+    }
+
+    /**
+     * Remembers a colour map for one family.
+     *
+     * @param centred true for data with a meaningful zero (diverging family)
+     * @param name    the map name, or null to go back to the default
+     */
+    public static void setHeatmapColorMap(boolean centred, String name) {
+        StringProperty p = centred ? heatmapColorMapDiverging : heatmapColorMapSequential;
+        p.set(name == null || name.isBlank() ? QpcatColorMaps.defaultFor(centred) : name);
+    }
 
     /** True when display channels come only from mean/average/median markers. */
     public static boolean isRepVisualChannelsOnly() { return repVisualChannelsOnly.get(); }
@@ -960,6 +1003,34 @@ public final class QpcatPreferences {
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
+                .build());
+
+        // Colour maps are offered PER FAMILY, so there are two preferences rather
+        // than one. Listing them as free-text is deliberate: the available names
+        // depend on what the user has dropped in QuPath's colormaps directory,
+        // which cannot be enumerated at the time this list is built. The heatmap's
+        // own combo is the discoverable control; this is for persistence and for
+        // headless runs.
+        items.add(new PropertyItemBuilder<>(heatmapColorMapSequential, String.class)
+                .name("Heatmap colour map: sequential (no meaningful zero)")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Colour map for values with no centre -- raw, "
+                        + "min-max or percentile-normalized intensities, and the scanpy "
+                        + "dotplot / matrixplot, which rescale each marker to 0-1. "
+                        + "Default Viridis. Pick from the Colours box in the heatmap "
+                        + "instead of typing here; a name that is not installed falls "
+                        + "back to the default rather than failing."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(heatmapColorMapDiverging, String.class)
+                .name("Heatmap colour map: diverging (zero means something)")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Colour map for values with a meaningful "
+                        + "centre -- Z-scored means, and co-occurrence ratios whose null "
+                        + "is 1.0. Default Blue-White-Red, which is what QP-CAT has "
+                        + "always drawn. A diverging map is only ever offered for data "
+                        + "that HAS a centre: on raw intensities its pale midpoint would "
+                        + "land on an arbitrary number and invite reading it as average."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(heatmapSharedScale, Boolean.class)

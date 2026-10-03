@@ -1580,7 +1580,9 @@ def radius_caption(intervals, coord_unit):
     )
 
 
-def ratio_colour_scale(values, center=1.0):
+def ratio_colour_scale(
+    values, center=1.0, diverging_cmap="RdBu_r", sequential_cmap="viridis"
+):
     """Colour mapping for a ratio whose null value is meaningful.
 
     Co-occurrence is a ratio with a null of 1.0, so the colour scale has to put
@@ -1589,10 +1591,19 @@ def ratio_colour_scale(values, center=1.0):
     the null, and falls back to the sequential one when the data lies entirely on
     one side of it (TwoSlopeNorm requires vmin < vcenter < vmax).
 
+    The FAMILY is chosen from the data, not by the caller -- data that never
+    crosses the null has no midpoint to diverge about, and painting it diverging
+    would put the pale middle on an arbitrary value. The caller only says WHICH
+    map to use within each family.
+
     :param values: the array being drawn
     :param center: the null value
+    :param diverging_cmap: matplotlib name to use when the data straddles center
+    :param sequential_cmap: matplotlib name to use when it does not
     :return: (cmap_name, norm or None)
     """
+    diverging_cmap = diverging_cmap or "RdBu_r"
+    sequential_cmap = sequential_cmap or "viridis"
     try:
         import numpy as _np
         from matplotlib.colors import TwoSlopeNorm
@@ -1600,14 +1611,14 @@ def ratio_colour_scale(values, center=1.0):
         finite = _np.asarray(values, dtype=float)
         finite = finite[_np.isfinite(finite)]
         if finite.size == 0:
-            return "viridis", None
+            return sequential_cmap, None
         vmin = float(finite.min())
         vmax = float(finite.max())
         if vmin < center < vmax:
-            return "RdBu_r", TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
-        return "viridis", None
+            return diverging_cmap, TwoSlopeNorm(vmin=vmin, vcenter=center, vmax=vmax)
+        return sequential_cmap, None
     except Exception:
-        return "viridis", None
+        return sequential_cmap, None
 
 
 def _save_co_occurrence_curves(
@@ -1702,6 +1713,8 @@ def run_co_occurrence(
     plot_dpi=150,
     persist_plots=True,
     coord_unit="px",
+    sequential_cmap="viridis",
+    diverging_cmap="RdBu_r",
 ):
     """Compute co-occurrence as a function of radius.
 
@@ -1856,7 +1869,11 @@ def run_co_occurrence(
                     if arr.ndim == 3 and arr.shape[1] == 1:
                         arr = arr[:, 0, :]
                     fig, ax = plt.subplots(figsize=(10, 6))
-                    cmap_name, norm = ratio_colour_scale(arr)
+                    cmap_name, norm = ratio_colour_scale(
+                        arr,
+                        diverging_cmap=diverging_cmap,
+                        sequential_cmap=sequential_cmap,
+                    )
                     im = ax.imshow(
                         arr, aspect="auto", cmap=cmap_name, norm=norm, origin="lower"
                     )
@@ -1900,7 +1917,11 @@ def run_co_occurrence(
                     else:
                         heat = arr
                     fig, ax = plt.subplots(figsize=(8, 7))
-                    cmap_name, norm = ratio_colour_scale(heat)
+                    cmap_name, norm = ratio_colour_scale(
+                        heat,
+                        diverging_cmap=diverging_cmap,
+                        sequential_cmap=sequential_cmap,
+                    )
                     im = ax.imshow(
                         heat, aspect="equal", cmap=cmap_name, norm=norm, origin="lower"
                     )

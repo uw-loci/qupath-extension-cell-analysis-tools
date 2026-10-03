@@ -149,7 +149,7 @@ public class OperationLogger {
      *   QuPath version: 0.7.0
      *   Provider: ANTHROPIC
      *   Model: claude-sonnet-5
-     *   Prompt template: cluster_phenotype_v1
+     *   Prompt template: cluster_phenotype_v2
      *   Prompt hash: 5e9f2c...
      *   Cluster ids: 0, 1, 2, 3, 4
      *   Token count: 1234

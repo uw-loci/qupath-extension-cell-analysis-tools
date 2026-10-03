@@ -320,7 +320,9 @@ public class MarkerFingerprintPanel extends BorderPane {
         noteLabel.setText("One card per cluster, tinted with its color. Bars show each "
                 + "marker's enrichment (log2 fold-change vs. the rest) against a zero "
                 + "line: right is enriched, left is depleted, longest is most "
-                + "cluster-defining. Hover a bar for the Wilcoxon score and adjusted p-value.");
+                + "cluster-defining. Hover a bar for the Wilcoxon score and the p-value "
+                + "scanpy reported -- which ranks markers but is not evidence the cluster "
+                + "is real, because the clusters came from these same measurements.");
 
         // Two extents, not one. Bars diverge from a shared zero line, so the
         // gutter left of zero has to be as wide as the biggest DEPLETION and the
@@ -691,7 +693,12 @@ public class MarkerFingerprintPanel extends BorderPane {
         StringBuilder tip = new StringBuilder(mName);
         if (!Double.isNaN(lfc)) tip.append(String.format("%nlog2FC: %+.2f", lfc));
         if (!Double.isNaN(score)) tip.append(String.format("%nWilcoxon score: %.2f", score));
-        if (!Double.isNaN(padj)) tip.append(String.format("%nadj. p-value: %.2e", padj));
+        // Labelled by where it came from, not by what it would mean if the clusters
+        // had been defined independently of these measurements. They were not.
+        if (!Double.isNaN(padj)) {
+            tip.append(String.format("%nscanpy adj. p: %.2e (ranks markers; not a test"
+                    + "%nof whether this cluster is real)", padj));
+        }
         return tip.toString();
     }
 

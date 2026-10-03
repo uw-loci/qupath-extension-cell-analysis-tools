@@ -34,6 +34,9 @@ public class ClusteringResult {
 
     // Post-analysis results (set after construction)
     private String markerRankingsJson;
+    // How marginal each cell's hard label was. Null for the algorithms that
+    // produce no such quantity (Leiden, Agglomerative, BANKSY, supplied labels).
+    private MembershipConfidence membershipConfidence;
     private double[][] pagaConnectivity;
     private String[] pagaClusterNames;
     private Map<String, String> plotPaths;
@@ -127,6 +130,19 @@ public class ClusteringResult {
     public String[] getMarkerNames() { return markerNames; }
     public boolean hasEmbedding() { return embedding != null; }
     public int getNCells() { return clusterLabels.length; }
+
+    /** @see MembershipConfidence */
+    public MembershipConfidence getMembershipConfidence() { return membershipConfidence; }
+
+    /** @see MembershipConfidence */
+    public void setMembershipConfidence(MembershipConfidence mc) {
+        this.membershipConfidence = mc;
+    }
+
+    /** True when the algorithm produced a per-cell membership confidence. */
+    public boolean hasMembershipConfidence() {
+        return membershipConfidence != null && membershipConfidence.isUsable();
+    }
 
     public String getMarkerRankingsJson() { return markerRankingsJson; }
     public void setMarkerRankingsJson(String json) { this.markerRankingsJson = json; }

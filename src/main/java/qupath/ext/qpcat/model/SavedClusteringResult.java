@@ -541,7 +541,7 @@ public class SavedClusteringResult {
     public static class LlmExplanationsBundle {
         private String provider;            // e.g. "ANTHROPIC", "OLLAMA"
         private String model;
-        private String promptTemplate;      // e.g. "cluster_phenotype_v1"
+        private String promptTemplate;      // e.g. "cluster_phenotype_v2"
         private String promptHash;          // sha256 of the rendered prompt
         private String timestamp;           // ISO-8601 with zone offset
         private String promptText;          // scrubbed verbatim prompt

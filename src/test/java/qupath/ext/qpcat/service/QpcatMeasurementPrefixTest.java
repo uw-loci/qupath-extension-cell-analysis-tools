@@ -39,6 +39,9 @@ class QpcatMeasurementPrefixTest {
             "QPCAT UMAP_Demo3",
             "QPCAT spatial: Num neighbors",
             "QPCAT component: size",
+            "QPCAT confidence: Posterior",
+            "QPCAT confidence: Separation margin",
+            "QPCAT confidence: Runner-up cluster",
             "QPCAT CN",
             "qpcat umap1"
         }) {

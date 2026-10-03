@@ -507,6 +507,37 @@ Non-parametric test for identifying differentially expressed markers between clu
 
 **Used in:** Post-analysis (top differentially expressed markers per cluster)
 
+<a name="post-clustering-inference"></a>
+**Why that p-value is not a significance test, and what a valid one looks like.**
+The clusters are defined from the same measurements the test compares -- *double dipping* --
+so the p-value's null hypothesis is false before the test runs. Measured in QP-CAT's shipped
+environment on data with no clusters in it, 47% of displayed marker rows still reached
+adjusted p < 0.05. QP-CAT reports the ranking and says plainly that the p-value is not
+evidence the cluster is real
+([details](clustering.md#marker-pvalues-are-circular)); it does not implement any of the
+methods below.
+
+> Zhang JM, Kamath GM, Tse DN. "Valid Post-clustering Differential Analysis for Single-Cell RNA-Seq." *Cell Systems* 9(4), 383-392 (2019).
+> https://doi.org/10.1016/j.cels.2019.07.012
+
+> Lee C, Song D, Chen S, Li JJ. "ClusterDE: A Statistical Software Package for Removing Double-Dipping Bias in Post-Clustering Differential Expression Analysis." *Journal of Computational Biology* 33(1), 36-42 (2025).
+> https://doi.org/10.1177/15578666251383562
+
+The ClusterDE method itself was first described in a preprint:
+
+> Song D, Li K, Ge X, Li JJ. "ClusterDE: a post-clustering differential expression (DE) method robust to false-positive inflation caused by double dipping." *Research Square* (2023), preprint.
+> https://doi.org/10.21203/rs.3.rs-3211191/v1
+
+Selective inference conditioned on the clustering event, and sample-splitting alternatives:
+
+> Gao LL, Bien J, Witten D. "Selective Inference for Hierarchical Clustering." *Journal of the American Statistical Association* 119(545), 332-342 (2022).
+> https://doi.org/10.1080/01621459.2022.2116331
+
+> Neufeld A, Gao LL, Popp J, Battle A, Witten D. "Inference after latent variable estimation for single-cell RNA sequencing data." *Biostatistics* 25(1), 270-293 (2022).
+> https://doi.org/10.1093/biostatistics/kxac047
+
+**Used in:** the caveat above the Marker Rankings table, and the Marker Fingerprints tooltips
+
 ---
 
 ## Core Frameworks

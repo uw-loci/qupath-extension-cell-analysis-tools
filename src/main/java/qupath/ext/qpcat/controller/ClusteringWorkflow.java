@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.MembershipConfidence;
+import qupath.ext.qpcat.service.QpcatColorMaps;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
@@ -460,6 +462,14 @@ public class ClusteringWorkflow {
             // Record it so the results window can point the 3D view at THIS run's columns.
             result.setEmbeddingPrefix(prefix);
             applier.applyEmbedding(extraction.getDetections(), result.getEmbedding(), prefix);
+        }
+
+        // How marginal each cell's label was. Written as measurements so it can
+        // be mapped in the viewer and correlated with anything else -- which is
+        // the point: a hard label cannot show a gradient, and this can.
+        if (result.hasMembershipConfidence()) {
+            applier.applyMembershipConfidence(extraction.getDetections(),
+                    result.getMembershipConfidence(), 0);
         }
 
         // v0.3 spatial graph overlay: build PathObjectConnections + write
@@ -964,6 +974,13 @@ public class ClusteringWorkflow {
                 }
                 result.setEmbeddingPrefix(prefix);
                 applier.applyEmbedding(segmentDetections, segmentEmbedding, prefix);
+            }
+
+            // Offset into the whole run's arrays, so each image writes its own
+            // cells' confidence rather than the first N of the cohort's.
+            if (result.hasMembershipConfidence()) {
+                applier.applyMembershipConfidence(segmentDetections,
+                        result.getMembershipConfidence(), start);
             }
 
             // Save image data back to the project
@@ -1997,6 +2014,21 @@ public class ClusteringWorkflow {
         inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
+        // Colour maps for the figures matplotlib renders. Only names matplotlib
+        // actually has cross over: a user's own QuPath .tsv map has no equivalent,
+        // so it is OMITTED rather than sent -- the script falls back to its own
+        // default on NameError. Omitting beats sending null: an absent input is a
+        // documented path in every one of these scripts, a null one is not.
+        String seqCmap = QpcatColorMaps.matplotlibName(
+                QpcatPreferences.getHeatmapColorMap(false));
+        if (seqCmap != null) {
+            inputs.put("sequential_cmap", seqCmap);
+        }
+        String divCmap = QpcatColorMaps.matplotlibName(
+                QpcatPreferences.getHeatmapColorMap(true));
+        if (divCmap != null) {
+            inputs.put("diverging_cmap", divCmap);
+        }
         inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
         inputs.put("paga_edge_threshold", QpcatPreferences.getPagaEdgeThreshold());
         // Labels read off the objects, for the analyze-existing-classifications
@@ -2052,6 +2084,10 @@ public class ClusteringWorkflow {
         NDArray statsNd = null;
         NDArray pagaNd = null;
         NDArray nhoodNd = null;
+        NDArray confNd = null;
+        NDArray ruNd = null;
+        NDArray ruvNd = null;
+        NDArray entNd = null;
 
         try {
             // Run the task with progress updates
@@ -2140,6 +2176,50 @@ public class ClusteringWorkflow {
                 result.setQualityWarnings(qw);
                 if (qw != null) {
                     for (String w : qw) logger.warn("Clustering quality: {}", w);
+                }
+            }
+
+            // Membership confidence: how marginal each cell's hard label was.
+            // Only the algorithms that genuinely compute one send it, so absence
+            // here is the answer for Leiden / Agglomerative / BANKSY rather than
+            // a failure to read it.
+            if (task.outputs.containsKey("cluster_confidence")) {
+                var kind = MembershipConfidence.Kind.fromId(
+                        (String) task.outputs.get("cluster_confidence_kind"));
+                if (kind == null) {
+                    logger.warn("Ignoring membership confidence: unrecognised kind {}",
+                            task.outputs.get("cluster_confidence_kind"));
+                } else {
+                    confNd = (NDArray) task.outputs.get("cluster_confidence");
+                    double[] conf = new double[nCells];
+                    confNd.buffer().asDoubleBuffer().get(conf);
+
+                    int[] runnerUp = null;
+                    if (task.outputs.containsKey("cluster_runner_up")) {
+                        ruNd = (NDArray) task.outputs.get("cluster_runner_up");
+                        runnerUp = new int[nCells];
+                        ruNd.buffer().asIntBuffer().get(runnerUp);
+                    }
+                    double[] runnerUpValues = null;
+                    if (task.outputs.containsKey("cluster_runner_up_confidence")) {
+                        ruvNd = (NDArray) task.outputs.get("cluster_runner_up_confidence");
+                        runnerUpValues = new double[nCells];
+                        ruvNd.buffer().asDoubleBuffer().get(runnerUpValues);
+                    }
+                    double[] entropy = null;
+                    if (task.outputs.containsKey("cluster_entropy")) {
+                        entNd = (NDArray) task.outputs.get("cluster_entropy");
+                        entropy = new double[nCells];
+                        entNd.buffer().asDoubleBuffer().get(entropy);
+                    }
+
+                    MembershipConfidence mc = new MembershipConfidence(
+                            kind, conf, runnerUp, runnerUpValues, entropy);
+                    result.setMembershipConfidence(mc);
+                    logger.info("Membership confidence ({}): {}% of cells below {}",
+                            kind.getId(),
+                            String.format("%.1f", 100.0 * mc.ambiguousFraction()),
+                            MembershipConfidence.AMBIGUOUS_BELOW);
                 }
             }
 
@@ -2477,6 +2557,10 @@ public class ClusteringWorkflow {
             if (statsNd != null) statsNd.close();
             if (pagaNd != null) pagaNd.close();
             if (nhoodNd != null) nhoodNd.close();
+            if (confNd != null) confNd.close();
+            if (ruNd != null) ruNd.close();
+            if (ruvNd != null) ruvNd.close();
+            if (entNd != null) entNd.close();
         }
     }
 
