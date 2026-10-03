@@ -9,6 +9,7 @@ one view of the same result.
 - [Embedding](#embedding)
 - [Composition tabs](#composition-tabs)
 - [Representative cells](#representative-cells)
+- [Cluster confidence](#cluster-confidence-tab)
 - [Marker rankings and fingerprints](#marker-rankings-and-fingerprints)
 - [Spatial tabs](#spatial-tabs)
 - [Saving a plot](#saving-a-plot)
