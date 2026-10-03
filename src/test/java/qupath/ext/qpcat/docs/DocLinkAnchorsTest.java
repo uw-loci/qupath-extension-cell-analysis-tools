@@ -107,6 +107,44 @@ class DocLinkAnchorsTest {
                 .isEmpty();
     }
 
+    @Test
+    void everyCrossDocumentReferenceResolves() throws IOException {
+        // The same failure mode as the in-document check, one page over: GitHub
+        // serves the top of references.md and the reader never learns there was
+        // meant to be a specific citation there. Found as a gap when the
+        // Composition by group tab added three links into references.md and
+        // nothing checked them.
+        Map<String, Set<String>> anchorsByPage = new TreeMap<>();
+        for (Path doc : shippedDocs()) {
+            anchorsByPage.put(doc.getFileName().toString(),
+                    anchorsIn(Files.readString(doc, StandardCharsets.UTF_8)));
+        }
+
+        Map<String, String> broken = new TreeMap<>();
+        Pattern crossLink = Pattern.compile("\\]\\(([A-Za-z0-9_./-]+\\.md)#([^)]+)\\)");
+        int checked = 0;
+        for (Path doc : shippedDocs()) {
+            String md = Files.readString(doc, StandardCharsets.UTF_8);
+            Matcher link = crossLink.matcher(md);
+            while (link.find()) {
+                checked++;
+                String page = Path.of(link.group(1)).getFileName().toString();
+                String anchor = link.group(2);
+                Set<String> anchors = anchorsByPage.get(page);
+                if (anchors == null) {
+                    broken.put(doc.getFileName() + " -> " + page, "page not found");
+                } else if (!anchors.contains(anchor)) {
+                    broken.put(doc.getFileName() + " -> " + page + "#" + anchor, "unresolved");
+                }
+            }
+        }
+        assertThat(broken)
+                .as("cross-document links pointing at a page or section that does not exist")
+                .isEmpty();
+        // A pattern that stops matching makes this test pass by checking nothing.
+        assertThat(checked).as("cross-document anchored links found").isGreaterThan(50);
+    }
+
     private static List<Path> shippedDocs() throws IOException {
         List<Path> out = new java.util.ArrayList<>();
         try (Stream<Path> docs = Files.list(REPO.resolve("documentation"))) {

@@ -75,7 +75,6 @@ the colour is taken over what is shown, so colours do change when you filter. Th
 <a name="embedding-tab-interactive"></a>
 <a name="embedding-plot-tab"></a>
 <a name="spatial-scatter-tab"></a>
-<a name="paga-trajectory-tab"></a>
 ## Embedding
 
 Interactive 2D scatter of every cell, coloured by cluster. Scroll to zoom, middle-drag to
@@ -106,9 +105,14 @@ neighbourhoods are what matter.
 
 ## Composition tabs
 
-Four groupings of the same question: where does each cluster sit? Each shows a table
-(Counts / Row % toggle, **Copy table (TSV)**) and one pie per group, and each exports via
-**Export figure + table...** or in bulk from [Exporting](exporting.md).
+Four groupings of the same question -- where does each cluster sit? -- plus one that asks
+a different question. **By image**, **by annotation**, **by area** and **by class** each
+show a table (Counts / Row % toggle, **Copy table (TSV)**) and one pie per group, and each
+exports via **Export figure + table...** or in bulk from [Exporting](exporting.md).
+
+[**By group**](#composition-by-group-tab) is the odd one out: it *tests* rather than
+describes, so it has a statistics table instead of pies, and a block of warnings above the
+numbers that you should read before the numbers.
 
 <a name="composition-by-image-tab"></a>
 <a name="composition-by-image"></a>
@@ -131,6 +135,61 @@ conditions.
 > with a warning naming it, precisely because it would become an image-discriminating
 > constant. Seeing that warning means the offered measurement list included something the
 > other images lack.
+
+<a name="composition-by-group-tab"></a>
+### By group -- the only tab that tests
+
+Everything else here describes. This one asks whether a cluster is **more or less
+abundant in one group of images than another**: control versus treated, responder versus
+non-responder, primary versus metastasis. It is the question most cohort studies end on.
+
+Pick the **image-metadata key** that says which group each image belongs to (set these in
+QuPath's project pane, or with the
+[Project Metadata Browser](https://github.com/uw-loci/qupath-extension-project-metadata-browser)
+extension). The grouping is read **live from the project**, not stored in the result, so a
+run you saved months ago can be compared by a condition recorded afterwards -- and by a
+different condition tomorrow -- without re-clustering.
+
+**The unit of replication is the image, not the cell.** A thousand cells from one slide
+are one observation of that slide. The test therefore compares per-image proportions, so a
+section with 100,000 cells cannot outvote three with 10,000 each. Treating cells as
+independent replicates is the most common inflation of significance in this kind of work
+([Lazic et al. 2018](references.md#unit-of-replication)).
+
+The test is rank-based -- no normality assumption, which matters because proportions are
+bounded and these designs are small. Two groups get a **Mann-Whitney U** test, more than
+two a **Kruskal-Wallis H**. Both are exact for the small designs this tab is for: every
+arrangement of the group labels is enumerated, including when images tie at the same
+proportion. `q` is the Benjamini-Hochberg adjusted p across the clusters in the table.
+
+#### Read these before the numbers
+
+**A small design cannot reach significance however large the effect.** With three images
+per group there are only C(6,3) = 20 ways to arrange the labels, so the most extreme
+possible split carries 1/20 in each tail: the smallest two-sided p a rank test can return
+is **0.1**. Nothing in that table can cross 0.05, and a tool that printed q-values without
+saying so would be inviting you to read noise. The tab states the bound for your design
+explicitly. Five per group is the first size that can reach 0.05 at all (2/252 = 0.008).
+
+**Cluster proportions are compositional.** They sum to 1, so one cluster rising forces the
+others down. The per-cluster tests here are not independent, and Benjamini-Hochberg assumes
+nothing about that dependence -- a set of "significant" clusters may be one real shift and
+its arithmetic shadow. For a model that handles this properly, copy the table out and use
+**scCODA** ([Büttner et al. 2021](references.md#sccoda)) or **propeller**
+([Phipson et al. 2022](references.md#propeller)). This tab is a screen, not a publication
+analysis.
+
+**It cannot tell biology from batch.** The clustering never saw the group labels, so the
+test is not circular. But if a cluster lives in one image, a group difference in its
+abundance is a difference in staining. Read [By image](#composition-by-image-tab) first.
+
+**Images with no value for the key are left out, and the tab says how many.** Missing
+metadata is not a condition, so they are never pooled into an extra group. The same goes
+for an image that contributed no clustered cell at all (all noise, or filtered out): a row
+of zero proportions would be a fabricated observation, not an empty one.
+
+**Group medians are the honest summary.** When the design cannot reach significance, read
+the median column and report the effect as a description.
 
 <a name="composition-by-annotation-tab"></a>
 ### By annotation
@@ -232,6 +291,50 @@ comparing clusters at a glance rather than reading a table.
 > Other reasons include having too few cells to build a neighbor graph, or the ranking itself
 > failing. If the tabs are absent, check the **quality warnings** shown at the top of the
 > results window for why.
+
+<a name="paga-trajectory-tab"></a>
+## PAGA Trajectory -- read this before using it
+
+Partition-based graph abstraction. Each node is a cluster, sized by cell count; each
+edge is weighted by how connected two clusters are in the nearest-neighbour graph,
+compared with what random assignment would give. A thick edge means the two clusters'
+cells are **adjacent in expression space** -- many of one cluster's near neighbours
+belong to the other.
+
+**What it was built for.** PAGA comes from developmental single-cell RNA-seq
+([Wolf et al. 2019](references.md#paga)), where cells genuinely occupy a continuum and
+the question is the branching topology of a differentiation process. Its output is
+designed to be read as a trajectory.
+
+**Why that matters here.** A tissue sectioned at one moment is usually an inventory of
+**discrete** cell types -- T cells, macrophages, fibroblasts, tumour -- with no process
+moving cells between them. PAGA has no way to report that. It will always return a
+graph, and the graph will always look confident. Adjacency in expression space is
+exactly what you would expect between two phenotypically similar populations whether or
+not anything connects them biologically.
+
+So:
+
+- **A strong edge is evidence of similarity, not of differentiation.** Reading it as a
+  trajectory is a claim you bring to the figure, not one the figure supplies.
+- **Reasonable to use** when you have a prior reason to expect a continuum: a maturation
+  or activation gradient, a polarisation axis, an EMT-like transition.
+- **Not reasonable** as a generic "how do my clusters relate" figure. For that, the
+  [Heatmap](#heatmap-tab)'s dendrogram orders clusters by expression similarity and makes no
+  claim about process.
+
+**It is off by default**, because it is the only consumer of the per-cell
+nearest-neighbour graph and that is the slowest step after clustering itself. That
+default is about run time, not a judgement on the method -- turning it on costs minutes,
+and interpreting it costs more care than any other tab here.
+
+**If you want to learn the method properly**, the Galaxy Training Network's
+[trajectory analysis tutorial](references.md#trajectory-teaching) walks the whole scanpy
+ladder -- force-directed graph, diffusion map, PAGA, diffusion pseudotime -- on a real
+dataset, and is blunter about the risk than most tool documentation: you must know the
+biology *before* you look, and these methods "can pretty easily force branches to appear
+even if they are not biologically real." QP-CAT ships the PAGA rung of that ladder and
+nothing above it, deliberately; whether the rest belongs here is still open.
 
 <a name="spatial-autocorrelation-tab"></a>
 <a name="gearys-c-tab"></a>

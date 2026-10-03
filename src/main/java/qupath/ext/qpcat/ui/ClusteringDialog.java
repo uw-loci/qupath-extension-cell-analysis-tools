@@ -4540,6 +4540,68 @@ public class ClusteringDialog {
                 colorRefreshers.add(byImage::refreshColors);
             }
 
+            // "By group" -- the only tab that TESTS rather than describes. Built
+            // here rather than at run time on purpose: the grouping is read live
+            // from image metadata, so a result saved months ago can be compared
+            // by a condition that was recorded afterwards, and by a different
+            // condition tomorrow, without re-clustering. Nothing about the
+            // comparison depends on the clustering parameters.
+            if (distinctImages >= 2 && qupath != null && qupath.getProject() != null) {
+                java.util.Set<String> idsInResult = new java.util.HashSet<>();
+                String[] cellImageIds = new String[cellRefs.length];
+                for (int i = 0; i < cellRefs.length; i++) {
+                    cellImageIds[i] = cellRefs[i] != null ? cellRefs[i].getImageId() : null;
+                    if (cellImageIds[i] != null) {
+                        idsInResult.add(cellImageIds[i]);
+                    }
+                }
+                java.util.Map<String, java.util.Map<String, String>> metaByImage =
+                        new java.util.LinkedHashMap<>();
+                for (ProjectImageEntry<BufferedImage> e : qupath.getProject().getImageList()) {
+                    if (!idsInResult.contains(e.getID())) {
+                        continue;
+                    }
+                    try {
+                        java.util.Map<String, String> m = e.getMetadata();
+                        metaByImage.put(e.getID(),
+                                m == null ? java.util.Map.of() : new java.util.LinkedHashMap<>(m));
+                    } catch (Exception ignored) {
+                        // metadata is best-effort, as everywhere else we read it
+                    }
+                }
+                // A tab offering a comparison the project cannot make is worse
+                // than no tab: it reads as "the analysis found nothing".
+                if (!ClusterGroupComparisonPanel.metadataKeysOf(metaByImage).isEmpty()) {
+                    ClusterGroupComparisonPanel byGroup = new ClusterGroupComparisonPanel(
+                            result.getClusterLabels(), result.getNClusters(), cellImageIds,
+                            metaByImage, result.clusterNameFn());
+                    Tab groupTab = new Tab("Composition by group", wrapWithGuide(byGroup,
+                            "Tests whether a cluster is more or less abundant in one group of "
+                            + "images than another, grouping the images by an image-metadata "
+                            + "key (treatment, condition, responder status).\n"
+                            + "The unit of replication is the IMAGE, not the cell: a thousand "
+                            + "cells from one slide are one observation of that slide, so the "
+                            + "test compares per-image proportions and a huge slide cannot "
+                            + "outvote the rest.\n"
+                            + "READ THE AMBER BOX FIRST. Small designs cannot reach "
+                            + "significance however large the effect -- with three images per "
+                            + "group the smallest two-sided p a rank test can return is 0.1 -- "
+                            + "and cluster proportions sum to 1, so several \"significant\" "
+                            + "clusters may be one real shift and its arithmetic shadow. For a "
+                            + "model that handles that properly, export the table and use "
+                            + "scCODA or propeller; this tab is a screen, not a publication "
+                            + "analysis.\n"
+                            + "No metadata keys? Set them in QuPath's project pane, or with "
+                            + "the Project Metadata Browser extension.",
+                            "composition-by-group-tab"));
+                    groupTab.setClosable(false);
+                    tabPane.getTabs().add(groupTab);
+                } else {
+                    logger.info("Composition by group tab omitted: no image-metadata keys on "
+                            + "the {} clustered image(s)", idsInResult.size());
+                }
+            }
+
             // "By annotation" only when annotations were selected as the clustering
             // input (not merely when some cells happen to sit inside an annotation).
             if (result.isAnnotationInput() && result.hasCellParentNames()) {
@@ -5111,10 +5173,13 @@ public class ClusteringDialog {
         }
 
         // Lead with the at-a-glance tabs: the composition views first (image,
-        // area, class), then the two marker tabs, then everything else.
+        // group, area, class), then the two marker tabs, then everything else.
         // Composition by annotation (rare) stays adjacent to them when present.
-        reorderLeadingTabs(tabPane, "Composition by image", "Composition by area",
-                "Composition by class", "Composition by annotation",
+        // "By group" sits directly after "by image" because its own guidance is
+        // to read "by image" first -- a cluster confined to one slide makes the
+        // group test a test of staining.
+        reorderLeadingTabs(tabPane, "Composition by image", "Composition by group",
+                "Composition by area", "Composition by class", "Composition by annotation",
                 "Marker Fingerprints", "Marker Rankings");
         tabPane.getSelectionModel().selectFirst();
 
@@ -6286,11 +6351,15 @@ public class ClusteringDialog {
                 }
                 case "paga" -> {
                     tabName = "PAGA Trajectory";
-                    guide = "Partition-based graph abstraction showing connectivity between clusters. "
-                            + "Thicker edges = stronger expression similarity.\n"
-                            + "Connected clusters may represent related cell states or differentiation "
-                            + "trajectories. Isolated clusters have distinct expression profiles. "
-                            + "Node size reflects cell count.";
+                    guide = "Cluster connectivity in the nearest-neighbour graph. Thicker edges "
+                            + "mean two clusters' cells are ADJACENT IN EXPRESSION SPACE; node size "
+                            + "is cell count.\n"
+                            + "PAGA was built for developmental scRNA-seq, where cells occupy a "
+                            + "continuum. A tissue of discrete cell types has no trajectory, and PAGA "
+                            + "cannot say so -- it always returns a confident-looking graph. A strong "
+                            + "edge is evidence of SIMILARITY; reading it as differentiation is a "
+                            + "claim you bring, not one this figure supplies. For plain similarity, "
+                            + "the Heatmap's dendrogram makes no claim about process.";
                     docAnchor = "paga-trajectory-tab";
                 }
                 case "embedding" -> {

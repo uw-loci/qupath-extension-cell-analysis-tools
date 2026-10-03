@@ -4,6 +4,85 @@ All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are 
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.21.0] -- 2026-10-03 -- does a cluster differ between conditions?
+
+### Added
+
+- **"Composition by group" results tab -- the between-condition comparison QP-CAT could
+  not make.** Every other composition tab describes where a cluster sits; this one tests
+  whether a cluster is more or less abundant in one group of images than another (control
+  versus treated, responder versus not). Pick the image-metadata key that carries the
+  condition and the tab reports, per cluster, each group's median proportion, the test
+  statistic, p, and a Benjamini-Hochberg q.
+
+  Design decisions worth knowing, because each one is a way the answer could have been
+  wrong:
+
+  - **The unit of replication is the image, not the cell.** A thousand cells from one
+    slide are one observation of that slide, so the test runs on per-image proportions. A
+    section with 100,000 cells cannot outvote three with 10,000 each. Pooling cells is the
+    standard way significance gets inflated in this kind of work
+    ([Lazic et al. 2018](https://doi.org/10.1371/journal.pbio.2005282)).
+  - **The grouping is read live from the project, not stored in the result.** A run saved
+    months ago can be compared by a condition recorded afterwards, and by a different
+    condition tomorrow, without re-clustering. Nothing about the comparison depends on the
+    clustering parameters, so nothing needed to be added to the clustering config.
+  - **Both tests are exact at these sample sizes.** Mann-Whitney U for two groups,
+    Kruskal-Wallis H for more, with every arrangement of the group labels enumerated
+    (normal approximation only above 200,000 arrangements).
+  - **The tab states what the design cannot do, above the numbers.** With three images per
+    group there are 20 label arrangements, so the smallest two-sided p a rank test can
+    return is 0.1: nothing in the table can cross 0.05 however large the real effect. Five
+    per group is the first size that can reach 0.05 at all. It also says, every time, that
+    cluster proportions sum to 1 and so the per-cluster tests are not independent, and
+    points at [scCODA](https://doi.org/10.1038/s41467-021-27150-6) and
+    [propeller](https://doi.org/10.1093/bioinformatics/btac582) for a model that handles
+    that properly. This tab is a screen, not a publication analysis.
+  - **Images with no value for the key are left out and counted, never pooled into an
+    "unset" group** -- missing metadata is not a condition. Same for an image that
+    contributed no clustered cell at all: a row of zero proportions would be a fabricated
+    observation rather than an empty one.
+  - **It cannot tell biology from batch**, and says so: the clustering never saw the group
+    labels, so the test is not circular, but a cluster confined to one slide makes this a
+    test of staining. The tab sits directly after Composition by image for that reason.
+
+  Full description, including the caveats in prose, in
+  [`documentation/results.md`](documentation/results.md#composition-by-group-tab);
+  citations in [`documentation/references.md`](documentation/references.md#unit-of-replication).
+
+- **Documentation for the trajectory methods we expose.** The PAGA tab now points at the
+  Galaxy Training Network's trajectory tutorial as the place to learn the method, and
+  quotes its own warning -- these methods "can pretty easily force branches to appear even
+  if they are not biologically real" -- rather than paraphrasing it.
+
+### Fixed
+
+- **The exact Mann-Whitney test fell back to the normal approximation whenever two images
+  tied, which is the common case.** Three control images at the same proportion and three
+  treated images at the same proportion is the cleanest result a small study can produce,
+  and it is all ties. The approximation returned **p = 0.047** there -- an apparently
+  significant value printed directly underneath the warning saying a three-versus-three
+  design cannot reach 0.05. The exact enumeration now runs on the observed mid-ranks, so
+  ties stay on the exact branch and the same case returns 0.1. Found by a test, not by
+  reading: verified against `scipy.stats.permutation_test`, which agrees to 16 digits on
+  partially tied samples where `scipy.stats.mannwhitneyu(method='exact')` declines to run.
+  The approximation is still used above 200,000 arrangements.
+
+### Testing
+
+- 48 new tests. `CompositionComparisonTest` (38) pins every statistic against scipy 1.17.0
+  output rather than against this implementation: exact Mann-Whitney at three sizes and on
+  tied samples, Kruskal-Wallis with and without ties, Benjamini-Hochberg against
+  `false_discovery_control`, and a sweep asserting that no p from any
+  three-versus-three split can fall below what the design allows.
+  `ClusterGroupComparisonPanelTest` (9) drives the tab through the real JavaFX toolkit and
+  checks the wiring a test of the maths cannot see -- that the warning box is populated and
+  visible, that a key which does not split the images is refused with an explanation rather
+  than compared, and that switching keys recomputes instead of leaving stale numbers.
+- `DocLinkAnchorsTest` now also resolves **cross-document** links (`page.md#anchor`), not
+  just within-page ones. 69 such links existed and were unchecked; all resolve. The gap
+  surfaced because this release adds three links into `references.md`.
+
 ## [0.20.0] -- 2026-10-02 -- co-occurrence at a radius you can name, and squidpy's curves
 
 ### Fixed

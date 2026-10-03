@@ -345,6 +345,125 @@ Partition-based Graph Abstraction. Constructs a connectivity graph between cell 
 
 **Used in:** Post-analysis (PAGA connectivity graph between clusters)
 
+<a name="trajectory-teaching"></a>
+**Teaching material, and the warnings we took from it:**
+> Galaxy Training Network. "Trajectory Analysis using Python (Jupyter Notebook) in Galaxy."
+> https://training.galaxyproject.org/training-material/topics/single-cell/tutorials/scrna-case_JUPYTER-trajectories/tutorial.html
+
+This is the clearest walk-through of the scanpy trajectory ladder -- force-directed graph,
+diffusion map, PAGA, diffusion pseudotime -- and it is blunter about the risk than most
+tool documentation: you must know the biology *before* you look, these methods are "a
+bigger mathematical leap" than plotting, and they "can pretty easily force branches to
+appear even if they are not biologically real." QP-CAT's
+[PAGA tab guidance](results.md#paga-trajectory-tab) is built on that warning.
+
+**Cite the training network as:**
+> Hiltemann S, Rasche H, Gladman S, et al. "Galaxy Training: A powerful framework for teaching!" *PLOS Computational Biology* 19(1), e1010752 (2023).
+> https://doi.org/10.1371/journal.pcbi.1010752
+
+> Batut B, Hiltemann S, Bagnacani A, et al. "Community-Driven Data Analysis Training for Biology." *Cell Systems* 6(6), 752-758 (2018).
+> https://doi.org/10.1016/j.cels.2018.05.012
+
+---
+
+## Between-Group Composition Comparison
+
+The **Composition by group** results tab ([what it does, and what it refuses to
+do](results.md#composition-by-group-tab)).
+
+<a name="unit-of-replication"></a>
+### The unit of replication
+
+The test compares **per-image proportions**, not pooled cells. A thousand cells from one
+slide are one observation of that slide; treating them as a thousand independent
+replicates is the standard way significance gets inflated in this kind of work.
+
+**Reference:**
+> Lazic SE, Clarke-Williams CJ, Munafò MR. "What exactly is 'N' in cell culture and animal experiments?" *PLOS Biology* 16(4), e2005282 (2018).
+> https://doi.org/10.1371/journal.pbio.2005282
+
+**Used in:** Composition by group (per-image proportions)
+
+---
+
+<a name="mann-whitney"></a>
+### Mann-Whitney U and Kruskal-Wallis H
+
+Rank-based tests, so no normality assumption -- which matters because proportions are
+bounded and these designs are small. Two groups get Mann-Whitney, more than two
+Kruskal-Wallis. Both are computed **exactly** at these sample sizes by enumerating every
+arrangement of the group labels, including when images tie at the same proportion. The
+normal approximation is used only above 200,000 arrangements; at 3 versus 3 it returns
+0.047 for the most extreme possible split, where the exact value is 0.1.
+
+**Original papers:**
+> Mann HB, Whitney DR. "On a Test of Whether one of Two Random Variables is Stochastically Larger than the Other." *The Annals of Mathematical Statistics* 18(1), 50-60 (1947).
+> https://doi.org/10.1214/aoms/1177730491
+
+> Kruskal WH, Wallis WA. "Use of Ranks in One-Criterion Variance Analysis." *Journal of the American Statistical Association* 47(260), 583-621 (1952).
+> https://doi.org/10.1080/01621459.1952.10483441
+
+**Used in:** Composition by group (both tests). Verified against
+`scipy.stats.mannwhitneyu(method='exact')`, `scipy.stats.permutation_test` (for the tied
+cases scipy's exact method declines) and `scipy.stats.kruskal`.
+
+---
+
+<a name="benjamini-hochberg"></a>
+### Benjamini-Hochberg false discovery rate
+
+The `q` column: the step-up adjustment across the clusters in the table.
+
+**Original paper:**
+> Benjamini Y, Hochberg Y. "Controlling the False Discovery Rate: A Practical and Powerful Approach to Multiple Testing." *Journal of the Royal Statistical Society Series B* 57(1), 289-300 (1995).
+> https://doi.org/10.1111/j.2517-6161.1995.tb02031.x
+
+**Used in:** Composition by group (q column), Marker Rankings. Verified against
+`scipy.stats.false_discovery_control`.
+
+---
+
+<a name="compositional-caveat"></a>
+### Why cluster proportions are not independent -- and what to use instead
+
+Proportions sum to 1, so one cluster rising forces the others down. The per-cluster tests
+in that tab are not independent and Benjamini-Hochberg assumes nothing about the
+dependence, so several "significant" clusters may be one real shift and its arithmetic
+shadow. **QP-CAT's tab is a screen, not a publication analysis.** Copy the table out and
+use a model built for compositional single-cell data:
+
+<a name="sccoda"></a>
+**scCODA** -- Bayesian model with an explicit reference cell type, so the "everything else
+went down" artifact is accounted for rather than reported:
+> Büttner M, Ostner J, Müller CL, Theis FJ, Schubert B. "scCODA is a Bayesian model for compositional single-cell data analysis." *Nature Communications* 12, 6876 (2021).
+> https://doi.org/10.1038/s41467-021-27150-6
+
+<a name="propeller"></a>
+**propeller** -- a transformation plus empirical Bayes moderated tests, designed for the
+small sample sizes real cohorts have:
+> Phipson B, Sim CB, Porrello ER, Hewitt AW, Powell J, Oshlack A. "propeller: testing for differences in cell type proportions in single cell data." *Bioinformatics* 38(20), 4720-4726 (2022).
+> https://doi.org/10.1093/bioinformatics/btac582
+
+**Compositional data analysis, the general treatment:**
+> Aitchison J. *The Statistical Analysis of Compositional Data.* Springer Netherlands (1986).
+> https://doi.org/10.1007/978-94-009-4109-0
+
+**Used in:** Composition by group (the warning, and the pointers in it)
+
+---
+
+<a name="imaging-cohort-workflow"></a>
+### Where this sits in a multiplexed-imaging workflow
+
+An end-to-end protocol for multiplexed image analysis, including comparing cell-type
+composition between conditions on per-image summaries -- useful for seeing what QP-CAT's
+tab is and is not a substitute for:
+
+> Windhager J, Zanotelli VRT, Schulz D, et al. "An end-to-end workflow for multiplexed image processing and analysis." *Nature Protocols* 18, 3565-3613 (2023).
+> https://doi.org/10.1038/s41596-023-00881-0
+
+**Used in:** Composition by group (design), Cellular Neighborhoods (per-group proportions)
+
 ---
 
 ## Phenotyping and Gating
