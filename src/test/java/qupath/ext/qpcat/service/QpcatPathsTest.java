@@ -23,6 +23,8 @@ class QpcatPathsTest {
             QpcatPaths.PHENOTYPE_RULES,
             QpcatPaths.SPATIAL_STATS,
             QpcatPaths.FIGURES,
+            QpcatPaths.CROP_TABLES,
+            QpcatPaths.GATES,
             QpcatPaths.LOGS,
             QpcatPaths.CELLULAR_NEIGHBORHOODS,
             QpcatPaths.TEMP

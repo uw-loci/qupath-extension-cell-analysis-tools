@@ -266,6 +266,40 @@ Uniform Manifold Approximation and Projection for dimensionality reduction. Pres
 
 ---
 
+<a name="embedding-layout-is-not-stable"></a>
+### The layout belongs to the run, not to the cells
+
+A gate drawn on an embedding is only replayable onto the coordinates it was drawn on
+(see [Saving and reloading a gate](clusters.md#saving-and-reloading-a-gate)). The reason
+is that an embedding's layout is not a property of the data alone: with the same cells and
+the same parameters, a different seed or initialization gives a different picture.
+
+**Initialization decides the layout:**
+> Kobak D, Linderman GC. "Initialization is critical for preserving global data structure
+> in both t-SNE and UMAP." *Nature Biotechnology* 39, 156-157 (2021).
+> https://doi.org/10.1038/s41587-020-00809-z
+> Shows that the global arrangement these methods produce is determined by the
+> initialization rather than recovered from the data, and that random initialization gives
+> a layout that does not reproduce.
+
+**And so do the other knobs:**
+> Kobak D, Berens P. "The art of using t-SNE for single-cell transcriptomics."
+> *Nature Communications* 10, 5416 (2019).
+> https://doi.org/10.1038/s41467-019-13056-x
+> A practical account of how perplexity, initialization, learning rate and
+> exaggeration change the embedding of fixed data.
+
+QP-CAT pins `random_state` precisely so a run can be repeated, which makes the exact-match
+case real: the same cells, measurements, parameters and seed reproduce the same
+coordinates, and a gate saved on them selects the same cells. Change any one of the four
+and nothing constrains the new layout's rotation, reflection or scale -- which is why
+QP-CAT fingerprints the coordinates rather than trusting that the axis names match.
+
+**Used in:** gate save / replay (`GateStore`), Clustering Dialog seed
+
+
+---
+
 ### t-SNE
 
 t-distributed Stochastic Neighbor Embedding. Emphasizes local neighborhood preservation.
@@ -782,6 +816,59 @@ brianhie) so the mode adds no new environment dependency; see the header of
 > https://doi.org/10.1038/nbt.1991
 > (SPADE's density-dependent downsampling: heavily downsample abundant cell types while
 > preserving rare ones, without altering the shape of the point cloud.)
+
+---
+
+<a name="traithorizon"></a>
+## Crops + Feature Table Export (TraitHorizon)
+
+"Export cell crops + feature table" writes one PNG per cell plus a table in the input
+format of TraitHorizon, so the cells can be browsed in a parallel-coordinates plot beside
+their images.
+
+**Tool whose file format we write:**
+> TraitHorizon. Janowczyk lab (Emory University).
+> https://github.com/choosehappy/TraitHorizon
+> Documentation: https://traithorizon.readthedocs.io/en/latest/usage.html
+> A Flask application that pairs a parallel-coordinates plot with a data table and the
+> object images, for exploring image-feature paired datasets at the scale of hundreds of
+> thousands of histologic objects.
+
+**Publication status, as checked on 2026-10-04: there is none to cite yet.** The paper
+*"TraitHorizon: Scalable Exploration of Large Image-Feature Paired Datasets"* is **under
+review** at the Journal of Open Source Software -- review issue
+[openjournals/joss-reviews#10793](https://github.com/openjournals/joss-reviews/issues/10793),
+opened 2026-06-24 and still open. It therefore has **no DOI**, and is cited here as the
+software it is rather than as a published article. Re-check before citing it in a
+manuscript.
+
+**Its license statement is inconsistent**, and that is the upstream project's to resolve:
+`README.md` says The Clear BSD License, `docs/source/index.md` says MIT, and GitHub's
+detector reports `NOASSERTION`. Both candidates are permissive, and in any case it does
+not reach QP-CAT: **QP-CAT writes a file TraitHorizon happens to read and takes none of
+its code**, which is not a derivation.
+
+**What QP-CAT is held to by the format** (all four from its usage documentation, and each
+one pinned by a test in `CropTableExporterTest`): the first column must be named
+`filename`; every feature name must be unique; the `filename` column must not contain
+duplicates and must name a file present in the assets folder; and there must be no missing
+values, which is why QP-CAT drops a cell rather than writing a blank, and reports coverage
+before the export runs. Types are inferred with
+[d3.autoType](https://d3js.org/d3-dsv#autoType), so integers, decimals and scientific
+notation all parse and text columns are passed to `--hide_axes` instead.
+
+**Why it earns a place beside QP-CAT's own gallery.** The Representative Cells gallery
+shows medoids -- what a cluster typically looks like. Putting the image next to the full
+feature vector for every object answers the other question, "is this cluster real or is it
+a cluster of bad segmentations", and that is what the parallel-coordinates view at
+population scale is for. Shipping the export buys it for the cost of a file writer.
+
+**The interaction it provides, for context on why the format is shaped this way:**
+> Inselberg A. "The plane with parallel coordinates." *The Visual Computer* 1, 69-91 (1985).
+> https://doi.org/10.1007/BF01898350
+> (The origin of the parallel-coordinates plot, which is TraitHorizon's central view: one
+> vertical axis per feature, one polyline per object, and a drag on an axis as a range
+> filter.)
 
 ---
 

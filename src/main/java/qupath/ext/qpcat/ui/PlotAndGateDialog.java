@@ -21,6 +21,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ImageDataResources;
@@ -289,7 +290,12 @@ public class PlotAndGateDialog {
                     scatter.setData(pd.embedding, pd.labels, pd.nClasses, axisName);
                     scatter.setAxisLabels(labelX, labelY);
                     scatter.setNavigation(pd.refs, qupath, null);  // no crop preview here
-                    plotArea.getChildren().setAll(GateActionBar.wrap(scatter, pd.refs, qupath));
+                    GateSet.Axes gateAxes = new GateSet.Axes(
+                            emb ? GateSet.MODE_EMBEDDING : GateSet.MODE_BIAXIAL,
+                            axisName, colX, colY,
+                            pd.imagesUsed + " image(s)");
+                    plotArea.getChildren().setAll(
+                            GateActionBar.wrap(scatter, pd.refs, qupath, gateAxes));
                     String msg = "Plotted " + pd.count + " cells across " + pd.imagesUsed
                             + " image(s), " + pd.nClasses + " classification(s).";
                     if (skipped > 0) {

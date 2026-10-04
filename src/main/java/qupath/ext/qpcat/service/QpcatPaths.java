@@ -48,6 +48,12 @@ public final class QpcatPaths {
     /** Batch figure exports, one dated folder per export. */
     public static final String FIGURES = ROOT + "/figures";
 
+    /** Per-cell crops plus the feature table over them, one folder per export. */
+    public static final String CROP_TABLES = ROOT + "/crop_tables";
+
+    /** Saved gate definitions, one JSON file per saved set. */
+    public static final String GATES = ROOT + "/gates";
+
     /** The operation log. */
     public static final String LOGS = ROOT + "/logs";
 

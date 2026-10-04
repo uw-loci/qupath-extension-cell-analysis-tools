@@ -179,7 +179,8 @@ public final class VestExporter {
             // index stride, whose representativeness would depend on detection order).
             int[] sizes = new int[clusterIds.size()];
             for (int i = 0; i < clusterIds.size(); i++) sizes[i] = byCluster.get(clusterIds.get(i)).size();
-            int[] targets = allocateCounts(sizes, opts.globalCap, opts.minPerClass);
+            int[] targets = StratifiedSample.allocateCounts(
+                    sizes, opts.globalCap, opts.minPerClass);
 
             List<PathObject> pick = new ArrayList<>();
             List<Integer> pickCids = new ArrayList<>();
@@ -187,16 +188,10 @@ public final class VestExporter {
                 int cid = clusterIds.get(i);
                 List<PathObject> group = byCluster.get(cid);
                 int take = Math.min(targets[i], group.size());
-                List<PathObject> chosen;
-                if (take >= group.size()) {
-                    chosen = group;
-                } else {
-                    chosen = new ArrayList<>(group);
-                    java.util.Collections.shuffle(chosen,
-                            new java.util.Random(opts.seed * 1000003L + cid));
-                    chosen = chosen.subList(0, take);
+                for (PathObject d : StratifiedSample.draw(group, take, opts.seed, cid)) {
+                    pick.add(d);
+                    pickCids.add(cid);
                 }
-                for (PathObject d : chosen) { pick.add(d); pickCids.add(cid); }
             }
             List<String> markerNames = markerMeasurements(pick);
             if (markerNames.isEmpty()) {
@@ -255,41 +250,6 @@ public final class VestExporter {
                 "Exported " + n + " cells (" + written + " crops) across " + byCluster.size()
                 + " clusters to " + opts.outputDir);
         return new Result(n, byCluster.size(), opts.outputDir);
-    }
-
-    /**
-     * Per-cluster export counts under a GLOBAL cell budget with a per-class floor.
-     *
-     * <p>Each cluster gets at least {@code min(minPerClass, size)} cells -- so severe
-     * class imbalance (e.g. one cluster with a million cells) never hides a smaller
-     * cluster -- plus a size-proportional share of {@code globalCap}, capped at the
-     * cluster's actual size. The per-class floor takes priority: when there are so many
-     * clusters that the floors alone exceed the budget, the total exceeds
-     * {@code globalCap} (keeping every cluster visible wins over the nominal cap). Pure
-     * function of its inputs so it can be unit-tested and previewed in the dialog.</p>
-     */
-    public static int[] allocateCounts(int[] sizes, int globalCap, int minPerClass) {
-        int k = sizes.length;
-        int[] out = new int[k];
-        long total = 0;
-        for (int s : sizes) total += Math.max(0, s);
-        if (total == 0) return out;
-        int cap = Math.max(0, globalCap);
-        int floor = Math.max(0, minPerClass);
-        for (int i = 0; i < k; i++) {
-            int s = Math.max(0, sizes[i]);
-            int floorI = Math.min(s, floor);
-            int prop = (int) Math.round((double) cap * s / total);
-            out[i] = Math.min(s, Math.max(floorI, prop));
-        }
-        return out;
-    }
-
-    /** Total cells {@link #allocateCounts} would export for the given cluster sizes. */
-    public static int totalAllocated(int[] sizes, int globalCap, int minPerClass) {
-        int sum = 0;
-        for (int c : allocateCounts(sizes, globalCap, minPerClass)) sum += c;
-        return sum;
     }
 
     /**

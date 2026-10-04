@@ -23,6 +23,7 @@ import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringConfig.*;
@@ -4605,8 +4606,15 @@ public class ClusteringDialog {
             }
             // Wrap with the polygon-gating action bar (gate -> select / classify
             // cells across images) when we have references + a GUI to write back.
+            // The gate bar needs to know what the axes ARE, so a saved gate can
+            // later be checked against the plot it is dropped onto: an embedding
+            // layout belongs to one run, and a gate replayed on another selects
+            // other cells while looking identical.
+            GateSet.Axes gateAxes = new GateSet.Axes(GateSet.MODE_EMBEDDING,
+                    embName, embName + "1", embName + "2",
+                    result.getNCells() + " clustered cell(s)");
             javafx.scene.Node scatterNode = (qupath != null && result.getCellRefs() != null)
-                    ? GateActionBar.wrap(scatter, result.getCellRefs(), qupath)
+                    ? GateActionBar.wrap(scatter, result.getCellRefs(), qupath, gateAxes)
                     : scatter;
             Tab tab = new Tab(EmbeddingScatterPanel.prettyEmbeddingName(embName) + " 2D",
                     wrapWithGuide(scatterNode,

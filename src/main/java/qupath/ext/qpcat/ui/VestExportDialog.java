@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig.EmbeddingMethod;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
+import qupath.ext.qpcat.service.StratifiedSample;
 import qupath.ext.qpcat.service.VestExporter;
 import qupath.ext.qpcat.service.VestLauncher;
 import qupath.fx.dialogs.Dialogs;
@@ -201,7 +202,7 @@ public final class VestExportDialog {
             int budget = isCustom(budgetBox.getValue())
                     ? customBudget.getValue() : budgetValue(budgetBox.getValue());
             int minv = minPerClassSpinner.getValue();
-            int n = VestExporter.totalAllocated(sizes, budget, minv);
+            int n = StratifiedSample.totalAllocated(sizes, budget, minv);
             estimate.setText(sizes.length == 0
                     ? "No clustered cells on the open image yet."
                     : String.format("Will export ~%,d cells across %d clusters "

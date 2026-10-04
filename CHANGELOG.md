@@ -6,7 +6,89 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
-Four items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+Six items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+
+### Added
+
+- **Gates can be saved, reloaded, and are recorded when they classify anything.** A gate
+  assigns a classification to thousands of cells, which is an analysis decision someone
+  will be asked to justify; until now it lived only in the dialog that drew it. There are
+  **Save gates... / Load gates...** buttons on both gate bars, and -- separately --
+  **every Assign class... writes its polygon into `<project>/qpcat/gates/` unasked**, with
+  an operation-log line naming the file. The file is readable JSON: the axis mode, the two
+  column names, the scope, a coordinate fingerprint, and the data-space vertices.
+
+  **The design came out of a measurement that the plan had not anticipated.** The backlog
+  entry asked for "export and re-import of the gate definition". That is only safe for one
+  of the two axis kinds. 600 cells in three well-separated blobs, a gate drawn around one
+  blob holding about 200 of them. Re-lay the same cells -- reflect, rotate 37 degrees,
+  rescale 1.1, which changes no neighbour and no cluster -- and drop the same polygon back:
+
+  | | original layout | same gate, re-laid layout |
+  |---|---|---|
+  | cells held | ~200 | 53 to 85 |
+  | of which were in the original selection | 200 | **0** |
+
+  Zero overlap in five of five seeds. The gate does not fail, does not empty, and reports a
+  plausible count -- there is nothing on screen to see. That is what an embedding re-run is
+  free to do, because the layout belongs to the run and not to the cells (Kobak &
+  Linderman 2021: the initialization, not the data, fixes the arrangement).
+
+  So **no load is silent.** QP-CAT fingerprints the coordinates -- order-insensitively,
+  since pooling the same cells across images in another order is the same plot -- and
+  reports one of three verdicts: *same axes and same coordinates* (stated plainly, no
+  warning); *same axis columns, different coordinates* (the ordinary useful case for a
+  biaxial gate on raw measurements, a loud WARNING for an embedding); *different axis
+  columns* (**refused** -- there is no reading of the polygon that means anything over
+  different quantities). Either way the load dialog lists every gate's cells **here**
+  against its cells **when saved** and flags the ones that changed, before you can assign
+  a class from it.
+
+- **Export one crop per cell plus a feature table** -- *Export > "Export cell crops +
+  feature table (TraitHorizon / CSV)..."*. Writes `images/cell_NNNNNN.png` plus a table
+  whose first column names that PNG, which is
+  [TraitHorizon](https://github.com/choosehappy/TraitHorizon)'s input format: a
+  parallel-coordinates plot over every column at once, with each cell's image beside its
+  feature vector. That answers a question QP-CAT's own Representative Cells gallery does
+  not -- the gallery shows medoids, i.e. what is *typical*, and this shows what is
+  *broken*. The same table is written as CSV for Excel / R / pandas, and the crops can be
+  switched off for a numbers-only export.
+
+  **Two things in their contract turned out to matter more than the file writer.**
+  TraitHorizon requires **no missing values**, and QuPath measurements are routinely
+  missing on some cells, so a cell missing any chosen measurement has to be dropped --
+  which means a measurement present on 3% of cells would delete 97% of the export with
+  nothing on screen to say why. The dialog therefore **measures per-measurement coverage
+  before the export runs** and reports, in cells, what each one would cost. And the byte
+  order mark: the CSV needs one or Excel mangles the non-ASCII characters ordinary QuPath
+  measurement names carry ("um", "^2"), while the TSV must *not* have one, because d3 does
+  not strip it and TraitHorizon's required `filename` column would arrive renamed to
+  something it does not recognise. Both directions are tested.
+
+  One file per cell means the filesystem carries the export, so it takes a total cell
+  budget (default 2,000) spread by abundance with a floor per classification (default 30),
+  seeded. `README.txt` states what was left out and why, and gives the exact
+  `traithorizon ... --hide_axes ...` command -- which the dialog also shows before you run.
+
+  QP-CAT writes the file format and uses **none** of TraitHorizon's code. Its own licence
+  statement is inconsistent (README says The Clear BSD License, the docs index says MIT,
+  GitHub reports NOASSERTION); that is upstream's to resolve and does not reach us.
+  **Its paper is still under review at JOSS** (joss-reviews#10793, opened 2026-06-24, open
+  as of 2026-10-04), so it has no DOI and `references.md` cites the software rather than an
+  article.
+
+### Changed
+
+- **The VEST export's subsampling policy moved to `service/StratifiedSample`** and is now
+  shared with the crops/table export, rather than a second exporter growing its own rules.
+  Two exporters sampling differently would make the same cluster look differently abundant
+  in two files written from the same data. The inline seeded shuffle became
+  `StratifiedSample.draw`, which a test now pins against the index stride it replaced:
+  on a tiled slide, detection order is spatial, so every n-th cell samples a few stripes.
+
+- **One point-in-polygon implementation.** `EmbeddingScatterPanel.pointInPolygon` became
+  `GateSet.contains`, so the plot that draws a gate and the replay that reloads one cannot
+  drift apart on which cells a polygon holds.
 
 ### Fixed
 
@@ -170,8 +252,13 @@ Four items off the backlog. **Not released** -- version stays 0.21.0 until there
   citation.
   - Its DOI pattern excluded `)`, so any DOI *containing* parentheses was truncated at the
     first one. Rousseeuw's silhouette paper is `10.1016/0377-0427(87)90125-7`; the checker
-    resolved `10.1016/0377-0427(87` and called it dead. Elsevier minted a great many DOIs in
-    that shape. Parentheses are now matched and only an *unbalanced* trailing one is stripped.
+    resolved only the part before the parenthesis and called the whole citation dead.
+    Elsevier minted a great many DOIs in that shape. Parentheses are now matched and only an
+    *unbalanced* trailing one is stripped.
+  - Its DOI pattern also allowed a backtick, so a DOI written as markdown inline code
+    resolved with the closing backtick attached and 404ed. Found by this very changelog:
+    the entry describing the parenthesis fix was itself reported DEAD. Same false-DEAD
+    class, one layer out.
   - Its author check used a 4-line context window, so a wrapped docstring citation that names
     its author further above the DOI read as a mismatch -- `ppm_library`'s PS-TACS reference
     names "Qian et al. (2025)" five lines up. It now retries against a 10-line window **only

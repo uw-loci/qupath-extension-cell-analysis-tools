@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.ui;
 
 import org.junit.jupiter.api.Test;
+import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.ui.EmbeddingScatterPanel.PlotTransform;
 
 import java.util.ArrayList;
@@ -40,7 +41,7 @@ class GateSurvivesZoomTest {
     private static boolean[] gatedIn(List<double[]> poly) {
         boolean[] out = new boolean[CELLS.length];
         for (int i = 0; i < CELLS.length; i++) {
-            out[i] = EmbeddingScatterPanel.pointInPolygon(poly, CELLS[i][0], CELLS[i][1]);
+            out[i] = GateSet.contains(poly, CELLS[i][0], CELLS[i][1]);
         }
         return out;
     }

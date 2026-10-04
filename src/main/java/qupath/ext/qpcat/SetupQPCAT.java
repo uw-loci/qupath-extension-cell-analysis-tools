@@ -34,6 +34,7 @@ import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.ui.AutoencoderDialog;
 import qupath.ext.qpcat.ui.BatchFigureExportDialog;
+import qupath.ext.qpcat.ui.CropTableExportDialog;
 import qupath.ext.qpcat.ui.VestExportDialog;
 import qupath.ext.qpcat.service.VestLauncher;
 import qupath.ext.qpcat.ui.PhenotypingDialog;
@@ -531,6 +532,16 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
 
+        // Export one crop per cell plus a feature table over the same cells
+        // (TraitHorizon's TSV shape, and/or CSV).
+        MenuItem exportCropTableItem = new MenuItem(res.getString("menu.exportCropTable"));
+        exportCropTableItem.setOnAction(e -> CropTableExportDialog.show(qupath));
+        exportCropTableItem.visibleProperty().bind(environmentReady);
+        exportCropTableItem.disableProperty().bind(
+                Bindings.createBooleanBinding(
+                        () -> qupath.getImageData() == null,
+                        qupath.imageDataProperty()));
+
         // Export clustered cells as a VEST 3D-viewer bundle (embedding.csv + crops)
         MenuItem exportVestItem = new MenuItem(res.getString("menu.exportVest"));
         exportVestItem.setOnAction(e -> VestExportDialog.show(qupath));
@@ -627,6 +638,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         exportMenu.getItems().addAll(
                 exportFiguresItem,
                 exportAnnDataItem,
+                exportCropTableItem,
                 new SeparatorMenuItem(),
                 exportVestItem,
                 stopVestItem);

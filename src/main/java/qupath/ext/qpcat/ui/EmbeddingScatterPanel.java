@@ -27,6 +27,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusterPalette;
 import qupath.ext.qpcat.service.ViewerNavigator;
@@ -1207,7 +1208,7 @@ public class EmbeddingScatterPanel extends VBox {
         // Both the polygon and the coordinates are in data space, so no view
         // transform is involved and the answer cannot depend on the zoom.
         for (int i = 0; i < nCells; i++) {
-            if (pointInPolygon(gatePolygon, embedding[i][0], embedding[i][1])) {
+            if (GateSet.contains(gatePolygon, embedding[i][0], embedding[i][1])) {
                 gatedMask[i] = true;
                 gatedCount++;
             }
@@ -1219,25 +1220,96 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     /**
-     * Ray-casting point-in-polygon test. Both the polygon and the point are in the
-     * same coordinate space; gating uses data space, so the answer does not depend
-     * on the current zoom, pan or canvas size.
+     * Cells of this plot inside a polygon given in data coordinates.
      *
-     * @param poly polygon vertices, implicitly closed
-     * @param x    point x
-     * @param y    point y
-     * @return true when the point lies inside the polygon
+     * <p>Used to replay a saved gate: it reports what a polygon would select
+     * without touching the gate being drawn.
+     *
+     * @param polygon vertices in data coordinates, implicitly closed
+     * @return the enclosed cell indices, ascending
      */
-    static boolean pointInPolygon(List<double[]> poly, double x, double y) {
-        boolean inside = false;
-        int n = poly.size();
-        for (int i = 0, j = n - 1; i < n; j = i++) {
-            double xi = poly.get(i)[0], yi = poly.get(i)[1];
-            double xj = poly.get(j)[0], yj = poly.get(j)[1];
-            boolean intersect = ((yi > y) != (yj > y))
-                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
+    public int[] indicesIn(List<double[]> polygon) {
+        if (embedding == null || polygon == null || polygon.size() < 3) {
+            return new int[0];
         }
-        return inside;
+        int[] buffer = new int[nCells];
+        int k = 0;
+        for (int i = 0; i < nCells; i++) {
+            if (GateSet.contains(polygon, embedding[i][0], embedding[i][1])) {
+                buffer[k++] = i;
+            }
+        }
+        return java.util.Arrays.copyOf(buffer, k);
+    }
+
+    /**
+     * Digest of the coordinates currently plotted, for
+     * {@link qupath.ext.qpcat.service.GateStore}: it is how a gate saved on one
+     * embedding run is recognised as not belonging to another.
+     */
+    public String dataFingerprint() {
+        return GateSet.fingerprintOf(embedding);
+    }
+
+    /** Cells currently plotted. */
+    public int getCellCount() {
+        return nCells;
+    }
+
+    /**
+     * Add a labelled gate outline without going through the drawing handlers.
+     *
+     * <p>How a saved gate comes back onto the plot. The active gate is left
+     * alone, so a replay never disturbs a selection in progress.
+     *
+     * @param label    the gate's name
+     * @param vertices data-coordinate vertices, at least three
+     */
+    public void addCommittedGate(String label, List<double[]> vertices) {
+        if (vertices == null || vertices.size() < 3) return;
+        List<double[]> copy = new ArrayList<>(vertices.size());
+        for (double[] v : vertices) {
+            copy.add(new double[] {v[0], v[1]});
+        }
+        committedPolys.add(copy);
+        committedLabels.add(label == null ? ("gate " + committedPolys.size()) : label);
+        redraw();
+    }
+
+    /**
+     * Make a polygon the active gate, as if it had just been drawn and closed.
+     *
+     * <p>How a saved gate becomes usable again: the enclosed cells are computed
+     * and the gate callback fires, so "Select in open image" and
+     * "Assign class..." act on it.
+     *
+     * @param vertices data-coordinate vertices, at least three
+     * @return the enclosed cell count
+     */
+    public int setActiveGate(List<double[]> vertices) {
+        if (embedding == null || vertices == null || vertices.size() < 3) {
+            return 0;
+        }
+        gatePolygon.clear();
+        for (double[] v : vertices) {
+            gatePolygon.add(new double[] {v[0], v[1]});
+        }
+        finalizeGate();
+        return gatedCount;
+    }
+
+    /** Labels of the committed gate outlines, in the order they were added. */
+    public List<String> getCommittedGateLabels() {
+        return List.copyOf(committedLabels);
+    }
+
+    /** Vertices of one committed gate, in data coordinates. */
+    public List<double[]> getCommittedGateVertices(int index) {
+        List<double[]> out = new ArrayList<>();
+        if (index < 0 || index >= committedPolys.size()) return out;
+        for (double[] v : committedPolys.get(index)) {
+            out.add(new double[] {v[0], v[1]});
+        }
+        return out;
     }
 }

@@ -9,6 +9,8 @@ or push it onto another image's detections.
 - [Seeing a sub-cluster next to its parent clusters](#seeing-a-sub-cluster-next-to-the-clusters-it-came-from)
 - [Sub-clustering](#sub-clustering-cluster-within-a-cluster)
 - [Gating cells on a 2D plot](#gating-cells-on-a-2d-plot)
+- [Saving and reloading a gate](#saving-and-reloading-a-gate)
+- [Exporting crops and a feature table](#exporting-crops-and-a-feature-table)
 - [Applying a saved result to detections](#applying-a-saved-result-to-detections)
 
 ## Judging a result
@@ -354,6 +356,95 @@ survives reload.
 > you need them back; re-running clustering/phenotyping restores the cell-type
 > column.
 
+<a name="saving-and-reloading-a-gate"></a>
+### Saving and reloading a gate
+
+A gate is an analysis decision: it defines a population that then gets a name and
+gets reported on. Two things record it.
+
+**Every gate that assigns a class writes itself into the project, unasked.** When
+you click **Assign class...**, QP-CAT writes the polygon to
+`<project>/qpcat/gates/<class name>_<timestamp>.gates.json` and logs the event in
+the operation log, naming that file. You do not have to remember to save anything
+for the population to be traceable back to the geometry that chose it.
+
+**Save gates... / Load gates...** are the deliberate version, beside the gate bar
+on both plots. **Save** writes every outline on the plot -- the labelled ones and
+the one you are drawing -- to a file you name. **Load** puts them back.
+
+The file is plain JSON you can read without QuPath:
+
+```json
+{
+  "formatVersion": 1,
+  "axisMode": "biaxial",
+  "axisName": "biaxial",
+  "columnX": "CD3: Mean",
+  "columnY": "CD8: Mean",
+  "nCells": 48213,
+  "dataFingerprint": "48213-3f1a9c0b7d24e88",
+  "gates": [
+    {"label": "CD8 high", "vertices": [[0.42, 1.90], [0.95, 1.90], [0.95, 3.10]],
+     "cellsWhenDrawn": 1204}
+  ]
+}
+```
+
+Vertices are in the plot's **own units** -- marker values on a biaxial plot,
+embedding coordinates on an embedding -- not screen pixels, so a saved gate does
+not depend on the zoom, the window size or the screen it was drawn on.
+
+#### A gate on an embedding is only replayable onto the same coordinates
+
+This is the one failure you cannot see, so QP-CAT checks it for you.
+
+A polygon will happily draw itself onto any plot. Whether the cells underneath are
+the cells it was drawn around is a question about the **axes**, and the two axis
+kinds are completely different:
+
+- **Biaxial gates replay.** The axes are raw measurements, which are a property of
+  the cell. Load a biaxial gate onto other cells, other images or a later session
+  and it asks the same question it asked when you drew it. QP-CAT says so and gets
+  on with it.
+- **Embedding gates usually do not.** UMAP, t-SNE and PCA coordinates belong to the
+  *run* that produced them, not to the cell. Reproducing a layout needs the same
+  cells, the same measurements, the same parameters **and** the same seed; change
+  any one and the layout is free to rotate, reflect and rescale without a single
+  cell changing its neighbours. (That the initialization, not the data, fixes the
+  arrangement is Kobak & Linderman's finding -- see
+  [References](references.md#embedding-layout-is-not-stable).)
+
+**Measured, because the size of this matters.** 600 cells in three well-separated
+blobs; a gate drawn around one blob held about 200 cells. Re-lay the same cells --
+reflect, rotate 37 degrees, rescale 1.1, which changes no neighbour and no cluster
+-- and drop the same polygon back on:
+
+| | gate on the original layout | same gate, re-laid layout |
+|---|---|---|
+| cells held | ~200 | 53 to 85 |
+| cells held that were in the original selection | 200 | **0** |
+
+Zero overlap, in five of five seeds. The gate does not fail, does not empty, and
+does not look wrong. It selects a different population and reports a plausible
+count.
+
+**So QP-CAT never loads a gate silently.** Every load reports what it found:
+
+- **Same axes, same coordinates** -- each gate selects exactly the cells it
+  selected before. Stated plainly, no warning.
+- **Same axis columns, different coordinates** -- on a biaxial plot, the ordinary
+  useful case, with the cell counts then and now. On an embedding, a **WARNING**
+  spelling out that the layout is a different one and that the gates will hold a
+  different set of cells.
+- **Different axis columns** -- refused. There is no reading of the polygon that
+  means anything over different quantities.
+
+Either way the dialog lists each gate with the cells it holds **here** against the
+cells it held when saved, and flags the ones that changed, so you see the damage
+before you assign a class from it. You can also make one loaded gate the active
+selection, which is what makes **Select in open image** and **Assign class...**
+work on it.
+
 ### Notes
 
 - Gating across a multi-image plot resolves each point back to its detection by
@@ -366,6 +457,93 @@ survives reload.
   scrolling to zoom, middle-dragging to pan or resizing the window moves the
   outline with the points it encloses. You can draw a rough gate, zoom in and
   keep adding vertices.
+
+---
+<a name="exporting-crops-and-a-feature-table"></a>
+## Exporting crops and a feature table
+
+**Menu: Extensions > QP-CAT > Export > "Export cell crops + feature table (TraitHorizon / CSV)..."**
+
+Writes one small PNG per cell plus a table whose first column names that PNG and
+whose other columns are the cell's measurements:
+
+```
+images/cell_000000.png
+images/cell_000001.png
+features.tsv
+features.csv          (optional)
+README.txt
+```
+
+Two reasons to want it.
+
+**A QC pass QP-CAT does not offer.** That table shape is the input format of
+[TraitHorizon](https://github.com/choosehappy/TraitHorizon), a separate tool that
+draws a **parallel-coordinates plot over every column at once** -- drag along an
+axis to brush a range, and the data grid and the images update to the brushed
+subset. Its published use case is finding segmentation artifacts and extremal
+objects at population scale, which answers a question QP-CAT's own
+[Representative Cells](#representative-cells) gallery does not: that gallery shows
+medoids, i.e. what is *typical*, and this shows what is *broken*. QP-CAT writes the
+file format and uses none of TraitHorizon's code; see
+[References](references.md#traithorizon).
+
+**Or just the numbers.** Untick the crops and tick CSV and it is a plain per-cell
+measurement table for Excel, R or pandas, with the classification as a column.
+
+### The columns
+
+| Column | What it is |
+|---|---|
+| `filename` | the crop in `images/`. TraitHorizon requires this first, and it must name a file that is really there |
+| *measurement* | the QuPath measurement of that name, unchanged |
+| `class_index` | 0-based index into the classification list in `README.txt` |
+| `classification` | the classification name. Text, so not an axis |
+| `image` | the source image name. Text, so not an axis |
+
+A measurement whose name collides with a column QP-CAT adds gets a
+`_measurement` suffix -- TraitHorizon requires every feature name to be unique, and
+the renaming is visible rather than a silently dropped column.
+
+TraitHorizon cannot plot a text column as an axis, so it takes a `--hide_axes`
+flag for them. The dialog shows the **exact command to run**, with that flag
+already filled in, and writes it into `README.txt` as well:
+
+```
+traithorizon /path/to/export/images /path/to/export/features.tsv --hide_axes classification image
+```
+
+### Two things that will bite you, and what QP-CAT does about them
+
+**A cell missing any chosen measurement is dropped.** TraitHorizon requires no
+missing values, so there is nowhere to put a blank. That means a measurement
+present on 3% of cells deletes 97% of the export -- so the dialog **measures
+coverage on the open image before you run it** and says, in cells, how many you
+would lose and which measurements are incomplete. Deselect the sparse ones and
+keep the cells.
+
+**One file per cell means the filesystem carries the export.** A 300,000-cell
+project is 300,000 PNGs. So the export takes a **total cell budget** (default
+2,000), spread across classifications in proportion to their size with a floor
+(default 30) so a rare population is not sampled away. The draw is seeded, so the
+same settings write the same file twice. It is a **sample**: counts read off the
+table are counts of the sample, and `README.txt` says so along with exactly what
+was left out and why.
+
+### Notes
+
+- The crops are rendered with the viewer's **current brightness, contrast and
+  channel selection**, at 3x the cell bounding box by default. They are a picture
+  of the cell, not its pixel data -- do not measure them.
+- Scope can be the current image, the whole project or a chosen subset; crop
+  filenames are globally unique across images.
+- The TSV is written as UTF-8 **without** a byte-order mark and the CSV **with**
+  one. That is not a detail: a BOM would rename TraitHorizon's required
+  `filename` column to something it does not recognise, and Excel without one
+  mangles the non-ASCII characters ordinary QuPath measurement names carry.
+- TraitHorizon links each object out to an external viewer by URL. QP-CAT does not
+  write that column, because [clicking a point](#embedding-scatter-plot) already
+  navigates straight into the QuPath viewer.
 
 ---
 ## Applying a saved result to detections
