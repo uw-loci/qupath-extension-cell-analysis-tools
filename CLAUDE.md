@@ -94,6 +94,36 @@ touching the scrubber, the payload, or the artifact set, read the contract and t
 in `claude-reports/design/2026-08-19_bug-reporter-architecture.md` (invariants INV-1..INV-9).
 User-submitted reports become public GitHub issues -- redaction is a privacy surface.
 
+## Testing against a real QuPath -- `tools/qp-harness`
+
+Before you write something off as "only a human can check this", see whether the
+shared harness reaches it: [`tools/qp-harness/README.md`](/home/msnelson/QPSC_Project/tools/qp-harness/README.md).
+
+Three tiers, cheapest first:
+
+1. **`bin/qp-script`** -- a Groovy script inside a real QuPath, headless. No
+   display needed. Reaches the project, the hierarchy, measurements and batch
+   entry points.
+2. **`bin/qp-gui`** -- a Java scenario against a **hidden `QuPathGUI`**
+   (`QuPathGUI.createHiddenInstance()`): a real, fully-wired GUI with no window.
+   This is the tier people forget exists, and it reaches most of what gets
+   called untestable -- image servers, the viewer's display settings, rendered
+   panes, writing classifications back across a project and saving them.
+   Needs a display; WSLg provides one.
+3. **`src/test/.../FxHarness`** -- in-repo JUnit JavaFX tests. Stays per-repo.
+
+`bin/qp-dataset synthetic-tme <dir>` builds a project with real cell detection
+from the 8-image ground-truthed synthetic dataset.
+
+Scenarios live in **this repo** under `harness/`, versioned with the code they
+test; only the plumbing is shared. `tools/` is not a git repo, so the harness
+itself is disk-only -- see its README before relying on it from a fresh clone.
+
+**It earns its keep:** the first real-data run of QP-CAT's crop/table export
+found an error message that named five measurements at 100% coverage and
+truncated before the one at 0% that actually caused the failure. Twenty-one unit
+tests had missed it, because every one of them passed measurements that existed.
+
 ## Manual test queue
 
 Checks only a human can make for this repo -- reading a figure, real data volumes,
