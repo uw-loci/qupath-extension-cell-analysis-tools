@@ -297,6 +297,54 @@ public final class CropTableExporter {
     }
 
     /**
+     * Name the measurements that cost the export its cells, worst first.
+     *
+     * <p>Reported worst-first rather than in the order chosen, because this
+     * message exists only when something went wrong and the reader needs the
+     * culprit. Measured against the real synthetic dataset: a list led by five
+     * measurements at 100% coverage, truncated before reaching the one at 0%,
+     * says "no cell carried every chosen measurement" and names nothing that
+     * explains it.
+     *
+     * @param names    measurement names
+     * @param present  count of cells carrying a finite value, index-aligned
+     * @param examined cells scanned
+     * @return a one-line summary, or "" when there is nothing to say
+     */
+    static String coverageSummary(List<String> names, int[] present, int examined) {
+        if (names == null || present == null || examined == 0
+                || present.length != names.size()) {
+            return "";
+        }
+        // A measurement on NO cell is a different mistake from a sparse one --
+        // almost always a name that does not exist on these detections.
+        List<String> absent = new ArrayList<>();
+        Integer[] order = new Integer[names.size()];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+            if (present[i] == 0) absent.add(names.get(i));
+        }
+        if (!absent.isEmpty()) {
+            return "Scanned " + examined + " cell(s), and "
+                    + (absent.size() == 1 ? "this measurement is" : "these measurements are")
+                    + " on none of them: " + String.join(", ", absent)
+                    + ". Check the name against the measurements on these detections.";
+        }
+        java.util.Arrays.sort(order, (a, b) -> Integer.compare(present[a], present[b]));
+        StringBuilder sb = new StringBuilder("Scanned ").append(examined)
+                .append(" cell(s); lowest coverage: ");
+        int shown = Math.min(5, order.length);
+        for (int k = 0; k < shown; k++) {
+            if (k > 0) sb.append(", ");
+            int i = order[k];
+            sb.append(names.get(i)).append(' ')
+                    .append(Math.round(100.0 * present[i] / examined)).append('%');
+        }
+        if (order.length > shown) sb.append(", ...");
+        return sb.toString();
+    }
+
+    /**
      * A cell's measurement values, or null when any is missing or non-finite.
      *
      * @param det          the cell
@@ -555,18 +603,7 @@ public final class CropTableExporter {
         List<String> measurements = List.of();
 
         String missingSummary() {
-            if (present == null || examined == 0) return "";
-            StringBuilder sb = new StringBuilder("Scanned ").append(examined)
-                    .append(" cell(s); per-measurement coverage: ");
-            int shown = 0;
-            for (int i = 0; i < present.length && shown < 5; i++) {
-                if (shown > 0) sb.append(", ");
-                sb.append(measurements.get(i)).append(' ')
-                        .append(Math.round(100.0 * present[i] / examined)).append('%');
-                shown++;
-            }
-            if (present.length > shown) sb.append(", ...");
-            return sb.toString();
+            return coverageSummary(measurements, present, examined);
         }
     }
 

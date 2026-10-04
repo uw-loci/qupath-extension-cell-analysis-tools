@@ -79,6 +79,15 @@ Six items off the backlog. **Not released** -- version stays 0.21.0 until there 
 
 ### Changed
 
+- **A failed export now names the measurement that caused it.** Found by running
+  `CropTableExporter` against a real project for the first time: a measurement name that
+  is on none of the detections drops every cell, and the message read *"No cell carried
+  every chosen measurement"* followed by five measurements at **100%** coverage, truncated
+  before reaching the one at 0%. It named nothing that explained the failure. Coverage is
+  now reported worst-first, and a measurement present on no cell is its own case with its
+  own advice. Invisible to 21 unit tests, because every one of them passed measurements
+  that existed.
+
 - **The VEST export's subsampling policy moved to `service/StratifiedSample`** and is now
   shared with the crops/table export, rather than a second exporter growing its own rules.
   Two exporters sampling differently would make the same cluster look differently abundant

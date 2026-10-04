@@ -229,4 +229,64 @@ class CropTableExporterTest {
         CropTableExporter.writeTable(file, Format.TSV, header(List.of("CD3")), List.of());
         assertThat(Files.readAllLines(file)).hasSize(1);
     }
+
+    // ---- the message a failed export leaves behind ----
+
+    @Test
+    void aMeasurementOnNoCellIsNamedRatherThanAveragedIntoAList() {
+        // Found by running the exporter against the real synthetic dataset: a
+        // measurement name that does not exist on these detections drops every
+        // cell, and the old message led with five measurements at 100% and
+        // truncated before reaching the culprit. It explained nothing.
+        List<String> names = List.of("CD3", "CD8", "CD20", "CD68", "PanCK", "Nucleus: Area um^2");
+        int[] present = {4528, 4528, 4528, 4528, 4528, 0};
+        String msg = CropTableExporter.coverageSummary(names, present, 4528);
+        assertThat(msg).contains("Nucleus: Area um^2");
+        assertThat(msg).contains("on none of them");
+        assertThat(msg).contains("Check the name");
+    }
+
+    @Test
+    void severalAbsentMeasurementsAreAllNamed() {
+        String msg = CropTableExporter.coverageSummary(
+                List.of("a", "b", "c"), new int[] {100, 0, 0}, 100);
+        assertThat(msg).contains("these measurements are").contains("b, c");
+    }
+
+    @Test
+    void sparseCoverageIsReportedWorstFirst() {
+        // Not in the order the user chose: this message only appears when
+        // something went wrong, so it leads with what caused it.
+        List<String> names = List.of("full", "half", "rare", "most");
+        int[] present = {1000, 500, 30, 900};
+        String msg = CropTableExporter.coverageSummary(names, present, 1000);
+        assertThat(msg).startsWith("Scanned 1000 cell(s); lowest coverage: rare 3%");
+        assertThat(msg.indexOf("rare")).isLessThan(msg.indexOf("half"));
+        assertThat(msg.indexOf("half")).isLessThan(msg.indexOf("most"));
+        assertThat(msg.indexOf("most")).isLessThan(msg.indexOf("full"));
+    }
+
+    @Test
+    void theSummaryTruncatesButSaysSo() {
+        List<String> names = new java.util.ArrayList<>();
+        int[] present = new int[9];
+        for (int i = 0; i < 9; i++) {
+            names.add("m" + i);
+            present[i] = 100 + i;
+        }
+        String msg = CropTableExporter.coverageSummary(names, present, 1000);
+        assertThat(msg).contains("m0 10%").contains("m4").endsWith(", ...");
+        assertThat(msg).doesNotContain("m8");
+    }
+
+    @Test
+    void aSummaryWithNothingToSayIsEmpty() {
+        assertThat(CropTableExporter.coverageSummary(List.of("a"), new int[] {1}, 0)).isEmpty();
+        assertThat(CropTableExporter.coverageSummary(null, new int[] {1}, 10)).isEmpty();
+        assertThat(CropTableExporter.coverageSummary(List.of("a"), null, 10)).isEmpty();
+        // Mismatched lengths would otherwise index out of bounds inside an
+        // error path, turning a bad export into a crash.
+        assertThat(CropTableExporter.coverageSummary(
+                List.of("a", "b"), new int[] {1}, 10)).isEmpty();
+    }
 }
