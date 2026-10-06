@@ -15,6 +15,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
+import qupath.ext.qpcat.service.CellMatcher;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
@@ -77,7 +78,9 @@ public class PostHocSpatialWorkflow {
     private volatile boolean cancelled;
     // imageId -> (quantized centroid key -> cluster label), built from a saved
     // result when it is used as the label source (see Options.savedLabelSource).
-    private Map<String, Map<Long, Integer>> savedLabelMap;
+    private Map<String, Map<String, Integer>> savedLabelMap;
+    /** True when savedLabelMap is keyed by object id rather than by centroid. */
+    private boolean savedLabelsById;
     // Absolute path of the persisted results folder from the last run, or null.
     private String lastSavedPath;
 
@@ -546,16 +549,15 @@ public class PostHocSpatialWorkflow {
         // a heterogeneous non-phenotype that would pollute enrichment / co-occurrence;
         // from a saved-result source, a cell with no matching saved cell has no label.
         boolean fromSaved = opts.savedLabelSource != null && savedLabelMap != null;
-        Map<Long, Integer> imgMap = fromSaved ? savedLabelMap.get(w.imageId) : null;
+        Map<String, Integer> imgMap = fromSaved ? savedLabelMap.get(w.imageId) : null;
         List<PathObject> cells = new ArrayList<>();
         List<String> cellKeys = new ArrayList<>();
         for (PathObject d : w.detections) {
             if (fromSaved) {
                 if (imgMap == null) break;   // saved result has no cells for this image
-                var roi = d.getROI();
-                if (roi == null) continue;
-                Integer id = imgMap.get(SavedResultApplier.centroidKey(
-                        roi.getCentroidX(), roi.getCentroidY()));
+                String key = CellMatcher.liveKey(d, savedLabelsById);
+                if (key == null) continue;
+                Integer id = imgMap.get(key);
                 if (id == null || id < 0) continue;
                 cells.add(d);
                 // Display name, so a renamed / merged result labels its spatial
@@ -677,18 +679,20 @@ public class PostHocSpatialWorkflow {
      * for using it as an in-memory label source (no PathClass writes). Returns null
      * if the result lacks the per-cell references needed to match.
      */
-    private static Map<String, Map<Long, Integer>> buildSavedLabelMap(SavedClusteringResult saved) {
+    private Map<String, Map<String, Integer>> buildSavedLabelMap(SavedClusteringResult saved) {
         String[] ids = saved.getCellImageIds();
-        double[] cx = saved.getCellX();
-        double[] cy = saved.getCellY();
         int[] labels = saved.getClusterLabels();
-        if (ids == null || cx == null || cy == null || labels == null) return null;
-        int n = Math.min(ids.length, Math.min(cx.length, Math.min(cy.length, labels.length)));
-        Map<String, Map<Long, Integer>> map = new java.util.HashMap<>();
+        if (ids == null || labels == null) return null;
+        savedLabelsById = CellMatcher.hasObjectIds(saved);
+        if (!savedLabelsById && (saved.getCellX() == null || saved.getCellY() == null)) return null;
+        int n = Math.min(ids.length, labels.length);
+        Map<String, Map<String, Integer>> map = new java.util.HashMap<>();
         for (int i = 0; i < n; i++) {
             if (ids[i] == null) continue;
+            String key = CellMatcher.savedKey(saved, i, savedLabelsById);
+            if (key == null) continue;
             map.computeIfAbsent(ids[i], k -> new java.util.HashMap<>())
-                    .putIfAbsent(SavedResultApplier.centroidKey(cx[i], cy[i]), labels[i]);
+                    .putIfAbsent(key, labels[i]);
         }
         return map;
     }

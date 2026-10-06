@@ -66,6 +66,7 @@ public final class GateApplier {
         String currentName = imageData.getServer().getMetadata().getName();
         String currentId = entryId(qupath.getProject(), imageData);
 
+        Map<String, PathObject> byId = buildIdIndex(imageData);
         Map<Long, PathObject> index = buildCentroidIndex(imageData);
         List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
         List<PathObject> hits = new ArrayList<>();
@@ -73,7 +74,7 @@ public final class GateApplier {
             if (idx < 0 || idx >= refs.length) continue;
             CellRef ref = refs[idx];
             if (ref == null || !sameImage(ref, currentId, currentName)) continue;
-            PathObject po = resolve(ref, index, dets);
+            PathObject po = resolve(ref, byId, index, dets);
             if (po != null) hits.add(po);
         }
         if (hits.isEmpty()) return 0;
@@ -142,11 +143,12 @@ public final class GateApplier {
                 }
             }
 
+            Map<String, PathObject> byId = buildIdIndex(imageData);
             Map<Long, PathObject> index = buildCentroidIndex(imageData);
             List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
             int hitsThisImage = 0;
             for (CellRef ref : groupRefs) {
-                PathObject po = resolve(ref, index, dets);
+                PathObject po = resolve(ref, byId, index, dets);
                 if (po != null) {
                     ResultApplier.setClassification(po, pathClass);
                     hitsThisImage++;
@@ -218,16 +220,38 @@ public final class GateApplier {
         return index;
     }
 
+    /** Object id -> detection, so a ref that carries one needs no position search. */
+    private static Map<String, PathObject> buildIdIndex(ImageData<BufferedImage> imageData) {
+        Map<String, PathObject> index = new HashMap<>();
+        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
+            String id = CellRef.idOf(det);
+            if (id != null) index.putIfAbsent(id, det);
+        }
+        return index;
+    }
+
     private static long centroidKey(double x, double y) {
         long xi = Math.round(x);
         long yi = Math.round(y);
         return (xi << 32) ^ (yi & 0xffffffffL);
     }
 
-    /** Resolve a CellRef to its detection: exact integer-key hit, then a small
-     *  neighbor probe, then a linear nearest fallback within the image. */
-    private static PathObject resolve(CellRef ref, Map<Long, PathObject> index,
+    /** Resolve a CellRef to its detection: its object id when it has one, then
+     *  an exact integer-key hit, a small neighbor probe, and a linear nearest
+     *  fallback within the image.
+     *
+     *  <p>The id is tried first because the position search is tolerant by
+     *  design -- it probes +-1px and then takes the nearest within 2px -- and a
+     *  tolerant search can return a NEIGHBOURING cell, which classifies the
+     *  wrong one with nothing reported. A ref that knows its own id never needs
+     *  that risk. */
+    private static PathObject resolve(CellRef ref, Map<String, PathObject> byId,
+                                      Map<Long, PathObject> index,
                                       List<PathObject> dets) {
+        if (ref.getObjectId() != null) {
+            PathObject exact = byId.get(ref.getObjectId());
+            if (exact != null) return exact;
+        }
         PathObject po = index.get(centroidKey(ref.getX(), ref.getY()));
         if (po != null) return po;
         // +-1px probe absorbs JSON double round-trip / sub-pixel drift.

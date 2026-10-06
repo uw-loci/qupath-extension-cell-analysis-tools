@@ -44,6 +44,11 @@ public class SavedClusteringResult {
     // Parallel, index-aligned with clusterLabels. Image NAME is not persisted --
     // it is looked up from the project by id at navigate time.
     private String[] cellImageIds;
+    /**
+     * Per-cell {@code PathObject.getID()}, index-aligned with clusterLabels.
+     * Null on results saved before 0.21.0, which match on centroid instead.
+     */
+    private String[] cellObjectIds;
     private String[] cellImageNames;    // display names, persisted so the
                                         // "Composition by image" tab reads
                                         // friendly labels after reload; older
@@ -216,6 +221,11 @@ public class SavedClusteringResult {
     public double[] getCellX() { return cellX; }
     public void setCellX(double[] v) { this.cellX = v; }
 
+    /** Per-cell object ids, or null on a result saved before they were recorded. */
+    public String[] getCellObjectIds() { return cellObjectIds; }
+
+    public void setCellObjectIds(String[] v) { this.cellObjectIds = v; }
+
     public double[] getCellY() { return cellY; }
     public void setCellY(double[] v) { this.cellY = v; }
 
@@ -370,19 +380,26 @@ public class SavedClusteringResult {
         if (refs != null && refs.length > 0) {
             String[] ids = new String[refs.length];
             String[] names = new String[refs.length];
+            String[] objectIds = new String[refs.length];
             double[] xs = new double[refs.length];
             double[] ys = new double[refs.length];
             double[] halves = new double[refs.length];
+            boolean anyObjectId = false;
             for (int i = 0; i < refs.length; i++) {
                 CellRef r = refs[i];
                 ids[i] = r != null ? r.getImageId() : null;
                 names[i] = r != null ? r.getImageName() : null;
+                objectIds[i] = r != null ? r.getObjectId() : null;
+                if (objectIds[i] != null) anyObjectId = true;
                 xs[i] = r != null ? r.getX() : 0;
                 ys[i] = r != null ? r.getY() : 0;
                 halves[i] = r != null ? r.getBboxHalf() : 0;
             }
             saved.setCellImageIds(ids);
             saved.setCellImageNames(names);
+            // Omit the array entirely rather than persist a column of nulls,
+            // so "has ids" is one check instead of a per-cell one.
+            saved.setCellObjectIds(anyObjectId ? objectIds : null);
             saved.setCellX(xs);
             saved.setCellY(ys);
             saved.setCellBboxHalf(halves);
@@ -466,12 +483,14 @@ public class SavedClusteringResult {
             int n = cellImageIds.length;
             CellRef[] refs = new CellRef[n];
             boolean haveNames = cellImageNames != null && cellImageNames.length == n;
+            boolean haveObjectIds = cellObjectIds != null && cellObjectIds.length == n;
             for (int i = 0; i < n; i++) {
                 double half = (cellBboxHalf != null && cellBboxHalf.length == n) ? cellBboxHalf[i] : 0;
                 // Image name persisted since v0.x; older saves fall back to
                 // an id lookup at navigate time (null name).
                 String name = haveNames ? cellImageNames[i] : null;
-                refs[i] = new CellRef(cellImageIds[i], name, cellX[i], cellY[i], half);
+                String objectId = haveObjectIds ? cellObjectIds[i] : null;
+                refs[i] = new CellRef(cellImageIds[i], name, objectId, cellX[i], cellY[i], half);
             }
             result.setCellRefs(refs);
         }

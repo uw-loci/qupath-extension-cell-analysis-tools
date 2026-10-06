@@ -4899,8 +4899,12 @@ public class ClusteringDialog {
                                 : galleryHolder[0].displayChannelsForCluster(id);
                     });
                 }
-                // Host owns the scope (the clustered images) -> no picker prompt.
-                pane3d.initializeForHost(scope3d, axes3d);
+                // Host owns the scope (the clustered images) -> no picker prompt,
+                // and host owns the GROUPING too. Without the lookup the pane reads
+                // each cell's current PathClass, so a result reopened after a later
+                // run described that later run while the title bar named this one.
+                pane3d.initializeForHost(scope3d, axes3d,
+                        ResultApplier.labelLookup(result));
             };
             tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
                 if (newTab == tab3d) {

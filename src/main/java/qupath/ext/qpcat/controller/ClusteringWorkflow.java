@@ -550,9 +550,10 @@ public class ClusteringWorkflow {
                 imageName = entry.getImageName();
             }
             for (int i = seg.getStartIndex(); i < seg.getEndIndex(); i++) {
-                var roi = detections.get(i).getROI();
+                PathObject det = detections.get(i);
+                var roi = det.getROI();
                 double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
-                refs[i] = new CellRef(imageId, imageName,
+                refs[i] = new CellRef(imageId, imageName, CellRef.idOf(det),
                         roi.getCentroidX(), roi.getCentroidY(), half);
             }
         }

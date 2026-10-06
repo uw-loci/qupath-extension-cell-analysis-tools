@@ -80,21 +80,29 @@ Three kinds of spec:
 Saved-result names are passed in rather than hard-coded, because which run
 backs which figure belongs to the document, not to this repo.
 
-**Why `apply:` exists.** Reopening a saved result does not restore the
-classifications it produced. Result-driven tabs (Marker Fingerprints,
-Representative cells) are unaffected, but the **3D View** reads the project's
-*current* classifications, so its CLASSES list shows whatever the cells happen
-to carry now while the title bar names the result you just opened. On a project
-where a later run had been applied to only some images, that list showed six
-ground-truth cell types and four `Cluster N` labels side by side.
+**What `apply:` found, and what it is for now.** Reopening a saved result used
+to leave the **3D View** reading the project's *current* classifications, so its
+CLASSES list described whatever the cells happened to carry while the title bar
+named the result you had just opened. On a project where a later run had been
+applied to only some images, that list showed six ground-truth cell types and
+four `Cluster N` labels side by side.
 
-**A second thing it found.** The menu's own *Apply saved QP-CAT result to
-detections* namespaces every applied class with the result name, so that two
-results can coexist on the same cells. In the 3D View's narrow CLASSES column
-that renders as seven identical truncated rows with the counts pushed out of
-sight. `apply:` therefore uses `SavedResultApplier.applyRenamed` with no
+That is fixed: the tab is now handed the result's own grouping
+(`ResultApplier.labelLookup`), so it shows the result whatever the cells carry.
+Verified by opening a 6-cluster result on cells classified by a 7-cluster run
+and watching the panel report the 6-cluster counts.
+
+`apply:` therefore no longer changes what a results tab shows. Keep it when the
+figure should also reflect the project state -- the viewer overlay, or a tab
+that genuinely reads the hierarchy.
+
+**A second thing it found, still open.** The menu's own *Apply saved QP-CAT
+result to detections* namespaces every applied class with the result name, so
+that two results can coexist on the same cells. In the 3D View's narrow CLASSES
+column that renders as seven identical truncated rows with the counts pushed out
+of sight. `apply:` works around it with `SavedResultApplier.applyRenamed` and no
 renames, which writes bare `Cluster N` -- the state a finished run leaves
-behind, and so the state these figures document.
+behind. The column itself has not been fixed.
 
 ## `QpcatSpatialShotScenario`
 

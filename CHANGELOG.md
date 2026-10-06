@@ -6,9 +6,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
-Six items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+Seven items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+
+### Fixed
+
+- **The 3D View tab described a different run from the one named in its title bar.** The
+  tab asked each cell what it was classified as, rather than asking the result what it had
+  grouped that cell into. Those are the same thing right after a run and nothing afterwards:
+  reopening a saved result does not restore the classifications it produced. On a project
+  where a later run had been applied to four of eight images, the CLASSES panel listed six
+  ground-truth cell types beside four `Cluster N` labels while the window claimed to show
+  one seven-cluster result. The counts matched the live hierarchy exactly -- 5,980 cells
+  under the cell types, 5,423 under the cluster labels, 18 unclassified -- so nothing about
+  the display looked broken.
+
+  The results window now hands the 3D pane the result's own grouping, through a new
+  `labelOverride` on `cluster3d-core`'s host entry point (0.1.12). Nothing is written to
+  the hierarchy; a cell the result does not cover reads as ungrouped rather than being
+  guessed at. Checked by opening a six-cluster result on cells carrying a seven-cluster
+  run's labels and confirming the panel reports the six-cluster counts.
 
 ### Added
+
+- **A saved result now records each cell's object id**, not just its position. Matching a
+  saved cell back to a detection was keyed on the centroid quantised to half a pixel. That
+  is exact while the detections are untouched -- measured across 11,421 cells in eight
+  images, zero collisions -- but it is positional: re-segmenting an image moves centroids,
+  and a moved centroid can quantise onto a **different** cell's key. That labels the wrong
+  cell, and because a match was found, nothing is reported. `PathObject.getID()` cannot
+  collide that way; QuPath persists it, confirmed stable across reload on all eight images.
+
+  Written as `cellObjectIds` beside the existing per-cell columns, and omitted entirely
+  rather than stored as a column of nulls. A result saved before this still matches on its
+  centroid, and an older QP-CAT reading a newer result ignores the field. The one matcher
+  lives in `CellMatcher`, which `SavedResultApplier`, the post-hoc spatial workflow and the
+  3D View all share; gate application takes the same id-first path, where its fallback
+  search was tolerant enough to return a *neighbouring* cell.
 
 - **Gates can be saved, reloaded, and are recorded when they classify anything.** A gate
   assigns a classification to thousands of cells, which is an analysis decision someone

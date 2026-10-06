@@ -1,8 +1,11 @@
 package qupath.ext.qpcat.service;
+import java.util.function.BiFunction;
+import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.model.ClusterNaming;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.MembershipConfidence;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
@@ -584,5 +587,59 @@ public class ResultApplier {
         // "2D_UMAP" would make needlessly ugly. Runs of whitespace collapse to one.
         String s = name.trim().replaceAll("[^A-Za-z0-9_\\- ]", "_").replaceAll("\\s+", " ").trim();
         return s.isBlank() ? "EMB" : s;
+    }
+
+    /**
+     * Build a lookup that reports which cluster of {@code result} a detection
+     * belongs to, for a view that must show the result rather than whatever the
+     * cells are classified as now.
+     *
+     * <p>Nothing is written to the hierarchy. A detection the result does not
+     * cover maps to null, which a view should render as ungrouped rather than
+     * guess at.
+     *
+     * @param result the clustering result being displayed
+     * @return imageId + detection -&gt; the cluster's PathClass, or null outside
+     *         the result; null overall when the result carries no cell
+     *         references to match on
+     */
+    public static BiFunction<String, PathObject, PathClass> labelLookup(ClusteringResult result) {
+        if (result == null) return null;
+        CellRef[] refs = result.getCellRefs();
+        int[] labels = result.getClusterLabels();
+        if (refs == null || labels == null || refs.length == 0) return null;
+
+        boolean byId = CellMatcher.hasObjectIds(refs);
+        var nameFn = result.clusterNameFn();
+        Map<Integer, PathClass> classByLabel = new HashMap<>();
+        Map<String, Map<String, PathClass>> byImage = new HashMap<>();
+
+        int n = Math.min(refs.length, labels.length);
+        for (int i = 0; i < n; i++) {
+            CellRef ref = refs[i];
+            if (ref == null) continue;
+            String key = CellMatcher.refKey(ref, byId);
+            if (key == null) continue;
+            int label = labels[i];
+            PathClass pc = classByLabel.computeIfAbsent(label, l -> {
+                if (l < 0) return null;   // noise keeps no class
+                String name = nameFn.apply(l);
+                return name == null ? null : PathClass.fromString(name);
+            });
+            if (pc == null) continue;
+            byImage.computeIfAbsent(ref.getImageId(), k -> new HashMap<>())
+                    .putIfAbsent(key, pc);
+        }
+        // Deliberately NOT "return null when nothing was keyed". Null means
+        // "read each cell's own classification", and a result that grouped
+        // nothing -- all noise, say -- would then show whatever later run the
+        // cells are classified as, which is the confusion this exists to end.
+        // An empty lookup reports every cell as ungrouped, which is true.
+        return (imageId, det) -> {
+            Map<String, PathClass> forImage = byImage.get(imageId);
+            if (forImage == null) return null;
+            String key = CellMatcher.liveKey(det, byId);
+            return key == null ? null : forImage.get(key);
+        };
     }
 }

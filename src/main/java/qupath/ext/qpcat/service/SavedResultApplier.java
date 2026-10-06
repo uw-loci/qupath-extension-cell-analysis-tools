@@ -247,11 +247,11 @@ public final class SavedResultApplier {
                 if (!isOpen) toClose = data;
                 PathObjectHierarchy hierarchy = data.getHierarchy();
 
-                Map<Long, PathObject> byKey = new HashMap<>();
+                boolean byId = CellMatcher.hasObjectIds(saved);
+                Map<String, PathObject> byKey = new HashMap<>();
                 for (PathObject d : hierarchy.getDetectionObjects()) {
-                    ROI roi = d.getROI();
-                    if (roi == null) continue;
-                    byKey.putIfAbsent(centroidKey(roi.getCentroidX(), roi.getCentroidY()), d);
+                    String k = CellMatcher.liveKey(d, byId);
+                    if (k != null) byKey.putIfAbsent(k, d);
                 }
 
                 List<PathObject> matchedDet = new ArrayList<>();
@@ -262,7 +262,8 @@ public final class SavedResultApplier {
                 for (int i = 0; i < labels.length; i++) {
                     if (!eid.equals(cellImageIds[i])) continue;
                     savedForImage++;
-                    PathObject d = byKey.get(centroidKey(cx[i], cy[i]));
+                    String k = CellMatcher.savedKey(saved, i, byId);
+                    PathObject d = k != null ? byKey.get(k) : null;
                     if (d == null) { unmatched++; continue; }
                     matchedDet.add(d);
                     matchedLab.add(labels[i]);
@@ -336,18 +337,19 @@ public final class SavedResultApplier {
         if (eid == null || data == null || ids == null || cx == null || cy == null) {
             return new int[]{0, 0};
         }
-        Map<Long, PathObject> byKey = new HashMap<>();
+        boolean byId = CellMatcher.hasObjectIds(saved);
+        Map<String, PathObject> byKey = new HashMap<>();
         for (PathObject d : data.getHierarchy().getDetectionObjects()) {
-            ROI roi = d.getROI();
-            if (roi == null) continue;
-            byKey.putIfAbsent(centroidKey(roi.getCentroidX(), roi.getCentroidY()), d);
+            String k = CellMatcher.liveKey(d, byId);
+            if (k != null) byKey.putIfAbsent(k, d);
         }
         int total = 0;
         int matched = 0;
         for (int i = 0; i < ids.length; i++) {
             if (!eid.equals(ids[i])) continue;
             total++;
-            if (byKey.containsKey(centroidKey(cx[i], cy[i]))) matched++;
+            String k = CellMatcher.savedKey(saved, i, byId);
+            if (k != null && byKey.containsKey(k)) matched++;
         }
         return new int[]{matched, total};
     }
@@ -382,16 +384,6 @@ public final class SavedResultApplier {
             if (eid.equals(entry.getID())) return entry.getImageName();
         }
         return eid;
-    }
-
-    // Quantize a centroid to 0.5-px resolution and pack into a long key. The
-    // saved per-cell X/Y are the detection centroids, so this hits exactly.
-    // Public so other tools (e.g. post-hoc spatial stats using a saved result as
-    // the label source) match cells to saved cells identically.
-    public static long centroidKey(double x, double y) {
-        long xi = Math.round(x * 2.0);
-        long yi = Math.round(y * 2.0);
-        return (xi << 32) ^ (yi & 0xffffffffL);
     }
 
     private static void recordStep(ImageData<BufferedImage> data, SavedClusteringResult saved,

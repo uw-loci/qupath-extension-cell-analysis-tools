@@ -220,7 +220,7 @@ public final class VestExporter {
                 PathObject det = selected.get(i);
                 ROI roi = det.getROI();
                 double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
-                CellRef ref = new CellRef(imageId, imageName,
+                CellRef ref = new CellRef(imageId, imageName, CellRef.idOf(det),
                         roi.getCentroidX(), roi.getCentroidY(), half);
                 String fname = String.format("cell_%05d.png", i);
                 try {
