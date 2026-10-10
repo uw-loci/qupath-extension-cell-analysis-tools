@@ -17,6 +17,36 @@ tools/qp-harness/bin/qp-gui \
     /tmp/qph/project /tmp/qph/out
 ```
 
+## `QpcatAutocorrProbeScenario`
+
+Asks which per-marker spatial statistics a real clustering run actually
+produces, through `ClusteringWorkflow.runProjectClustering`.
+
+```bash
+tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatAutocorrProbeScenario.java \
+    qupath-extension-cell-analysis-tools \
+    /tmp/qph/project 2 6 zscore      # project, images, k, normalization
+```
+
+Written to settle a question reading could not. Moran's I and Geary's C are
+requested by the same tick-box and computed a few lines apart in
+`run_clustering.py`, each inside its own `except Exception` that only logs -- so
+a statistic that never arrives is indistinguishable, in the results window, from
+one nobody asked for. This asserts on the payloads.
+
+It found that **Moran's I had never worked**: `Spatial autocorrelation failed:`
+with an empty message, no tab, and the run otherwise reporting success. Keep it
+as a regression probe -- it is the only thing here that would notice a statistic
+quietly going missing again.
+
+**Gotcha worth knowing:** a dense spatial graph makes the workflow raise a modal
+"push the overlay anyway?" prompt, which a hidden GUI has nobody to answer, and
+the run parks on its latch forever. The scenario sets
+`config.setPushConnectionsToViewer(false)`. If a scenario of yours hangs after
+"Applying results to project images...", take a `jstack`: the main thread parked
+in `confirmOverlayPushBatch` is this.
+
 ## `QpcatExportAndGateScenario`
 
 Covers the crop/feature-table export and the gate save / replay / apply path

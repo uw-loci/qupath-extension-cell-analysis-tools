@@ -24,16 +24,24 @@ public final class SpatialStatsCsv {
 
     /** Header + one row per marker: marker, Geary's C, p-value. */
     public static String gearyCsv(GearyCResult geary) {
-        StringBuilder sb = new StringBuilder("marker,geary_c,p_value\n");
+        // Both p-values, and the method, because a CSV leaves the window and
+        // "p_value" alone does not say whether it was corrected.
+        StringBuilder sb = new StringBuilder(
+                "marker,geary_c,p_value,p_value_uncorrected,p_value_method\n");
         if (geary == null || geary.getMarkerStats() == null) {
             return sb.toString();
         }
+        String method = geary.getPValueMethod() != null ? geary.getPValueMethod() : "";
         for (Map.Entry<String, GearyCResult.Entry> e : geary.getMarkerStats().entrySet()) {
             sb.append(escape(e.getKey()))
                     .append(',')
                     .append(num(e.getValue().getC()))
                     .append(',')
                     .append(num(e.getValue().getPValue()))
+                    .append(',')
+                    .append(num(e.getValue().getPValueUncorrected()))
+                    .append(',')
+                    .append(escape(method))
                     .append('\n');
         }
         return sb.toString();
@@ -212,6 +220,11 @@ public final class SpatialStatsCsv {
     /** Empty for a non-finite value, so a spreadsheet reads a gap rather than "NaN" as text. */
     private static String num(double v) {
         return Double.isFinite(v) ? String.valueOf(v) : "";
+    }
+
+    /** As {@link #num(double)} but an absent value is an empty cell, not "null". */
+    private static String num(Double v) {
+        return v == null ? "" : num(v.doubleValue());
     }
 
     /** RFC 4180 quoting: cluster and marker names are user-supplied and may contain commas. */

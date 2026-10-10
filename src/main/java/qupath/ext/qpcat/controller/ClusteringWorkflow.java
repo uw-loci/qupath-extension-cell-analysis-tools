@@ -2389,7 +2389,12 @@ public class ClusteringWorkflow {
             if (task.outputs.containsKey("spatial_autocorr")) {
                 result.setSpatialAutocorrJson(
                         (String) task.outputs.get("spatial_autocorr"));
-                logger.info("Received spatial autocorrelation results");
+                if (task.outputs.containsKey("spatial_autocorr_p_method")) {
+                    result.setSpatialAutocorrPMethod(
+                            String.valueOf(task.outputs.get("spatial_autocorr_p_method")));
+                }
+                logger.info("Received spatial autocorrelation results (p from {})",
+                        result.getSpatialAutocorrPMethod());
             }
 
             // Per-area spreadsheets. Carried on the result only so
@@ -4857,13 +4862,17 @@ public class ClusteringWorkflow {
                 if (e.getValue() instanceof Map<?, ?> entry) {
                     double c = readNumber(entry.get("c"), Double.NaN);
                     double p = readNumber(entry.get("p_value"), Double.NaN);
-                    out.putMarker(marker, c, p);
+                    double pRaw = readNumber(entry.get("p_value_uncorrected"), Double.NaN);
+                    out.putMarker(marker, c, p, Double.isFinite(pRaw) ? pRaw : null);
                 }
             }
         }
         Object n = raw.get("n_permutations");
         if (n instanceof Number num) out.setNPermutations(num.intValue());
         if (raw.get("graph_type") != null) out.setGraphType(raw.get("graph_type").toString());
+        if (raw.get("p_value_method") != null) {
+            out.setPValueMethod(raw.get("p_value_method").toString());
+        }
         return out;
     }
 

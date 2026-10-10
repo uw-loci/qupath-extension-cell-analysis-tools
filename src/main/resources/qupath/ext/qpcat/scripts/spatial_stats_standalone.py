@@ -296,32 +296,18 @@ if want_nhood:
 
 if want_moran:
     if feats is None or mnames is None:
-        logger.warning("Moran's I requested but no feature matrix supplied; skipping.")
+        _spatial.note_for_user(
+            "Moran's I was requested but no feature matrix was supplied, so the "
+            "Spatial Autocorrelation tab is absent."
+        )
     else:
-        try:
-            _update("Computing Moran's I spatial autocorrelation...")
-            df = sq.gr.spatial_autocorr(
-                adata,
-                mode="moran",
-                **_supported(
-                    sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0
-                )
-            )
-            autocorr = {}
-            for marker in mnames:
-                if marker in df.index:
-                    row = df.loc[marker]
-                    autocorr[marker] = {
-                        "I": float(row["I"]),
-                        "pval": float(
-                            row.get("pval_norm", row.get("pval_z_sim", float("nan")))
-                        ),
-                    }
-            task.outputs["spatial_autocorr"] = json.dumps(_sanitize(autocorr))
+        # Shared with run_clustering.py. This block used to carry its own copy
+        # of the squidpy call, and its own copy of that call's two defects.
+        _update("Computing Moran's I spatial autocorrelation...")
+        if _spatial.run_moran_i(
+            adata, task, measurements=list(mnames), n_permutations=n_perms
+        ):
             any_stat = True
-            logger.info("Moran's I computed for %d markers", len(autocorr))
-        except Exception as e:
-            logger.warning("Moran's I failed: %s", e)
 
 # 5. v1 expansion stats (Ripley / Geary / co-occurrence)
 if want_ripley:

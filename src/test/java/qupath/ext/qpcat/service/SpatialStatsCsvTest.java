@@ -84,12 +84,36 @@ class SpatialStatsCsvTest {
     @Test
     void gearyWritesOneRowPerMarker() {
         GearyCResult g = new GearyCResult();
-        g.putMarker("Cell: CD8a: Mean", 0.42, 0.001);
+        g.putMarker("Cell: CD8a: Mean", 0.42, 0.001, 0.0004);
+        g.setPValueMethod("pval_sim_fdr_bh (1000 permutations, BH across 1 markers)");
 
         String csv = SpatialStatsCsv.gearyCsv(g);
 
-        assertThat(csv.lines().findFirst()).hasValue("marker,geary_c,p_value");
-        assertThat(csv).contains("Cell: CD8a: Mean,0.42,0.001");
+        assertThat(csv.lines().findFirst())
+                .hasValue("marker,geary_c,p_value,p_value_uncorrected,p_value_method");
+        assertThat(csv).contains("Cell: CD8a: Mean,0.42,0.001,4.0E-4,");
+    }
+
+    @Test
+    void gearyNamesWhichPValueItWroteSoACsvIsNotAmbiguousOnceItLeaves() {
+        GearyCResult g = new GearyCResult();
+        g.putMarker("Cell: CD8a: Mean", 0.42, 0.001, 0.0004);
+        g.setPValueMethod("pval_sim_fdr_bh (999 permutations, Benjamini-Hochberg)");
+
+        assertThat(SpatialStatsCsv.gearyCsv(g))
+                .contains("pval_sim_fdr_bh (999 permutations, Benjamini-Hochberg)");
+    }
+
+    @Test
+    void anUnrecordedUncorrectedPIsAnEmptyCell() {
+        // A result parsed from a run before 0.21.1 has no uncorrected column.
+        GearyCResult g = new GearyCResult();
+        g.putMarker("Cell: CD8a: Mean", 0.42, 0.001);
+
+        assertThat(SpatialStatsCsv.gearyCsv(g))
+                .contains("Cell: CD8a: Mean,0.42,0.001,,")
+                .doesNotContain("NaN")
+                .doesNotContain("null");
     }
 
     @Test
@@ -105,7 +129,8 @@ class SpatialStatsCsvTest {
 
     @Test
     void emptyResultsStillProduceAHeader() {
-        assertThat(SpatialStatsCsv.gearyCsv(null)).isEqualTo("marker,geary_c,p_value\n");
+        assertThat(SpatialStatsCsv.gearyCsv(null))
+                .isEqualTo("marker,geary_c,p_value,p_value_uncorrected,p_value_method\n");
         assertThat(SpatialStatsCsv.ripleyCsv(null, null)).isEqualTo("cluster,radius,k,l\n");
         assertThat(SpatialStatsCsv.coOccurrenceCsv(null, null))
                 .isEqualTo("center_cluster,neighbor_cluster,radius,ratio\n");

@@ -628,7 +628,7 @@ public class PostHocSpatialWorkflow {
                     runTask(coords, labels, classNames, fFeat, fMarkers, opts, coordUnit, progress));
             wr.result = buildResult(labels, classNames, outputs);
             wr.result.setSpatialUnit(wr.unit);
-            wr.statsRun = statsRunLabel(wr.result);
+            wr.statsRun = statsRunLabel(wr.result, opts);
         } catch (Exception e) {
             logger.warn("Spatial stats failed for {} / {}: {}",
                     w.imageName, w.regionLabel, e.getMessage());
@@ -637,15 +637,39 @@ public class PostHocSpatialWorkflow {
         return wr;
     }
 
-    private static String statsRunLabel(ClusteringResult r) {
-        List<String> s = new ArrayList<>();
-        if (r.hasRipley()) s.add("Ripley");
-        if (r.hasCoOccurrencePairwise()) s.add("Cooc-pair");
-        if (r.hasCoOccurrenceOneVsRest()) s.add("Cooc-1vR");
-        if (r.hasNhoodEnrichment()) s.add("Nhood");
-        if (r.hasGeary()) s.add("Geary");
-        if (r.hasSpatialAutocorr()) s.add("Moran");
-        return String.join(", ", s);
+    /**
+     * What this window produced, and what it was asked for and did not produce.
+     *
+     * <p>The second half matters: each statistic is computed inside its own
+     * {@code except Exception} on the Python side, so one that fails leaves no
+     * tab and no message, which is indistinguishable from not having ticked it.
+     * Moran's I did exactly that from the day it shipped until 0.21.1.
+     *
+     * @param r the window's result
+     * @param opts the options it was run with
+     * @return a label naming what ran, plus any requested statistic that is missing
+     */
+    private static String statsRunLabel(ClusteringResult r, Options opts) {
+        List<String> ran = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        record Stat(String name, boolean requested, boolean present) {}
+        List<Stat> stats = List.of(
+                new Stat("Ripley", opts.ripley, r.hasRipley()),
+                new Stat("Cooc-pair", opts.coocPairwise, r.hasCoOccurrencePairwise()),
+                new Stat("Cooc-1vR", opts.coocOneVsRest, r.hasCoOccurrenceOneVsRest()),
+                new Stat("Nhood", opts.nhood, r.hasNhoodEnrichment()),
+                new Stat("Geary", opts.gearyC, r.hasGeary()),
+                new Stat("Moran", opts.moran, r.hasSpatialAutocorr()));
+        for (Stat stat : stats) {
+            if (stat.present()) ran.add(stat.name());
+            else if (stat.requested()) missing.add(stat.name());
+        }
+        String label = String.join(", ", ran);
+        if (!missing.isEmpty()) {
+            label = (label.isEmpty() ? "" : label + " -- ")
+                    + "REQUESTED BUT NOT PRODUCED: " + String.join(", ", missing);
+        }
+        return label;
     }
 
     /**
@@ -817,6 +841,10 @@ public class PostHocSpatialWorkflow {
         }
         if (outputs.containsKey("spatial_autocorr")) {
             result.setSpatialAutocorrJson(String.valueOf(outputs.get("spatial_autocorr")));
+            if (outputs.containsKey("spatial_autocorr_p_method")) {
+                result.setSpatialAutocorrPMethod(
+                        String.valueOf(outputs.get("spatial_autocorr_p_method")));
+            }
         }
         return result;
     }

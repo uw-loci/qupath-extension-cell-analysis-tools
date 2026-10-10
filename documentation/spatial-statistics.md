@@ -75,11 +75,38 @@ The z-score matrix shows:
 - **Negative values (blue):** clusters avoid each other (exclusion)
 - **Near-zero (white):** random spatial relationship
 
-### Interpreting Moran's I
+<a name="autocorr-p-values"></a>
+### Interpreting Moran's I and Geary's C
 
 - **High I with low p-value:** marker expression is spatially clustered (not random)
 - **I near 0:** expression is randomly distributed
 - **Negative I:** expression is spatially dispersed (checkerboard pattern)
+
+Geary's C is the same test read the other way round: **C < 1** nearby cells similar,
+**C ~ 1** random, **C > 1** dissimilar.
+
+#### Which p-value these tables show
+
+squidpy returns up to nine p-value columns for this one test, and they do not agree.
+Both tables show two of them:
+
+| Column | What it is |
+|---|---|
+| **P-value** | The **permutation** p, **corrected across the markers in the panel** (Benjamini-Hochberg). This is the one to read. |
+| **P (uncorr.)** | The same test without the multiple-marker correction. Kept so a number quoted elsewhere can be matched against it. |
+
+A line under each table names the exact column, e.g.
+`pval_sim_fdr_bh (1000 permutations, Benjamini-Hochberg across 8 markers)`.
+
+**Why the correction matters here.** The question you put to these tables is "which of my
+markers are spatially structured", which is one test per marker. Measured on 34 markers
+and 2,000 cells of pure noise, where no spatial structure exists at all: the uncorrected
+normal-theory p flagged **3** markers below 0.05 (smallest 0.0024) and the uncorrected
+permutation p flagged **9**, while either corrected column flagged **none**.
+
+Before 0.21.1 these tables showed the uncorrected normal-theory value, and the
+permutations the run spent time on were computed and discarded. A result saved before
+then says so under the table instead of naming a column.
 
 ### BANKSY vs. Post-Hoc Spatial Analysis
 

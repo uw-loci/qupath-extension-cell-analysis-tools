@@ -6,9 +6,90 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
-Seven items off the backlog. **Not released** -- version stays 0.21.0 until there is more here.
+Seven items off the backlog, plus a results-tab audit. **Not released** -- version stays
+0.21.0 until there is more here.
 
 ### Fixed
+
+- **Moran's I has never worked, in either place it is computed.** The Spatial
+  Autocorrelation tab could not appear, and nothing said so. Two defects in the same
+  `sq.gr.spatial_autocorr` call, written out twice -- inline in `run_clustering.py` and
+  again inline in `spatial_stats_standalone.py` -- each sufficient on its own:
+
+  1. `copy` was left at its default `False`, so squidpy returns `None` and writes to
+     `adata.uns`; the next line read `df.index`. Present since the feature was written.
+  2. `genes` was omitted, so squidpy does `genes = adata.var_names.values` and indexes
+     AnnData with it. Under the pinned pandas 3.0.5 that is an `ArrowStringArray`, which
+     anndata's `_normalize_index` rejects with a bare `IndexError` carrying no message.
+
+  Both were swallowed by `except Exception` and logged, so the tab was simply absent --
+  indistinguishable from not having ticked the box. Corroborated before fixing: of 12
+  saved results across four projects whose JSON carries `nhoodEnrichment` (computed a few
+  lines above, under the same gate), not one carries `spatialAutocorrJson`.
+
+  The call now lives once, in `spatial_stats.run_moran_i`, where `genes` and `copy=True`
+  are the contract rather than optional arguments. Verified end to end on a fresh
+  eight-image synthetic TME project through the hidden-GUI harness: before, the log read
+  `Spatial autocorrelation failed:` with an empty message and no tab; after,
+  `Moran's I computed for 8 markers (p from pval_sim_fdr_bh)` with CD20 highest
+  (I = 0.568, the B-cell follicles) and PanCK next (0.369, the tumour nests).
+
+- **A spatial statistic that was requested and did not arrive now says so.** Each one is
+  computed inside its own `except Exception`, so a failure left no tab and no message.
+  `quality_warnings` could not carry the news either, because it was written before the
+  spatial section ran; it is now assembled once, last, after the spatial and plot
+  sections. The post-hoc summary's Statistics column names what was asked for and is
+  missing, instead of only listing what arrived.
+
+- **Moran's I and Geary's C reported an uncorrected, normal-theory p-value and discarded
+  the ones they paid for.** Geary ran up to 1000 permutations and then picked `pval_norm`
+  first out of squidpy's nine p-value columns, so `pval_sim` was computed and thrown away,
+  and the Benjamini-Hochberg column squidpy produces by default was never read at all.
+
+  Measured on 34 markers x 2000 cells of i.i.d. noise, where no spatial structure exists:
+  `pval_norm` flagged 3 markers below 0.05 (smallest 0.0024) and `pval_sim` flagged 9,
+  while either FDR column flagged none. The two are not refinements of each other
+  (Spearman 0.60, maximum difference 0.315), so switching to the permutation p is not the
+  fix by itself -- only the corrected columns are calibrated at panel level.
+
+  Both tables now lead with the corrected permutation p, keep the uncorrected value in a
+  second column, and print a line naming the exact column, e.g.
+  `pval_sim_fdr_bh (1000 permutations, Benjamini-Hochberg across 8 markers)`. The Geary
+  CSV carries both and the method. A result saved earlier says the method was not
+  recorded rather than implying its number was corrected. Moran's I is now given the same
+  permutation count as Geary's C (3.2 s for 8 markers over 3,098 cells).
+
+- **The Dotplot's dot size was labelled "fraction of cells expressing", which under the
+  default normalization it is not.** scanpy sizes each dot by `obs_tidy > expression_cutoff`
+  with the cutoff at 0.0, reading `adata.X` -- which here holds the NORMALISED matrix, so
+  the cutoff moves with the Normalization setting. With Min-Max, Percentile or None it
+  lands on the measurement's own zero and the usual reading holds. With **Z-score**, the
+  default, it lands on the marker's cohort mean instead: measured on 3,098 real cells,
+  DAPI read 0.495 against 1.000 actually carrying signal, CD3 0.258 against 0.352.
+
+  No cutoff is invented per mode. The figure's caption now states the cutoff and the
+  units, and says plainly under z-score that this is not the fraction expressing; the tab
+  guide and `results.md` say the same. The figure is skipped, with a warning naming the
+  measured spread, only when the dot size genuinely encodes nothing -- which happens on
+  measurements with no zero floor, where Min-Max puts every cell but one above the cutoff.
+
+- **Geary's C plotted a marker with no finite C as a bar at zero.** The null for this
+  statistic is C = 1, so a zero bar is the tallest "positive autocorrelation" bar on the
+  chart and reads as the strongest result rather than a missing one. Such markers are now
+  omitted and the title counts them.
+
+- **Captions collided with the figure's own tick labels.** `save_scanpy_plot` stamped the
+  caption at a fixed offset below the axes, but a dotplot's marker names are rotated
+  vertical and run far past them. The caption is now placed below the measured extent of
+  the tick labels, and soft-wrapped.
+
+- **Five Documentation links resolved without describing their tab.** Anchor resolution
+  was never the question -- `DocLinkAnchorsTest` passed throughout. Moran's I, Geary's C
+  and Neighborhood Enrichment all landed on one shared table row (and the table had no row
+  for Neighborhood Enrichment at all); Stacked Violin landed on a section where the word
+  "violin" appeared only as the anchor; Spatial Scatter landed on the Embedding section,
+  and "spatial scatter" appeared nowhere in `results.md`. All five now have their own
+  sections.
 
 - **The 3D View tab described a different run from the one named in its title bar.** The
   tab asked each cell what it was classified as, rather than asking the result what it had

@@ -5050,9 +5050,17 @@ public class ClusteringDialog {
                     + "  I > 0: spatially clustered (nearby cells have similar expression).\n"
                     + "  I ~ 0: spatially random (no spatial pattern).\n"
                     + "  I < 0: spatially dispersed (nearby cells have different expression).\n"
-                    + "Markers with high Moran's I and significant p-values show tissue-level "
-                    + "spatial structure -- they are good candidates for spatially-aware analyses "
-                    + "like BANKSY clustering.",
+                    + "Markers with high Moran's I are the candidates for a spatially-aware run "
+                    + "(BANKSY).\n"
+                    + "TWO P-VALUES, and the line under the table names the exact column. The "
+                    + "first is a permutation p CORRECTED across the markers in the panel, which "
+                    + "is the one to read, because asking which of your markers are structured is "
+                    + "one test per marker. The second is the same test uncorrected, kept so a "
+                    + "number quoted elsewhere can be matched. On 34 markers of pure noise the "
+                    + "uncorrected columns flagged 3 and 9 markers below 0.05; the corrected ones "
+                    + "flagged none.\n"
+                    + "Unlike Ripley's L and co-occurrence, this DOES read the neighbour graph, so "
+                    + "the graph constructor changes these numbers.",
                     "spatial-autocorrelation-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5116,8 +5124,10 @@ public class ClusteringDialog {
                     + "  C < 1: positive autocorrelation (nearby cells have similar values).\n"
                     + "  C ~ 1: spatial randomness.\n"
                     + "  C > 1: dispersion (nearby cells have dissimilar values).\n"
-                    + "Sensitive to local detail; pairs naturally with Moran's I which\n"
-                    + "weights global structure more heavily.",
+                    + "Sensitive to local detail; pairs naturally with Moran's I, in the Spatial "
+                    + "Autocorrelation tab, which weights global structure more heavily. Same "
+                    + "squidpy call, same neighbour graph, same two p-value columns -- see that "
+                    + "tab or the documentation link for what they are.",
                     "gearys-c-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -6525,8 +6535,22 @@ public class ClusteringDialog {
             switch (key) {
                 case "dotplot" -> {
                     tabName = "Dotplot";
-                    guide = "Dot size = fraction of cells in the cluster expressing the marker. "
-                            + "Dot color = mean expression level.\n"
+                    // The dot SIZE is scanpy's `obs_tidy > expression_cutoff` over
+                    // adata.X, which here is the NORMALISED matrix -- so what it
+                    // means depends on the Normalization setting, and under
+                    // z-score it is not "expressing" at all. The figure's own
+                    // caption states the cutoff and the units for the run that
+                    // produced it; this text cannot, because it is shared.
+                    guide = "Dot size = fraction of the cluster's cells above the cutoff "
+                            + "named in the caption under the figure. Dot color = mean "
+                            + "expression level.\n"
+                            + "WHAT THE SIZE MEANS FOLLOWS THE NORMALIZATION, and the caption "
+                            + "says which: with Min-Max, Percentile or None the cutoff sits at "
+                            + "the measurement's own zero, so a large dot means most of the "
+                            + "cluster carries any signal at all. With Z-score -- the default -- "
+                            + "it sits at the marker's COHORT MEAN instead, so a large dot means "
+                            + "most of the cluster is above average for that marker, which is "
+                            + "not the same as expressing it.\n"
                             + "Large, dark dots indicate markers that are both highly expressed and "
                             + "broadly active in that cluster -- strong candidate markers for cell type identity.";
                     docAnchor = "dotplot-tab";
@@ -6687,18 +6711,32 @@ public class ClusteringDialog {
             Map<String, Map<String, Double>> autocorr = gson.fromJson(json, type);
 
             StringBuilder sb = new StringBuilder();
-            sb.append(String.format("%-35s %10s %12s%n", "Marker", "Moran's I", "P-value"));
-            sb.append("-".repeat(59)).append(System.lineSeparator());
+            // Both p-values are shown. The first is the one to read -- a
+            // permutation p corrected across the panel, because the question
+            // put to this table is "which markers", which is a multiple
+            // comparison. The second is the uncorrected value, kept so a number
+            // reported elsewhere can be matched against it.
+            sb.append(String.format("%-35s %10s %12s %14s%n",
+                    "Marker", "Moran's I", "P-value", "P (uncorr.)"));
+            sb.append("-".repeat(74)).append(System.lineSeparator());
 
             // Sort by Moran's I descending (NaN-safe -- nulls / NaN go to the bottom)
             autocorr.entrySet().stream()
                     .sorted((a, b) -> Double.compare(
                             sortKey(b.getValue().get("I")),
                             sortKey(a.getValue().get("I"))))
-                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s%n",
+                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s %14s%n",
                             entry.getKey(),
                             formatDouble(entry.getValue().get("I"), "%.4f"),
-                            formatDouble(entry.getValue().get("pval"), "%.2e"))));
+                            formatDouble(entry.getValue().get("pval"), "%.2e"),
+                            formatDouble(entry.getValue().get("pval_uncorrected"), "%.2e"))));
+
+            sb.append(System.lineSeparator());
+            String method = result.getSpatialAutocorrPMethod();
+            sb.append("P-value: ").append(method != null ? method
+                    : "method not recorded (result saved before 0.21.1, when the "
+                      + "displayed p was the uncorrected normal-theory value)")
+              .append(System.lineSeparator());
 
             return sb.toString();
         } catch (Exception e) {
@@ -7315,14 +7353,25 @@ public class ClusteringDialog {
             return "No Geary's C data available.";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("%-35s %10s %12s%n", "Marker", "Geary C", "P-value"));
-        sb.append("-".repeat(59)).append("\n");
+        // Same two columns as the Moran's I table, for the same reason: the
+        // first p is corrected across the panel, the second is not.
+        sb.append(String.format("%-35s %10s %12s %14s%n",
+                "Marker", "Geary C", "P-value", "P (uncorr.)"));
+        sb.append("-".repeat(74)).append("\n");
         geary.getMarkerStats().entrySet().stream()
                 .sorted((a, b) -> Double.compare(a.getValue().getC(), b.getValue().getC()))
-                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e%n",
+                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e %14s%n",
                         entry.getKey(),
                         entry.getValue().getC(),
-                        entry.getValue().getPValue())));
+                        entry.getValue().getPValue(),
+                        entry.getValue().getPValueUncorrected() == null
+                                ? "-"
+                                : String.format("%.2e",
+                                        entry.getValue().getPValueUncorrected()))));
+        sb.append("\nP-value: ").append(geary.getPValueMethod() != null
+                ? geary.getPValueMethod()
+                : "method not recorded (result saved before 0.21.1, when the "
+                  + "displayed p was the uncorrected normal-theory value)");
         if (geary.getNPermutations() > 0) {
             sb.append("\n").append("Permutations: ").append(geary.getNPermutations());
         }

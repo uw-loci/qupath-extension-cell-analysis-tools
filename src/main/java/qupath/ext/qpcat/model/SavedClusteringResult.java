@@ -104,6 +104,7 @@ public class SavedClusteringResult {
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
+    private String spatialAutocorrPMethod;
 
     // LLM Cluster Explainer (optional; null on older saves)
     private LlmExplanationsBundle llmExplanations;
@@ -307,6 +308,9 @@ public class SavedClusteringResult {
     public String getSpatialAutocorrJson() { return spatialAutocorrJson; }
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
 
+    public String getSpatialAutocorrPMethod() { return spatialAutocorrPMethod; }
+    public void setSpatialAutocorrPMethod(String v) { this.spatialAutocorrPMethod = v; }
+
     // --- LLM Cluster Explainer ---
     public LlmExplanationsBundle getLlmExplanations() { return llmExplanations; }
     public void setLlmExplanations(LlmExplanationsBundle bundle) { this.llmExplanations = bundle; }
@@ -373,6 +377,7 @@ public class SavedClusteringResult {
         saved.setNhoodEnrichment(result.getNhoodEnrichment());
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
+        saved.setSpatialAutocorrPMethod(result.getSpatialAutocorrPMethod());
 
         // Plot-click navigation + representative crops.
         saved.setRepresentativesJson(result.getRepresentativesJson());
@@ -473,6 +478,7 @@ public class SavedClusteringResult {
         result.setNhoodEnrichment(nhoodEnrichment);
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
+        result.setSpatialAutocorrPMethod(spatialAutocorrPMethod);
         result.setNoiseRowIndex(getNoiseRowIndex());
         result.setNNoiseCells(nNoiseCells);
         result.setQualityWarnings(qualityWarnings);

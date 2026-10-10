@@ -368,6 +368,7 @@ public class ClusteringResult {
     private double[][] nhoodEnrichment;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
+    private String spatialAutocorrPMethod;
 
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }
     public void setNhoodEnrichment(double[][] m) { this.nhoodEnrichment = m; }
@@ -378,6 +379,14 @@ public class ClusteringResult {
     public String getSpatialAutocorrJson() { return spatialAutocorrJson; }
     public void setSpatialAutocorrJson(String json) { this.spatialAutocorrJson = json; }
     public boolean hasSpatialAutocorr() { return spatialAutocorrJson != null; }
+
+    /**
+     * Which of squidpy's p-value columns the Moran's I table is showing, in
+     * words. Null for a result saved before 0.21.1, where the column was always
+     * the uncorrected analytic one but nothing recorded that.
+     */
+    public String getSpatialAutocorrPMethod() { return spatialAutocorrPMethod; }
+    public void setSpatialAutocorrPMethod(String v) { this.spatialAutocorrPMethod = v; }
 
     // ---- Independent areas ----
     // Ready-to-write CSV text produced by the Python side. Held here only long

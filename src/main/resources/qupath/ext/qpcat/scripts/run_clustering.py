@@ -1554,8 +1554,135 @@ def save_scanpy_plot(plot_obj, path, dpi, caption=""):
     if caption:
         # Bottom-centred: the dendrogram occupies the top. bbox_inches="tight"
         # keeps text drawn outside the axes, so the note survives into the PNG.
-        fig.text(0.5, -0.02, caption, ha="center", va="top", fontsize=8)
+        #
+        # BELOW THE TICK LABELS, not at a fixed offset. A dotplot's marker names
+        # are rotated vertical and run far past the axes, so the old fixed -0.02
+        # drew the caption straight through them. Measure where the labels
+        # actually end and go under that; fall back to the fixed offset if the
+        # backend will not give a renderer.
+        y = -0.02
+        try:
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            inv = fig.transFigure.inverted()
+            for ax in fig.axes:
+                for label in ax.get_xticklabels():
+                    if not label.get_text():
+                        continue
+                    bb = label.get_window_extent(renderer=renderer).transformed(inv)
+                    y = min(y, bb.y0)
+            y -= 0.02
+        except Exception as e:
+            logger.debug("Could not measure tick labels for the caption: %s", e)
+        fig.text(0.5, y, _wrap_caption(caption), ha="center", va="top", fontsize=8)
     fig.savefig(path, dpi=dpi, bbox_inches="tight")
+
+
+def _wrap_caption(caption, width=95):
+    """Soft-wrap a caption so one long line does not stretch the figure."""
+    import textwrap
+
+    return "\n".join(
+        "\n".join(textwrap.wrap(line, width=width)) if line else line
+        for line in caption.split("\n")
+    )
+
+
+def dot_size_fractions(matrix, labels, cutoff=0.0):
+    """What a scanpy dotplot's dot SIZE encodes, computed the same way.
+
+    ``sc.pl.dotplot`` sizes each dot by ``obs_tidy > expression_cutoff``, with
+    the cutoff defaulting to 0.0, and it reads ``adata.X``. QP-CAT puts the
+    NORMALISED matrix there, so the quantity is "fraction of cells in this
+    cluster above `cutoff` in normalised units" and its meaning changes with the
+    Normalization setting -- not "fraction expressing", which is what the tab
+    guide, the docs and the figure legend all used to call it.
+
+    :param matrix: 2-D array, cells x markers, exactly what goes into adata.X
+    :param labels: per-cell cluster label, len == matrix rows
+    :param cutoff: the scanpy expression_cutoff that will be used
+    :return: list of fractions, one per (cluster, marker) pair
+    """
+    arr = np.asarray(matrix, dtype=float)
+    lab = np.asarray(labels)
+    out = []
+    for group in np.unique(lab):
+        rows = arr[lab == group]
+        if rows.shape[0] == 0:
+            continue
+        out.extend((rows > cutoff).mean(axis=0).tolist())
+    return out
+
+
+def dot_size_is_readable(fractions, tol=0.10):
+    """False when every dot would be drawn at effectively one size.
+
+    A dotplot whose dot sizes are all equal says nothing the matrix plot does
+    not say better, and it invites reading the uniform size as a result. This is
+    a question about the VISUAL ENCODING, not about the biology.
+
+    WHETHER IT IS READABLE DEPENDS ON THE DATA, NOT ONLY THE NORMALIZATION,
+    which is why this measures instead of switching on the mode. On continuous
+    measurements with no zero floor -- lognormal intensities, 3 clusters x 6
+    markers, three seeds -- the spread was
+
+        zscore      0.837, 0.856, 0.842
+        percentile  0.021, 0.021, 0.018
+        minmax      0.001, 0.001, 0.001
+        none        0.000, 0.000, 0.000
+
+    because minmax maps only each marker's single minimum cell to 0 and
+    percentile only the bottom 1%, so every dot is at maximum size. But real
+    multiplex intensities have a HARD ZERO for cells that do not carry the
+    marker, and on 3,098 real cells every mode was informative:
+
+        zscore 0.458, minmax 0.938, percentile 0.932, none 0.938
+
+    The threshold is not a tuned number: it sits in the empty gap between those
+    two regimes, and anything between roughly 0.03 and 0.4 would behave the same.
+
+    :param fractions: per-(cluster, marker) fractions from dot_size_fractions
+    :param tol: spread below which the dots are visually identical
+    :return: True when the spread is worth drawing
+    """
+    finite = [f for f in fractions if f is not None and math.isfinite(f)]
+    if not finite:
+        return False
+    return (max(finite) - min(finite)) > tol
+
+
+def dot_size_caption(normalization, cutoff=0.0):
+    """One line stating exactly what the dot size means, in these units.
+
+    Z-SCORE GETS ITS OWN SENTENCE because that is the case where "fraction
+    expressing" -- what the legend, the tab guide and the docs all called this
+    -- is simply the wrong name. Centring on the mean moves the cutoff off the
+    marker's zero and onto its average. Measured on 3,098 real cells, fraction
+    above the cutoff under z-score against the fraction actually carrying any
+    signal: DAPI 0.495 vs 1.000, CD3 0.258 vs 0.352, CD8 0.138 vs 0.201.
+
+    Under the other three the measurements keep their zero, and multiplex
+    intensities have a hard floor there -- 1,893 to 2,861 of those 3,098 cells
+    sit at exactly 0 for each lineage marker -- so above-the-cutoff really does
+    mean "has any signal", and the usual reading holds.
+    """
+    if normalization == "zscore":
+        return (
+            "dot size = fraction of the cluster's cells above each marker's "
+            "COHORT MEAN (z-score > %.3g), which is not the fraction expressing"
+            % cutoff
+        )
+    units = {
+        "minmax": "each marker rescaled to [0, 1], so above 0 means any signal "
+                  "above that marker's minimum",
+        "percentile": "each marker clipped to [p1, p99] and rescaled to [0, 1], "
+                      "so above 0 means above the 1st percentile",
+    }.get(normalization, "raw measurement units, so above 0 means any signal")
+    return "dot size = fraction of the cluster's cells above %.3g (%s: %s)" % (
+        cutoff,
+        normalization,
+        units,
+    )
 
 
 def plot_feature_note(n_shown, n_total, subset_applied):
@@ -2037,6 +2164,9 @@ if has_spatial and n_clusters_found > 1:
     # __file__ and the sibling scripts are not on sys.path.
     try:
         import spatial_stats as _qpcat_spatial
+
+        # Long-lived worker: clear notes left by a previous run in this process.
+        _qpcat_spatial.reset_notes()
     except ImportError as _e:
         raise RuntimeError(
             "spatial_stats module is not available -- the QP-CAT analysis "
@@ -2147,35 +2277,20 @@ if has_spatial and n_clusters_found > 1:
         except Exception as e:
             logger.warning("Neighborhood enrichment failed: %s", e)
 
-        # Spatial autocorrelation (Moran's I per marker)
-        try:
-            _progress(0.82, "Computing Moran's I spatial autocorrelation...")
-            df_autocorr = sq.gr.spatial_autocorr(
-                adata,
-                mode="moran",
-                **_supported_kwargs(
-                    sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0
-                )
-            )
-            autocorr_results = {}
-            for marker in marker_names:
-                if marker in df_autocorr.index:
-                    row = df_autocorr.loc[marker]
-                    autocorr_results[marker] = {
-                        "I": float(row["I"]),
-                        "pval": float(
-                            row.get("pval_norm", row.get("pval_z_sim", float("nan")))
-                        ),
-                    }
-            task.outputs["spatial_autocorr"] = json.dumps(
-                _sanitize_json_tree(autocorr_results)
-            )
-            logger.info(
-                "Spatial autocorrelation (Moran's I) computed for %d markers",
-                len(autocorr_results),
-            )
-        except Exception as e:
-            logger.warning("Spatial autocorrelation failed: %s", e)
+        # Spatial autocorrelation (Moran's I per marker). The call lives in
+        # spatial_stats.run_moran_i, which the standalone post-hoc script uses
+        # too -- it was written out inline in both, and the same two defects
+        # were in both copies (see that function's header). It records its own
+        # user-visible note on failure rather than only logging.
+        _progress(0.82, "Computing Moran's I spatial autocorrelation...")
+        _qpcat_spatial.run_moran_i(
+            adata,
+            task,
+            measurements=list(marker_names),
+            n_permutations=_qpcat_spatial.adaptive_permutations(
+                n_cells, override=pref_spatial_permutations
+            ),
+        )
 
     # ---- v1 spatial stats expansion ----
     # Each new statistic wraps in its own try/except via the helper module
@@ -2453,8 +2568,34 @@ if do_plots and plot_dir and can_analyze:
             pref_plot_max_features,
         )
 
-    # Dotplot with dendrogram -- fraction expressing + mean expression per cluster
+    # Dotplot with dendrogram. Its dot SIZE is the fraction of each cluster's
+    # cells above scanpy's expression_cutoff (0.0) in whatever units adata.X is
+    # in -- which here is the NORMALISED matrix, so it is not "fraction
+    # expressing" and its meaning moves with the Normalization setting. No
+    # cutoff is invented per mode; what happens instead is that the figure says
+    # what the size means, and is not drawn at all when the size says nothing.
     try:
+        _dot_cutoff = 0.0
+        _dot_fractions = dot_size_fractions(
+            adata.X, adata.obs["cluster"].to_numpy(), cutoff=_dot_cutoff
+        )
+        if not dot_size_is_readable(_dot_fractions):
+            _lo = min(_dot_fractions) if _dot_fractions else float("nan")
+            _hi = max(_dot_fractions) if _dot_fractions else float("nan")
+            _analysis_notes.append(
+                "The Dotplot was not drawn. Its dot size is the fraction of a "
+                "cluster's cells above %.3g in normalised units, and under "
+                "'%s' normalization that fraction is %.3f to %.3f across every "
+                "cluster and marker -- every dot would be the same size, which "
+                "says nothing and invites being read as a result. The Matrix "
+                "Plot shows the same means. Re-run with z-score normalization "
+                "for a dot size that varies."
+                % (_dot_cutoff, normalization, _lo, _hi)
+            )
+            raise RuntimeError(
+                "dot size spread %.3f-%.3f under '%s' normalization carries no "
+                "information" % (_lo, _hi, normalization)
+            )
         # standard_scale="var" rescales each marker to [0,1], so there is no
         # meaningful zero here and the sequential family is the correct one.
         dp = sc.pl.dotplot(
@@ -2464,11 +2605,15 @@ if do_plots and plot_dir and can_analyze:
             dendrogram=True,
             standard_scale="var",
             cmap=pref_cmap_sequential,
+            expression_cutoff=_dot_cutoff,
             show=False,
             return_fig=True,
         )
         dotplot_path = os.path.join(plot_dir, "cluster_dotplot.png")
-        save_scanpy_plot(dp, dotplot_path, pref_plot_dpi, plot_feature_caption)
+        _dot_caption = dot_size_caption(normalization, _dot_cutoff)
+        if plot_feature_caption:
+            _dot_caption = plot_feature_caption + "\n" + _dot_caption
+        save_scanpy_plot(dp, dotplot_path, pref_plot_dpi, _dot_caption)
         plt.close("all")
         plot_paths["dotplot"] = dotplot_path
         logger.info("Saved dotplot: %s", dotplot_path)
@@ -2690,6 +2835,24 @@ else:
             task.outputs["plot_paths"] = json.dumps(plot_paths)
     except NameError:
         pass
+
+# Everything that should reach the results window as a warning, assembled ONCE
+# and last. Earlier writes of this key stand as a partial record if the script
+# dies, but the authoritative list can only be built here: the spatial section
+# and the plot section both add notes, and both run after the two places that
+# used to write it -- so a note appended at source never shipped. The spatial
+# helpers collect theirs in spatial_stats.SPATIAL_NOTES.
+try:
+    _spatial_notes = list(_qpcat_spatial.SPATIAL_NOTES)
+except (NameError, AttributeError):
+    _spatial_notes = []
+_final_warnings = list(_quality) + list(_analysis_notes) + _spatial_notes
+if _final_warnings:
+    import json as _json_fw
+
+    task.outputs["quality_warnings"] = _json_fw.dumps(_final_warnings)
+    for _w in _spatial_notes:
+        logger.warning("Analysis: %s", _w)
 
 # 8. Package core outputs
 _progress(1.0, "Packaging results...")

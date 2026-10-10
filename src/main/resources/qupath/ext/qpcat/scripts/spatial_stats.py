@@ -1419,6 +1419,209 @@ def centre_on_median(curve, median):
     return [curve[j] - median[j] for j in range(n)]
 
 
+# ---------------------------------------------------------------------------
+# Moran's I and Geary's C: one squidpy call, two modes, one p-value contract.
+#
+# Both statistics are sq.gr.spatial_autocorr with a different `mode`. They used
+# to be written out twice -- Geary here, Moran inline in run_clustering.py AND
+# again inline in spatial_stats_standalone.py -- and the same two defects were
+# in both Moran copies: `genes` omitted, so squidpy indexed with
+# `adata.var_names.values`, which under the pinned pandas 3.0.5 is an
+# ArrowStringArray that anndata rejects with a bare IndexError; and `copy` left
+# at False, so the function returns None and writing `df.index` raises. Either
+# alone meant the Spatial Autocorrelation tab could never appear, and a bare
+# `except Exception` turned both into a log line.
+#
+# So the call lives in one place now. `genes` and `copy=True` are not optional
+# arguments here, they are the contract, and test_spatial_autocorr_contract.py
+# pins them against the installed squidpy.
+# ---------------------------------------------------------------------------
+
+# Which of squidpy's p-value columns to REPORT. It returns up to nine, and the
+# previous Geary code picked "pval_norm" first -- the analytic normal-theory
+# value -- so the permutations it had just paid for were computed and discarded,
+# and the Benjamini-Hochberg column squidpy produces by default
+# (corr_method="fdr_bh") was never read at all.
+#
+# The corrected simulated p leads, because the tab shows a whole marker panel at
+# once and the question put to it is "which markers", which is a multiple
+# comparison. Measured on 34 markers x 2000 cells of i.i.d. noise, where no
+# spatial structure exists: pval_norm flagged 3 markers at < 0.05 (smallest
+# 0.0024) and pval_sim flagged 9, while either FDR column flagged none.
+AUTOCORR_P_PREFERENCE = (
+    "pval_sim_fdr_bh",
+    "pval_z_sim_fdr_bh",
+    "pval_norm_fdr_bh",
+    "pval_sim",
+    "pval_z_sim",
+    "pval_norm",
+    "pval",
+)
+
+# The uncorrected counterpart, kept alongside so a value can be cross-referenced
+# against a published or previously-reported number.
+AUTOCORR_P_RAW_PREFERENCE = ("pval_sim", "pval_z_sim", "pval_norm", "pval")
+
+# Notes that have to reach the user rather than only the log. A statistic that
+# was requested and did not arrive leaves no trace in the results window --
+# the tab is simply absent, which looks exactly like not having asked for it.
+# run_clustering.py merges this into quality_warnings AFTER the spatial section.
+SPATIAL_NOTES = []
+
+
+def reset_notes():
+    """Clear the per-run note list.
+
+    The Appose worker is long-lived and this module stays imported between
+    tasks, so without this a note from one run reappears in the next one's
+    results window. Every entry point calls it before doing any spatial work.
+    """
+    del SPATIAL_NOTES[:]
+
+
+def note_for_user(message):
+    """Record a message the results window should show, and log it."""
+    SPATIAL_NOTES.append(message)
+    logger.warning("Spatial: %s", message)
+
+
+def _json_number(v):
+    """NaN / inf -> None, so the emitted JSON is valid and nulls render blank."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def pick_p_column(row, preference):
+    """First finite p-value in `preference` that `row` actually has.
+
+    :param row: one row of the sq.gr.spatial_autocorr DataFrame
+    :param preference: column names, best first
+    :return: (value, column_name), or (nan, None) when none is usable
+    """
+    for col in preference:
+        if col not in row:
+            continue
+        try:
+            val = float(row[col])
+        except (TypeError, ValueError):
+            continue
+        if not math.isnan(val):
+            return val, col
+    return float("nan"), None
+
+
+def compute_autocorr(
+    adata, mode, measurements, n_permutations=0, value_key="I"
+):
+    """Run sq.gr.spatial_autocorr for one mode and shape the per-marker stats.
+
+    :param adata: AnnData carrying a connectivity graph
+    :param mode: "moran" or "geary"
+    :param measurements: marker names to test; REQUIRED, see the note above
+    :param n_permutations: 0 leaves squidpy at its analytic-only default
+    :param value_key: "I" for Moran, "C" for Geary
+    :return: (stats, p_method) where stats maps marker -> dict with the value,
+             "p" (reported), "p_raw" (uncorrected) and p_method names the column
+    :raises ValueError: when `measurements` is empty
+    """
+    import squidpy as sq
+
+    genes = [str(m) for m in (measurements or [])]
+    if not genes:
+        raise ValueError(
+            "spatial_autocorr needs an explicit gene list: with genes=None "
+            "squidpy indexes AnnData with var_names.values, which pandas 3 "
+            "returns as an ArrowStringArray and anndata rejects"
+        )
+
+    kwargs = {"mode": mode, "genes": genes}
+    if n_permutations and int(n_permutations) > 0:
+        kwargs["n_perms"] = int(n_permutations)
+    # Force serial execution (avoids the numba/joblib deadlock on Windows).
+    kwargs.update(
+        _safe_kwargs(sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0)
+    )
+    # copy=True or the return value is None and the results land in adata.uns.
+    df = sq.gr.spatial_autocorr(adata, copy=True, **kwargs)
+
+    stats = {}
+    p_method = None
+    for marker in df.index:
+        row = df.loc[marker]
+        value = float(row.get(value_key, row.get("I", float("nan"))))
+        p_val, p_col = pick_p_column(row, AUTOCORR_P_PREFERENCE)
+        p_raw, _ = pick_p_column(row, AUTOCORR_P_RAW_PREFERENCE)
+        if p_col is not None and p_method is None:
+            p_method = p_col
+        stats[str(marker)] = {"value": value, "p": p_val, "p_raw": p_raw}
+    return stats, p_method
+
+
+def describe_p_method(p_method, n_markers, n_permutations):
+    """One line naming exactly which p-value a table is showing."""
+    if not p_method:
+        return "no p-value column was available"
+    parts = []
+    if "sim" in p_method:
+        parts.append("%d permutations" % int(n_permutations or 0))
+    else:
+        parts.append("normal-theory approximation")
+    if p_method.endswith("_fdr_bh"):
+        parts.append("Benjamini-Hochberg across %d markers" % int(n_markers))
+    else:
+        parts.append("NOT corrected for multiple markers")
+    return "%s (%s)" % (p_method, ", ".join(parts))
+
+
+def run_moran_i(
+    adata,
+    task,
+    measurements,
+    n_permutations=0,
+    output_key="spatial_autocorr",
+):
+    """Compute Moran's I per measurement and write task.outputs[output_key].
+
+    :param measurements: marker names to test
+    :param n_permutations: permutation count; 0 for squidpy's analytic default
+    :param output_key: task output key the Java side reads
+    :return: number of markers reported (0 when nothing was produced)
+    """
+    try:
+        stats, p_method = compute_autocorr(
+            adata, "moran", measurements,
+            n_permutations=n_permutations, value_key="I",
+        )
+        payload = {}
+        for marker, st in stats.items():
+            payload[marker] = {
+                "I": _json_number(st["value"]),
+                "pval": _json_number(st["p"]),
+                "pval_uncorrected": _json_number(st["p_raw"]),
+            }
+        # The payload stays strictly marker -> numbers, because the Java side
+        # parses it as Map<String, Map<String, Double>> and renders one table
+        # row per key. The method line travels as its own output.
+        task.outputs[output_key] = json.dumps(payload)
+        task.outputs[output_key + "_p_method"] = describe_p_method(
+            p_method, len(stats), n_permutations
+        )
+        logger.info(
+            "Moran's I computed for %d markers (p from %s)", len(stats), p_method
+        )
+        return len(stats)
+    except Exception as e:
+        note_for_user(
+            "Moran's I was requested but did not run (%s: %s), so the Spatial "
+            "Autocorrelation tab is absent. Everything else in this result is "
+            "unaffected." % (type(e).__name__, e)
+        )
+        return 0
+
+
 def run_geary_c(
     adata,
     task,
@@ -1434,51 +1637,44 @@ def run_geary_c(
 
     Writes task.outputs["geary_c"] as a JSON blob shaped:
       {
-        "marker_stats": {"CD3: Mean": {"c": 0.42, "p_value": 0.001}, ...},
+        "marker_stats": {"CD3: Mean": {"c": 0.42, "p_value": 0.001,
+                                       "p_value_uncorrected": 0.0004}, ...},
         "n_permutations": N,
-        "graph_type": "..."
+        "graph_type": "...",
+        "p_value_method": "pval_sim_fdr_bh (1000 permutations, ...)"
       }
+
+    Shares its squidpy call with Moran's I via compute_autocorr, which is also
+    what fixes the p-value: this used to prefer "pval_norm" and so discarded
+    both the permutation p it paid for and squidpy's Benjamini-Hochberg column.
     """
-    import squidpy as sq
-
     try:
-        kwargs = {"mode": "geary", "n_perms": int(n_permutations)}
-        if measurements:
-            kwargs["genes"] = list(measurements)
-        # Force serial execution (avoids the numba/joblib deadlock on Windows).
-        kwargs.update(
-            _safe_kwargs(
-                sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0
-            )
+        stats, p_method = compute_autocorr(
+            adata, "geary", measurements,
+            n_permutations=n_permutations, value_key="C",
         )
-        df = sq.gr.spatial_autocorr(adata, **kwargs, copy=True)
-
         marker_stats = {}
-        for marker in df.index:
-            row = df.loc[marker]
-            c_val = float(row.get("C", row.get("I", float("nan"))))
-            # squidpy reports either pval_norm / pval_z_sim / pval_sim depending
-            # on version; pick the first available
-            p_val = float("nan")
-            for col in ("pval_norm", "pval_z_sim", "pval_sim", "pval"):
-                if col in row:
-                    try:
-                        p_val = float(row[col])
-                        break
-                    except (TypeError, ValueError):
-                        continue
-            marker_stats[str(marker)] = {"c": c_val, "p_value": p_val}
+        for marker, st in stats.items():
+            marker_stats[marker] = {
+                "c": _json_number(st["value"]),
+                "p_value": _json_number(st["p"]),
+                "p_value_uncorrected": _json_number(st["p_raw"]),
+            }
 
         payload = {
             "marker_stats": marker_stats,
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
+            "p_value_method": describe_p_method(
+                p_method, len(marker_stats), n_permutations
+            ),
         }
         task.outputs["geary_c"] = json.dumps(payload)
         logger.info(
-            "Geary's C computed for %d markers (%d perms)",
+            "Geary's C computed for %d markers (%d perms, p from %s)",
             len(marker_stats),
             n_permutations,
+            p_method,
         )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).
@@ -1489,13 +1685,25 @@ def run_geary_c(
                 matplotlib.use("Agg")
                 import matplotlib.pyplot as plt
 
-                markers = list(marker_stats.keys())
-                c_vals = [marker_stats[m].get("c", float("nan")) for m in markers]
-                # Replace NaNs with 0 for plotting; the bar still appears
-                # but at height 0 so the marker name remains visible.
-                c_plot = [
-                    0.0 if (v is None or math.isnan(v)) else float(v) for v in c_vals
+                # A marker with no C is OMITTED, not drawn at zero. The null
+                # for this statistic is C = 1, so a zero bar is the tallest
+                # "positive autocorrelation" bar on the chart -- it reads as the
+                # strongest result rather than as a missing one. The caption
+                # says how many were left out.
+                measured = [
+                    (m, float(marker_stats[m]["c"]))
+                    for m in marker_stats
+                    if marker_stats[m].get("c") is not None
+                    and math.isfinite(float(marker_stats[m]["c"]))
                 ]
+                n_omitted = len(marker_stats) - len(measured)
+                if not measured:
+                    raise ValueError(
+                        "no marker produced a finite Geary's C, so there is "
+                        "nothing to plot"
+                    )
+                markers = [m for m, _ in measured]
+                c_plot = [c for _, c in measured]
 
                 n_markers = len(markers)
                 width = max(8.0, min(0.4 * n_markers + 2.0, 24.0))
@@ -1513,10 +1721,13 @@ def run_geary_c(
                 ax.set_xticks(xs)
                 ax.set_xticklabels(markers, rotation=45, ha="right", fontsize="small")
                 ax.set_ylabel("Geary's C")
-                ax.set_title(
-                    "Geary's C per marker (graph: %s, perms: %d)"
-                    % (graph_type, int(n_permutations))
+                _title = "Geary's C per marker (graph: %s, perms: %d)" % (
+                    graph_type,
+                    int(n_permutations),
                 )
+                if n_omitted:
+                    _title += "\n%d marker(s) omitted: no finite C" % n_omitted
+                ax.set_title(_title)
                 ax.legend(fontsize="small", loc="best")
                 ax.grid(True, axis="y", alpha=0.3)
 
