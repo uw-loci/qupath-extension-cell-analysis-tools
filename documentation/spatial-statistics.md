@@ -110,10 +110,13 @@ Three things to know before reading either number:
   corrected on its own.
 - **The permutation p has a floor of 1 / (permutations + 1)**, and QP-CAT lowers the
   permutation count as cell count rises (1000 up to 50,000 cells, then 100, then 50 above
-  500,000). After correction across m measurements the smallest value the lead column can
-  show is m / (permutations + 1): with 100 permutations and 20 measurements that is
-  **0.198, whatever the spatial structure**. On a large cohort read the I or C value and its
-  rank, and treat the corrected p as a floor, not a verdict. This is under review.
+  500,000). After Benjamini-Hochberg across m measurements, a measurement at the floor can
+  show at best m / (k x (permutations + 1)), where k is how many measurements sit at the
+  floor with it. With 100 permutations and 20 measurements that is **0.198 when one marker
+  carries the structure**, 0.040 when five do, 0.010 when all do -- so the floor bites
+  hardest in exactly the case worth finding, a single strongly organised marker. On a large
+  cohort read the I or C value and its rank, and treat the corrected p as a floor, not a
+  verdict. Which statistic should lead at scale is under review.
 
 **Why the correction is there.** The question these tables answer is "which of my
 measurements are spatially structured", which is one test per measurement, and a panel
