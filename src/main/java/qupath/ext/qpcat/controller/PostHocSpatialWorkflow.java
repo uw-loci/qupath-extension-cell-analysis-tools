@@ -846,6 +846,20 @@ public class PostHocSpatialWorkflow {
                         String.valueOf(outputs.get("spatial_autocorr_p_method")));
             }
         }
+        // Why a requested statistic is missing. statsRunLabel already says THAT
+        // one is; this says why, and it is the only place that can.
+        if (outputs.containsKey("spatial_notes")) {
+            try {
+                List<String> notes = gson.fromJson(
+                        String.valueOf(outputs.get("spatial_notes")),
+                        new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
+                for (String note : notes) {
+                    logger.warn("Spatial: {}", note);
+                }
+            } catch (Exception e) {
+                logger.debug("Could not read spatial notes: {}", e.getMessage());
+            }
+        }
         return result;
     }
 

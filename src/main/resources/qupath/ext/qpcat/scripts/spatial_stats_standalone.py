@@ -214,6 +214,10 @@ import anndata as ad
 import squidpy as sq
 import spatial_stats as _spatial
 
+# Long-lived worker, and runWindows loops over every window in one process, so
+# without this a note from one window reappears in the next one's results.
+_spatial.reset_notes()
+
 if feats is not None:
     X = feats.astype(np.float32, copy=False)
 else:
@@ -392,6 +396,12 @@ if want_cooc_ovr:
         p = os.path.join(out_dir, _spatial.PLOT_FILE_COOC_ONE_VS_REST)
         if os.path.exists(p):
             plot_paths["cooc_one_vs_rest"] = p
+
+# A statistic that was requested and did not arrive leaves no tab, which looks
+# exactly like not having asked for it. The Java side also derives this from the
+# options, but the note says WHY.
+if _spatial.SPATIAL_NOTES:
+    task.outputs["spatial_notes"] = json.dumps(list(_spatial.SPATIAL_NOTES))
 
 if any_stat:
     task.outputs["spatial_n_permutations"] = int(n_perms)

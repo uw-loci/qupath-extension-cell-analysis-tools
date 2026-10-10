@@ -59,13 +59,33 @@ class _Task:
 # --- the two library contracts the defects rested on ---------------------
 
 
-def test_var_names_values_is_not_indexable_so_genes_must_be_explicit():
-    """Defect 2. Reproduces the exact failure, so the fix cannot be undone."""
+def test_genes_must_be_explicit_because_var_names_values_may_not_be_indexable():
+    """Defect 2, which is PANDAS-VERSION-DEPENDENT -- and that is the point.
+
+    Under the pinned pandas 3.0.5 an Index's ``.values`` is an
+    ``ArrowStringArray``, which anndata's ``_normalize_index`` falls through to
+    a bare ``IndexError``. Under pandas 2.x it is an object ndarray and the same
+    line works fine.
+
+    **CI runs pandas 2.3.3 and the shipped env runs 3.0.5**, so CI could not
+    have caught this defect and will not catch the next one of its shape. The
+    same skew is recorded in test_stacked_violin_width.py. What this test can
+    enforce everywhere is the invariant the fix rests on: pass ``genes``
+    explicitly and the behaviour stops depending on the pandas version at all.
+    """
     a = _adata()
-    with pytest.raises(IndexError):
-        # What squidpy does internally when genes=None.
-        _ = a[:, a.var_names.values]
-    # A plain list is accepted, which is why passing genes= fixes it.
+    values = a.var_names.values
+
+    if isinstance(values, np.ndarray):
+        # pandas 2.x: indexing happens to work, so there is nothing to reproduce.
+        assert a[:, values].shape[1] == len(MARKERS)
+    else:
+        # pandas 3.x, the shipped env: exactly the failure that hid the tab.
+        with pytest.raises(IndexError):
+            _ = a[:, values]
+
+    # Either way, the explicit list is accepted -- which is why the fix works
+    # and why `genes` is not an optional argument in compute_autocorr.
     assert a[:, list(a.var_names)].shape[1] == len(MARKERS)
 
 
