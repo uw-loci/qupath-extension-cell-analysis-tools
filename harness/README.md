@@ -47,6 +47,15 @@ the run parks on its latch forever. The scenario sets
 "Applying results to project images...", take a `jstack`: the main thread parked
 in `confirmOverlayPushBatch` is this.
 
+### `apply:` and `apply:ns:`
+
+`apply:<result>` writes the result's labels back as bare `Cluster N`
+(`applyRenamed` with no renames), which keeps a figure's legend short.
+`apply:ns:<result>` uses the real `SavedResultApplier.apply` instead, which
+namespaces every class with the result name
+(`auto_20260927_015057_hdbscan: Cluster 0`) -- that is what a user gets, and it
+is how to reproduce anything about long class names.
+
 ## `QpcatExportAndGateScenario`
 
 Covers the crop/feature-table export and the gate save / replay / apply path

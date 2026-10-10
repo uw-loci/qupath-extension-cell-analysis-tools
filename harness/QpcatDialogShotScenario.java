@@ -143,7 +143,8 @@ public final class QpcatDialogShotScenario {
             System.exit(1);
         }
         for (String name : applies) {
-            applySavedResult(qupath, project, name);
+            boolean namespaced = name.startsWith("ns:");
+            applySavedResult(qupath, project, namespaced ? name.substring(3) : name, namespaced);
         }
         if (!dialogs.isEmpty()) ensureClassifications(project);
         note("project ready: " + entries.size() + " image(s), image "
@@ -181,13 +182,22 @@ public final class QpcatDialogShotScenario {
      * <p>Must run off the JavaFX thread: it reads and writes every image's
      * data and blocks while it does.
      */
+    /**
+     * @param namespaced true to use the real {@code apply} path, which prefixes
+     *                   every class with the result name
+     *                   ({@code auto_20260927_015057_hdbscan: Cluster 0}) -- the
+     *                   spec form {@code apply:ns:<result>}. False uses
+     *                   {@code applyRenamed} with no renames, which writes bare
+     *                   {@code Cluster N} and keeps a figure's legend short.
+     */
     private static void applySavedResult(QuPathGUI qupath, Project<BufferedImage> project,
-                                         String resultName) {
+                                         String resultName, boolean namespaced) {
         try {
             SavedClusteringResult saved =
                     ClusteringResultManager.loadSavedResult(project, resultName);
-            SavedResultApplier.ApplyReport report =
-                    SavedResultApplier.applyRenamed(qupath, saved, Map.of());
+            SavedResultApplier.ApplyReport report = namespaced
+                    ? SavedResultApplier.apply(qupath, saved, true, false)
+                    : SavedResultApplier.applyRenamed(qupath, saved, Map.of());
             if (report.isError()) {
                 bad("apply " + resultName + ": " + report.error);
                 return;

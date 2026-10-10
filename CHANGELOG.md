@@ -11,6 +11,27 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Fixed
 
+- **A long applied-class name squeezed the 3D View legend's cell count down to an
+  ellipsis** (`cluster3d-core` 0.1.13). `SavedResultApplier.apply` namespaces every applied
+  class with the result name, so the legend's ~160 px name column gets
+  `auto_20260927_015057_hdbscan: Cluster 0`. Measured at that width with a four-digit
+  count: the name was drawn at 178 px against a 286 px preference, and the **count at 13 px
+  against 33** -- inside the row, but rendered as an ellipsis where a cell count should be.
+  HBox shrinks every shrinkable child proportionally, so the count gave up two thirds of its
+  width to a name with far more to give. The name now absorbs the whole squeeze and the
+  count is pinned at its preferred size, because the count is how you check an apply landed
+  on the number of cells you expected. The name also elides from the LEFT -- a trailing
+  ellipsis left every row reading `auto_20260927_015057...`, which is the part they share --
+  with the full name on a tooltip.
+
+  **Worth recording: QP-CAT's own 3D View had already stopped showing this**, because the
+  previous fix in this section hands the pane the result's grouping rather than reading each
+  cell's class, and that grouping uses bare `Cluster N`. Verified by applying a namespaced
+  result to the harness project -- the cells carry
+  `auto_20261009_215650_kmeans: Cluster 1` and the legend reads `Cluster 1  1932`. The
+  defect was still live anywhere the pane reads classes directly, which is the standalone
+  Cluster 3D Navigator and any class name longer than the column.
+
 - **Moran's I has never worked, in either place it is computed.** The Spatial
   Autocorrelation tab could not appear, and nothing said so. Two defects in the same
   `sq.gr.spatial_autocorr` call, written out twice -- inline in `run_clustering.py` and
