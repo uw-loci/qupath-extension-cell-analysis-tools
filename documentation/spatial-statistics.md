@@ -196,6 +196,11 @@ After the run completes, see [Chapter 21 -- Spatial graph overlay](spatial-neigh
 
 Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPATIAL STATS GEARY`, `SPATIAL STATS COOC PAIRWISE`, `SPATIAL STATS COOC ONE-VS-REST`) plus one `SPATIAL GRAPH` row for the graph build under your project's `qpcat/logs/qpcat_YYYY-MM-DD.log`. Each row records the method name, graph constructor + parameters, permutation count, and a short result summary.
 
+**When a requested statistic does not arrive**, it says so rather than leaving you to notice a missing tab. Each statistic is computed inside its own error handler, so one that fails used to leave no tab and no message -- indistinguishable from not having ticked it. Now:
+
+- In a **clustering run**, the reason appears in the result's quality warnings, e.g. *"Moran's I was requested but did not run (...), so the Spatial Autocorrelation tab is absent. Everything else in this result is unaffected."*
+- In a **post-hoc run**, the summary window's **Statistics** column names what is missing (`REQUESTED BUT NOT PRODUCED: Moran`), and the reason is logged as `Spatial: <reason>`.
+
 ### Matplotlib PNG output
 
 When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplotlib PNGs** is enabled (the default), each spatial statistic that runs also writes a PNG alongside the existing clustering plots under `<project>/qpcat/cluster_results/<result_name>_plots/`:
