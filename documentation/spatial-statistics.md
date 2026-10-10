@@ -87,26 +87,46 @@ Geary's C is the same test read the other way round: **C < 1** nearby cells simi
 
 #### Which p-value these tables show
 
-squidpy returns up to nine p-value columns for this one test, and they do not agree.
-Both tables show two of them:
+squidpy returns nine columns for this one test, six of them p-values, and they do not
+agree. Both tables show two of them:
 
 | Column | What it is |
 |---|---|
-| **P-value** | The **permutation** p, **corrected across the markers in the panel** (Benjamini-Hochberg). This is the one to read. |
-| **P (uncorr.)** | The same test without the multiple-marker correction. Kept so a number quoted elsewhere can be matched against it. |
+| **P-value** | The **permutation** p, corrected with Benjamini-Hochberg across the measurements tested in that table. This is the one to read. |
+| **P (uncorr.)** | The same test without the multiple-comparison correction. Kept so a number quoted elsewhere can be matched against it. |
 
 A line under each table names the exact column, e.g.
 `pval_sim_fdr_bh (1000 permutations, Benjamini-Hochberg across 8 markers)`.
 
-**Why the correction matters here.** The question you put to these tables is "which of my
-markers are spatially structured", which is one test per marker. Measured on 34 markers
-and 2,000 cells of pure noise, where no spatial structure exists at all: the uncorrected
-normal-theory p flagged **3** markers below 0.05 (smallest 0.0024) and the uncorrected
-permutation p flagged **9**, while either corrected column flagged **none**.
+Three things to know before reading either number:
 
-Before 0.21.1 these tables showed the uncorrected normal-theory value, and the
-permutations the run spent time on were computed and discarded. A result saved before
-then says so under the table instead of naming a column.
+- **Both p-values are one-sided**, in the direction observed. squidpy's `two_tailed` defaults
+  to off and QP-CAT leaves it there, so under the null each p is uniform on (0, 0.5], and a
+  0.05 threshold is really a 0.10 one. On 34 markers of pure noise, about 3 land below 0.05
+  by construction.
+- **The correction is per table.** Moran's I and Geary's C are two squidpy calls, each
+  corrected over the same measurements. Scanning both tables and taking whichever flagged
+  is twice the tests either correction allows for. In a post-hoc run each image or area is
+  corrected on its own.
+- **The permutation p has a floor of 1 / (permutations + 1)**, and QP-CAT lowers the
+  permutation count as cell count rises (1000 up to 50,000 cells, then 100, then 50 above
+  500,000). After correction across m measurements the smallest value the lead column can
+  show is m / (permutations + 1): with 100 permutations and 20 measurements that is
+  **0.198, whatever the spatial structure**. On a large cohort read the I or C value and its
+  rank, and treat the corrected p as a floor, not a verdict. This is under review.
+
+**Why the correction is there.** The question these tables answer is "which of my
+measurements are spatially structured", which is one test per measurement, and a panel
+screened without correction turns into a false-positive list. Measured on 34 markers and
+2,000 cells of i.i.d. noise (seed 7, kNN graph, k = 15, 1000 permutations): the uncorrected
+normal-theory p flagged 3 markers below 0.05, which is what a correctly calibrated one-sided
+p should do; the uncorrected permutation p flagged 9, about three times its expectation,
+which is a calibration question about the permutation null itself; and the corrected columns
+flagged none.
+
+Every QP-CAT version up to and including 0.21.0 showed the uncorrected normal-theory value
+and discarded the permutations the run spent time on. A result saved by one of those
+versions says so under the table instead of naming a column.
 
 ### BANKSY vs. Post-Hoc Spatial Analysis
 

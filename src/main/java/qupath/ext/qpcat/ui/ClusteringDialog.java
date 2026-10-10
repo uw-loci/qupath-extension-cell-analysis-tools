@@ -5052,14 +5052,14 @@ public class ClusteringDialog {
                     + "  I < 0: spatially dispersed (nearby cells have different expression).\n"
                     + "Markers with high Moran's I are the candidates for a spatially-aware run "
                     + "(BANKSY).\n"
-                    + "TWO P-VALUES, and the line under the table names the exact column. The "
-                    + "first is a permutation p CORRECTED across the markers in the panel, which "
-                    + "is the one to read, because asking which of your markers are structured is "
-                    + "one test per marker. The second is the same test uncorrected, kept so a "
-                    + "number quoted elsewhere can be matched. On 34 markers of pure noise the "
-                    + "uncorrected columns flagged 3 and 9 markers below 0.05; the corrected ones "
-                    + "flagged none.\n"
-                    + "Unlike Ripley's L and co-occurrence, this DOES read the neighbour graph, so "
+                    + "TWO P-VALUES, both one-sided; the line under the table names the exact "
+                    + "column. The first is a permutation p corrected across the measurements in "
+                    + "this table, because asking which of them are structured is one test per "
+                    + "measurement. The second is the same test uncorrected, kept so a number "
+                    + "quoted elsewhere can be matched. On a large cohort the corrected p cannot "
+                    + "fall below (measurements / permutations), so read the I value and its rank "
+                    + "there -- see the documentation link.\n"
+                    + "Unlike Ripley's L and co-occurrence, this DOES read the neighbor graph, so "
                     + "the graph constructor changes these numbers.",
                     "spatial-autocorrelation-tab"));
             tab.setClosable(false);
@@ -5124,10 +5124,14 @@ public class ClusteringDialog {
                     + "  C < 1: positive autocorrelation (nearby cells have similar values).\n"
                     + "  C ~ 1: spatial randomness.\n"
                     + "  C > 1: dispersion (nearby cells have dissimilar values).\n"
-                    + "Sensitive to local detail; pairs naturally with Moran's I, in the Spatial "
-                    + "Autocorrelation tab, which weights global structure more heavily. Same "
-                    + "squidpy call, same neighbour graph, same two p-value columns -- see that "
-                    + "tab or the documentation link for what they are.",
+                    + "Sensitive to local detail; the global-structure counterpart is Moran's I "
+                    + "(the Spatial Autocorrelation tab, when it ran).\n"
+                    + "TWO P-VALUES, both one-sided; the line under the table names the exact "
+                    + "column. The first is a permutation p corrected across the measurements in "
+                    + "this table; the second is uncorrected. Corrected separately from Moran's I, "
+                    + "so do not pool the two tables' hits. On a large cohort the corrected p "
+                    + "cannot fall below (measurements / permutations); read C and its rank there. "
+                    + "Reads the neighbor graph, so the graph constructor changes these numbers.",
                     "gearys-c-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5405,6 +5409,11 @@ public class ClusteringDialog {
         // top of the window instead.
         Node qualityBanner = buildQualityBanner(result);
         if (qualityBanner != null) mainContent.getChildren().add(qualityBanner);
+        // A requested output that did not arrive is a different kind of news:
+        // the result is fine, one tab or figure is missing. It gets its own,
+        // calmer banner rather than the amber one above.
+        Node omittedBanner = buildOmittedBanner(result);
+        if (omittedBanner != null) mainContent.getChildren().add(omittedBanner);
         mainContent.getChildren().add(tabPane);
         if (colorPanel != null) mainContent.getChildren().add(colorPanel);
         if (locationField != null) mainContent.getChildren().add(locationField);
@@ -5934,18 +5943,47 @@ public class ClusteringDialog {
      * {@code run_clustering.cluster_quality_warnings} -- kept Python-side because
      * that is where the label array and the algorithm name both live.
      */
-    private static Node buildQualityBanner(ClusteringResult result) {
-        List<String> warnings = result.getQualityWarnings();
-        if (warnings.isEmpty()) return null;
+    static Node buildQualityBanner(ClusteringResult result) {
+        return buildNoticeBanner(result.getQualityWarnings(),
+                "This result may not be usable",
+                "#7a2e00", "#6b4e00", "#fff3cd", "#d9a400");
+    }
 
-        Label head = new Label("This result may not be usable");
-        head.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a2e00;");
+    /**
+     * Banner for outputs the run was asked for and did not produce. Neutral
+     * styling on purpose: everything else in the result stands.
+     */
+    static Node buildOmittedBanner(ClusteringResult result) {
+        return buildNoticeBanner(result.getOmittedOutputs(),
+                "Not produced in this run",
+                "#2b4a6f", "#3d5570", "#eef3f8", "#9fb3c8");
+    }
+
+    /**
+     * One banner shape for both notice kinds, so the wrap-height handling below
+     * is written once.
+     *
+     * @param items lines to list; null banner when empty
+     * @param heading bold first line
+     * @param headColor heading text colour
+     * @param textColor item text colour
+     * @param background banner background
+     * @param border banner border
+     * @return the banner, or null when there is nothing to say
+     */
+    private static Node buildNoticeBanner(List<String> items, String heading,
+                                          String headColor, String textColor,
+                                          String background, String border) {
+        if (items == null || items.isEmpty()) return null;
+
+        Label head = new Label(heading);
+        head.setStyle("-fx-font-weight: bold; -fx-text-fill: " + headColor + ";");
 
         VBox details = new VBox(4);
-        for (String w : warnings) {
+        for (String w : items) {
             Label l = new Label("- " + w);
             l.setWrapText(true);
-            l.setStyle("-fx-text-fill: #6b4e00;");
+            l.setStyle("-fx-text-fill: " + textColor + ";");
             // The tab pane below takes all the spare height, so the VBox shrinks this
             // banner to its MINIMUM, and a warning that cannot be read in full is not
             // a warning.
@@ -5982,8 +6020,8 @@ public class ClusteringDialog {
         // preferred height from its children, whose own minimum heights the
         // listeners above keep correct for the width they were given.
         box.setMinHeight(Region.USE_PREF_SIZE);
-        box.setStyle("-fx-font-size: 11px; -fx-background-color: #fff3cd; -fx-padding: 8; "
-                + "-fx-border-color: #d9a400; -fx-border-width: 1;");
+        box.setStyle("-fx-font-size: 11px; -fx-background-color: " + background
+                + "; -fx-padding: 8; -fx-border-color: " + border + "; -fx-border-width: 1;");
         return box;
     }
 
@@ -6541,16 +6579,17 @@ public class ClusteringDialog {
                     // z-score it is not "expressing" at all. The figure's own
                     // caption states the cutoff and the units for the run that
                     // produced it; this text cannot, because it is shared.
-                    guide = "Dot size = fraction of the cluster's cells above the cutoff "
-                            + "named in the caption under the figure. Dot color = mean "
-                            + "expression level.\n"
-                            + "WHAT THE SIZE MEANS FOLLOWS THE NORMALIZATION, and the caption "
-                            + "says which: with Min-Max, Percentile or None the cutoff sits at "
-                            + "the measurement's own zero, so a large dot means most of the "
-                            + "cluster carries any signal at all. With Z-score -- the default -- "
-                            + "it sits at the marker's COHORT MEAN instead, so a large dot means "
-                            + "most of the cluster is above average for that marker, which is "
-                            + "not the same as expressing it.\n"
+                    guide = "Dot size = fraction of the cluster's cells above the cutoff named "
+                            + "in the caption under the figure. Dot color = the cluster's mean, "
+                            + "rescaled per marker so the darkest dot in a column is that "
+                            + "column's highest cluster -- colors are not comparable across "
+                            + "columns.\n"
+                            + "What the size means follows the Normalization setting, and the "
+                            + "caption says which. Min-Max or None: a large dot means most of the "
+                            + "cluster has any signal above the marker's minimum. Percentile: above "
+                            + "the marker's 1st percentile. Z-score, the default: above the marker's "
+                            + "MEAN OVER EVERY CELL IN THIS RUN, which is not the same as expressing "
+                            + "it -- a marker present in every cell can show a half-size dot.\n"
                             + "Large, dark dots indicate markers that are both highly expressed and "
                             + "broadly active in that cluster -- strong candidate markers for cell type identity.";
                     docAnchor = "dotplot-tab";
@@ -6716,16 +6755,16 @@ public class ClusteringDialog {
             // put to this table is "which markers", which is a multiple
             // comparison. The second is the uncorrected value, kept so a number
             // reported elsewhere can be matched against it.
-            sb.append(String.format("%-35s %10s %12s %14s%n",
-                    "Marker", "Moran's I", "P-value", "P (uncorr.)"));
-            sb.append("-".repeat(74)).append(System.lineSeparator());
+            sb.append(String.format("%-35s %10s %12s %16s%n",
+                    "Marker", "Moran's I", "P-value", "P (uncorrected)"));
+            sb.append("-".repeat(76)).append(System.lineSeparator());
 
             // Sort by Moran's I descending (NaN-safe -- nulls / NaN go to the bottom)
             autocorr.entrySet().stream()
                     .sorted((a, b) -> Double.compare(
                             sortKey(b.getValue().get("I")),
                             sortKey(a.getValue().get("I"))))
-                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s %14s%n",
+                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s %16s%n",
                             entry.getKey(),
                             formatDouble(entry.getValue().get("I"), "%.4f"),
                             formatDouble(entry.getValue().get("pval"), "%.2e"),
@@ -6734,8 +6773,8 @@ public class ClusteringDialog {
             sb.append(System.lineSeparator());
             String method = result.getSpatialAutocorrPMethod();
             sb.append("P-value: ").append(method != null ? method
-                    : "method not recorded (result saved before 0.21.1, when the "
-                      + "displayed p was the uncorrected normal-theory value)")
+                    : "method not recorded: this result was saved by an earlier QP-CAT, "
+                      + "which showed the uncorrected normal-theory p")
               .append(System.lineSeparator());
 
             return sb.toString();
@@ -7355,12 +7394,12 @@ public class ClusteringDialog {
         StringBuilder sb = new StringBuilder();
         // Same two columns as the Moran's I table, for the same reason: the
         // first p is corrected across the panel, the second is not.
-        sb.append(String.format("%-35s %10s %12s %14s%n",
-                "Marker", "Geary C", "P-value", "P (uncorr.)"));
-        sb.append("-".repeat(74)).append("\n");
+        sb.append(String.format("%-35s %10s %12s %16s%n",
+                "Marker", "Geary C", "P-value", "P (uncorrected)"));
+        sb.append("-".repeat(76)).append("\n");
         geary.getMarkerStats().entrySet().stream()
                 .sorted((a, b) -> Double.compare(a.getValue().getC(), b.getValue().getC()))
-                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e %14s%n",
+                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e %16s%n",
                         entry.getKey(),
                         entry.getValue().getC(),
                         entry.getValue().getPValue(),
@@ -7370,8 +7409,8 @@ public class ClusteringDialog {
                                         entry.getValue().getPValueUncorrected()))));
         sb.append("\nP-value: ").append(geary.getPValueMethod() != null
                 ? geary.getPValueMethod()
-                : "method not recorded (result saved before 0.21.1, when the "
-                  + "displayed p was the uncorrected normal-theory value)");
+                : "method not recorded: this result was saved by an earlier QP-CAT, "
+                  + "which showed the uncorrected normal-theory p");
         if (geary.getNPermutations() > 0) {
             sb.append("\n").append("Permutations: ").append(geary.getNPermutations());
         }

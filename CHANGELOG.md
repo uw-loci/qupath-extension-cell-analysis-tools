@@ -11,6 +11,29 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Fixed
 
+- **Nine things a documentation review found in the text shipped above**, every one of them
+  verified against code before being counted. Two Documentation links -- Stacked Violin and
+  Spatial Scatter -- still landed on the wrong section, because the new sections were added
+  without deleting the old anchors and a browser takes the first. A menu path that does not
+  exist (*Analyze > Post-hoc spatial statistics*; it is **Explore & spatial > Spatial
+  statistics on existing clusters...**). Seven references to a version, 0.21.1, that has never
+  been released. A description of the post-hoc measurement filter that the code never
+  implemented (it does not drop shape or size columns; the docs now say what it does drop).
+  The results-window table for Percentile normalization grouped it with Min-Max as "the
+  measurement's own zero" while the figure's own caption, correctly, said the 1st
+  percentile. The Stacked Violin description had its axes backwards and claimed widths were
+  comparable; scanpy draws every violin to the same width by design. "Cohort mean" in the
+  Dotplot caption -- a pathologist reads cohort as patients -- is now "mean over all cells
+  in this run". The Dotplot's colour, "mean expression level", is a per-marker 0-1 rescale and
+  is labelled as such. And the statistical inference above, corrected in place.
+
+- **A failed optional statistic no longer raises the "This result may not be usable"
+  banner.** Its note went into the quality-warning channel and so appeared under a heading
+  that contradicted it. Requested-but-missing outputs now have their own neutral banner,
+  "Not produced in this run", their own saved field, and their own line in the run record.
+  The note itself no longer quotes the exception -- which for the original defect rendered
+  as `(IndexError: )`, an empty parenthesis -- and names the menu item to retry from.
+
 - **A long applied-class name squeezed the 3D View legend's cell count down to an
   ellipsis** (`cluster3d-core` 0.1.13). `SavedResultApplier.apply` namespaces every applied
   class with the result name, so the legend's ~160 px name column gets
@@ -64,14 +87,27 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 - **Moran's I and Geary's C reported an uncorrected, normal-theory p-value and discarded
   the ones they paid for.** Geary ran up to 1000 permutations and then picked `pval_norm`
-  first out of squidpy's nine p-value columns, so `pval_sim` was computed and thrown away,
-  and the Benjamini-Hochberg column squidpy produces by default was never read at all.
+  first out of squidpy's nine result columns (six of them p-values), so `pval_sim` was
+  computed and thrown away, and the Benjamini-Hochberg column squidpy produces by default
+  was never read at all.
 
-  Measured on 34 markers x 2000 cells of i.i.d. noise, where no spatial structure exists:
-  `pval_norm` flagged 3 markers below 0.05 (smallest 0.0024) and `pval_sim` flagged 9,
-  while either FDR column flagged none. The two are not refinements of each other
-  (Spearman 0.60, maximum difference 0.315), so switching to the permutation p is not the
-  fix by itself -- only the corrected columns are calibrated at panel level.
+  Measured on 34 markers x 2000 cells of i.i.d. noise (seed 7, kNN k = 15, 1000
+  permutations), where no spatial structure exists: `pval_norm` flagged 3 markers below
+  0.05, `pval_sim` flagged 9, and either FDR column flagged none. The two are not
+  refinements of each other (Spearman 0.60, maximum difference 0.315).
+
+  *Corrected 2026-10-10 after review.* An earlier version of this entry, and the guide
+  bars, read the 3 as evidence against the analytic p. It is not. Both p-values are
+  **one-sided** (`two_tailed` defaults off and QP-CAT leaves it), so under the null each is
+  uniform on (0, 0.5] and 3 of 34 below 0.05 is exactly nominal. The 9 is the anomaly -- the
+  permutation null running about three times hot on this data -- and it went unremarked.
+  The case for the corrected column rests on the multiple-comparison argument alone.
+
+  *Also found in review, and not yet resolved:* the permutation p has a floor of
+  1 / (permutations + 1), and the adaptive count drops to 100 above 50,000 cells. After
+  BH across 20 measurements the lead column cannot read below 0.198 on such a cohort,
+  whatever the structure. The docs now say so; which statistic should lead at scale is
+  under review.
 
   Both tables now lead with the corrected permutation p, keep the uncorrected value in a
   second column, and print a line naming the exact column, e.g.
@@ -85,7 +121,8 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   with the cutoff at 0.0, reading `adata.X` -- which here holds the NORMALISED matrix, so
   the cutoff moves with the Normalization setting. With Min-Max, Percentile or None it
   lands on the measurement's own zero and the usual reading holds. With **Z-score**, the
-  default, it lands on the marker's cohort mean instead: measured on 3,098 real cells,
+  default, it lands on the marker's mean over every cell in the run instead: measured on
+  3,098 real cells,
   DAPI read 0.495 against 1.000 actually carrying signal, CD3 0.258 against 0.352.
 
   No cutoff is invented per mode. The figure's caption now states the cutoff and the

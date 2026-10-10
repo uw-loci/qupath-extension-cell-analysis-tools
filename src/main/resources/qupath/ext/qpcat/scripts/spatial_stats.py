@@ -1462,10 +1462,14 @@ AUTOCORR_P_PREFERENCE = (
 # against a published or previously-reported number.
 AUTOCORR_P_RAW_PREFERENCE = ("pval_sim", "pval_z_sim", "pval_norm", "pval")
 
-# Notes that have to reach the user rather than only the log. A statistic that
-# was requested and did not arrive leaves no trace in the results window --
-# the tab is simply absent, which looks exactly like not having asked for it.
-# run_clustering.py merges this into quality_warnings AFTER the spatial section.
+# Outputs that were requested and did not arrive, with a reason a user can act
+# on. A failed statistic leaves no trace in the results window -- the tab is
+# simply absent, which looks exactly like not having asked for it. These are
+# NOT quality warnings: the result stands, one tab is missing. run_clustering.py
+# emits them under their own key (omitted_outputs) after the spatial section,
+# and the Java side shows them in a separate, neutral banner. Sharing the
+# quality channel put them under "This result may not be usable", over a note
+# saying the opposite.
 SPATIAL_NOTES = []
 
 
@@ -1479,10 +1483,17 @@ def reset_notes():
     del SPATIAL_NOTES[:]
 
 
-def note_for_user(message):
-    """Record a message the results window should show, and log it."""
+def note_for_user(message, detail=None):
+    """Record a message the results window should show, and log it.
+
+    :param message: what the user reads; plain words, no exception text
+    :param detail: for the log only -- exception type and message, if any
+    """
     SPATIAL_NOTES.append(message)
-    logger.warning("Spatial: %s", message)
+    if detail:
+        logger.warning("Spatial: %s [%s]", message, detail)
+    else:
+        logger.warning("Spatial: %s", message)
 
 
 def _json_number(v):
@@ -1531,11 +1542,10 @@ def compute_autocorr(
 
     genes = [str(m) for m in (measurements or [])]
     if not genes:
-        raise ValueError(
-            "spatial_autocorr needs an explicit gene list: with genes=None "
-            "squidpy indexes AnnData with var_names.values, which pandas 3 "
-            "returns as an ArrowStringArray and anndata rejects"
-        )
+        # Why an explicit list is required, for whoever reads this: with
+        # genes=None squidpy indexes AnnData with var_names.values, which
+        # pandas 3 returns as an ArrowStringArray and anndata rejects.
+        raise ValueError("no measurements were selected to test")
 
     kwargs = {"mode": mode, "genes": genes}
     if n_permutations and int(n_permutations) > 0:
@@ -1614,10 +1624,15 @@ def run_moran_i(
         )
         return len(stats)
     except Exception as e:
+        # The user reads the first sentence; the exception goes to the log.
+        # Rendering it inline gave "(IndexError: )" for the defect that hid this
+        # tab for months, and a 228-character developer sentence for the guard.
         note_for_user(
-            "Moran's I was requested but did not run (%s: %s), so the Spatial "
-            "Autocorrelation tab is absent. Everything else in this result is "
-            "unaffected." % (type(e).__name__, e)
+            "Moran's I did not run, so there is no Spatial Autocorrelation tab. "
+            "Everything else in this result stands. The QuPath log has the "
+            "error; re-running the statistic from Explore & spatial > Spatial "
+            "statistics on existing clusters... is the quickest retry.",
+            detail="%s: %s" % (type(e).__name__, e) if str(e) else type(e).__name__,
         )
         return 0
 

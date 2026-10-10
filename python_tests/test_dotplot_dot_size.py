@@ -199,5 +199,7 @@ def test_the_caption_names_the_cutoff_and_the_units():
 def test_the_zscore_caption_says_it_is_not_the_fraction_expressing():
     """The default mode, and the one place the old label was simply wrong."""
     text = _fn("dot_size_caption")("zscore", 0.0)
-    assert "COHORT MEAN" in text
+    assert "MEAN OVER ALL CELLS IN THIS RUN" in text
     assert "not the fraction expressing" in text
+    # "cohort" is read by a pathologist as patients, and this ships in the PNG.
+    assert "cohort" not in text.lower()

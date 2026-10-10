@@ -31,6 +31,12 @@ public class ClusteringResult {
     // single cluster). A run can finish cleanly and still be useless; without
     // these the only signal is the viewer looking wrong.
     private java.util.List<String> qualityWarnings;
+    // Outputs the user asked for that this run did not produce, with the reason.
+    // NOT quality warnings: the result is fine, one optional tab or figure is
+    // missing. The two used to share a channel, so a failed optional statistic
+    // raised the "This result may not be usable" banner over a note saying the
+    // opposite.
+    private java.util.List<String> omittedOutputs;
 
     // Post-analysis results (set after construction)
     private String markerRankingsJson;
@@ -273,6 +279,12 @@ public class ClusteringResult {
 
     public void setQualityWarnings(java.util.List<String> v) { this.qualityWarnings = v; }
 
+    /** Requested outputs this run did not produce, each with its reason; never null. */
+    public java.util.List<String> getOmittedOutputs() {
+        return omittedOutputs == null ? java.util.List.of() : omittedOutputs;
+    }
+    public void setOmittedOutputs(java.util.List<String> v) { this.omittedOutputs = v; }
+
     // Per-cell parent-annotation display name (index-aligned with clusterLabels).
     // Null for cells whose parent is the image root (i.e. not inside a named /
     // classified annotation). Used by the "Composition by annotation" results
@@ -382,8 +394,8 @@ public class ClusteringResult {
 
     /**
      * Which of squidpy's p-value columns the Moran's I table is showing, in
-     * words. Null for a result saved before 0.21.1, where the column was always
-     * the uncorrected analytic one but nothing recorded that.
+     * words. Null for a result saved before the method was recorded, when the
+     * column was always the uncorrected analytic one and nothing said so.
      */
     public String getSpatialAutocorrPMethod() { return spatialAutocorrPMethod; }
     public void setSpatialAutocorrPMethod(String v) { this.spatialAutocorrPMethod = v; }

@@ -22,7 +22,7 @@ public final class SpatialStatsCsv {
 
     private SpatialStatsCsv() {}
 
-    /** Header + one row per marker: marker, Geary's C, p-value. */
+    /** Header + one row per marker: marker, Geary's C, corrected p, uncorrected p, p-value method. */
     public static String gearyCsv(GearyCResult geary) {
         // Both p-values, and the method, because a CSV leaves the window and
         // "p_value" alone does not say whether it was corrected.

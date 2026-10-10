@@ -1657,7 +1657,8 @@ def dot_size_caption(normalization, cutoff=0.0):
     Z-SCORE GETS ITS OWN SENTENCE because that is the case where "fraction
     expressing" -- what the legend, the tab guide and the docs all called this
     -- is simply the wrong name. Centring on the mean moves the cutoff off the
-    marker's zero and onto its average. Measured on 3,098 real cells, fraction
+    marker's zero and onto its average over every cell in the run, all images
+    pooled. Not "cohort mean": a pathologist reads cohort as patients. Measured on 3,098 real cells, fraction
     above the cutoff under z-score against the fraction actually carrying any
     signal: DAPI 0.495 vs 1.000, CD3 0.258 vs 0.352, CD8 0.138 vs 0.201.
 
@@ -1669,8 +1670,8 @@ def dot_size_caption(normalization, cutoff=0.0):
     if normalization == "zscore":
         return (
             "dot size = fraction of the cluster's cells above each marker's "
-            "COHORT MEAN (z-score > %.3g), which is not the fraction expressing"
-            % cutoff
+            "MEAN OVER ALL CELLS IN THIS RUN (z-score > %.3g); not the fraction "
+            "expressing" % cutoff
         )
     units = {
         "minmax": "each marker rescaled to [0, 1], so above 0 means any signal "
@@ -2009,6 +2010,10 @@ can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
 # nothing but a log line -- so the tabs were simply absent and the user had to
 # guess. These are appended to the quality warnings the results window shows.
 _analysis_notes = []
+# Outputs the user asked for and did not get, with the reason. Kept apart from
+# the quality warnings: those say the RESULT is suspect, these say a figure or
+# tab is missing and the result stands. They render in different banners.
+_omitted_outputs = []
 if not can_analyze:
     if n_clusters_found <= 1:
         _analysis_notes.append(
@@ -2582,15 +2587,13 @@ if do_plots and plot_dir and can_analyze:
         if not dot_size_is_readable(_dot_fractions):
             _lo = min(_dot_fractions) if _dot_fractions else float("nan")
             _hi = max(_dot_fractions) if _dot_fractions else float("nan")
-            _analysis_notes.append(
-                "The Dotplot was not drawn. Its dot size is the fraction of a "
-                "cluster's cells above %.3g in normalised units, and under "
-                "'%s' normalization that fraction is %.3f to %.3f across every "
-                "cluster and marker -- every dot would be the same size, which "
-                "says nothing and invites being read as a result. The Matrix "
-                "Plot shows the same means. Re-run with z-score normalization "
-                "for a dot size that varies."
-                % (_dot_cutoff, normalization, _lo, _hi)
+            _omitted_outputs.append(
+                "Dotplot: not drawn. Under %s normalization the fraction of "
+                "cells above the cutoff is %.2f to %.2f for every cluster and "
+                "marker, so every dot would be the same size and the figure "
+                "would only repeat the Matrix Plot. Choosing a different "
+                "normalization changes the clustering as well, not only this "
+                "figure." % (normalization, _lo, _hi)
             )
             raise RuntimeError(
                 "dot size spread %.3f-%.3f under '%s' normalization carries no "
@@ -2846,13 +2849,16 @@ try:
     _spatial_notes = list(_qpcat_spatial.SPATIAL_NOTES)
 except (NameError, AttributeError):
     _spatial_notes = []
-_final_warnings = list(_quality) + list(_analysis_notes) + _spatial_notes
-if _final_warnings:
-    import json as _json_fw
+import json as _json_fw
 
+_final_warnings = list(_quality) + list(_analysis_notes)
+if _final_warnings:
     task.outputs["quality_warnings"] = _json_fw.dumps(_final_warnings)
-    for _w in _spatial_notes:
-        logger.warning("Analysis: %s", _w)
+_final_omitted = list(_omitted_outputs) + _spatial_notes
+if _final_omitted:
+    task.outputs["omitted_outputs"] = _json_fw.dumps(_final_omitted)
+    for _w in _final_omitted:
+        logger.warning("Not produced: %s", _w)
 
 # 8. Package core outputs
 _progress(1.0, "Packaging results...")

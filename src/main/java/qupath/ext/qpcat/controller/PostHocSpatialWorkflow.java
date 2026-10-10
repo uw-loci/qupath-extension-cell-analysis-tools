@@ -643,7 +643,7 @@ public class PostHocSpatialWorkflow {
      * <p>The second half matters: each statistic is computed inside its own
      * {@code except Exception} on the Python side, so one that fails leaves no
      * tab and no message, which is indistinguishable from not having ticked it.
-     * Moran's I did exactly that from the day it shipped until 0.21.1.
+     * Moran's I did exactly that in every release through 0.21.0.
      *
      * @param r the window's result
      * @param opts the options it was run with

@@ -301,8 +301,8 @@ if want_nhood:
 if want_moran:
     if feats is None or mnames is None:
         _spatial.note_for_user(
-            "Moran's I was requested but no feature matrix was supplied, so the "
-            "Spatial Autocorrelation tab is absent."
+            "Moran's I did not run because no measurements were selected to "
+            "test, so there is no Spatial Autocorrelation tab."
         )
     else:
         # Shared with run_clustering.py. This block used to carry its own copy

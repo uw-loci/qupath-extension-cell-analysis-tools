@@ -223,6 +223,9 @@ public final class ClusteringRunRecord {
             for (String w : result.getQualityWarnings()) {
                 sb.append("WARNING     : ").append(w).append('\n');
             }
+            for (String w : result.getOmittedOutputs()) {
+                sb.append("NOT PRODUCED: ").append(w).append('\n');
+            }
         }
         if (result != null && result.getDerivedOp() != null) {
             sb.append("Derived     : ").append(result.getDerivedOp());

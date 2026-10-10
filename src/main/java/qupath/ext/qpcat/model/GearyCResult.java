@@ -33,9 +33,9 @@ public class GearyCResult {
 
     /**
      * Which of squidpy's p-value columns {@link Entry#getPValue()} holds, in
-     * words. Null for a result saved before 0.21.1, where it was always the
-     * uncorrected normal-theory value and the permutations the run paid for
-     * were discarded.
+     * words. Null for a result saved before the method was recorded, when it
+     * was always the uncorrected normal-theory value and the permutations the
+     * run paid for were discarded.
      */
     public String getPValueMethod() { return pValueMethod; }
     public void setPValueMethod(String v) { this.pValueMethod = v; }

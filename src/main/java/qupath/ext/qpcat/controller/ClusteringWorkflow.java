@@ -2278,6 +2278,15 @@ public class ClusteringWorkflow {
                     for (String w : qw) logger.warn("Clustering quality: {}", w);
                 }
             }
+            if (task.outputs.containsKey("omitted_outputs")) {
+                List<String> om = new Gson().fromJson(
+                        (String) task.outputs.get("omitted_outputs"),
+                        new TypeToken<List<String>>(){}.getType());
+                result.setOmittedOutputs(om);
+                if (om != null) {
+                    for (String w : om) logger.warn("Not produced: {}", w);
+                }
+            }
 
             // Membership confidence: how marginal each cell's hard label was.
             // Only the algorithms that genuinely compute one send it, so absence

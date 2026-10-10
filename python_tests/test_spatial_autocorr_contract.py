@@ -157,7 +157,8 @@ def _base_globals():
         "logger": logging.getLogger("test.spatial_stats"),
         "AUTOCORR_P_PREFERENCE": _const("AUTOCORR_P_PREFERENCE"),
         "AUTOCORR_P_RAW_PREFERENCE": _const("AUTOCORR_P_RAW_PREFERENCE"),
-        "note_for_user": _NOTES.append,
+        # The real one takes (message, detail=None); only the message is user-facing.
+        "note_for_user": lambda message, detail=None: _NOTES.append(message),
     }
     for name in ("_safe_kwargs", "_json_number", "pick_p_column",
                  "describe_p_method", "compute_autocorr", "run_moran_i"):
@@ -214,7 +215,12 @@ def test_an_empty_measurement_list_is_refused_and_reported_to_the_user():
     assert n == 0
     assert "spatial_autocorr" not in task.outputs
     assert len(_NOTES) == 1
-    assert "Spatial Autocorrelation tab is absent" in _NOTES[0]
+    assert "no Spatial Autocorrelation tab" in _NOTES[0]
+    # What the user reads must not contain exception text: the original defect
+    # raised a BARE IndexError, which rendered as "(IndexError: )", and the
+    # guard's message was 228 characters of pandas internals.
+    for leaked in ("Error", "ArrowStringArray", "genes=None", "var_names"):
+        assert leaked not in _NOTES[0], _NOTES[0]
 
 
 def test_p_column_preference_puts_corrected_permutation_first():

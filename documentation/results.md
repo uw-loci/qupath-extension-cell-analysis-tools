@@ -37,9 +37,8 @@ Auto-saves are never deleted automatically.
 <a name="heatmap-tab"></a>
 <a name="matrix-plot-tab"></a>
 <a name="dotplot-tab"></a>
-<a name="stacked-violin-tab"></a>
 <a name="reading-expression"></a>
-## Reading expression: heatmap, matrix plot, dot plot
+## Reading expression: heatmap, matrix plot, dotplot
 
 Three views of the same per-cluster-per-marker matrix, side by side deliberately.
 
@@ -47,9 +46,9 @@ Three views of the same per-cluster-per-marker matrix, side by side deliberately
 |---|---|---|
 | **Heatmap** (interactive) | Column-normalised mean expression per cluster. Hover for values and cell counts; Ctrl+scroll or the zoom buttons to resize. | Exploring |
 | **Matrix Plot** (PNG) | The same, plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
-| **Dot plot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = mean expression. Same zoom controls. [What the size means](#dot-size) | When the share of cells, not just the mean, changes the reading |
+| **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = per-marker rescaled mean. Same zoom controls. [What size and colour mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
 
-Matrix Plot for figures, Heatmap for exploration, Dot plot when a marker is high in a few
+Matrix Plot for figures, Heatmap for exploration, Dotplot when a marker is high in a few
 cells rather than low in many -- a distinction the other two cannot show, because they
 collapse to per-cluster means.
 
@@ -66,28 +65,56 @@ shape measurements appear alongside intensities if they were selected for the ru
 only `...: Mean` columns is a run in which only those were ticked.
 
 <a name="dot-size"></a>
-### What the Dot plot's dot size actually means
+### What the Dotplot's dot size and colour actually mean
 
-Its dot size is the fraction of a cluster's cells above a cutoff, and scanpy puts that
-cutoff at **0 in the units of the matrix being plotted** -- which is the **normalised**
-matrix, not the raw intensities. So the Normalization setting changes what the dot means,
-and the caption printed under the figure states the cutoff and the units for that run.
+**Dot size** is the fraction of a cluster's cells above a cutoff. scanpy puts that cutoff at
+**0 in the units of the matrix being plotted**, and QP-CAT plots the **normalized** matrix,
+not the raw intensities. So the Normalization setting decides what a large dot means, and
+the caption printed under the figure states the cutoff and the units for that run.
 
-| Normalization | A large dot means |
-|---|---|
-| **Min-Max**, **Percentile**, **None** | most of the cluster carries **any signal at all** for that marker -- the familiar "fraction expressing", because the cutoff lands on the measurement's own zero |
-| **Z-score** (the default) | most of the cluster is **above that marker's cohort mean** -- which is *not* the fraction expressing |
+| Normalization | A large dot means | Is that "fraction expressing"? |
+|---|---|---|
+| **Min-Max**, **None** | most of the cluster has **any signal above the marker's minimum** | Yes, when the marker has a zero floor (cells that lack it read exactly 0), which multiplex intensities usually do |
+| **Percentile** | most of the cluster is **above the marker's 1st percentile** | Nearly: the faintest 1% of cells are clipped to the cutoff and count as "off" |
+| **Z-score** (the default) | most of the cluster is **above the marker's mean over every cell in this run** | **No.** The mean is taken over all cells in the run, every image pooled, so a marker in every cell can show a half-size dot |
 
 Measured on 3,098 cells of the synthetic TME dataset, fraction above the cutoff under
 z-score against the fraction carrying any signal: **DAPI 0.495 vs 1.000**, CD3 0.258 vs
 0.352, CD8 0.138 vs 0.201. DAPI is in every cell, and under z-score half its dots vanish.
 
+**Dot colour** is the mean of the normalized value per cluster, then **rescaled per marker to
+0-1** (scanpy's `standard_scale="var"`). So within one column, dark is the cluster with the
+highest mean for that marker and pale the lowest; colours are **not** comparable across
+columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
+
 **The figure is skipped when the size carries nothing.** On measurements with no zero
 floor, Min-Max puts every cell except one per marker above the cutoff, so every dot is
-drawn at maximum size and the plot degenerates to the Matrix Plot. When that happens the
-run says so in its warnings instead of drawing it. Typical multiplex intensities do have
-a zero floor -- in that dataset 1,893 to 2,861 of the 3,098 cells sit at exactly 0 for
-each lineage marker -- so the figure is normally drawn.
+drawn at maximum size and the plot adds nothing to the Matrix Plot. QP-CAT measures the
+spread of the dot size across every cluster and marker and skips the figure when that
+spread is below 0.10 (measured over the markers chosen for plotting, which is the "Plot
+Feature Limit" subset when that applies), saying so in the run's notes. Typical multiplex
+intensities do have a zero floor -- in that dataset 1,893 to 2,861 of the 3,098 cells sit at
+exactly 0 for each lineage marker -- so the figure is normally drawn. Re-running with a
+different Normalization changes the clustering itself, not only this figure.
+
+<a name="stacked-violin-tab"></a>
+### Stacked Violin
+
+One violin per cluster per marker: the **distribution** of each marker's values within a
+cluster, where the Heatmap, Matrix Plot and Dotplot all collapse to a per-cluster mean. A
+**double-peaked violin inside one cluster** is the tell that the cluster holds two
+populations, and the reason to try splitting it with **Modify clusters...** at the bottom of
+this window.
+
+How to read a violin: its **length along the value axis** is the range of values in that
+cluster, in the run's normalized units (z-scores by default); its **width at any point** is
+how many cells sit at that value, relative to the rest of the same violin. Every violin is
+drawn to the same maximum width (scanpy's `density_norm="width"`), so width shows the *shape*
+of a distribution and says nothing about how many cells a cluster has or how strongly a
+marker is expressed -- compare shapes across clusters, not sizes. Unlike the Matrix Plot and
+Dotplot the values are *not* rescaled per marker, so the value axis is directly comparable
+across clusters within a marker, and across markers only to the extent the normalization
+made them so.
 
 <a name="heatmap-colours"></a>
 ### Choosing the colour map
@@ -126,7 +153,6 @@ the colour is taken over what is shown, so colours do change when you filter. Th
 
 <a name="embedding-tab-interactive"></a>
 <a name="embedding-plot-tab"></a>
-<a name="spatial-scatter-tab"></a>
 ## Embedding
 
 Interactive 2D scatter of every cell, coloured by cluster. Scroll to zoom, middle-drag to
@@ -465,8 +491,10 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 
 | Tab | Reads as |
 |---|---|
-| **Spatial Autocorrelation** (Moran's I) | I > 0 clustered, ~0 random, < 0 dispersed. High I with a significant p-value means tissue-level structure -- a good BANKSY candidate. Zoom controls available. |
-| **Geary's C** | C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. Zoom controls available. |
+| **Spatial Autocorrelation** (Moran's I) | Per marker: I > 0 clustered, ~0 random, < 0 dispersed. Markers with high I are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
+| **Geary's C** | Per marker: C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
+| **Neighborhood Enrichment** | Cluster x cluster permutation z-score: red = neighbours more often than chance, blue = less. The standard interaction matrix. [Full description below](#neighborhood-enrichment-tab). |
+| **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
 | **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
@@ -607,18 +635,26 @@ a spatially-aware run (BANKSY).
 k, the radius or the Delaunay pruning *does* change these numbers.
 
 **Both p-values are shown**, and the line under each table names exactly which column:
-the first is a permutation p corrected across the panel, the second is uncorrected.
-Full explanation, and the measurement behind the choice, in
+the first is a permutation p corrected (Benjamini-Hochberg) across the measurements tested
+in that table, the second is uncorrected. Moran's I and Geary's C are corrected
+**separately**, each over the same measurements, so reading both tables and taking whichever
+flagged is twice as many tests as either correction allows for. Both tests are one-sided in
+the direction observed. What the columns are, and their limits at cohort scale, in
 [Spatial statistics](spatial-statistics.md#autocorr-p-values).
 
-**Which measurements are tested.** The post-hoc path drops coordinates, geometry that
-duplicates area, and previously-derived QP-CAT / embedding / spatial columns -- autocorrelating
-a coordinate is trivially maximal and autocorrelating a derived spatial column is circular.
+**Which measurements are tested.** In a clustering run, the measurements you selected for
+clustering. The post-hoc path starts from every numeric measurement and drops coordinates
+(`Centroid`, `X`, `Y`), anything QP-CAT itself wrote (`qpcat*`, cluster, component, neighbor
+and `distance to` columns), and embedding columns (UMAP, t-SNE, PCA) -- autocorrelating a
+coordinate is trivially maximal, and autocorrelating a derived spatial column is circular.
+It does **not** drop shape or size measurements: `Nucleus: Area`, perimeter and the calipers
+are tested like any other column if they are present, so read their rows as "is cell size
+spatially structured", not as marker expression.
 
-> **Moran's I could not appear at all before 0.21.1.** Two defects in the squidpy call,
-> each sufficient alone, both swallowed by a `try/except` that only wrote to the log. If
-> you have a saved result from before then, its Spatial Autocorrelation tab is missing and
-> re-running the statistic is the only way to get it.
+> **If a saved result has no Spatial Autocorrelation tab, re-run the statistic.** Every
+> version of QP-CAT up to and including 0.21.0 asked for Moran's I and silently failed to
+> produce it -- two defects in the squidpy call, both caught by an error handler that only
+> wrote to the log. Results saved by those versions cannot grow the tab retroactively.
 
 <a name="neighborhood-enrichment-tab"></a>
 ### Neighborhood Enrichment
@@ -640,19 +676,8 @@ Two things to keep in mind:
 - **A z-score carries no cell count.** A pair with very few edges between them can still
   produce a large z. Read it next to the cluster sizes in the Composition tabs.
 - **The figure is a PNG only** in this window. For the numbers, run the statistic from
-  *Analyze > Post-hoc spatial statistics*, which writes `nhood_z` rows to its spreadsheet.
-
-<a name="stacked-violin-tab"></a>
-### Stacked Violin
-
-One violin per cluster per marker: the **distribution** of expression, where the heatmap,
-matrix plot and dot plot all collapse to a per-cluster mean. A **double-peaked violin
-inside one cluster** is the tell that the cluster holds two populations, and the reason
-to try subclustering it from the Cluster Management dialog.
-
-Its axis is in **normalised units** -- whatever the run's Normalization setting produced.
-Unlike the Matrix Plot and Dot plot it is *not* rescaled per marker, so violin widths are
-comparable across clusters within a marker but the heights are in the run's own units.
+  **Extensions > QP-CAT > Explore & spatial > Spatial statistics on existing clusters...**,
+  which writes `nhood_z` rows to its spreadsheet.
 
 <a name="spatial-scatter-tab"></a>
 ### Spatial Scatter

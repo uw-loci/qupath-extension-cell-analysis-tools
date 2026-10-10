@@ -27,6 +27,7 @@ public class SavedClusteringResult {
     private Integer noiseRowIndex;      // null on pre-0.11 saves
     private int nNoiseCells;
     private List<String> qualityWarnings;
+    private List<String> omittedOutputs;
 
     // Core data
     private int[] clusterLabels;
@@ -162,6 +163,11 @@ public class SavedClusteringResult {
         return qualityWarnings == null ? List.of() : qualityWarnings;
     }
     public void setQualityWarnings(List<String> v) { this.qualityWarnings = v; }
+
+    public List<String> getOmittedOutputs() {
+        return omittedOutputs == null ? List.of() : omittedOutputs;
+    }
+    public void setOmittedOutputs(List<String> v) { this.omittedOutputs = v; }
 
     /** Clusters excluding the noise row -- the number to show a user. */
     public int getNRealClusters() {
@@ -373,6 +379,7 @@ public class SavedClusteringResult {
         saved.setNoiseRowIndex(result.getNoiseRowIndex());
         saved.setNNoiseCells(result.getNNoiseCells());
         saved.setQualityWarnings(result.getQualityWarnings());
+        saved.setOmittedOutputs(result.getOmittedOutputs());
 
         saved.setNhoodEnrichment(result.getNhoodEnrichment());
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
@@ -482,6 +489,7 @@ public class SavedClusteringResult {
         result.setNoiseRowIndex(getNoiseRowIndex());
         result.setNNoiseCells(nNoiseCells);
         result.setQualityWarnings(qualityWarnings);
+        result.setOmittedOutputs(omittedOutputs);
 
         // Plot-click navigation + representative crops (null on older saves).
         result.setRepresentativesJson(representativesJson);
