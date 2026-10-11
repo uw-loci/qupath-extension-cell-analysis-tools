@@ -358,6 +358,12 @@ public final class QpcatPreferences {
     private static final IntegerProperty spatialPermutations = PathPrefs.createPersistentPreference(
             "qpcat.spatial.permutations", 0);
 
+    // Effect-size cut the Moran's I / Geary's C tables lead with: an area counts
+    // as structured when I >= this (Geary: C <= 1 - this). 0.05 is the filter
+    // 10x Genomics' Loupe Browser applies to its spatial enrichment table.
+    private static final DoubleProperty spatialAutocorrThreshold = PathPrefs.createPersistentPreference(
+            "qpcat.spatial.autocorrThreshold", 0.05);
+
     // Smoothing-rewrite feature flag. Per Phase 2 contract #2: when we
     // cannot run the numerical-equivalence check in this environment, the
     // smoothing rewrite is gated and defaults off so existing cluster
@@ -687,6 +693,8 @@ public final class QpcatPreferences {
     public static void setSpatialGraphDelaunayMaxEdge(double v) { spatialGraphDelaunayMaxEdge.set(v); }
     public static int getSpatialPermutations() { return spatialPermutations.get(); }
     public static void setSpatialPermutations(int v) { spatialPermutations.set(v); }
+    public static double getSpatialAutocorrThreshold() { return spatialAutocorrThreshold.get(); }
+    public static void setSpatialAutocorrThreshold(double v) { spatialAutocorrThreshold.set(v); }
     public static boolean isSpatialUseSquidpyGraphForSmoothing() {
         return spatialUseSquidpyGraphForSmoothing.get();
     }
@@ -1026,6 +1034,16 @@ public final class QpcatPreferences {
                 .description(Tooltips.wrap("Number of random permutations for the new spatial statistics. "
                         + "0 = adaptive default (1000 for <= 50k cells, 100 for 50k-500k, "
                         + "50 above). Positive values override the adaptive default."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(spatialAutocorrThreshold, Double.class)
+                .name("Spatial Autocorrelation Threshold")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Moran's I at or above this counts a measurement as spatially "
+                        + "structured in an image (Geary's C: at or below 1 minus this). The "
+                        + "Spatial Autocorrelation and Geary's C tables count the images that "
+                        + "pass it. Default 0.05, the cut 10x Genomics' Loupe Browser uses for "
+                        + "its spatial enrichment table."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialUseSquidpyGraphForSmoothing, Boolean.class)

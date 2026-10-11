@@ -13,6 +13,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.GearyCResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellMatcher;
@@ -753,6 +754,7 @@ public class PostHocSpatialWorkflow {
         inputs.put("graph_radius", opts.graphRadius);
         inputs.put("graph_delaunay_max_edge", opts.graphDelaunayMaxEdge);
         inputs.put("permutations", opts.permutations);
+        inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
         inputs.put("enable_ripley", opts.ripley);
         inputs.put("enable_geary", opts.gearyC);
         inputs.put("enable_co_occurrence_pairwise", opts.coocPairwise);
@@ -845,6 +847,7 @@ public class PostHocSpatialWorkflow {
                 result.setSpatialAutocorrPMethod(
                         String.valueOf(outputs.get("spatial_autocorr_p_method")));
             }
+            ClusteringWorkflow.readAutocorrConsistency(result, outputs);
         }
         // Why a requested statistic is missing. statsRunLabel already says THAT
         // one is; this says why, and it is the only place that can.

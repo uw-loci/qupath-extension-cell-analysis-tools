@@ -1443,24 +1443,41 @@ def centre_on_median(curve, median):
 # and the Benjamini-Hochberg column squidpy produces by default
 # (corr_method="fdr_bh") was never read at all.
 #
-# The corrected simulated p leads, because the tab shows a whole marker panel at
-# once and the question put to it is "which markers", which is a multiple
-# comparison. Measured on 34 markers x 2000 cells of i.i.d. noise, where no
-# spatial structure exists: pval_norm flagged 3 markers at < 0.05 (smallest
-# 0.0024) and pval_sim flagged 9, while either FDR column flagged none.
+# The p-value is a GUARD here, not the ranking: the tables lead with the
+# statistic itself (see autocorr_passes). Among the corrected columns,
+# pval_z_sim_fdr_bh is preferred over pval_sim_fdr_bh because the latter is the
+# empirical permutation p and cannot fall below 1 / (permutations + 1), so with
+# k markers all at that floor the corrected value is m / (k * (perms + 1)) --
+# 0.198 for one structured marker out of twenty at 100 permutations. The
+# z-score form reads the normal tail of the permutation distribution instead
+# and has no floor.
 AUTOCORR_P_PREFERENCE = (
-    "pval_sim_fdr_bh",
     "pval_z_sim_fdr_bh",
     "pval_norm_fdr_bh",
-    "pval_sim",
+    "pval_sim_fdr_bh",
     "pval_z_sim",
     "pval_norm",
+    "pval_sim",
     "pval",
 )
 
 # The uncorrected counterpart, kept alongside so a value can be cross-referenced
 # against a published or previously-reported number.
-AUTOCORR_P_RAW_PREFERENCE = ("pval_sim", "pval_z_sim", "pval_norm", "pval")
+AUTOCORR_P_RAW_PREFERENCE = ("pval_z_sim", "pval_norm", "pval_sim", "pval")
+
+# Effect-size threshold the tables lead with. Moran's I >= this counts as
+# spatially structured; Geary's C mirrors it as C <= 1 - threshold. 0.05 is the
+# filter 10x Genomics' Loupe Browser applies to its spatial enrichment table
+# (Moran's I >= 0.05 AND Benjamini-Hochberg p <= 0.05), which is the same
+# effect-size-plus-guard shape used here. A user override arrives from the
+# QP-CAT preference "Spatial Autocorrelation Threshold".
+AUTOCORR_DEFAULT_THRESHOLD = 0.05
+
+# Fewer cells than this in one area and its own I / C is not evaluated: the
+# area still contributes to the pooled statistic, it just does not get a vote
+# in the consistency count. 50 is well above where the analytic Moran's I
+# variance stops being meaningful, and far below any real image.
+AUTOCORR_MIN_AREA_CELLS = 50
 
 # Outputs that were requested and did not arrive, with a reason a user can act
 # on. A failed statistic leaves no trace in the results window -- the tab is
@@ -1524,28 +1541,27 @@ def pick_p_column(row, preference):
     return float("nan"), None
 
 
-def compute_autocorr(
-    adata, mode, measurements, n_permutations=0, value_key="I"
-):
-    """Run sq.gr.spatial_autocorr for one mode and shape the per-marker stats.
+def autocorr_passes(value, mode, threshold=AUTOCORR_DEFAULT_THRESHOLD):
+    """Whether one statistic value counts as spatially structured.
 
-    :param adata: AnnData carrying a connectivity graph
-    :param mode: "moran" or "geary"
-    :param measurements: marker names to test; REQUIRED, see the note above
-    :param n_permutations: 0 leaves squidpy at its analytic-only default
-    :param value_key: "I" for Moran, "C" for Geary
-    :return: (stats, p_method) where stats maps marker -> dict with the value,
-             "p" (reported), "p_raw" (uncorrected) and p_method names the column
-    :raises ValueError: when `measurements` is empty
+    :param value: Moran's I or Geary's C
+    :param mode: "moran" (I >= threshold) or "geary" (C <= 1 - threshold)
+    :return: False for a missing or non-finite value
     """
-    import squidpy as sq
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(v):
+        return False
+    if mode == "geary":
+        return v <= 1.0 - float(threshold)
+    return v >= float(threshold)
 
-    genes = [str(m) for m in (measurements or [])]
-    if not genes:
-        # Why an explicit list is required, for whoever reads this: with
-        # genes=None squidpy indexes AnnData with var_names.values, which
-        # pandas 3 returns as an ArrowStringArray and anndata rejects.
-        raise ValueError("no measurements were selected to test")
+
+def _autocorr_frame(adata, mode, genes, n_permutations=0):
+    """One sq.gr.spatial_autocorr call, returned as a DataFrame."""
+    import squidpy as sq
 
     kwargs = {"mode": mode, "genes": genes}
     if n_permutations and int(n_permutations) > 0:
@@ -1555,7 +1571,86 @@ def compute_autocorr(
         _safe_kwargs(sq.gr.spatial_autocorr, n_jobs=1, show_progress_bar=False, seed=0)
     )
     # copy=True or the return value is None and the results land in adata.uns.
-    df = sq.gr.spatial_autocorr(adata, copy=True, **kwargs)
+    return sq.gr.spatial_autocorr(adata, copy=True, **kwargs)
+
+
+def per_area_autocorr(
+    adata, mode, genes, area_ids, area_names=None, value_key="I",
+    min_cells=AUTOCORR_MIN_AREA_CELLS,
+):
+    """The statistic recomputed inside each independent area, no permutations.
+
+    The pooled value answers "is this measurement structured somewhere in the
+    cohort"; one image with a staining gradient can carry it on its own. The
+    per-area values are what separate that from structure the tissue repeats.
+
+    :param area_ids: per-cell area id (None -> nothing to compare, returns empty)
+    :return: ({marker: {area_label: value}}, n_evaluated, [(label, reason)])
+    """
+    per_area = {str(g): {} for g in genes}
+    skipped = []
+    if area_ids is None:
+        return per_area, 0, skipped
+    slices = area_slices(area_ids, adata.shape[0])
+    if len(slices) < 2:
+        return per_area, 0, skipped
+    n_evaluated = 0
+    for area_id, idx in slices:
+        label = area_label(area_names, area_id)
+        if idx.size < int(min_cells):
+            skipped.append((label, "only %d cell(s)" % int(idx.size)))
+            continue
+        # Slicing an AnnData slices obsp with it, and the graph was built per
+        # area, so this sub-graph is exactly the area's own graph.
+        sub = adata[idx].copy()
+        try:
+            df = _autocorr_frame(sub, mode, genes, n_permutations=0)
+        except Exception as e:
+            skipped.append((label, "%s: %s" % (type(e).__name__, e)))
+            continue
+        n_evaluated += 1
+        for marker in df.index:
+            row = df.loc[marker]
+            per_area[str(marker)][label] = _json_number(
+                row.get(value_key, row.get("I", float("nan")))
+            )
+    if skipped:
+        logger.warning(
+            "%s per area: %d of %d area(s) not evaluated (first: %s -- %s)",
+            mode, len(skipped), len(slices), skipped[0][0], skipped[0][1],
+        )
+    return per_area, n_evaluated, skipped
+
+
+def compute_autocorr(
+    adata, mode, measurements, n_permutations=0, value_key="I",
+    area_ids=None, area_names=None, threshold=AUTOCORR_DEFAULT_THRESHOLD,
+):
+    """Run sq.gr.spatial_autocorr for one mode and shape the per-marker stats.
+
+    :param adata: AnnData carrying a connectivity graph
+    :param mode: "moran" or "geary"
+    :param measurements: marker names to test; REQUIRED, see the note below
+    :param n_permutations: 0 leaves squidpy at its analytic-only default
+    :param value_key: "I" for Moran, "C" for Geary
+    :param area_ids: per-cell independent-area id, for the consistency count
+    :param threshold: effect-size cut, see autocorr_passes
+    :return: dict with "stats" (marker -> {value, p, p_raw, areas_above,
+             n_areas}), "p_method", "per_area" (marker -> {area: value}),
+             "n_areas" (areas evaluated), "skipped_areas", "threshold"
+    :raises ValueError: when `measurements` is empty
+    """
+    genes = [str(m) for m in (measurements or [])]
+    if not genes:
+        # Why an explicit list is required, for whoever reads this: with
+        # genes=None squidpy indexes AnnData with var_names.values, which
+        # pandas 3 returns as an ArrowStringArray and anndata rejects.
+        raise ValueError("no measurements were selected to test")
+
+    df = _autocorr_frame(adata, mode, genes, n_permutations=n_permutations)
+    per_area, n_areas, skipped = per_area_autocorr(
+        adata, mode, genes, area_ids, area_names, value_key=value_key
+    )
 
     stats = {}
     p_method = None
@@ -1566,8 +1661,25 @@ def compute_autocorr(
         p_raw, _ = pick_p_column(row, AUTOCORR_P_RAW_PREFERENCE)
         if p_col is not None and p_method is None:
             p_method = p_col
-        stats[str(marker)] = {"value": value, "p": p_val, "p_raw": p_raw}
-    return stats, p_method
+        areas_above = sum(
+            1 for v in per_area.get(str(marker), {}).values()
+            if autocorr_passes(v, mode, threshold)
+        )
+        stats[str(marker)] = {
+            "value": value,
+            "p": p_val,
+            "p_raw": p_raw,
+            "areas_above": int(areas_above),
+            "n_areas": int(n_areas),
+        }
+    return {
+        "stats": stats,
+        "p_method": p_method,
+        "per_area": per_area,
+        "n_areas": int(n_areas),
+        "skipped_areas": skipped,
+        "threshold": float(threshold),
+    }
 
 
 def describe_p_method(p_method, n_markers, n_permutations):
@@ -1575,15 +1687,29 @@ def describe_p_method(p_method, n_markers, n_permutations):
     if not p_method:
         return "no p-value column was available"
     parts = []
-    if "sim" in p_method:
-        parts.append("%d permutations" % int(n_permutations or 0))
+    if "z_sim" in p_method:
+        parts.append(
+            "normal tail of %d permutations, one-sided" % int(n_permutations or 0)
+        )
+    elif "sim" in p_method:
+        parts.append("%d permutations, one-sided" % int(n_permutations or 0))
     else:
-        parts.append("normal-theory approximation")
+        parts.append("normal-theory approximation, one-sided")
     if p_method.endswith("_fdr_bh"):
-        parts.append("Benjamini-Hochberg across %d markers" % int(n_markers))
+        parts.append("Benjamini-Hochberg across %d measurements" % int(n_markers))
     else:
-        parts.append("NOT corrected for multiple markers")
+        parts.append("NOT corrected for multiple measurements")
     return "%s (%s)" % (p_method, ", ".join(parts))
+
+
+def describe_areas(n_areas, skipped, min_cells=AUTOCORR_MIN_AREA_CELLS):
+    """One line saying how many areas voted in the consistency count."""
+    if n_areas <= 0 and not skipped:
+        return ""
+    line = "%d area(s) evaluated" % int(n_areas)
+    if skipped:
+        line += ", %d skipped (fewer than %d cells)" % (len(skipped), int(min_cells))
+    return line
 
 
 def run_moran_i(
@@ -1592,35 +1718,54 @@ def run_moran_i(
     measurements,
     n_permutations=0,
     output_key="spatial_autocorr",
+    area_ids=None,
+    area_names=None,
+    threshold=AUTOCORR_DEFAULT_THRESHOLD,
 ):
     """Compute Moran's I per measurement and write task.outputs[output_key].
+
+    Also writes output_key + "_p_method" (one line naming the p column),
+    output_key + "_per_area" ({marker: {area: I}}, JSON), output_key +
+    "_threshold" and output_key + "_areas" (the describe_areas line).
 
     :param measurements: marker names to test
     :param n_permutations: permutation count; 0 for squidpy's analytic default
     :param output_key: task output key the Java side reads
+    :param area_ids: per-cell independent-area id for the consistency count
+    :param threshold: I at or above this counts as structured
     :return: number of markers reported (0 when nothing was produced)
     """
     try:
-        stats, p_method = compute_autocorr(
+        res = compute_autocorr(
             adata, "moran", measurements,
             n_permutations=n_permutations, value_key="I",
+            area_ids=area_ids, area_names=area_names, threshold=threshold,
         )
+        stats = res["stats"]
         payload = {}
         for marker, st in stats.items():
             payload[marker] = {
                 "I": _json_number(st["value"]),
                 "pval": _json_number(st["p"]),
                 "pval_uncorrected": _json_number(st["p_raw"]),
+                "areas_above": st["areas_above"],
+                "n_areas": st["n_areas"],
             }
         # The payload stays strictly marker -> numbers, because the Java side
         # parses it as Map<String, Map<String, Double>> and renders one table
-        # row per key. The method line travels as its own output.
+        # row per key. Everything else travels as its own output.
         task.outputs[output_key] = json.dumps(payload)
         task.outputs[output_key + "_p_method"] = describe_p_method(
-            p_method, len(stats), n_permutations
+            res["p_method"], len(stats), n_permutations
+        )
+        task.outputs[output_key + "_per_area"] = json.dumps(res["per_area"])
+        task.outputs[output_key + "_threshold"] = float(res["threshold"])
+        task.outputs[output_key + "_areas"] = describe_areas(
+            res["n_areas"], res["skipped_areas"]
         )
         logger.info(
-            "Moran's I computed for %d markers (p from %s)", len(stats), p_method
+            "Moran's I computed for %d markers (p from %s; %d area(s) compared)",
+            len(stats), res["p_method"], res["n_areas"],
         )
         return len(stats)
     except Exception as e:
@@ -1647,37 +1792,52 @@ def run_geary_c(
     plot_dpi=150,
     persist_plots=True,
     coord_unit="px",
+    area_ids=None,
+    area_names=None,
+    threshold=AUTOCORR_DEFAULT_THRESHOLD,
 ):
     """Compute Geary's C per marker.
 
     Writes task.outputs["geary_c"] as a JSON blob shaped:
       {
         "marker_stats": {"CD3: Mean": {"c": 0.42, "p_value": 0.001,
-                                       "p_value_uncorrected": 0.0004}, ...},
+                                       "p_value_uncorrected": 0.0004,
+                                       "areas_above": 6, "n_areas": 8}, ...},
+        "per_area": {"CD3: Mean": {"image_01.tif": 0.41, ...}, ...},
+        "threshold": 0.05,
+        "areas": "8 area(s) evaluated",
         "n_permutations": N,
         "graph_type": "...",
-        "p_value_method": "pval_sim_fdr_bh (1000 permutations, ...)"
+        "p_value_method": "pval_z_sim_fdr_bh (normal tail of 1000 ...)"
       }
 
     Shares its squidpy call with Moran's I via compute_autocorr, which is also
     what fixes the p-value: this used to prefer "pval_norm" and so discarded
     both the permutation p it paid for and squidpy's Benjamini-Hochberg column.
+    "areas_above" counts areas with C <= 1 - threshold.
     """
     try:
-        stats, p_method = compute_autocorr(
+        res = compute_autocorr(
             adata, "geary", measurements,
             n_permutations=n_permutations, value_key="C",
+            area_ids=area_ids, area_names=area_names, threshold=threshold,
         )
+        p_method = res["p_method"]
         marker_stats = {}
-        for marker, st in stats.items():
+        for marker, st in res["stats"].items():
             marker_stats[marker] = {
                 "c": _json_number(st["value"]),
                 "p_value": _json_number(st["p"]),
                 "p_value_uncorrected": _json_number(st["p_raw"]),
+                "areas_above": st["areas_above"],
+                "n_areas": st["n_areas"],
             }
 
         payload = {
             "marker_stats": marker_stats,
+            "per_area": res["per_area"],
+            "threshold": float(res["threshold"]),
+            "areas": describe_areas(res["n_areas"], res["skipped_areas"]),
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
             "p_value_method": describe_p_method(
@@ -1686,10 +1846,11 @@ def run_geary_c(
         }
         task.outputs["geary_c"] = json.dumps(payload)
         logger.info(
-            "Geary's C computed for %d markers (%d perms, p from %s)",
+            "Geary's C computed for %d markers (%d perms, p from %s; %d area(s) compared)",
             len(marker_stats),
             n_permutations,
             p_method,
+            res["n_areas"],
         )
 
         # Phase 5: matplotlib PNG output for Feature B (batch figure export).

@@ -1851,6 +1851,7 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
         inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdgePixels(config));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
+        inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
 
         // The probe must partition exactly as the run will. A per-area graph is
         // a different graph -- cheaper, and with a different neighbour
@@ -2152,6 +2153,7 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_delaunay_max_edge",
                 resolveDelaunayMaxEdgePixels(config));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
+        inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
         inputs.put("use_squidpy_graph_for_smoothing",
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
         // Phase 5 enhancement: PNG output for spatial-stats plots so the
@@ -2402,8 +2404,9 @@ public class ClusteringWorkflow {
                     result.setSpatialAutocorrPMethod(
                             String.valueOf(task.outputs.get("spatial_autocorr_p_method")));
                 }
-                logger.info("Received spatial autocorrelation results (p from {})",
-                        result.getSpatialAutocorrPMethod());
+                readAutocorrConsistency(result, task.outputs);
+                logger.info("Received spatial autocorrelation results (p from {}; {})",
+                        result.getSpatialAutocorrPMethod(), result.getSpatialAutocorrAreas());
             }
 
             // Per-area spreadsheets. Carried on the result only so
@@ -4859,6 +4862,20 @@ public class ClusteringWorkflow {
         return out;
     }
 
+    /**
+     * Read the per-area Moran's I outputs that travel beside the main payload.
+     * Absent keys leave the result's fields null, which the table renders as
+     * "no consistency count".
+     */
+    static void readAutocorrConsistency(ClusteringResult result, Map<String, Object> outputs) {
+        Object perArea = outputs.get("spatial_autocorr_per_area");
+        if (perArea != null) result.setSpatialAutocorrPerAreaJson(String.valueOf(perArea));
+        Object thr = outputs.get("spatial_autocorr_threshold");
+        if (thr instanceof Number n) result.setSpatialAutocorrThreshold(n.doubleValue());
+        Object areas = outputs.get("spatial_autocorr_areas");
+        if (areas != null) result.setSpatialAutocorrAreas(String.valueOf(areas));
+    }
+
     static qupath.ext.qpcat.model.GearyCResult parseGeary(String json, Gson gson) {
         Map<String, Object> raw = gson.fromJson(json,
                 new TypeToken<Map<String, Object>>(){}.getType());
@@ -4872,7 +4889,9 @@ public class ClusteringWorkflow {
                     double c = readNumber(entry.get("c"), Double.NaN);
                     double p = readNumber(entry.get("p_value"), Double.NaN);
                     double pRaw = readNumber(entry.get("p_value_uncorrected"), Double.NaN);
-                    out.putMarker(marker, c, p, Double.isFinite(pRaw) ? pRaw : null);
+                    Integer above = entry.get("areas_above") instanceof Number a ? a.intValue() : null;
+                    Integer nAreas = entry.get("n_areas") instanceof Number a ? a.intValue() : null;
+                    out.putMarker(marker, c, p, Double.isFinite(pRaw) ? pRaw : null, above, nAreas);
                 }
             }
         }
@@ -4882,6 +4901,22 @@ public class ClusteringWorkflow {
         if (raw.get("p_value_method") != null) {
             out.setPValueMethod(raw.get("p_value_method").toString());
         }
+        if (raw.get("per_area") instanceof Map<?, ?> pa) {
+            Map<String, Map<String, Double>> perArea = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : pa.entrySet()) {
+                if (e.getKey() == null || !(e.getValue() instanceof Map<?, ?> inner)) continue;
+                Map<String, Double> row = new java.util.LinkedHashMap<>();
+                for (Map.Entry<?, ?> ie : inner.entrySet()) {
+                    if (ie.getKey() == null) continue;
+                    double v = readNumber(ie.getValue(), Double.NaN);
+                    row.put(ie.getKey().toString(), Double.isFinite(v) ? v : null);
+                }
+                perArea.put(e.getKey().toString(), row);
+            }
+            out.setPerArea(perArea);
+        }
+        if (raw.get("threshold") instanceof Number t) out.setThreshold(t.doubleValue());
+        if (raw.get("areas") != null) out.setAreas(raw.get("areas").toString());
         return out;
     }
 

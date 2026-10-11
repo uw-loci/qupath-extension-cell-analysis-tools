@@ -78,58 +78,70 @@ The z-score matrix shows:
 <a name="autocorr-p-values"></a>
 ### Interpreting Moran's I and Geary's C
 
-- **High I with low p-value:** marker expression is spatially clustered (not random)
-- **I near 0:** expression is randomly distributed
-- **Negative I:** expression is spatially dispersed (checkerboard pattern)
+Both tabs answer one question: **which measurements vary with position in the tissue, and
+how much.** Each row is one measurement. The columns, in the order they appear:
 
-Geary's C is the same test read the other way round: **C < 1** nearby cells similar,
-**C ~ 1** random, **C > 1** dissimilar.
+| Column | What it is | How to read it |
+|---|---|---|
+| **Moran's I** (or **Geary C**) | The effect size. I = 0 means nearby cells are no more alike on this measurement than any two cells; larger I, up to 1, means they are more alike; below 0 means they differ. Geary's C is the same idea read the other way: C = 1 is no pattern, below 1 is alike, above 1 is different. | The rows are **ranked by this column**, and it is the number to read. |
+| **Areas >= 0.05** (Geary: **Areas <= 0.95**) | In how many of the run's independent areas (images, TMA cores, sections) the measurement's own I reaches the cut. The pooled I to its left can be carried entirely by one image with a staining gradient; this column is what tells that apart from structure the tissue repeats. Shown only when the run had more than one area. | "8 of 8" is a cohort finding. "1 of 8" is one slide. |
+| **q** | A one-sided permutation p, Benjamini-Hochberg corrected across the measurements in that table. The line under the table names the exact squidpy column. | A **guard against noise, not the ranking**: with enough cells a negligible I earns a tiny q. |
 
-#### Which p-value these tables show
+Below the table, when there are between two and twelve areas, a grid shows each
+measurement's I (or C) in each area on its own, so you can see which image carries it. With
+more areas than that, the grid is in the CSV export instead.
 
-squidpy returns nine columns for this one test, six of them p-values, and they do not
-agree. Both tables show two of them:
+The cut (0.05 for I; C mirrors it as 1 - 0.05) is the QP-CAT preference **Spatial
+Autocorrelation Threshold**. It is the filter 10x Genomics' Loupe Browser applies to its own
+spatial enrichment table -- Moran's I >= 0.05 *and* Benjamini-Hochberg p <= 0.05 -- which is
+the same effect-size-plus-guard shape ([10x Genomics, Loupe Browser tutorials: Evaluate gene
+markers](https://www.10xgenomics.com/support/software/loupe-browser/latest/tutorials/assay-analysis/evaluate-gene-markers),
+accessed 2026-10-11). It is a convention, not a law of nature: a measurement at I = 0.04 in
+every one of eight images is telling you something, and the grid under the table will show
+it.
 
-| Column | What it is |
-|---|---|
-| **P-value** | The **permutation** p, corrected with Benjamini-Hochberg across the measurements tested in that table. This is the one to read. |
-| **P (uncorr.)** | The same test without the multiple-comparison correction. Kept so a number quoted elsewhere can be matched against it. |
+#### Why the statistic leads and the p-value guards
 
-A line under each table names the exact column, e.g.
-`pval_sim_fdr_bh (1000 permutations, Benjamini-Hochberg across 8 markers)`.
+This is a design choice, made 2026-10-11, and the reasons are worth knowing:
 
-Three things to know before reading either number:
+- **At cohort scale the p-value stops discriminating.** The analytic Moran's I p saturates
+  as the cell count grows: at a million cells an I of 0.001 is "significant". Everything in
+  the table ends up with q near zero, and a column of zeros ranks nothing.
+- **A pooled p-value cannot tell tissue from a slide.** One image with an illumination or
+  staining gradient produces a strongly positive pooled I and a tiny q. Only recomputing the
+  statistic inside each image shows that the other seven carry nothing. That is what the
+  Areas column does.
+- **The empirical permutation p has a floor.** The column QP-CAT used to show,
+  `pval_sim_fdr_bh`, cannot fall below 1 / (permutations + 1), and QP-CAT lowers the
+  permutation count as the cell count rises (1000 up to 50,000 cells, then 100, then 50
+  above 500,000). After Benjamini-Hochberg across m measurements, a measurement at the floor
+  shows at best m / (k x (permutations + 1)), where k is how many sit at the floor with it:
+  with 100 permutations and 20 measurements, **0.198 when one marker carries the structure**,
+  0.040 when five do, 0.010 when all do. The floor bit hardest in exactly the case worth
+  finding. The q column now reads `pval_z_sim_fdr_bh`, the normal tail of the permutation
+  distribution, which has no floor; the empirical p stays in the CSV as `p_value_uncorrected`.
+- **This is how the field uses the statistic.** Per-marker Moran's I is not standard in
+  multiplex antibody imaging (the IMC and CODEX protocols report cell-type statistics
+  instead); where spatial transcriptomics uses it, it is a ranking and feature-selection
+  device -- the top-I genes go into the next step -- and the published benchmarks find it
+  among the best rankers and the worst-calibrated p-values. QP-CAT uses it the same way: the
+  measurements high in I and consistent across areas are the candidates for a
+  spatially-aware run (BANKSY), and the ones to look at before trusting a spatial result.
 
-- **Both p-values are one-sided**, in the direction observed. squidpy's `two_tailed` defaults
-  to off and QP-CAT leaves it there, so under the null each p is uniform on (0, 0.5], and a
-  0.05 threshold is really a 0.10 one. On 34 markers of pure noise, about 3 land below 0.05
-  by construction.
+Two things still to know about q:
+
+- **It is one-sided**, in the direction of positive autocorrelation. squidpy's `two_tailed`
+  defaults to off and QP-CAT leaves it there, because the question is "which measurements
+  cluster", not "which differ from random in either direction".
 - **The correction is per table.** Moran's I and Geary's C are two squidpy calls, each
   corrected over the same measurements. Scanning both tables and taking whichever flagged
   is twice the tests either correction allows for. In a post-hoc run each image or area is
   corrected on its own.
-- **The permutation p has a floor of 1 / (permutations + 1)**, and QP-CAT lowers the
-  permutation count as cell count rises (1000 up to 50,000 cells, then 100, then 50 above
-  500,000). After Benjamini-Hochberg across m measurements, a measurement at the floor can
-  show at best m / (k x (permutations + 1)), where k is how many measurements sit at the
-  floor with it. With 100 permutations and 20 measurements that is **0.198 when one marker
-  carries the structure**, 0.040 when five do, 0.010 when all do -- so the floor bites
-  hardest in exactly the case worth finding, a single strongly organised marker. On a large
-  cohort read the I or C value and its rank, and treat the corrected p as a floor, not a
-  verdict. Which statistic should lead at scale is under review.
 
-**Why the correction is there.** The question these tables answer is "which of my
-measurements are spatially structured", which is one test per measurement, and a panel
-screened without correction turns into a false-positive list. Measured on 34 markers and
-2,000 cells of i.i.d. noise (seed 7, kNN graph, k = 15, 1000 permutations): the uncorrected
-normal-theory p flagged 3 markers below 0.05, which is what a correctly calibrated one-sided
-p should do; the uncorrected permutation p flagged 9, about three times its expectation,
-which is a calibration question about the permutation null itself; and the corrected columns
-flagged none.
-
-Every QP-CAT version up to and including 0.21.0 showed the uncorrected normal-theory value
-and discarded the permutations the run spent time on. A result saved by one of those
-versions says so under the table instead of naming a column.
+**History.** Every QP-CAT version up to and including 0.21.0 showed the uncorrected
+normal-theory p (and, for Moran's I, failed silently and showed nothing -- see the
+changelog). A result saved by one of those versions says so under the table instead of
+naming a column, and has no Areas column.
 
 ### BANKSY vs. Post-Hoc Spatial Analysis
 

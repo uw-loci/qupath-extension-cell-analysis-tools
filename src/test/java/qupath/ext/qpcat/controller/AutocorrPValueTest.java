@@ -20,9 +20,10 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
  * {@code pval_norm} flagged 3 markers below 0.05 and {@code pval_sim} flagged 9,
  * while either FDR column flagged none.
  * <p>
- * Both tables now show the corrected value first, keep the uncorrected one
- * beside it, and name the column -- because "P-value" alone cannot say whether
- * it was corrected, and a CSV leaves the window.
+ * Both tables now lead with the statistic itself and show the corrected p as a
+ * guard, naming the column -- because "P-value" alone cannot say whether it was
+ * corrected, and a CSV leaves the window. The consistency count (areas above
+ * the threshold) travels with each marker and survives a save.
  */
 class AutocorrPValueTest {
 
@@ -35,11 +36,11 @@ class AutocorrPValueTest {
                    "CD3: Mean":{"c":0.42,"p_value":0.013,"p_value_uncorrected":0.001},
                    "CD8: Mean":{"c":0.98,"p_value":0.640,"p_value_uncorrected":0.320}},
                  "n_permutations":999,"graph_type":"knn",
-                 "p_value_method":"pval_sim_fdr_bh (999 permutations, Benjamini-Hochberg across 2 markers)"}
+                 "p_value_method":"pval_z_sim_fdr_bh (normal tail of 999 permutations, one-sided, Benjamini-Hochberg across 2 measurements)"}
                 """;
         GearyCResult g = ClusteringWorkflow.parseGeary(json, GSON);
 
-        assertThat(g.getPValueMethod()).contains("pval_sim_fdr_bh")
+        assertThat(g.getPValueMethod()).contains("pval_z_sim_fdr_bh")
                 .contains("999 permutations")
                 .contains("Benjamini-Hochberg");
         assertThat(g.getMarkerStats().get("CD3: Mean").getPValue()).isEqualTo(0.013);
@@ -94,6 +95,50 @@ class AutocorrPValueTest {
 
         assertThat(reopened.getSpatialAutocorrPMethod())
                 .isEqualTo(result.getSpatialAutocorrPMethod());
+    }
+
+    @Test
+    void gearyCarriesTheConsistencyCountAndPerAreaValues() {
+        String json = """
+                {"marker_stats":{
+                   "CD3: Mean":{"c":0.42,"p_value":0.013,"p_value_uncorrected":0.001,
+                                "areas_above":1,"n_areas":2}},
+                 "per_area":{"CD3: Mean":{"img_A":0.40,"img_B":0.99}},
+                 "threshold":0.05,"areas":"2 area(s) evaluated",
+                 "n_permutations":999,"graph_type":"knn"}
+                """;
+        GearyCResult g = ClusteringWorkflow.parseGeary(json, GSON);
+
+        assertThat(g.getMarkerStats().get("CD3: Mean").getAreasAbove()).isEqualTo(1);
+        assertThat(g.getMarkerStats().get("CD3: Mean").getNAreas()).isEqualTo(2);
+        assertThat(g.getPerArea().get("CD3: Mean")).containsEntry("img_A", 0.40).containsEntry("img_B", 0.99);
+        assertThat(g.getThreshold()).isEqualTo(0.05);
+        assertThat(g.getAreas()).isEqualTo("2 area(s) evaluated");
+        // And it survives a plain-Gson save.
+        GearyCResult restored = GSON.fromJson(GSON.toJson(g), GearyCResult.class);
+        assertThat(restored.getMarkerStats().get("CD3: Mean").getAreasAbove()).isEqualTo(1);
+        assertThat(restored.getPerArea().get("CD3: Mean").get("img_B")).isEqualTo(0.99);
+    }
+
+    @Test
+    void theMoranConsistencyOutputsSurviveSavingAndReopening() {
+        ClusteringResult result = new ClusteringResult(
+                new int[] {0, 1}, 2,
+                new double[][] {{0.0, 0.0}, {1.0, 1.0}},
+                new double[][] {{0.1}, {0.9}},
+                new String[] {"CD3: Mean"});
+        java.util.Map<String, Object> outputs = new java.util.HashMap<>();
+        outputs.put("spatial_autocorr_per_area", "{\"CD3: Mean\":{\"img_A\":0.5}}");
+        outputs.put("spatial_autocorr_threshold", 0.05);
+        outputs.put("spatial_autocorr_areas", "2 area(s) evaluated");
+        ClusteringWorkflow.readAutocorrConsistency(result, outputs);
+
+        ClusteringResult reopened = SavedClusteringResult.fromResult(
+                result, "t", "kmeans", "zscore", "umap").toClusteringResult();
+
+        assertThat(reopened.getSpatialAutocorrPerAreaJson()).contains("img_A");
+        assertThat(reopened.getSpatialAutocorrThreshold()).isEqualTo(0.05);
+        assertThat(reopened.getSpatialAutocorrAreas()).isEqualTo("2 area(s) evaluated");
     }
 
     @Test

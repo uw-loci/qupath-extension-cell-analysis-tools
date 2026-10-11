@@ -33,6 +33,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
+import qupath.ext.qpcat.service.AutocorrTables;
 import qupath.ext.qpcat.service.SpatialStatsCsv;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellClasses;
@@ -5040,27 +5041,27 @@ public class ClusteringDialog {
 
         // Spatial autocorrelation tab
         if (result.hasSpatialAutocorr()) {
-            TextArea autocorrText = new TextArea(formatSpatialAutocorr(result));
+            TextArea autocorrText = new TextArea(AutocorrTables.moranTable(result));
             autocorrText.setEditable(false);
             autocorrText.setWrapText(false);
             autocorrText.setPrefRowCount(30);
             autocorrText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
-            Tab tab = new Tab("Spatial Autocorrelation", wrapWithGuide(autocorrText,
-                    "Moran's I per marker measures spatial organization of expression.\n"
-                    + "  I > 0: spatially clustered (nearby cells have similar expression).\n"
-                    + "  I ~ 0: spatially random (no spatial pattern).\n"
-                    + "  I < 0: spatially dispersed (nearby cells have different expression).\n"
-                    + "Markers with high Moran's I are the candidates for a spatially-aware run "
-                    + "(BANKSY).\n"
-                    + "TWO P-VALUES, both one-sided; the line under the table names the exact "
-                    + "column. The first is a permutation p corrected across the measurements in "
-                    + "this table, because asking which of them are structured is one test per "
-                    + "measurement. The second is the same test uncorrected, kept so a number "
-                    + "quoted elsewhere can be matched. On a large cohort the corrected p cannot "
-                    + "fall below (measurements / permutations), so read the I value and its rank "
-                    + "there -- see the documentation link.\n"
-                    + "Unlike Ripley's L and co-occurrence, this DOES read the neighbor graph, so "
-                    + "the graph constructor changes these numbers.",
+            Tab tab = new Tab("Spatial Autocorrelation", wrapWithGuide(withCsvExport(
+                    autocorrText,
+                    autocorrText::getText,
+                    () -> SpatialStatsCsv.moranCsv(result),
+                    "qpcat_moran_i.csv"),
+                    "Which measurements vary with position in the tissue, ranked by Moran's I.\n"
+                    + "  I near 0: no spatial pattern.  Larger I: nearby cells are more alike on "
+                    + "this measurement.  Below 0: nearby cells differ.\n"
+                    + "The Areas column counts the images (or cores, or sections) in which the "
+                    + "measurement is structured on its own. Structure in one of many is a staining "
+                    + "or sectioning effect, not a cohort finding. q guards against noise; it is not "
+                    + "the ranking.\n"
+                    + "Measurements high in I and consistent across areas are the candidates for a "
+                    + "spatially-aware run (BANKSY), and the ones to check before trusting a "
+                    + "spatial result.\n"
+                    + "Reads the neighbor graph, so the graph constructor changes these numbers.",
                     "spatial-autocorrelation-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
@@ -5111,7 +5112,7 @@ public class ClusteringDialog {
         }
 
         if (result.hasGeary()) {
-            TextArea gearyText = new TextArea(formatGearyC(result.getGeary()));
+            TextArea gearyText = new TextArea(AutocorrTables.gearyTable(result.getGeary()));
             gearyText.setEditable(false);
             gearyText.setWrapText(false);
             gearyText.setStyle("-fx-font-family: monospace; -fx-font-size: 12px;");
@@ -5120,17 +5121,14 @@ public class ClusteringDialog {
                     gearyText::getText,
                     () -> SpatialStatsCsv.gearyCsv(result.getGeary()),
                     "qpcat_geary_c.csv"),
-                    "Geary's C per marker measures local spatial autocorrelation.\n"
-                    + "  C < 1: positive autocorrelation (nearby cells have similar values).\n"
-                    + "  C ~ 1: spatial randomness.\n"
-                    + "  C > 1: dispersion (nearby cells have dissimilar values).\n"
-                    + "Sensitive to local detail; the global-structure counterpart is Moran's I "
-                    + "(the Spatial Autocorrelation tab, when it ran).\n"
-                    + "TWO P-VALUES, both one-sided; the line under the table names the exact "
-                    + "column. The first is a permutation p corrected across the measurements in "
-                    + "this table; the second is uncorrected. Corrected separately from Moran's I, "
-                    + "so do not pool the two tables' hits. On a large cohort the corrected p "
-                    + "cannot fall below (measurements / permutations); read C and its rank there. "
+                    "Which measurements vary with position in the tissue, ranked by Geary's C.\n"
+                    + "  C near 1: no spatial pattern.  Below 1: nearby cells are alike on this "
+                    + "measurement.  Above 1: nearby cells differ.\n"
+                    + "Sensitive to local detail; the global counterpart is Moran's I (Spatial "
+                    + "Autocorrelation tab). The Areas column counts the images (or cores, or "
+                    + "sections) in which the measurement is structured on its own; structure in one "
+                    + "of many is a staining or sectioning effect. q guards against noise; it is not "
+                    + "the ranking, and it is corrected separately from Moran's I.\n"
                     + "Reads the neighbor graph, so the graph constructor changes these numbers.",
                     "gearys-c-tab"));
             tab.setClosable(false);
@@ -6737,61 +6735,6 @@ public class ClusteringDialog {
         Dialogs.showPlainMessage("Compare expression views", body);
     }
 
-    @SuppressWarnings("deprecation")  // GsonBuilder.setLenient() vs the 2.11+ Strictness API
-    private static String formatSpatialAutocorr(ClusteringResult result) {
-        String json = result.getSpatialAutocorrJson();
-        if (json == null) return "No spatial autocorrelation data available.";
-
-        try {
-            com.google.gson.Gson gson = new com.google.gson.GsonBuilder()
-                    .serializeNulls().setLenient().create();
-            java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<
-                    Map<String, Map<String, Double>>>(){}.getType();
-            Map<String, Map<String, Double>> autocorr = gson.fromJson(json, type);
-
-            StringBuilder sb = new StringBuilder();
-            // Both p-values are shown. The first is the one to read -- a
-            // permutation p corrected across the panel, because the question
-            // put to this table is "which markers", which is a multiple
-            // comparison. The second is the uncorrected value, kept so a number
-            // reported elsewhere can be matched against it.
-            sb.append(String.format("%-35s %10s %12s %16s%n",
-                    "Marker", "Moran's I", "P-value", "P (uncorrected)"));
-            sb.append("-".repeat(76)).append(System.lineSeparator());
-
-            // Sort by Moran's I descending (NaN-safe -- nulls / NaN go to the bottom)
-            autocorr.entrySet().stream()
-                    .sorted((a, b) -> Double.compare(
-                            sortKey(b.getValue().get("I")),
-                            sortKey(a.getValue().get("I"))))
-                    .forEach(entry -> sb.append(String.format("%-35s %10s %12s %16s%n",
-                            entry.getKey(),
-                            formatDouble(entry.getValue().get("I"), "%.4f"),
-                            formatDouble(entry.getValue().get("pval"), "%.2e"),
-                            formatDouble(entry.getValue().get("pval_uncorrected"), "%.2e"))));
-
-            sb.append(System.lineSeparator());
-            String method = result.getSpatialAutocorrPMethod();
-            sb.append("P-value: ").append(method != null ? method
-                    : "method not recorded: this result was saved by an earlier QP-CAT, "
-                      + "which showed the uncorrected normal-theory p")
-              .append(System.lineSeparator());
-
-            return sb.toString();
-        } catch (Exception e) {
-            logger.warn("Failed to format spatial autocorrelation: {}", e.getMessage());
-            return "Spatial autocorrelation could not be parsed: " + e.getMessage()
-                    + System.lineSeparator() + System.lineSeparator()
-                    + "Raw payload:" + System.lineSeparator() + json;
-        }
-    }
-
-    /** NaN/null-safe sort key: missing values sort to the bottom. */
-    private static double sortKey(Double v) {
-        if (v == null || Double.isNaN(v)) return Double.NEGATIVE_INFINITY;
-        return v;
-    }
-
     /**
      * Build the dual K(r) + L(r) chart pane for the Ripley result tab.
      * Responsive layout: side-by-side above ~700 px width, stacked
@@ -7380,44 +7323,6 @@ public class ClusteringDialog {
         } catch (NumberFormatException e) {
             return ClusterPalette.hexFor(fallbackIndex);
         }
-    }
-
-    /**
-     * Render Geary's C as a per-marker monospace table; mirrors the
-     * formatSpatialAutocorr style for visual consistency.
-     */
-    private static String formatGearyC(qupath.ext.qpcat.model.GearyCResult geary) {
-        if (geary == null || geary.getMarkerStats() == null
-                || geary.getMarkerStats().isEmpty()) {
-            return "No Geary's C data available.";
-        }
-        StringBuilder sb = new StringBuilder();
-        // Same two columns as the Moran's I table, for the same reason: the
-        // first p is corrected across the panel, the second is not.
-        sb.append(String.format("%-35s %10s %12s %16s%n",
-                "Marker", "Geary C", "P-value", "P (uncorrected)"));
-        sb.append("-".repeat(76)).append("\n");
-        geary.getMarkerStats().entrySet().stream()
-                .sorted((a, b) -> Double.compare(a.getValue().getC(), b.getValue().getC()))
-                .forEach(entry -> sb.append(String.format("%-35s %10.4f %12.2e %16s%n",
-                        entry.getKey(),
-                        entry.getValue().getC(),
-                        entry.getValue().getPValue(),
-                        entry.getValue().getPValueUncorrected() == null
-                                ? "-"
-                                : String.format("%.2e",
-                                        entry.getValue().getPValueUncorrected()))));
-        sb.append("\nP-value: ").append(geary.getPValueMethod() != null
-                ? geary.getPValueMethod()
-                : "method not recorded: this result was saved by an earlier QP-CAT, "
-                  + "which showed the uncorrected normal-theory p");
-        if (geary.getNPermutations() > 0) {
-            sb.append("\n").append("Permutations: ").append(geary.getNPermutations());
-        }
-        if (geary.getGraphType() != null) {
-            sb.append("\nGraph: ").append(geary.getGraphType());
-        }
-        return sb.toString();
     }
 
     /**

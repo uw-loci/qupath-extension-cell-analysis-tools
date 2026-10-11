@@ -491,8 +491,8 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 
 | Tab | Reads as |
 |---|---|
-| **Spatial Autocorrelation** (Moran's I) | Per marker: I > 0 clustered, ~0 random, < 0 dispersed. Markers with high I are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
-| **Geary's C** | Per marker: C < 1 nearby cells similar, ~1 random, > 1 dissimilar. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
+| **Spatial Autocorrelation** (Moran's I) | Per measurement, ranked by I: I > 0 clustered, ~0 random, < 0 dispersed, plus in how many images the structure holds. Measurements high in I and consistent across images are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
+| **Geary's C** | Per measurement, ranked by C: C < 1 nearby cells similar, ~1 random, > 1 dissimilar, plus the same per-image count. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
 | **Neighborhood Enrichment** | Cluster x cluster permutation z-score: red = neighbours more often than chance, blue = less. The standard interaction matrix. [Full description below](#neighborhood-enrichment-tab). |
 | **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
@@ -634,13 +634,18 @@ a spatially-aware run (BANKSY).
 **They read the neighbour graph**, unlike Ripley's L and co-occurrence. Changing the kNN
 k, the radius or the Delaunay pruning *does* change these numbers.
 
-**Both p-values are shown**, and the line under each table names exactly which column:
-the first is a permutation p corrected (Benjamini-Hochberg) across the measurements tested
-in that table, the second is uncorrected. Moran's I and Geary's C are corrected
-**separately**, each over the same measurements, so reading both tables and taking whichever
-flagged is twice as many tests as either correction allows for. Both tests are one-sided in
-the direction observed. What the columns are, and their limits at cohort scale, in
-[Spatial statistics](spatial-statistics.md#autocorr-p-values).
+**The statistic leads, ranked; the p-value guards.** Each table is sorted by I (or C),
+because that is the effect size and the number to read. Beside it, when the run covered
+more than one image, core or section, an **Areas** column counts how many of them carry the
+structure on their own -- "8 of 8" is a cohort finding, "1 of 8" is a staining gradient on
+one slide, and a grid under the table shows which. Last comes **q**, a one-sided permutation
+p corrected (Benjamini-Hochberg) across the measurements in that table; the line under the
+table names the exact column. q is a guard against noise, not the ranking: with enough cells
+a negligible I earns a tiny q. Moran's I and Geary's C are corrected **separately**, so
+reading both tables and taking whichever flagged is twice as many tests as either
+correction allows for. The cut for the Areas column is the preference **Spatial
+Autocorrelation Threshold** (default 0.05). Why it is built this way, and what the
+columns are, in [Spatial statistics](spatial-statistics.md#autocorr-p-values).
 
 **Which measurements are tested.** In a clustering run, the measurements you selected for
 clustering. The post-hoc path starts from every numeric measurement and drops coordinates
@@ -692,14 +697,20 @@ how the files happen to be numbered.
 
 ### Exporting spatial statistics tables
 
-The **Geary's C**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
+The **Spatial Autocorrelation**, **Geary's C**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
 
 Buttons above each table:
-- **Copy text** -- copies the table exactly as shown, spacing preserved (Geary's C and Co-occurrence only; Ripley L is a chart).
+- **Copy text** -- copies the table exactly as shown, spacing preserved (not Ripley L, which is a chart).
 - **Copy CSV** -- copies comma-separated rows in long form, ready to paste into a spreadsheet or R/Python.
-- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
+- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_moran_i.csv`, `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
 
 **Why long form?** The on-screen table for pairwise co-occurrence is one column per ordered cluster pair (20 clusters = 400 columns, labels scroll away). CSV writes one row per pair, so every comparison is explicit and legible in a cell editor or data frame.
+
+The Moran's I and Geary's C CSVs have one row per (measurement, area): the row with
+`area = all` is the pooled statistic and carries `p_value` (the corrected q shown on
+screen), `p_value_uncorrected`, the `areas_above_threshold` / `n_areas` count and the
+`threshold`; each area the run evaluated on its own gets a row with only its I or C, which
+is the evidence behind the count.
 
 ### Ripley L: controlling cluster visibility
 

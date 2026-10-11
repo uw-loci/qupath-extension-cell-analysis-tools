@@ -381,6 +381,9 @@ public class ClusteringResult {
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
     private String spatialAutocorrPMethod;
+    private String spatialAutocorrPerAreaJson;
+    private Double spatialAutocorrThreshold;
+    private String spatialAutocorrAreas;
 
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }
     public void setNhoodEnrichment(double[][] m) { this.nhoodEnrichment = m; }
@@ -399,6 +402,18 @@ public class ClusteringResult {
      */
     public String getSpatialAutocorrPMethod() { return spatialAutocorrPMethod; }
     public void setSpatialAutocorrPMethod(String v) { this.spatialAutocorrPMethod = v; }
+
+    /** Moran's I recomputed inside each independent area: {marker: {area: I}} as JSON, or null. */
+    public String getSpatialAutocorrPerAreaJson() { return spatialAutocorrPerAreaJson; }
+    public void setSpatialAutocorrPerAreaJson(String v) { this.spatialAutocorrPerAreaJson = v; }
+
+    /** I at or above this counted an area as structured; null when the run did not record one. */
+    public Double getSpatialAutocorrThreshold() { return spatialAutocorrThreshold; }
+    public void setSpatialAutocorrThreshold(Double v) { this.spatialAutocorrThreshold = v; }
+
+    /** One line saying how many areas voted in the consistency count ("8 area(s) evaluated"); may be empty. */
+    public String getSpatialAutocorrAreas() { return spatialAutocorrAreas; }
+    public void setSpatialAutocorrAreas(String v) { this.spatialAutocorrAreas = v; }
 
     // ---- Independent areas ----
     // Ready-to-write CSV text produced by the Python side. Held here only long

@@ -301,6 +301,12 @@ try:
 except NameError:
     pref_spatial_permutations = 0
 try:
+    pref_spatial_autocorr_threshold = float(spatial_autocorr_threshold)
+except NameError:
+    # Same value as spatial_stats.AUTOCORR_DEFAULT_THRESHOLD, which is not
+    # imported yet at this point in the script.
+    pref_spatial_autocorr_threshold = 0.05
+try:
     pref_use_squidpy_smoothing = use_squidpy_graph_for_smoothing
 except NameError:
     pref_use_squidpy_smoothing = False
@@ -2295,6 +2301,9 @@ if has_spatial and n_clusters_found > 1:
             n_permutations=_qpcat_spatial.adaptive_permutations(
                 n_cells, override=pref_spatial_permutations
             ),
+            area_ids=area_ids_list,
+            area_names=area_names_list,
+            threshold=pref_spatial_autocorr_threshold,
         )
 
     # ---- v1 spatial stats expansion ----
@@ -2386,6 +2395,9 @@ if has_spatial and n_clusters_found > 1:
             plot_dir=_spatial_plot_dir,
             plot_dpi=pref_plot_dpi,
             persist_plots=_spatial_persist,
+            area_ids=area_ids_list,
+            area_names=area_names_list,
+            threshold=pref_spatial_autocorr_threshold,
         )
         if _spatial_persist:
             _geary_path = os.path.join(

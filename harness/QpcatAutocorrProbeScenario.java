@@ -1,6 +1,7 @@
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.service.AutocorrTables;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
@@ -45,6 +46,10 @@ public final class QpcatAutocorrProbeScenario {
         int imageCount = args.length > 1 ? Integer.parseInt(args[1]) : 2;
         int nClusters = args.length > 2 ? Integer.parseInt(args[2]) : 6;
         String normalization = args.length > 3 ? args[3] : "zscore";
+        // Extra measurements to cluster on and test, semicolon-separated; see
+        // InjectSingleImageGradient.groovy for one with a known answer.
+        List<String> extra = args.length > 4 && !args[4].isBlank()
+                ? Arrays.asList(args[4].split(";")) : List.of();
 
         startFx();
         QuPathGUI qupath = onFx(QuPathGUI::createHiddenInstance);
@@ -70,10 +75,12 @@ public final class QpcatAutocorrProbeScenario {
         }
 
         ClusteringConfig config = new ClusteringConfig();
-        config.setSelectedMeasurements(Arrays.asList(
+        List<String> measurements = new ArrayList<>(Arrays.asList(
                 "Nucleus: DAPI mean", "Nucleus: PanCK mean", "Nucleus: Ki67 mean",
                 "Nucleus: aSMA mean", "Nucleus: CD3 mean", "Nucleus: CD8 mean",
                 "Nucleus: CD20 mean", "Nucleus: CD68 mean"));
+        measurements.addAll(extra);
+        config.setSelectedMeasurements(measurements);
         config.setAlgorithm(ClusteringConfig.Algorithm.KMEANS);
         config.setNormalization(ClusteringConfig.Normalization.valueOf(
                 normalization.toUpperCase(java.util.Locale.ROOT)));
@@ -108,6 +115,20 @@ public final class QpcatAutocorrProbeScenario {
         if (result.hasSpatialAutocorr()) {
             ok("Moran's I: present");
             note("payload: " + abbreviate(result.getSpatialAutocorrJson()));
+            // The consistency count only exists across more than one area; a
+            // multi-image run that reports none has lost the area ids somewhere.
+            String areas = result.getSpatialAutocorrAreas();
+            if (entries.size() > 1) {
+                if (areas != null && areas.startsWith(entries.size() + " area(s) evaluated")) {
+                    ok("Moran's I consistency count covers all " + entries.size() + " images");
+                } else {
+                    bad("Moran's I consistency count: expected '" + entries.size()
+                            + " area(s) evaluated', got '" + areas + "'");
+                }
+            }
+            System.out.println();
+            System.out.println("---- Spatial Autocorrelation tab, as rendered ----");
+            System.out.println(AutocorrTables.moranTable(result));
         } else {
             bad("Moran's I: ABSENT -- requested by the same tick-box that produced "
                     + "neighbourhood enrichment above");
@@ -116,8 +137,9 @@ public final class QpcatAutocorrProbeScenario {
         if (result.hasGeary()) {
             ok("Geary's C: present, " + result.getGeary().getMarkerStats().size() + " markers, "
                     + result.getGeary().getNPermutations() + " permutations");
-            result.getGeary().getMarkerStats().forEach((m, s) ->
-                    note(String.format("   %-24s C=%.4f  p=%.4g", m, s.getC(), s.getPValue())));
+            System.out.println();
+            System.out.println("---- Geary's C tab, as rendered ----");
+            System.out.println(AutocorrTables.gearyTable(result.getGeary()));
         } else {
             bad("Geary's C: ABSENT");
         }

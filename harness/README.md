@@ -27,6 +27,7 @@ tools/qp-harness/bin/qp-gui \
     qupath-extension-cell-analysis-tools/harness/QpcatAutocorrProbeScenario.java \
     qupath-extension-cell-analysis-tools \
     /tmp/qph/project 2 6 zscore      # project, images, k, normalization
+    # optional 5th arg: extra measurements to cluster on and test, ";"-separated
 ```
 
 Written to settle a question reading could not. Moran's I and Geary's C are
@@ -46,6 +47,29 @@ the run parks on its latch forever. The scenario sets
 `config.setPushConnectionsToViewer(false)`. If a scenario of yours hangs after
 "Applying results to project images...", take a `jstack`: the main thread parked
 in `confirmOverlayPushBatch` is this.
+
+It also prints both tabs as the user sees them (`AutocorrTables.moranTable` /
+`gearyTable`) and, on a multi-image run, asserts the consistency count covers
+every image.
+
+### `InjectSingleImageGradient.groovy` -- a measurement with a known answer
+
+```bash
+tools/qp-harness/bin/qp-script \
+    qupath-extension-cell-analysis-tools/harness/InjectSingleImageGradient.groovy \
+    /tmp/qph/project 3            # project, index of the ONE image that gets the gradient
+```
+
+Adds `Nucleus: Probe mean` to every cell: i.i.d. noise everywhere except image 3,
+where it is the cell's x position plus the same noise. So the ground truth is
+"structured in exactly one image", which is what a staining or illumination
+gradient on one slide looks like, and what the Spatial Autocorrelation tab's
+Areas column exists to catch. Run the probe with the 5th argument
+`"Nucleus: Probe mean"` afterwards. Measured 2026-10-11 on the 8-image synthetic
+project: pooled I = 0.23, q < 1e-300 -- a p-value-led table would have ranked
+it third in the cohort, above CD3 -- and the Areas column read **1 of 8**, with
+the per-image grid showing 0.42 in `tme_03` and |I| < 0.03 everywhere else.
+Work on a copy of the project; the script writes the measurement into it.
 
 ### `apply:` and `apply:ns:`
 

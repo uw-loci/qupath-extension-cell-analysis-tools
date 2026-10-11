@@ -103,18 +103,44 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   permutation null running about three times hot on this data -- and it went unremarked.
   The case for the corrected column rests on the multiple-comparison argument alone.
 
-  *Also found in review, and not yet resolved:* the permutation p has a floor of
-  1 / (permutations + 1), and the adaptive count drops to 100 above 50,000 cells. After
-  BH across 20 measurements the lead column cannot read below 0.198 on such a cohort,
-  whatever the structure. The docs now say so; which statistic should lead at scale is
-  under review.
+  *Also found in review:* the permutation p has a floor of 1 / (permutations + 1), and
+  the adaptive count drops to 100 above 50,000 cells. After BH across 20 measurements the
+  lead column cannot read below m / (k x (permutations + 1)) -- 0.198 when one marker
+  carries the structure, 0.040 when five do -- so the floor bit hardest in exactly the case
+  worth finding. Resolved by the entry below, which stops the p-value being the lead at all.
 
-  Both tables now lead with the corrected permutation p, keep the uncorrected value in a
-  second column, and print a line naming the exact column, e.g.
-  `pval_sim_fdr_bh (1000 permutations, Benjamini-Hochberg across 8 markers)`. The Geary
-  CSV carries both and the method. A result saved earlier says the method was not
-  recorded rather than implying its number was corrected. Moran's I is now given the same
-  permutation count as Geary's C (3.2 s for 8 markers over 3,098 cells).
+  Both tables printed a line naming the exact column; the Geary CSV carried both p-values
+  and the method; a result saved earlier says the method was not recorded rather than
+  implying its number was corrected. Moran's I is given the same permutation count as
+  Geary's C (3.2 s for 8 markers over 3,098 cells).
+
+### Changed
+
+- **The Moran's I and Geary's C tables now lead with the statistic, ranked, and show a
+  per-image consistency count; the p-value is a guard, not the ranking.** Three reasons,
+  each measured. At cohort scale the p saturates (at a million cells I = 0.001 is
+  "significant") and a column of zeros ranks nothing. A pooled p cannot tell tissue from
+  a slide: on a two-image construction where one image carries a gradient and the other is
+  noise, the pooled I is 0.17 with q < 1e-9, and only recomputing I inside each image shows
+  0.50 in one and -0.02 in the other. And the empirical permutation p has the floor
+  described above. A field-practice review (per-marker Moran's I is not standard in
+  multiplex antibody imaging; where spatial transcriptomics uses it, it is a ranking and
+  feature-selection device, and the benchmarks find it among the best rankers and the
+  worst-calibrated p-values) pointed the same way.
+
+  So: each table is sorted by I (or C). An **Areas** column counts in how many of the run's
+  independent areas (images, cores, sections) the measurement's own I reaches the cut, with
+  a measurement-by-area grid under the table (up to twelve areas; past that, the CSV). The
+  cut is a new preference, **Spatial Autocorrelation Threshold**, default 0.05 -- the filter
+  10x Genomics' Loupe Browser applies to its spatial enrichment table (I >= 0.05 and BH
+  p <= 0.05), the same shape. Areas under 50 cells do not vote. The **q** column reads
+  squidpy's `pval_z_sim_fdr_bh`, the normal tail of the permutation distribution, which has
+  no floor; the empirical p moves to the CSV as `p_value_uncorrected`. The uncorrected p
+  column is gone from the screen. The Spatial Autocorrelation tab gains the same Copy/Save
+  CSV buttons as Geary's C (`qpcat_moran_i.csv`), and both CSVs are long form with one row
+  per (measurement, area). Guide bars and both docs rewritten around "which measurements vary
+  with position, and in how many images". Results saved before this show no Areas column
+  and say so.
 
 - **The Dotplot's dot size was labelled "fraction of cells expressing", which under the
   default normalization it is not.** scanpy sizes each dot by `obs_tidy > expression_cutoff`

@@ -181,6 +181,10 @@ try:
 except NameError:
     perm_override = 0
 try:
+    autocorr_threshold = float(spatial_autocorr_threshold)
+except NameError:
+    autocorr_threshold = 0.05  # spatial_stats.AUTOCORR_DEFAULT_THRESHOLD, not imported yet
+try:
     coord_unit = str(coord_unit)
 except NameError:
     coord_unit = "px"
@@ -309,7 +313,8 @@ if want_moran:
         # of the squidpy call, and its own copy of that call's two defects.
         _update("Computing Moran's I spatial autocorrelation...")
         if _spatial.run_moran_i(
-            adata, task, measurements=list(mnames), n_permutations=n_perms
+            adata, task, measurements=list(mnames), n_permutations=n_perms,
+            area_ids=sa_area_ids, threshold=autocorr_threshold,
         ):
             any_stat = True
 
@@ -347,6 +352,8 @@ if want_geary:
             plot_dir=out_dir if persist else None,
             plot_dpi=dpi,
             persist_plots=persist,
+            area_ids=sa_area_ids,
+            threshold=autocorr_threshold,
         )
         any_stat = True
         if persist:

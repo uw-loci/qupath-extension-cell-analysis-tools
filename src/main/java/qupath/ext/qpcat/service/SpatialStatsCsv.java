@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
+import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.CoOccurrenceResult;
 import qupath.ext.qpcat.model.GearyCResult;
 import qupath.ext.qpcat.model.RipleyResult;
@@ -22,27 +23,51 @@ public final class SpatialStatsCsv {
 
     private SpatialStatsCsv() {}
 
-    /** Header + one row per marker: marker, Geary's C, corrected p, uncorrected p, p-value method. */
+    /**
+     * Long form, one row per (measurement, area). The pooled statistic has
+     * {@code area = "all"} and carries the p-values and the consistency count;
+     * each area the run evaluated on its own gets a row with only its C.
+     */
     public static String gearyCsv(GearyCResult geary) {
-        // Both p-values, and the method, because a CSV leaves the window and
-        // "p_value" alone does not say whether it was corrected.
-        StringBuilder sb = new StringBuilder(
-                "marker,geary_c,p_value,p_value_uncorrected,p_value_method\n");
-        if (geary == null || geary.getMarkerStats() == null) {
-            return sb.toString();
-        }
-        String method = geary.getPValueMethod() != null ? geary.getPValueMethod() : "";
-        for (Map.Entry<String, GearyCResult.Entry> e : geary.getMarkerStats().entrySet()) {
-            sb.append(escape(e.getKey()))
-                    .append(',')
-                    .append(num(e.getValue().getC()))
-                    .append(',')
-                    .append(num(e.getValue().getPValue()))
-                    .append(',')
-                    .append(num(e.getValue().getPValueUncorrected()))
-                    .append(',')
-                    .append(escape(method))
-                    .append('\n');
+        return autocorrCsv("geary_c", AutocorrTables.gearyRows(geary),
+                geary == null ? null : geary.getPerArea(),
+                geary == null ? null : geary.getThreshold(),
+                geary == null ? null : geary.getPValueMethod());
+    }
+
+    /** As {@link #gearyCsv} for the Moran's I table. */
+    public static String moranCsv(ClusteringResult result) {
+        return autocorrCsv("moran_i", AutocorrTables.moranRows(result.getSpatialAutocorrJson()),
+                AutocorrTables.perArea(result.getSpatialAutocorrPerAreaJson()),
+                result.getSpatialAutocorrThreshold(), result.getSpatialAutocorrPMethod());
+    }
+
+    private static String autocorrCsv(String statColumn, List<AutocorrTables.Row> rows,
+                                      Map<String, Map<String, Double>> perArea,
+                                      Double threshold, String pMethod) {
+        // Both p-values, the method and the threshold, because a CSV leaves the
+        // window and "p_value" alone does not say whether it was corrected.
+        StringBuilder sb = new StringBuilder("measurement,area,").append(statColumn)
+                .append(",p_value,p_value_uncorrected,areas_above_threshold,n_areas,threshold,p_value_method\n");
+        String method = pMethod != null ? pMethod : "";
+        String thr = num(threshold);
+        for (AutocorrTables.Row row : rows) {
+            sb.append(escape(row.marker())).append(",all,")
+                    .append(num(row.value())).append(',')
+                    .append(num(row.q())).append(',')
+                    .append(num(row.pRaw())).append(',')
+                    .append(row.areasAbove() == null ? "" : row.areasAbove()).append(',')
+                    .append(row.nAreas() == null ? "" : row.nAreas()).append(',')
+                    .append(thr).append(',')
+                    .append(escape(method)).append('\n');
+            Map<String, Double> areas = perArea == null ? null : perArea.get(row.marker());
+            if (areas == null) {
+                continue;
+            }
+            for (Map.Entry<String, Double> a : areas.entrySet()) {
+                sb.append(escape(row.marker())).append(',').append(escape(a.getKey())).append(',')
+                        .append(num(a.getValue())).append(",,,,,").append(thr).append(",\n");
+            }
         }
         return sb.toString();
     }

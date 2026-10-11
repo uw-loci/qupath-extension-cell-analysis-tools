@@ -154,14 +154,19 @@ def _base_globals():
     g = {
         "json": json,
         "math": _math,
+        "np": np,
         "logger": logging.getLogger("test.spatial_stats"),
         "AUTOCORR_P_PREFERENCE": _const("AUTOCORR_P_PREFERENCE"),
         "AUTOCORR_P_RAW_PREFERENCE": _const("AUTOCORR_P_RAW_PREFERENCE"),
+        "AUTOCORR_DEFAULT_THRESHOLD": _const("AUTOCORR_DEFAULT_THRESHOLD"),
+        "AUTOCORR_MIN_AREA_CELLS": _const("AUTOCORR_MIN_AREA_CELLS"),
         # The real one takes (message, detail=None); only the message is user-facing.
         "note_for_user": lambda message, detail=None: _NOTES.append(message),
     }
-    for name in ("_safe_kwargs", "_json_number", "pick_p_column",
-                 "describe_p_method", "compute_autocorr", "run_moran_i"):
+    for name in ("_safe_kwargs", "_json_number", "pick_p_column", "area_slices",
+                 "area_label", "autocorr_passes", "_autocorr_frame",
+                 "per_area_autocorr", "describe_p_method", "describe_areas",
+                 "compute_autocorr", "run_moran_i"):
         g[name] = load_script_symbol(SCRIPT, name, extra_globals=g)
     return g
 
@@ -182,8 +187,12 @@ def test_run_moran_i_produces_a_payload_per_marker():
     payload = json.loads(task.outputs["spatial_autocorr"])
     assert set(payload) == set(MARKERS)
     for marker, stats in payload.items():
-        assert set(stats) == {"I", "pval", "pval_uncorrected"}
+        assert set(stats) == {"I", "pval", "pval_uncorrected", "areas_above", "n_areas"}
         assert stats["I"] is not None
+        # One area: nothing to compare, and the count says so rather than "1 of 1".
+        assert stats["n_areas"] == 0 and stats["areas_above"] == 0
+    assert task.outputs["spatial_autocorr_threshold"] == pytest.approx(0.05)
+    assert task.outputs["spatial_autocorr_areas"] == ""
     assert not _NOTES
 
 
@@ -223,13 +232,103 @@ def test_an_empty_measurement_list_is_refused_and_reported_to_the_user():
         assert leaked not in _NOTES[0], _NOTES[0]
 
 
-def test_p_column_preference_puts_corrected_permutation_first():
+def test_p_column_preference_puts_the_floor_free_corrected_p_first():
+    """pval_sim is bounded below by 1 / (perms + 1), so its BH-corrected form
+    cannot fall below m / (k * (perms + 1)) when k markers sit at that floor:
+    0.198 for 1 of 20 at 100 permutations. pval_z_sim has no floor. Either
+    corrected column must still outrank every uncorrected one."""
     pref = _const("AUTOCORR_P_PREFERENCE")
-    assert pref[0] == "pval_sim_fdr_bh"
-    # pval_norm must not outrank any corrected column -- that inversion is
-    # exactly what made the run pay for permutations and then ignore them.
-    assert pref.index("pval_norm") > pref.index("pval_sim")
-    assert pref.index("pval_norm") > pref.index("pval_norm_fdr_bh")
+    assert pref[0] == "pval_z_sim_fdr_bh"
+    assert pref.index("pval_sim_fdr_bh") > pref.index("pval_z_sim_fdr_bh")
+    for corrected in ("pval_z_sim_fdr_bh", "pval_norm_fdr_bh", "pval_sim_fdr_bh"):
+        for raw in ("pval_z_sim", "pval_norm", "pval_sim", "pval"):
+            assert pref.index(raw) > pref.index(corrected), (raw, corrected)
+
+
+def test_z_sim_p_has_no_permutation_floor():
+    """The reason for the preference order, measured rather than asserted."""
+    a = _adata(n=400, seed=3)
+    # Make one marker strongly structured so its empirical p hits the floor.
+    a.X[:, 0] = (a.obsm["spatial"][:, 0] / 1000.0).astype(np.float32)
+    n_perms = 49
+    df = sq.gr.spatial_autocorr(
+        a, mode="moran", genes=list(a.var_names), n_perms=n_perms,
+        n_jobs=1, show_progress_bar=False, seed=0, copy=True,
+    )
+    floor = 1.0 / (n_perms + 1)
+    assert df.loc[MARKERS[0], "pval_sim"] == pytest.approx(floor)
+    assert df.loc[MARKERS[0], "pval_z_sim"] < floor / 100
+
+
+# --- the consistency count ----------------------------------------------
+
+
+def _two_area_adata(n=500, seed=11):
+    """Area A: marker 0 follows x (strong structure). Area B: everything iid.
+
+    The pooled I for marker 0 is clearly positive, and that is the number a
+    p-value judges. The per-area values are what say it comes from ONE image.
+    """
+    rng = np.random.default_rng(seed)
+    xy_a = rng.uniform(0, 1000, (n, 2))
+    xy_b = rng.uniform(0, 1000, (n, 2)) + np.array([5000.0, 0.0])
+    X = rng.standard_normal((2 * n, len(MARKERS))).astype(np.float32)
+    X[:n, 0] = (xy_a[:, 0] / 1000.0 + rng.normal(0, 0.3, n)).astype(np.float32)
+    a = ad.AnnData(X=X)
+    a.var_names = pd.Index(list(MARKERS))
+    a.obsm["spatial"] = np.vstack([xy_a, xy_b])
+    area_ids = np.array([0] * n + [1] * n)
+    # Area B sits 4000 px clear of area A, so a 15-NN graph never crosses and
+    # is block-diagonal without going through build_spatial_graph.
+    sq.gr.spatial_neighbors(a, coord_type="generic", n_neighs=15)
+    return a, area_ids
+
+
+def test_autocorr_passes_mirrors_moran_and_geary():
+    passes = _base_globals()["autocorr_passes"]
+    assert passes(0.05, "moran") and not passes(0.049, "moran")
+    assert passes(0.95, "geary") and not passes(0.951, "geary")
+    assert passes(0.2, "moran", threshold=0.1) and not passes(0.2, "moran", threshold=0.3)
+    assert not passes(None, "moran") and not passes(float("nan"), "geary")
+
+
+def test_consistency_count_separates_one_image_structure_from_cohort_structure():
+    _NOTES.clear()
+    a, area_ids = _two_area_adata()
+    task = _Task()
+    n = _base_globals()["run_moran_i"](
+        a, task, measurements=MARKERS, n_permutations=99,
+        area_ids=area_ids, area_names=["img_A", "img_B"],
+    )
+    assert n == len(MARKERS), _NOTES
+    payload = json.loads(task.outputs["spatial_autocorr"])
+    per_area = json.loads(task.outputs["spatial_autocorr_per_area"])
+    structured = payload[MARKERS[0]]
+    assert structured["I"] > 0.05
+    assert structured["pval"] < 0.01  # the guard alone would call this a cohort finding
+    assert structured["n_areas"] == 2
+    assert structured["areas_above"] == 1  # ... and the count says it is one image
+    assert per_area[MARKERS[0]]["img_A"] > 0.3
+    assert abs(per_area[MARKERS[0]]["img_B"]) < 0.05
+    for noise in MARKERS[1:]:
+        assert payload[noise]["areas_above"] == 0
+    assert task.outputs["spatial_autocorr_areas"] == "2 area(s) evaluated"
+
+
+def test_small_areas_do_not_vote():
+    a, area_ids = _two_area_adata(n=500)
+    # Shrink area B below the minimum by relabelling most of it into A.
+    min_cells = _const("AUTOCORR_MIN_AREA_CELLS")
+    area_ids = area_ids.copy()
+    area_ids[500:1000 - (min_cells - 1)] = 0
+    res = _base_globals()["compute_autocorr"](
+        a, "moran", MARKERS, n_permutations=0, area_ids=area_ids,
+        area_names=["img_A", "img_B"],
+    )
+    assert res["n_areas"] == 1
+    assert [lab for lab, _ in res["skipped_areas"]] == ["img_B"]
+    assert "1 skipped" in _base_globals()["describe_areas"](
+        res["n_areas"], res["skipped_areas"])
 
 
 def test_pick_p_column_skips_missing_and_nan():

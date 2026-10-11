@@ -106,6 +106,9 @@ public class SavedClusteringResult {
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
     private String spatialAutocorrPMethod;
+    private String spatialAutocorrPerAreaJson;
+    private Double spatialAutocorrThreshold;
+    private String spatialAutocorrAreas;
 
     // LLM Cluster Explainer (optional; null on older saves)
     private LlmExplanationsBundle llmExplanations;
@@ -317,6 +320,15 @@ public class SavedClusteringResult {
     public String getSpatialAutocorrPMethod() { return spatialAutocorrPMethod; }
     public void setSpatialAutocorrPMethod(String v) { this.spatialAutocorrPMethod = v; }
 
+    public String getSpatialAutocorrPerAreaJson() { return spatialAutocorrPerAreaJson; }
+    public void setSpatialAutocorrPerAreaJson(String v) { this.spatialAutocorrPerAreaJson = v; }
+
+    public Double getSpatialAutocorrThreshold() { return spatialAutocorrThreshold; }
+    public void setSpatialAutocorrThreshold(Double v) { this.spatialAutocorrThreshold = v; }
+
+    public String getSpatialAutocorrAreas() { return spatialAutocorrAreas; }
+    public void setSpatialAutocorrAreas(String v) { this.spatialAutocorrAreas = v; }
+
     // --- LLM Cluster Explainer ---
     public LlmExplanationsBundle getLlmExplanations() { return llmExplanations; }
     public void setLlmExplanations(LlmExplanationsBundle bundle) { this.llmExplanations = bundle; }
@@ -385,6 +397,9 @@ public class SavedClusteringResult {
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
         saved.setSpatialAutocorrPMethod(result.getSpatialAutocorrPMethod());
+        saved.setSpatialAutocorrPerAreaJson(result.getSpatialAutocorrPerAreaJson());
+        saved.setSpatialAutocorrThreshold(result.getSpatialAutocorrThreshold());
+        saved.setSpatialAutocorrAreas(result.getSpatialAutocorrAreas());
 
         // Plot-click navigation + representative crops.
         saved.setRepresentativesJson(result.getRepresentativesJson());
@@ -486,6 +501,9 @@ public class SavedClusteringResult {
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
         result.setSpatialAutocorrPMethod(spatialAutocorrPMethod);
+        result.setSpatialAutocorrPerAreaJson(spatialAutocorrPerAreaJson);
+        result.setSpatialAutocorrThreshold(spatialAutocorrThreshold);
+        result.setSpatialAutocorrAreas(spatialAutocorrAreas);
         result.setNoiseRowIndex(getNoiseRowIndex());
         result.setNNoiseCells(nNoiseCells);
         result.setQualityWarnings(qualityWarnings);
