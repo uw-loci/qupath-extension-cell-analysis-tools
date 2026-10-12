@@ -91,6 +91,10 @@ public class ClusterExplainerPanel {
     private Spinner<Integer> topMarkersSpinner;
     private Button runBtn;
     private Button cancelBtn;
+    // CHATBOT provider: the round trip by hand.
+    private VBox chatbotBox;
+    private Button copyPromptBtn;
+    private TextArea pasteArea;
     private Label statusLabel;
     private ProgressBar progressBar;
     private TableView<ClusterExplanation> resultsTable;
@@ -174,12 +178,13 @@ public class ClusterExplainerPanel {
      */
     private Node buildUntestedBanner() {
         Label warn = new Label(
-                "EXPERIMENTAL. Anthropic (Claude): this path has been run end-to-end "
-                + "against the live API with a real key. Ollama: never run, by anyone -- "
-                + "expect to be the first, and please report what happens. In both cases "
-                + "the OUTPUT is unvalidated: every suggestion is a hint to check, not a "
-                + "conclusion. Confirm it against the Marker Rankings tab and your own "
-                + "domain knowledge before relying on it.");
+                "EXPERIMENTAL. Any chatbot (copy prompt, paste reply): run end-to-end, no "
+                + "key needed. Anthropic (Claude): run end-to-end against the live API "
+                + "with a real key. Ollama: never run, by anyone -- expect to be the first, "
+                + "and please report what happens. In every case the OUTPUT is "
+                + "unvalidated: every suggestion is a hint to check, not a conclusion. "
+                + "Confirm it against the Marker Rankings tab and your own domain "
+                + "knowledge before relying on it.");
         warn.setWrapText(true);
         warn.setMaxWidth(Double.MAX_VALUE);
         // Without this the banner is one line tall and the sentence is clipped --
@@ -200,7 +205,7 @@ public class ClusterExplainerPanel {
         heading.setStyle("-fx-font-weight: bold;");
 
         providerCombo = new ComboBox<>(FXCollections.observableArrayList(
-                Provider.NONE, Provider.ANTHROPIC, Provider.OLLAMA));
+                Provider.NONE, Provider.CHATBOT, Provider.ANTHROPIC, Provider.OLLAMA));
         // Say which path has been run IN the list, not only in the tooltip: the
         // choice is made here, and a tooltip is not read before choosing.
         providerCombo.setConverter(new javafx.util.StringConverter<Provider>() {
@@ -208,6 +213,7 @@ public class ClusterExplainerPanel {
             public String toString(Provider p) {
                 if (p == null) return "";
                 switch (p) {
+                    case CHATBOT: return "Any chatbot (copy prompt, paste reply) -- no key";
                     case ANTHROPIC: return "Anthropic (Claude API)";
                     case OLLAMA: return "Ollama (local) -- never run";
                     default: return "None";
@@ -223,6 +229,10 @@ public class ClusterExplainerPanel {
         providerCombo.getSelectionModel().select(initial);
         providerCombo.setTooltip(Tooltips.of(
                 "Which LLM service to call.\n\n"
+                + "Any chatbot = you carry the prompt. Copy it, paste it into\n"
+                + "claude.ai, ChatGPT, Gemini, Copilot or a local model you already\n"
+                + "use, paste the reply back here. No key, nothing leaves QuPath\n"
+                + "except by your clipboard. Your own subscription does the work.\n\n"
                 + "Anthropic = remote Claude API (paid, requires a key). Run\n"
                 + "end-to-end against the live API, so the path works.\n\n"
                 + "Ollama = local server (free, requires 'ollama serve' running).\n"
@@ -261,6 +271,8 @@ public class ClusterExplainerPanel {
                 QpcatPreferences.setLlmAnthropicModel(newV);
             } else if (p == Provider.OLLAMA) {
                 QpcatPreferences.setLlmOllamaModel(newV);
+            } else if (p == Provider.CHATBOT) {
+                QpcatPreferences.setLlmChatbotLabel(newV);
             }
         });
 
@@ -427,7 +439,53 @@ public class ClusterExplainerPanel {
         HBox runRow = new HBox(8, runBtn, cancelBtn);
         runRow.setAlignment(Pos.CENTER_LEFT);
 
-        return new VBox(6, heading, scopeRow, topRow, runRow, statusLabel, progressBar);
+        return new VBox(6, heading, scopeRow, topRow, buildChatbotBox(), runRow,
+                statusLabel, progressBar);
+    }
+
+    /**
+     * The three steps of the round trip by hand. Shown only for the CHATBOT
+     * provider; the Run button becomes step 3.
+     */
+    private VBox buildChatbotBox() {
+        copyPromptBtn = new Button("1. Copy prompt to clipboard");
+        copyPromptBtn.setOnAction(e -> onCopyPromptPressed());
+        copyPromptBtn.setTooltip(Tooltips.of(
+                "Builds the same prompt the API providers get -- the clusters and\n"
+                + "their top markers, with the instructions -- and puts it on the\n"
+                + "clipboard. Paste it into any chatbot."));
+        copyPromptBtn.setAccessibleText("Copy the explainer prompt to the clipboard");
+
+        Label step2 = new Label("2. Paste the chatbot's whole reply here "
+                + "(a JSON list; fences and chat around it are fine):");
+        step2.setWrapText(true);
+        WrapHeight.bind(step2);
+
+        pasteArea = new TextArea();
+        pasteArea.setPromptText("[{\"cluster_id\": 0, \"phenotype\": ...}, ...]");
+        pasteArea.setPrefRowCount(3);
+        pasteArea.setWrapText(true);
+        pasteArea.setAccessibleText("Paste the chatbot's reply");
+        pasteArea.textProperty().addListener((obs, o, n) -> refreshState());
+
+        chatbotBox = new VBox(6, copyPromptBtn, step2, pasteArea);
+        chatbotBox.setVisible(false);
+        chatbotBox.setManaged(false);
+        return chatbotBox;
+    }
+
+    /** Step 1: ask Python for the prompt (one contract, built in one place) and copy it. */
+    private void onCopyPromptPressed() {
+        if (result == null || !result.hasMarkerRankings()) {
+            statusLabel.setText("No marker rankings available for this run.");
+            return;
+        }
+        ExplainRequest req = buildBaseRequest(Provider.CHATBOT);
+        req.pastedResponse = "";
+        if (scopeRadioOne.isSelected() && clusterCombo.getValue() != null) {
+            req.clusterIds = List.of(clusterCombo.getValue());
+        }
+        dispatch(req);
     }
 
     @SuppressWarnings("unchecked")
@@ -590,6 +648,10 @@ public class ClusterExplainerPanel {
             statusLabel.setText("No marker rankings available for this run.");
             return;
         }
+        if (provider == Provider.CHATBOT && pasteArea.getText().isBlank()) {
+            statusLabel.setText("Copy the prompt (step 1), get a reply, and paste it (step 2) first.");
+            return;
+        }
 
         ExplainRequest req = buildBaseRequest(provider);
         if (scopeRadioOne.isSelected() && clusterCombo.getValue() != null) {
@@ -634,6 +696,8 @@ public class ClusterExplainerPanel {
         req.endpoint = endpointField.getText();
         req.markerTableJson = result.getMarkerRankingsJson();
         req.topN = topMarkersSpinner.getValue();
+        req.pastedResponse = provider == Provider.CHATBOT && pasteArea != null
+                ? pasteArea.getText() : "";
         req.timeoutSec = QpcatPreferences.getLlmTimeoutSec();
         // Also commit here: the button can be fired from the keyboard without
         // the model box ever losing focus.
@@ -678,8 +742,11 @@ public class ClusterExplainerPanel {
     private void dispatch(ExplainRequest req) {
         cancelled.set(false);
         setInFlight(true);
-        statusLabel.setText("Calling " + req.provider.name() + " ("
-                + safeStr(req.model) + ")...");
+        boolean promptOnly = req.provider == Provider.CHATBOT
+                && (req.pastedResponse == null || req.pastedResponse.isBlank());
+        statusLabel.setText(promptOnly ? "Building the prompt..."
+                : req.provider == Provider.CHATBOT ? "Reading the pasted reply..."
+                : "Calling " + req.provider.name() + " (" + safeStr(req.model) + ")...");
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
 
@@ -718,6 +785,16 @@ public class ClusterExplainerPanel {
                     LlmExplainerService.writeAuditLog(req, finalRes, durationMs);
                     return;
                 }
+                if (promptOnly) {
+                    // Nothing was answered yet, so nothing to merge or audit.
+                    ClipboardContent cc = new ClipboardContent();
+                    cc.putString(finalRes.prompt);
+                    Clipboard.getSystemClipboard().setContent(cc);
+                    statusLabel.setText("Prompt copied (" + finalRes.prompt.length()
+                            + " characters). Paste it into your chatbot, then paste the "
+                            + "reply in step 2 and press '3. Read pasted reply'.");
+                    return;
+                }
                 mergeResults(req, finalRes);
                 statusLabel.setText("Done. " + finalRes.explanations.size()
                         + " clusters explained ("
@@ -738,15 +815,27 @@ public class ClusterExplainerPanel {
         Provider p = providerCombo != null ? providerCombo.getValue() : Provider.NONE;
         boolean anthropic = (p == Provider.ANTHROPIC);
         boolean ollama = (p == Provider.OLLAMA);
+        boolean chatbot = (p == Provider.CHATBOT);
         if (apiKeyField != null) apiKeyField.setDisable(!anthropic);
         if (endpointField != null) endpointField.setDisable(!ollama);
         if (keyWarningLabel != null) keyWarningLabel.setVisible(anthropic);
+        if (chatbotBox != null) {
+            chatbotBox.setVisible(chatbot);
+            chatbotBox.setManaged(chatbot);
+        }
+        if (runBtn != null) runBtn.setText(chatbot ? "3. Read pasted reply" : "Run Explainer");
+        if (cancelBtn != null) {
+            cancelBtn.setVisible(!chatbot);
+            cancelBtn.setManaged(!chatbot);
+        }
 
         boolean canRun;
         if (p == Provider.NONE || p == null) {
             canRun = false;
         } else if (anthropic) {
             canRun = !apiKeyField.getText().isEmpty();
+        } else if (chatbot) {
+            canRun = pasteArea != null && !pasteArea.getText().isBlank();
         } else {
             canRun = true;
         }
@@ -763,6 +852,10 @@ public class ClusterExplainerPanel {
         if (endpointField != null) endpointField.setDisable(inFlight
                 || providerCombo.getValue() != Provider.OLLAMA);
         if (topMarkersSpinner != null) topMarkersSpinner.setDisable(inFlight);
+        if (copyPromptBtn != null) copyPromptBtn.setDisable(inFlight);
+        if (pasteArea != null) pasteArea.setDisable(inFlight);
+        // Back to the provider-specific enablement, which the lines above overrode.
+        if (!inFlight) refreshState();
         if (scopeRadioAll != null) scopeRadioAll.setDisable(inFlight);
         if (scopeRadioOne != null) scopeRadioOne.setDisable(inFlight);
         if (clusterCombo != null) clusterCombo.setDisable(inFlight || scopeRadioAll.isSelected());
@@ -879,6 +972,13 @@ public class ClusterExplainerPanel {
             modelCombo.setItems(FXCollections.observableArrayList(
                     "llama3.1:8b", "phi3:14b"));
             modelCombo.setValue(QpcatPreferences.getLlmOllamaModel());
+            modelCombo.setDisable(false);
+        } else if (p == Provider.CHATBOT) {
+            // A label for the record, not a model id anything is sent to: the
+            // saved result and the audit log say which chatbot answered.
+            modelCombo.setItems(FXCollections.observableArrayList(
+                    "claude.ai", "ChatGPT", "Gemini", "Copilot", "local model"));
+            modelCombo.setValue(QpcatPreferences.getLlmChatbotLabel());
             modelCombo.setDisable(false);
         } else {
             modelCombo.setItems(FXCollections.observableArrayList());

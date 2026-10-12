@@ -114,6 +114,22 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   implying its number was corrected. Moran's I is given the same permutation count as
   Geary's C (3.2 s for 8 markers over 3,098 cells).
 
+### Added
+
+- **The Cluster Explainer works with any chatbot, with no API key.** A new provider, *Any
+  chatbot (copy prompt, paste reply)*, replaces the Run button with three steps: copy the
+  prompt to the clipboard, paste it into claude.ai / ChatGPT / Gemini / Copilot / a local
+  model you already use, paste the reply back, read it. The prompt is the one the API
+  providers get -- built in one place in `run_llm_explainer.py`, from the same marker
+  rankings, with the same no-p-value rule -- and the reply goes through the same parser,
+  fences and chat around the JSON included. The Model box becomes a label for the record;
+  the saved result and the audit log carry provider `CHATBOT`, that label, and the prompt and
+  reply verbatim; token counts are recorded as unknown. Run end-to-end on 2026-10-12 in a
+  real QuPath: prompt copied off the system clipboard (3,124 characters, six clusters),
+  answered by a Claude model outside QuPath, pasted back, six rows in the table. This is the
+  universal half of the plan to drop the API-key requirement; the MCP half, for agents that
+  can call into QuPath, is next.
+
 ### Changed
 
 - **The Moran's I and Geary's C tables now lead with the statistic, ranked, and show a

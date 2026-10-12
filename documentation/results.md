@@ -497,7 +497,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 | **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
-| **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
+| **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions, from any chatbot you already use (copy the prompt, paste the reply; no key) or the Anthropic API. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 
 <a name="co-occurrence-tabs"></a>
 ### Co-occurrence: the value, the radius, and what each view aggregates

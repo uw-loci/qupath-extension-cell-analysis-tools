@@ -3,15 +3,17 @@
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
 
-> **What has actually been run, per provider.** *Anthropic (Claude API)*: run end-to-end
-> against the live API with a real key, on 2026-09-27 -- `claude-sonnet-5`, seven clusters
-> from the synthetic demo dataset, 23 seconds. *Ollama*: **never run, by anyone.** It is
-> built from the documented API and has not been exercised once, so if you are the first to
-> try it, a failure is as likely to be ours as yours -- please
-> [report](troubleshooting.md#reporting-a-bug) it.
+> **What has actually been run, per provider.** *Any chatbot (copy prompt, paste reply)*:
+> run end-to-end on 2026-10-12 -- prompt copied from the tab, answered by a Claude model
+> outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *Anthropic
+> (Claude API)*: run end-to-end against the live API with a real key, on 2026-09-27 --
+> `claude-sonnet-5`, seven clusters from the synthetic demo dataset, 23 seconds. *Ollama*:
+> **never run, by anyone.** It is built from the documented API and has not been exercised
+> once, so if you are the first to try it, a failure is as likely to be ours as yours --
+> please [report](troubleshooting.md#reporting-a-bug) it.
 >
 > The two claims are separate. "Never run" is about the code path. *Unvalidated* is about
-> the answer, and applies to both providers: the suggestions are proposals to check, not
+> the answer, and applies to every provider: the suggestions are proposals to check, not
 > labels to publish.
 
 The prompt template, output JSON shape, and audit-log row format may also change.
@@ -28,6 +30,10 @@ The prompt template, output JSON shape, and audit-log row format may also change
 
 Choose one of:
 
+- **Any chatbot you already use** -- claude.ai, ChatGPT, Gemini, Copilot, a local model with a
+  chat window. Nothing to install and no key: you carry the prompt over by clipboard and paste
+  the reply back. Your own subscription does the work, and nothing leaves QuPath except what
+  you paste.
 - **Anthropic Claude** -- a current Anthropic API key from [console.anthropic.com](https://console.anthropic.com/). Pay-as-you-go (~$0.003-0.015 per cluster set in current Sonnet pricing; see *Cost expectations* below).
 - **A running Ollama instance** -- [Ollama](https://ollama.com/) installed locally (or reachable on your network) with at least one chat model pulled. Recommended models: `llama3.1:8b` (4-5 GB, fast, decent), `qwen2.5:14b` (~9 GB, more accurate), or any other model you trust. No API costs; no data leaves your machine.
 
@@ -38,7 +44,9 @@ OpenAI is **not** supported in v1.
 1. Open an image (or project), run **Find cell populations (clustering)...** to completion
 2. In the results dialog, open the **Cluster Explainer (LLM) [Experimental]** tab -- it is the **last** tab, after the data tabs
 3. In the tab itself, select a provider, model, and (for Anthropic) paste your API key
-4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model
+4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model. With **Any
+   chatbot** the button is replaced by three steps: **1. Copy prompt to clipboard**, paste it
+   into the chatbot, paste its reply into the box, **3. Read pasted reply**
 5. Read the table: suggested phenotype, confidence, supporting markers, one-paragraph rationale per cluster
 
 The results are also persisted to `SavedClusteringResult` so reopening past results shows the same table without re-paying the API call.
@@ -60,6 +68,33 @@ than taking on trust:
   population by cell state was what you wanted.
 
 ### Provider Setup
+
+<details>
+<summary><strong>Any chatbot (copy prompt, paste reply) -- no key</strong></summary>
+
+1. Pick **Any chatbot (copy prompt, paste reply) -- no key** as the provider. The **Model**
+   box becomes a label for the record (`claude.ai`, `ChatGPT`, ...); type whichever you are
+   about to use. It is saved with the result and written to the audit log, so a methods
+   section can still say what answered.
+2. Press **1. Copy prompt to clipboard**. The prompt is the one the API providers get --
+   built in the same place, from the same marker rankings, with the same instructions
+   (including the rule that no p-values are sent and no significance language is wanted).
+   The status line reports its length.
+3. Paste it into the chatbot and send. Most chatbots return the JSON list inside a code
+   fence with a sentence or two around it; that is fine.
+4. Copy the whole reply, paste it into the box under step 2, and press **3. Read pasted
+   reply**. The reply goes through the same parser as a live response: a cluster the chatbot
+   skipped gets an "LLM did not return a row" line rather than an error, and a reply with no
+   JSON in it at all gives that line for every cluster -- the usual cause is the chatbot
+   answering in prose, so ask it again for only the JSON array.
+
+What you give up against the API path: token counts (recorded as unknown), and the
+one-click re-run of a single cluster becomes copy, paste, paste again. What you gain: it
+works with every chatbot that exists, including ones with no API, and no key is ever typed
+into QuPath. The audit log entry has provider `CHATBOT`, the label you typed as the model,
+and the prompt and reply verbatim.
+
+</details>
 
 <details>
 <summary><strong>Anthropic Claude (cloud, paid)</strong></summary>

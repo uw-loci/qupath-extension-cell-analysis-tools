@@ -5259,8 +5259,10 @@ public class ClusteringDialog {
                     // put two near-identical warnings one above the other, which reads
                     // as a UI mistake and makes both easier to skip. This bar keeps
                     // only what it uniquely offers.
-                    "Asks a remote or local LLM to suggest cell-type names for each "
-                    + "cluster from its top markers. The API key is held in memory only; "
+                    "Asks an LLM to suggest cell-type names for each cluster from its top "
+                    + "markers. 'Any chatbot' needs no key: copy the prompt, paste it into "
+                    + "the chatbot you already use, paste the reply back. The Anthropic "
+                    + "API key, if you use that path instead, is held in memory only; "
                     + "re-enter it each QuPath session, or set QPCAT_ANTHROPIC_KEY in "
                     + "your shell.",
                     "cluster-explainer-llm-tab"));

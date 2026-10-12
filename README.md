@@ -53,7 +53,7 @@ caveats.
 - **[Marker gating with auto-thresholds](documentation/phenotyping.md#running-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
 - **[Cleaner clusters via tissue context](documentation/clustering.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
 - **[Annotate a few cells, classify the rest](documentation/autoencoder.md)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
-- **[Get a phenotype suggestion in plain English](documentation/llm-explainer.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Anthropic Claude or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
+- **[Get a phenotype suggestion in plain English](documentation/llm-explainer.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Any chatbot by clipboard (no key needed), Anthropic Claude, or a local Ollama endpoint; prompt and response always logged. *Beta, largely untested*</sub>
 
 **Ask spatial questions**
 
@@ -85,7 +85,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
 - **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/setup.md#cpu-or-gpu) for details on what does and doesn't benefit.
-- **LLM provider account or local Ollama** (optional) -- required only for the *Cluster Explainer (LLM) [Experimental]* feature (the Anthropic path has been run end-to-end against the live API; the Ollama path has never been run). Choose one of: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
+- **LLM provider account or local Ollama** (optional) -- for the *Cluster Explainer (LLM) [Experimental]* feature. Nothing is required if you use the "Any chatbot" provider (copy the prompt, paste it into claude.ai / ChatGPT / Gemini / Copilot / your own model, paste the reply back). Alternatively, choose: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
 
 ---
 
@@ -322,9 +322,9 @@ This is a lighter-weight alternative to BANKSY when you want spatial awareness w
 
 **Cluster results dialog > Cluster Explainer (LLM) [Experimental] tab** turns each cluster's top-marker statistics into a plain-English phenotype suggestion with rationale. The LLM reads only the per-cluster marker rankings and cluster summary statistics -- no pixels, no cell-level data, no patient-identifiable information.
 
-> **[UNTESTED]** This feature has not yet been validated end-to-end on real data. The LLM calls, provider integrations (Anthropic / Ollama), and rendered output are unverified -- treat any phenotype suggestion as provisional and validate it independently before relying on it. Behavior may change.
+> **[PARTIALLY TESTED]** The "Any chatbot" and "Anthropic (Claude API)" paths have been run end-to-end. Ollama has never been run, by anyone. In all cases, the OUTPUT is unvalidated -- treat any phenotype suggestion as provisional and validate it independently before relying on it. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
 
-**What has been run, per provider.** *Anthropic (Claude API)*: run end-to-end against the live API with a real key -- `claude-sonnet-5`, seven clusters, 23 seconds, on 2026-09-27. *Ollama*: never run, by anyone; if you try it first, a failure is as likely to be ours as yours, so please report it. Separately, and for both: the OUTPUT is unvalidated, so the suggestions are proposals to check rather than labels to publish. The surface area (prompt template, output JSON, audit-log row shape) may also change. The audit log is the canonical record of every call. Both Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload reaches the log.
+**What has been run, per provider.** *Any chatbot (copy prompt, paste reply)*: run end-to-end on 2026-10-12 -- prompt copied from the tab, answered by a Claude model outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *Anthropic (Claude API)*: run end-to-end against the live API with a real key -- `claude-sonnet-5`, seven clusters, 23 seconds, on 2026-09-27. *Ollama*: never run, by anyone; if you try it first, a failure is as likely to be ours as yours, so please report it.
 
 Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping; QP-CAT's variant uses Anthropic + Ollama (not OpenAI), reads marker statistics only (no pixels, no patient metadata), and writes a full prompt+response audit log on every call. See [the LLM explainer documentation](documentation/llm-explainer.md) for the workflow.
 
@@ -332,6 +332,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 
 | Provider | Pros | Cons | Default model |
 |---|---|---|---|
+| **Any chatbot (copy prompt, paste reply)** | No key, no installation, works with any LLM (claude.ai, ChatGPT, Gemini, Copilot, Ollama, local model) | Multi-step workflow (copy → paste into chatbot → paste back) | — (user types chatbot name for the record) |
 | **Anthropic Claude** | Strong reasoning, structured output via tool-use, hosted | Costs money per call; key must be re-entered each session | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
@@ -341,7 +342,7 @@ OpenAI is intentionally **not** supported in v1.
 
 1. After clustering completes (or after "View Past Results"), open the **Cluster Explainer (LLM) [Experimental]** tab in the results dialog
 2. Pick a provider and model directly in the tab, and -- for Anthropic -- paste your API key
-3. Click **Run Explainer**. One LLM call is made with all clusters' Wilcoxon marker rankings + cell counts as input
+3. For the "Any chatbot" provider: **1. Copy prompt to clipboard** → paste into your chatbot (claude.ai, ChatGPT, etc.) → copy the reply → paste it into the tab → **3. Read pasted reply**. For Anthropic or Ollama: click **Run Explainer** to make one batched LLM call with all clusters' Wilcoxon marker rankings + cell counts as input
 4. Results render as a per-cluster table: suggested phenotype, confidence band, top supporting markers, one-paragraph rationale
 5. The full prompt and full response are written to the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag
 

@@ -20,10 +20,16 @@ Per the Phase 2 design contract (02_design.md, Carried-forward contracts):
     rationale explaining why ("insufficient signal" path).
 
 Inputs (Appose 0.10.0+ injects these as bare variables, NOT task.inputs):
-  provider             str   -- "ANTHROPIC" or "OLLAMA"
-  model                str   -- provider-specific model id
-  api_key              str   -- Anthropic key (empty string for Ollama)
-  endpoint             str   -- Ollama base URL (empty string for Anthropic)
+  provider             str   -- "ANTHROPIC", "OLLAMA", or "CHATBOT" (the user
+                                carries the prompt to any chatbot by hand and
+                                pastes the reply back; no key, no network)
+  model                str   -- provider-specific model id; for CHATBOT, a label
+                                the user typed naming the chatbot, for the record
+  api_key              str   -- Anthropic key (empty string otherwise)
+  endpoint             str   -- Ollama base URL (empty string otherwise)
+  pasted_response      str   -- CHATBOT only: the reply the user pasted. Empty
+                                means "just give me the prompt": the outputs
+                                carry the prompt and no explanations, no error.
   marker_table_json    str   -- JSON dict {cluster_id: [{name, score, ...}]}
   top_n                int   -- max markers per cluster to include in the prompt
   cluster_ids          str   -- JSON list of cluster ids to explain (or "all")
@@ -59,7 +65,7 @@ PROMPT_TEMPLATE_ID = "cluster_phenotype_v2"
 # ---------------------------------------------------------------------------
 
 def run_explainer(provider, model, api_key, endpoint, marker_table_json,
-                  top_n, cluster_ids_spec, timeout_sec):
+                  top_n, cluster_ids_spec, timeout_sec, pasted_response=""):
     """
     Drive a single LLM call and return a dict suitable for assignment to
     `task.outputs`. Callers should pass through the dict's keys verbatim.
@@ -98,9 +104,15 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
     out["prompt"] = prompt
     out["prompt_hash"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
+    if (provider or "").strip().upper() == "CHATBOT" and not (pasted_response or "").strip():
+        # Step one of the round trip: the caller wants the prompt to carry to a
+        # chatbot. Nothing to parse yet, and nothing has gone wrong.
+        return out
+
     try:
         raw, input_tokens, output_tokens = _call_provider(
-            provider, model, api_key, endpoint, prompt, int(timeout_sec))
+            provider, model, api_key, endpoint, prompt, int(timeout_sec),
+            pasted_response=pasted_response)
     except _LlmError as e:
         out["error_type"] = e.error_type
         out["error_detail"] = scrub_secrets(e.detail)
@@ -229,7 +241,8 @@ class _LlmError(Exception):
         self.detail = detail
 
 
-def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec):
+def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec,
+                   pasted_response=""):
     """
     Dispatch to the chosen provider. Returns
     ``(raw_response_text, input_tokens, output_tokens)``. Either token count
@@ -247,6 +260,12 @@ def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec):
         return _call_anthropic(model, api_key, prompt, timeout_sec)
     if provider_norm == "OLLAMA":
         return _call_ollama(model, endpoint, prompt, timeout_sec)
+    if provider_norm == "CHATBOT":
+        # The "call" already happened in a browser or desktop app the user
+        # owns; the reply arrives by paste. Same parser as the live providers.
+        if not (pasted_response or "").strip():
+            raise _LlmError("MALFORMED_RESPONSE", "Nothing was pasted.")
+        return str(pasted_response), -1, -1
     raise _LlmError(
         "UNKNOWN",
         "Unsupported provider: " + str(provider))
@@ -512,6 +531,11 @@ def _safe_str(obj):
 # ---------------------------------------------------------------------------
 # Appose task entry point
 # ---------------------------------------------------------------------------
+
+def _optional_input(name, default):
+    """An injected input that older Java callers do not send."""
+    return globals().get(name, default)
+
 # When this module is loaded as an Appose task script (loaded fresh from
 # JAR resources every run, per the QP-CAT pattern), Appose 0.10.0+ injects
 # task inputs as bare variables. We collect them here, call run_explainer,
@@ -527,6 +551,7 @@ try:
         top_n=top_n,
         cluster_ids_spec=cluster_ids,
         timeout_sec=timeout_sec,
+        pasted_response=_optional_input("pasted_response", ""),
     )
     for _k, _v in _result.items():
         task.outputs[_k] = _v

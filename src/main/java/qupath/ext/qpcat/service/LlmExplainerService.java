@@ -39,9 +39,13 @@ public class LlmExplainerService {
 
     private static final Logger logger = LoggerFactory.getLogger(LlmExplainerService.class);
 
-    /** Provider enum surfaced in the UI and the audit log. */
+    /**
+     * Provider enum surfaced in the UI and the audit log. {@code CHATBOT} is
+     * the round trip by hand: the prompt goes to any chatbot the user already
+     * has, by clipboard, and the reply comes back by paste. No key, no network.
+     */
     public enum Provider {
-        NONE, ANTHROPIC, OLLAMA
+        NONE, ANTHROPIC, OLLAMA, CHATBOT
     }
 
     /** Marshalled result of a single explain call. */
@@ -100,6 +104,8 @@ public class LlmExplainerService {
         public String resultName = "";      // pi-1: clustering-result name/hash
         public String imageName = "";       // pi-1: image-level provenance
         public String operatorUser = "";    // pi-5: OS user attribution
+        /** CHATBOT only: the reply the user pasted. Empty asks for the prompt alone. */
+        public String pastedResponse = "";
     }
 
     /**
@@ -148,6 +154,7 @@ public class LlmExplainerService {
             inputs.put("cluster_ids", new Gson().toJson(req.clusterIds));
         }
         inputs.put("timeout_sec", Math.max(5, req.timeoutSec));
+        inputs.put("pasted_response", req.pastedResponse != null ? req.pastedResponse : "");
 
         Task task;
         try {
