@@ -55,8 +55,12 @@ class McpServerControllerTest {
             squatter.bind(new java.net.InetSocketAddress(
                     java.net.InetAddress.getLoopbackAddress(), McpServerController.FIRST_PORT));
             controller.start();
-            assertThat(controller.getPort()).isEqualTo(McpServerController.FIRST_PORT + 1);
-            assertThat(controller.getUrl()).endsWith(":" + (McpServerController.FIRST_PORT + 1) + "/mcp");
+            // Not "exactly FIRST_PORT + 1": another process on the machine may hold that too
+            // (a second QuPath did, during Phase 3), and the scan is allowed to walk past it.
+            assertThat(controller.getPort())
+                    .isGreaterThan(McpServerController.FIRST_PORT)
+                    .isLessThanOrEqualTo(McpServerController.LAST_PORT);
+            assertThat(controller.getUrl()).endsWith(":" + controller.getPort() + "/mcp");
         }
     }
 

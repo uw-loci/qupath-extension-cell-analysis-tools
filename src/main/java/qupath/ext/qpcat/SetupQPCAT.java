@@ -608,6 +608,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // ("(off)" / "(ON - port N)"), so the submenu alone says whether a socket
         // is open. Always enabled: the off-switch must never be unreachable.
         CheckMenuItem mcpServerItem = McpServerWindow.createMenuItem(qupath);
+        // Re-shows the window (address, token) while the server is on; the tick
+        // above stops the server instead. Disabled while off, when the tick opens it.
+        MenuItem mcpWindowItem = McpServerWindow.createShowWindowItem(qupath);
 
         // ---- Menu structure -------------------------------------------------
         // Six rows, not nineteen. The two things QP-CAT is FOR -- finding
@@ -664,7 +667,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 new SeparatorMenuItem(),
                 documentationItem,
                 reportBugItem,
-                mcpServerItem);
+                mcpServerItem,
+                mcpWindowItem);
 
         extensionMenu.getItems().addAll(
                 // -- The two main tools --

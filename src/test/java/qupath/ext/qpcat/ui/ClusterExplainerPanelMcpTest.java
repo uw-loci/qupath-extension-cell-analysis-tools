@@ -9,6 +9,8 @@ import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.Region;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.mcp.ExplanationListeners;
@@ -105,6 +107,22 @@ class ClusterExplainerPanelMcpTest {
 
         FxHarness.onFx(panel::dispose);
         assertThat(ExplanationListeners.count(name)).as("window closed, listener gone").isZero();
+    }
+
+    @Test
+    void theTabScrollsWhenShorterThanItsContent() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), null);
+        Node root = FxHarness.onFxGet(panel::build);
+        // At the results window's default height the table fell below the tab's
+        // edge with nothing to scroll; the content must keep its preferred height
+        // inside a ScrollPane that otherwise fills the tab.
+        assertThat(root).isInstanceOf(ScrollPane.class);
+        ScrollPane scroll = (ScrollPane) root;
+        assertThat(scroll.isFitToWidth()).isTrue();
+        assertThat(scroll.isFitToHeight()).isTrue();
+        assertThat(scroll.getHbarPolicy()).isEqualTo(ScrollPane.ScrollBarPolicy.NEVER);
+        assertThat(((Region) scroll.getContent()).getMinHeight()).isEqualTo(Region.USE_PREF_SIZE);
     }
 
     @Test

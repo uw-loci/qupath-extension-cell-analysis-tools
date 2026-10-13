@@ -15,6 +15,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.RadioButton;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
@@ -32,6 +33,7 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,7 +195,18 @@ public class ClusterExplainerPanel {
             unregisterMcp = ExplanationListeners.register(resultName, this::onExplanationsWritten);
             loadSavedExplanations();
         }
-        return root;
+
+        // At the results window's default height the Run section pushes the
+        // status line and the Suggestions table below the tab's bottom edge, with
+        // nothing to scroll. Scroll when the tab is shorter than the content;
+        // when it is taller, the content fills it and the table takes the rest.
+        root.setMinHeight(Region.USE_PREF_SIZE);
+        ScrollPane scroll = new ScrollPane(root);
+        scroll.setFitToWidth(true);
+        scroll.setFitToHeight(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("edge-to-edge");
+        return scroll;
     }
 
     /** Stops listening for MCP writes. Called when the results window closes. */

@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.scene.control.CheckMenuItem;
+import javafx.scene.control.MenuItem;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.mcp.McpServerController;
@@ -135,5 +136,25 @@ class McpServerWindowTest {
         assertThat(w.stopDisabled()).isTrue();
         assertThat(w.startDisabled()).isFalse();
         assertThat(w.commandShown()).doesNotContain(TOKEN);
+    }
+
+    @Test
+    void theShowWindowItemIsDisabledWhileTheServerIsOff() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        MenuItem item = FxHarness.onFxGet(() -> McpServerWindow.createShowWindowItem(null));
+        assertThat(item.getText()).isEqualTo("Show MCP server window (address and token)");
+        assertThat(McpServerController.getInstance().isRunning()).isFalse();
+        assertThat(item.isDisable()).as("the tick opens the window while off").isTrue();
+    }
+
+    @Test
+    void anUnexpectedStopIsAmberInBothThemes() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        McpServerWindow w = FxHarness.onFxGet(() -> new McpServerWindow(null));
+        FxHarness.onFx(() -> w.apply(stopped("stopped: project changed")));
+        // A fixed #7a5b00 reads 2.3:1 on the dark theme; the ladder picks one amber per theme.
+        assertThat(w.statusStyleShown()).contains("ladder(-fx-background").contains("#7a5b00").contains("#f0b429");
+        FxHarness.onFx(() -> w.apply(stopped("stopped: user turned it off")));
+        assertThat(w.statusStyleShown()).as("a stop the user chose is not a warning").doesNotContain("ladder(");
     }
 }

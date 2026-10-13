@@ -8,11 +8,13 @@ import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableBooleanValue;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -74,7 +76,10 @@ public final class McpServerWindow {
             + "agents, press Start server, and paste the new token into your agent.";
 
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
-    private static final String AMBER_TEXT = "-fx-text-fill: #7a5b00; -fx-font-weight: bold;";
+    // One amber per theme: #7a5b00 reads 5.6:1 on the light background and only
+    // 2.3:1 on the dark one, where #f0b429 reads 7.6:1 (WCAG AA needs 4.5:1).
+    private static final String AMBER_TEXT =
+            "-fx-text-fill: ladder(-fx-background, #f0b429 49%, #7a5b00 50%); -fx-font-weight: bold;";
 
     /** True while a Start press is in flight; shared with the menu text. */
     private static final BooleanProperty STARTING = new SimpleBooleanProperty(false);
@@ -167,6 +172,21 @@ public final class McpServerWindow {
             item.setSelected(c.isRunning());
         });
         wireProjectChangeNotice(c);
+        return item;
+    }
+
+    /**
+     * The plain item under the tick: shows this window again while the server is
+     * on. The tick cannot, because clicking it while on means stop, and a closed
+     * window would otherwise leave a running server whose token nobody can see.
+     *
+     * @param qupath owner of the window; may be null in tests
+     * @return the item, enabled only while the server is running
+     */
+    public static MenuItem createShowWindowItem(QuPathGUI qupath) {
+        MenuItem item = new MenuItem(res.getString("menu.mcpServer.window"));
+        item.disableProperty().bind(McpServerController.getInstance().runningProperty().not());
+        item.setOnAction(e -> show(qupath));
         return item;
     }
 
@@ -317,10 +337,10 @@ public final class McpServerWindow {
         copyTokenBtn = copyButton("Copy", "Copy the token to the clipboard. Paste it into your "
                 + "agent's config, not into a chat.", "Copy MCP session token", tokenField, copiedToken);
 
-        grid.add(rowLabel("Address"), 0, 0);
+        grid.add(rowLabel("Address", addressField), 0, 0);
         grid.add(addressField, 1, 0);
         grid.add(new HBox(6, copyAddressBtn, copiedAddress), 2, 0);
-        grid.add(rowLabel("Token"), 0, 1);
+        grid.add(rowLabel("Token", tokenField), 0, 1);
         grid.add(tokenField, 1, 1);
         grid.add(new HBox(6, copyTokenBtn, copiedToken), 2, 1);
         GridPane.setHgrow(addressField, Priority.ALWAYS);
@@ -345,6 +365,7 @@ public final class McpServerWindow {
         ScrollPane scroll = new ScrollPane(body);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("edge-to-edge");
 
         startBtn = new Button("Start server");
         startBtn.setDefaultButton(false);
@@ -388,8 +409,9 @@ public final class McpServerWindow {
         commandArea = new TextArea();
         commandArea.setEditable(false);
         commandArea.setWrapText(false);
-        commandArea.setFont(Font.font("monospace", 12));
-        commandArea.setPrefRowCount(3);
+        commandArea.setFont(Font.font("Monospaced", 12));
+        // Three lines of command plus the horizontal scrollbar a long token brings.
+        commandArea.setPrefRowCount(4);
         commandArea.setAccessibleText("Claude Code registration command, read only");
 
         Label copied = copiedLabel();
@@ -437,15 +459,15 @@ public final class McpServerWindow {
         copyHeaderValueBtn = copyButton("Copy", "Copy this value to the clipboard.",
                 "Copy the Authorization header value", headerValueField, c3);
 
-        g.add(rowLabel("Transport"), 0, 0);
+        g.add(rowLabel("Transport", transport), 0, 0);
         g.add(transport, 1, 0, 2, 1);
-        g.add(rowLabel("URL"), 0, 1);
+        g.add(rowLabel("URL", urlField), 0, 1);
         g.add(urlField, 1, 1);
         g.add(new HBox(6, copyUrlBtn, c1), 2, 1);
-        g.add(rowLabel("Header name"), 0, 2);
+        g.add(rowLabel("Header name", headerNameField), 0, 2);
         g.add(headerNameField, 1, 2);
         g.add(new HBox(6, copyHeaderNameBtn, c2), 2, 2);
-        g.add(rowLabel("Header value"), 0, 3);
+        g.add(rowLabel("Header value", headerValueField), 0, 3);
         g.add(headerValueField, 1, 3);
         g.add(new HBox(6, copyHeaderValueBtn, c3), 2, 3);
         GridPane.setHgrow(urlField, Priority.ALWAYS);
@@ -469,7 +491,7 @@ public final class McpServerWindow {
         untestedArea = new TextArea();
         untestedArea.setEditable(false);
         untestedArea.setWrapText(false);
-        untestedArea.setFont(Font.font("monospace", 11));
+        untestedArea.setFont(Font.font("Monospaced", 11));
         untestedArea.setPrefRowCount(16);
         untestedArea.setAccessibleText("Untested config snippets for other clients, read only");
         TitledPane pane = new TitledPane(
@@ -506,10 +528,9 @@ public final class McpServerWindow {
         area.setEditable(false);
         area.setWrapText(true);
         area.setFocusTraversable(true);
-        area.setFont(Font.font("monospace", 11));
+        area.setFont(Font.font("Monospaced", 11));
         area.setPrefRowCount(19);
         area.setAccessibleText("What the MCP server can and cannot do");
-        area.setStyle("-fx-background-color: transparent; -fx-background-insets: 0;");
         return area;
     }
 
@@ -649,10 +670,14 @@ public final class McpServerWindow {
         return f;
     }
 
-    /** A label that keeps its full text when the row beside it is wide. */
-    private static Label rowLabel(String text) {
+    /**
+     * A row label that keeps its full text when the field beside it is wide,
+     * and names that field for assistive technology.
+     */
+    private static Label rowLabel(String text, Node labelFor) {
         Label l = new Label(text);
         l.setMinWidth(Region.USE_PREF_SIZE);
+        l.setLabelFor(labelFor);
         return l;
     }
 
@@ -695,6 +720,7 @@ public final class McpServerWindow {
 
     // ---- package-private accessors for tests ----
     String statusTextShown() { return statusLabel.getText(); }
+    String statusStyleShown() { return statusLabel.getStyle(); }
     String tokenShown() { return tokenField.getText(); }
     String addressShown() { return addressField.getText(); }
     String commandShown() { return commandArea.getText(); }

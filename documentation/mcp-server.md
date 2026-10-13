@@ -142,9 +142,11 @@ Turning it on is two steps; turning it off is one.
    the button's tooltip says so, and the menu item keeps reading `(ON - port ...)`.
 
 **About the token.** It is shown for as long as that server session runs. If you close the
-window, choosing the menu item again reopens it with the same token. A new token exists only
-after you stop and start the server, at which point any configuration holding the old one
-stops working, and you paste the new one. The token is never written to QuPath's log, your
+window while the server is on, a second item appears under the tick, **Show MCP server window
+(address and token)**, which reopens it with the same token (the tick itself would stop the
+server, so it is not the way back in). A new token exists only after you stop and start the
+server, at which point any configuration holding the old one stops working, and you paste the
+new one. The token is never written to QuPath's log, your
 preferences, or any file; the window is the only place it appears.
 
 The tool-call counter in the status line is the ambient reassurance. If it still reads
@@ -453,7 +455,7 @@ it is off after every QuPath restart by design, and it stops when the project ch
 **What it usually means:** the token in your client configuration is missing, mistyped, or
 from a previous time you started the server -- every start makes a new one.
 
-**What to do:** open the window (choose the menu item while the server is on), press **Copy**
+**What to do:** open the window (choose **Show MCP server window (address and token)** under the tick while the server is on), press **Copy**
 beside **Token**, update the configuration, and restart or reload your client so it re-reads
 the file. For Claude Code, re-run the `claude mcp add` command after `claude mcp remove
 qpcat`.
