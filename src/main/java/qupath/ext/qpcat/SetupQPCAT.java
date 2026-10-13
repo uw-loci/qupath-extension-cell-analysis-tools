@@ -210,6 +210,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
     @Override
     public void installExtension(QuPathGUI qupath) {
         logger.info("Installing extension: {}", EXTENSION_NAME);
+        // An administrator's -Dqpcat.mcp.disabled=true (launcher java-options, not a
+        // preference) leaves both MCP menu items out; say so once, here.
+        if (McpServerController.isDisabledByPolicy()) {
+            logger.info("MCP server disabled by policy (qpcat.mcp.disabled=true)");
+        }
 
         // Start capturing QuPath's live log in memory so the bug reporter can
         // attach it even when file logging is disabled (the default).
@@ -607,10 +612,13 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // MCP server for AI agents. A CheckMenuItem whose text carries the state
         // ("(off)" / "(ON - port N)"), so the submenu alone says whether a socket
         // is open. Always enabled: the off-switch must never be unreachable.
-        CheckMenuItem mcpServerItem = McpServerWindow.createMenuItem(qupath);
-        // Re-shows the window (address, token) while the server is on; the tick
-        // above stops the server instead. Disabled while off, when the tick opens it.
-        MenuItem mcpWindowItem = McpServerWindow.createShowWindowItem(qupath);
+        // Both items are left out entirely when an administrator has disabled the
+        // server for this installation; installExtension logged that once.
+        List<MenuItem> mcpItems = McpServerController.isDisabledByPolicy() ? List.of() : List.of(
+                McpServerWindow.createMenuItem(qupath),
+                // Re-shows the window (address, token) while the server is on; the tick
+                // above stops the server instead. Disabled while off, when the tick opens it.
+                McpServerWindow.createShowWindowItem(qupath));
 
         // ---- Menu structure -------------------------------------------------
         // Six rows, not nineteen. The two things QP-CAT is FOR -- finding
@@ -666,9 +674,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 rebuildItem,
                 new SeparatorMenuItem(),
                 documentationItem,
-                reportBugItem,
-                mcpServerItem,
-                mcpWindowItem);
+                reportBugItem);
+        setupHelpMenu.getItems().addAll(mcpItems);
 
         extensionMenu.getItems().addAll(
                 // -- The two main tools --

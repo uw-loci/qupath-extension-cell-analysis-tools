@@ -9,6 +9,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
@@ -31,6 +32,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.control.Hyperlink;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -116,6 +118,11 @@ public class ClusterExplainerPanel {
     // bundle already saved with the result. Hidden until one of those happens.
     private Label sourceLabel;
     private Runnable unregisterMcp;
+    // Pinned above the scrolling content, so an MCP write is announced wherever
+    // the tab is scrolled; hidden until the first write.
+    private Label mcpNoticeLabel;
+    private ScrollPane scrollPane;
+    private VBox resultsBox;
 
     /** Longest agent label shown; it is free text from a network client. */
     static final int AGENT_LABEL_MAX = 60;
@@ -201,12 +208,33 @@ public class ClusterExplainerPanel {
         // nothing to scroll. Scroll when the tab is shorter than the content;
         // when it is taller, the content fills it and the table takes the rest.
         root.setMinHeight(Region.USE_PREF_SIZE);
-        ScrollPane scroll = new ScrollPane(root);
-        scroll.setFitToWidth(true);
-        scroll.setFitToHeight(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.getStyleClass().add("edge-to-edge");
-        return scroll;
+        scrollPane = new ScrollPane(root);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setFitToHeight(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.getStyleClass().add("edge-to-edge");
+
+        // The MCP notice sits outside the scrolled content: at the default
+        // results-window size the Suggestions table is below the fold, so a line
+        // inside the content was either scrolled away with the top or never seen
+        // at the bottom. Pinned, it is in view at every size and scroll position.
+        mcpNoticeLabel = new Label();
+        mcpNoticeLabel.setWrapText(true);
+        mcpNoticeLabel.setMaxWidth(Double.MAX_VALUE);
+        WrapHeight.bind(mcpNoticeLabel);
+        mcpNoticeLabel.setStyle(BannerStyles.GUIDE_BAR + " -fx-text-fill: #1a3d6b; -fx-font-weight: bold;");
+        mcpNoticeLabel.setVisible(false);
+        mcpNoticeLabel.setManaged(false);
+        mcpNoticeLabel.setAccessibleText("An AI agent wrote suggestions over MCP");
+        mcpNoticeLabel.setTooltip(Tooltips.of(
+                "An AI agent connected to the QP-CAT MCP server wrote these suggestions "
+                + "into the saved result. Nothing was applied to your cells; review the "
+                + "table and use the names only if they hold up."));
+
+        BorderPane tab = new BorderPane();
+        tab.setTop(mcpNoticeLabel);
+        tab.setCenter(scrollPane);
+        return tab;
     }
 
     /** Stops listening for MCP writes. Called when the results window closes. */
@@ -232,7 +260,8 @@ public class ClusterExplainerPanel {
                 + "MCP server for AI agents. In every case the OUTPUT is "
                 + "unvalidated: every suggestion is a hint to check, not a conclusion. "
                 + "Confirm it against the Marker Rankings tab and your own domain "
-                + "knowledge before relying on it.");
+                + "knowledge before relying on it. Research use only: these are "
+                + "suggestions to check, not diagnoses.");
         warn.setWrapText(true);
         warn.setMaxWidth(Double.MAX_VALUE);
         // Without this the banner is one line tall and the sentence is clipped --
@@ -558,8 +587,9 @@ public class ClusterExplainerPanel {
         sourceLabel.setAccessibleText("Where the suggestions came from");
         sourceLabel.setTooltip(Tooltips.of(
                 "These suggestions were written by an AI agent through the MCP server, or\n"
-                + "loaded from the saved result, not produced by this panel just now. The\n"
-                + "agent said which model it used; we pass that on without checking it.\n"
+                + "loaded from the saved result, not produced by this panel just now.\n"
+                + "The agent name shown here is self-reported by the agent; QP-CAT records\n"
+                + "it without verifying it.\n"
                 + "The result on disk holds them -- reopen it from Results & populations >\n"
                 + "View Past Results to see them again later."));
 
@@ -579,8 +609,14 @@ public class ClusterExplainerPanel {
                 cd.getValue().displayPhenotype()));
         phenotypeCol.setPrefWidth(220);
 
-        TableColumn<ClusterExplanation, String> confidenceCol =
-                new TableColumn<>("Confidence");
+        // A TableColumn has no tooltip of its own; a Label as the header graphic
+        // carries one and still sorts on click.
+        TableColumn<ClusterExplanation, String> confidenceCol = new TableColumn<>();
+        Label confidenceHeader = new Label("Confidence");
+        confidenceHeader.setTooltip(Tooltips.of(
+                "The model's own confidence in its suggestion (HI/MD/LO), not a "
+                + "measured accuracy."));
+        confidenceCol.setGraphic(confidenceHeader);
         confidenceCol.setCellValueFactory(cd -> new SimpleStringProperty(
                 cd.getValue().displayConfidence()));
         confidenceCol.setPrefWidth(90);
@@ -651,6 +687,7 @@ public class ClusterExplainerPanel {
         VBox box = new VBox(6, heading, sourceLabel, resultsTable,
                 new Label("Rationale:"), rationaleArea, btnRow);
         VBox.setVgrow(resultsTable, Priority.ALWAYS);
+        resultsBox = box;
         return box;
     }
 
@@ -965,9 +1002,44 @@ public class ClusterExplainerPanel {
         String when = LocalTime.now().format(HH_MM);
         showSource("Last written by " + agent + " over MCP at " + when
                 + " -- by an AI agent, not from this panel. Saved to the result on disk.");
-        statusLabel.setText("An AI agent just wrote " + rows.size()
-                + (rows.size() == 1 ? " suggestion" : " suggestions")
-                + " over MCP. Scroll the table to review them.");
+        mcpNoticeLabel.setText(mcpNoticeText(rows.size()));
+        mcpNoticeLabel.setVisible(true);
+        mcpNoticeLabel.setManaged(true);
+        // The write may have made the source line managed and the table taller;
+        // scroll after that layout pass, not before it.
+        Platform.runLater(this::scrollSuggestionsIntoView);
+    }
+
+    /** @return the pinned notice for an MCP write of {@code n} rows */
+    static String mcpNoticeText(int n) {
+        return "An AI agent just wrote " + n + (n == 1 ? " suggestion" : " suggestions")
+                + " over MCP. They are saved with this result; review them in the "
+                + "Suggestions table below.";
+    }
+
+    /**
+     * Scrolls the tab so the Suggestions heading is at the top of the viewport,
+     * or as near as the content allows. No-op when everything already fits.
+     */
+    void scrollSuggestionsIntoView() {
+        if (scrollPane == null || resultsBox == null
+                || !(scrollPane.getContent() instanceof Region content)) {
+            return;
+        }
+        // Lay out from the scene root, not just the content: the notice that the
+        // same write made visible shrinks the viewport, and a fraction computed
+        // against the old viewport lands below the heading once it has.
+        Parent top = scrollPane.getScene() != null ? scrollPane.getScene().getRoot() : content;
+        top.applyCss();
+        top.layout();
+        double contentHeight = content.getLayoutBounds().getHeight();
+        double viewportHeight = scrollPane.getViewportBounds().getHeight();
+        double hidden = contentHeight - viewportHeight;
+        if (hidden <= 0) {
+            return;
+        }
+        double target = resultsBox.getBoundsInParent().getMinY() / hidden;
+        scrollPane.setVvalue(Math.max(0.0, Math.min(1.0, target)));
     }
 
     private void showSource(String text) {

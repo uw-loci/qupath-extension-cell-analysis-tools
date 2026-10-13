@@ -10,6 +10,7 @@ import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.beans.value.ObservableValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.service.OperationLogger;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
@@ -30,7 +31,8 @@ import java.util.function.Supplier;
  * Lifecycle of the QP-CAT MCP server: off at every launch, started and
  * stopped by the user, stopped by any project change or 60 idle minutes.
  * Holds the only copy of the per-session token. No preference records
- * whether it runs.
+ * whether it runs. An administrator disables it for an installation with
+ * the JVM property {@code -Dqpcat.mcp.disabled=true}, read once at load.
  */
 public final class McpServerController {
 
@@ -39,8 +41,13 @@ public final class McpServerController {
     public static final int FIRST_PORT = 51516;
     public static final int LAST_PORT = 51525;
     static final long IDLE_TIMEOUT_MINUTES = 60;
-    static final int MAX_TOOL_CALLS_PER_MINUTE = 30;
+    static final int MAX_TOOL_CALLS_PER_MINUTE = 120;
     static final long FX_HOP_TIMEOUT_SECONDS = 15;
+    public static final String DISABLED_PROPERTY = "qpcat.mcp.disabled";
+    private static final boolean DISABLED_BY_POLICY = readDisabledByPolicy(System.getProperties());
+
+    static final String DISABLED_TEXT =
+            "The MCP server is disabled on this installation (" + DISABLED_PROPERTY + "=true).";
 
     static final String NO_PROJECT_TEXT =
             "No project is open, so there are no saved clustering results to serve.\n"
@@ -64,9 +71,11 @@ public final class McpServerController {
             + "project currently open in QuPath. Workflow: call qpcat_list_results, pick a result "
             + "name, call qpcat_explain_prompt with it, answer the returned prompt yourself in the "
             + "JSON shape it asks for, then call qpcat_set_explanations with the result name, your "
-            + "full reply and a short agent label. The tools read saved results and write only "
-            + "their explanations field. They cannot run analyses, read images or cells, execute "
-            + "code, or touch files outside the project's results folder.";
+            + "full reply, a short agent label, and the prompt_hash (plus any top_n or cluster_ids "
+            + "you passed) from the prompt's metadata block, so the stored record is the prompt you "
+            + "answered. The tools read saved results and write only their explanations field. They "
+            + "cannot run analyses, read images or cells, execute code, or touch files outside the "
+            + "project's results folder.";
 
     private static final McpServerController INSTANCE = new McpServerController();
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -80,6 +89,8 @@ public final class McpServerController {
     private volatile Instant startedAt;
     private volatile int port;
     private volatile long lastActivityNanos;
+    /** The project being served; start/stop audit lines go into ITS log, even after it closes. */
+    private volatile Project<?> servedProject;
     private McpHttpEndpoint endpoint;
     private McpJsonRpc rpc;
     private ScheduledExecutorService idleTimer;
@@ -112,15 +123,37 @@ public final class McpServerController {
     public Instant getStartedAt() { return startedAt; }
 
     /**
+     * @return true when the launcher set {@code -Dqpcat.mcp.disabled=true}; read once
+     *         at class load, so a script cannot flip it at runtime
+     */
+    public static boolean isDisabledByPolicy() { return DISABLED_BY_POLICY; }
+
+    /** Pure form of {@link #isDisabledByPolicy()} for tests; true only for the word "true". */
+    static boolean readDisabledByPolicy(java.util.Properties props) {
+        String v = props.getProperty(DISABLED_PROPERTY);
+        return v != null && v.trim().equalsIgnoreCase("true");
+    }
+
+    /**
      * Binds the endpoint on loopback and starts serving. Picks {@link #FIRST_PORT}
      * or the next free port up to {@link #LAST_PORT}, and generates a fresh token.
      *
-     * @throws IOException with a user-readable message when no project is open or
-     *                     every port is taken; nothing is left running in that case
+     * @throws IOException with a user-readable message when the installation disables the
+     *                     server, no project is open, QuPath's interface thread does not
+     *                     answer, or every port is taken; nothing is left running in that case
      */
     public synchronized void start() throws IOException {
         if (runningFlag) return;
-        Project<?> project = currentProject();
+        if (DISABLED_BY_POLICY) {
+            logger.info("MCP server start refused: {}=true", DISABLED_PROPERTY);
+            throw new IOException(DISABLED_TEXT);
+        }
+        Project<?> project;
+        try {
+            project = currentProject();
+        } catch (McpExplainerTools.ProjectUnavailableException fxBlocked) {
+            throw new IOException(fxBlocked.getMessage(), fxBlocked);
+        }
         if (project == null) {
             throw new IOException(NO_PROJECT_TEXT);
         }
@@ -150,6 +183,7 @@ public final class McpServerController {
 
         this.endpoint = bound;
         this.rpc = jsonRpc;
+        this.servedProject = project;
         this.token = freshToken;
         this.port = boundPort;
         this.startedAt = Instant.now();
@@ -162,6 +196,7 @@ public final class McpServerController {
             logger.info("MCP port {} was in use; bound {} instead", FIRST_PORT, boundPort);
         }
         final int finalPort = boundPort;
+        auditEvent(project, "started on 127.0.0.1 port " + finalPort + " (loopback only; the token is not recorded)");
         fx(() -> {
             toolCallCount.set(0);
             lastEvent.set("started on port " + finalPort);
@@ -193,6 +228,8 @@ public final class McpServerController {
         startedAt = null;
         runningFlag = false;
         logger.info("MCP endpoint stopped (reason: {})", why);
+        auditEvent(servedProject, "stopped (reason: " + why + ")");
+        servedProject = null;
         fx(() -> {
             running.set(false);
             lastEvent.set("stopped: " + why);
@@ -218,13 +255,31 @@ public final class McpServerController {
         });
     }
 
-    /** Fetches the open project on the FX thread; null when none. */
+    /**
+     * Fetches the open project on the FX thread; null when none is open.
+     *
+     * @throws McpExplainerTools.ProjectUnavailableException when the FX thread did not
+     *         answer within {@link #FX_HOP_TIMEOUT_SECONDS}; this is not "no project"
+     */
     Project<?> currentProject() {
         try {
             return onFx(() -> projectSupplier.get());
+        } catch (java.util.concurrent.TimeoutException e) {
+            logger.warn("The FX thread did not answer within {} s; cannot read the open project",
+                    FX_HOP_TIMEOUT_SECONDS);
+            throw new McpExplainerTools.ProjectUnavailableException(FX_HOP_TIMEOUT_SECONDS);
         } catch (Exception e) {
             logger.warn("Could not read the open project: {}", e.toString());
             return null;
+        }
+    }
+
+    /** One line in that project's QP-CAT operation log; a no-op when the project is null. */
+    private static void auditEvent(Project<?> project, String description) {
+        try {
+            OperationLogger.getInstance().logEvent(project, "MCP SERVER", description);
+        } catch (RuntimeException e) {
+            logger.debug("MCP audit line not written: {}", e.toString());
         }
     }
 

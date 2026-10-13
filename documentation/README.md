@@ -65,6 +65,7 @@ Setup & help >
     Documentation (How-to guide)...                       opens this page
     Report a Bug...                                       Troubleshooting
     [ ] MCP server for AI agents (off)                    MCP server (off by default)
+    Show MCP server window (address and token)            MCP server (greyed until it is on)
 ```
 
 Menu paths are written in full throughout, e.g.

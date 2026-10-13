@@ -148,6 +148,42 @@ class McpServerWindowTest {
     }
 
     @Test
+    void theWindowSaysWhereTheTokenLivesAndHowToReRegister() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        McpServerWindow w = FxHarness.onFxGet(() -> new McpServerWindow(null));
+        assertThat(w.claudeRemoveHintShown()).isEqualTo(
+                "If Claude Code says the server already exists, run: claude mcp remove qpcat   "
+                + "then the command above.");
+        assertThat(w.claudeIntroShown()).contains("The token changes on every Start server");
+        assertThat(w.tokenNoteShown()).contains(
+                "Your agent keeps a copy in its own configuration (and your shell history); "
+                + "that copy stops working at Stop.");
+        assertThat(w.bannerShown()).endsWith(
+                "Research use only: these are suggestions to check, not diagnoses.");
+        assertThat(w.canCannotShown()).contains(
+                "LOGS:   each tool call -- tool, result name, outcome -- to the QuPath\n"
+                + "        log; the prompt and reply to the project audit log; never the\n"
+                + "        token.");
+        // The LIMITS line quotes the developer's constant; the field is package-private
+        // in mcp/, so the pin is by reflection rather than a retyped number.
+        int perMinute;
+        try {
+            java.lang.reflect.Field f = McpServerController.class.getDeclaredField("MAX_TOOL_CALLS_PER_MINUTE");
+            f.setAccessible(true);
+            perMinute = f.getInt(null);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("MAX_TOOL_CALLS_PER_MINUTE moved", e);
+        }
+        assertThat(w.canCannotShown()).contains(
+                "LIMITS: " + perMinute + " tool calls a minute (listing results is not counted), one at a\n"
+                + "        time; a refusal says how long to wait. It stops by itself after 60\n"
+                + "        minutes with no tool calls, and whenever the project changes.\n");
+        // The copied command itself is unchanged: an idempotent form differs per shell.
+        FxHarness.onFx(() -> w.apply(running(51516, 0)));
+        assertThat(w.commandShown()).startsWith("claude mcp add --transport http qpcat");
+    }
+
+    @Test
     void anUnexpectedStopIsAmberInBothThemes() {
         Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
         McpServerWindow w = FxHarness.onFxGet(() -> new McpServerWindow(null));

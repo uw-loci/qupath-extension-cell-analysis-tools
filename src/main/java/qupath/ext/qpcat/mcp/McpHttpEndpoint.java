@@ -73,7 +73,7 @@ public final class McpHttpEndpoint implements AutoCloseable {
      * @param port             TCP port to bind
      * @param token            bearer token clients must present
      * @param handler          receives every authenticated POST
-     * @param activityListener invoked on every accepted connection; may be null
+     * @param activityListener invoked once a request has presented the right token; may be null
      * @throws IOException if the port cannot be bound
      */
     public McpHttpEndpoint(int port, String token, Handler handler, Runnable activityListener)
@@ -130,7 +130,6 @@ public final class McpHttpEndpoint implements AutoCloseable {
                 if (!closed) logger.debug("MCP accept failed: {}", e.getMessage());
                 continue;
             }
-            activityListener.run();
             try {
                 pool.execute(() -> serve(socket));
             } catch (RejectedExecutionException busy) {
@@ -225,6 +224,9 @@ public final class McpHttpEndpoint implements AutoCloseable {
             logger.warn("MCP request rejected: missing or invalid bearer token");
             throw new BadRequest(401, "Unauthorized: missing or invalid bearer token.");
         }
+        // Only an authenticated request counts as activity: a port scanner or a
+        // client with a stale token must not keep the idle timer from firing.
+        activityListener.run();
 
         String expect = headers.get("expect");
         if (expect != null && expect.toLowerCase(Locale.ROOT).contains("100-continue")) {

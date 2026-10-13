@@ -3,19 +3,24 @@
 
 Get a plain-English phenotype suggestion for each cluster, with rationale citing the top markers. Runs on the per-cluster Wilcoxon marker rankings that QP-CAT already produces -- no pixels are sent.
 
+**For research use only.** A suggested phenotype is a hint to check against the markers, not
+a diagnosis. It has not been validated for, and must not be used in, diagnostic or clinical
+decision-making.
+
 > **What has actually been run, per provider.** *Any chatbot (copy prompt, paste reply)*:
 > run end-to-end on 2026-10-12 -- prompt copied from the tab, answered by a Claude model
 > outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *MCP server
-> (AI agents)*: run end-to-end on 2026-10-13, on Linux: a Python MCP client drove all three tools against a real project from a hidden QuPath (the harness scenario), and Claude Code registered the server with the one-liner below and reported it `Connected`; the Explainer tab updated live while a saved result was open. No other client has connected yet; the other
-> clients' setup snippets are unverified. *Anthropic (Claude API)* and *Ollama* as before:
-> the first run end-to-end on 2026-09-27, the second **never run, by anyone** -- if you are
-> the first to try it, a failure is as likely to be ours as yours -- please
+> (AI agents)*: run on 2026-10-13, on Linux -- Claude Code registered the server with the
+> documented one-liner and reported it `Connected`; a Python MCP client drove all three tools
+> against a real project, and this tab updated live during that client's write. No other
+> client has connected yet, no agent has yet run the three calls unprompted from one typed
+> sentence, and the jpackaged Windows / macOS runtime has not run it; details on the
+> [MCP server](mcp-server.md) page. *Anthropic (Claude API)*: run end-to-end against the live
+> API with a real key, on 2026-09-27 -- `claude-sonnet-5`, seven clusters from the synthetic
+> demo dataset, 23 seconds. *Ollama*: **never run, by anyone.** It is built from the
+> documented API and has not been exercised once, so if you are the first to try it, a
+> failure is as likely to be ours as yours -- please
 > [report](troubleshooting.md#reporting-a-bug) it.
-> *Anthropic (Claude API)*: run end-to-end against the live API with a real key, on 2026-09-27 --
-> `claude-sonnet-5`, seven clusters from the synthetic demo dataset, 23 seconds. *Ollama*:
-> **never run, by anyone.** It is built from the documented API and has not been exercised
-> once, so if you are the first to try it, a failure is as likely to be ours as yours --
-> please [report](troubleshooting.md#reporting-a-bug) it.
 >
 > The two claims are separate. "Never run" is about the code path. *Unvalidated* is about
 > the answer, and applies to every provider: the suggestions are proposals to check, not
@@ -23,7 +28,7 @@ Get a plain-English phenotype suggestion for each cluster, with rationale citing
 
 The prompt template, output JSON shape, and audit-log row format may also change.
 
-**Inspiration and prior art.** The design was inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping feature. QP-CAT's implementation differs in three notable ways: (a) supports Anthropic Claude and local Ollama in v1; OpenAI is intentionally not supported, (b) the LLM reads marker statistics only -- no pixels and no patient-identifying metadata cross the network boundary, (c) the full prompt and response are captured to a per-project audit log on every call, with API keys scrubbed on both the Java and Python sides before logging.
+**Inspiration and prior art.** The design was inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping feature. QP-CAT's implementation differs in three notable ways: (a) supports Anthropic Claude and local Ollama in v1; OpenAI is intentionally not supported, (b) the LLM reads marker statistics only -- no pixels and no patient-identifying metadata cross the network boundary (the one thing you control: over MCP, the names you gave your saved results travel with the listing), (c) the full prompt and response are captured to a per-project audit log on every call, with API keys scrubbed on both the Java and Python sides before logging.
 
 ### When to use this feature
 
@@ -130,8 +135,11 @@ configuration.
 **[Full instructions, the security model, and troubleshooting: MCP server](mcp-server.md).**
 
 The audit log entry has provider `MCP`, the agent label the tool call supplied as the model,
-and the prompt and reply verbatim -- the same record the other providers write. Unlike the
-other providers until now, the explanations are also saved into the result on disk.
+the client's `User-Agent`, and the prompt and reply verbatim -- the same record the other
+providers write, plus those two rows. The label is whatever the agent chose to send; QP-CAT
+records it without verifying it. Unlike the other providers until now, the explanations are
+also saved into the result on disk. On a managed install, IT can remove the feature with a
+launcher option; see [For IT administrators](mcp-server.md#for-it-administrators).
 
 </details>
 
@@ -199,19 +207,26 @@ A key set this way is stored in plain text in your user environment. On a shared
 
 ### What the LLM Sees
 
-The prompt contains, per cluster:
+The prompt -- one text for every provider, built once by `build_prompt` in
+`run_llm_explainer.py` -- contains, per cluster:
 
-- The cluster id (e.g. `Cluster 3`) and cell count
-- The top-N (default 10) markers by Wilcoxon score, each with score and log fold change. **Adjusted p-values are deliberately NOT sent** -- the clusters were defined from these same measurements, so the p-value is circular, and handing it to a language model invites it to write "significantly enriched". The prompt explicitly instructs the model not to claim significance. See [the marker p-values are circular](clustering.md#marker-pvalues-are-circular).
-- The cluster-by-marker mean expression table for those markers (so the LLM can see "this cluster is high in CD8 and low in CD20" without needing to compute it)
+- The cluster id (e.g. `Cluster 3`)
+- The top-N (default 10) markers by Wilcoxon score, each as the marker name, its score and its log2 fold change. **Adjusted p-values are deliberately NOT sent** -- the clusters were defined from these same measurements, so the p-value is circular, and handing it to a language model invites it to write "significantly enriched". The prompt explicitly instructs the model not to claim significance. See [the marker p-values are circular](clustering.md#marker-pvalues-are-circular).
 
 The prompt **does not** contain:
+- A cell count, or a count of anything
+- A cluster-by-marker expression table (the model reasons from the ranked markers alone)
 - Pixel data of any kind
 - Individual cell measurements
 - Image metadata, file names, or paths
 - Patient identifiers, sample names, or any project metadata
 - Spatial coordinates of cells
-- Anything from QuPath beyond the per-cluster summary statistics
+- Anything from QuPath beyond the ranked markers per cluster
+
+That list is about the **prompt**. Over the MCP server the agent also sees the result listing
+-- result names you chose, timestamps, cluster and cell counts, and a coarse scope such as
+`1 image` -- which the MCP page itemizes under
+[What text does leave QuPath](mcp-server.md#the-three-tools-and-exactly-what-each-one-can-do).
 
 You can see the exact prompt that was sent by opening the audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` and finding the `=== LLM EXPLAIN ===` entry. The prompt is reproduced verbatim in the indented `Prompt:` block. Both the Java and Python sides scrub `Authorization:` headers and `sk-ant-*` keys before any payload is logged, so the audit trail never contains the API key.
 
@@ -248,7 +263,7 @@ LLM output is **not deterministic** unless the provider exposes a temperature=0 
 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
-1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`)
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`; for an MCP run this is the `Agent:` row, which the agent reported about itself)
 2. Record the **prompt template version** (e.g. `cluster_phenotype_v2`)
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
@@ -270,16 +285,17 @@ A **Cancel** button is exposed during the in-flight call. Cancelled calls are st
 
 ### [Experimental] notice
 
-**Status: one provider proven to run, one not.** The Anthropic path has been run
-end-to-end against the live API. The Ollama path has not been run at all, so treat
-everything below about Ollama as design intent rather than observed behaviour. Neither
-provider's *output* has been validated against ground truth.
+**Status: three providers run, one not.** The chatbot, MCP (Claude Code and a Python
+client, Linux only) and Anthropic paths have each been run end-to-end. The Ollama path has
+not been run at all, so treat everything below about Ollama as design intent rather than
+observed behavior. No provider's *output* has been validated against ground truth beyond
+the seven-cluster synthetic check above.
 
 This is the first feature in QP-CAT that calls a remote LLM API. The surface area is
 intentionally narrow:
 
 - One prompt template (`cluster_phenotype_v2`); not user-editable yet
-- Two providers (Anthropic, run; Ollama, never run); OpenAI deferred
+- Four providers (any chatbot, MCP agent and Anthropic, each run; Ollama, never run); OpenAI deferred
 - One batched call per Run Explainer click; per-cluster async deferred
 - API key is session-scoped; OS-keychain integration deferred
 
@@ -320,9 +336,10 @@ morphology-level reasoning.
 
 ### Audit-Log Discipline for Publications
 
-Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail is safe to share but does not contain the API key. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
+Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
 - **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
+- **For an MCP run, the `Agent:` label and the `Client:` (`User-Agent`) row as logged, with the caveat that the label is self-reported** -- QP-CAT records what the agent sent and does not verify it, so check it against the agent's own transcript
 - **Prompt template version** as logged (currently `cluster_phenotype_v2`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
 - **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories
@@ -335,8 +352,8 @@ Archive the audit log alongside your other reproducibility artifacts (clustering
 
 
 > **The error states below are derived from the code, not from observed
-> failures**, so the list is neither complete nor confirmed. The one successful
-> run on record exercised none of them.
+> failures**, so the list is neither complete nor confirmed. The runs on record
+> exercised none of them.
 
 This page covers the error states you may see in the **Cluster Explainer (LLM)** tab of the cluster results dialog, what each one typically means, and what to do about it.
 

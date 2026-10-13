@@ -3,6 +3,7 @@ package qupath.ext.qpcat.mcp;
 import com.google.gson.JsonParser;
 import javafx.beans.property.SimpleObjectProperty;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import qupath.lib.projects.Project;
@@ -15,6 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,8 +49,45 @@ class McpServerControllerTest {
         assertThat(controller.getUrl()).isNull();
     }
 
+    /** True when nothing on this machine holds the loopback port. */
+    private static boolean portFree(int port) {
+        try (java.net.ServerSocket probe = new java.net.ServerSocket()) {
+            probe.bind(new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), port));
+            return true;
+        } catch (IOException inUse) {
+            return false;
+        }
+    }
+
+    private static boolean anyPortFree() {
+        for (int p = McpServerController.FIRST_PORT; p <= McpServerController.LAST_PORT; p++) {
+            if (portFree(p)) return true;
+        }
+        return false;
+    }
+
+    @Test
+    void thePolicyPropertyIsTrueOnlyForTheWordTrue() {
+        java.util.Properties props = new java.util.Properties();
+        assertThat(McpServerController.readDisabledByPolicy(props)).isFalse();
+        props.setProperty(McpServerController.DISABLED_PROPERTY, "true");
+        assertThat(McpServerController.readDisabledByPolicy(props)).isTrue();
+        props.setProperty(McpServerController.DISABLED_PROPERTY, " TRUE ");
+        assertThat(McpServerController.readDisabledByPolicy(props)).isTrue();
+        for (String notTrue : List.of("false", "1", "yes", "")) {
+            props.setProperty(McpServerController.DISABLED_PROPERTY, notTrue);
+            assertThat(McpServerController.readDisabledByPolicy(props)).as(notTrue).isFalse();
+        }
+        assertThat(McpServerController.DISABLED_TEXT).contains("qpcat.mcp.disabled=true");
+        // This JVM was not launched with the property, so the singleton is enabled.
+        assertThat(McpServerController.isDisabledByPolicy()).isFalse();
+    }
+
     @Test
     void anOccupiedFirstPortFallsThroughToTheNextOne() throws Exception {
+        Assumptions.assumeTrue(portFree(McpServerController.FIRST_PORT),
+                "port " + McpServerController.FIRST_PORT + " is already in use on this machine "
+                        + "(another QuPath with the MCP server on?); skipping the squatter test");
         Project<BufferedImage> project = Projects.createProject(dir.toFile(), BufferedImage.class);
         controller.bindToProjectProperty(new SimpleObjectProperty<Project<?>>(project));
         try (java.net.ServerSocket squatter = new java.net.ServerSocket()) {
@@ -66,6 +105,8 @@ class McpServerControllerTest {
 
     @Test
     void startServesAndProjectChangeStops() throws Exception {
+        Assumptions.assumeTrue(anyPortFree(), "ports " + McpServerController.FIRST_PORT + "-"
+                + McpServerController.LAST_PORT + " are all in use on this machine; skipping");
         Project<BufferedImage> project = Projects.createProject(dir.toFile(), BufferedImage.class);
         SimpleObjectProperty<Project<?>> property = new SimpleObjectProperty<>(project);
         controller.bindToProjectProperty(property);

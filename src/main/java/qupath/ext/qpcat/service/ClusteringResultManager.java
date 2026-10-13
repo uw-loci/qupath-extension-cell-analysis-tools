@@ -19,6 +19,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -583,21 +584,75 @@ public class ClusteringResultManager {
     }
 
     /**
-     * Lightweight listing of every saved result for the Manage dialog:
-     * name, timestamp, summary, scope label, origin, and on-disk size.
-     * Ordered most-recent first (same order as {@link #listResults}).
+     * Lightweight listing of every saved result for the Manage dialog and the
+     * MCP tools: name, timestamp, summary, scope label, origin, and on-disk size.
+     * Ordered newest first by each result's own timestamp; a result without a
+     * readable timestamp sorts by its file's modification time. Parsed fields
+     * are cached per file on (path, mtime, size), so a listing re-reads only
+     * the files that changed.
      */
     public static List<ResultEntry> listResultEntries(Project<?> project) throws IOException {
+        Path resultsDir = getResultsDirectory(project);
         List<ResultEntry> entries = new ArrayList<>();
+        Map<ResultEntry, Long> sortKeys = new IdentityHashMap<>();
+        Set<Path> seen = new HashSet<>();
         for (String name : listResults(project)) {
+            Path file = resultsDir.resolve(name + JSON_EXT);
+            seen.add(file);
+            long mtime = 0;
+            long size = -1;
+            try {
+                mtime = Files.getLastModifiedTime(file).toMillis();
+                size = Files.size(file);
+            } catch (IOException ignored) {
+                // falls through to a fresh parse with no cache entry
+            }
+            CachedEntry cached = ENTRY_CACHE.get(file);
+            if (cached == null || cached.mtime != mtime || cached.size != size) {
+                cached = CachedEntry.read(project, name, mtime, size);
+                if (size >= 0) ENTRY_CACHE.put(file, cached);
+            }
+            ResultEntry e = cached.copy();
+            try {
+                e.sizeBytes = resultSize(project, name);
+            } catch (Exception ex) {
+                e.sizeBytes = 0;
+            }
+            sortKeys.put(e, cached.sortMillis != null ? cached.sortMillis : mtime);
+            entries.add(e);
+        }
+        ENTRY_CACHE.keySet().removeIf(p -> p.getParent() != null
+                && p.getParent().equals(resultsDir) && !seen.contains(p));
+        entries.sort(Comparator.comparing((ResultEntry e) -> sortKeys.get(e)).reversed());
+        return entries;
+    }
+
+    /** Listing fields of one result file, valid while its mtime and size are unchanged. */
+    private static final Map<Path, CachedEntry> ENTRY_CACHE = new ConcurrentHashMap<>();
+
+    private static final class CachedEntry {
+        final long mtime;
+        final long size;
+        final ResultEntry entry;
+        /** Epoch millis of the result's own timestamp; null when absent or unparseable. */
+        final Long sortMillis;
+
+        private CachedEntry(long mtime, long size, ResultEntry entry, Long sortMillis) {
+            this.mtime = mtime;
+            this.size = size;
+            this.entry = entry;
+            this.sortMillis = sortMillis;
+        }
+
+        static CachedEntry read(Project<?> project, String name, long mtime, long size) {
             ResultEntry e = new ResultEntry();
             e.name = name;
+            Long sortMillis = null;
             try {
                 SavedClusteringResult saved = loadSavedResult(project, name);
-                e.timestamp = saved.getTimestamp() != null
-                        ? saved.getTimestamp().substring(0,
-                                Math.min(16, saved.getTimestamp().length()))
-                        : "";
+                String ts = saved.getTimestamp();
+                e.timestamp = ts != null ? ts.substring(0, Math.min(16, ts.length())) : "";
+                sortMillis = parseTimestampMillis(ts);
                 e.summary = saved.getSummary();
                 e.scopeLabel = saved.getScopeLabel();
                 e.autoSaved = saved.isAutoSaved();
@@ -607,14 +662,36 @@ public class ClusteringResultManager {
             } catch (Exception ex) {
                 e.summary = "(failed to read)";
             }
-            try {
-                e.sizeBytes = resultSize(project, name);
-            } catch (Exception ex) {
-                e.sizeBytes = 0;
-            }
-            entries.add(e);
+            return new CachedEntry(mtime, size, e, sortMillis);
         }
-        return entries;
+
+        ResultEntry copy() {
+            ResultEntry c = new ResultEntry();
+            c.name = entry.name;
+            c.timestamp = entry.timestamp;
+            c.summary = entry.summary;
+            c.scopeLabel = entry.scopeLabel;
+            c.autoSaved = entry.autoSaved;
+            c.derivedFrom = entry.derivedFrom;
+            c.derivedOp = entry.derivedOp;
+            c.hasExplanations = entry.hasExplanations;
+            return c;
+        }
+    }
+
+    /** Saved timestamps are {@code LocalDateTime.toString()}; older files may carry an offset. */
+    static Long parseTimestampMillis(String ts) {
+        if (ts == null || ts.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(ts).atZone(java.time.ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (java.time.format.DateTimeParseException e) {
+            try {
+                return java.time.OffsetDateTime.parse(ts).toInstant().toEpochMilli();
+            } catch (java.time.format.DateTimeParseException e2) {
+                return null;
+            }
+        }
     }
 
     /**

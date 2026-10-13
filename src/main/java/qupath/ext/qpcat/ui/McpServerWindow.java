@@ -67,6 +67,9 @@ public final class McpServerWindow {
     static final String EVENT_IDLE_PREFIX = "stopped: idle";
     static final String EVENT_USER_PREFIX = "stopped: " + STOP_REASON_USER;
     static final String ADDRESS_PLACEHOLDER = "<address>";
+    static final String CLAUDE_REMOVE_HINT =
+            "If Claude Code says the server already exists, run: claude mcp remove qpcat   "
+            + "then the command above.";
     static final String TOKEN_PLACEHOLDER = "<token>";
 
     static final String PROJECT_CHANGED_NOTICE =
@@ -108,6 +111,11 @@ public final class McpServerWindow {
     private Button copyTokenBtn;
     private TextArea commandArea;
     private Button copyCommandBtn;
+    private Label bannerLabel;
+    private Label tokenNoteLabel;
+    private Label claudeIntroLabel;
+    private Label claudeRemoveHintLabel;
+    private TextArea canCannotArea;
     private TextField urlField;
     private TextField headerNameField;
     private TextField headerValueField;
@@ -284,7 +292,9 @@ public final class McpServerWindow {
                 + "cluster names. It serves three tools and nothing else: no file access, no "
                 + "scripting, no code execution. Nothing listens until you press Start server. "
                 + "It stops when you close or switch project, after 60 minutes with no tool "
-                + "calls, and it is OFF again the next time you start QuPath.");
+                + "calls, and it is OFF again the next time you start QuPath. Research use "
+                + "only: these are suggestions to check, not diagnoses.");
+        bannerLabel = banner;
         banner.setWrapText(true);
         banner.setMaxWidth(Double.MAX_VALUE);
         WrapHeight.bind(banner);
@@ -351,7 +361,9 @@ public final class McpServerWindow {
         Label tokenNote = new Label(
                 "Shown only while this server is running. A new token is made every time you "
                 + "turn the server on, so a config file you saved earlier will stop working -- "
-                + "paste the new one.");
+                + "paste the new one. Your agent keeps a copy in its own configuration (and "
+                + "your shell history); that copy stops working at Stop.");
+        tokenNoteLabel = tokenNote;
         tokenNote.setWrapText(true);
         tokenNote.setMaxWidth(Double.MAX_VALUE);
         tokenNote.setStyle("-fx-font-size: 11px;");
@@ -405,7 +417,13 @@ public final class McpServerWindow {
     }
 
     private TitledPane buildClaudeCodePane() {
-        Label intro = new Label("Run this in a terminal, in the folder you work from:");
+        Label intro = new Label("Run this in a terminal, in the folder where you will start "
+                + "Claude Code. The token changes on every Start server, so run it again "
+                + "after each one:");
+        intro.setWrapText(true);
+        intro.setMaxWidth(Double.MAX_VALUE);
+        WrapHeight.bind(intro);
+        claudeIntroLabel = intro;
         commandArea = new TextArea();
         commandArea.setEditable(false);
         commandArea.setWrapText(false);
@@ -424,12 +442,21 @@ public final class McpServerWindow {
                 + "user to register it for every folder instead."));
         copyCommandBtn.setAccessibleText("Copy the Claude Code registration command");
         copyCommandBtn.setOnAction(e -> copy(commandArea.getText(), copied));
-        Label scopeNote = new Label("Add -s user to make it available in every folder.");
+        Label scopeNote = new Label("To register it for every folder, add -s user to the command.");
         scopeNote.setStyle("-fx-font-size: 11px;");
         HBox row = new HBox(8, copyCommandBtn, copied, scopeNote);
         row.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(6, intro, commandArea, row);
+        // Claude Code refuses a second "add" under the same name and keeps the old
+        // token, which then fails with a 401 that names neither cause nor cure.
+        Label removeHint = new Label(CLAUDE_REMOVE_HINT);
+        removeHint.setWrapText(true);
+        removeHint.setMaxWidth(Double.MAX_VALUE);
+        removeHint.setStyle("-fx-font-size: 11px;");
+        WrapHeight.bind(removeHint);
+        claudeRemoveHintLabel = removeHint;
+
+        VBox box = new VBox(6, intro, commandArea, removeHint, row);
         TitledPane pane = new TitledPane("Claude Code  (tested by us on Linux)", box);
         pane.setExpanded(true);
         pane.setAnimated(false);
@@ -519,17 +546,18 @@ public final class McpServerWindow {
                 + "        connect (we listen on 127.0.0.1 only). A different program on this\n"
                 + "        machine, running as you, could use the token if it could read it --\n"
                 + "        but such a program could read your project directly anyway.\n"
-                + "LIMITS: 30 tool calls a minute, one at a time. It stops by itself after 60\n"
+                + "LIMITS: 120 tool calls a minute (listing results is not counted), one at a\n"
+                + "        time; a refusal says how long to wait. It stops by itself after 60\n"
                 + "        minutes with no tool calls, and whenever the project changes.\n"
-                + "LOGS:   every tool call is logged with its tool name, result name and\n"
-                + "        outcome. The token, the prompt and the model's reply are never\n"
-                + "        written to the QuPath log; prompts and replies go to the LLM audit\n"
-                + "        log beside the result.");
+                + "LOGS:   each tool call -- tool, result name, outcome -- to the QuPath\n"
+                + "        log; the prompt and reply to the project audit log; never the\n"
+                + "        token.");
+        canCannotArea = area;
         area.setEditable(false);
         area.setWrapText(true);
         area.setFocusTraversable(true);
         area.setFont(Font.font("Monospaced", 11));
-        area.setPrefRowCount(19);
+        area.setPrefRowCount(18);
         area.setAccessibleText("What the MCP server can and cannot do");
         return area;
     }
@@ -724,6 +752,11 @@ public final class McpServerWindow {
     String tokenShown() { return tokenField.getText(); }
     String addressShown() { return addressField.getText(); }
     String commandShown() { return commandArea.getText(); }
+    String bannerShown() { return bannerLabel.getText(); }
+    String tokenNoteShown() { return tokenNoteLabel.getText(); }
+    String claudeIntroShown() { return claudeIntroLabel.getText(); }
+    String claudeRemoveHintShown() { return claudeRemoveHintLabel.getText(); }
+    String canCannotShown() { return canCannotArea.getText(); }
     boolean startDisabled() { return startBtn.isDisabled(); }
     boolean stopDisabled() { return stopBtn.isDisabled(); }
     boolean tokenFieldDisabled() { return tokenField.isDisabled(); }

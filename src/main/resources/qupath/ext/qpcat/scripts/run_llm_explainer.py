@@ -449,7 +449,9 @@ def parse_response(raw, cluster_ids):
         if confidence is not None and not isinstance(confidence, str):
             confidence = str(confidence)
         rationale = entry.get("rationale", "")
-        if not isinstance(rationale, str):
+        if rationale is None:
+            rationale = ""          # a JSON null is "no rationale", not the string "None"
+        elif not isinstance(rationale, str):
             rationale = _safe_str(rationale)
         markers = entry.get("supporting_markers", []) or []
         if not isinstance(markers, list):

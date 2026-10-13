@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.mcp.McpHttpEndpoint.HttpResponse;
+import qupath.ext.qpcat.mcp.McpJsonRpc.CallContext;
 import qupath.ext.qpcat.mcp.McpJsonRpc.Tool;
 import qupath.ext.qpcat.mcp.McpJsonRpc.ToolResult;
 
@@ -19,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Protocol behaviour of {@link McpJsonRpc} with the transport stubbed out. */
 class McpJsonRpcTest {
 
-    private static final class Stub implements Tool {
+    private static class Stub implements Tool {
         final String name;
         final java.util.function.Function<JsonObject, ToolResult> body;
         Stub(String name, java.util.function.Function<JsonObject, ToolResult> body) {
@@ -30,7 +31,7 @@ class McpJsonRpcTest {
         @Override public String title() { return name; }
         @Override public String description() { return "stub"; }
         @Override public JsonObject inputSchema() { return new JsonObject(); }
-        @Override public ToolResult call(JsonObject arguments) { return body.apply(arguments); }
+        @Override public ToolResult call(JsonObject arguments, CallContext context) { return body.apply(arguments); }
     }
 
     private static Map<String, String> headers(String session) {
@@ -123,8 +124,9 @@ class McpJsonRpcTest {
         assertThat(r.has("error")).isFalse();
         JsonObject result = r.getAsJsonObject("result");
         assertThat(result.get("isError").getAsBoolean()).isTrue();
+        // The agent learns the class, never the message (which may hold a path).
         assertThat(result.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
-                .contains("kaput").contains("Nothing has changed");
+                .contains("IllegalStateException").doesNotContain("kaput").contains("Nothing has changed");
     }
 
     @Test
@@ -140,9 +142,68 @@ class McpJsonRpcTest {
         JsonObject limited = json(rpc.handle(headers(s), call("ok", "{}"))).getAsJsonObject("result");
         assertThat(limited.get("isError").getAsBoolean()).isTrue();
         assertThat(limited.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
-                .isEqualTo("Too many tool calls in the last minute (limit 30). Nothing has changed. "
-                        + "Wait a moment and try again.");
+                .matches("Too many tool calls in the last minute \\(limit 30 per minute\\)\\. Nothing has changed\\. "
+                        + "Retry after [1-9][0-9]? s\\.");
+        // the refusal itself is not a counted call
         assertThat(outcomes).hasSize(30);
+    }
+
+    @Test
+    void anExemptToolIsNeverRateLimitedAndValidationRunsBeforeTheLimiter() {
+        Tool free = new Stub("free", a -> ToolResult.ok("fine")) {
+            @Override public boolean rateLimited() { return false; }
+        };
+        Tool picky = new Stub("picky", a -> ToolResult.ok("ran")) {
+            @Override public ToolResult validate(JsonObject a) {
+                return a.has("x") ? null : ToolResult.error("x is required");
+            }
+        };
+        McpJsonRpc rpc = new McpJsonRpc("v", "i", List.of(free, picky), 2, null);
+        String s = init(rpc);
+        for (int i = 0; i < 2; i++) {
+            assertThat(json(rpc.handle(headers(s), call("picky", "{\"x\":1}"))).getAsJsonObject("result")
+                    .get("isError").getAsBoolean()).isFalse();
+        }
+        // window exhausted: a mistaken call still gets its own refusal, not the limiter's
+        JsonObject mistaken = json(rpc.handle(headers(s), call("picky", "{}"))).getAsJsonObject("result");
+        assertThat(mistaken.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
+                .isEqualTo("x is required");
+        JsonObject limited = json(rpc.handle(headers(s), call("picky", "{\"x\":1}"))).getAsJsonObject("result");
+        assertThat(limited.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
+                .startsWith("Too many tool calls");
+        for (int i = 0; i < 10; i++) {
+            assertThat(json(rpc.handle(headers(s), call("free", "{}"))).getAsJsonObject("result")
+                    .get("isError").getAsBoolean()).isFalse();
+        }
+    }
+
+    @Test
+    void initializeEchoesASupportedRequestedVersionAndOtherwiseAnswersOurs() {
+        McpJsonRpc rpc = new McpJsonRpc("v", "i", List.of(), 30, null);
+        JsonObject older = json(rpc.handle(headers(null),
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\"}}"));
+        assertThat(older.getAsJsonObject("result").get("protocolVersion").getAsString()).isEqualTo("2025-03-26");
+        JsonObject unknown = json(rpc.handle(headers(null),
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2030-01-01\"}}"));
+        assertThat(unknown.getAsJsonObject("result").get("protocolVersion").getAsString()).isEqualTo("2025-06-18");
+        JsonObject legacy = json(rpc.handle(headers(null),
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\"}}"));
+        assertThat(legacy.getAsJsonObject("result").get("protocolVersion").getAsString()).isEqualTo("2025-06-18");
+    }
+
+    @Test
+    void sessionEvictionIsLeastRecentlyUsedNotOldestCreated() throws Exception {
+        McpJsonRpc rpc = new McpJsonRpc("v", "i", List.of(), 30, null);
+        String first = init(rpc);
+        for (int i = 1; i < McpJsonRpc.MAX_SESSIONS; i++) {
+            init(rpc);
+            Thread.sleep(1);
+        }
+        // the oldest session is used again, so it must survive the next eviction
+        assertThat(rpc.handle(headers(first), "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}").status()).isEqualTo(200);
+        Thread.sleep(1);
+        init(rpc);
+        assertThat(rpc.handle(headers(first), "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"ping\"}").status()).isEqualTo(200);
     }
 
     @Test

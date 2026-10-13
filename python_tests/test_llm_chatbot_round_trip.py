@@ -95,3 +95,14 @@ def test_chatbot_never_touches_the_network_even_with_a_key_present(mod, monkeypa
     mod.run_explainer("CHATBOT", "x", "sk-ant-should-not-be-used", "http://x", MARKERS,
                       10, "all", 30, pasted_response="[]")
     assert called == []
+
+
+def test_a_null_rationale_is_stored_as_empty_not_the_word_none(mod):
+    reply = json.dumps([{"cluster_id": 0, "phenotype": "T cell", "confidence": "high",
+                         "rationale": None, "supporting_markers": ["CD3"]},
+                        {"cluster_id": 1, "phenotype": "Tumor", "confidence": "low",
+                         "rationale": "PanCK high", "supporting_markers": []}])
+    out = mod.run_explainer("MCP", "agent", "", "", MARKERS, 10, "all", 30, pasted_response=reply)
+    rows = json.loads(out["explanations_json"])
+    assert rows[0]["rationale"] == ""
+    assert rows[1]["rationale"] == "PanCK high"

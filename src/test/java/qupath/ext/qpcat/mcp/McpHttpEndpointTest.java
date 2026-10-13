@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import qupath.ext.qpcat.mcp.McpJsonRpc.CallContext;
 import qupath.ext.qpcat.mcp.McpJsonRpc.Tool;
 import qupath.ext.qpcat.mcp.McpJsonRpc.ToolResult;
 
@@ -48,7 +49,7 @@ class McpHttpEndpointTest {
             o.addProperty("type", "object");
             return o;
         }
-        @Override public ToolResult call(JsonObject arguments) {
+        @Override public ToolResult call(JsonObject arguments, CallContext context) {
             return ToolResult.ok("echo: " + arguments.get("text").getAsString());
         }
     }

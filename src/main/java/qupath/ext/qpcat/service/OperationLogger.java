@@ -225,7 +225,18 @@ public class OperationLogger {
      * Log a simple event (e.g. config save/load, environment setup).
      */
     public synchronized void logEvent(String eventType, String description) {
-        Path logFile = resolveLogFile();
+        logEvent(project, eventType, description);
+    }
+
+    /**
+     * As {@link #logEvent(String, String)}, but into the log of an explicit project:
+     * for events about a project that is no longer the active one (the MCP server
+     * stopping because the project was closed).
+     *
+     * @param target the project whose log receives the line; nothing is written when null
+     */
+    public synchronized void logEvent(Project<?> target, String eventType, String description) {
+        Path logFile = resolveLogFile(target);
         if (logFile == null) return;
 
         String text = "--- " + eventType + " --- "
@@ -423,12 +434,16 @@ public class OperationLogger {
      * Returns null if no project is set or directory creation fails.
      */
     private Path resolveLogFile() {
-        if (project == null) {
+        return resolveLogFile(project);
+    }
+
+    private Path resolveLogFile(Project<?> target) {
+        if (target == null) {
             return null;
         }
 
         try {
-            Path projectDir = project.getPath().getParent();
+            Path projectDir = target.getPath().getParent();
             Path logsDir = projectDir.resolve(LOGS_DIR);
             if (!Files.exists(logsDir)) {
                 Files.createDirectories(logsDir);

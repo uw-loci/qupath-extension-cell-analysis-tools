@@ -106,7 +106,13 @@ public class LlmExplainerService {
         public String resultName = "";      // pi-1: clustering-result name/hash
         public String imageName = "";       // pi-1: image-level provenance
         public String operatorUser = "";    // pi-5: OS user attribution
-        /** CHATBOT only: the reply the user pasted. Empty asks for the prompt alone. */
+        /** MCP only: the connecting client's User-Agent, sanitised; empty elsewhere. */
+        public String client = "";
+        /** Set when this write replaces an existing bundle: "<provider>/<label> written <timestamp>". */
+        public String replaced = null;
+        /** Set when the reply carried rows for cluster ids the result does not have. */
+        public String droppedRows = null;
+        /** CHATBOT and MCP: the reply the user pasted or the agent sent. Empty asks for the prompt alone. */
         public String pastedResponse = "";
     }
 
@@ -306,17 +312,7 @@ public class LlmExplainerService {
      */
     public static void writeAuditLog(ExplainRequest req, ExplainResult result,
                                       long durationMs) {
-        Map<String, String> params = new LinkedHashMap<>();
-        params.put("Project", emptyToUnknown(req.projectName));
-        params.put("Clustering result", emptyToUnknown(req.resultName));
-        params.put("Image", emptyToUnknown(req.imageName));
-        params.put("User", emptyToUnknown(req.operatorUser));
-        params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
-        params.put(req.provider == Provider.MCP ? "Agent" : "Model",
-                req.model != null ? req.model : "");
-        if (req.provider == Provider.OLLAMA) {
-            params.put("Endpoint", req.endpoint != null ? req.endpoint : "");
-        }
+        Map<String, String> params = baseParams(req);
         params.put("Prompt template", result.promptTemplate);
         if (result.promptHash != null && !result.promptHash.isEmpty()) {
             params.put("Prompt hash", result.promptHash);
@@ -332,6 +328,9 @@ public class LlmExplainerService {
                 result.outputTokens >= 0 ? String.valueOf(result.outputTokens) : "unknown");
         params.put("Token count",
                 result.tokenCount >= 0 ? String.valueOf(result.tokenCount) : "unknown");
+        if (req.droppedRows != null) {
+            params.put("Dropped rows", req.droppedRows);
+        }
 
         Map<String, String> blocks = new LinkedHashMap<>();
         blocks.put("Prompt",
@@ -354,6 +353,61 @@ public class LlmExplainerService {
         }
         OperationLogger.getInstance().logLargeOperation(
                 "LLM EXPLAIN", params, blocks, summary, durationMs);
+    }
+
+    /**
+     * Write an {@code === LLM EXPLAIN [REFUSED] ===} block for a write the
+     * tool declined (prose reply, missing overwrite flag, prompt-hash mismatch).
+     *
+     * @param req     the request as far as it was built
+     * @param reason  one-line reason, as told to the caller
+     * @param partial the prompt/reply pair when the round trip ran; null otherwise
+     * @param durationMs wall-clock duration, or -1
+     */
+    public static void writeAuditRefusal(ExplainRequest req, String reason,
+                                         ExplainResult partial, long durationMs) {
+        Map<String, String> params = baseParams(req);
+        if (partial != null) {
+            params.put("Prompt template", partial.promptTemplate);
+            if (partial.promptHash != null && !partial.promptHash.isEmpty()) {
+                params.put("Prompt hash", partial.promptHash);
+            }
+        }
+        params.put("Cluster ids",
+                req.clusterIds == null || req.clusterIds.isEmpty() ? "all" : req.clusterIds.toString());
+        params.put("Top markers", String.valueOf(req.topN));
+        params.put("Refused", reason);
+        Map<String, String> blocks = null;
+        if (partial != null) {
+            blocks = new LinkedHashMap<>();
+            blocks.put("Prompt", LlmAuditScrubber.scrub(partial.prompt != null ? partial.prompt : ""));
+            blocks.put("Response", LlmAuditScrubber.scrub(
+                    partial.responseRaw != null ? partial.responseRaw : ""));
+        }
+        OperationLogger.getInstance().logLargeOperation(
+                "LLM EXPLAIN [REFUSED]", params, blocks, "REFUSED, nothing written", durationMs);
+    }
+
+    /** The provenance rows every LLM EXPLAIN block starts with. */
+    private static Map<String, String> baseParams(ExplainRequest req) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("Project", emptyToUnknown(req.projectName));
+        params.put("Clustering result", emptyToUnknown(req.resultName));
+        params.put("Image", emptyToUnknown(req.imageName));
+        params.put("User", emptyToUnknown(req.operatorUser));
+        params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
+        params.put(req.provider == Provider.MCP ? "Agent" : "Model",
+                req.model != null ? req.model : "");
+        if (req.provider == Provider.MCP) {
+            params.put("Client", emptyToUnknown(req.client));
+        }
+        if (req.provider == Provider.OLLAMA) {
+            params.put("Endpoint", req.endpoint != null ? req.endpoint : "");
+        }
+        if (req.replaced != null) {
+            params.put("Overwrite", "replaced " + req.replaced);
+        }
+        return params;
     }
 
     private static String emptyToUnknown(String s) {

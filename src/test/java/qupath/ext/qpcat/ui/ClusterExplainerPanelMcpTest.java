@@ -9,8 +9,13 @@ import javafx.collections.ObservableList;
 import javafx.scene.Node;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.Scene;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.mcp.ExplanationListeners;
@@ -101,9 +106,15 @@ class ClusterExplainerPanelMcpTest {
         assertThat(source.getText())
                 .startsWith("Last written by Claude Code (claude-fable-5-1) over MCP at ")
                 .contains("Saved to the result on disk");
+        // The announcement is pinned above the scrolling content, not in the Run
+        // section's status line, which at the default window size was below the fold.
+        Label notice = field(panel, "mcpNoticeLabel");
+        assertThat(notice.isManaged()).isTrue();
+        assertThat(notice.getText()).isEqualTo(
+                "An AI agent just wrote 2 suggestions over MCP. They are saved with this "
+                + "result; review them in the Suggestions table below.");
         Label status = field(panel, "statusLabel");
-        assertThat(status.getText()).isEqualTo(
-                "An AI agent just wrote 2 suggestions over MCP. Scroll the table to review them.");
+        assertThat(status.getText()).as("the Run status line is left alone").isEqualTo("Ready.");
 
         FxHarness.onFx(panel::dispose);
         assertThat(ExplanationListeners.count(name)).as("window closed, listener gone").isZero();
@@ -117,12 +128,97 @@ class ClusterExplainerPanelMcpTest {
         // At the results window's default height the table fell below the tab's
         // edge with nothing to scroll; the content must keep its preferred height
         // inside a ScrollPane that otherwise fills the tab.
-        assertThat(root).isInstanceOf(ScrollPane.class);
-        ScrollPane scroll = (ScrollPane) root;
+        assertThat(root).isInstanceOf(BorderPane.class);
+        BorderPane tab = (BorderPane) root;
+        assertThat(tab.getCenter()).isInstanceOf(ScrollPane.class);
+        ScrollPane scroll = (ScrollPane) tab.getCenter();
         assertThat(scroll.isFitToWidth()).isTrue();
         assertThat(scroll.isFitToHeight()).isTrue();
         assertThat(scroll.getHbarPolicy()).isEqualTo(ScrollPane.ScrollBarPolicy.NEVER);
         assertThat(((Region) scroll.getContent()).getMinHeight()).isEqualTo(Region.USE_PREF_SIZE);
+        // The MCP notice is pinned above the scrolled content and hidden until a write.
+        Label notice = field(panel, "mcpNoticeLabel");
+        assertThat(tab.getTop()).isSameAs(notice);
+        assertThat(notice.isManaged()).isFalse();
+    }
+
+    @Test
+    void anMcpWriteScrollsTheSuggestionsIntoView() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        String name = "mcp-scroll-" + System.nanoTime();
+        ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), name);
+        Node root = FxHarness.onFxGet(panel::build);
+        // A tab shorter than its content, as the results window is at 926x747.
+        Scene scene = FxHarness.onFxGet(() -> {
+            Scene sc = new Scene(new javafx.scene.layout.StackPane(root), 900, 450);
+            sc.getRoot().applyCss();
+            sc.getRoot().layout();
+            return sc;
+        });
+        assertThat(scene).isNotNull();
+        ScrollPane scroll = field(panel, "scrollPane");
+        assertThat(scroll.getVvalue()).as("opens at the top").isZero();
+
+        FxHarness.onFx(() -> ExplanationListeners.notify(name, bundle("Codex", 3)));
+        // The scroll is deferred one FX turn so it follows the layout the write caused.
+        FxHarness.onFx(() -> { });
+        FxHarness.onFx(() -> {
+            scene.getRoot().applyCss();
+            scene.getRoot().layout();
+        });
+
+        Region content = (Region) scroll.getContent();
+        VBox results = field(panel, "resultsBox");
+        double contentHeight = content.getLayoutBounds().getHeight();
+        double viewportHeight = scroll.getViewportBounds().getHeight();
+        assertThat(contentHeight).as("content taller than the viewport").isGreaterThan(viewportHeight);
+        double visibleTop = scroll.getVvalue() * (contentHeight - viewportHeight);
+        double resultsTop = results.getBoundsInParent().getMinY();
+        assertThat(scroll.getVvalue()).isGreaterThan(0.0);
+        assertThat(resultsTop).as("Suggestions heading at or below the viewport top")
+                .isGreaterThanOrEqualTo(visibleTop - 1.0);
+        assertThat(resultsTop).as("Suggestions heading inside the viewport")
+                .isLessThan(visibleTop + viewportHeight);
+        // The "Last written by" line sits between the heading and the table; a
+        // scroll that shows the table but hides that line is the bug this guards.
+        Label source = field(panel, "sourceLabel");
+        double sourceTop = results.getBoundsInParent().getMinY() + source.getBoundsInParent().getMinY();
+        assertThat(sourceTop).isGreaterThanOrEqualTo(visibleTop - 1.0)
+                .isLessThan(visibleTop + viewportHeight);
+        Label notice = field(panel, "mcpNoticeLabel");
+        assertThat(notice.isManaged()).isTrue();
+        assertThat(notice.getLayoutBounds().getHeight()).as("the notice has laid out").isGreaterThan(0.0);
+        FxHarness.onFx(panel::dispose);
+    }
+
+    @Test
+    void confidenceHeaderSaysItIsTheModelsOwnEstimate() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), null);
+        FxHarness.onFx(panel::build);
+        TableView<ClusterExplanation> table = field(panel, "resultsTable");
+        TableColumn<ClusterExplanation, ?> confidence = table.getColumns().stream()
+                .filter(c -> c.getGraphic() instanceof Label l && "Confidence".equals(l.getText()))
+                .findFirst().orElseThrow(() -> new AssertionError("no Confidence column"));
+        Label header = (Label) confidence.getGraphic();
+        assertThat(header.getTooltip()).isNotNull();
+        assertThat(header.getTooltip().getText()).isEqualTo(
+                "The model's own confidence in its suggestion (HI/MD/LO), not a measured accuracy.");
+    }
+
+    @Test
+    void theBannerAndTheSourceLineCarryTheClinicalCaveats() {
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), null);
+        Node root = FxHarness.onFxGet(panel::build);
+        ScrollPane scroll = (ScrollPane) ((BorderPane) root).getCenter();
+        Label banner = (Label) ((VBox) scroll.getContent()).getChildren().get(0);
+        assertThat(banner.getText())
+                .contains("Research use only: these are suggestions to check, not diagnoses.");
+        Label source = field(panel, "sourceLabel");
+        assertThat(source.getTooltip().getText())
+                .contains("self-reported by the agent")
+                .contains("without verifying it");
     }
 
     @Test

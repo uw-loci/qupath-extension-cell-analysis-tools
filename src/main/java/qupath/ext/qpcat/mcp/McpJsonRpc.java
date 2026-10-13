@@ -34,8 +34,11 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
     private static final Logger logger = LoggerFactory.getLogger(McpJsonRpc.class);
 
     public static final String PROTOCOL_VERSION = "2025-06-18";
+    /** Accepted in the {@code MCP-Protocol-Version} header. */
     static final Set<String> SUPPORTED_PROTOCOL_VERSIONS =
             Set.of("2025-06-18", "2025-03-26", "2024-11-05");
+    /** Echoed back from initialize when the client asks for one of these; otherwise ours. */
+    static final Set<String> NEGOTIABLE_PROTOCOL_VERSIONS = Set.of("2025-06-18", "2025-03-26");
     static final int MAX_SESSIONS = 16;
     static final String SESSION_HEADER = "Mcp-Session-Id";
 
@@ -45,6 +48,11 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
     static final int INVALID_PARAMS = -32602;
     static final int SERVER_ERROR = -32000;
 
+    /** Per-call facts the transport knows and a tool may record; never trusted for authorisation. */
+    public record CallContext(String client) {
+        public static final CallContext NONE = new CallContext("");
+    }
+
     /** One MCP tool. */
     public interface Tool {
         String name();
@@ -52,7 +60,16 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
         String description();
         /** JSON Schema of the {@code arguments} object. */
         JsonObject inputSchema();
-        ToolResult call(JsonObject arguments) throws Exception;
+        /**
+         * Cheap argument checks, run before the rate limiter and the one-in-flight
+         * gate so a mistaken call gets its specific refusal.
+         *
+         * @return the refusal, or null when the arguments are acceptable
+         */
+        default ToolResult validate(JsonObject arguments) throws Exception { return null; }
+        /** False exempts the tool from the per-minute limit. */
+        default boolean rateLimited() { return true; }
+        ToolResult call(JsonObject arguments, CallContext context) throws Exception;
     }
 
     /** Text content blocks plus the error flag. */
@@ -80,8 +97,10 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
      * @param serverVersion    reported in {@code serverInfo.version}
      * @param instructions     server instructions text for the agent
      * @param tools            the tool set, fixed for the server's life
-     * @param maxCallsPerMinute token-bucket size for {@code tools/call}
-     * @param toolCallListener receives (toolName, outcome) after every accepted call; may be null
+     * @param maxCallsPerMinute sliding-window limit on {@code tools/call} for tools that are
+     *                          {@link Tool#rateLimited()}; refusals name the seconds to wait
+     * @param toolCallListener receives (toolName, outcome) after every call a tool answered,
+     *                         including its own refusals; may be null
      */
     public McpJsonRpc(String serverVersion, String instructions, List<Tool> tools,
                       int maxCallsPerMinute, BiConsumer<String, String> toolCallListener) {
@@ -133,7 +152,8 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
         }
 
         if ("initialize".equals(method)) {
-            return initialize(id);
+            return initialize(id, msg.has("params") && msg.get("params").isJsonObject()
+                    ? msg.getAsJsonObject("params") : new JsonObject());
         }
 
         String sessionId = headers.get("mcp-session-id");
@@ -143,6 +163,7 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
                             ? "Missing Mcp-Session-Id header; call initialize first."
                             : "Unknown Mcp-Session-Id; call initialize again."));
         }
+        sessions.put(sessionId, System.nanoTime());   // least-recently-USED eviction
 
         if (method.startsWith("notifications/")) {
             return HttpResponse.empty(202);
@@ -160,14 +181,16 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
             case "tools/list":
                 return HttpResponse.json(200, resultBody(id, toolsList()));
             case "tools/call":
-                return toolsCall(id, params);
+                String userAgent = headers.get("user-agent");
+                return toolsCall(id, params,
+                        new CallContext(userAgent == null ? "" : McpHttpEndpoint.describe(userAgent)));
             default:
                 return HttpResponse.json(200, errorBody(id, METHOD_NOT_FOUND,
                         "Method not found: " + McpHttpEndpoint.describe(method)));
         }
     }
 
-    private HttpResponse initialize(JsonElement id) {
+    private HttpResponse initialize(JsonElement id, JsonObject params) {
         if (id == null) {
             return HttpResponse.json(200, errorBody(JsonNull.INSTANCE, INVALID_REQUEST,
                     "initialize is a request and needs an id."));
@@ -176,12 +199,15 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
         if (sessions.size() >= MAX_SESSIONS) {
             sessions.entrySet().stream()
                     .min(Map.Entry.comparingByValue())
-                    .ifPresent(oldest -> sessions.remove(oldest.getKey()));
+                    .ifPresent(leastRecentlyUsed -> sessions.remove(leastRecentlyUsed.getKey()));
         }
         sessions.put(sessionId, System.nanoTime());
 
+        String requested = stringOrNull(params.get("protocolVersion"));
+        String negotiated = requested != null && NEGOTIABLE_PROTOCOL_VERSIONS.contains(requested.trim())
+                ? requested.trim() : PROTOCOL_VERSION;
         JsonObject result = new JsonObject();
-        result.addProperty("protocolVersion", PROTOCOL_VERSION);
+        result.addProperty("protocolVersion", negotiated);
         JsonObject capabilities = new JsonObject();
         JsonObject toolsCap = new JsonObject();
         toolsCap.addProperty("listChanged", false);
@@ -212,7 +238,7 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
         return result;
     }
 
-    private HttpResponse toolsCall(JsonElement id, JsonObject params) {
+    private HttpResponse toolsCall(JsonElement id, JsonObject params, CallContext context) {
         String name = stringOrNull(params.get("name"));
         if (name == null) {
             return HttpResponse.json(200, errorBody(id, INVALID_PARAMS, "Missing tool name."));
@@ -228,12 +254,31 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
         }
         JsonObject arguments = argsEl != null && argsEl.isJsonObject()
                 ? argsEl.getAsJsonObject() : new JsonObject();
+        String resultArg = arguments.has("result") && arguments.get("result").isJsonPrimitive()
+                ? " [result=" + McpHttpEndpoint.describe(arguments.get("result").getAsString()) + "]" : "";
 
-        if (!rateLimiter.tryAcquire()) {
-            logger.info("MCP tool call rejected: rate limit (tool={})", name);
-            return HttpResponse.json(200, resultBody(id, toolResultJson(ToolResult.error(
-                    "Too many tool calls in the last minute (limit " + rateLimiter.capacity
-                            + "). Nothing has changed. Wait a moment and try again."))));
+        // Argument mistakes are answered before the limiter and the gate, so a
+        // mistaken call is told what was wrong with it, not that it was one too many.
+        long t0 = System.nanoTime();
+        ToolResult result;
+        try {
+            result = tool.validate(arguments);
+        } catch (Exception e) {
+            result = failed(name, e);
+        }
+        if (result != null) {
+            return finish(id, name, resultArg, result, t0);
+        }
+
+        if (tool.rateLimited()) {
+            long retryAfter = rateLimiter.tryAcquire();
+            if (retryAfter > 0) {
+                logger.info("MCP tool call rejected: rate limit (tool={})", name);
+                return HttpResponse.json(200, resultBody(id, toolResultJson(ToolResult.error(
+                        "Too many tool calls in the last minute (limit " + rateLimiter.capacity
+                                + " per minute). Nothing has changed. Retry after " + retryAfter
+                                + " s."))));
+            }
         }
         if (!callInFlight.compareAndSet(false, true)) {
             logger.info("MCP tool call rejected: another call is in flight (tool={})", name);
@@ -241,21 +286,27 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
                     "Another tool call is still running; this server handles one at a time. "
                             + "Nothing has changed. Wait for it to finish and try again."))));
         }
-        long t0 = System.nanoTime();
-        ToolResult result;
         try {
-            result = tool.call(arguments);
+            result = tool.call(arguments, context);
         } catch (Exception e) {
-            logger.warn("MCP tool '{}' failed: {}", name, e.toString());
-            result = ToolResult.error("The tool failed: " + e.getClass().getSimpleName()
-                    + (e.getMessage() != null ? ": " + e.getMessage() : "")
-                    + ". Nothing has changed.");
+            result = failed(name, e);
         } finally {
             callInFlight.set(false);
         }
+        return finish(id, name, resultArg, result, t0);
+    }
+
+    /** The agent learns the exception's class only; the message (which may hold a path) stays in the log. */
+    private static ToolResult failed(String name, Exception e) {
+        logger.warn("MCP tool '{}' failed: {}", name, e.toString());
+        return ToolResult.error("The tool failed with " + e.getClass().getSimpleName()
+                + ". Nothing has changed. The person at QuPath can find the details in the QuPath log.");
+    }
+
+    private HttpResponse finish(JsonElement id, String name, String resultArg, ToolResult result, long t0) {
         long ms = (System.nanoTime() - t0) / 1_000_000L;
         String outcome = result.isError() ? "error" : "ok";
-        logger.info("MCP tool call: {} -> {} ({} ms)", name, outcome, ms);
+        logger.info("MCP tool call: {}{} -> {} ({} ms)", name, resultArg, outcome, ms);
         toolCallListener.accept(name, outcome + " (" + ms + " ms)");
         return HttpResponse.json(200, resultBody(id, toolResultJson(result)));
     }
@@ -319,14 +370,18 @@ public final class McpJsonRpc implements McpHttpEndpoint.Handler {
             this.windowNanos = windowNanos;
         }
 
-        synchronized boolean tryAcquire() {
+        /** @return 0 when acquired, else the whole seconds (at least 1) until a slot frees */
+        synchronized long tryAcquire() {
             long now = System.nanoTime();
             while (!stamps.isEmpty() && now - stamps.peekFirst() > windowNanos) {
                 stamps.pollFirst();
             }
-            if (stamps.size() >= capacity) return false;
+            if (stamps.size() >= capacity) {
+                long waitNanos = windowNanos - (now - stamps.peekFirst());
+                return Math.max(1L, (waitNanos + 999_999_999L) / 1_000_000_000L);
+            }
             stamps.addLast(now);
-            return true;
+            return 0;
         }
     }
 }

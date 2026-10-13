@@ -142,8 +142,24 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   same `parse_response`. MCP is not an entry in the Provider box, because the agent initiates,
   not the tab; the tab shows a line saying which agent wrote the table and when. If a result
   already has explanations the tool refuses unless the agent passes `overwrite: true`, naming
-  the existing source and date, so a careless overwrite leaves an explicit choice in the agent's
-  own transcript.
+  the existing source and date; the refusal is recorded in the project audit log as an
+  `=== LLM EXPLAIN [REFUSED] ===` block, and an accepted overwrite adds an `Overwrite: replaced ...` row, so the choice is in
+  the lab's record and not only in the agent's transcript.
+
+  Four things the persona tests changed before release. `qpcat_set_explanations` takes the
+  `prompt_hash` (and `top_n` / `cluster_ids`) the agent got from `qpcat_explain_prompt`,
+  rebuilds the prompt and refuses on a mismatch, so the audit log records the prompt actually
+  answered -- the first draft recorded the default prompt whenever the agent had asked for
+  fewer markers or clusters. Its success text counts honestly, `Saved N suggestions (K with a
+  phenotype)`, and names rows whose cluster id matched nothing instead of dropping them in
+  silence; unknown argument names, a string where `overwrite` wants a boolean, and cluster ids
+  the result does not have are each refused with a message naming the accepted form, before
+  the rate limiter runs; a blocked interface thread is reported as that, not as "no project
+  is open". `qpcat_list_results` sorts by each result's own timestamp rather than file date (a
+  copied project had put a two-day-old result first under a "newest first" promise), and
+  reports a coarse scope -- `1 image`, `8 images` -- never the image's name, which the first
+  draft had sent as the scope label. And the audit entry carries the client's `User-Agent` and
+  that coarse scope beside the agent label, which stays self-reported and is recorded as such.
 
   **The server is off on every installation and after every restart**, because there is no
   preference that can remember "on" -- the state is in memory only. Turning it on is two steps,
@@ -152,11 +168,16 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   `127.0.0.1` on a fixed port, 51516 (`qupath-mcp` holds 51515, so both can run), refuses any
   request whose `Origin` or `Host` is not loopback (the MCP specification's one MUST, and a
   loopback bind alone does not stop a web page you visit from posting to the port), requires a
-  token minted fresh on each start and shown in the window only for as long as that server runs,
-  never logs or persists that token, rate-limits to 30 tool calls a minute, and stops itself
-  when the project changes or after 60 minutes with no connection or call. No tool takes a path, a URL or a filename -- a result is named only
-  by exact membership in the list the agent was given -- and no tool runs Groovy, reads an
-  image, or reads a cell. That last point is the deliberate difference from
+  token minted fresh on each start and shown in the window only for as long as that server runs
+  (QP-CAT never logs or persists that token; the agent's own configuration does hold it, which
+  is why it dies at Stop), rate-limits to 120 tool calls a minute with `qpcat_list_results`
+  exempt and a retry-after in the refusal, and stops itself when the project changes or after
+  60 minutes with no connection or call; start and stop each write a line to the project audit
+  log. A managed install can remove the feature with `-Dqpcat.mcp.disabled=true` in the
+  launcher's Java options: both menu items disappear and a start attempt refuses with a message
+  naming the property. It is not a preference, so nothing can persist "on". No tool takes a
+  path, a URL or a filename -- a result is named only by exact membership in the list the agent
+  was given -- and no tool runs Groovy, reads an image, or reads a cell. That last point is the deliberate difference from
   `earthmover-support/qupath-mcp`, which inspired the transport and whose own security page
   states that its tools can run any code in QuPath with the user's privileges. The transport is
   a raw `java.net.ServerSocket`, not `com.sun.net.httpserver`, because the official 0.7.0
@@ -184,12 +205,17 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   suggestions saved with provider `MCP` and the agent label as model, the second write refused
   without `overwrite`, `overwrite: true` replacing and saying so, a project change stopping the
   server and clearing the token, and the port refusing connections after the stop. The log of
-  that run contains no string of the token's shape.
+  that run contains no string of the token's shape. **Not run: the jpackaged QuPath runtime**
+  of the official Windows and macOS builds -- its module list was read, the code has not been
+  executed on it. The 60-minute idle stop has never fired either.
 
   **Clients that have connected: Claude Code, on Linux, on 2026-10-13** -- registered with
   the documented one-liner, `claude mcp list` reported `Connected`, and the connection was
   refused after Stop server. A Python MCP client drove all three tools in the harness run
-  above, and the Explainer tab updated live while a saved result was open. **Not Codex, not
+  above, and the Explainer tab updated live during that client's write while a saved result
+  was open; a second Linux walk on a real QuPath window went from the menu tick to a filled
+  tab with the tools called from that client by hand. No agent has yet run the three calls on
+  its own from one typed sentence. **Not Codex, not
   Cursor, not Gemini CLI, not VS Code, not Claude Desktop, on any platform**: their
   configuration snippets are written from each client's published format and are each
   labeled unverified. The specification
