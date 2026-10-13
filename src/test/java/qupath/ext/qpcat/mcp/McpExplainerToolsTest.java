@@ -35,6 +35,9 @@ class McpExplainerToolsTest {
     @TempDir
     Path dir;
 
+    /** A well-formed sha256 hex; the Appose gate is reached before it is compared. */
+    private static final String HASH = "a".repeat(64);
+
     private Project<BufferedImage> project;
     private Map<String, Tool> tools;
 
@@ -77,7 +80,7 @@ class McpExplainerToolsTest {
         assertThat(tools.keySet()).containsExactlyInAnyOrder(
                 "qpcat_list_results", "qpcat_explain_prompt", "qpcat_set_explanations");
         JsonArray required = tools.get("qpcat_set_explanations").inputSchema().getAsJsonArray("required");
-        assertThat(required).extracting(e -> e.getAsString()).containsExactly("result", "response", "agent");
+        assertThat(required).extracting(e -> e.getAsString()).containsExactly("result", "response", "agent", "prompt_hash");
         assertThat(tools.get("qpcat_explain_prompt").inputSchema().getAsJsonArray("required"))
                 .extracting(e -> e.getAsString()).containsExactly("result");
     }
@@ -116,7 +119,7 @@ class McpExplainerToolsTest {
     @Test
     void existingExplanationsAreNotReplacedWithoutOverwrite() throws Exception {
         ToolResult r = tools.get("qpcat_set_explanations").call(args(
-                "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"test\"}"), CallContext.NONE);
+                "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"test\",\"prompt_hash\":\"" + HASH + "\"}"), CallContext.NONE);
         assertThat(r.isError()).isTrue();
         assertThat(r.texts().get(0))
                 .contains("already has 1 suggestions")
@@ -132,13 +135,13 @@ class McpExplainerToolsTest {
         assertThat(prompt.texts().get(0)).isEqualTo(McpExplainerTools.APPOSE_NOT_RUNNING);
 
         ToolResult set = tools.get("qpcat_set_explanations").call(args(
-                "{\"result\":\"plain\",\"response\":\"[]\",\"agent\":\"test\"}"), CallContext.NONE);
+                "{\"result\":\"plain\",\"response\":\"[]\",\"agent\":\"test\",\"prompt_hash\":\"" + HASH + "\"}"), CallContext.NONE);
         assertThat(set.isError()).isTrue();
         assertThat(set.texts().get(0)).isEqualTo(McpExplainerTools.APPOSE_NOT_RUNNING);
 
         // overwrite: true on the explained result also reaches the gate, i.e. the flag is honoured
         ToolResult ow = tools.get("qpcat_set_explanations").call(args(
-                "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"test\",\"overwrite\":true}"), CallContext.NONE);
+                "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"test\",\"prompt_hash\":\"" + HASH + "\",\"overwrite\":true}"), CallContext.NONE);
         assertThat(ow.texts().get(0)).isEqualTo(McpExplainerTools.APPOSE_NOT_RUNNING);
     }
 
@@ -151,7 +154,7 @@ class McpExplainerToolsTest {
                 .texts().get(0)).contains("cluster_ids");
         assertThat(tools.get("qpcat_set_explanations").call(args("{\"result\":\"plain\",\"response\":\"x\"}"), CallContext.NONE)
                 .texts().get(0)).contains("agent");
-        assertThat(tools.get("qpcat_set_explanations").call(args("{\"result\":\"plain\",\"agent\":\"a\"}"), CallContext.NONE)
+        assertThat(tools.get("qpcat_set_explanations").call(args("{\"result\":\"plain\",\"agent\":\"a\",\"prompt_hash\":\"" + HASH + "\"}"), CallContext.NONE)
                 .texts().get(0)).contains("response");
     }
 
@@ -170,7 +173,7 @@ class McpExplainerToolsTest {
         switch (t.name()) {
             case "qpcat_list_results": return new JsonObject();
             case "qpcat_explain_prompt": return args("{\"result\":\"plain\"}");
-            default: return args("{\"result\":\"plain\",\"response\":\"x\",\"agent\":\"a\"}");
+            default: return args("{\"result\":\"plain\",\"response\":\"x\",\"agent\":\"a\",\"prompt_hash\":\"" + HASH + "\"}");
         }
     }
 
@@ -203,7 +206,7 @@ class McpExplainerToolsTest {
     void overwriteMustBeAJsonBooleanNotAStringOrNumber() throws Exception {
         for (String form : List.of("\"true\"", "1", "\"yes\"")) {
             ToolResult r = tools.get("qpcat_set_explanations").call(args(
-                    "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"t\",\"overwrite\":" + form + "}"),
+                    "{\"result\":\"explained\",\"response\":\"[]\",\"agent\":\"t\",\"prompt_hash\":\"" + HASH + "\",\"overwrite\":" + form + "}"),
                     CallContext.NONE);
             assertThat(r.isError()).as(form).isTrue();
             assertThat(r.texts().get(0)).as(form).contains("overwrite must be the JSON boolean")
@@ -241,6 +244,14 @@ class McpExplainerToolsTest {
         assertThat(ok.texts().get(0)).isEqualTo(McpExplainerTools.APPOSE_NOT_RUNNING);
         JsonObject props = tools.get("qpcat_set_explanations").inputSchema().getAsJsonObject("properties");
         assertThat(props.keySet()).contains("prompt_hash", "top_n", "cluster_ids", "overwrite");
+        // and it is required: a call without it is refused by name, before anything is read
+        ToolResult missing = tools.get("qpcat_set_explanations").call(args(
+                "{\"result\":\"plain\",\"response\":\"[]\",\"agent\":\"t\"}"), CallContext.NONE);
+        assertThat(missing.isError()).isTrue();
+        assertThat(missing.texts().get(0)).startsWith("The \"prompt_hash\" argument is required");
+        assertThat(tools.get("qpcat_set_explanations").validate(args(
+                "{\"result\":\"plain\",\"response\":\"[]\",\"agent\":\"t\"}")).texts().get(0))
+                .contains("prompt_hash");
     }
 
     @Test
@@ -271,7 +282,7 @@ class McpExplainerToolsTest {
         }
         assertThat(McpExplainerTools.coarseScope("3 project image(s), existing classifications")).isEqualTo("3 images");
         assertThat(McpExplainerTools.coarseScope("1 project image")).isEqualTo("1 image");
-        assertThat(McpExplainerTools.coarseScope("4 areas")).isEqualTo("4 areas");
+        assertThat(McpExplainerTools.coarseScope("4 areas")).isEqualTo("1 image");   // no producer writes this
         assertThat(McpExplainerTools.coarseScope("liver_L002 (existing classifications)")).isEqualTo("1 image");
     }
 

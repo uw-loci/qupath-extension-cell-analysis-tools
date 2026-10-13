@@ -134,6 +134,7 @@ public final class QpcatMcpScenario {
         if (listed.exit == 0) {
             JsonArray rows = JsonParser.parseString(listed.out.trim()).getAsJsonArray();
             ok("qpcat_list_results returned " + rows.size() + " saved result(s)");
+            note("first listing entry, verbatim: " + rows.get(0));
             boolean descending = true;
             String prev = null;
             Pattern coarse = Pattern.compile("^(\\d+ (image|images|area|areas)|unknown scope)$");
@@ -182,11 +183,6 @@ public final class QpcatMcpScenario {
         check(camel.exit != 0 && camel.out.contains("does not accept the argument(s) [topN]"),
                 "unknown argument name refused, accepted names listed",
                 "unknown argument: exit=" + camel.exit + " out=" + abbreviate(camel.out));
-        Run strTrue = run(python, mcpc, env, "qpcat_set_explanations", "{\"result\":\"" + resultName
-                + "\",\"response\":\"[]\",\"agent\":\"x\",\"overwrite\":\"true\"}");
-        check(strTrue.exit != 0 && strTrue.out.contains("overwrite must be the JSON boolean"),
-                "overwrite given as the string \"true\" is refused with a type-specific text",
-                "string overwrite: exit=" + strTrue.exit + " out=" + abbreviate(strTrue.out));
 
         // --- qpcat_explain_prompt with a non-default top_n ---
         Run prompt = run(python, mcpc, env, "qpcat_explain_prompt",
@@ -199,8 +195,8 @@ public final class QpcatMcpScenario {
         String explainHash = null;
         Matcher hm = Pattern.compile("prompt_hash: ([0-9a-f]{64})").matcher(prompt.out);
         if (hm.find()) { explainHash = hm.group(1); ok("prompt hash reported"); } else bad("no prompt hash");
-        check(prompt.out.contains("top_n: 5") && prompt.out.contains("prompt_hash (the value above)"),
-                "metadata block says to pass prompt_hash and top_n back",
+        check(prompt.out.contains("top_n: 5") && prompt.out.contains("prompt_hash (the value above; required)"),
+                "metadata block says prompt_hash is required on set and to pass top_n back",
                 "metadata block lacks the pass-back instruction: " + abbreviate(prompt.out.substring(
                         Math.max(0, prompt.out.length() - 900))));
 
@@ -215,6 +211,24 @@ public final class QpcatMcpScenario {
         setArgs.addProperty("agent", "QpcatMcpScenario (harness)");
         setArgs.addProperty("prompt_hash", explainHash != null ? explainHash : "0".repeat(64));
         setArgs.addProperty("top_n", 5);
+
+        // --- item 3 validation, with the hash from explain_prompt in hand ---
+        JsonObject strTrueArgs = setArgs.deepCopy();
+        strTrueArgs.addProperty("overwrite", "true");
+        Run strTrue = run(python, mcpc, env, "qpcat_set_explanations", strTrueArgs.toString());
+        check(strTrue.exit != 0 && strTrue.out.contains("overwrite must be the JSON boolean"),
+                "overwrite given as the string \"true\" is refused with a type-specific text",
+                "string overwrite: exit=" + strTrue.exit + " out=" + abbreviate(strTrue.out));
+        JsonObject noHash = setArgs.deepCopy();
+        noHash.remove("prompt_hash");
+        Run missingHash = run(python, mcpc, env, "qpcat_set_explanations", noHash.toString());
+        check(missingHash.exit != 0 && missingHash.out.startsWith("The \"prompt_hash\" argument is required"),
+                "a set call without prompt_hash is refused, naming the field",
+                "missing hash: exit=" + missingHash.exit + " out=" + abbreviate(missingHash.out));
+        check(!readJson(projectDir.resolve("qpcat").resolve("cluster_results").resolve(resultName + ".json"))
+                        .has("llmExplanations"),
+                "nothing was written by the refused calls", "a refused call wrote explanations");
+
         Run set = run(python, mcpc, env, "qpcat_set_explanations", setArgs.toString());
         int n = clusterIds.size();
         check(set.exit == 0 && set.out.startsWith("Saved " + n + " suggestions (" + n

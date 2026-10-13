@@ -98,7 +98,7 @@ public final class McpExplainerTools {
 
     private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
     private static final Pattern COUNTED_SCOPE =
-            Pattern.compile("^\\s*(\\d+)\\s+(?:project\\s+)?(image|area)s?(?:\\(s\\))?\\b");
+            Pattern.compile("^\\s*(\\d+)\\s+(?:project\\s+)?(image)s?(?:\\(s\\))?\\b");
     private static final Pattern SHA256_HEX = Pattern.compile("[0-9a-fA-F]{64}");
 
     private static final Set<String> EXPLAIN_KEYS = Set.of("result", "top_n", "cluster_ids");
@@ -131,8 +131,9 @@ public final class McpExplainerTools {
             return "Lists the saved QP-CAT clustering results of the project open in QuPath, "
                     + "newest first by each result's own timestamp: name, timestamp, summary, "
                     + "scope, size and whether explanations are already stored (hasExplanations). "
-                    + "scope is a count only (\"1 image\", \"8 images\", \"3 areas\"); no image "
-                    + "name or path is returned. Use a name from this list, exactly, in the other "
+                    + "scope is one of \"1 image\", \"N images\" or \"unknown scope\" (a result saved "
+                    + "without a scope, such as a YAML batch run); no image name or path is "
+                    + "returned. Use a name from this list, exactly, in the other "
                     + "two tools. Takes no arguments and is not rate limited.";
         }
         @Override public JsonObject inputSchema() {
@@ -228,7 +229,7 @@ public final class McpExplainerTools {
                     + "cluster_ids: " + (p.clusterIds.isEmpty() ? "all" : p.clusterIds.toString()) + "\n"
                     + "Next step: answer the prompt above in the exact JSON shape it asks for, then call "
                     + SET_EXPLANATIONS + " with: result (this name), response (your full reply), agent "
-                    + "(a short label for the audit log), prompt_hash (the value above), and the same "
+                    + "(a short label for the audit log), prompt_hash (the value above; required), and the same "
                     + "top_n and cluster_ids you passed here, if any. QP-CAT rebuilds the prompt from "
                     + "those and refuses the write if its hash differs from prompt_hash, so the record "
                     + "it stores is the prompt you answered.";
@@ -242,9 +243,9 @@ public final class McpExplainerTools {
         @Override public String description() {
             return "Parses your reply to the prompt from " + EXPLAIN_PROMPT + " and stores the "
                     + "per-cluster phenotype suggestions on that saved result, with your agent "
-                    + "label in the audit log. Pass back the prompt_hash (and any top_n / "
-                    + "cluster_ids) from that prompt's metadata block: the write is refused if the "
-                    + "prompt rebuilt from them hashes differently. Refuses to replace existing "
+                    + "label in the audit log. prompt_hash is required: pass it back from that "
+                    + "prompt's metadata block, with any top_n / cluster_ids you used; the write is "
+                    + "refused if the prompt rebuilt from them hashes differently. Refuses to replace existing "
                     + "explanations unless overwrite is the JSON boolean true. Writes nothing else.";
         }
         @Override public JsonObject inputSchema() {
@@ -259,12 +260,12 @@ public final class McpExplainerTools {
             ow.addProperty("description", "Set true to replace explanations that already exist "
                     + "on the result (default false). Must be a JSON boolean.");
             props.add("overwrite", ow);
-            props.add("prompt_hash", stringProp("The prompt_hash from " + EXPLAIN_PROMPT
-                    + "'s metadata block (sha256 hex). Recommended: the write is refused when the "
-                    + "prompt rebuilt for this result, top_n and cluster_ids hashes differently."));
+            props.add("prompt_hash", stringProp("Required. The prompt_hash from " + EXPLAIN_PROMPT
+                    + "'s metadata block (sha256 hex). The write is refused when the prompt "
+                    + "rebuilt for this result, top_n and cluster_ids hashes differently."));
             props.add("top_n", topNProp());
             props.add("cluster_ids", clusterIdsProp());
-            return objectSchema(props, List.of("result", "response", "agent"));
+            return objectSchema(props, List.of("result", "response", "agent", "prompt_hash"));
         }
         @Override public ToolResult validate(JsonObject args) throws Exception {
             return prepare(args, true).error;
@@ -314,7 +315,7 @@ public final class McpExplainerTools {
                         + (res.errorDetail != null ? " -- " + res.errorDetail : "")
                         + ". Nothing has changed.");
             }
-            if (p.promptHash != null && !p.promptHash.equalsIgnoreCase(res.promptHash)) {
+            if (!p.promptHash.equalsIgnoreCase(res.promptHash)) {
                 String how = "top_n=" + req.topN + " and cluster_ids="
                         + (p.clusterIds.isEmpty() ? "all" : p.clusterIds.toString());
                 LlmExplainerService.writeAuditRefusal(req, "prompt_hash mismatch: the call sent "
@@ -504,9 +505,14 @@ public final class McpExplainerTools {
         return e.getAsBoolean();
     }
 
+    /** Required: the 64-character sha256 hex from the explain_prompt metadata block. */
     private static String readPromptHash(JsonObject args) throws Invalid {
         JsonElement e = args.get("prompt_hash");
-        if (e == null || e.isJsonNull()) return null;
+        if (e == null || e.isJsonNull()) {
+            throw new Invalid("The \"prompt_hash\" argument is required: pass the prompt_hash from the "
+                    + "metadata block of " + EXPLAIN_PROMPT + " (64-character sha256 hex), so the stored "
+                    + "record is the prompt you answered. Nothing has changed.");
+        }
         if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isString()
                 || !SHA256_HEX.matcher(e.getAsString().trim()).matches()) {
             throw new Invalid("prompt_hash must be the 64-character sha256 hex string from the "
@@ -588,8 +594,9 @@ public final class McpExplainerTools {
     // ---------------------------------------------------------------- helpers
 
     /**
-     * The scope of a saved result as a count only: "1 image", "8 images", "3 areas".
-     * Never the image name the label carries for a single-image run.
+     * The scope of a saved result as a count only: "1 image", "N images", or "unknown scope"
+     * when the result was saved without a label (YAML batch runs, older saves). Never the
+     * image name the label carries for a single-image run.
      */
     static String coarseScope(String scopeLabel) {
         if (scopeLabel == null || scopeLabel.isBlank()) return "unknown scope";

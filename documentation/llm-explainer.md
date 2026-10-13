@@ -11,10 +11,11 @@ decision-making.
 > run end-to-end on 2026-10-12 -- prompt copied from the tab, answered by a Claude model
 > outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *MCP server
 > (AI agents)*: run on 2026-10-13, on Linux -- Claude Code registered the server with the
-> documented one-liner and reported it `Connected`; a Python MCP client drove all three tools
-> against a real project, and this tab updated live during that client's write. No other
-> client has connected yet, no agent has yet run the three calls unprompted from one typed
-> sentence, and the jpackaged Windows / macOS runtime has not run it; details on the
+> documented one-liner and `claude mcp list` reported it `Connected`, but never drove a tool; a
+> Python MCP client drove all three tools against a real project, and this tab's live update
+> was seen in the UI designer's walks on a real window. No other client has connected yet, no
+> agent has yet run the three calls unprompted from one typed sentence, and the official
+> Windows / macOS installers' bundled runtime has not run it; details on the
 > [MCP server](mcp-server.md) page. *Anthropic (Claude API)*: run end-to-end against the live
 > API with a real key, on 2026-09-27 -- `claude-sonnet-5`, seven clusters from the synthetic
 > demo dataset, 23 seconds. *Ollama*: **never run, by anyone.** It is built from the
@@ -28,12 +29,12 @@ decision-making.
 
 The prompt template, output JSON shape, and audit-log row format may also change.
 
-**Inspiration and prior art.** The design was inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping feature. QP-CAT's implementation differs in three notable ways: (a) supports Anthropic Claude and local Ollama in v1; OpenAI is intentionally not supported, (b) the LLM reads marker statistics only -- no pixels and no patient-identifying metadata cross the network boundary (the one thing you control: over MCP, the names you gave your saved results travel with the listing), (c) the full prompt and response are captured to a per-project audit log on every call, with API keys scrubbed on both the Java and Python sides before logging.
+**Inspiration and prior art.** The design was inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping feature. QP-CAT's implementation differs in three notable ways: (a) supports four providers -- any chatbot by clipboard, an MCP-capable agent, Anthropic Claude and local Ollama; OpenAI is intentionally not supported, (b) the LLM reads marker statistics only -- no pixels and no patient-identifying metadata cross the network boundary (the one thing you control: over MCP, the names you gave your saved results travel with the listing), (c) the full prompt and response are captured to a per-project audit log on every call, with API keys scrubbed on both the Java and Python sides before logging.
 
 ### When to use this feature
 
-- **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalise them as gating rules for the final analysis
-- **When the panel is unfamiliar** -- the most direct value. New panel + grad student = the explainer turns a 30-minute look-up-each-marker exercise into a 30-second sanity check
+- **vs Rule-Based Phenotyping** -- rule-based gating is deterministic and publication-defensible; the LLM explainer is exploratory. Use the explainer to *propose* phenotype labels, then formalize them as gating rules for the final analysis
+- **When the panel is unfamiliar** -- the most direct value. When the panel is new to you, the explainer gives a one-paragraph rationale per cluster where you would otherwise look up each marker
 - **When writing up results** -- the audit log captures the full prompt and response, which can be cited verbatim in a methods section ("cluster labels were initially proposed by Claude Sonnet 5 (`claude-sonnet-5`) on $DATE using prompt template `cluster_phenotype_v2`; the full prompt and response are archived in the project log")
 
 ### Requirements
@@ -47,8 +48,9 @@ Choose one of:
 - **An MCP-capable AI agent you already use** -- Claude Code, Codex, Cursor, Gemini CLI. No
   key either: QP-CAT opens a small local server, off until you start it, and the agent does
   the copy-and-paste round trip itself. Setup, the security model and what it cannot do are on
-  their own page, [MCP server](mcp-server.md). Run with Claude Code on Linux; other clients unverified.
-- **Anthropic Claude** -- a current Anthropic API key from [console.anthropic.com](https://console.anthropic.com/). Pay-as-you-go (~$0.003-0.015 per cluster set in current Sonnet pricing; see *Cost expectations* below).
+  their own page, [MCP server](mcp-server.md). Claude Code has connected on Linux; the tools have
+  been driven by a Python client; other clients unverified.
+- **Anthropic Claude** -- a current Anthropic API key from [platform.claude.com](https://platform.claude.com/). Pay-as-you-go (~$0.003-0.015 per cluster set in current Sonnet pricing; see *Cost expectations* below).
 - **A running Ollama instance** -- [Ollama](https://ollama.com/) installed locally (or reachable on your network) with at least one chat model pulled. Recommended models: `llama3.1:8b` (4-5 GB, fast, decent), `qwen2.5:14b` (~9 GB, more accurate), or any other model you trust. No API costs; no data leaves your machine.
 
 OpenAI is **not** supported in v1.
@@ -124,31 +126,36 @@ It works by QP-CAT opening a small local server that your agent connects to, and
 starts with it off. Turning it on is two steps: choose **Extensions > QP-CAT > Setup & help >
 MCP server for AI agents**, read the window that opens, then press **Start server**. It listens
 on `127.0.0.1` only, requires a token that is generated fresh each time you start it, and stops
-by itself when the project changes or after an hour with no calls. It offers exactly three tools: list the saved results, read
+by itself when the project changes or after an hour with no authenticated request from your
+agent. It offers exactly three tools: list the saved results, read
 one result's marker statistics, write cluster explanations back. Nothing reads a file path, an
 image, or a cell; nothing runs code.
 
 MCP is not an entry in the **Provider** box, because it is not something you run from this
 tab: the agent asks QP-CAT, and the answers appear here, with a line under **Suggestions**
 saying which agent wrote them and when. Setup is per client and takes one line of
-configuration.
-**[Full instructions, the security model, and troubleshooting: MCP server](mcp-server.md).**
+configuration; the full instructions, the security model and the troubleshooting are on the
+[MCP server](mcp-server.md) page. First ask: `list my QP-CAT results`. The agent shows the
+saved results of the open project, and the window's status line counts one tool call.
 
-The audit log entry has provider `MCP`, the agent label the tool call supplied as the model,
-the client's `User-Agent`, and the prompt and reply verbatim -- the same record the other
-providers write, plus those two rows. The label is whatever the agent chose to send; QP-CAT
-records it without verifying it. Unlike the other providers until now, the explanations are
-also saved into the result on disk. On a managed install, IT can remove the feature with a
-launcher option; see [For IT administrators](mcp-server.md#for-it-administrators).
+The audit log entry has provider `MCP` and the prompt and reply verbatim -- the same record
+the other providers write, with the `Model` row labeled `Agent` and one extra row, `Client`
+(the agent program's `User-Agent`). The agent's self-reported label is stored where the other
+providers store the model id -- in the saved result's model field and in the audit entry's
+`Agent:` row -- so every reader of the log finds it in the same place; QP-CAT records it
+without verifying it. The explanations are saved into the result on disk, as they now are for
+every provider when the tab is open on a saved result (a live run has nowhere to write). On a
+managed install, IT can remove the feature with a launcher option; see
+[For IT administrators](mcp-server.md#for-it-administrators).
 
 </details>
 
 <details>
 <summary><strong>Anthropic Claude (cloud, paid)</strong></summary>
 
-1. Go to [console.anthropic.com](https://console.anthropic.com/), create an account if needed, and create a new API key
+1. Go to [platform.claude.com](https://platform.claude.com/), create an account if needed, and create a new API key
 2. In the explainer tab, set **Provider** to "Anthropic"
-3. Set **Model**. The dropdown lists a few current ids as suggestions; it is **editable**, so you can type any id the provider accepts, including a model released after your version of QP-CAT. The id is sent verbatim, and an unrecognised one comes back as a provider error rather than falling back to something else. Anthropic's [model overview](https://docs.claude.com/en/docs/about-claude/models/overview) lists the current ids.
+3. Set **Model**. The dropdown lists a few current ids as suggestions; it is **editable**, so you can type any id the provider accepts, including a model released after your version of QP-CAT. The id is sent verbatim, and an unrecognized one comes back as a provider error rather than falling back to something else. Anthropic's [model overview](https://platform.claude.com/docs/en/models/overview) lists the current ids.
 4. Paste your API key into the **API Key** field. The key is held in memory only for this QuPath session and is never written to disk
 5. Click **Run Explainer**
 
@@ -238,7 +245,7 @@ Each row of the result table has:
 |---|---|
 | **Cluster** | The cluster id (`Cluster 0`, `Cluster 1`, ...) |
 | **Suggested phenotype** | The LLM's primary phenotype guess (e.g. "CD8+ cytotoxic T lymphocyte"). May show **(no suggestion)** -- see "Refused-to-guess rows" below |
-| **Confidence** | One of `high`, `medium`, `low` -- the LLM's self-reported confidence. Treat with skepticism; `high` does not mean correct |
+| **Confidence** | `HI`, `MD` or `LO`: the model's own `high` / `medium` / `low` from the reply (`med` and `moderate` are read as `MD`). Blank when the model set it to null **or used any other word**; the `Response:` block in the audit log keeps the original. Treat with skepticism; `HI` does not mean correct |
 | **Supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
 | **Rationale** | One-paragraph explanation of why the LLM made this call |
 
@@ -260,10 +267,11 @@ LLM output is **not deterministic** unless the provider exposes a temperature=0 
 
 - Anthropic Claude with `temperature=0` is approximately deterministic but not guaranteed byte-identical across requests
 - Ollama with `temperature=0` and the same model snapshot is closer to deterministic, but the model can be re-pulled with a different hash at any time
+- Over MCP or the chatbot the sampling settings are the agent's or the chat window's; QP-CAT cannot pin them
 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
-1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`; for an MCP run this is the `Agent:` row, which the agent reported about itself)
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`). For an MCP run no row records the model; take it from the agent's own session and report the `Agent:` row as the agent's self-description beside it
 2. Record the **prompt template version** (e.g. `cluster_phenotype_v2`)
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
@@ -279,14 +287,15 @@ One **Run Explainer** click is one LLM call with all clusters batched into the s
 | 10 | 10 | 3,000 | 1,500 | ~$0.01-0.02 |
 | 20 | 10 | 6,000 | 3,000 | ~$0.02-0.05 |
 
-Pricing changes; the audit log captures the exact `Input tokens:` and `Output tokens:` for every call so you can compute real spend at the right rate. (Anthropic charges different rates for input vs output -- Sonnet output is ~5x input -- so a combined number alone undercounts cost.) The combined `Token count:` is still emitted for backward compatibility. Ollama is free.
+Pricing changes; the audit log captures the exact `Input tokens:` and `Output tokens:` for every call (Anthropic and Ollama only; the chatbot and MCP paths record `unknown`) so you can compute real spend at the right rate. (Anthropic charges different rates for input vs output -- Sonnet output is ~5x input -- so a combined number alone undercounts cost.) The combined `Token count:` is still emitted for backward compatibility. Ollama is free.
 
-A **Cancel** button is exposed during the in-flight call. Cancelled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
+A **Cancel** button is exposed during the in-flight call. Canceled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
 
 ### [Experimental] notice
 
-**Status: three providers run, one not.** The chatbot, MCP (Claude Code and a Python
-client, Linux only) and Anthropic paths have each been run end-to-end. The Ollama path has
+**Status: three providers run, one not.** The chatbot, MCP (a Python test client, Linux only;
+Claude Code has connected but has not yet run the three calls itself) and Anthropic paths have
+each been run end-to-end. The Ollama path has
 not been run at all, so treat everything below about Ollama as design intent rather than
 observed behavior. No provider's *output* has been validated against ground truth beyond
 the seven-cluster synthetic check above.
@@ -336,10 +345,10 @@ morphology-level reasoning.
 
 ### Audit-Log Discipline for Publications
 
-Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts. Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
+Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
 - **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
-- **For an MCP run, the `Agent:` label and the `Client:` (`User-Agent`) row as logged, with the caveat that the label is self-reported** -- QP-CAT records what the agent sent and does not verify it, so check it against the agent's own transcript
+- **For an MCP run: QP-CAT does not know which model answered.** The `Agent:` row is a label the agent wrote about itself (cut at 60 characters) and the `Client:` row is the client program's `User-Agent`, not a model. Take the model from the agent's own session (the model shown in the client, or its transcript) and report the `Agent:` label as the agent's self-description beside it. The recorded prompt is the text QP-CAT handed the agent; the model saw it inside the agent's conversation, with a system prompt and tool descriptions QP-CAT does not record, and with sampling settings QP-CAT neither sets nor sees. The `Agent:` and `Client:` rows are written as sent, unscrubbed
 - **Prompt template version** as logged (currently `cluster_phenotype_v2`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
 - **Whether final phenotype labels were taken directly from the LLM output or re-derived from rule-based gating** -- these are very different reproducibility stories
@@ -390,7 +399,7 @@ See also:
 **What it usually means:** The key was mistyped, has been revoked, or has been rotated and the old value is still in the TextField or env var.
 
 **What to do:**
-1. Go to [console.anthropic.com](https://console.anthropic.com/) and verify the key is listed and active
+1. Go to [platform.claude.com](https://platform.claude.com/) and verify the key is listed and active
 2. Re-copy the key (watch for trailing whitespace) and paste again
 3. If using the `QPCAT_ANTHROPIC_KEY` environment variable, restart QuPath so the new value is picked up -- the env var is read once at launch
 
@@ -458,20 +467,20 @@ See also:
 </details>
 
 <details>
-<summary><strong>"Request cancelled" / Cancel button was clicked</strong></summary>
+<summary><strong>"Cancelled. No results applied." / Cancel button was clicked</strong></summary>
 
 **What you see:** Status banner: *"Cancelled. No results applied."*
 
 **What it usually means:** You clicked Cancel while the call was in flight, or QuPath was closed before the call returned.
 
 **What to do:**
-- Nothing -- this is the expected behavior. The audit log notes the cancelled call (look for `Cancelled: true`). The cancel is a "soft" cancel on the Java side -- the underlying HTTP request is allowed to complete in the background -- so cancelled calls **may still consume tokens depending on provider and request stage; check your billing**. Anthropic, in particular, may bill for input tokens on a request that was already in flight.
+- Nothing -- this is the expected behavior. The audit log notes the canceled call (look for `Cancelled: true`). The cancel is a "soft" cancel on the Java side -- the underlying HTTP request is allowed to complete in the background -- so cancelled calls **may still consume tokens depending on provider and request stage; check your billing**. Anthropic, in particular, may bill for input tokens on a request that was already in flight.
 - Click Run Explainer again when ready.
 
 </details>
 
 <details>
-<summary><strong>The tab is greyed out / Run Explainer is disabled</strong></summary>
+<summary><strong>The tab is grayed out / Run Explainer is disabled</strong></summary>
 
 **What you see:** The Cluster Explainer (LLM) [Experimental] tab opens but the **Run Explainer** button is disabled with a tooltip like *"Marker rankings not available for this clustering result"* or *"Select a provider"*.
 

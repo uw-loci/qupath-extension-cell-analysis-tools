@@ -8,26 +8,6 @@ copying anything by hand.
 a diagnosis. It has not been validated for, and must not be used in, diagnostic or clinical
 decision-making.
 
-> **What has actually been run.** On 2026-10-13, on Linux: Claude Code registered the server
-> with the one-liner below and `claude mcp list` reported it `Connected`; separately, a Python
-> MCP client drove all three tools against a real project from a hidden QuPath (the harness
-> scenario), and the Explainer tab updated live during that client's write while a saved
-> result was open. A second Linux walk the same day, on a real QuPath window, went from the
-> menu tick to a filled tab with the three tools called from that Python client by hand. **No
-> agent has yet run the three calls on its own from one typed sentence.** **No other client
-> has connected yet** -- Codex, Cursor, Gemini CLI, VS Code and Claude Desktop are written
-> from each client's published format and have not been exercised, on any platform, so if you
-> are the first to try one, a failure is as likely to be ours as yours -- please
-> [report](troubleshooting.md#reporting-a-bug) it. **Not run either:** the jpackaged QuPath
-> runtime that the official Windows and macOS builds ship -- only its module list has been
-> read, which is what chose the transport (see
-> [For maintainers](#for-maintainers-the-wire-protocol)) -- and the 60-minute idle stop,
-> which has never fired.
->
-> Two claims, kept separate. "Never run" is about the code path. *Unvalidated* is about the
-> answer, and applies to every provider: a suggested phenotype is a proposal to check, not a
-> label to publish.
-
 ## What this is
 
 [MCP](https://modelcontextprotocol.io) -- the Model Context Protocol -- is an open standard
@@ -39,21 +19,44 @@ Explainer tab fills in. Your own subscription does the thinking. No API key is t
 QuPath, nothing is copied by hand, and the server that makes this possible is **off until you
 turn it on**.
 
-The design follows two pieces of prior art. [`fiji_mcp`](https://github.com/NicoKiaru/fiji_mcp)
-established the shape: the chatbot is the agent and the imaging application is a tool
-provider. [`qupath-mcp`](https://github.com/earthmover-support/qupath-mcp) hosts an MCP
-server inside QuPath, and its
-[per-client install pages](https://earthmover-support.github.io/qupath-mcp/install/) are the
-model for the snippets below. QP-CAT's server differs on purpose in the ways the
-[Security](#security) section describes, and the two are independent -- see
-[Running both servers](#running-both-qp-cats-server-and-qupath-mcp).
+An *agent* is not the same thing as a *chatbot*. If you type into a web page (claude.ai,
+ChatGPT, Gemini, Copilot) you have a chatbot: use the clipboard provider on the
+[LLM explainer](llm-explainer.md#provider-setup) page, which needs no setup and produces the
+same prompt and the same table. If you type into a terminal or a code editor (Claude Code,
+Codex, Cursor, Gemini CLI) you have an agent, and this page is for you.
 
-An *agent* is not the same thing as a *chatbot*. An agent is a client that can call tools; a
-chatbot is a window you type into. If your AI assistant cannot be given an MCP server in its
-configuration, use the clipboard provider on the
-[LLM explainer](llm-explainer.md#provider-setup) page instead. It is not a lesser path.
+**The short path.**
 
-Six words this page and the window use, each in one line:
+1. **Extensions > QP-CAT > Setup & help > MCP server for AI agents**, then **Start server**
+   ([Turning it on and off](#turning-it-on-and-off)).
+2. Paste the one command the window shows into a terminal
+   ([Connecting your agent](#connecting-your-agent)).
+3. Type `list my QP-CAT results` into your agent ([Check it from the agent](#check-it-from-the-agent)).
+
+Read [Security](#security) first if anyone else uses this machine.
+
+> **What has actually been run.** On 2026-10-13, on Linux: Claude Code registered the server
+> with the command below, `claude mcp list` reported it `Connected`, and after **Stop server**
+> it reported the connection refused. Claude Code never drove a tool. The three tools were
+> called by a Python MCP client -- by hand, against a real QuPath window, and in an automated
+> QuPath test against a real project. The Explainer tab's live update was seen in the UI
+> designer's walks on a real window (screenshots
+> `mcp_03_explainer_tab_after_mcp_write.png` and `mcp_fix_04_explainer_tab_after_write.png`,
+> 2026-10-13); the automated test opens no window. **No agent has yet run the three calls on
+> its own from one typed sentence.** **No other client has connected yet** -- Codex, Cursor,
+> Gemini CLI, VS Code and Claude Desktop are written from each client's published format and
+> have not been exercised, on any platform, so if you are the first to try one, a failure is
+> as likely to be ours as yours -- please [report](troubleshooting.md#reporting-a-bug) it.
+> **Not run either:** the official Windows and macOS QuPath installers, which bundle their own
+> trimmed Java runtime. We read that runtime's list of components to choose how the server
+> talks (see [For maintainers](#for-maintainers-the-wire-protocol)) and have not run the
+> server on it. The 60-minute idle stop has never fired.
+>
+> Two claims, kept separate. "Never run" is about the code path. *Unvalidated* is about the
+> answer, and applies to every provider: a suggested phenotype is a proposal to check, not a
+> label to publish.
+
+Four words this page and the window use, each in one line:
 
 - **Bearer token**, sent as `Authorization: Bearer <TOKEN>` -- a one-time password the window
   shows you, carried in a standard HTTP header. "Bearer" means whoever holds it is let in,
@@ -65,15 +68,21 @@ Six words this page and the window use, each in one line:
 - **`Origin` header** -- what a browser attaches to a request to say which web site sent it.
   The server refuses any request carrying one that is not loopback, so a page you visit
   cannot drive your QuPath.
-- **Event stream** (SSE) -- one of the two ways an MCP server may answer over HTTP. This one
-  answers with a single plain JSON object instead, which every MCP client must accept.
-- **`-s user`** -- a Claude Code flag: register the server for every folder you open Claude
-  Code in, not only the current one.
+
+The design follows two pieces of prior art. [`fiji_mcp`](https://github.com/NicoKiaru/fiji_mcp)
+established the shape: the chatbot is the agent and the imaging application is a tool
+provider. [`qupath-mcp`](https://github.com/earthmover-support/qupath-mcp) hosts an MCP
+server inside QuPath, and its
+[per-client install pages](https://earthmover-support.github.io/qupath-mcp/install/) are the
+model for the snippets below. QP-CAT's server differs on purpose in the ways the
+[Security](#security) section describes, and the two are independent -- see
+[Running both servers](#running-both-qp-cats-server-and-qupath-mcp).
 
 ## Security
 
 Read this section before you turn the server on. Everything the server can and cannot do is
-stated here, in five short parts.
+stated here, in five short parts and a table for IT. What has and has not been run is in the
+box under [What this is](#what-this-is).
 
 ### It is off, on every installation
 
@@ -83,9 +92,12 @@ Installing or updating QP-CAT never opens a port. Only you can start the server,
 not opening a project, not running a clustering analysis. There is no preference that
 remembers "on", by design: the on/off state lives in memory only, so every QuPath restart
 begins with the server off. A "start with QuPath" option does not exist, deliberately, and is
-not planned for this release. On a managed install an administrator can go one step further
-and remove the feature with a launcher option, `-Dqpcat.mcp.disabled=true`, which hides both
-menu items; see [For IT administrators](#for-it-administrators) below.
+not planned for this release. Starting it needs no administrator rights, and QuPath needs no
+internet connection for it; the agent is the online component. Whether a Windows or macOS
+firewall prompts on a loopback-only listener has not been tested. On a managed install an
+administrator can go one step further and remove the feature with a launcher option,
+`-Dqpcat.mcp.disabled=true`, which hides both menu items; see
+[For IT administrators](#for-it-administrators) below.
 
 ### Where it listens, and who it answers
 
@@ -94,31 +106,35 @@ menu items; see [For IT administrators](#for-it-administrators) below.
 | Address | Binds `127.0.0.1` (loopback) only, never `0.0.0.0`. Port **51516**; if that is taken it tries 51517 through 51525 and tells you which one it bound | Nothing outside this machine can reach it, including other machines on your lab network or VPN. 51516 is not `qupath-mcp`'s 51515, so both can run |
 | `Origin` and `Host` headers | A request whose `Host` is missing or not loopback, or whose `Origin` is present and not loopback, is refused with **403** | A loopback bind alone does not stop a web page you visit from posting to the port from your browser. The MCP specification makes the `Origin` check a MUST ([transports, 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)) |
 | Token | A fresh random token is generated every time you start the server, shown in the window for as long as that server is running, and required on every request as `Authorization: Bearer <TOKEN>`. A request without it is refused with **401** | A stale config file cannot stay a credential: QP-CAT never persists the token or writes it to a log, and it changes on every start. Your agent's own configuration does hold a copy -- see [Residual risk](#residual-risk-stated-plainly) |
-| Lifetime | The server stops by itself when the project changes or closes, and after 60 minutes with no authenticated request or tool call -- a port scan or a client with a stale token does not keep it alive. QuPath exiting ends it too, since nothing remembers it was on | The tools are scoped to one project; switching projects must not silently repoint your agent at a different one. The idle stop covers the server you forgot about |
-| Rate | At most 120 tool calls per minute, not counting `qpcat_list_results`, and one `tools/call` in flight at a time; the rest are refused with a message that says how long to wait, not queued | The specification requires rate limiting. A serial agent makes three calls per result, so 120 catches a loop without stalling a cohort; one-at-a-time matches QP-CAT's own one-Python-task-at-a-time rule |
+| Lifetime | The server stops by itself when the project changes or closes, and after 60 minutes with no authenticated request or tool call (a request without a valid token does not reset the clock). QuPath exiting ends it too, since nothing remembers it was on | The tools are scoped to one project; switching projects must not silently repoint your agent at a different one. The idle stop covers the server you forgot about |
+| Rate | At most 120 tool calls per minute, not counting `qpcat_list_results`, and one `tools/call` in flight at a time; excess calls are refused with the wait time | The [tools page](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) of the specification requires rate limiting. A serial agent makes three calls per result, so 120 catches a loop without stalling a cohort; one-at-a-time matches QP-CAT's own one-Python-task-at-a-time rule |
 
 ### The three tools, and exactly what each one can do
 
 | Tool | Arguments | Reads | Writes |
 |---|---|---|---|
-| `qpcat_list_results` | none | The clustering results saved in the open project, as a JSON array, newest first by each result's own timestamp: name, timestamp, one-line summary (algorithm, number of clusters and of cells), a coarse scope (`1 image`, `8 images`, `3 areas` -- never an image or project name), size in bytes, what it was derived from, and whether it already has explanations | Nothing |
-| `qpcat_explain_prompt` | `result` (a name from the list above), optional `top_n`, optional `cluster_ids` | One saved result's per-cluster marker rankings; returns the explainer prompt QP-CAT would send to any other provider -- cluster ids, and for each cluster its top-N marker names with their Wilcoxon score and log2 fold change, nothing else -- then a short metadata block with the prompt's hash, `top_n` and `cluster_ids` | Nothing |
-| `qpcat_set_explanations` | `result`, `response` (the agent's reply text), `agent` (a label for the record), optional `overwrite`, and the provenance fields from the metadata block: `prompt_hash`, plus `top_n` and `cluster_ids` when they were not the defaults | The agent's reply; rebuilds the prompt from those fields and refuses if its hash does not match `prompt_hash` | The cluster explanations, into that saved result and into the project audit log, with the prompt actually answered |
+| `qpcat_list_results` | none | The clustering results saved in the open project, as a JSON array, newest first by each result's own timestamp (a result with no readable timestamp falls back to its file date). Per result: `name`; `timestamp` to the minute, no zone; `summary` -- the number of clusters (a HDBSCAN noise cluster is not counted) and of cells in the result, then the algorithm in parentheses, with `(+N noise)` when there is a noise cluster, or `(failed to read)` for a file QP-CAT could not parse; `scope` as a count only -- `1 image`, `8 images` (the result's image count, also when the run used independent areas inside those images), or `unknown scope` for a result saved without scope metadata, which includes every YAML-batch result -- never an image or project name; `autoSaved`; `sizeBytes`; `derivedFrom` and `derivedOp` (what it was derived from and by which operation) when present; `hasExplanations` | Nothing |
+| `qpcat_explain_prompt` | `result` (a name from the list above), optional `top_n` (default 10, at least 1), optional `cluster_ids` (omit for all; an explicit list keeps its order, and the order is part of the prompt) | One saved result's per-cluster marker rankings; returns the explainer prompt QP-CAT would send to any other provider -- cluster ids, and for each cluster its top-N marker names with their Wilcoxon score and log2 fold change, nothing else -- then a short metadata block with the prompt's hash, `top_n` and `cluster_ids` | Nothing |
+| `qpcat_set_explanations` | `result`, `response` (the agent's reply text), `agent` (a label for the record, cut at 60 characters), `prompt_hash` (from the metadata block; required), optional `overwrite`, and `top_n` / `cluster_ids` when they were not the defaults | The agent's reply; rebuilds the prompt from `result`, `top_n` and `cluster_ids` and refuses if its hash does not match `prompt_hash` | The cluster explanations, into that saved result and into the project audit log, with the prompt actually answered |
 
 Those marker rankings are the same statistics every other provider sees, built by the same
-code (`build_prompt` in `run_llm_explainer.py`): for each cluster, its id and the top-N
-markers by Wilcoxon score, each as a marker name, its score and its log2 fold change. No cell
-counts, no expression table, no p-values. See
-[What the LLM sees](llm-explainer.md#what-the-llm-sees) -- that section is the authority and
-this page does not restate it.
+code: for each cluster, its id and the top-N markers by Wilcoxon score, each as a marker
+name, its score and its log2 fold change. No cell counts, no expression table, no p-values.
+See [What the LLM sees](llm-explainer.md#what-the-llm-sees) -- that section is the authority
+and this page does not restate it.
 
-**What text does leave QuPath**, across the three tools, is therefore: the names of your
-saved results (which you chose -- a result you named after a case carries that name out),
-their timestamps, cluster and cell counts, a coarse scope, cluster ids, marker names with
-their rank scores, and -- in a refusal -- the label and date of explanations already stored.
-A derived result's description can also carry a cluster name you typed when you
-sub-clustered. Everything the agent receives it may forward to its own LLM provider; QuPath
-itself makes no outbound connection.
+**What text does leave QuPath**, across the three tools:
+
+- the names of your saved results, which you chose -- a result you named after a case carries
+  that name out -- with their timestamps, sizes and whether they were auto-saved;
+- cluster and cell counts, and a coarse scope;
+- cluster ids, and marker names with their rank scores;
+- in a refusal, the label and date of explanations already stored;
+- a derived result's description, which can carry a cluster name you typed when you
+  sub-clustered.
+
+Everything the agent receives it may forward to its own LLM provider; QuPath itself makes no
+outbound connection.
 
 If a result already has explanations, `qpcat_set_explanations` refuses unless the agent passes
 `overwrite: true`, and its refusal names who wrote the existing ones and when. A careful agent
@@ -132,16 +148,16 @@ explanations' own entry stays in the log.
 
 - **No file paths.** No tool takes a path, a URL, or a filename. The only way to name a result
   is to pick one of the names `qpcat_list_results` returned, matched exactly; a name that is
-  not on that list is refused without ever being resolved as a path, and the refusal never
-  echoes one.
+  not on that list is refused without ever being resolved as a path, and the refusal repeats
+  the name you sent, never a filesystem path.
 - **No code.** Nothing runs Groovy, a script, or a command. This is the one deliberate
   difference from `qupath-mcp`, whose
   [security page](https://earthmover-support.github.io/qupath-mcp/security/) states plainly
   that its tools can run any code in QuPath with your privileges and file access.
 - **No pixels, no images, no cells.** No tool reads an image, a tile, a thumbnail, or an
   individual cell measurement. No image or file name leaves either: a result's scope is
-  reported as `1 image` or `8 images`, never as the image's name, and the prompt carries
-  marker names only.
+  reported as `1 image`, `8 images` or `unknown scope`, never as the image's name, and the
+  prompt carries marker names only.
 - **No deleting, no renaming, no reclustering.** The single write is the explanation text on
   one saved result.
 - **No environment build.** If QP-CAT's analysis environment is not up,
@@ -151,57 +167,91 @@ explanations' own entry stays in the log.
 
 **Once connected, the agent acts on your behalf -- within those three tools, and nowhere
 else.** It can list your saved results, read one result's marker statistics, and write cluster
-explanations into it. That is the entire surface.
+explanations into it.
 
 ### Residual risk, stated plainly
 
 With loopback, the `Origin` check, and the token in place, the remaining exposure is another
-program running as you, on this machine, that can read the token. QP-CAT writes the token
-nowhere -- not to QuPath's log, not to a preference, not to a file -- but the feature only
-works once you have put it somewhere: your agent's configuration holds it in plain text
-(`claude mcp add` writes it into Claude Code's config; the JSON and TOML snippets below embed
-it), and the pasted command lands in your shell history. Another process running as you does
-not need QuPath's memory; it needs to read a dotfile. That is why the token dies the moment
-you press **Stop server**, why you re-run the add command after every **Start server**, and
-why `claude mcp remove qpcat` (or deleting the entry) belongs in your routine when you are
-done. A program that can read your dotfiles could read your project files directly anyway,
-which is where the risk bottoms out; that is a sentence rather than a claim of isolation. Two
-things worth acting on: do not turn the server on a machine you share with people you would
-not hand your project to, and turn it off when you are done. Whether a clinical or managed
-QuPath may run it at all is a policy question for whoever manages that machine; the switch
-they can pull is in the next block.
+program running as you, on this machine, that can read the token.
+
+QP-CAT writes the token nowhere -- not to QuPath's log, not to a preference, not to a file --
+but the feature only works once you have put it somewhere. Your agent's configuration holds
+it in plain text (`claude mcp add` writes it into Claude Code's config; the JSON and TOML
+snippets below embed it), and the pasted command lands in your shell history. Another
+process running as you does not need QuPath's memory; it needs to read a hidden configuration
+file in your home folder.
+
+That is why the token dies the moment you press **Stop server**, why you re-run the add
+command after every **Start server**, and why `claude mcp remove qpcat` (or deleting the
+entry) belongs in your routine when you are done. A program that can read those files could
+read your project files directly anyway, which is where the risk bottoms out.
+
+**Two things to do:**
+
+1. Do not turn the server on a machine you share with people you would not hand your project
+   to.
+2. Turn it off when you are done.
+
+Whether a clinical or managed QuPath may run it at all is a policy question for whoever
+manages that machine; the switch they can pull is in the next block.
 
 ### For IT administrators
 
 <details>
 <summary><strong>The facts a security review needs, in one place</strong></summary>
 
-| | |
+Each row answers one question a security review asks.
+
+| Question | Answer |
 |---|---|
 | Listener | TCP on `127.0.0.1` only (a Java `ServerSocket` bound to the loopback address; never `0.0.0.0`). Port 51516, falling through 51517 to 51525 if taken. Plain HTTP, no TLS: the traffic never leaves the loopback interface. One endpoint, `POST /mcp` |
 | Authentication | A per-start bearer token: 32 random bytes from `SecureRandom`, base64url, compared in constant time. Required on every request; a missing or stale one is `401` before the body is read |
 | Request checks | `Host` must be present and loopback; `Origin`, if present, must be loopback; anything else is `403`. Body capped at 1 MB (`413`). No chunked bodies (`411`) |
 | Outbound connections | None. QuPath opens no client connection for this feature. The **agent** is the online component: whatever the tools return to it, the agent may forward to its own LLM provider under that vendor's data handling, not ours |
 | Where the token ends up | In QP-CAT: memory only, cleared at Stop; never logged, never in a preference or a file. On the client side: in plain text in the agent's configuration (Claude Code's config for `claude mcp add`; the JSON/TOML files under [Connecting your agent](#connecting-your-agent)), and in the shell history of whoever pasted the command |
-| What is logged, QuPath log (in memory unless the user has set a log file) | One line per start (the URL) and per stop (the reason); one line per tool call with the tool name, the result name and the outcome; a rejected `Host`/`Origin` value, truncated to 80 printable characters; the fact of a rejected token, never the token itself |
+| What is logged, QuPath log (in memory unless the user has set a log file) | One line per start (the URL) and per stop (the reason); one ERROR line, `MCP server failed to start: <message>`, whenever Start server is refused; one line per tool call with the tool name, the result name and the outcome; a rejected `Host`/`Origin` value, truncated to 80 printable characters; the fact of a rejected token, never the token itself |
 | What is logged, project audit log (`<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`) | One `MCP SERVER` event per start (`started on 127.0.0.1 port 51516 (loopback only; the token is not recorded)`) and per stop (`stopped (reason: ...)`); one `=== LLM EXPLAIN ===` block per accepted write with the agent's self-reported label, the client's `User-Agent`, the coarse image scope, the prompt actually answered and the reply verbatim; a `=== LLM EXPLAIN [REFUSED] ===` block per refused write with the reason; an `Overwrite:` row when stored explanations were replaced. Credential-shaped strings are scrubbed; nothing else is -- the scrubber de-identifies nothing |
 | Persistence of "on" | None. No preference, no file, no autostart. Every QuPath launch begins with the server off |
 | Rate | 120 tool calls per minute (`qpcat_list_results` exempt), one in flight; a Python round trip is abandoned after five minutes |
 | To confirm it is off | **Extensions > QP-CAT > Setup & help** reads `MCP server for AI agents (off)`, unticked, and nothing listens on 51516-51525: `ss -ltn \| grep 5151` (Linux), `lsof -nP -iTCP:51516-51525 -sTCP:LISTEN` (macOS), `netstat -ano \| findstr 5151` (Windows) print nothing |
-| To disable it for every user of a managed install | Add `-Dqpcat.mcp.disabled=true` to the launcher's Java options. For the official jpackaged QuPath that is the `[JavaOptions]` section of the `.cfg` beside the application -- on Windows `QuPath-0.7.0\app\QuPath-0.7.0.cfg` (and its `(console)` twin), on macOS the same file under `Contents/app/` inside the `.app` bundle -- as one more line, `java-options=-Dqpcat.mcp.disabled=true`. With the property set, neither menu item is built, QuPath's log carries `MCP server disabled by policy (qpcat.mcp.disabled=true)` at startup, and a start attempt (including one from a script) refuses with `The MCP server is disabled on this installation (qpcat.mcp.disabled=true).` Users of a managed install cannot edit that file. It is not a preference, so it adds no way to persist "on" |
+| To disable it for every user of a managed install | Add `-Dqpcat.mcp.disabled=true` to the launcher's Java options; the steps are below the table. It is not a preference, so it adds no way to persist "on", and users of a managed install cannot edit the launcher file |
+
+**Disabling it on a managed install.**
+
+1. Open the launcher's `.cfg` file beside the application: on Windows
+   `QuPath-0.7.0\app\QuPath-0.7.0.cfg` (and its `(console)` twin); on macOS the same file
+   under `Contents/app/` inside the `.app` bundle.
+2. Under `[JavaOptions]`, add one line: `java-options=-Dqpcat.mcp.disabled=true`.
+3. Restart QuPath.
+
+**What you see:** neither MCP menu item is built; QuPath's log carries
+`MCP server disabled by policy (qpcat.mcp.disabled=true)` at startup; and a start attempt,
+including one from a script, refuses with
+`The MCP server is disabled on this installation (qpcat.mcp.disabled=true).`
 
 </details>
 
 ## Turning it on and off
 
-Turning it on is two steps; turning it off is one.
+A project must be open first; with none open the menu item shows an error and nothing starts.
+
+**Turn it on**
 
 1. Choose **Extensions > QP-CAT > Setup & help > MCP server for AI agents (off)**. It is the
    second-to-last item in that submenu, above a grayed **Show MCP server window (address and
-   token)**. A window titled **QP-CAT MCP Server** opens. **The server is not running yet.**
-   The window leads with an amber banner saying what you are about to start, and a block
-   headed CAN / CANNOT / REACH / LIMITS / LOGS that restates the [Security](#security)
-   section. As shipped it reads:
+   token)**. A window titled **QP-CAT MCP Server** opens. **The server is not running yet**;
+   the status line reads `NOT RUNNING. Nothing is listening. Press Start server to open the
+   socket on this computer only (127.0.0.1).`
+
+   <!-- TODO: Add screenshot Docs_McpServer_Window_NotRunning.png: the QP-CAT MCP Server window as first opened -- amber banner, NOT RUNNING status line, empty Address and Token fields, the CAN / CANNOT block below. -->
+
+2. Read the amber banner, which says what you are about to start and ends with the same
+   sentence as this page's top: `Research use only: these are suggestions to check, not
+   diagnoses.` Below it a block headed CAN / CANNOT / REACH / LIMITS / LOGS restates the
+   [Security](#security) section.
+
+   <details>
+   <summary>What the window says, as shipped</summary>
 
    ```
    CAN:    list the saved clustering results in the open project; build the
@@ -224,36 +274,55 @@ Turning it on is two steps; turning it off is one.
            token.
    ```
 
-   The amber banner above it ends with the same sentence as this page's top: `Research use
-   only: these are suggestions to check, not diagnoses.` A project must be open; with none
-   open you get an error instead, and nothing starts.
-2. Press **Start server**. The status line changes to `RUNNING since HH:mm - 0 tool calls so
+   </details>
+
+3. Press **Start server**. The status line changes to `RUNNING since HH:mm - 0 tool calls so
    far`, the **Address** field shows `http://127.0.0.1:51516/mcp` (or the fallback port, named
    in the status line), and the **Token** field shows the token. Each has a **Copy** button.
-   The menu item now reads **MCP server for AI agents (ON - port 51516)** with a check mark,
-   and the QuPath log gains a line, `MCP endpoint listening on http://127.0.0.1:51516/mcp`
-   (two more if the default port was taken: `MCP port 51516 is in use; trying the next one`
-   and `MCP port 51516 was in use; bound 51517 instead`). The project audit log gains a start
-   line too, with the port. The token is in neither.
-3. Copy the address and the token into your agent's configuration -- the next section has
+
+   What else changes: the menu item reads **MCP server for AI agents (ON - port 51516)** with
+   a check mark; the QuPath log gains a line, `MCP endpoint listening on
+   http://127.0.0.1:51516/mcp` (two more if the default port was taken: `MCP port 51516 is in
+   use; trying the next one` and `MCP port 51516 was in use; bound 51517 instead`); the
+   project audit log gains a start line with the port. The token is in neither.
+
+   <!-- TODO: Add screenshot Docs_McpServer_Menu_On.png: the Setup & help submenu with "MCP server for AI agents (ON - port 51516)" checked and "Show MCP server window (address and token)" enabled below it. Take it, then press Stop server before publishing so the token in any visible window is dead, and say so in the alt text. -->
+
+4. Copy the address and the token into your agent's configuration -- the next section has
    one block per client -- or copy the ready-made command from the **Connect your agent**
    pane.
-4. To turn it off: untick the menu item, or press **Stop server** in the window. One click,
-   either way. Closing the window with **Close window** or Esc does **not** stop the server;
-   the button's tooltip says so, and the menu item keeps reading `(ON - port ...)`.
+
+**Turn it off**
+
+1. Uncheck the menu item, or press **Stop server** in the window. One click, either way.
+   Closing the window with **Close window** or Esc does **not** stop the server; the button's
+   tooltip says so, and the menu item keeps reading `(ON - port ...)`.
+
+### Check it from the agent
+
+Type `list my QP-CAT results` into your agent. It calls only `qpcat_list_results`, which
+writes nothing, and shows you the saved results of the open project. On a project with no
+QP-CAT run yet it relays
+
+```
+The open project has no saved clustering results yet. The person at QuPath needs to run a QP-CAT clustering first; every run is saved automatically.
+```
+
+Either way the connection works, and the window's status line now reads
+`RUNNING since HH:mm - 1 tool call so far`.
 
 **About the token.** It is shown for as long as that server session runs. If you close the
-window while the server is on, a second item appears under the tick, **Show MCP server window
-(address and token)**, which reopens it with the same token (the tick itself would stop the
-server, so it is not the way back in). A new token exists only after you stop and start the
-server, at which point any configuration holding the old one stops working, and you paste the
-new one. QP-CAT writes the token nowhere -- not QuPath's log, not a preference, not a file --
-so inside QuPath the window is the only place it appears. Outside QuPath it lives wherever
-you put it: your agent's configuration and your shell history, until you remove the
-registration (see [Residual risk](#residual-risk-stated-plainly)).
+window while the server is on, the second item under the checked menu item, **Show MCP server
+window (address and token)**, is enabled and reopens it with the same token (the checked item
+itself would stop the server, so it is not the way back in). A new token exists only after you
+stop and start the server, at which point any configuration holding the old one stops
+working, and you paste the new one. QP-CAT writes the token nowhere -- not QuPath's log, not a
+preference, not a file -- so inside QuPath the window is the only place it appears. Outside
+QuPath it lives wherever you put it: your agent's configuration and your shell history, until
+you remove the registration (see [Residual risk](#residual-risk-stated-plainly)).
 
-The tool-call counter in the status line is the ambient reassurance. If it still reads
-`0 tool calls so far` after an hour, nothing has used the server.
+If the status line still reads `0 tool calls so far` after an hour, nothing has used the
+server.
 
 When the server stops for a reason you did not ask for, the window's status line says why,
 the menu item returns to `(off)`, and the log line `MCP endpoint stopped (reason: ...)` names
@@ -270,13 +339,18 @@ nothing remembers it was on.
 Each block below is one client. `<PORT>` is the port the window shows (51516 unless the
 status line says otherwise) and `<TOKEN>` is the token it shows.
 
-> **Verification status: no snippet on this page has been run against this server.** They
-> are written from each client's own published configuration format and from `qupath-mcp`'s
+> **Verification status: of the snippets on this page, only the Claude Code command has been
+> run against this server (Linux, 2026-10-13).** The rest are written from each client's own
+> published configuration format and from `qupath-mcp`'s
 > [install page](https://earthmover-support.github.io/qupath-mcp/install/), which documents
 > the same transport for the same kind of server. Each block carries its own status line. A
-> line reading "verified on <date> with <client> <version>" means somebody did it; until a
-> block says that, treat it as a well-informed guess and keep your client's own documentation
-> open beside it.
+> line reading "run on <date> with <client>" means somebody did it; until a block says that,
+> treat it as a well-informed guess and keep your client's own documentation open beside it.
+
+The window has three panes for this, titled **Claude Code  (tested by us on Linux)**, **Any
+other MCP client  (the two values it needs)** and **Claude Desktop, Cursor, Codex, Gemini
+CLI  (untested snippets)**; the third holds the same untested blocks as this page, with
+`<token>` left for you to paste.
 
 <details>
 <summary><strong>Claude Code</strong> -- one command</summary>
@@ -303,13 +377,13 @@ That line (exit code 1) means the previous token is still registered, and the ne
 `claude mcp remove qpcat`, then the command above. The window's pane says the same under
 its command: `If Claude Code says the server already exists, run: claude mcp remove qpcat   then the command above.`
 
-The window's **Connect your agent > Claude Code** pane shows the command with the real port
-and token filled in, and a **Copy command** button. Run it in a terminal, in the folder where
-you will start Claude Code -- the default scope is `local`, meaning that folder only -- or
-add `-s user` to the command to register the server for every folder. Then check from the
+The window's **Claude Code** pane shows the command with the real port and token filled in,
+and a **Copy command** button. Run it in a terminal, in the folder where you will start Claude
+Code -- the default scope is `local`, meaning that folder only -- or add `-s user` to the
+command to register the server for every folder you open Claude Code in. Then check from the
 terminal with `claude mcp list`, which prints `qpcat: http://127.0.0.1:<PORT>/mcp (HTTP) -
-Connected` (or the 401 reason), or type `/mcp` inside Claude Code and look for `qpcat` with
-three tools.
+Connected` (status glyph omitted; or the 401 reason), or type `/mcp` inside Claude Code and
+look for `qpcat` with three tools.
 
 The copied command uses backslash line continuations, which PowerShell and `cmd` do not read;
 on Windows, join it onto one line before running it. Untested there, like the rest of the
@@ -322,18 +396,18 @@ Windows path.
 
 *Status: this block cannot go stale, because it carries no command.*
 
-Every MCP client that supports a streamable-HTTP server with a custom header needs exactly
+Every MCP client that supports a Streamable HTTP server with a custom header needs exactly
 these:
 
 | | Value |
 |---|---|
-| Transport | Streamable HTTP. One endpoint, POST only. The server answers plain JSON, not an event stream |
+| Transport | **Streamable HTTP**, the MCP name for plain HTTP requests to one URL. One endpoint, POST only. The server answers each request with one JSON object rather than an event stream (SSE, the other way an MCP server may answer), which every MCP client must accept |
 | URL | `http://127.0.0.1:<PORT>/mcp` |
 | Header name | `Authorization` |
 | Header value | `Bearer <TOKEN>` |
 
-The window's **Any other MCP client** pane shows these as three copyable fields. Your client's
-own documentation says where they go.
+The window's **Any other MCP client  (the two values it needs)** pane shows these as three
+copyable fields. Your client's own documentation says where they go.
 
 </details>
 
@@ -361,7 +435,10 @@ bridge process. In `claude_desktop_config.json` (macOS:
 ```
 
 `mcp-remote` is third-party software, not ours and not Anthropic's; installing it is your
-call. Restart Claude Desktop after editing the file.
+call. Restart Claude Desktop after editing the file. On Windows, `mcp-remote`'s README
+reports that Claude Desktop mangles spaces inside `args`; use `"Authorization:${AUTH_HEADER}"`
+(no space) in `args` and `"env": { "AUTH_HEADER": "Bearer <TOKEN>" }` beside it, as that
+README shows.
 
 </details>
 
@@ -378,7 +455,17 @@ url = "http://127.0.0.1:<PORT>/mcp"
 http_headers = { "Authorization" = "Bearer <TOKEN>" }
 ```
 
-If your Codex version names the header table differently, the
+Codex also documents a key made for this, which keeps the token out of the TOML file --
+exactly what [Residual risk](#residual-risk-stated-plainly) asks for:
+
+```toml
+[mcp_servers.qpcat]
+url = "http://127.0.0.1:<PORT>/mcp"
+bearer_token_env_var = "QPCAT_MCP_TOKEN"
+```
+
+then `export QPCAT_MCP_TOKEN=<TOKEN>` in the shell that starts Codex. Codex's docs name the
+static-header table `http_headers` (checked 2026-10-13); the
 [Any other MCP client](#connecting-your-agent) block has the raw values.
 
 </details>
@@ -462,42 +549,49 @@ Claude Code you type:
 
 > Explain the clusters in my latest QP-CAT result
 
-What happens, in order. The outputs below are illustrative -- the field names and the shape
-are the code's, the values are made up, and no agent has yet run this sequence unprompted;
-the three calls have so far been made by hand.
+What happens, in order. No agent has yet run this sequence unprompted; the three calls have
+so far been made by hand. Each block below says whether its text is the code's or invented.
+
+What the agent has to go on is the server's `instructions` text, sent once when the agent
+connects, plus the three tool descriptions (`qpcat_list_results` says "newest first", which is
+what makes "latest" work):
+
+```
+QP-CAT (QuPath Cell Analysis Tools) serves the saved clustering results of the project currently open in QuPath. Workflow: call qpcat_list_results, pick a result name, call qpcat_explain_prompt with it, answer the returned prompt yourself in the JSON shape it asks for, then call qpcat_set_explanations with the result name, your full reply, a short agent label, and the prompt_hash (plus any top_n or cluster_ids you passed) from the prompt's metadata block, so the stored record is the prompt you answered. The tools read saved results and write only their explanations field. They cannot run analyses, read images or cells, execute code, or touch files outside the project's results folder.
+```
 
 1. **The agent calls `qpcat_list_results`.** It gets back the saved results in the open
    project as one JSON array, one object per result, newest first by each result's own
    timestamp -- not by file date, so a project you copied from a share or restored from a
-   backup still lists the latest run first (values illustrative; the field names are the
-   code's):
+   backup still lists the latest run first (a result with no readable timestamp falls back to
+   its file date). This entry is real -- one of the results in the eight-image synthetic
+   project, as the tool returned it on 2026-10-13 (a second result would follow it in the
+   same shape; `hasExplanations` turns `true` once anything has written to it):
 
    ```json
    [
-     {"name": "leiden_res1.0_2026-10-11", "timestamp": "2026-10-11T16:42:08",
-      "summary": "leiden, 7 clusters, 48,210 cells", "scope": "1 image",
-      "autoSaved": false, "sizeBytes": 31457280, "hasExplanations": false},
-     {"name": "kmeans_k8_2026-10-09", "timestamp": "2026-10-09T11:05:51",
-      "summary": "kmeans, 8 clusters, 48,210 cells", "scope": "1 image",
-      "autoSaved": true, "sizeBytes": 29360128, "hasExplanations": true}
+     {"name": "auto_20261011_041855_kmeans", "timestamp": "2026-10-11T04:18",
+      "summary": "6 clusters, 11421 cells (KMeans)", "scope": "8 images",
+      "autoSaved": true, "sizeBytes": 5892850, "hasExplanations": false}
    ]
    ```
 
-   `scope` is deliberately coarse -- `1 image`, `8 images`, `3 areas` -- and never the
-   image's name.
+   `scope` is deliberately coarse -- `1 image`, `8 images`, or `unknown scope` for a result
+   saved without scope metadata (every YAML-batch result) -- and never the image's name.
 
-2. **The agent calls `qpcat_explain_prompt`** with `result: "leiden_res1.0_2026-10-11"`. It
+2. **The agent calls `qpcat_explain_prompt`** with `result: "auto_20261011_041855_kmeans"`. It
    gets back two text blocks. First the prompt QP-CAT would have sent to any other provider,
    verbatim -- the marker table and the instructions, including the rule that no p-values are
-   sent and no significance language is wanted. Then a metadata block:
+   sent and no significance language is wanted. Then a metadata block; this text is the
+   code's, with the hash and the result name as placeholders:
 
    ```
    prompt_hash: <hash>
    prompt_template: cluster_phenotype_v2
-   result: leiden_res1.0_2026-10-11
+   result: auto_20261011_041855_kmeans
    top_n: 10
    cluster_ids: all
-   Next step: answer the prompt above in the exact JSON shape it asks for, then call qpcat_set_explanations with: result (this name), response (your full reply), agent (a short label for the audit log), prompt_hash (the value above), and the same top_n and cluster_ids you passed here, if any. QP-CAT rebuilds the prompt from those and refuses the write if its hash differs from prompt_hash, so the record it stores is the prompt you answered.
+   Next step: answer the prompt above in the exact JSON shape it asks for, then call qpcat_set_explanations with: result (this name), response (your full reply), agent (a short label for the audit log), prompt_hash (the value above; required), and the same top_n and cluster_ids you passed here, if any. QP-CAT rebuilds the prompt from those and refuses the write if its hash differs from prompt_hash, so the record it stores is the prompt you answered.
    ```
 
 3. **The agent answers it.** This is the part your subscription pays for; QuPath is not
@@ -506,61 +600,72 @@ the three calls have so far been made by hand.
 
 4. **The agent calls `qpcat_set_explanations`** with that reply, a label such as
    `agent: "Claude Code (claude-fable-5-1)"`, and the `prompt_hash` from step 2 (plus `top_n`
-   and `cluster_ids` if it changed them). QP-CAT rebuilds the prompt from those fields and
-   refuses if the hash does not match, so the audit log can never record a prompt the agent
-   did not see. It then parses the reply with the same parser the clipboard and API paths
-   use, writes the explanations into the saved result, and writes the prompt and reply to the
-   project audit log. The tool result tells the agent what happened, including whether
-   anything on screen changed:
+   and `cluster_ids` if it changed them). The hash is required: QP-CAT rebuilds the prompt
+   from those fields and refuses if the hash does not match, so the audit log can never record
+   a prompt the agent did not see. It then parses the reply with the same parser the clipboard
+   and API paths use, writes the explanations into the saved result, and writes the prompt and
+   reply to the project audit log. The tool result is this text, exactly, with your result's
+   name and counts:
 
    ```
-   Saved 7 suggestions (7 with a phenotype, 0 the model declined or did not answer) to the clustering result "leiden_res1.0_2026-10-11".
+   Saved 6 suggestions (6 with a phenotype, 0 the model declined or did not answer) to the clustering result "auto_20261011_041855_kmeans".
 
    A results window showing this result is open in QuPath; its "Cluster Explainer (LLM) [Experimental]" tab has been updated.
    ```
 
    The first number is the clusters in the result; the bracket says how many received a
    phenotype and how many did not. A cluster the agent skipped, or answered with `phenotype:
-   null`, gets an "LLM did not return a row" or "(no suggestion)" line in the table rather
-   than an error, exactly as on the other providers, and the text adds `Clusters left without
-   a phenotype: [2, 5].` A row whose `cluster_id` is not in the result is dropped and named:
-   `Rows for cluster ids [100, 101] matched no cluster in this result and were dropped.` A
-   reply with no usable row at all is refused and nothing is stored; see
+   null`, gets a row whose phenotype reads `(no suggestion)` and whose rationale reads `LLM did
+   not return a row for this cluster.`, exactly as on the other providers, and the text adds
+   `Clusters left without a phenotype: [2, 5].` A row whose `cluster_id` is not in the result
+   is dropped and named: `Rows for cluster ids [100, 101] matched no cluster in this result and
+   were dropped.` A reply with no usable row at all is refused and nothing is stored; see
    [Troubleshooting](#troubleshooting).
+
+   If no results window shows the saved result, the second paragraph of the tool result
+   instead reads `No results window is open in QuPath, so there is nothing on screen to
+   update.` and names the menu path. It says this even when a live results window is open,
+   because a live window is not the saved result.
+
+**A narrower ask.** "Re-explain clusters 2 and 5 of that result with the top 15 markers, and
+replace what is there." The agent calls `qpcat_explain_prompt` with `top_n: 15` and
+`cluster_ids: [2, 5]`, answers, and calls `qpcat_set_explanations` with the same two values,
+the new `prompt_hash` and `overwrite: true`. The write stores what the agent sent, so a
+two-cluster reply leaves a two-row table; the previous six rows stay in the audit log.
 
 Where you see the result:
 
 - **The Cluster Explainer tab**, if that result is open in a results window: a bold line
   pinned to the top of the tab, in view at any window size and scroll position, reads `An AI
-  agent just wrote 7 suggestions over MCP. They are saved with this result; review them in
+  agent just wrote 6 suggestions over MCP. They are saved with this result; review them in
   the Suggestions table below.`; the tab scrolls so the **Suggestions** heading is at the top;
   the table repopulates; and the line under the heading reads `Last written by Claude Code
   (claude-fable-5-1) over MCP at 14:07 -- by an AI agent, not from this panel. Saved to the
   result on disk.` No popup, no toast. If no results window shows that result, the tool
   result says so instead and names the menu path, and you open the result from **View Past
   Results...** to see them; the line then reads `Loaded from the saved result: written by
-  Claude Code (claude-fable-5-1) via MCP at 14:07.`
+  Claude Code (claude-fable-5-1) via MCP at 14:07 on 2026-10-11.`
 - **The audit log**, at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`, under the
   `=== LLM EXPLAIN ===` entry: provider `MCP`; `Agent:`, the label the agent chose to send,
   recorded as sent and **not verified** by QP-CAT -- check it against the agent's own
   transcript; `Client:`, the agent's `User-Agent` header, which real clients set and which is
   harder to misreport by accident than a label the model composes; `Image:`, the coarse scope
-  (`1 image`, `8 images`); the prompt hash, `top_n` and cluster ids as actually answered; and
-  the prompt and the reply verbatim; a `Dropped rows:` row when the reply named cluster ids
-  the result does not have. An overwrite adds an `Overwrite: replaced <provider>/<label>
+  (`1 image`, `8 images`); `QPCAT version:` and `QuPath version:`; `Prompt hash:`,
+  `Top markers:` (the `top_n` used) and `Cluster ids:` as actually answered; and the prompt
+  and the reply verbatim; a `Dropped rows:` row when the reply named cluster ids the result
+  does not have. An overwrite adds an `Overwrite: replaced <provider>/<label>
   written <timestamp> (N suggestions)` row; a refused write is its own `=== LLM EXPLAIN [REFUSED] ===` block
   with a `Refused:` row giving the reason and the summary `REFUSED, nothing written`. `User:`
   is the account QuPath runs as, not necessarily the person at the
   keyboard. The entry's header timestamp is local wall-clock time with no zone offset
   (`yyyy-MM-dd HH:mm:ss`); the timestamp saved inside the result's bundle is ISO-8601 with
-  the offset. This is the record every other provider writes, plus the two MCP rows, and it
-  is what lets a methods section say what answered. See
+  the offset. This is the record every other provider writes, with the `Model` row labeled
+  `Agent` and one extra row, `Client`, and it is what lets a methods section say what QP-CAT
+  sent and what came back. Which model answered has to come from the agent's own session; no
+  row records it. See
   [Audit-log discipline for publications](llm-explainer.md#audit-log-discipline-for-publications).
 - **The saved result**, so reopening it later shows the same table. This is new: before this
   feature, explanations lived only in the open window and the audit log, for every provider.
-
-A second, narrower thing to try first: "list my QP-CAT results". That calls only
-`qpcat_list_results`, writes nothing, and is the cheapest way to confirm the connection works.
 
 ## Which of the three providers should I use?
 
@@ -570,7 +675,7 @@ They differ only in who carries the text.
 | | Needs | What you give up | What you gain |
 |---|---|---|---|
 | **Any chatbot** (clipboard) | A chatbot window. Any one | Three manual steps; token counts recorded as unknown | Works with every chatbot that exists, including ones with no API. No key, no port, nothing to configure |
-| **MCP server** (this page) | An MCP-capable *agent* (Claude Code, Codex, Cursor, Gemini CLI) | A server you have to start and stop, and the security model above to read | No copying by hand; the agent does the whole round trip from one sentence you type |
+| **MCP server** (this page) | An MCP-capable *agent* (Claude Code is the one that has connected; Codex, Cursor and Gemini CLI have snippets but are untested) | A server you have to start and stop, and the security model above to read; token counts recorded as unknown, as for the chatbot (the agent's own usage view is the only record) | No copying by hand; the agent does the whole round trip from one sentence you type |
 | **Anthropic API** | A paid API key, pasted each session | Money per call, and a key in QuPath | One click, in-window, and real token counts |
 
 Ollama is a fourth option on the explainer page, for a local model with its own API; it has
@@ -578,12 +683,19 @@ never been run either.
 
 ## Troubleshooting
 
-> The states below are derived from the code and from one Linux walk that provoked the
-> wrong-name, overwrite, prose-reply and stale-token refusals on purpose; the rest have not
-> been observed, so the list is neither complete nor confirmed.
+> The states below come from three places: a Linux hand walk and a Linux automated run on
+> 2026-10-13 (connection refused, 401, wrong name, overwrite refusal, prose reply, hash
+> mismatch, rate limit, project-change stop); unit tests that exercise the text without a
+> running server (403, 411 / 413 / 417, environment not running, interface-thread timeout, the
+> one-at-a-time refusal); and the code alone (ports exhausted, busy, cluster-id membership, the
+> idle stop, the project-changed notification). Nothing here has been seen on Windows or
+> macOS, so the list is neither complete nor confirmed.
 
 <details>
 <summary><strong>"Connection refused" / the agent cannot see the QP-CAT tools</strong></summary>
+
+**What the terminal shows:** your client reports the connection refused, or lists no `qpcat`
+tools; Claude Code's `claude mcp list` prints `Failed to connect` for `qpcat`.
 
 **What it usually means:** the server is off -- the most common cause by a distance, because
 it is off after every QuPath restart by design, and it stops when the project changes.
@@ -620,6 +732,9 @@ refuses while the old entry exists.
 <details>
 <summary><strong>"403" / "Forbidden"</strong></summary>
 
+**What the client shows:** HTTP 403 with a body that says which header failed:
+`Forbidden: Host must be loopback.` or `Forbidden: Origin must be loopback.`
+
 **What it usually means:** the request carried an `Origin` or `Host` header that is not
 loopback, which is refused on purpose. A command-line agent sends no `Origin` and is
 unaffected; a browser-based client, or a web page, is exactly what this check is for.
@@ -633,7 +748,8 @@ not one.
 <details>
 <summary><strong>"Could not start the MCP server: ports 51516 to 51525 are all in use"</strong></summary>
 
-**What you see:** a popup titled **QP-CAT MCP Server - Error**:
+**What the code shows** (this popup has not been seen by anyone): an ERROR line in the QuPath
+log, `MCP server failed to start: <message>`, and a popup titled **QP-CAT MCP Server - Error**:
 
 ```
 Could not start the MCP server: ports 51516 to 51525 are all in use on this
@@ -648,18 +764,24 @@ The server was NOT started.
 
 **What it usually means:** ten consecutive ports are held, which almost always means several
 QuPath windows each with this server on. One other copy of QuPath only moves you to 51517;
-the status line then reads `RUNNING since HH:mm on port 51517 (51516 was in use) - ...`.
+the status line then reads `RUNNING since HH:mm on port 51517 (51516 was in use) - ...` (the
+fall-through is unit-tested; this line is the code's, not observed).
 
 **What to do:** find the other QuPath window and stop its server, or close it. To see what
-holds a port: `ss -ltnp` (Linux), `lsof -i :51516` (macOS), `netstat -ano | findstr 51516`
-(Windows). There is no port setting to change; the fallback scan is the port chooser.
+holds a port, the same commands as the IT table: `ss -ltnp | grep 5151` (Linux),
+`lsof -nP -iTCP:51516-51525 -sTCP:LISTEN` (macOS), `netstat -ano | findstr 5151` (Windows). A
+hit looks like `LISTEN 0 50 127.0.0.1:51516 ... users:(("java",pid=...))` on Linux (shape from
+the tool's manual, not captured). There is no port setting to change; the fallback scan is the
+port chooser.
 
 </details>
 
 <details>
 <summary><strong>"No project is open, so there are no saved clustering results to serve"</strong></summary>
 
-**What you see:** a popup titled **QP-CAT MCP Server - Error**:
+**What the code shows** (seen in a screenshot of the design walk, not in a user's hands): an
+ERROR line in the QuPath log, `MCP server failed to start: <message>`, and a popup titled
+**QP-CAT MCP Server - Error**:
 
 ```
 No project is open, so there are no saved clustering results to serve.
@@ -670,7 +792,14 @@ The server was NOT started.
 ```
 
 **What to do:** what it says. The menu item is always enabled, even with no project, so that
-the off-switch can never be unreachable; this popup is the price of that.
+the off-switch can never be unreachable; this popup is the price of that. The same condition
+reached through a tool, rather than the Start button, tells the agent:
+
+```
+No project is open in QuPath, so there are no saved clustering results to serve.
+Nothing has changed. Ask the person at QuPath to open a project and turn the
+MCP server on again.
+```
 
 </details>
 
@@ -695,8 +824,9 @@ and that is not something a network request should be able to trigger.
 **What it usually means:** QP-CAT's analysis environment has not been built on this machine
 yet, or its background start at QuPath launch failed. Once built, the environment starts in
 the background when QuPath launches, so on a working install `qpcat_explain_prompt` succeeds
-within a minute or two of launch without any clustering run; if it refuses, look for
-`ApposeClusteringService` in the QuPath log.
+within a minute or two of launch without any clustering run; if it refuses, open **View >
+Show log** and search for `ApposeClusteringService`; the lines around it say why the
+environment did not start.
 
 **What to do:** **Set up analysis environment (first run)...** if the environment has never
 been built, or run any clustering to start it, then ask the agent again. No popup appears in
@@ -785,21 +915,28 @@ qpcat_explain_prompt does not accept the argument(s) [topN]. Accepted argument n
 overwrite must be the JSON boolean true or false, not the string "true" (the string "true" and the number 1 are refused). Nothing has changed.
 ```
 ```
+The "prompt_hash" argument is required: pass the prompt_hash from the metadata block of qpcat_explain_prompt (64-character sha256 hex), so the stored record is the prompt you answered. Nothing has changed.
+```
+```
 prompt_hash must be the 64-character sha256 hex string from the metadata block of qpcat_explain_prompt, not the string "abc". Nothing has changed.
 ```
 ```
-cluster_ids [999] are not clusters of the result "leiden_res1.0_2026-10-11"; its cluster ids are [0, 1, 2, 3, 4, 5, 6]. Nothing has changed.
+cluster_ids [999] are not clusters of the result "auto_20261011_041855_kmeans"; its cluster ids are [0, 1, 2, 3, 4, 5]. Nothing has changed.
 ```
 ```
-The prompt_hash you sent (<hash>) does not match the prompt QP-CAT rebuilds for "leiden_res1.0_2026-10-11" with top_n=10 and cluster_ids=all (<hash>). Either you answered a prompt built with different top_n / cluster_ids, or the result changed since. Nothing has changed.
+The prompt_hash you sent (<hash>) does not match the prompt QP-CAT rebuilds for "auto_20261011_041855_kmeans" with top_n=10 and cluster_ids=all (<hash>). Either you answered a prompt built with different top_n / cluster_ids, or the result changed since. Nothing has changed.
 
 Call qpcat_explain_prompt again with the top_n and cluster_ids you want, answer the prompt it returns, and pass its prompt_hash back here.
 ```
 
-**What it usually means:** the agent camel-cased an argument, sent a string where a boolean
-or an integer was wanted, guessed a cluster id, or answered one prompt and reported another's
-hash. Argument checks run before the rate limiter, so the agent always gets the specific
-refusal. The `prompt_hash` mismatch and the cluster-id refusal on a write are recorded in the
+**What it usually means:** the agent camel-cased an argument, left out the required
+`prompt_hash`, sent a string where a boolean or an integer was wanted, guessed a cluster id, or
+answered one prompt and reported another's hash. The name and type checks (unknown argument names, a string for `overwrite`, a malformed
+`prompt_hash`, a non-integer `top_n`, an unknown result name) run before the rate limiter, so
+those refusals arrive even while the limit is in force; the cluster-id membership check and
+the hash comparison run inside the call, after it. A third cause of a hash mismatch, which the
+text does not name: QP-CAT was updated and its prompt template changed, so every hash changed
+with it. The `prompt_hash` mismatch and the cluster-id refusal on a write are recorded in the
 project audit log as `=== LLM EXPLAIN [REFUSED] ===` blocks; `top_n` must also be a whole
 number of at least 1.
 
@@ -827,12 +964,65 @@ message in the same state.
 </details>
 
 <details>
+<summary><strong>Other refusals the agent may relay</strong></summary>
+
+Each is the tool's text, verbatim, with one line on the cause.
+
+```
+The "result" argument must be a non-empty string.
+```
+```
+The "response" argument must be a non-empty string: your full reply to the prompt. Nothing has changed.
+```
+```
+The "agent" argument must be a non-empty string naming the agent, for the audit log. Nothing has changed.
+```
+A required argument was missing or empty.
+
+```
+The result "auto_20261011_041855_kmeans" has no per-cluster marker rankings, so no prompt can be built. Rankings are computed during clustering; a derived or imported result may lack them. Nothing has changed.
+```
+```
+The result "auto_20261011_041855_kmeans" has no per-cluster marker rankings, so the reply cannot be matched to clusters. Nothing has changed.
+```
+The saved result carries no Wilcoxon marker table (`qpcat_explain_prompt` and
+`qpcat_set_explanations` respectively); the Explainer tab is disabled for the same result.
+
+```
+The Python round trip did not finish within 5 minutes, so nothing was built. Nothing has been written. Try again; if it repeats, the person at QuPath should check the QP-CAT log.
+```
+The five-minute cap (`parsed` in place of `built` on a write). The Python task is left to
+finish in the background and its result discarded.
+
+```
+Could not build the prompt: <error type> -- <detail>. Nothing has changed.
+```
+```
+The reply could not be used: <error type> -- <detail>. Nothing has changed.
+```
+The Python side failed; its error type and detail are relayed in full (credential shapes
+scrubbed, nothing else).
+
+```
+The prompt came back empty. Nothing has changed.
+```
+The Python side returned no prompt text; not expected on a result with marker rankings.
+
+```
+The tool failed with IOException. Nothing has changed. The person at QuPath can find the details in the QuPath log.
+```
+An unexpected Java exception; the agent sees the class name only, the message stays in the
+QuPath log.
+
+</details>
+
+<details>
 <summary><strong>"The clustering result ... already has N suggestions"</strong></summary>
 
 **What the agent is told**, as the tool result:
 
 ```
-The clustering result "leiden_res1.0_2026-10-11" already has 7 suggestions, written by claude.ai via CHATBOT at 2026-10-11T17:02:40Z. Nothing has changed.
+The clustering result "auto_20261011_041855_kmeans" already has 6 suggestions, written by claude.ai via CHATBOT at 2026-10-11T17:02:40.512-05:00. Nothing has changed.
 
 Check with the person at QuPath before replacing them. To replace, call this tool again with overwrite: true (the JSON boolean); the previous suggestions stay in the LLM audit log beside the result.
 ```
@@ -844,8 +1034,8 @@ explanations, without `overwrite: true`. The source reads `<agent or model> via 
 **What to do:** decide. If you want them replaced, tell the agent to call again with
 `overwrite: true` -- the JSON boolean; the string `"true"` and the number `1` are refused
 with a message saying so. The earlier explanations stay in the audit log, the success text
-then begins `Saved 7 suggestions (7 with a phenotype, 0 the model declined or did not answer)
-to the clustering result "...", REPLACING the 7 suggestions that were already stored there`,
+then begins `Saved 6 suggestions (6 with a phenotype, 0 the model declined or did not answer)
+to the clustering result "...", REPLACING the 6 suggestions that were already stored there`,
 and the new entry in the audit log carries an `Overwrite: replaced ...` row naming what it
 replaced. If you did not mean to touch that
 result, the refusal has cost you nothing -- it changed nothing, and it is recorded in the
@@ -885,8 +1075,10 @@ the attempt.
 scrolls the Suggestions table into view, so "nothing changed" means the explanations were
 written to the saved result and what you are looking at is a window that is not showing that
 saved result -- most often the live results window of a run you have not reopened from disk,
-or no results window at all. The tool result tells the agent this, so the agent should have
-said so.
+or no results window at all. The tool result then reads `No results window is open in QuPath,
+so there is nothing on screen to update.` and names the menu path, so the agent should have
+said so. It says this even when a live results window is open, because a live window is not
+the saved result.
 
 **What to do:** reopen the result from **Extensions > QP-CAT > Results & populations > View
 Past Results...** and open the **Cluster Explainer (LLM) [Experimental]** tab. To confirm the
@@ -898,7 +1090,8 @@ entry with provider `MCP` at the time the agent answered.
 <details>
 <summary><strong>The server stopped by itself</strong></summary>
 
-**What you see:** the menu item reads `(off)` again; if the window is open its status line
+**What the code shows** (the stop and its log line were observed; the notification has not
+been seen by anyone): the menu item reads `(off)` again; if the window is open its status line
 reads `STOPPED - the project changed. Press Start server to serve the new project; you will
 get a new token.`; and a notification appears:
 
@@ -941,22 +1134,27 @@ issues. A token is dead the moment you stop the server, so if one has leaked, st
 <summary><strong>What the server answers, and why it does not stream</strong></summary>
 
 This is the contract a client sees. Everything here is the design as specified; the Phase 2
-tests are what make it true.
+tests are what make it true, except for `431`, `503`, the `400` header-syntax refusals and the
+idle stop, which are read from the code and have not been exercised.
 
 **Transport.** A raw `java.net.ServerSocket` bound to the loopback address, one acceptor
 thread and a bounded pool of four handler threads, all daemon. Not `com.sun.net.httpserver`:
 the official QuPath 0.7.0 Windows build ships a jlinked runtime of 24 modules and
 `jdk.httpserver` is not one of them, so anything importing it would fail to load on the
-runtime users actually have. The package depends on `java.base` and Gson (host-provided)
-only.
+runtime users actually have. The transport class, `McpHttpEndpoint`, uses `java.base` and
+SLF4J only; the JSON-RPC layer adds Gson; the controller and the tools use JavaFX and QuPath's
+own API. Nothing outside what the QuPath runtime already provides -- `McpPackageLintTest`
+fails the build on any other import root and on any `com.sun.net.httpserver` import.
 
 **HTTP subset.** One request per connection; every response carries `Connection: close` and
 `Cache-Control: no-store`. Ten-second socket timeout; a timeout anywhere is `408` and close. A
 header block over 16 KB is `431`; a folded header line, a duplicate `Content-Length`, `Host`,
 `Authorization` or `Transfer-Encoding`, or a non-numeric `Content-Length` is `400`. The pool
-is four threads with a queue of eight; a request that finds both full gets `503`. The
-authentication and `Origin`/`Host` checks run on the headers **before** the body is read, in
-the order of the table.
+is four threads with a queue of eight; a request that finds both full gets `503`. The checks
+run on the headers, **before** the body is read, in this order: path (404), method (405 with
+`Allow: POST` for GET and DELETE; 404 for anything else), `Host` (403), `Origin` (403), token
+(401), `Expect` (417), `Transfer-Encoding` and `Content-Length` (411 / 400), size (413). Only
+then is the body read -- so a chunked POST without a token gets 401, not 411.
 
 | Request | Response | Meaning |
 |---|---|---|
@@ -993,25 +1191,30 @@ never needs a long-lived connection, which is why `Connection: close` is safe.
 **Tool failures are results, not errors.** A tool that cannot do its job -- unknown result
 name, environment not running, QP-CAT busy, rate limit, existing explanations without
 `overwrite` -- returns `result.isError: true` with a text content item, never a JSON-RPC
-error. The tools page of the specification draws that line (protocol errors for unknown
-tools and invalid arguments, `isError` for business-logic failures), and the practical reason
-is that the agent reads an `isError` text and relays it, while many clients swallow a
-JSON-RPC error. Every `isError` text on this page is written for a reader who is not looking
-at QuPath. An unexpected exception inside a tool reaches the agent as its class name only
-(`The tool failed with IOException. Nothing has changed. ...`); the message, which can hold a
-file path, stays in the QuPath log.
+error. The [tools page](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
+of the specification puts unknown tools AND invalid arguments on the protocol-error side and
+business-logic failures under `isError`; this server answers bad arguments with `isError`
+text instead, deliberately, because the agent reads an `isError` text and relays it, while
+many clients swallow a JSON-RPC error. Every `isError` text on this page is written for a
+reader who is not looking at QuPath. An unexpected Java exception inside a tool reaches the
+agent as its class name only (`The tool failed with IOException. Nothing has changed. ...`);
+the message, which can hold a file path, stays in the QuPath log. A Python-side error is
+different: its type and detail text are relayed to the agent (credential shapes scrubbed,
+nothing else).
 
 **Rate limiting.** A sliding window of 120 tool calls per minute, in which
 `qpcat_list_results` does not count, and a one-in-flight gate on `tools/call`; excess calls
-get `isError` with a retry-after figure, not a queue, and argument validation runs first so
-a bad result name is reported as such. A tool's Python round trip is capped at five minutes
+get `isError` with a retry-after figure, not a queue. Name and type validation (and the
+result-name check) run before the limiter; cluster-id membership and the hash comparison run
+inside the call, after it. A tool's Python round trip is capped at five minutes
 of wall clock, after which the call returns `isError` and the result is discarded; this is a
 soft cancel -- the Python task drains to completion in the background, it is not killed. The
 one-in-flight refusal reads
 `Another tool call is still running; this server handles one at a time. Nothing has changed.
 Wait for it to finish and try again.`
 
-**What is logged.** QuPath log -- start: the URL; stop: the reason; per call: tool name,
+**What is logged.** QuPath log -- start: the URL; a refused start: an ERROR line `MCP server
+failed to start: <message>`; stop: the reason; per call: tool name,
 result name, outcome, duration (`MCP tool call: qpcat_set_explanations [result=...] -> ok
 (140 ms)`). Project audit log (`OperationLogger`) -- one `MCP SERVER` event per start and
 stop with the port and reason; per accepted write an `=== LLM EXPLAIN ===` block carrying
@@ -1028,10 +1231,15 @@ neither menu item is built and `start()` throws `IOException` with `The MCP serv
 on this installation (qpcat.mcp.disabled=true).` Deliberately not a preference, so the
 no-persisted-"on" invariant is untouched.
 
-**Testing a client by hand.** `qupath-mcp`'s standalone Python client speaks exactly this
-subset (initialize, initialized, tools/list, tools/call, plain JSON, `Mcp-Session-Id`) and is
-the quickest way to drive the server without an agent in the loop. It sends no
-`MCP-Protocol-Version` header, which this server accepts.
+**Testing a client by hand.** `mcpc.py`, the small Python client in our local fork of
+`qupath-mcp` (`/mnt/f/claude/qupath-mcp/`, a fork of `earthmover-support/qupath-mcp` with an
+action log; upstream ships no such client), speaks exactly this subset (initialize,
+initialized, tools/list, tools/call, plain JSON, `Mcp-Session-Id`) and is the quickest way to
+drive the server without an agent in the loop. `harness/QpcatMcpScenario.java` drives it
+inside a hidden QuPath; by hand,
+`MCP_PORT=<PORT> MCP_TOKEN=<TOKEN> python3 mcpc.py qpcat_list_results '{}'` prints the JSON
+array from the worked example. It sends no `MCP-Protocol-Version` header, which this server
+accepts.
 
 </details>
 
@@ -1042,7 +1250,9 @@ the quickest way to drive the server without an agent in the loop. It sends no
 - [Troubleshooting](troubleshooting.md) -- everything else that can go wrong in QP-CAT
 - [Model Context Protocol](https://modelcontextprotocol.io) -- the specification;
   [transports, 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
-  is the page this server is built against
+  is the page this server is built against, and the
+  [tools page](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) holds
+  the rate-limit requirement and the protocol-error / `isError` split
 - [`qupath-mcp`](https://github.com/earthmover-support/qupath-mcp) -- the general-purpose
   QuPath MCP server, with Groovy execution; its
   [security page](https://earthmover-support.github.io/qupath-mcp/security/) is the threat

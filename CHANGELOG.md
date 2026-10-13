@@ -137,7 +137,9 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   Code, Codex, Cursor or Gemini CLI does the whole round trip: the agent reads the prompt out of
   QuPath, answers it on your subscription, and writes the explanations into the saved result,
   the Cluster Explainer tab, and the project audit log with provider `MCP` and the agent's own
-  label. One prompt, one parser, one scrubber, shared with the clipboard and Anthropic paths;
+  label. The suggestions remain what they are on every provider -- proposals to check against
+  the markers, for research use, not labels to publish or act on clinically. One prompt, one
+  parser, one scrubber, shared with the clipboard and Anthropic paths;
   the prompt is built in one place in `run_llm_explainer.py` and the reply goes through the
   same `parse_response`. MCP is not an entry in the Provider box, because the agent initiates,
   not the tab; the tab shows a line saying which agent wrote the table and when. If a result
@@ -146,16 +148,18 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   `=== LLM EXPLAIN [REFUSED] ===` block, and an accepted overwrite adds an `Overwrite: replaced ...` row, so the choice is in
   the lab's record and not only in the agent's transcript.
 
-  Four things the persona tests changed before release. `qpcat_set_explanations` takes the
-  `prompt_hash` (and `top_n` / `cluster_ids`) the agent got from `qpcat_explain_prompt`,
-  rebuilds the prompt and refuses on a mismatch, so the audit log records the prompt actually
-  answered -- the first draft recorded the default prompt whenever the agent had asked for
-  fewer markers or clusters. Its success text counts honestly, `Saved N suggestions (K with a
-  phenotype)`, and names rows whose cluster id matched nothing instead of dropping them in
-  silence; unknown argument names, a string where `overwrite` wants a boolean, and cluster ids
-  the result does not have are each refused with a message naming the accepted form, before
-  the rate limiter runs; a blocked interface thread is reported as that, not as "no project
-  is open". `qpcat_list_results` sorts by each result's own timestamp rather than file date (a
+  Four things the persona tests changed before release. `qpcat_set_explanations` requires the
+  `prompt_hash` (and takes the `top_n` / `cluster_ids`) the agent got from
+  `qpcat_explain_prompt`, rebuilds the prompt and refuses on a mismatch, so the audit log
+  records the prompt actually answered -- the first draft recorded the default prompt whenever
+  the agent had asked for fewer markers or clusters. Its success text counts honestly --
+  `Saved N suggestions (K with a phenotype, M the model declined or did not answer) to the
+  clustering result "<name>"` -- and names rows whose cluster id matched nothing instead of
+  dropping them in silence; unknown argument names and a string where `overwrite` wants a
+  boolean are each refused with a message naming the accepted form, before the rate limiter
+  runs; cluster ids the result does not have are refused once the result is read, with the ids
+  it does have listed; a blocked interface thread is reported as that, not as "no project is
+  open". `qpcat_list_results` sorts by each result's own timestamp rather than file date (a
   copied project had put a two-day-old result first under a "newest first" promise), and
   reports a coarse scope -- `1 image`, `8 images` -- never the image's name, which the first
   draft had sent as the scope label. And the audit entry carries the client's `User-Agent` and
@@ -165,15 +169,17 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   preference that can remember "on" -- the state is in memory only. Turning it on is two steps,
   a menu item that opens a window and a **Start server** button inside it, so the window's
   explanation is read before any port is bound; turning it off is one click. It binds
-  `127.0.0.1` on a fixed port, 51516 (`qupath-mcp` holds 51515, so both can run), refuses any
-  request whose `Origin` or `Host` is not loopback (the MCP specification's one MUST, and a
-  loopback bind alone does not stop a web page you visit from posting to the port), requires a
+  `127.0.0.1` on port 51516, falling through to 51517-51525 if that is taken and saying which
+  one it bound (`qupath-mcp` holds 51515, so both can run), refuses any request whose `Origin`
+  or `Host` is not loopback (the one MUST in the specification's transport security warning,
+  and a loopback bind alone does not stop a web page you visit from posting to the port),
+  requires a
   token minted fresh on each start and shown in the window only for as long as that server runs
   (QP-CAT never logs or persists that token; the agent's own configuration does hold it, which
   is why it dies at Stop), rate-limits to 120 tool calls a minute with `qpcat_list_results`
   exempt and a retry-after in the refusal, and stops itself when the project changes or after
-  60 minutes with no connection or call; start and stop each write a line to the project audit
-  log. A managed install can remove the feature with `-Dqpcat.mcp.disabled=true` in the
+  60 minutes with no authenticated request; start and stop each write a line to the project
+  audit log. A managed install can remove the feature with `-Dqpcat.mcp.disabled=true` in the
   launcher's Java options: both menu items disappear and a start attempt refuses with a message
   naming the property. It is not a preference, so nothing can persist "on". No tool takes a
   path, a URL or a filename -- a result is named only by exact membership in the list the agent
@@ -181,8 +187,8 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   `earthmover-support/qupath-mcp`, which inspired the transport and whose own security page
   states that its tools can run any code in QuPath with the user's privileges. The transport is
   a raw `java.net.ServerSocket`, not `com.sun.net.httpserver`, because the official 0.7.0
-  Windows build's jlinked runtime has 24 modules and `jdk.httpserver` is not one of them; a
-  maintainer tempted to "simplify" it should read the maintainer section of the new page first.
+  Windows build's jlinked runtime has 24 modules and `jdk.httpserver` is not one of them. The
+  maintainer section of the new page records why.
 
   Also new, and the reason this could be wired at all: **explanations are now persisted, for
   every provider.** `toBundle`, `setLlmExplanations` and `hasLlmExplanations` had been written,
@@ -196,31 +202,29 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
   **Measured:** the module list of the official QuPath 0.7.0 Windows runtime, read on
   2026-10-12 -- 24 modules, no `jdk.httpserver` -- which decided the transport. Then, on
-  2026-10-13 on Linux, 50 new Java tests (875 pass) and 7 new Python tests (382 pass),
-  including raw-socket cases for a chunked body (411), a body over 1 MB (413), `Expect:
+  2026-10-13 on Linux, 84 new Java tests across ten files (55 in the `mcp` package) and 8 new
+  Python tests (7 for the MCP provider); the suite passes. They include raw-socket cases for a chunked body (411), a body over 1 MB (413), `Expect:
   100-continue` (417), a non-loopback `Origin` (403) and a missing token (401); and one
   hidden-`QuPathGUI` harness scenario against a real project with a Python client over HTTP:
   start, 401 without the token, `tools/list` names three tools, six saved results listed, a
   traversal name refused with no path echoed, the prompt returned (3,494 characters), six
   suggestions saved with provider `MCP` and the agent label as model, the second write refused
   without `overwrite`, `overwrite: true` replacing and saying so, a project change stopping the
-  server and clearing the token, and the port refusing connections after the stop. The log of
-  that run contains no string of the token's shape. **Not run: the jpackaged QuPath runtime**
+  server and clearing the token, and the port refusing connections after the stop. The project
+  audit log of that run does not contain the token. **Not run: the jpackaged QuPath runtime**
   of the official Windows and macOS builds -- its module list was read, the code has not been
   executed on it. The 60-minute idle stop has never fired either.
 
   **Clients that have connected: Claude Code, on Linux, on 2026-10-13** -- registered with
   the documented one-liner, `claude mcp list` reported `Connected`, and the connection was
-  refused after Stop server. A Python MCP client drove all three tools in the harness run
-  above, and the Explainer tab updated live during that client's write while a saved result
-  was open; a second Linux walk on a real QuPath window went from the menu tick to a filled
-  tab with the tools called from that client by hand. No agent has yet run the three calls on
-  its own from one typed sentence. **Not Codex, not
+  refused after Stop server; Claude Code never drove a tool. A Python MCP client drove all three
+  tools in the harness run above and, by hand, against a real QuPath window; the Explainer
+  tab's live update was seen in the UI designer's walks on that real window (the harness opens
+  no window). No agent has yet run the three calls on its own from one typed sentence. **Not Codex, not
   Cursor, not Gemini CLI, not VS Code, not Claude Desktop, on any platform**: their
   configuration snippets are written from each client's published format and are each
   labeled unverified. The specification
-  requires clients to accept the plain-JSON responses this server returns, which is a good
-  argument and not evidence. Also unverified: whether a loopback-only Java listener raises a
+  requires clients to accept the plain-JSON responses this server returns. Also unverified: whether a loopback-only Java listener raises a
   firewall prompt on Windows or macOS. New documentation page: `documentation/mcp-server.md`.
 
 ### Changed

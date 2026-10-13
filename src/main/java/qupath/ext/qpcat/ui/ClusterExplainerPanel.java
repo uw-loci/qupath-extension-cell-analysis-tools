@@ -432,8 +432,17 @@ public class ClusterExplainerPanel {
                 new Label("API key:"), apiKeyField, clearKeyBtn, keyStatusLabel);
         keyRow.setAlignment(Pos.CENTER_LEFT);
 
-        return new VBox(6, heading, providerRow, endpointRow, keyRow, keyWarningRow,
-                QpcatDocLinks.linkBar("llm-explainer.md", null));
+        // The agent path is a page of its own, and this tab is where a user who
+        // has just seen "written over MCP" looks for it.
+        HBox docLinks = QpcatDocLinks.linkBar("llm-explainer.md", null);
+        Hyperlink mcpLink = QpcatDocLinks.page(
+                "AI agents (MCP server)", "mcp-server.md", null);
+        mcpLink.setTooltip(Tooltips.of(
+                "How an AI agent you already use (Claude Code, Cursor, ...) can\n"
+                + "write these suggestions itself, with no API key: the server is\n"
+                + "off by default and started from Setup & help."));
+        docLinks.getChildren().add(mcpLink);
+        return new VBox(6, heading, providerRow, endpointRow, keyRow, keyWarningRow, docLinks);
     }
 
     private VBox buildRunSection() {
