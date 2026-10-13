@@ -603,6 +603,7 @@ public class ClusteringResultManager {
                 e.autoSaved = saved.isAutoSaved();
                 e.derivedFrom = saved.getDerivedFrom();
                 e.derivedOp = saved.getDerivedOp();
+                e.hasExplanations = saved.hasLlmExplanations();
             } catch (Exception ex) {
                 e.summary = "(failed to read)";
             }
@@ -630,6 +631,8 @@ public class ClusteringResultManager {
         public String derivedFrom;
         /** What produced it ("rename/merge"); null for an original run. */
         public String derivedOp;
+        /** True when the result carries at least one LLM cluster explanation. */
+        public boolean hasExplanations;
     }
 
     /**
@@ -750,6 +753,67 @@ public class ClusteringResultManager {
         // Atomic: never truncate a good result file just to rewrite its palette.
         writeJsonAtomic(file, saved);
         logger.info("Updated saved palette for result '{}'", name);
+    }
+
+    /**
+     * Attach an LLM explanations bundle to an existing saved result and rewrite
+     * the file atomically.
+     *
+     * @param project the open project
+     * @param name    saved result name (no extension)
+     * @param bundle  the bundle to store; replaces any existing one
+     * @throws IOException if the result file is missing, corrupt, or cannot be written
+     */
+    public static void persistLlmExplanations(Project<?> project, String name,
+                                              SavedClusteringResult.LlmExplanationsBundle bundle)
+            throws IOException {
+        if (bundle == null) {
+            throw new IllegalArgumentException("bundle must not be null");
+        }
+        Path file = getResultsDirectory(project).resolve(name + JSON_EXT);
+        if (!Files.exists(file)) {
+            throw new IOException("Saved result '" + name + "' does not exist.");
+        }
+        SavedClusteringResult saved = readSavedJson(file);
+        if (saved == null) {
+            throw new IOException("Saved result '" + name + "' is empty or corrupt; "
+                    + "cannot attach explanations.");
+        }
+        saved.setLlmExplanations(bundle);
+        writeJsonAtomic(file, saved);
+        logger.info("Stored {} LLM explanation(s) on result '{}'",
+                bundle.getExplanations() != null ? bundle.getExplanations().size() : 0, name);
+    }
+
+    /**
+     * Verify that {@code name} is exactly one of the saved results of
+     * {@code project} and resolves to a file inside the results directory.
+     * Intended for names that arrive from outside the UI (network, scripts).
+     *
+     * @throws IllegalArgumentException if the name is unknown or unsafe; the
+     *                                  message never contains a filesystem path
+     * @throws IOException              if the results directory cannot be listed
+     */
+    public static void requireKnownResult(Project<?> project, String name) throws IOException {
+        if (name == null || name.isEmpty() || !isSafeResultName(name)
+                || !listResults(project).contains(name)) {
+            throw new IllegalArgumentException("No saved result named \"" + name + "\"");
+        }
+        Path resultsDir = getResultsDirectory(project).toAbsolutePath().normalize();
+        Path file = resultsDir.resolve(name + JSON_EXT).toAbsolutePath().normalize();
+        if (!resultsDir.equals(file.getParent())) {
+            throw new IllegalArgumentException("No saved result named \"" + name + "\"");
+        }
+    }
+
+    /** Rejects separators, parent references, NUL, control chars and a leading dot. */
+    static boolean isSafeResultName(String name) {
+        if (name.startsWith(".") || name.contains("..")) return false;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (c == '/' || c == '\\' || c < 0x20 || c == 0x7f) return false;
+        }
+        return true;
     }
 
     /**

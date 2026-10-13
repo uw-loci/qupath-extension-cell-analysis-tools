@@ -5,8 +5,13 @@ Get a plain-English phenotype suggestion for each cluster, with rationale citing
 
 > **What has actually been run, per provider.** *Any chatbot (copy prompt, paste reply)*:
 > run end-to-end on 2026-10-12 -- prompt copied from the tab, answered by a Claude model
-> outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *Anthropic
-> (Claude API)*: run end-to-end against the live API with a real key, on 2026-09-27 --
+> outside QuPath, reply pasted back, six clusters from the synthetic demo dataset. *MCP server
+> (AI agents)*: run end-to-end on 2026-10-13, on Linux: a Python MCP client drove all three tools against a real project from a hidden QuPath (the harness scenario), and Claude Code registered the server with the one-liner below and reported it `Connected`; the Explainer tab updated live while a saved result was open. No other client has connected yet; the other
+> clients' setup snippets are unverified. *Anthropic (Claude API)* and *Ollama* as before:
+> the first run end-to-end on 2026-09-27, the second **never run, by anyone** -- if you are
+> the first to try it, a failure is as likely to be ours as yours -- please
+> [report](troubleshooting.md#reporting-a-bug) it.
+> *Anthropic (Claude API)*: run end-to-end against the live API with a real key, on 2026-09-27 --
 > `claude-sonnet-5`, seven clusters from the synthetic demo dataset, 23 seconds. *Ollama*:
 > **never run, by anyone.** It is built from the documented API and has not been exercised
 > once, so if you are the first to try it, a failure is as likely to be ours as yours --
@@ -34,6 +39,10 @@ Choose one of:
   chat window. Nothing to install and no key: you carry the prompt over by clipboard and paste
   the reply back. Your own subscription does the work, and nothing leaves QuPath except what
   you paste.
+- **An MCP-capable AI agent you already use** -- Claude Code, Codex, Cursor, Gemini CLI. No
+  key either: QP-CAT opens a small local server, off until you start it, and the agent does
+  the copy-and-paste round trip itself. Setup, the security model and what it cannot do are on
+  their own page, [MCP server](mcp-server.md). Run with Claude Code on Linux; other clients unverified.
 - **Anthropic Claude** -- a current Anthropic API key from [console.anthropic.com](https://console.anthropic.com/). Pay-as-you-go (~$0.003-0.015 per cluster set in current Sonnet pricing; see *Cost expectations* below).
 - **A running Ollama instance** -- [Ollama](https://ollama.com/) installed locally (or reachable on your network) with at least one chat model pulled. Recommended models: `llama3.1:8b` (4-5 GB, fast, decent), `qwen2.5:14b` (~9 GB, more accurate), or any other model you trust. No API costs; no data leaves your machine.
 
@@ -93,6 +102,36 @@ one-click re-run of a single cluster becomes copy, paste, paste again. What you 
 works with every chatbot that exists, including ones with no API, and no key is ever typed
 into QuPath. The audit log entry has provider `CHATBOT`, the label you typed as the model,
 and the prompt and reply verbatim.
+
+</details>
+
+<a name="mcp-server"></a>
+<details>
+<summary><strong>MCP server (AI agents, no key)</strong></summary>
+
+If your AI assistant is an *agent* -- Claude Code, Codex, Cursor, Gemini CLI -- it can do this
+round trip itself. You type "explain the clusters in my latest QP-CAT result", the agent asks
+QuPath for the prompt, answers it, and writes the names back into this tab. No key, and nothing
+copied by hand.
+
+It works by QP-CAT opening a small local server that your agent connects to, and that server is
+**off until you start it** -- installing QP-CAT never opens a port, and every QuPath restart
+starts with it off. Turning it on is two steps: choose **Extensions > QP-CAT > Setup & help >
+MCP server for AI agents**, read the window that opens, then press **Start server**. It listens
+on `127.0.0.1` only, requires a token that is generated fresh each time you start it, and stops
+by itself when the project changes or after an hour with no calls. It offers exactly three tools: list the saved results, read
+one result's marker statistics, write cluster explanations back. Nothing reads a file path, an
+image, or a cell; nothing runs code.
+
+MCP is not an entry in the **Provider** box, because it is not something you run from this
+tab: the agent asks QP-CAT, and the answers appear here, with a line under **Suggestions**
+saying which agent wrote them and when. Setup is per client and takes one line of
+configuration.
+**[Full instructions, the security model, and troubleshooting: MCP server](mcp-server.md).**
+
+The audit log entry has provider `MCP`, the agent label the tool call supplied as the model,
+and the prompt and reply verbatim -- the same record the other providers write. Unlike the
+other providers until now, the explanations are also saved into the result on disk.
 
 </details>
 
@@ -307,6 +346,8 @@ See also:
 
 - [How-To Guide section 10](llm-explainer.md) -- the full workflow walkthrough
 - [above](#when-it-is-worth-using) -- when to trust the output and how to cite it
+- [MCP server troubleshooting](mcp-server.md#troubleshooting) -- connection refused, 401, 403,
+  port in use, and the messages an agent relays; none of them are repeated here
 
 ---
 

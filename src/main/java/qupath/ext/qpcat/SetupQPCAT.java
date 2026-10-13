@@ -28,6 +28,8 @@ import qupath.ext.qpcat.ui.ClusterColorPaletteDialog;
 import qupath.ext.qpcat.ui.SpatialStatsDialog;
 import qupath.ext.qpcat.ui.ClusteringDialog;
 import qupath.ext.qpcat.ui.ClusterManagementDialog;
+import qupath.ext.qpcat.ui.McpServerWindow;
+import qupath.ext.qpcat.mcp.McpServerController;
 import qupath.ext.qpcat.ui.QpcatDocLinks;
 import qupath.ext.qpcat.ui.EmbeddingDialog;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -224,6 +226,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                     OperationLogger.getInstance().setProject(newProject));
             // Set initial project if already open
             OperationLogger.getInstance().setProject(qupath.getProject());
+            // The MCP server serves the open project only: any project change stops it.
+            McpServerController.getInstance().bindToProject(qupath);
         });
 
         // Wire the Python console UNCONDITIONALLY, not inside the environment-ready
@@ -600,6 +604,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         documentationItem.setOnAction(e ->
                 QuPathGUI.openInBrowser(QpcatDocLinks.pageUrl("README.md")));
 
+        // MCP server for AI agents. A CheckMenuItem whose text carries the state
+        // ("(off)" / "(ON - port N)"), so the submenu alone says whether a socket
+        // is open. Always enabled: the off-switch must never be unreachable.
+        CheckMenuItem mcpServerItem = McpServerWindow.createMenuItem(qupath);
+
         // ---- Menu structure -------------------------------------------------
         // Six rows, not nineteen. The two things QP-CAT is FOR -- finding
         // populations and classifying cells -- stay at the top level; everything
@@ -654,7 +663,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 rebuildItem,
                 new SeparatorMenuItem(),
                 documentationItem,
-                reportBugItem);
+                reportBugItem,
+                mcpServerItem);
 
         extensionMenu.getItems().addAll(
                 // -- The two main tools --

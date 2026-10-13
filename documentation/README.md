@@ -20,6 +20,7 @@ which options to pick for which kind of data.
 | Drive QP-CAT from a Groovy script | [Scripting](scripting.md) |
 | Reproduce an earlier run, or work out why one is slow | [Reproducibility and run cost](reproducibility.md) |
 | Ask an LLM to name clusters | [LLM explainer](llm-explainer.md) |
+| Let an AI agent I already use name the clusters, with no key | [MCP server](mcp-server.md) |
 | Fix something that went wrong | [Troubleshooting](troubleshooting.md) |
 | Cluster *on* a UMAP instead of on the markers | [Recipes](recipes.md) |
 | See a worked example end to end | [Recipes](recipes.md) |
@@ -63,6 +64,7 @@ Setup & help >
     Rebuild analysis environment                          Troubleshooting
     Documentation (How-to guide)...                       opens this page
     Report a Bug...                                       Troubleshooting
+    [ ] MCP server for AI agents (off)                    MCP server (off by default)
 ```
 
 Menu paths are written in full throughout, e.g.

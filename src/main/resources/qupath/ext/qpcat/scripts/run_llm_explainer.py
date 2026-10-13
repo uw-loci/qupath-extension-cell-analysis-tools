@@ -20,16 +20,20 @@ Per the Phase 2 design contract (02_design.md, Carried-forward contracts):
     rationale explaining why ("insufficient signal" path).
 
 Inputs (Appose 0.10.0+ injects these as bare variables, NOT task.inputs):
-  provider             str   -- "ANTHROPIC", "OLLAMA", or "CHATBOT" (the user
+  provider             str   -- "ANTHROPIC", "OLLAMA", "CHATBOT" (the user
                                 carries the prompt to any chatbot by hand and
-                                pastes the reply back; no key, no network)
+                                pastes the reply back; no key, no network) or
+                                "MCP" (the same round trip, driven by an AI
+                                agent over QP-CAT's local MCP server)
   model                str   -- provider-specific model id; for CHATBOT, a label
-                                the user typed naming the chatbot, for the record
+                                the user typed naming the chatbot, for the record;
+                                for MCP, the agent's self-reported label
   api_key              str   -- Anthropic key (empty string otherwise)
   endpoint             str   -- Ollama base URL (empty string otherwise)
-  pasted_response      str   -- CHATBOT only: the reply the user pasted. Empty
-                                means "just give me the prompt": the outputs
-                                carry the prompt and no explanations, no error.
+  pasted_response      str   -- CHATBOT / MCP only: the reply the user pasted
+                                (or the agent sent). Empty means "just give me
+                                the prompt": the outputs carry the prompt and no
+                                explanations, no error.
   marker_table_json    str   -- JSON dict {cluster_id: [{name, score, ...}]}
   top_n                int   -- max markers per cluster to include in the prompt
   cluster_ids          str   -- JSON list of cluster ids to explain (or "all")
@@ -58,6 +62,10 @@ import sys
 logger = logging.getLogger("qpcat.llm")
 
 PROMPT_TEMPLATE_ID = "cluster_phenotype_v2"
+
+# Providers whose "reply" arrives as text rather than from an HTTP call. They
+# share one branch so the prompt and the parser can never drift between them.
+PASTE_PROVIDERS = ("CHATBOT", "MCP")
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +112,9 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
     out["prompt"] = prompt
     out["prompt_hash"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
-    if (provider or "").strip().upper() == "CHATBOT" and not (pasted_response or "").strip():
+    if (provider or "").strip().upper() in PASTE_PROVIDERS and not (pasted_response or "").strip():
         # Step one of the round trip: the caller wants the prompt to carry to a
-        # chatbot. Nothing to parse yet, and nothing has gone wrong.
+        # chatbot (or hand to an agent). Nothing to parse yet, nothing has gone wrong.
         return out
 
     try:
@@ -260,9 +268,9 @@ def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec,
         return _call_anthropic(model, api_key, prompt, timeout_sec)
     if provider_norm == "OLLAMA":
         return _call_ollama(model, endpoint, prompt, timeout_sec)
-    if provider_norm == "CHATBOT":
-        # The "call" already happened in a browser or desktop app the user
-        # owns; the reply arrives by paste. Same parser as the live providers.
+    if provider_norm in PASTE_PROVIDERS:
+        # The "call" already happened in a browser, desktop app or agent the
+        # user owns; the reply arrives as text. Same parser as the live providers.
         if not (pasted_response or "").strip():
             raise _LlmError("MALFORMED_RESPONSE", "Nothing was pasted.")
         return str(pasted_response), -1, -1

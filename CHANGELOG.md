@@ -130,6 +130,73 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   universal half of the plan to drop the API-key requirement; the MCP half, for agents that
   can call into QuPath, is next.
 
+- **An AI agent you already use can name the clusters, with no API key and no copying.** The
+  MCP half, promised above. QP-CAT can open a small local [MCP](https://modelcontextprotocol.io)
+  server offering exactly three tools -- `qpcat_list_results`, `qpcat_explain_prompt`,
+  `qpcat_set_explanations` -- so "explain the clusters in my latest QP-CAT result" in Claude
+  Code, Codex, Cursor or Gemini CLI does the whole round trip: the agent reads the prompt out of
+  QuPath, answers it on your subscription, and writes the explanations into the saved result,
+  the Cluster Explainer tab, and the project audit log with provider `MCP` and the agent's own
+  label. One prompt, one parser, one scrubber, shared with the clipboard and Anthropic paths;
+  the prompt is built in one place in `run_llm_explainer.py` and the reply goes through the
+  same `parse_response`. MCP is not an entry in the Provider box, because the agent initiates,
+  not the tab; the tab shows a line saying which agent wrote the table and when. If a result
+  already has explanations the tool refuses unless the agent passes `overwrite: true`, naming
+  the existing source and date, so a careless overwrite leaves an explicit choice in the agent's
+  own transcript.
+
+  **The server is off on every installation and after every restart**, because there is no
+  preference that can remember "on" -- the state is in memory only. Turning it on is two steps,
+  a menu item that opens a window and a **Start server** button inside it, so the window's
+  explanation is read before any port is bound; turning it off is one click. It binds
+  `127.0.0.1` on a fixed port, 51516 (`qupath-mcp` holds 51515, so both can run), refuses any
+  request whose `Origin` or `Host` is not loopback (the MCP specification's one MUST, and a
+  loopback bind alone does not stop a web page you visit from posting to the port), requires a
+  token minted fresh on each start and shown in the window only for as long as that server runs,
+  never logs or persists that token, rate-limits to 30 tool calls a minute, and stops itself
+  when the project changes or after 60 minutes with no connection or call. No tool takes a path, a URL or a filename -- a result is named only
+  by exact membership in the list the agent was given -- and no tool runs Groovy, reads an
+  image, or reads a cell. That last point is the deliberate difference from
+  `earthmover-support/qupath-mcp`, which inspired the transport and whose own security page
+  states that its tools can run any code in QuPath with the user's privileges. The transport is
+  a raw `java.net.ServerSocket`, not `com.sun.net.httpserver`, because the official 0.7.0
+  Windows build's jlinked runtime has 24 modules and `jdk.httpserver` is not one of them; a
+  maintainer tempted to "simplify" it should read the maintainer section of the new page first.
+
+  Also new, and the reason this could be wired at all: **explanations are now persisted, for
+  every provider.** `toBundle`, `setLlmExplanations` and `hasLlmExplanations` had been written,
+  documented and called from nowhere since the explainer shipped, so explanations lived in the
+  open window and the audit log and died with the window. A single new
+  `persistLlmExplanations` writes them into the saved result atomically (temp file, then
+  `ATOMIC_MOVE` -- a saved result can be hundreds of megabytes of per-cell arrays and a
+  truncating write would destroy it), and the MCP tool, the clipboard path and the API paths
+  all call it. Covered by a Gson round-trip test, because that bundle had never been through
+  one.
+
+  **Measured:** the module list of the official QuPath 0.7.0 Windows runtime, read on
+  2026-10-12 -- 24 modules, no `jdk.httpserver` -- which decided the transport. Then, on
+  2026-10-13 on Linux, 50 new Java tests (875 pass) and 7 new Python tests (382 pass),
+  including raw-socket cases for a chunked body (411), a body over 1 MB (413), `Expect:
+  100-continue` (417), a non-loopback `Origin` (403) and a missing token (401); and one
+  hidden-`QuPathGUI` harness scenario against a real project with a Python client over HTTP:
+  start, 401 without the token, `tools/list` names three tools, six saved results listed, a
+  traversal name refused with no path echoed, the prompt returned (3,494 characters), six
+  suggestions saved with provider `MCP` and the agent label as model, the second write refused
+  without `overwrite`, `overwrite: true` replacing and saying so, a project change stopping the
+  server and clearing the token, and the port refusing connections after the stop. The log of
+  that run contains no string of the token's shape.
+
+  **Clients that have connected: Claude Code, on Linux, on 2026-10-13** -- registered with
+  the documented one-liner, `claude mcp list` reported `Connected`, and the connection was
+  refused after Stop server. A Python MCP client drove all three tools in the harness run
+  above, and the Explainer tab updated live while a saved result was open. **Not Codex, not
+  Cursor, not Gemini CLI, not VS Code, not Claude Desktop, on any platform**: their
+  configuration snippets are written from each client's published format and are each
+  labeled unverified. The specification
+  requires clients to accept the plain-JSON responses this server returns, which is a good
+  argument and not evidence. Also unverified: whether a loopback-only Java listener raises a
+  firewall prompt on Windows or macOS. New documentation page: `documentation/mcp-server.md`.
+
 ### Changed
 
 - **The Moran's I and Geary's C tables now lead with the statistic, ranked, and show a

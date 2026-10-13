@@ -1,0 +1,120 @@
+package qupath.ext.qpcat.mcp;
+
+import com.google.gson.JsonParser;
+import javafx.beans.property.SimpleObjectProperty;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import qupath.lib.projects.Project;
+import qupath.lib.projects.Projects;
+
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Path;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/**
+ * Lifecycle of the singleton controller against a project-valued property:
+ * no project -> refused; start -> token + URL + serving; project change -> stopped;
+ * stop clears the credential.
+ */
+class McpServerControllerTest {
+
+    @TempDir
+    Path dir;
+
+    private final McpServerController controller = McpServerController.getInstance();
+
+    @AfterEach
+    void stop() {
+        controller.stop("test teardown");
+    }
+
+    @Test
+    void startRefusesWithoutAProjectAndLeavesNothingRunning() {
+        controller.bindToProjectProperty(new SimpleObjectProperty<Project<?>>(null));
+        assertThatThrownBy(controller::start)
+                .isInstanceOf(IOException.class)
+                .hasMessage(McpServerController.NO_PROJECT_TEXT);
+        assertThat(controller.isRunning()).isFalse();
+        assertThat(controller.getToken()).isNull();
+        assertThat(controller.getUrl()).isNull();
+    }
+
+    @Test
+    void anOccupiedFirstPortFallsThroughToTheNextOne() throws Exception {
+        Project<BufferedImage> project = Projects.createProject(dir.toFile(), BufferedImage.class);
+        controller.bindToProjectProperty(new SimpleObjectProperty<Project<?>>(project));
+        try (java.net.ServerSocket squatter = new java.net.ServerSocket()) {
+            squatter.bind(new java.net.InetSocketAddress(
+                    java.net.InetAddress.getLoopbackAddress(), McpServerController.FIRST_PORT));
+            controller.start();
+            assertThat(controller.getPort()).isEqualTo(McpServerController.FIRST_PORT + 1);
+            assertThat(controller.getUrl()).endsWith(":" + (McpServerController.FIRST_PORT + 1) + "/mcp");
+        }
+    }
+
+    @Test
+    void startServesAndProjectChangeStops() throws Exception {
+        Project<BufferedImage> project = Projects.createProject(dir.toFile(), BufferedImage.class);
+        SimpleObjectProperty<Project<?>> property = new SimpleObjectProperty<>(project);
+        controller.bindToProjectProperty(property);
+
+        controller.start();
+        assertThat(controller.isRunning()).isTrue();
+        assertThat(controller.getPort()).isBetween(McpServerController.FIRST_PORT, McpServerController.LAST_PORT);
+        assertThat(controller.getUrl()).isEqualTo("http://127.0.0.1:" + controller.getPort() + "/mcp");
+        assertThat(controller.getToken()).matches("[A-Za-z0-9_-]{43}");
+        assertThat(controller.getStartedAt()).isNotNull();
+        assertThat(controller.lastEventProperty().get()).startsWith("started on port");
+        String token = controller.getToken();
+
+        HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+        HttpResponse<String> init = client.send(HttpRequest.newBuilder(URI.create(controller.getUrl()))
+                .header("Authorization", "Bearer " + token)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(init.statusCode()).isEqualTo(200);
+        String session = init.headers().firstValue("Mcp-Session-Id").orElseThrow();
+
+        HttpResponse<String> list = client.send(HttpRequest.newBuilder(URI.create(controller.getUrl()))
+                .header("Authorization", "Bearer " + token)
+                .header("Mcp-Session-Id", session)
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{"
+                                + "\"name\":\"qpcat_list_results\",\"arguments\":{}}}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(list.statusCode()).isEqualTo(200);
+        var result = JsonParser.parseString(list.body()).getAsJsonObject().getAsJsonObject("result");
+        assertThat(result.get("isError").getAsBoolean()).isFalse();
+        assertThat(result.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
+                .contains("no saved clustering results yet");
+        assertThat(controller.toolCallCountProperty().get()).isEqualTo(1);
+
+        // A second start is a no-op and keeps the same token.
+        controller.start();
+        assertThat(controller.getToken()).isEqualTo(token);
+
+        property.set(null);
+        assertThat(controller.isRunning()).isFalse();
+        assertThat(controller.getToken()).isNull();
+        assertThat(controller.lastEventProperty().get()).isEqualTo("stopped: project changed");
+        assertThat(controller.runningProperty().get()).isFalse();
+
+        // Restarting mints a new token.
+        property.set(project);
+        controller.start();
+        assertThat(controller.getToken()).isNotNull().isNotEqualTo(token);
+        controller.stop("done");
+        assertThat(controller.getToken()).isNull();
+        assertThat(controller.getStartedAt()).isNull();
+        controller.stop("again");
+    }
+}

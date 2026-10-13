@@ -43,9 +43,11 @@ public class LlmExplainerService {
      * Provider enum surfaced in the UI and the audit log. {@code CHATBOT} is
      * the round trip by hand: the prompt goes to any chatbot the user already
      * has, by clipboard, and the reply comes back by paste. No key, no network.
+     * {@code MCP} is the same round trip driven by an AI agent over the local
+     * MCP server; {@code model} then holds the agent's label. Not a UI choice.
      */
     public enum Provider {
-        NONE, ANTHROPIC, OLLAMA, CHATBOT
+        NONE, ANTHROPIC, OLLAMA, CHATBOT, MCP
     }
 
     /** Marshalled result of a single explain call. */
@@ -310,7 +312,8 @@ public class LlmExplainerService {
         params.put("Image", emptyToUnknown(req.imageName));
         params.put("User", emptyToUnknown(req.operatorUser));
         params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
-        params.put("Model", req.model != null ? req.model : "");
+        params.put(req.provider == Provider.MCP ? "Agent" : "Model",
+                req.model != null ? req.model : "");
         if (req.provider == Provider.OLLAMA) {
             params.put("Endpoint", req.endpoint != null ? req.endpoint : "");
         }

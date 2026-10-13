@@ -5268,6 +5268,10 @@ public class ClusteringDialog {
                     "cluster-explainer-llm-tab"));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
+            // Stacks with the other WINDOW_HIDDEN handlers: lets the panel stop
+            // listening for explanations written over MCP to this saved result.
+            stage.addEventHandler(javafx.stage.WindowEvent.WINDOW_HIDDEN,
+                    ev -> explainerPanel.dispose());
         }
 
         // Save/manage controls at bottom

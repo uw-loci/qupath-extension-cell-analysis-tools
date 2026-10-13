@@ -35,10 +35,14 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.mcp.ExplanationListeners;
 import qupath.ext.qpcat.model.ClusterExplanation;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.PhenotypeNames;
+import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.model.SavedClusteringResult.LlmExplanationsBundle;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.LlmExplainerService;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainRequest;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainResult;
@@ -48,7 +52,12 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.projects.Project;
 
+import java.io.IOException;
 import java.lang.reflect.Type;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -101,6 +110,14 @@ public class ClusterExplainerPanel {
     private TextArea rationaleArea;
     private Button copyTsvBtn;
     private Button regenSelectedBtn;
+    // Where the rows came from when it was not this panel: an MCP write, or the
+    // bundle already saved with the result. Hidden until one of those happens.
+    private Label sourceLabel;
+    private Runnable unregisterMcp;
+
+    /** Longest agent label shown; it is free text from a network client. */
+    static final int AGENT_LABEL_MAX = 60;
+    private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     private final ObservableList<ClusterExplanation> tableRows =
             FXCollections.observableArrayList();
@@ -168,7 +185,23 @@ public class ClusterExplainerPanel {
             keyStatusLabel.setText("(in-memory)");
         }
         refreshState();
+
+        // A saved result can be written to from outside this panel (an AI agent
+        // over MCP). Listen while the window is open; dispose() stops it. A live,
+        // unsaved run has no name and nothing can address it.
+        if (resultName != null) {
+            unregisterMcp = ExplanationListeners.register(resultName, this::onExplanationsWritten);
+            loadSavedExplanations();
+        }
         return root;
+    }
+
+    /** Stops listening for MCP writes. Called when the results window closes. */
+    public void dispose() {
+        if (unregisterMcp != null) {
+            unregisterMcp.run();
+            unregisterMcp = null;
+        }
     }
 
     /**
@@ -181,7 +214,9 @@ public class ClusterExplainerPanel {
                 "EXPERIMENTAL. Any chatbot (copy prompt, paste reply): run end-to-end, no "
                 + "key needed. Anthropic (Claude): run end-to-end against the live API "
                 + "with a real key. Ollama: never run, by anyone -- expect to be the first, "
-                + "and please report what happens. In every case the OUTPUT is "
+                + "and please report what happens. MCP (an AI agent writes the answer "
+                + "itself): run end-to-end with a test client on Linux -- see Setup & help > "
+                + "MCP server for AI agents. In every case the OUTPUT is "
                 + "unvalidated: every suggestion is a hint to check, not a conclusion. "
                 + "Confirm it against the Marker Rankings tab and your own domain "
                 + "knowledge before relying on it.");
@@ -204,6 +239,9 @@ public class ClusterExplainerPanel {
         Label heading = new Label("Provider");
         heading.setStyle("-fx-font-weight: bold;");
 
+        // Provider.MCP is deliberately absent: the other three are things you ask
+        // this panel to do, MCP is something an agent does TO the panel. It is
+        // turned on under Setup & help, and its rows arrive via onExplanationsWritten.
         providerCombo = new ComboBox<>(FXCollections.observableArrayList(
                 Provider.NONE, Provider.CHATBOT, Provider.ANTHROPIC, Provider.OLLAMA));
         // Say which path has been run IN the list, not only in the tooltip: the
@@ -238,7 +276,11 @@ public class ClusterExplainerPanel {
                 + "Ollama = local server (free, requires 'ollama serve' running).\n"
                 + "NEVER RUN: the request is built from the documented API and has\n"
                 + "not been exercised once, so a first failure is as likely to be\n"
-                + "ours as yours. Please report it if it is."));
+                + "ours as yours. Please report it if it is.\n\n"
+                + "An AI agent connected over MCP is not in this list, because it is\n"
+                + "not something you run from here: the agent asks QP-CAT, and the\n"
+                + "answers appear in the table. Turn it on under Setup & help > MCP\n"
+                + "server for AI agents."));
         providerCombo.valueProperty().addListener((obs, oldV, newV) -> {
             QpcatPreferences.setLlmProvider(newV != null ? newV.name() : "NONE");
             populateModelsForProvider(newV);
@@ -493,6 +535,21 @@ public class ClusterExplainerPanel {
         Label heading = new Label("Suggestions");
         heading.setStyle("-fx-font-weight: bold;");
 
+        sourceLabel = new Label();
+        sourceLabel.setWrapText(true);
+        sourceLabel.setMaxWidth(Double.MAX_VALUE);
+        sourceLabel.setStyle("-fx-font-size: 11px; -fx-font-style: italic;");
+        WrapHeight.bind(sourceLabel);
+        sourceLabel.setVisible(false);
+        sourceLabel.setManaged(false);
+        sourceLabel.setAccessibleText("Where the suggestions came from");
+        sourceLabel.setTooltip(Tooltips.of(
+                "These suggestions were written by an AI agent through the MCP server, or\n"
+                + "loaded from the saved result, not produced by this panel just now. The\n"
+                + "agent said which model it used; we pass that on without checking it.\n"
+                + "The result on disk holds them -- reopen it from Results & populations >\n"
+                + "View Past Results to see them again later."));
+
         resultsTable = new TableView<>(tableRows);
         resultsTable.setPrefHeight(200);
         resultsTable.setPlaceholder(new Label(
@@ -578,7 +635,7 @@ public class ClusterExplainerPanel {
         HBox btnRow = new HBox(8, copyTsvBtn, regenSelectedBtn, useAsNamesBtn);
         btnRow.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(6, heading, resultsTable,
+        VBox box = new VBox(6, heading, sourceLabel, resultsTable,
                 new Label("Rationale:"), rationaleArea, btnRow);
         VBox.setVgrow(resultsTable, Priority.ALWAYS);
         return box;
@@ -800,11 +857,147 @@ public class ClusterExplainerPanel {
                         + " clusters explained ("
                         + (durationMs / 1000L) + "s).");
                 LlmExplainerService.writeAuditLog(req, finalRes, durationMs);
+                persistToSavedResult(req, finalRes);
             });
         }, "QPCAT-LlmExplainer");
         t.setDaemon(true);
         runningThread = t;
         t.start();
+    }
+
+    // ---------------------------------------------------------------------
+    // Persistence and writes from outside the panel
+    // ---------------------------------------------------------------------
+
+    /**
+     * Writes the table, as it now stands, into the saved result so the clipboard
+     * and API providers persist like the MCP path does. Only for a saved result;
+     * a live run has nowhere to write. IO runs off the FX thread.
+     */
+    private void persistToSavedResult(ExplainRequest req, ExplainResult finalRes) {
+        if (resultName == null) {
+            return;
+        }
+        Project<?> project = currentProject();
+        if (project == null) {
+            return;
+        }
+        LlmExplanationsBundle bundle = LlmExplainerService.toBundle(finalRes, req.provider, req.model);
+        // A single-cluster regenerate must not clobber the other rows on disk.
+        bundle.setExplanations(new ArrayList<>(tableRows));
+        String baseStatus = statusLabel.getText();
+        Thread t = new Thread(() -> {
+            String outcome;
+            try {
+                ClusteringResultManager.persistLlmExplanations(project, resultName, bundle);
+                outcome = " Saved to the result on disk.";
+            } catch (IOException | RuntimeException e) {
+                logger.warn("Could not save explanations to result '{}': {}", resultName, e.toString());
+                outcome = " Could not save to the result on disk: " + e.getMessage();
+            }
+            String finalOutcome = outcome;
+            Platform.runLater(() -> statusLabel.setText(baseStatus + finalOutcome));
+        }, "QPCAT-LlmExplainer-persist");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Shows the explanations already stored with this saved result, if any, so a
+     * reopened result carries what an agent or an earlier run wrote. Read off FX.
+     */
+    private void loadSavedExplanations() {
+        Project<?> project = currentProject();
+        if (project == null) {
+            return;
+        }
+        Thread t = new Thread(() -> {
+            LlmExplanationsBundle bundle;
+            try {
+                SavedClusteringResult saved = ClusteringResultManager.loadSavedResult(project, resultName);
+                if (saved == null || !saved.hasLlmExplanations()) {
+                    return;
+                }
+                bundle = saved.getLlmExplanations();
+            } catch (IOException | RuntimeException e) {
+                logger.debug("No saved explanations read for '{}': {}", resultName, e.toString());
+                return;
+            }
+            Platform.runLater(() -> {
+                if (!tableRows.isEmpty()) {
+                    return; // the user has already produced rows in this window
+                }
+                tableRows.setAll(bundle.getExplanations());
+                resultsTable.getSelectionModel().selectFirst();
+                showSource("Loaded from the saved result: written by "
+                        + sanitizeAgentLabel(bundle.getModel()) + " via "
+                        + safeStr(bundle.getProvider()) + " at " + shortTime(bundle.getTimestamp()) + ".");
+            });
+        }, "QPCAT-LlmExplainer-load");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** An AI agent wrote explanations to this saved result over MCP. FX thread. */
+    void onExplanationsWritten(LlmExplanationsBundle bundle) {
+        if (bundle == null || bundle.getExplanations() == null) {
+            return;
+        }
+        List<ClusterExplanation> rows = bundle.getExplanations();
+        tableRows.setAll(rows);
+        if (!tableRows.isEmpty()) {
+            resultsTable.getSelectionModel().selectFirst();
+        }
+        String agent = sanitizeAgentLabel(bundle.getModel());
+        String when = LocalTime.now().format(HH_MM);
+        showSource("Last written by " + agent + " over MCP at " + when
+                + " -- by an AI agent, not from this panel. Saved to the result on disk.");
+        statusLabel.setText("An AI agent just wrote " + rows.size()
+                + (rows.size() == 1 ? " suggestion" : " suggestions")
+                + " over MCP. Scroll the table to review them.");
+    }
+
+    private void showSource(String text) {
+        sourceLabel.setText(text);
+        sourceLabel.setVisible(true);
+        sourceLabel.setManaged(true);
+    }
+
+    /** Agent labels are untrusted network text: no control characters, 60 chars at most. */
+    static String sanitizeAgentLabel(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "an unnamed agent";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < raw.length() && sb.length() < AGENT_LABEL_MAX; i++) {
+            char c = raw.charAt(i);
+            if (!Character.isISOControl(c)) {
+                sb.append(c);
+            }
+        }
+        String out = sb.toString().trim();
+        if (out.isEmpty()) {
+            return "an unnamed agent";
+        }
+        return raw.length() > out.length() && sb.length() >= AGENT_LABEL_MAX ? out + "..." : out;
+    }
+
+    /** ISO-8601 with offset -> local HH:mm; anything else is passed through. */
+    private static String shortTime(String iso) {
+        if (iso == null || iso.isBlank()) {
+            return "an unknown time";
+        }
+        try {
+            var local = OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault());
+            return local.toLocalTime().format(HH_MM) + " on " + local.toLocalDate();
+        } catch (DateTimeParseException e) {
+            return iso;
+        }
+    }
+
+    private static Project<?> currentProject() {
+        QuPathGUI gui = QuPathGUI.getInstance();
+        return gui != null ? gui.getProject() : null;
     }
 
     // ---------------------------------------------------------------------
@@ -981,6 +1174,7 @@ public class ClusterExplainerPanel {
             modelCombo.setValue(QpcatPreferences.getLlmChatbotLabel());
             modelCombo.setDisable(false);
         } else {
+            // NONE, and MCP if it ever reached here: nothing to send a model id to.
             modelCombo.setItems(FXCollections.observableArrayList());
             modelCombo.setValue(null);
             modelCombo.setDisable(true);

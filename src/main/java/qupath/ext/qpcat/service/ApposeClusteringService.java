@@ -746,6 +746,11 @@ public class ApposeClusteringService {
         return initialized && initError == null && pythonService != null;
     }
 
+    /** True while another task holds the Python worker (see {@code TASK_LOCK}). */
+    public boolean isBusy() {
+        return TASK_LOCK.isLocked();
+    }
+
     public String getInitError() { return initError; }
 
     /**
