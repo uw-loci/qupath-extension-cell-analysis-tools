@@ -2,6 +2,7 @@ package qupath.ext.qpcat.controller;
 
 import javafx.application.Platform;
 import org.apposed.appose.NDArray;
+import qupath.ext.qpcat.service.ApposeArrays;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
 import org.slf4j.Logger;
@@ -2698,34 +2699,16 @@ public class ClusteringWorkflow {
      */
     /** Cluster labels as an int32 NDArray, for the analyze-existing path. */
     private static NDArray buildLabelNDArray(int[] labels) {
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, labels.length);
-        NDArray nd = new NDArray(NDArray.DType.INT32, shape);
-        var buf = nd.buffer().asIntBuffer();
-        buf.put(labels);
-        return nd;
+        return ApposeArrays.int32Vector(labels);
     }
 
     private static NDArray buildMeasurementNDArray(double[][] data, int nCells, int nMeasurements) {
-        NDArray.Shape shape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, nMeasurements);
         if (MeasurementExtractor.isFloat32Exact(data)) {
-            NDArray nd = new NDArray(NDArray.DType.FLOAT32, shape);
-            var buf = nd.buffer().asFloatBuffer();
-            for (int i = 0; i < nCells; i++) {
-                double[] row = data[i];
-                for (int j = 0; j < nMeasurements; j++) {
-                    buf.put((float) row[j]);
-                }
-            }
-            return nd;
+            return ApposeArrays.float32Matrix(data, nCells, nMeasurements);
         }
         logger.info("Measurement matrix is not float32-exact; shipping float64 "
                 + "({} cells x {} markers)", nCells, nMeasurements);
-        NDArray nd = new NDArray(NDArray.DType.FLOAT64, shape);
-        var buf = nd.buffer().asDoubleBuffer();
-        for (int i = 0; i < nCells; i++) {
-            buf.put(data[i]);
-        }
-        return nd;
+        return ApposeArrays.float64Matrix(data, nCells, nMeasurements);
     }
 
     /**
@@ -5194,8 +5177,11 @@ public class ClusteringWorkflow {
         if (!task.outputs.containsKey(key)) return null;
         NDArray nd = (NDArray) task.outputs.get(key);
         opened.add(nd);
-        double[] arr = new double[n];
-        nd.buffer().asDoubleBuffer().get(arr);
+        double[] arr = ApposeArrays.toDoubles(nd);
+        if (arr.length != n) {
+            logger.warn("Output '{}' has {} values; expected {}", key, arr.length, n);
+            arr = java.util.Arrays.copyOf(arr, n);
+        }
         return arr;
     }
 

@@ -5,20 +5,15 @@ import org.apposed.appose.Environment;
 import org.apposed.appose.Service;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
-import org.apposed.appose.TaskException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Singleton managing the Appose Environment and Python Service lifecycle
@@ -27,6 +22,11 @@ import java.util.stream.Collectors;
  * Provides an embedded Python runtime for clustering, dimensionality reduction,
  * and related operations via Appose's shared-memory IPC. No GPU required --
  * all operations are CPU-based.
+ * <p>
+ * The generic plumbing (manifest staging, worker shutdown, failure
+ * classification, the thread-death retry) lives in the shared copies
+ * {@link ApposeSupport} and {@link ApposeTaskRunner}; this class holds only
+ * what is specific to the QP-CAT environment.
  */
 public class ApposeClusteringService {
 
@@ -157,11 +157,42 @@ public class ApposeClusteringService {
     }
 
     private Environment environment;
-    private Service pythonService;
-    private boolean initialized;
-    private String initError;
+    // Read outside the synchronized methods by the task path; a restart swaps
+    // the reference, so readers must not see a stale one.
+    private volatile Service pythonService;
+    private volatile boolean initialized;
+    private volatile String initError;
     private Thread shutdownHook;
     private Consumer<String> debugListener;
+
+    /**
+     * How {@link ApposeTaskRunner} reaches the worker and replaces a stale one.
+     * A worker that died since initialization (OOM kill, user killed it) is
+     * respawned here rather than failing every task for the rest of the
+     * session; the environment is already built, so that costs seconds.
+     */
+    private final ApposeTaskRunner.WorkerSource workerSource = new ApposeTaskRunner.WorkerSource() {
+        @Override
+        public Service worker() throws IOException {
+            ensureInitialized();
+            Service service = pythonService;
+            if (service != null && !service.isAlive() && environment != null) {
+                logger.warn("QPCAT Python worker is not alive; recreating it before running the task");
+                restartWorker(service);
+                service = pythonService;
+            }
+            if (service == null) {
+                throw new IOException("QPCAT task cannot start: the Python worker is being replaced. "
+                        + "Retry the operation.");
+            }
+            return service;
+        }
+
+        @Override
+        public void replaceWorker(Service stale) throws IOException {
+            restartWorker(stale);
+        }
+    };
 
     // Capability flags reported by init_services.py at verification time.
     // Java reads these to gray out features whose Python deps are missing
@@ -182,13 +213,7 @@ public class ApposeClusteringService {
      * Checks if the Appose pixi environment appears to be built on disk.
      */
     public static boolean isEnvironmentBuilt() {
-        ApposeClusteringService svc = instance;
-        if (svc != null && svc.environment != null) {
-            Path envDir = Path.of(svc.environment.base());
-            return Files.isDirectory(envDir.resolve(".pixi"));
-        }
-        Path envDir = getEnvironmentPath();
-        return Files.isDirectory(envDir.resolve(".pixi"));
+        return ApposeEnvLocation.isBuilt(getEnvironmentPath());
     }
 
     /**
@@ -204,7 +229,7 @@ public class ApposeClusteringService {
             if (!Files.exists(pixiTomlFile)) return false;
             if (!Files.isDirectory(envDir.resolve(".pixi"))) return false;
 
-            String expected = loadResource(RESOURCE_BASE + variant().tomlResource());
+            String expected = ApposeSupport.loadResource(RESOURCE_BASE + variant().tomlResource());
             String existing = Files.readString(pixiTomlFile, StandardCharsets.UTF_8);
             return !existing.replace("\r\n", "\n").strip()
                     .equals(expected.replace("\r\n", "\n").strip());
@@ -243,15 +268,16 @@ public class ApposeClusteringService {
             // Manifest AND lock come from the same variant, so they can never
             // be paired wrongly (lockResource() is derived from tomlResource()).
             var computeVariant = variant();
-            String pixiToml = loadResource(RESOURCE_BASE + computeVariant.tomlResource());
-            String pixiLock = loadResource(RESOURCE_BASE + computeVariant.lockResource());
+            String pixiToml = ApposeSupport.loadResource(RESOURCE_BASE + computeVariant.tomlResource());
+            String pixiLock = ApposeSupport.loadResource(RESOURCE_BASE + computeVariant.lockResource());
 
             // TCCL must be set for all Appose operations
             ClassLoader original = Thread.currentThread().getContextClassLoader();
-            Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
+            Thread.currentThread().setContextClassLoader(ApposeSupport.extensionClassLoader());
 
             try {
-                boolean rebuilding = syncManifest(pixiToml, pixiLock);
+                long setupStart = System.nanoTime();
+                boolean rebuilding = ApposeSupport.syncManifest(getEnvironmentPath(), pixiToml, pixiLock, logger);
                 if (rebuilding) {
                     report(statusCallback,
                             "Dependencies changed -- rebuilding environment (this may take several minutes)...");
@@ -296,79 +322,14 @@ public class ApposeClusteringService {
                             configuredDir);
                 }
 
+                long buildStart = System.nanoTime();
                 environment = builder.build();
 
-                logger.info("QPCAT Appose environment built");
+                logger.info("QPCAT Appose environment built ({} ms)", ApposeSupport.elapsedMs(buildStart));
                 report(statusCallback, "Starting Python service...");
 
-                pythonService = environment.python();
-
-                pythonService.debug(msg -> {
-                    // Filter out Appose protocol messages (EXECUTE requests contain
-                    // the full script + base64 inputs and can be 25+ MB). Only log
-                    // Python stderr output (logging, warnings, errors).
-                    if (msg.contains("\"requestType\"") || msg.contains("\"responseType\"")) {
-                        // Protocol message -- skip logging (too large, not useful)
-                        return;
-                    }
-                    // Truncate very long messages (safety net)
-                    String logMsg = msg.length() > 2000
-                            ? msg.substring(0, 2000) + "... [truncated]" : msg;
-                    logger.info("[QPCAT Python] {}", logMsg);
-                    Consumer<String> listener = debugListener;
-                    if (listener != null) {
-                        listener.accept(logMsg);
-                    } else {
-                        // Belt and braces. The console was blank for a whole
-                        // session whenever this field happened to be unwired,
-                        // with the same text going to the QuPath log -- so a
-                        // missing listener must not be a silent data loss.
-                        logger.debug("Python console listener not wired; line only in the log");
-                    }
-                });
-
-                // Import numpy first to avoid Windows threading deadlock
-                // Load model_utils into global scope so task scripts can use
-                // detect_device() and the shared helpers without import
-                String initScript = "import numpy\n"
-                        + loadScript("init_services.py") + "\n"
-                        + loadScript("model_utils.py");
-                pythonService.init(initScript);
-
-                // Register spatial_stats.py as an importable module in the
-                // persistent worker. Task scripts run via exec(compile(..., "<string>"))
-                // so they have NO __file__ and the bundled sibling scripts are not on
-                // sys.path -- so `import spatial_stats` (spatial smoothing + spatial
-                // statistics in run_clustering.py) would fail, and the old
-                // __file__-based fallback raised "name '__file__' is not defined".
-                // Passing the source as an Appose INPUT (not a Java string literal)
-                // avoids escaping issues, and registering in sys.modules persists for
-                // every subsequent task in this worker process.
-                try {
-                    String regScript =
-                            "import sys as _sys, types as _types\n" +
-                            "_mod = _types.ModuleType(module_name)\n" +
-                            "exec(compile(module_source, module_name + '.py', 'exec'), _mod.__dict__)\n" +
-                            "_sys.modules[module_name] = _mod\n" +
-                            "task.outputs['registered'] = module_name\n";
-                    Task regTask = pythonService.task(regScript, Map.of(
-                            "module_name", "spatial_stats",
-                            "module_source", loadScript("spatial_stats.py")));
-                    regTask.listen(event -> {
-                        if (event.responseType == ResponseType.FAILURE
-                                || event.responseType == ResponseType.CRASH) {
-                            logger.error("spatial_stats module registration failed: {}",
-                                    regTask.error);
-                        }
-                    });
-                    regTask.waitFor();
-                    logger.info("Registered spatial_stats as an importable module");
-                } catch (Exception regEx) {
-                    // Non-fatal: only spatial smoothing / spatial statistics need it.
-                    // run_clustering.py raises a clear error if it is still missing.
-                    logger.warn("Could not register spatial_stats module; spatial "
-                            + "analysis features may be unavailable: {}", regEx.getMessage());
-                }
+                long workerStart = System.nanoTime();
+                spawnWorker();
 
                 // Verify packages are importable
                 report(statusCallback, "Verifying installed packages...");
@@ -411,10 +372,12 @@ public class ApposeClusteringService {
                 Object banksyFlag = verifyTask.outputs.get("banksy_available");
                 banksyAvailable = Boolean.TRUE.equals(banksyFlag);
                 logger.info("Verified: scikit-learn {}, scanpy {}, umap {}, env {} "
-                        + "(harmonypy={}, pybanksy={})",
+                        + "(harmonypy={}, pybanksy={}); the Python worker started in {} ms, "
+                        + "setup took {} ms",
                         sklearnVersion, scanpyVersion, umapVersion, envVersion,
                         harmonypyAvailable ? "available" : "MISSING",
-                        banksyAvailable ? "available" : "MISSING");
+                        banksyAvailable ? "available" : "MISSING",
+                        ApposeSupport.elapsedMs(workerStart), ApposeSupport.elapsedMs(setupStart));
 
                 // Version check: warn if environment version doesn't match expected
                 if (!EXPECTED_ENV_VERSION.equals(envVersion)) {
@@ -461,7 +424,7 @@ public class ApposeClusteringService {
             // BuildException only says "pixi build failed" at the top; the
             // actionable "failed to link ... os error 32" / "No module named"
             // text lives in a nested cause.
-            String fullMsg = collectCauseMessages(e);
+            String fullMsg = ApposeSupport.collectCauseMessages(e);
             initError = e.getMessage();
             initialized = false;
             logger.error("Failed to initialize QPCAT Appose: {}", e.getMessage(), e);
@@ -494,11 +457,11 @@ public class ApposeClusteringService {
                         // -- the log + status callback already told the user.
                     }
                 }
-            } else if (looksLikeWindowsFileLock(fullMsg)) {
+            } else if (ApposeSupport.looksLikeWindowsFileLock(fullMsg)) {
                 // v0.3.4: Windows file-lock during pixi link step. Do NOT auto-wipe
                 // -- another process is actively holding a file in .pixi/envs/, so
                 // a wipe risks corruption. Show the user the recovery steps.
-                String advice = WINDOWS_FILE_LOCK_ADVICE;
+                String advice = ApposeSupport.windowsFileLockAdvice(getEnvironmentPath());
                 logger.warn("Pixi env install hit a Windows file lock; manual recovery required\n{}", advice);
                 report(statusCallback, "Pixi env install failed: Windows file lock. See recovery steps.");
                 try {
@@ -516,79 +479,134 @@ public class ApposeClusteringService {
     }
 
     /**
-     * v0.3.4: Recovery instructions for the Windows file-lock failure mode
-     * during Pixi env install (`failed to link` + os error 32). Emitted to
-     * the log; surfaced as a short notification with a pointer to the log
-     * for the full steps.
+     * Creates the Python worker, queues its init script and registers the
+     * {@code spatial_stats} module. Used by {@link #initialize} and by
+     * {@link #restartWorker(Service)}, so a replaced worker has the same
+     * globals as the original.
+     *
+     * <p>Caller must hold the monitor and have the extension classloader set
+     * as TCCL. {@code import numpy} must stay the literal first line of the
+     * init string to avoid a Windows deadlock (numpy/numpy#24290).
      */
-    private static final String WINDOWS_FILE_LOCK_ADVICE =
-            "QP-CAT cannot finish building its Python environment because another"
-            + " process is holding a file open inside the env directory.\n\n"
-            + "RECOVERY STEPS (Windows):\n"
-            + "  1. Close QuPath completely (File -> Quit).\n"
-            + "  2. Open Task Manager -- end any leftover java.exe or python.exe"
-            + " running under your user.\n"
-            + "  3. In PowerShell:\n"
-            + "       Remove-Item -Recurse -Force \"$env:USERPROFILE\\.local\\share\\appose\\qupath-qpcat\\.pixi\"\n"
-            + "  4. (If step 3 fails: reboot Windows -- guaranteed to release every file handle.)\n"
-            + "  5. (Optional) Add an antivirus exclusion for the appose folder to prevent"
-            + " repeat occurrences:\n"
-            + "       %USERPROFILE%\\.local\\share\\appose\\\n"
-            + "  6. Relaunch QuPath. Pixi will rebuild from scratch and the link step will succeed.";
+    private void spawnWorker() throws IOException {
+        Service fresh = ApposeGpu.pinned(environment).python();
+
+        fresh.debug(msg -> {
+            // Filter out Appose protocol messages (EXECUTE requests contain
+            // the full script + base64 inputs and can be 25+ MB). Only log
+            // Python stderr output (logging, warnings, errors).
+            if (ApposeSupport.isProtocolEnvelope(msg)) {
+                return;
+            }
+            // Truncate very long messages (safety net)
+            String logMsg = msg.length() > 2000
+                    ? msg.substring(0, 2000) + "... [truncated]" : msg;
+            logger.info("[QPCAT Python] {}", logMsg);
+            Consumer<String> listener = debugListener;
+            if (listener != null) {
+                listener.accept(logMsg);
+            } else {
+                // Belt and braces. The console was blank for a whole
+                // session whenever this field happened to be unwired,
+                // with the same text going to the QuPath log -- so a
+                // missing listener must not be a silent data loss.
+                logger.debug("Python console listener not wired; line only in the log");
+            }
+        });
+
+        // Import numpy first to avoid Windows threading deadlock
+        // Load model_utils into global scope so task scripts can use
+        // detect_device() and the shared helpers without import
+        String initScript = "import numpy\n"
+                + loadScript("init_services.py") + "\n"
+                + loadScript("model_utils.py");
+        fresh.init(initScript);
+        pythonService = fresh;
+
+        // Register spatial_stats.py as an importable module in the
+        // persistent worker. Task scripts run via exec(compile(..., "<string>"))
+        // so they have NO __file__ and the bundled sibling scripts are not on
+        // sys.path -- so `import spatial_stats` (spatial smoothing + spatial
+        // statistics in run_clustering.py) would fail, and the old
+        // __file__-based fallback raised "name '__file__' is not defined".
+        // Passing the source as an Appose INPUT (not a Java string literal)
+        // avoids escaping issues, and registering in sys.modules persists for
+        // every subsequent task in this worker process. This is also the task
+        // that starts the subprocess, so isAlive() is meaningful on return.
+        try {
+            String regScript =
+                    "import sys as _sys, types as _types\n" +
+                    "_mod = _types.ModuleType(module_name)\n" +
+                    "exec(compile(module_source, module_name + '.py', 'exec'), _mod.__dict__)\n" +
+                    "_sys.modules[module_name] = _mod\n" +
+                    "task.outputs['registered'] = module_name\n";
+            Task regTask = fresh.task(regScript, Map.of(
+                    "module_name", "spatial_stats",
+                    "module_source", loadScript("spatial_stats.py")));
+            regTask.listen(event -> {
+                if (event.responseType == ResponseType.FAILURE
+                        || event.responseType == ResponseType.CRASH) {
+                    logger.error("spatial_stats module registration failed: {}",
+                            regTask.error);
+                }
+            });
+            regTask.waitFor();
+            logger.info("Registered spatial_stats as an importable module");
+            ApposeGpu.checkWorker(fresh, "QPCAT", logger);
+        } catch (Exception regEx) {
+            // Non-fatal: only spatial smoothing / spatial statistics need it.
+            // run_clustering.py raises a clear error if it is still missing.
+            logger.warn("Could not register spatial_stats module; spatial "
+                    + "analysis features may be unavailable: {}", regEx.getMessage());
+        }
+    }
+
+    /**
+     * Recreates ONLY the Python worker subprocess, killing the stale one first.
+     * The pixi environment is untouched; this re-runs the init script and the
+     * module registration, which is seconds rather than the minutes a rebuild
+     * costs.
+     *
+     * <p>A no-op when {@code staleWorker} is not the current worker, so two
+     * tasks failing on the same stale worker do not tear down each other's
+     * replacement. Pass {@code null} to restart unconditionally.
+     */
+    public synchronized void restartWorker(Service staleWorker) throws IOException {
+        if (environment == null) {
+            throw new IOException("Cannot restart worker: Appose environment not built");
+        }
+        if (staleWorker != null && pythonService != staleWorker) {
+            logger.info("QPCAT Python worker was already replaced by another thread; skipping redundant restart");
+            return;
+        }
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(ApposeSupport.extensionClassLoader());
+        try {
+            long start = System.nanoTime();
+            Service stale = pythonService;
+            pythonService = null;
+            ApposeSupport.stopWorker(stale, 3000, logger);
+            spawnWorker();
+            logger.info("QPCAT Appose worker restarted in {} ms (fresh Python subprocess)",
+                    ApposeSupport.elapsedMs(start));
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("Failed to restart QPCAT Appose worker: " + e.getMessage(), e);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
+    }
 
     /**
      * Runs a named task script with the given inputs.
+     *
+     * <p>Tasks run one at a time (see {@code TASK_LOCK}). A stale worker is
+     * replaced and the task retried, only when no Python ran; the attempt
+     * count and delay are the user's preferences. See {@link ApposeTaskRunner}.
      */
     public Task runTask(String scriptName, Map<String, Object> inputs) throws IOException {
-        ensureInitialized();
-
-        String script;
-        try {
-            script = loadScript(scriptName + ".py");
-        } catch (IOException e) {
-            throw new IOException("Failed to load task script: " + scriptName, e);
-        }
-
-        int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
-        ClassLoader original = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
-        acquireWorker(scriptName);
-        try {
-            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                    Task task = pythonService.task(script, inputs);
-                    task.listen(event -> {
-                        if (event.responseType == ResponseType.CRASH) {
-                            logger.error("Task '{}' CRASH: {}", scriptName, task.error);
-                        } else if (event.responseType == ResponseType.FAILURE) {
-                            logger.error("Task '{}' FAILURE: {}", scriptName, task.error);
-                        }
-                    });
-                    task.waitFor();
-                    return task;
-                } catch (TaskException e) {
-                    if (e.getMessage() != null
-                            && e.getMessage().contains("thread death")
-                            && attempt < maxAttempts) {
-                        logger.warn("Task '{}' thread death (attempt {}/{}), retrying...",
-                                scriptName, attempt, maxAttempts);
-                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            throw new IOException("Task '" + scriptName + "' interrupted", ie);
-                        }
-                        continue;
-                    }
-                    throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
-                }
-            }
-            throw new IOException("Task '" + scriptName + "' failed after " + maxAttempts + " attempts");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Task '" + scriptName + "' interrupted", e);
-        } finally {
-            TASK_LOCK.unlock();
-            Thread.currentThread().setContextClassLoader(original);
-        }
+        return runTaskWithListener(scriptName, inputs, null, null);
     }
 
     /**
@@ -618,47 +636,16 @@ public class ApposeClusteringService {
             throw new IOException("Failed to load task script: " + scriptName, e);
         }
 
-        // Retry on "thread death" -- Appose spawns a Python thread per task.
-        // Stale thread deaths from previous tasks can get misattributed to the
-        // current task, causing a spurious failure. Retrying after a brief pause
-        // lets the stale cleanup messages drain before resubmitting.
-        // Same pattern as the DL pixel classifier extension.
-        int maxAttempts = qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries();
-        ClassLoader original = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
+        ApposeTaskRunner.Options options = new ApposeTaskRunner.Options()
+                .maxAttempts(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskMaxRetries())
+                .retryDelayMs(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs())
+                .listener(eventListener)
+                .onCreated(onTaskCreated);
         acquireWorker(scriptName);
         try {
-            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                    Task task = pythonService.task(script, inputs);
-                    if (onTaskCreated != null) {
-                        onTaskCreated.accept(task);
-                    }
-                    task.listen(eventListener::accept);
-                    task.waitFor();
-                    return task;
-                } catch (TaskException e) {
-                    if (e.getMessage() != null
-                            && e.getMessage().contains("thread death")
-                            && attempt < maxAttempts) {
-                        logger.warn("Task '{}' failed with thread death (attempt {}/{}), retrying...",
-                                scriptName, attempt, maxAttempts);
-                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            throw new IOException("Task '" + scriptName + "' interrupted", ie);
-                        }
-                        continue;
-                    }
-                    throw new IOException("Task '" + scriptName + "' failed: " + e.getMessage(), e);
-                }
-            }
-            throw new IOException("Task '" + scriptName + "' failed after " + maxAttempts + " attempts");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Task '" + scriptName + "' interrupted", e);
+            return ApposeTaskRunner.run("QPCAT", workerSource, scriptName, script, inputs, options);
         } finally {
             TASK_LOCK.unlock();
-            Thread.currentThread().setContextClassLoader(original);
         }
     }
 
@@ -667,51 +654,19 @@ public class ApposeClusteringService {
      * failure path: if {@code environment.python()} succeeded but a later step threw,
      * the worker process is left alive and orphaned, and a subsequent env wipe would
      * race a live process still holding files under {@code .pixi/} (the exact Windows
-     * file-lock we otherwise guard against). Closes, then force-kills, then nulls.
+     * file-lock we otherwise guard against).
      */
     private void teardownPythonServiceQuietly() {
-        if (pythonService == null) {
-            return;
-        }
-        try {
-            pythonService.close();
-            if (pythonService.isAlive()) {
-                pythonService.kill();
-            }
-        } catch (Exception e) {
-            try { pythonService.kill(); }
-            catch (Exception ignored) { /* already down */ }
-            logger.warn("Error tearing down partially-started Python worker: {}",
-                    e.getMessage());
-        } finally {
-            pythonService = null;
-        }
+        Service service = pythonService;
+        pythonService = null;
+        ApposeSupport.stopWorker(service, 500, logger);
     }
 
     public synchronized void shutdown() {
-        if (pythonService != null) {
-            try {
-                logger.info("Shutting down QPCAT Python service...");
-                pythonService.close();
-                if (pythonService.isAlive()) {
-                    long deadline = System.currentTimeMillis() + 5000;
-                    while (pythonService.isAlive() && System.currentTimeMillis() < deadline) {
-                        try { Thread.sleep(qupath.ext.qpcat.preferences.QpcatPreferences.getTaskRetrySleepMs()); }
-                        catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            break;
-                        }
-                    }
-                }
-                if (pythonService.isAlive()) {
-                    logger.warn("Python service did not exit gracefully, force-killing");
-                    pythonService.kill();
-                }
-            } catch (Exception e) {
-                try { pythonService.kill(); }
-                catch (Exception ignored) {}
-                logger.warn("Error during shutdown: {}", e.getMessage());
-            }
+        Service service = pythonService;
+        if (service != null) {
+            logger.info("Shutting down QPCAT Python service...");
+            ApposeSupport.stopWorker(service, 5000, logger);
             pythonService = null;
         }
         initialized = false;
@@ -738,7 +693,7 @@ public class ApposeClusteringService {
         Path envPath = getEnvironmentPath();
         if (Files.exists(envPath)) {
             logger.info("Deleting environment directory: {}", envPath);
-            deleteDirectoryRecursively(envPath);
+            ApposeSupport.deleteDirectoryRecursively(envPath);
         }
     }
 
@@ -788,13 +743,7 @@ public class ApposeClusteringService {
      * Executes a callable with the extension classloader as TCCL.
      */
     public static <T> T withExtensionClassLoader(java.util.concurrent.Callable<T> callable) throws Exception {
-        ClassLoader original = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(ApposeClusteringService.class.getClassLoader());
-        try {
-            return callable.call();
-        } finally {
-            Thread.currentThread().setContextClassLoader(original);
-        }
+        return ApposeSupport.withExtensionClassLoader(callable);
     }
 
     // ==================== Internal Helpers ====================
@@ -834,22 +783,6 @@ public class ApposeClusteringService {
         return i == 0 ? 0 : Integer.parseInt(s.substring(0, i));
     }
 
-    /** Concatenate the message of a throwable and its entire cause chain.
-     *  Failure signatures we match on (Windows file lock, missing module) are
-     *  often nested: e.g. PixiBuilder throws BuildException("pixi build failed")
-     *  whose cause carries the real "failed to link ... os error 32" text. The
-     *  detectors below must see the whole chain, not just the top message. */
-    private static String collectCauseMessages(Throwable t) {
-        StringBuilder sb = new StringBuilder();
-        int guard = 0;
-        for (Throwable c = t; c != null && guard < 20; c = c.getCause(), guard++) {
-            if (c.getMessage() != null) {
-                sb.append(c.getMessage()).append('\n');
-            }
-        }
-        return sb.toString();
-    }
-
     /** True when the init exception message carries a well-known signature
      *  that means the Pixi env is structurally OK on disk but missing a
      *  package the verify import needed -- usually setuptools / pkg_resources
@@ -862,22 +795,6 @@ public class ApposeClusteringService {
                 || m.contains("No module named 'xarray_schema'")
                 || m.contains("No module named 'spatialdata'")
                 || m.contains("No module named 'squidpy'");
-    }
-
-    /** v0.3.4: True when the Pixi build failed because Windows held an
-     *  exclusive lock on a file the link step needed to replace. The
-     *  canonical signature is the conda "failed to link" line plus the
-     *  Windows "os error 32" / "being used by another process" wording.
-     *  Distinct from looksLikeStaleEnv -- this is a transient OS-level
-     *  failure, not a structural env corruption. Do NOT auto-wipe (the
-     *  blocking process may still be writing to the env). */
-    private static boolean looksLikeWindowsFileLock(String message) {
-        if (message == null) return false;
-        String m = message;
-        boolean linkFailure = m.contains("failed to link");
-        boolean processBlock = m.contains("os error 32")
-                || m.contains("being used by another process");
-        return linkFailure && processBlock;
     }
 
     /** Best-effort delete of .pixi/ + pixi.lock so the next QuPath launch
@@ -895,7 +812,7 @@ public class ApposeClusteringService {
             }
             Path pixiDir = envDir.resolve(".pixi");
             if (Files.isDirectory(pixiDir)) {
-                deleteDirectoryRecursively(pixiDir);
+                ApposeSupport.deleteDirectoryRecursively(pixiDir);
                 wiped = true;
             }
             if (wiped) {
@@ -908,74 +825,6 @@ public class ApposeClusteringService {
         }
     }
 
-    /**
-     * Sync the on-disk pixi.toml AND pixi.lock with the JAR-bundled versions.
-     *
-     * <p>The lock is the source of truth for the installed versions, and this
-     * method is what makes that true. We cannot pass {@code --frozen} to force
-     * it (Appose injects builder flags as global pixi args, which pixi rejects
-     * -- see initialize()), so we get the same effect by construction: stage
-     * the bundled manifest and the lock generated FROM that manifest together,
-     * leaving pixi nothing to re-resolve. Both files must be written before the
-     * build, and they must come from the same bundle -- staging a manifest
-     * without its matching lock is what would silently re-enable resolution.
-     *
-     * <ul>
-     *   <li>First run (no manifest on disk): create the env dir and stage the
-     *       lock so the very first install already has it. Appose writes the
-     *       manifest itself, from the same bundled content.</li>
-     *   <li>Either file changed vs the bundle: rewrite both and delete .pixi/
-     *       so pixi reinstalls cleanly from the new lock.</li>
-     *   <li>Unchanged: ensure the lock is present (re-stage if a prior wipe
-     *       removed it), then no-op.</li>
-     * </ul>
-     *
-     * @return true if the environment was wiped for a rebuild
-     */
-    private boolean syncManifest(String expectedToml, String expectedLock) {
-        try {
-            Path envDir = getEnvironmentPath();
-            Path tomlFile = envDir.resolve("pixi.toml");
-            Path lockFile = envDir.resolve("pixi.lock");
-
-            if (!Files.exists(tomlFile)) {
-                // First build: stage the lock; Appose writes the manifest.
-                Files.createDirectories(envDir);
-                Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
-                return false;
-            }
-
-            String onToml = Files.readString(tomlFile, StandardCharsets.UTF_8)
-                    .replace("\r\n", "\n").strip();
-            String exToml = expectedToml.replace("\r\n", "\n").strip();
-            String onLock = Files.exists(lockFile)
-                    ? Files.readString(lockFile, StandardCharsets.UTF_8).replace("\r\n", "\n").strip()
-                    : "";
-            String exLock = expectedLock.replace("\r\n", "\n").strip();
-
-            if (onToml.equals(exToml) && onLock.equals(exLock)) {
-                // Unchanged -- but make sure the lock is on disk, so the
-                // install has something to install FROM rather than resolving.
-                if (!Files.exists(lockFile)) {
-                    Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
-                }
-                return false;
-            }
-
-            logger.info("pixi manifest/lock changed - forcing environment rebuild");
-            Files.writeString(tomlFile, expectedToml, StandardCharsets.UTF_8);
-            Files.writeString(lockFile, expectedLock, StandardCharsets.UTF_8);
-            Path pixiDir = envDir.resolve(".pixi");
-            if (Files.isDirectory(pixiDir)) {
-                deleteDirectoryRecursively(pixiDir);
-            }
-            return true;
-        } catch (IOException e) {
-            logger.warn("Failed to sync pixi manifest/lock: {}", e.getMessage());
-            return false;
-        }
-    }
-
     private void ensureInitialized() throws IOException {
         if (!isAvailable()) {
             throw new IOException("QPCAT service is not available"
@@ -984,64 +833,16 @@ public class ApposeClusteringService {
     }
 
     String loadScript(String scriptFileName) throws IOException {
-        return loadResource(SCRIPTS_BASE + scriptFileName);
-    }
-
-    private static String loadResource(String resourcePath) throws IOException {
-        try (InputStream is = ApposeClusteringService.class.getClassLoader()
-                .getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                throw new IOException("Resource not found: " + resourcePath);
-            }
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                return reader.lines().collect(Collectors.joining("\n"));
-            }
-        }
+        return ApposeSupport.loadResource(SCRIPTS_BASE + scriptFileName);
     }
 
     private void registerShutdownHook() {
         if (shutdownHook != null) return;
-        shutdownHook = new Thread(() -> {
-            Service svc = pythonService;
-            if (svc != null) {
-                try {
-                    svc.close();
-                    if (svc.isAlive()) Thread.sleep(2000);
-                    if (svc.isAlive()) svc.kill();
-                } catch (Exception e) {
-                    try { svc.kill(); } catch (Exception ignored) {}
-                }
-            }
-        }, "QPCAT-ShutdownHook");
-        shutdownHook.setDaemon(false);
-        Runtime.getRuntime().addShutdownHook(shutdownHook);
+        shutdownHook = ApposeSupport.registerShutdownHook("QPCAT-ShutdownHook", () -> pythonService, logger);
     }
 
     private void removeShutdownHook() {
-        if (shutdownHook != null) {
-            try { Runtime.getRuntime().removeShutdownHook(shutdownHook); }
-            catch (IllegalStateException e) { /* JVM shutting down */ }
-            shutdownHook = null;
-        }
-    }
-
-    private static void deleteDirectoryRecursively(Path directory) throws IOException {
-        java.nio.file.FileVisitor<Path> visitor = new java.nio.file.SimpleFileVisitor<>() {
-            @Override
-            public java.nio.file.FileVisitResult visitFile(Path file,
-                    java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
-                Files.delete(file);
-                return java.nio.file.FileVisitResult.CONTINUE;
-            }
-            @Override
-            public java.nio.file.FileVisitResult postVisitDirectory(Path dir,
-                    IOException exc) throws IOException {
-                if (exc != null) throw exc;
-                Files.delete(dir);
-                return java.nio.file.FileVisitResult.CONTINUE;
-            }
-        };
-        Files.walkFileTree(directory, visitor);
+        ApposeSupport.removeShutdownHook(shutdownHook);
+        shutdownHook = null;
     }
 }

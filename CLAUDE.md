@@ -124,6 +124,26 @@ found an error message that named five measurements at 100% coverage and
 truncated before the one at 0% that actually caused the failure. Twenty-one unit
 tests had missed it, because every one of them passed measurements that existed.
 
+## Shared Appose files -- copied, not imported
+
+`service/ApposeEnvLocation.java`, `service/ApposeSupport.java`, `service/ApposeTaskRunner.java`,
+`service/ApposeArrays.java` (every image/table to `NDArray` conversion; use it rather than
+building arrays by hand), `service/ApposeGpu.java` (which NVIDIA card a worker runs on: wrap the
+environment with `ApposeGpu.pinned(env)` before `python()`), their tests and `src/test/resources/.../fake_appose_worker.py` are
+**identical copies** of the
+same files in the other four Appose extensions (QP-CAT, DL classifier, cellAPpose, PPM,
+fiber-analysis), differing only in the package line and a `TITLE`. There is no shared library on
+purpose. Edit them here, run the tests, then push the change to the siblings:
+
+```bash
+python3 /home/msnelson/QPSC_Project/tools/check_appose_copies.py --sync --from qupath-extension-cell-analysis-tools
+```
+
+and build each sibling (`./gradlew spotlessApply build`). The pre-push hook refuses a push that
+changed one of these files while the copies differ. Record WHY in
+`/home/msnelson/QPSC_Project/claude-reports/design/appose/SHARED_COPIES.md`; that ledger also
+says what is deliberately not shared.
+
 ## Manual test queue
 
 Checks only a human can make for this repo -- reading a figure, real data volumes,

@@ -1,34 +1,32 @@
 package qupath.ext.qpcat.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import qupath.fx.dialogs.Dialogs;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import qupath.fx.dialogs.Dialogs;
 
 /**
  * Where an Appose environment is built, and what happens to the old one when
  * that changes.
  *
- * <h2>DUPLICATED ACROSS THE APPOSE EXTENSIONS -- change all five together</h2>
+ * <h2>COPIED BETWEEN REPOS -- keep the copies identical</h2>
  *
- * The same file belongs in {@code qupath-extension-cellAPpose},
- * {@code -dl-pixel-classifier}, {@code -ppm} and {@code -fiber-analysis}, with
- * only the package and the preference prefix changed. There is no shared
- * library yet; the intent to build one is recorded in
- * {@code claude-reports/TODO_LIST.md} ("shared Appose env-location library").
+ * The same file lives in {@code qupath-extension-cell-analysis-tools},
+ * {@code -dl-pixel-classifier}, {@code -cellAPpose}, {@code -ppm} and
+ * {@code -fiber-analysis}, differing only in the package line and the
+ * {@link #TITLE} constant. {@code tools/check_appose_copies.py} compares the
+ * copies by meaning, {@code --sync --from <repo>} pushes a change to the
+ * others, and the pre-push hook refuses a push that leaves them apart. Record
+ * why each change was made in {@code claude-reports/design/appose/SHARED_COPIES.md}.
  *
- * <p>Until then this is a copy, and copies drift. The project has already paid
- * for that once: the bug reporter lives as three separate copies, and a single
- * path-scrubber defect leaked usernames from all three at the same time. This
- * code decides where multi-gigabyte installs land and, in
- * {@link #promptCleanup}, what gets deleted -- a divergence here removes the
- * wrong directory on somebody's cluster. If you change anything below, change
- * it in all five.
+ * <p>Copies drift, and the project has paid for that: the bug reporter lives as
+ * three separate copies, and a single path-scrubber defect leaked usernames
+ * from all three at once. This code decides where multi-gigabyte installs land
+ * and, in {@link #promptCleanup}, what gets deleted -- a divergence here
+ * removes the wrong directory on somebody's cluster.
  *
  * <h2>Why the location is configurable</h2>
  *
@@ -55,8 +53,8 @@ public final class ApposeEnvLocation {
      * Name shown in this extension's dialogs.
      * <p>
      * This file is copied between the Appose extensions, so the one thing that
-     * must differ per repo is pulled out here. Every other copy shipped naming
-     * QP-CAT, because the strings were inline and nothing pointed at them.
+     * must differ per repo is pulled out here. Every copy shipped naming QP-CAT
+     * instead, because the strings were inline and nothing pointed at them.
      */
     private static final String TITLE = "QP-CAT";
 
@@ -95,7 +93,7 @@ public final class ApposeEnvLocation {
         }
         try {
             if (newDir != null && Files.isSameFile(oldDir, newDir)) {
-                return false;                       // nothing was superseded
+                return false; // nothing was superseded
             }
         } catch (IOException e) {
             // Cannot prove they differ -> do not delete.
@@ -107,12 +105,12 @@ public final class ApposeEnvLocation {
         boolean delete = Dialogs.showYesNoDialog(
                 TITLE + " - remove the previous environment?",
                 "A new Python environment has been built and verified at:\n\n"
-                + "    " + newDir + "\n\n"
-                + "The previous one is still on disk and is no longer used:\n\n"
-                + "    " + oldDir + "  (" + size + ")\n\n"
-                + "Delete it? Choosing No keeps it, which is safe -- it simply uses "
-                + "the space. Nothing else refers to it, and you can remove it by hand "
-                + "later.");
+                        + "    " + newDir + "\n\n"
+                        + "The previous one is still on disk and is no longer used:\n\n"
+                        + "    " + oldDir + "  (" + size + ")\n\n"
+                        + "Delete it? Choosing No keeps it, which is safe -- it simply uses "
+                        + "the space. Nothing else refers to it, and you can remove it by hand "
+                        + "later.");
         if (!delete) {
             logger.info("Keeping the previous environment at {}", oldDir);
             return false;
@@ -123,13 +121,15 @@ public final class ApposeEnvLocation {
     /** Total size of a directory tree, or 0 if it cannot be measured. */
     public static long sizeOf(Path dir) {
         try (var walk = Files.walk(dir)) {
-            return walk.filter(Files::isRegularFile).mapToLong(p -> {
-                try {
-                    return Files.size(p);
-                } catch (IOException e) {
-                    return 0L;
-                }
-            }).sum();
+            return walk.filter(Files::isRegularFile)
+                    .mapToLong(p -> {
+                        try {
+                            return Files.size(p);
+                        } catch (IOException e) {
+                            return 0L;
+                        }
+                    })
+                    .sum();
         } catch (IOException e) {
             return 0L;
         }
@@ -144,20 +144,25 @@ public final class ApposeEnvLocation {
      */
     private static boolean deleteRecursively(Path dir) {
         try (var walk = Files.walk(dir)) {
-            long failed = walk.sorted(Comparator.reverseOrder()).filter(p -> {
-                try {
-                    Files.delete(p);
-                    return false;
-                } catch (IOException e) {
-                    return true;
-                }
-            }).count();
+            long failed = walk.sorted(Comparator.reverseOrder())
+                    .filter(p -> {
+                        try {
+                            Files.delete(p);
+                            return false;
+                        } catch (IOException e) {
+                            return true;
+                        }
+                    })
+                    .count();
             if (failed > 0) {
-                logger.warn("Removed the previous environment at {} except {} item(s) "
-                        + "-- delete the folder by hand if it is still there", dir, failed);
-                Dialogs.showWarningNotification(TITLE,
-                        "Could not fully remove the previous environment; " + failed
-                        + " item(s) remain at " + dir);
+                logger.warn(
+                        "Removed the previous environment at {} except {} item(s) "
+                                + "-- delete the folder by hand if it is still there",
+                        dir,
+                        failed);
+                Dialogs.showWarningNotification(
+                        TITLE,
+                        "Could not fully remove the previous environment; " + failed + " item(s) remain at " + dir);
                 return false;
             }
             logger.info("Removed the previous environment at {}", dir);

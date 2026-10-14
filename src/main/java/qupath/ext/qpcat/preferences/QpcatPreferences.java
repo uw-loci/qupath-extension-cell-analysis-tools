@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.preferences;
 
+import qupath.ext.qpcat.service.ApposeGpu;
+
 import javafx.beans.property.*;
 import javafx.collections.ObservableList;
 import qupath.ext.qpcat.service.QpcatColorMaps;
@@ -999,6 +1001,14 @@ public final class QpcatPreferences {
                         + "Switching builds a separate environment and re-downloads several GB."))
                 .build());
 
+        items.add(new PropertyItemBuilder<>(ApposeGpu.preferenceProperty(), String.class)
+                .propertyType(PropertyItemBuilder.PropertyType.CHOICE)
+                .choices(ApposeGpu.preferenceChoices())
+                .name(ApposeGpu.PREFERENCE_NAME)
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(ApposeGpu.preferenceDescription()))
+                .build());
+
         // --- Spatial Statistics Expansion (v1) ---
 
         items.add(new PropertyItemBuilder<>(spatialGraphType, String.class)
@@ -1324,15 +1334,16 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(taskMaxRetries, Integer.class)
                 .name("Task Max Retries")
                 .category(CATEGORY_GENERAL)
-                .description(Tooltips.wrap("Maximum retry attempts on Appose 'thread death' errors (default: 3). "
-                        + "Increase if thread death errors persist. Range: 1-10."))
+                .description(Tooltips.wrap("Attempts for a task whose Python worker went stale (Appose 'thread death' "
+                        + "before any Python ran). The worker is replaced before each retry, so a retry never "
+                        + "runs beside a zombie copy of the task (default: 3). Range: 1-10."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(taskRetrySleepMs, Integer.class)
                 .name("Task Retry Sleep (ms)")
                 .category(CATEGORY_GENERAL)
-                .description(Tooltips.wrap("Milliseconds to wait between task retries (default: 200). "
-                        + "Increase if retries fail. Range: 100-2000."))
+                .description(Tooltips.wrap("Milliseconds to wait after replacing the worker, times the attempt "
+                        + "number, before the retry (default: 200). Range: 100-2000."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(shutdownTimeoutMs, Integer.class)

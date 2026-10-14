@@ -55,18 +55,21 @@ class WorkerSerializationTest {
     void everyTaskSubmissionIsSerialized() throws Exception {
         String src = source();
 
-        // Each `pythonService.task(...)` is a submission to the shared worker.
-        // Count them, and count the guarded runners. Submissions made during
-        // initialize() are exempt: initialize() is synchronized and
-        // ensureInitialized() completes before any runner takes the lock, so no
-        // user workflow can overlap them.
-        int submissions = count(src, Pattern.compile("pythonService\\.task\\("));
+        // Each `pythonService.task(...)`, `fresh.task(...)` or
+        // `ApposeTaskRunner.run(...)` is a submission to the shared worker.
+        // Count them, and count the guarded runners. Submissions made while
+        // the worker is being (re)created are exempt: initialize() and
+        // restartWorker() are synchronized, and spawnWorker() runs inside them,
+        // so no user workflow can overlap the registration and verification tasks.
+        int submissions = count(src, Pattern.compile("pythonService\\.task\\("))
+                + count(src, Pattern.compile("fresh\\.task\\("))
+                + count(src, Pattern.compile("ApposeTaskRunner\\.run\\("));
         int guarded = count(src, Pattern.compile("acquireWorker\\("));
-        int inInitialize = 2;   // the registration + verification warm-up tasks
+        int inInitialize = 2;   // the registration (spawnWorker) + verification (initialize) tasks
 
         assertThat(submissions)
-                .as("a new pythonService.task(...) call site appeared; it must either "
-                        + "run under acquireWorker() or be part of initialize()")
+                .as("a new task submission call site appeared; it must either "
+                        + "run under acquireWorker() or be part of worker creation")
                 .isEqualTo(guarded + inInitialize - 1);   // -1: the helper's own definition
     }
 
@@ -80,13 +83,14 @@ class WorkerSerializationTest {
             int end = src.indexOf("\r\n    public ", at + runner.length());
             if (end < 0) end = src.indexOf("\n    public ", at + runner.length());
             String body = end > at ? src.substring(at, end) : src.substring(at);
-            if (!body.contains("pythonService.task(")) continue;   // delegating overload
+            String submit = "ApposeTaskRunner.run(";
+            if (!body.contains(submit)) continue;   // delegating overload
             assertThat(body.indexOf("acquireWorker("))
                     .as("%s submits to the worker without taking the lock first", runner)
                     .isGreaterThan(0);
             assertThat(body.indexOf("acquireWorker("))
                     .as("%s takes the lock AFTER submitting", runner)
-                    .isLessThan(body.indexOf("pythonService.task("));
+                    .isLessThan(body.indexOf(submit));
         }
     }
 
