@@ -52,6 +52,17 @@ not rebuild.
 
 After setup: **Edit > Preferences > QP-CAT: Python environment > Compute variant**.
 
+### Which GPU, on a multi-GPU machine
+
+On a machine with more than one NVIDIA card, **Edit > Preferences > QP-CAT: Python
+environment > GPU device (all Appose extensions)** chooses the card the Python worker uses.
+The default, `auto`, picks the card with the most free memory when the worker first starts:
+the compute card on a desktop that also has a display card, the least-loaded card on a
+shared server. A number is the index `nvidia-smi` shows. The cards found and the one chosen
+are written to the QuPath log at worker start. Changes apply to workers started after the
+change, so restart QuPath to move a running worker. If QuPath was started by a cluster
+scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
+
 ### What a GPU actually accelerates
 
 | Operation | Device |
