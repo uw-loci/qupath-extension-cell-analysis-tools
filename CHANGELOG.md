@@ -116,6 +116,13 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Added
 
+- **Choose the GPU on a multi-GPU machine.** A new preference, *Edit > Preferences > QP-CAT:
+  Python environment > GPU device (all Appose extensions)*, pins the Python worker to one
+  NVIDIA card. The default `auto` picks the card with the most free memory when the worker
+  starts and keeps the allocation of a cluster scheduler that sets `CUDA_VISIBLE_DEVICES`.
+  The cards found and the one chosen are written to the log. Restart QuPath to move a
+  running worker. See [setup](documentation/setup.md#which-gpu-on-a-multi-gpu-machine).
+
 - **The Cluster Explainer works with any chatbot, with no API key.** A new provider, *Any
   chatbot (copy prompt, paste reply)*, replaces the Run button with three steps: copy the
   prompt to the clipboard, paste it into claude.ai / ChatGPT / Gemini / Copilot / a local
