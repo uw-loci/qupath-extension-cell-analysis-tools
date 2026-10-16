@@ -128,11 +128,14 @@ For even faster exploration, use **Quick Cluster** submenu items which run with 
 No data of your own yet? Try the
 **[multiplex synthetic dataset](https://github.com/uw-loci/multiplex-synthetic-data)**
 -- a small, fully ground-truthed synthetic multiplexed dataset (8 images, 8
-channels, 6 cell types in schematic tissue niches). Every cell has a known type,
+channels, 7 cell types in schematic tissue niches). Every cell has a known type,
 marker positivity, and tissue region, so you can run clustering, phenotyping,
 spatial statistics, or batch correction and check the result against the truth.
 Download the dataset from its
 [latest release](https://github.com/uw-loci/multiplex-synthetic-data/releases/latest).
+The BINA / I2K 2026 workshop uses the earlier
+[v1.2](https://github.com/uw-loci/multiplex-synthetic-data/releases/tag/v1.2)
+(six cell types, aSMA instead of CD31).
 
 ---
 
