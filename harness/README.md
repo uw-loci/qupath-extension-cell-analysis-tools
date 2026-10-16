@@ -80,6 +80,23 @@ namespaces every class with the result name
 (`auto_20260927_015057_hdbscan: Cluster 0`) -- that is what a user gets, and it
 is how to reproduce anything about long class names.
 
+## `QpcatOpenImageWriteBackScenario`
+
+A multi-image clustering run with one of its images open in the viewer. Asserts that
+the viewer, the saved file and the image's "unsaved changes" flag agree afterwards.
+
+```bash
+tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatOpenImageWriteBackScenario.java \
+    qupath-extension-cell-analysis-tools \
+    /tmp/qph/project      # MODIFIED: run on a copy with unclassified detections
+```
+
+Before the fix the run wrote to a detached copy of the open image: the viewer showed
+`(none)` for all 1,530 cells of `tme_00` while the file held four clusters, and the image
+was marked changed, so a save from the viewer erased the run. Three of five checks failed;
+all five pass now.
+
 ## `QpcatExportAndGateScenario`
 
 Covers the crop/feature-table export and the gate save / replay / apply path

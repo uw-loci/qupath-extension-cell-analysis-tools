@@ -11,6 +11,16 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Fixed
 
+- **A run over several images no longer loses the open image's labels.** The run wrote
+  its labels into a second copy of each image read from disk, including the one open in the
+  viewer, so the viewer kept showing the old labels while being marked as changed. Answering
+  Yes to "Save changes?" then wrote the old labels and embedding back over the run's. The open
+  image is now clustered in place and saved, and left marked unchanged. The same applied to
+  project-scope phenotyping, thresholds, sub-clustering and the analysis of existing
+  classifications. An open image that was NOT in the run is no longer marked as changed. Found
+  re-walking the BINA workshop guide; `harness/QpcatOpenImageWriteBackScenario.java` reproduces
+  it (3 failures on the old build, 0 on the new).
+
 - **Nine things a documentation review found in the text shipped above**, every one of them
   verified against code before being counted. Two Documentation links -- Stacked Violin and
   Spatial Scatter -- still landed on the wrong section, because the new sections were added

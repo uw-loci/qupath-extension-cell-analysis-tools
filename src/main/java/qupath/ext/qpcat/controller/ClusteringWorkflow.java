@@ -748,21 +748,41 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Runs clustering across multiple project images simultaneously.
-     * Detections from all selected images are combined, clustered together
-     * for global consistency, then results are written back per-image.
-     *
-     * @param imageEntries       project image entries to include
-     * @param config             clustering configuration
-     * @param progressCallback   optional callback for progress messages
-     * @return the clustering result
-     * @throws IOException if clustering fails
+     * The open image's own {@link ImageData} when {@code entry} is the image in the viewer,
+     * otherwise a detached {@code readImageData()} copy. Labels written to a detached copy of
+     * the open image leave the viewer holding the old ones, and saving the image then writes
+     * them back over the new labels.
      */
+    private ImageData<BufferedImage> liveOrRead(ProjectImageEntry<BufferedImage> entry)
+            throws IOException {
+        if (qupath != null) {
+            ImageData<BufferedImage> live = qupath.getImageData();
+            Project<BufferedImage> project = currentProject();
+            if (live != null && project != null && entry.equals(project.getEntry(live))) {
+                return live;
+            }
+        }
+        return entry.readImageData();
+    }
+
     /**
-     * Close the native reader behind an {@link ImageData} we opened via
-     * {@code readImageData()}. Never call this on the live GUI ImageData -- only on
-     * detached copies we read ourselves. Quiet: logs and swallows any close failure so
-     * cleanup never masks the real result/exception.
+     * Repaint the open image if it is one of {@code groups}' live instances. The run has
+     * already saved it, so it is left marked unchanged. No-op headless.
+     */
+    private void refreshOpenImageIfIn(List<MeasurementExtractor.ImageDetectionGroup> groups) {
+        if (qupath == null) return;
+        ImageData<BufferedImage> live = qupath.getImageData();
+        if (live == null || groups.stream().noneMatch(g -> g.imageData == live)) return;
+        Platform.runLater(() -> {
+            live.getHierarchy().fireHierarchyChangedEvent(this);
+            live.setChanged(false);
+        });
+    }
+
+    /**
+     * Close the native reader behind an {@link ImageData} read via {@code readImageData()}.
+     * Never pass the image open in the viewer; {@link #closeDetached} checks that for you.
+     * Failures are logged, not thrown.
      */
     static void closeReadImageData(Object imageData) {
         if (imageData instanceof ImageData) {
@@ -774,27 +794,40 @@ public class ClusteringWorkflow {
         }
     }
 
+    /** {@link #closeReadImageData}, skipping the image open in the viewer (the GUI owns it). */
+    private void closeDetached(Object imageData) {
+        if (qupath == null || imageData != qupath.getImageData()) {
+            closeReadImageData(imageData);
+        }
+    }
+
     /** Close every detached ImageData held by a detection-group list. */
-    static void closeGroups(List<MeasurementExtractor.ImageDetectionGroup> groups) {
+    private void closeGroups(List<MeasurementExtractor.ImageDetectionGroup> groups) {
         if (groups == null) return;
         for (MeasurementExtractor.ImageDetectionGroup g : groups) {
-            if (g != null) closeReadImageData(g.imageData);
+            if (g != null) closeDetached(g.imageData);
+        }
+    }
+
+    /** Close every detached ImageData in the list; the open image is skipped. */
+    private void closeReadImageDatas(List<ImageData<BufferedImage>> imageDatas) {
+        if (imageDatas == null) return;
+        for (ImageData<BufferedImage> d : imageDatas) {
+            closeDetached(d);
         }
     }
 
     /**
-     * Close every ImageData in the list EXCEPT the live GUI one (identity match on
-     * {@code qupath.getImageData()}), which the GUI owns. Use for lists that mix the
-     * open image with detached copies read via {@code readImageData()}.
+     * Runs clustering across multiple project images simultaneously.
+     * Detections from all selected images are combined, clustered together
+     * for global consistency, then results are written back per-image.
+     *
+     * @param imageEntries       project image entries to include
+     * @param config             clustering configuration
+     * @param progressCallback   optional callback for progress messages
+     * @return the clustering result
+     * @throws IOException if clustering fails
      */
-    private void closeReadImageDatas(List<ImageData<BufferedImage>> imageDatas) {
-        if (imageDatas == null) return;
-        ImageData<BufferedImage> live = (qupath != null) ? qupath.getImageData() : null;
-        for (ImageData<BufferedImage> d : imageDatas) {
-            if (d != null && d != live) closeReadImageData(d);
-        }
-    }
-
     public ClusteringResult runProjectClustering(
             List<ProjectImageEntry<BufferedImage>> imageEntries,
             ClusteringConfig config,
@@ -820,7 +853,7 @@ public class ClusteringWorkflow {
 
             ImageData<BufferedImage> imageData;
             try {
-                imageData = entry.readImageData();
+                imageData = liveOrRead(entry);
             } catch (Exception e) {
                 logger.warn("Failed to read image data for {}: {}", entry.getImageName(), e.getMessage());
                 continue;
@@ -829,7 +862,7 @@ public class ClusteringWorkflow {
             Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
             if (detections.isEmpty()) {
                 // Close the copy: a skipped image never reaches closeGroups().
-                closeReadImageData(imageData);
+                closeDetached(imageData);
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
@@ -843,7 +876,7 @@ public class ClusteringWorkflow {
             if (detections.isEmpty()) {
                 // Same close-the-copy rule as the no-detections case above: an
                 // image that contributes nothing never reaches closeGroups().
-                closeReadImageData(imageData);
+                closeDetached(imageData);
                 logger.info("Skipping {} - no cell carries a selected classification",
                         entry.getImageName());
                 continue;
@@ -1029,18 +1062,7 @@ public class ClusteringWorkflow {
             reportSpatialGraphSummary(graphPerImage, meanAvg);
         }
 
-        // Fire hierarchy update for the currently open image (if it was clustered).
-        // Null-safe: headless dispatch (YAML batch) passes a null QuPathGUI, in
-        // which case there is no FX viewer to notify -- the per-image saves
-        // above already persisted the labels.
-        if (qupath != null) {
-            Platform.runLater(() -> {
-                ImageData<BufferedImage> currentImageData = qupath.getImageData();
-                if (currentImageData != null) {
-                    currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
-                }
-            });
-        }
+        refreshOpenImageIfIn(groups);
 
         String completeMsg = "Project clustering complete: " + result.getNClusters()
                 + " clusters found for " + result.getNCells() + " cells across "
@@ -1061,22 +1083,14 @@ public class ClusteringWorkflow {
                         config.isEnableBatchCorrection()),
                 completeMsg, elapsed);
 
-        // Auto-save (project scope). The per-image Workflow records were written
-        // inside the save loop above (so every processed image carries one). Also
-        // record on the currently open LIVE image instance so the Workflow tab
-        // updates immediately without a reload.
+        // Auto-save (project scope). The per-image Workflow records were written in the
+        // save loop above; the open image, when in scope, was that loop's live instance.
         String projectScopeLabel = nImages + " project image" + (nImages == 1 ? "" : "s");
         autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, projectScopeLabel);
-        if (qupath != null) {
-            ImageData<BufferedImage> openImageData = qupath.getImageData();
-            if (openImageData != null) {
-                recordClusteringWorkflowStep(openImageData, config, result, nImages);
-            }
-        }
 
         return result;
         } finally {
-            // All groups here are detached copies read via readImageData(); close them.
+            // Detached copies are closed; the open image is skipped.
             closeGroups(groups);
         }
     }
@@ -1437,18 +1451,7 @@ public class ClusteringWorkflow {
             report(progressCallback, "Saved results for " + entry.getImageName());
         }
 
-        // Fire hierarchy update for the currently open image (if it was phenotyped).
-        // Null-safe: headless dispatch (YAML batch) passes a null QuPathGUI, and
-        // there is no FX toolkit to post to -- the per-image saves above already
-        // persisted the labels. Same guard as runProjectClustering.
-        if (qupath != null) {
-            Platform.runLater(() -> {
-                ImageData<BufferedImage> currentImageData = qupath.getImageData();
-                if (currentImageData != null) {
-                    currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
-                }
-            });
-        }
+        refreshOpenImageIfIn(groups);
 
         String completeMsg = "Project phenotyping complete: " + resultMap.get("n_phenotypes")
                 + " phenotypes assigned to " + extraction.getNCells() + " cells across "
@@ -1469,7 +1472,7 @@ public class ClusteringWorkflow {
 
         return resultMap;
         } finally {
-            // Detection groups here are detached copies read by loadProjectDetectionGroups.
+            // Detached copies are closed; the open image is skipped.
             closeGroups(groups);
         }
     }
@@ -1492,7 +1495,7 @@ public class ClusteringWorkflow {
                     + ": " + entry.getImageName());
             ImageData<BufferedImage> imageData;
             try {
-                imageData = entry.readImageData();
+                imageData = liveOrRead(entry);
             } catch (Exception e) {
                 logger.warn("Failed to read image data for {}: {}",
                         entry.getImageName(), e.getMessage());
@@ -1501,7 +1504,7 @@ public class ClusteringWorkflow {
             Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
             if (detections.isEmpty()) {
                 // Close the copy: a skipped image never reaches closeGroups().
-                closeReadImageData(imageData);
+                closeDetached(imageData);
                 logger.info("Skipping {} - no detections", entry.getImageName());
                 continue;
             }
@@ -1557,7 +1560,7 @@ public class ClusteringWorkflow {
         } catch (Exception e) {
             throw new IOException("Threshold computation failed: " + e.getMessage(), e);
         } finally {
-            // Detection groups here are detached copies read by loadProjectDetectionGroups.
+            // Detached copies are closed; the open image is skipped.
             closeGroups(groups);
         }
     }
@@ -2972,7 +2975,7 @@ public class ClusteringWorkflow {
                 for (ProjectImageEntry<BufferedImage> entry : entries) {
                     ImageData<BufferedImage> imageData;
                     try {
-                        imageData = entry.readImageData();
+                        imageData = liveOrRead(entry);
                     } catch (Exception e) {
                         logger.warn("Failed to read image data for {}: {}",
                                 entry.getImageName(), e.getMessage());
@@ -2980,7 +2983,7 @@ public class ClusteringWorkflow {
                     }
                     Collection<PathObject> dets = imageData.getHierarchy().getDetectionObjects();
                     if (dets.isEmpty()) {
-                        closeReadImageData(imageData);
+                        closeDetached(imageData);
                         logger.info("Skipping {} - no detections", entry.getImageName());
                         continue;
                     }
@@ -3108,7 +3111,7 @@ public class ClusteringWorkflow {
 
             return result;
         } finally {
-            // Only the detached copies we opened; never the live open image.
+            // Detached copies are closed; the open image is skipped.
             if (multiImage) {
                 closeGroups(groups);
             }
@@ -3140,7 +3143,7 @@ public class ClusteringWorkflow {
 
                 ImageData<BufferedImage> imageData;
                 try {
-                    imageData = entry.readImageData();
+                    imageData = liveOrRead(entry);
                 } catch (Exception e) {
                     logger.warn("Failed to read image data for {}: {}",
                             entry.getImageName(), e.getMessage());
@@ -3159,7 +3162,7 @@ public class ClusteringWorkflow {
                     // Close the copy we just read. Skipping is the COMMON case here
                     // -- most images do not carry every class -- so leaving these
                     // open would leak an ImageData per skipped image on every run.
-                    closeReadImageData(imageData);
+                    closeDetached(imageData);
                     logger.info("Skipping {} - no detections classified as '{}'",
                             entry.getImageName(), parentClusterName);
                     continue;
@@ -3251,14 +3254,7 @@ public class ClusteringWorkflow {
                 report(progressCallback, "Saved results for " + entry.getImageName());
             }
 
-            if (qupath != null) {
-                Platform.runLater(() -> {
-                    ImageData<BufferedImage> currentImageData = qupath.getImageData();
-                    if (currentImageData != null) {
-                        currentImageData.getHierarchy().fireHierarchyChangedEvent(this);
-                    }
-                });
-            }
+            refreshOpenImageIfIn(groups);
 
             String completeMsg = "Project sub-clustering complete: " + result.getNClusters()
                     + " sub-clusters of '" + parentClusterName + "' across " + nImages + " images.";
@@ -3280,7 +3276,7 @@ public class ClusteringWorkflow {
 
             return result;
         } finally {
-            // Every group holds a detached copy read via readImageData().
+            // Detached copies are closed; the open image is skipped.
             closeGroups(groups);
         }
     }
