@@ -24,7 +24,6 @@ import javafx.scene.shape.Rectangle;
 
 import qupath.ext.qpcat.service.CompositionFigure;
 import qupath.ext.qpcat.service.FilenameSanitizer;
-import qupath.fx.dialogs.Dialogs;
 
 import javax.imageio.ImageIO;
 import java.io.File;
@@ -36,6 +35,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Simplified overview of how clusters are distributed across a grouping
@@ -50,6 +51,8 @@ import java.util.function.IntFunction;
  * (a batch effect), which is exactly what this view is meant to expose.</p>
  */
 public class ClusterCompositionPanel extends BorderPane {
+
+    private static final Logger logger = LoggerFactory.getLogger(ClusterCompositionPanel.class);
 
     private final int nClusters;
     private final IntFunction<Color> clusterColor;
@@ -389,7 +392,7 @@ public class ClusterCompositionPanel extends BorderPane {
                     "%s.png, %s.csv and %d individual %s (plus legend.png)",
                     base, base, n, n == 1 ? "pie" : "pies"));
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Could not write composition export: " + e.getMessage());
         }
     }

@@ -83,6 +83,9 @@ did not, and no test of our own code could have caught it. See
 ## Conventions
 
 - ASCII-only in logs / internal strings (Windows cp1252). Use `qupath.fx.dialogs.Dialogs`.
+- Error dialogs go through `ui/UserErrors.show(logger, ...)` / `UserErrors.notify(logger, ...)`,
+  which log at ERROR first; never `Dialogs.showErrorMessage` directly. A hand-built error
+  `Alert` calls `UserErrors.logAlert(logger, alert)` before it is shown. `UserErrorsTest` enforces it.
 - No `_legacy` / parallel code paths.
 
 ## In-app bug reporter

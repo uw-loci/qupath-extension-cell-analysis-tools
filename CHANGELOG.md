@@ -11,6 +11,13 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Fixed
 
+- **Every error dialog is now in the log.** All 55 error dialogs and notifications go through
+  one helper, `ui/UserErrors`, which writes the title and text to the log at ERROR (a line
+  starting `Error dialog "<title>"`) before showing it. 18 of them had no log line before, so
+  a bug report or the log could not show what the user had been told. `UserErrorsTest` fails
+  the build on a direct `Dialogs.showErrorMessage` / `showErrorNotification` call. Same helper
+  and test as QPSC and the DL classifier.
+
 - **A run over several images no longer loses the open image's labels.** The run wrote
   its labels into a second copy of each image read from disk, including the one open in the
   viewer, so the viewer kept showing the old labels while being marked as changed. Answering

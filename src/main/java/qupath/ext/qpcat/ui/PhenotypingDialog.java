@@ -862,7 +862,7 @@ public class PhenotypingDialog {
                     statusLabel.setText("Error: " + e.getMessage());
                     runButton.setDisable(false);
                     setBusy(false, null, null);
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Phenotyping failed: " + e.getMessage());
                 });
             }
@@ -924,7 +924,7 @@ public class PhenotypingDialog {
                     + rulesList.size() + " rules, " + currentMarkers.size() + " markers)");
         } catch (Exception e) {
             logger.error("Failed to save rule set", e);
-            Dialogs.showErrorNotification("QPCAT", "Failed to save: " + e.getMessage());
+            UserErrors.notify(logger, "QPCAT", "Failed to save: " + e.getMessage());
         }
     }
 
@@ -939,7 +939,7 @@ public class PhenotypingDialog {
         try {
             available = PhenotypeRuleSetManager.listRuleSets(project);
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to list rule sets: " + e.getMessage());
             return;
         }
@@ -967,7 +967,7 @@ public class PhenotypingDialog {
                     + ruleSet.getMarkers().size() + " markers)");
         } catch (Exception e) {
             logger.error("Failed to load rule set", e);
-            Dialogs.showErrorNotification("QPCAT", "Failed to load: " + e.getMessage());
+            UserErrors.notify(logger, "QPCAT", "Failed to load: " + e.getMessage());
         }
     }
 
@@ -1080,7 +1080,7 @@ public class PhenotypingDialog {
                     progressBar.setVisible(false);
                     setBusy(false, null, null);
                     statusLabel.setText("Validation error: " + e.getMessage());
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Channel validation failed: " + e.getMessage());
                 });
             }
@@ -1218,7 +1218,7 @@ public class PhenotypingDialog {
                     progressBar.setVisible(false);
                     statusLabel.setText("Threshold error: " + e.getMessage());
                     setBusy(false, computeBtn, "Compute Thresholds");
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Threshold computation failed: " + e.getMessage());
                 });
             }

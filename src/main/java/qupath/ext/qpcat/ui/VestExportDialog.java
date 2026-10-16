@@ -283,7 +283,7 @@ public final class VestExportDialog {
                         exportBtn.setDisable(false);
                         exportBtn.setText("Export");
                         status.setText("Export failed: " + ex.getMessage());
-                        Dialogs.showErrorNotification("QP-CAT", "VEST export failed: " + ex.getMessage());
+                        UserErrors.notify(logger, "QP-CAT", "VEST export failed: " + ex.getMessage());
                     });
                 }
             }, "QPCAT-VestExport");
@@ -338,7 +338,7 @@ public final class VestExportDialog {
                         + "Stop it via QP-CAT > Stop VEST viewer."));
             } catch (Exception ex) {
                 logger.error("Could not launch VEST", ex);
-                Platform.runLater(() -> Dialogs.showErrorNotification("QP-CAT - VEST",
+                Platform.runLater(() -> UserErrors.notify(logger, "QP-CAT - VEST",
                         "Could not launch VEST: " + ex.getMessage()));
             }
         }, "QPCAT-VestLaunch");

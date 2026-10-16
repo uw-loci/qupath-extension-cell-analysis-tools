@@ -284,7 +284,7 @@ public final class GateActionBar {
                     "Saved " + gates.size() + " gate(s) to " + chosen.getName() + ".");
         } catch (Exception ex) {
             logger.error("Could not save gates", ex);
-            Dialogs.showErrorNotification("QPCAT - gate save failed",
+            UserErrors.notify(logger, "QPCAT - gate save failed",
                     "Could not write the gate file: " + ex.getMessage());
         }
     }
@@ -312,14 +312,14 @@ public final class GateActionBar {
             saved = GateStore.read(chosen.toPath());
         } catch (Exception ex) {
             logger.warn("Could not read gates from {}: {}", chosen, ex.getMessage());
-            Dialogs.showErrorNotification("QPCAT - gate load failed", ex.getMessage());
+            UserErrors.notify(logger, "QPCAT - gate load failed", ex.getMessage());
             return;
         }
 
         GateStore.Compatibility compat = GateStore.check(
                 saved, axes, scatter.dataFingerprint(), scatter.getCellCount());
         if (!compat.replayable()) {
-            Dialogs.showErrorNotification("QPCAT - gates do not fit this plot", compat.message());
+            UserErrors.notify(logger, "QPCAT - gates do not fit this plot", compat.message());
             return;
         }
 

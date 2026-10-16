@@ -521,7 +521,7 @@ public class ClusterManagementDialog {
             activeSaved = ClusteringResultManager.loadSavedResult(project, sel.name);
             activeSourceName = sel.name;
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QPCAT", "Could not load '" + sel.name + "': " + e.getMessage());
+            UserErrors.notify(logger, "QPCAT", "Could not load '" + sel.name + "': " + e.getMessage());
             return;
         }
         int[] labels = activeSaved.getClusterLabels();
@@ -603,7 +603,7 @@ public class ClusterManagementDialog {
         try {
             parent = ClusteringResultManager.loadSavedResult(project, parentName);
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Could not load '" + parentName + "': " + e.getMessage()
                     + "\nIt may have been deleted; a step back needs the earlier result "
                     + "to still exist.");
@@ -622,7 +622,7 @@ public class ClusterManagementDialog {
         Project<BufferedImage> project = qupath.getProject();
         if (project == null || version == null) return;
         if (version.getClusterLabels() == null || version.getCellImageIds() == null) {
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "'" + versionName + "' cannot be re-applied (it has no per-cell "
                     + "references; it was saved by an older QP-CAT).");
             return;
@@ -1035,7 +1035,7 @@ public class ClusterManagementDialog {
                 logger.error("Failed to write renamed copy", ex);
                 Platform.runLater(() -> {
                     setBusy(false, "");
-                    Dialogs.showErrorNotification("QPCAT", "Could not write copy: " + ex.getMessage());
+                    UserErrors.notify(logger, "QPCAT", "Could not write copy: " + ex.getMessage());
                 });
                 return;
             }
@@ -1251,7 +1251,7 @@ public class ClusterManagementDialog {
 
     private void showApplyReport(SavedResultApplier.ApplyReport report, String header) {
         if (report.isError()) {
-            Dialogs.showErrorNotification("QPCAT", report.error);
+            UserErrors.notify(logger, "QPCAT", report.error);
             return;
         }
         StringBuilder sb = new StringBuilder(header).append("\n\n");
@@ -1268,7 +1268,7 @@ public class ClusterManagementDialog {
 
     private void showManualReport(ManualReport report) {
         if (report.error != null) {
-            Dialogs.showErrorNotification("QPCAT", report.error);
+            UserErrors.notify(logger, "QPCAT", report.error);
             return;
         }
         StringBuilder sb = new StringBuilder();

@@ -1455,7 +1455,7 @@ public class ClusteringDialog {
                         msg -> logger.info("Choose k: {}", msg));
                 Platform.runLater(() -> {
                     if (result == null) {
-                        Dialogs.showErrorMessage("QPCAT - Choose k",
+                        UserErrors.show(logger, "QPCAT - Choose k",
                                 "The sweep produced no result. See the log for details.");
                     } else {
                         ChooseKDialog.show(owner, result, k -> {
@@ -1466,7 +1466,7 @@ public class ClusteringDialog {
                 });
             } catch (Exception ex) {
                 logger.error("Choose k failed", ex);
-                Platform.runLater(() -> Dialogs.showErrorMessage("QPCAT - Choose k",
+                Platform.runLater(() -> UserErrors.show(logger, "QPCAT - Choose k",
                         "Could not sweep k:\n" + ex.getMessage()));
             } finally {
                 Thread.currentThread().setContextClassLoader(previous);
@@ -2189,7 +2189,7 @@ public class ClusteringDialog {
                 }
             }
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to scan saved results: " + e.getMessage());
             return;
         }
@@ -2236,7 +2236,7 @@ public class ClusteringDialog {
             } catch (Exception e) {
                 logger.error("Push-to-viewer-now failed", e);
                 Platform.runLater(() ->
-                        Dialogs.showErrorNotification("QPCAT",
+                        UserErrors.notify(logger, "QPCAT",
                                 "Push-to-viewer-now failed: " + e.getMessage()));
             }
         }, "qpcat-push-connections");
@@ -3405,7 +3405,7 @@ public class ClusteringDialog {
             logger.error("Failed to load config from file", e);
             // A dialog, not a notification: the message names the file to pick
             // instead, which is too long to read in a toast that fades.
-            Dialogs.showErrorMessage("QPCAT - config not loaded", e.getMessage());
+            UserErrors.show(logger, "QPCAT - config not loaded", e.getMessage());
         }
     }
 
@@ -3438,7 +3438,7 @@ public class ClusteringDialog {
                     + config.getSelectedMeasurements().size() + " markers)");
         } catch (Exception e) {
             logger.error("Failed to save config", e);
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to save config: " + e.getMessage());
         }
     }
@@ -3476,7 +3476,7 @@ public class ClusteringDialog {
                     + config.getSelectedMeasurements().size() + " markers)");
         } catch (Exception e) {
             logger.error("Failed to load config", e);
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to load config: " + e.getMessage());
         }
     }
@@ -3765,7 +3765,7 @@ public class ClusteringDialog {
                     runButton.setDisable(false);
                     progressBar.setVisible(false);
                     statusLabel.setText("");
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Could not count cells classified as '" + subclusterParentClass
                             + "': " + e.getMessage());
                 });
@@ -4156,7 +4156,7 @@ public class ClusteringDialog {
                     setRunActive(false);
                     activeWorkflow = null;
                     statusLabel.setText("Error: " + e.getMessage());
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Clustering failed: " + e.getMessage());
                 });
             }
@@ -4382,7 +4382,7 @@ public class ClusteringDialog {
             ExportLocation.announce(file.getParentFile(), file.getName());
         } catch (java.io.IOException ex) {
             logger.error("Failed to write CSV", ex);
-            Dialogs.showErrorNotification("QP-CAT", "Could not write CSV: " + ex.getMessage());
+            UserErrors.notify(logger, "QP-CAT", "Could not write CSV: " + ex.getMessage());
         }
     }
 
@@ -5344,7 +5344,7 @@ public class ClusteringDialog {
                         + result.getNCells() + " cells)");
             } catch (Exception ex) {
                 logger.error("Failed to save results", ex);
-                Dialogs.showErrorNotification("QPCAT",
+                UserErrors.notify(logger, "QPCAT",
                         "Failed to save results: " + ex.getMessage());
             }
         });
@@ -5594,7 +5594,7 @@ public class ClusteringDialog {
 
         } catch (Exception e) {
             logger.error("Failed to load past results", e);
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to load results: " + e.getMessage());
         }
     }
@@ -5699,7 +5699,7 @@ public class ClusteringDialog {
 
         } catch (Exception e) {
             logger.error("Failed to manage saved results", e);
-            Dialogs.showErrorNotification("QPCAT",
+            UserErrors.notify(logger, "QPCAT",
                     "Failed to manage saved results: " + e.getMessage());
         }
     }
@@ -5860,7 +5860,7 @@ public class ClusteringDialog {
             ExportLocation.announce(file.getParentFile(), "plot '" + tab.getText() + "'");
         } catch (Exception e) {
             logger.error("Failed to write plot snapshot", e);
-            Dialogs.showErrorNotification("QPCAT", "Could not write PNG: " + e.getMessage());
+            UserErrors.notify(logger, "QPCAT", "Could not write PNG: " + e.getMessage());
         }
     }
 
@@ -6524,7 +6524,7 @@ public class ClusteringDialog {
                 logger.error("Plot regeneration failed", ex);
                 Platform.runLater(() -> {
                     restoreRegenButton(regenBtn, prevText);
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Could not regenerate plots: " + ex.getMessage());
                 });
                 return;

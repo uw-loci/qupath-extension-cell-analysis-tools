@@ -55,6 +55,7 @@ import qupath.lib.objects.PathObject;
 import java.io.File;
 import java.util.*;
 import java.util.function.Consumer;
+import qupath.ext.qpcat.ui.UserErrors;
 
 /**
  * Entry point for the QPCAT QuPath extension.
@@ -727,7 +728,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             }
         } catch (Exception ex) {
             logger.error("clearCellConnections failed", ex);
-            Dialogs.showErrorNotification(EXTENSION_NAME,
+            UserErrors.notify(logger, EXTENSION_NAME,
                     "Failed to clear connections: " + ex.getMessage());
         }
     }
@@ -744,7 +745,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             ApposeClusteringService.getInstance().deleteEnvironment();
         } catch (Exception e) {
             logger.error("Failed to delete environment", e);
-            Dialogs.showErrorNotification(EXTENSION_NAME,
+            UserErrors.notify(logger, EXTENSION_NAME,
                     "Failed to delete environment: " + e.getMessage());
             return;
         }
@@ -965,7 +966,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                                "Cells", String.valueOf(detections.size())),
                         e.getMessage(), -1);
                 Platform.runLater(() ->
-                        Dialogs.showErrorNotification(EXTENSION_NAME,
+                        UserErrors.notify(logger, EXTENSION_NAME,
                                 "Quick " + algoName + " failed: " + e.getMessage()));
             }
         }, "QPCAT-Quick" + algoName);
@@ -1025,7 +1026,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         Map.of("Output", outputFile.getAbsolutePath()),
                         e.getMessage(), -1);
                 Platform.runLater(() ->
-                        Dialogs.showErrorNotification(EXTENSION_NAME,
+                        UserErrors.notify(logger, EXTENSION_NAME,
                                 "Export failed: " + e.getMessage()));
             }
         }, "QPCAT-ExportAnnData");

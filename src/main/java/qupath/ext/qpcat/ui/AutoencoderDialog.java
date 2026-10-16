@@ -1359,7 +1359,7 @@ public class AutoencoderDialog {
                     try {
                         entry.saveImageData(currentData);
                     } catch (IOException ioe) {
-                        Dialogs.showErrorMessage("QP-CAT",
+                        UserErrors.show(logger, "QP-CAT",
                                 "Failed to save image data: " + ioe.getMessage());
                         return;
                     }
@@ -1518,7 +1518,7 @@ public class AutoencoderDialog {
                     progressBar.setVisible(false);
                     trainButton.setDisable(false);
                     trainingInProgress.set(false);
-                    Dialogs.showErrorNotification("QP-CAT",
+                    UserErrors.notify(logger, "QP-CAT",
                             "Autoencoder training failed: " + e.getMessage());
                 });
             }
@@ -1615,7 +1615,7 @@ public class AutoencoderDialog {
                     saveModelButton.setDisable(false);
                     evaluateButton.setDisable(false);
                     trainingInProgress.set(false);
-                    Dialogs.showErrorNotification("QP-CAT",
+                    UserErrors.notify(logger, "QP-CAT",
                             "Failed to apply: " + e.getMessage());
                 });
             }
@@ -1922,7 +1922,7 @@ public class AutoencoderDialog {
 
         } catch (IOException e) {
             logger.error("Failed to save model", e);
-            Dialogs.showErrorNotification("QP-CAT",
+            UserErrors.notify(logger, "QP-CAT",
                     "Failed to save model: " + e.getMessage());
         }
     }
@@ -2002,7 +2002,7 @@ public class AutoencoderDialog {
 
         } catch (IOException e) {
             logger.error("Failed to load model", e);
-            Dialogs.showErrorNotification("QP-CAT",
+            UserErrors.notify(logger, "QP-CAT",
                     "Failed to load model: " + e.getMessage());
         }
     }

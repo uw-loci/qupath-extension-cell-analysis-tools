@@ -640,7 +640,7 @@ public class BatchFigureExportDialog {
                     statusLabel.setText("Failed: " + ex.getMessage());
                     progressBar.setProgress(0);
                     exportRunning.set(false);
-                    Dialogs.showErrorNotification("Export Figures", ex.getMessage());
+                    UserErrors.notify(logger, "Export Figures", ex.getMessage());
                 });
                 return;
             }

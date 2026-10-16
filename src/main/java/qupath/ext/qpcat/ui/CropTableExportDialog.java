@@ -299,7 +299,7 @@ public final class CropTableExportDialog {
                         exportBtn.setDisable(false);
                         exportBtn.setText("Export");
                         status.setText("Export failed: " + ex.getMessage());
-                        Dialogs.showErrorNotification("QP-CAT - Export error",
+                        UserErrors.notify(logger, "QP-CAT - Export error",
                                 "Export failed: " + ex.getMessage());
                     });
                 }

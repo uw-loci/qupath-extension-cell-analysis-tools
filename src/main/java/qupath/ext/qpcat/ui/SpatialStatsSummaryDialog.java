@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.PostHocSpatialWorkflow;
 import qupath.ext.qpcat.controller.PostHocSpatialWorkflow.WindowResult;
-import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 
 import java.io.File;
@@ -134,7 +133,7 @@ public final class SpatialStatsSummaryDialog {
             ExportLocation.announce(file.getParentFile(), file.getName());
         } catch (IOException ex) {
             logger.error("Failed to write spatial stats CSV", ex);
-            Dialogs.showErrorNotification("QP-CAT", "Could not write CSV: " + ex.getMessage());
+            UserErrors.notify(logger, "QP-CAT", "Could not write CSV: " + ex.getMessage());
         }
     }
 }

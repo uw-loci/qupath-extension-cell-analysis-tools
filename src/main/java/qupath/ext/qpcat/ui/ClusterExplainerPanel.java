@@ -741,7 +741,7 @@ public class ClusterExplainerPanel {
         }
         QuPathGUI gui = QuPathGUI.getInstance();
         if (gui == null) {
-            Dialogs.showErrorNotification("QPCAT", "QuPath is not available.");
+            UserErrors.notify(logger, "QPCAT", "QuPath is not available.");
             return;
         }
         ClusterManagementDialog dlg = new ClusterManagementDialog(gui, resultName);

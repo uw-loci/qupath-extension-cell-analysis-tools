@@ -674,7 +674,7 @@ public final class McpServerWindow {
             } catch (IOException ex) {
                 String msg = ex.getMessage() != null ? ex.getMessage() : ex.toString();
                 logger.error("MCP server failed to start: {}", msg);
-                Platform.runLater(() -> Dialogs.showErrorMessage(ERROR_TITLE, msg));
+                Platform.runLater(() -> UserErrors.show(logger, ERROR_TITLE, msg));
             } finally {
                 Platform.runLater(() -> STARTING.set(false));
             }

@@ -305,7 +305,7 @@ public class EmbeddingDialog {
                     progressBar.setVisible(false);
                     statusLabel.setText("Error: " + e.getMessage());
                     runButton.setDisable(false);
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Embedding failed: " + e.getMessage());
                 });
             }

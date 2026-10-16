@@ -477,7 +477,7 @@ public class CellularNeighborhoodDialog {
                 Platform.runLater(() -> {
                     setRunActive(false);
                     statusLabel.setText("Error: " + e.getMessage());
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Cellular-neighborhood analysis failed: " + e.getMessage());
                 });
             }
@@ -525,7 +525,7 @@ public class CellularNeighborhoodDialog {
                 Platform.runLater(() -> {
                     setRunActive(false);
                     statusLabel.setText("Error: " + e.getMessage());
-                    Dialogs.showErrorNotification("QPCAT",
+                    UserErrors.notify(logger, "QPCAT",
                             "Joint cellular-neighborhood analysis failed: " + e.getMessage());
                 });
             }

@@ -50,7 +50,7 @@ public final class ApplySavedResultDialog {
             summaries = ClusteringResultManager.listResultSummaries(project);
         } catch (Exception e) {
             logger.error("Failed to list saved results", e);
-            Dialogs.showErrorNotification("QP-CAT",
+            UserErrors.notify(logger, "QP-CAT",
                     "Could not list saved results: " + e.getMessage());
             return;
         }
@@ -153,7 +153,7 @@ public final class ApplySavedResultDialog {
         try {
             saved = ClusteringResultManager.loadSavedResult(project, name);
         } catch (Exception e) {
-            Dialogs.showErrorNotification("QP-CAT", "Could not load result: " + e.getMessage());
+            UserErrors.notify(logger, "QP-CAT", "Could not load result: " + e.getMessage());
             return;
         }
 
@@ -224,7 +224,7 @@ public final class ApplySavedResultDialog {
 
     private static void showReport(String name, SavedResultApplier.ApplyReport report) {
         if (report.isError()) {
-            Dialogs.showErrorNotification("QP-CAT", report.error);
+            UserErrors.notify(logger, "QP-CAT", report.error);
             return;
         }
         StringBuilder sb = new StringBuilder();

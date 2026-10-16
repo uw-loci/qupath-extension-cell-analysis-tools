@@ -342,7 +342,7 @@ public class SpatialStatsDialog {
                     Platform.runLater(() -> {
                         resetRun(runBtn, progressBar, content);
                         status.setText("Failed.");
-                        Dialogs.showErrorNotification("QP-CAT",
+                        UserErrors.notify(logger, "QP-CAT",
                                 "Spatial statistics failed: " + ex.getMessage());
                     });
                 }
@@ -413,7 +413,7 @@ public class SpatialStatsDialog {
             return ClusteringResultManager.loadSavedResult(qupath.getProject(), chosen.get());
         } catch (Exception e) {
             logger.error("Could not load saved result", e);
-            Dialogs.showErrorNotification("QP-CAT", "Could not load saved result: " + e.getMessage());
+            UserErrors.notify(logger, "QP-CAT", "Could not load saved result: " + e.getMessage());
             return null;
         }
     }
