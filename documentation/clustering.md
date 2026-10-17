@@ -60,9 +60,11 @@ predicted requirement, as a warning. It will not block on a number it does not h
 **Classification overwrite.** Cluster labels are written as classifications, so
 existing ones are replaced. For the current image the dialog counts the affected
 detections and names the classes going away -- `Cluster 0, Cluster 1` means you are
-re-running over your own output; `Tumor, Stroma` is worth stopping for. For a project
-scope it states the consequence without a count, since counting would mean opening
-every image to write a dialog.
+re-running over your own output; `Tumor, Stroma` is worth stopping for. With **Restrict
+this run to chosen classifications** on, the count covers only the cells that enter the
+run, and the dialog says how many keep their classification. For a project scope it
+states the consequence without a count, since counting would mean opening every image to
+write a dialog; with a restriction it names the restriction.
 
 **Back up first.** The first time you open any tool that can change classifications, a
 one-time modal says so. Duplicate the project folder before continuing. Re-arm it from
