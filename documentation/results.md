@@ -545,7 +545,8 @@ Radius: 12.4 to 248.6 um, 50 bins
 ```
 
 Radii are in **um** whenever every image in the run has a pixel size -- a clustering run and
-*Spatial statistics on existing clusters* alike, each image scaled by its own pixel size. A clustering run that includes an uncalibrated image stays in **px** throughout (the post-hoc
+*Spatial statistics on existing clusters* alike, each image scaled by its own pixel size. A
+clustering run that includes an uncalibrated image stays in **px** throughout (the post-hoc
 path decides per image), and the line says so.
 
 **What each view aggregates -- the one that catches people out:**
@@ -581,7 +582,7 @@ Two consequences:
   instead, named in its title.
 
 **Which radius the matrix uses.** *Spatial statistics > Matrix radius* in Run Clustering,
-in the image's units. Left at **0** it picks about five median nearest-neighbour distances
+in microns (pixels only if an image in the run has no pixel size). Left at **0** it picks about five median nearest-neighbour distances
 -- the near end of the profile, where the ratio still discriminates. The figure title
 always states the radius and bin it used, so the number can be quoted the way a published
 co-occurrence value is.
