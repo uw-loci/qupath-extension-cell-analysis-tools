@@ -18,6 +18,8 @@ public class SpatialStatsBundle {
     private double graphRadius;            // -1 if not applicable / auto
     private double graphDelaunayMaxEdge;   // -1 if not applicable / no pruning
     private int nPermutations;             // value actually used (post-adaptive resolution)
+    /** Distance unit of every radius here: "um" or "px". Null on saves older than 0.22.0. */
+    private String unit;
 
     private RipleyResult ripley;
     private GearyCResult geary;
@@ -25,6 +27,9 @@ public class SpatialStatsBundle {
     private CoOccurrenceResult coOccurrenceOneVsRest;
 
     public SpatialStatsBundle() {}
+
+    public String getUnit() { return unit; }
+    public void setUnit(String v) { this.unit = v; }
 
     public String getGraphType() { return graphType; }
     public void setGraphType(String v) { this.graphType = v; }

@@ -1018,10 +1018,11 @@ public final class QpcatPreferences {
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialGraphRadius, Double.class)
-                .name("Spatial Graph Radius (px)")
+                .name("Spatial Graph Radius (um)")
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Maximum distance for two cells to be neighbors when graph type is "
-                        + "radius (pixel units of detection centroids). -1 = auto-derive from "
+                        + "radius, in microns (pixels only when an image in the run has no pixel "
+                        + "size). -1 = auto-derive from "
                         + "median nearest-neighbor distance."))
                 .build());
 

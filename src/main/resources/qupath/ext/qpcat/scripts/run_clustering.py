@@ -364,6 +364,14 @@ try:
 except (NameError, TypeError, ValueError):
     pref_spatial_pixel_size_um = 1.0
 
+# Unit of spatial_coords. Java scales each image's centroids to microns when
+# every image in the run is calibrated, so radii and distances come back in
+# um; "px" only when some image has no pixel size.
+try:
+    pref_coord_unit = str(coord_unit)
+except NameError:
+    pref_coord_unit = "px"
+
 # Phase 5 enhancement: persist spatial-stats plots as PNG. Gated by the
 # qpcat.spatial.persistPlots preference (default true). When the parent
 # task is also generating plots (generate_plots + output_dir), the new
@@ -2358,6 +2366,7 @@ if has_spatial and n_clusters_found > 1:
                 n_permutations=n_perms,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
             )
             if _ripley_by_area:
                 task.outputs["ripley_per_area"] = _json_rep.dumps(_ripley_by_area)
@@ -2369,6 +2378,7 @@ if has_spatial and n_clusters_found > 1:
                 n_permutations=n_perms,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
                 persist_plots=_spatial_persist,
             )
         if _spatial_persist and not _per_area_stats:
@@ -2421,10 +2431,12 @@ if has_spatial and n_clusters_found > 1:
                 "co_occurrence_pairwise",
                 cluster_key="cluster",
                 mode="pairwise",
+                matrix_radius=pref_cooc_matrix_radius,
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
                 sequential_cmap=pref_cmap_sequential,
                 diverging_cmap=pref_cmap_diverging,
             )
@@ -2442,6 +2454,7 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
                 sequential_cmap=pref_cmap_sequential,
                 diverging_cmap=pref_cmap_diverging,
                 persist_plots=_spatial_persist,
@@ -2475,6 +2488,7 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
                 sequential_cmap=pref_cmap_sequential,
                 diverging_cmap=pref_cmap_diverging,
             )
@@ -2492,6 +2506,7 @@ if has_spatial and n_clusters_found > 1:
                 spatial_data=spatial_data,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
+                coord_unit=pref_coord_unit,
                 sequential_cmap=pref_cmap_sequential,
                 diverging_cmap=pref_cmap_diverging,
                 persist_plots=_spatial_persist,
@@ -2778,8 +2793,9 @@ if do_plots and plot_dir and can_analyze:
                         label=str(cl),
                         rasterized=True,
                     )
-                ax.set_xlabel("X (pixels)")
-                ax.set_ylabel("Y (pixels)")
+                _axis_unit = "\u00b5m" if pref_coord_unit == "um" else "pixels"
+                ax.set_xlabel("X (%s)" % _axis_unit)
+                ax.set_ylabel("Y (%s)" % _axis_unit)
                 ax.set_aspect("equal")
                 ax.invert_yaxis()  # image coordinates: Y increases downward
                 ax.set_title(title)

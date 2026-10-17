@@ -541,11 +541,12 @@ Each figure's title and the top of each table state **the bins actually used**, 
 never have to infer them:
 
 ```
-Radius: 12.4 to 248.6 px, 50 bins
+Radius: 12.4 to 248.6 um, 50 bins
 ```
 
-Units follow the image: **um** for a calibrated image, **px** otherwise, and the line
-says which.
+Radii are in **um** whenever every image in the run has a pixel size -- a clustering run and
+*Spatial statistics on existing clusters* alike, each image scaled by its own pixel size. A clustering run that includes an uncalibrated image stays in **px** throughout (the post-hoc
+path decides per image), and the line says so.
 
 **What each view aggregates -- the one that catches people out:**
 

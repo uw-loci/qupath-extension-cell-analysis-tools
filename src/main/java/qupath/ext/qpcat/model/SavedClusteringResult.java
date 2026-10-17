@@ -401,6 +401,7 @@ public class SavedClusteringResult {
         saved.setSpatialAutocorrThreshold(result.getSpatialAutocorrThreshold());
         saved.setSpatialAutocorrAreas(result.getSpatialAutocorrAreas());
 
+        saved.setPixelSizeUmByImage(result.getPixelSizeUmByImage());
         // Plot-click navigation + representative crops.
         saved.setRepresentativesJson(result.getRepresentativesJson());
         CellRef[] refs = result.getCellRefs();
@@ -468,6 +469,7 @@ public class SavedClusteringResult {
         if (result.hasAnySpatialStats()) {
             SpatialStatsBundle bundle = new SpatialStatsBundle();
             bundle.setGraphType(result.getSpatialGraphType());
+            bundle.setUnit(result.getSpatialUnit());
             bundle.setRipley(result.getRipley());
             bundle.setRipleyByArea(result.getRipleyByArea());
             bundle.setGeary(result.getGeary());
@@ -526,6 +528,7 @@ public class SavedClusteringResult {
             }
             result.setCellRefs(refs);
         }
+        result.setPixelSizeUmByImage(pixelSizeUmByImage);
         if (cellParentNames != null) {
             result.setCellParentNames(cellParentNames);
         }
@@ -552,6 +555,9 @@ public class SavedClusteringResult {
         // results-dialog tab branches downstream.
         if (spatialStats != null) {
             result.setSpatialGraphType(spatialStats.getGraphType());
+            if (spatialStats.getUnit() != null) {
+                result.setSpatialUnit(spatialStats.getUnit());
+            }
             result.setRipley(spatialStats.getRipley());
             result.setRipleyByArea(spatialStats.getRipleyByArea());
             result.setGeary(spatialStats.getGeary());
@@ -635,4 +641,10 @@ public class SavedClusteringResult {
             this.explanations = explanations;
         }
     }
+
+    /** Microns per pixel per image name, so a redrawn spatial scatter can use microns. */
+    private java.util.Map<String, Double> pixelSizeUmByImage;
+
+    public java.util.Map<String, Double> getPixelSizeUmByImage() { return pixelSizeUmByImage; }
+    public void setPixelSizeUmByImage(java.util.Map<String, Double> v) { this.pixelSizeUmByImage = v; }
 }

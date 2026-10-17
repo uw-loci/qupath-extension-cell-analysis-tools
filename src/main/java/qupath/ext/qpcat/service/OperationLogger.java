@@ -370,15 +370,16 @@ public class OperationLogger {
                                                               int knnK,
                                                               double radius,
                                                               double delaunayMaxEdge,
+                                                              String unit,
                                                               int nCells) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("Graph type", graphType);
         if ("knn".equals(graphType)) {
             params.put("k", String.valueOf(knnK));
         } else if ("radius".equals(graphType)) {
-            params.put("Radius (px)", radius < 0 ? "auto" : String.valueOf(radius));
+            params.put("Radius (" + unit + ")", radius < 0 ? "auto" : String.valueOf(radius));
         } else if ("delaunay".equals(graphType)) {
-            params.put("Max edge (px)",
+            params.put("Max edge (" + unit + ")",
                     delaunayMaxEdge < 0 ? "no pruning" : String.valueOf(delaunayMaxEdge));
         }
         params.put("Input", nCells + " cells");

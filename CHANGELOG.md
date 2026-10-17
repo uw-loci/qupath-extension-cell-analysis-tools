@@ -9,7 +9,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 Seven items off the backlog, plus a results-tab audit. **Not released** -- version stays
 0.21.0 until there is more here.
 
+### Changed
+
+- **Spatial results from a clustering run are in microns.** Each image's cell centroids are
+  scaled by that image's own pixel size before any spatial statistic runs, so co-occurrence
+  radii, Ripley's r, the radius graph, the spatial scatter's axes and the graph-distance
+  measurements all come out in um -- as *Spatial statistics on existing clusters* already
+  did. Before, a clustering run reported the same image in pixels ("49.7 to 717.0 px" where
+  the post-hoc path said "24.2 to 349.4 um"), so the two could not be compared, and images
+  scanned at different resolutions were measured on different scales. A run that includes
+  an image with no pixel size stays in pixels and logs why. **The Radius graph and Matrix
+  radius settings are now read as microns**: a saved config that set either in pixels gives
+  a different graph on 0.22.0; the auto value (-1 / 0) is unaffected. Results save their
+  unit, so reopened Ripley tabs label their axis correctly, and a regenerated spatial scatter
+  is drawn in microns too. The Autoencoder's tile-size hint gives microns beside pixels.
+  `SpatialFrameTest`.
+
 ### Fixed
+
+- **In a run over several images, the co-occurrence "Matrix radius" was ignored.** Those runs
+  compute statistics per image, and that path never passed the setting on, so the matrix
+  figure always used the automatic radius.
 
 - **Ticking a class in "Cells to cluster" ticked others too.** The list reuses its rows as
   it scrolls, and each reuse added another listener that was never removed. A tick then

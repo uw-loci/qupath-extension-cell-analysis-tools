@@ -264,8 +264,8 @@ Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ri
 |---|---|---|---|
 | `type` | string | `knn` | `knn`, `radius`, `delaunay`. |
 | `k` | int | `15` | kNN only. Range `[2, 200]`. |
-| `radius` | double | `-1` (auto) | Radius only (pixel units). |
-| `max_edge` | double | `-1` (no pruning) | Delaunay only (pixel units). |
+| `radius` | double | `-1` (auto) | Radius only (microns; pixels only if an image in the run has no pixel size). |
+| `max_edge` | double | `-1` (no pruning) | Delaunay only (microns; pixels only if an image in the run has no pixel size). |
 
 > **Note:** `spatial_stats.statistics` slugs mirror the `SpatialStatsScripts` keys 1:1. See [SCRIPTING.md `SpatialStatsScripts`](scripting.md#spatialstatsscripts).
 

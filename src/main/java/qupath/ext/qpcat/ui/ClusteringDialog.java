@@ -1866,10 +1866,11 @@ public class ClusteringDialog {
         spatialGraphRadiusSpinner.setPrefWidth(100);
         spatialGraphRadiusSpinner.setTooltip(Tooltips.of(
                 "Maximum distance for two cells to be neighbors (Radius graph only).\n"
-                + "Pixel units of detection centroids. Leave at -1 to auto-derive\n"
-                + "(median nearest-neighbor distance x 5)."));
+                + "In microns when every image in the run has a pixel size, otherwise\n"
+                + "in pixels. Leave at -1 to auto-derive (median nearest-neighbor\n"
+                + "distance x 5)."));
         spatialGraphRadiusSpinner.setAccessibleText(
-                "Maximum neighbor distance for Radius graph, in pixels; -1 for auto");
+                "Maximum neighbor distance for Radius graph, in microns; -1 for auto");
 
         spatialGraphDelaunayMaxEdgeSpinner = new Spinner<>(-1.0, 1.0e6,
                 QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
@@ -1903,7 +1904,7 @@ public class ClusteringDialog {
                 tipLabel("k:", spatialGraphKSpinner), spatialGraphKSpinner);
         kRow.setAlignment(Pos.CENTER_LEFT);
         HBox radiusRow = new HBox(8,
-                tipLabel("Radius:", spatialGraphRadiusSpinner), spatialGraphRadiusSpinner);
+                tipLabel("Radius (um):", spatialGraphRadiusSpinner), spatialGraphRadiusSpinner);
         radiusRow.setAlignment(Pos.CENTER_LEFT);
         delaunayMaxEdgePxRow = new HBox(8,
                 tipLabel("Delaunay max edge (px):", spatialGraphDelaunayMaxEdgeSpinner),
@@ -1960,8 +1961,8 @@ public class ClusteringDialog {
         coOccMatrixRadiusSpinner.setPrefWidth(110);
         SpinnerUtils.commitOnFocusLoss(coOccMatrixRadiusSpinner);
         coOccMatrixRadiusSpinner.setTooltip(Tooltips.of(
-                "Radius the pairwise co-occurrence MATRIX is drawn at, in the image's\n"
-                + "units (um when calibrated, otherwise pixels).\n\n"
+                "Radius the pairwise co-occurrence MATRIX is drawn at, in microns\n"
+                + "(pixels only if an image in the run has no pixel size).\n\n"
                 + "0 = auto: about five median nearest-neighbour distances, which keeps\n"
                 + "the figure in the short-range part of the profile where the statistic\n"
                 + "discriminates. The figure title always states the radius it used.\n\n"
@@ -1970,7 +1971,7 @@ public class ClusteringDialog {
         coOccMatrixRadiusSpinner.disableProperty().bind(
                 enableCoOccPairwiseCheck.selectedProperty().not());
         HBox matrixRadiusRow = new HBox(8,
-                new Label("Matrix radius (0 = auto):"), coOccMatrixRadiusSpinner);
+                new Label("Matrix radius (um, 0 = auto):"), coOccMatrixRadiusSpinner);
         matrixRadiusRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox statsBox = new VBox(4,
@@ -6572,14 +6573,23 @@ public class ClusteringDialog {
         }
 
         // Spatial-scatter coordinates come from the per-cell references.
+        // Drawn in microns when every cell's image has a known pixel size.
         double[][] coords = null;
+        String coordUnit = "px";
         if (wantSpatial && result.getCellRefs() != null) {
             var refs = result.getCellRefs();
+            var sizes = result.getPixelSizeUmByImage();
+            boolean microns = sizes != null && !sizes.isEmpty();
+            for (int i = 0; microns && i < refs.length; i++) {
+                microns = refs[i] == null || sizes.get(refs[i].getImageName()) != null;
+            }
             coords = new double[refs.length][2];
             for (int i = 0; i < refs.length; i++) {
-                coords[i][0] = refs[i] != null ? refs[i].getX() : 0;
-                coords[i][1] = refs[i] != null ? refs[i].getY() : 0;
+                double f = microns && refs[i] != null ? sizes.get(refs[i].getImageName()) : 1.0;
+                coords[i][0] = refs[i] != null ? refs[i].getX() * f : 0;
+                coords[i][1] = refs[i] != null ? refs[i].getY() * f : 0;
             }
+            coordUnit = microns ? "um" : "px";
         }
 
         if (!userInitiated) {
@@ -6589,6 +6599,7 @@ public class ClusteringDialog {
         }
 
         final double[][] fCoords = coords;
+        final String fCoordUnit = coordUnit;
         final java.util.List<String> fColors = colors;
         final int dpi = QpcatPreferences.getClusterPlotDpi();
         final String prevText = regenBtn.getText();
@@ -6602,7 +6613,7 @@ public class ClusteringDialog {
             Map<String, String> newPaths;
             try {
                 newPaths = PlotRegenerator.regenerate(result.getEmbedding(),
-                        result.getClusterLabels(), fCoords, fColors, embName, dpi,
+                        result.getClusterLabels(), fCoords, fCoordUnit, fColors, embName, dpi,
                         dir.toPath(), null);
             } catch (Exception ex) {
                 logger.error("Plot regeneration failed", ex);

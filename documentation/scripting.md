@@ -48,8 +48,8 @@ Static facade for graph construction. Returns a `Map<String, Object>` describing
 |---|---|---|---|
 | `type` | String | `"knn"` | One of `"knn"`, `"radius"`, `"delaunay"`. Case-insensitive. |
 | `k` | int | 15 | kNN only. Number of nearest neighbors per cell. |
-| `radius` | double | -1 (auto) | Radius only. Pixel units of detection centroids. -1 = auto-derive from median nearest-neighbor distance times 5. |
-| `maxEdge` | double | -1 (no pruning) | Delaunay only. Drop edges longer than this (pixel units). -1 = keep all. |
+| `radius` | double | -1 (auto) | Radius only. In microns; pixels only if an image in the run has no pixel size. -1 = auto-derive from median nearest-neighbor distance times 5. |
+| `maxEdge` | double | -1 (no pruning) | Delaunay only. Drop edges longer than this (microns; pixels only if an image in the run has no pixel size). -1 = keep all. |
 | `areas` | List\<Map\> | absent (one area per image) | Independent areas -- see below. No graph edge ever joins two areas. TMA cores flagged missing are not areas. |
 
 **Returns:** the canonical options map. Pass it to `SpatialStatsScripts` methods as the `graphHandle` argument so every statistic references the same neighborhood definition.
@@ -109,7 +109,7 @@ Stages Ripley's L for every cluster (or the subset listed in `clusters`).
 
 | Option key | Type | Default | Notes |
 |---|---|---|---|
-| `maxRadius` | double | -1 (auto) | Largest r to evaluate (pixel units). |
+| `maxRadius` | double | -1 (auto) | Largest r to evaluate (microns; pixels only if an image in the run has no pixel size). |
 | `nSteps` | int | 50 | Number of r values between 0 and `maxRadius`. |
 | `nPermutations` | int | -1 (adaptive) | Permutation count. -1 = adaptive default (1000 / 100 / 50 by cell count). |
 | `clusters` | List<String> | empty = all | Cluster labels to evaluate. Empty = all clusters present on detections. |
@@ -156,8 +156,8 @@ Stages co-occurrence as a function of radius.
 | Option key | Type | Default | Notes |
 |---|---|---|---|
 | `mode` | String | `"pairwise"` | One of `"pairwise"`, `"oneVsRest"`. Accepts `"one_vs_rest"` / `"one-vs-rest"` as synonyms. |
-| `minRadius` | double | -1 (auto) | Smallest r (pixel units). |
-| `maxRadius` | double | -1 (auto) | Largest r (pixel units). |
+| `minRadius` | double | -1 (auto) | Smallest r (microns; pixels only if an image in the run has no pixel size). |
+| `maxRadius` | double | -1 (auto) | Largest r (microns; pixels only if an image in the run has no pixel size). |
 | `nIntervals` | int | 50 | Number of radius bins. |
 | `matrixRadius` | double | -1 (auto) | (Pairwise only) Radius at which to draw the cluster x cluster heatmap figure. -1 = auto: about five median nearest-neighbour distances. Affects the figure only; the table and curves keep every bin. |
 | `persistPlots` | boolean | true | Also write `co_occurrence_pairwise.png` or `co_occurrence_one_vs_rest.png` (per `mode`) to the per-result plot directory. |

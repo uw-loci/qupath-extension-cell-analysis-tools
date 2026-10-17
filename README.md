@@ -262,7 +262,7 @@ Results live in their own tabs in the clustering results dialog and are persiste
 Spatial statistics need a definition of "neighbor". In v1 the clustering dialog exposes this explicitly:
 
 - **kNN** (default) -- each cell is connected to its k nearest neighbors by centroid distance. Default k = 15. Recommended starting point.
-- **Radius** -- each cell is connected to every neighbor within a fixed radius (in pixel units of the detection centroids). Use when the biology has a natural distance scale (e.g. immune synapse distance ~ 20 microns).
+- **Radius** -- each cell is connected to every neighbor within a fixed radius (in microns; pixels only if an image in the run has no pixel size). Use when the biology has a natural distance scale (e.g. immune synapse distance ~ 20 microns).
 - **Delaunay** -- a triangulation that connects each cell to its geometric neighbors; no k or radius. Optional max-edge pruning drops over-long edges (use for tissue with large gaps).
 
 The same graph backs **spatial feature smoothing** (the pre-clustering step) and **all post-clustering spatial stats** when you opt in via Preferences. The shared graph parameters are visible in the dialog and recorded in the audit log on every run.

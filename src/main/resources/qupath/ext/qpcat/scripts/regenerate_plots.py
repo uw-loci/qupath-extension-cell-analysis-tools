@@ -219,8 +219,12 @@ if coords is not None:
                 label=str(cl),
                 rasterized=True,
             )
-        ax.set_xlabel("X (pixels)")
-        ax.set_ylabel("Y (pixels)")
+        try:
+            _axis_unit = "\u00b5m" if str(coord_unit) == "um" else "pixels"
+        except NameError:
+            _axis_unit = "pixels"
+        ax.set_xlabel("X (%s)" % _axis_unit)
+        ax.set_ylabel("Y (%s)" % _axis_unit)
         ax.set_aspect("equal")
         ax.invert_yaxis()  # image coordinates: Y increases downward
         ax.set_title("Spatial distribution by cluster")

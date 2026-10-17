@@ -496,6 +496,8 @@ public class ClusteringResult {
     private CoOccurrenceResult coOccurrenceOneVsRest;
     private String spatialGraphType;       // "knn" | "radius" | "delaunay"
     private String spatialUnit = "px";     // distance unit for spatial stats: "px" or "um"
+    /** Microns per pixel for each image in the run, by image name; null when unknown. */
+    private java.util.Map<String, Double> pixelSizeUmByImage;
 
     /**
      * Per-area Ripley curves, keyed by area label, when the run was partitioned.
@@ -576,6 +578,8 @@ public class ClusteringResult {
     /** Distance unit for the spatial statistics ("px" or "um"). Default "px". */
     public String getSpatialUnit() { return spatialUnit == null ? "px" : spatialUnit; }
     public void setSpatialUnit(String v) { this.spatialUnit = v; }
+    public java.util.Map<String, Double> getPixelSizeUmByImage() { return pixelSizeUmByImage; }
+    public void setPixelSizeUmByImage(java.util.Map<String, Double> v) { this.pixelSizeUmByImage = v; }
 
     /**
      * True if at least one v1 spatial statistic is populated. Used by the

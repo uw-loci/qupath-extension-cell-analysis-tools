@@ -38,6 +38,7 @@ public final class PlotRegenerator {
      * @param embedding      N x 2 embedding coordinates (required)
      * @param labels         cluster id per cell, -1 = noise (required, length N)
      * @param coords         N x 2 centroids for the spatial scatter, or null
+     * @param coordUnit      "um" or "px": the unit of {@code coords}, for the axis labels
      * @param clusterColors  "#RRGGBB" per cluster id (index = id); may be null
      * @param embeddingName  axis-label stem (e.g. "UMAP"); null -> "Embedding"
      * @param dpi            output resolution
@@ -46,7 +47,8 @@ public final class PlotRegenerator {
      * @return map of plot key ("embedding", "spatial_scatter") -> absolute path
      */
     public static Map<String, String> regenerate(double[][] embedding, int[] labels,
-                                                  double[][] coords, List<String> clusterColors,
+                                                  double[][] coords, String coordUnit,
+                                                  List<String> clusterColors,
                                                   String embeddingName, int dpi, Path outputDir,
                                                   Consumer<String> progress) throws IOException {
         if (embedding == null || labels == null) {
@@ -58,7 +60,7 @@ public final class PlotRegenerator {
         }
         try {
             return ApposeClusteringService.withExtensionClassLoader(
-                    () -> runTask(embedding, labels, coords, clusterColors,
+                    () -> runTask(embedding, labels, coords, coordUnit, clusterColors,
                             embeddingName, dpi, outputDir, progress));
         } catch (IOException e) {
             throw e;
@@ -68,7 +70,8 @@ public final class PlotRegenerator {
     }
 
     private static Map<String, String> runTask(double[][] embedding, int[] labels,
-                                               double[][] coords, List<String> clusterColors,
+                                               double[][] coords, String coordUnit,
+                                               List<String> clusterColors,
                                                String embeddingName, int dpi, Path outputDir,
                                                Consumer<String> progress) throws IOException {
         int nCells = embedding.length;
@@ -107,6 +110,7 @@ public final class PlotRegenerator {
         }
         if (coordsNd != null) {
             inputs.put("spatial_coords", coordsNd);
+            inputs.put("coord_unit", coordUnit != null ? coordUnit : "px");
         }
 
         try {

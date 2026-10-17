@@ -542,8 +542,17 @@ public class AutoencoderDialog {
                 int computed = Math.max(16, ((int) Math.round(p95 * 1.5) + 7) / 8 * 8);
                 computed = Math.min(computed, 256);
                 suggestedTileSize = computed;
-                tileSizeHint = String.format(" (95th pctile cell: %.0f px, tile: %d px)",
-                        p95, computed);
+                var cal = qupath.getImageData().getServer().getPixelCalibration();
+                if (cal.hasPixelSizeMicrons()) {
+                    double um = cal.getAveragedPixelSizeMicrons();
+                    tileSizeHint = String.format(
+                            " (95th pctile cell: %.0f px = %.1f \u00b5m, tile: %d px = %.1f \u00b5m)",
+                            p95, p95 * um, computed, computed * um);
+                } else {
+                    tileSizeHint = String.format(
+                            " (95th pctile cell: %.0f px, tile: %d px; image has no pixel size)",
+                            p95, computed);
+                }
             }
         }
 

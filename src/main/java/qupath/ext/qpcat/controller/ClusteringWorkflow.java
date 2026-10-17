@@ -1836,11 +1836,13 @@ public class ClusteringWorkflow {
 
         NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
 
-        double[][] centroids = MeasurementExtractor.extractCentroids(extraction.getDetections());
+        SpatialFrame frame = resolveSpatialFrame(extraction);
+        double[][] centroids = frame.centroids(extraction.getDetections());
         NDArray spatialNd = buildMeasurementNDArray(centroids, nCells, 2);
 
         Map<String, Object> inputs = new HashMap<>();
         inputs.put("measurements", measurementsNd);
+        inputs.put("coord_unit", frame.unit());
         inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
         inputs.put("spatial_coords", spatialNd);
         inputs.put("normalization", config.getNormalization().getId());
@@ -1853,7 +1855,7 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_type", config.getSpatialGraphType());
         inputs.put("spatial_graph_k", config.getSpatialGraphK());
         inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
-        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdgePixels(config));
+        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdge(config, frame));
         inputs.put("spatial_permutations", config.getSpatialPermutations());
         inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
 
@@ -2013,13 +2015,13 @@ public class ClusteringWorkflow {
         // Create spatial coordinates NDArray if spatial analysis, smoothing,
         // BANKSY, or any v1 spatial statistic is enabled.
         NDArray spatialCoordsNd = null;
+        SpatialFrame frame = resolveSpatialFrame(extraction);
         boolean needsSpatialCoords = config.isEnableSpatialAnalysis()
                 || config.isEnableSpatialSmoothing()
                 || config.isAnySpatialStatEnabled()
                 || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY;
         if (needsSpatialCoords) {
-            double[][] centroids = MeasurementExtractor.extractCentroids(
-                    extraction.getDetections());
+            double[][] centroids = frame.centroids(extraction.getDetections());
             NDArray.Shape spatialShape = new NDArray.Shape(
                     NDArray.Shape.Order.C_ORDER, nCells, 2);
             spatialCoordsNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
@@ -2152,10 +2154,8 @@ public class ClusteringWorkflow {
         inputs.put("spatial_graph_type", config.getSpatialGraphType());
         inputs.put("spatial_graph_k", config.getSpatialGraphK());
         inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
-        // v0.3: prefer the canonical micron value when calibration is
-        // available; otherwise fall back to the pixel preference.
-        inputs.put("spatial_graph_delaunay_max_edge",
-                resolveDelaunayMaxEdgePixels(config));
+        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdge(config, frame));
+        inputs.put("coord_unit", frame.unit());
         inputs.put("spatial_permutations", config.getSpatialPermutations());
         inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
         inputs.put("use_squidpy_graph_for_smoothing",
@@ -2183,7 +2183,8 @@ public class ClusteringWorkflow {
         // distance + triangle-area outputs to microns when calibration is
         // present. Falls back to 1.0 (pixels) when no calibration is
         // available, matching the v0.2.7 spatial-stats unit treatment.
-        inputs.put("pixel_size_um", resolveSpatialPixelSizeUm(extraction));
+        // Coordinates already in microns need no further scaling.
+        inputs.put("pixel_size_um", frame.inMicrons() ? 1.0 : resolveSpatialPixelSizeUm(extraction));
 
         NDArray labelsNd = null;
         NDArray embNd = null;
@@ -2258,6 +2259,8 @@ public class ClusteringWorkflow {
 
             ClusteringResult result = new ClusteringResult(labels, nClusters, embedding,
                     clusterStats, extraction.getMeasurementNames());
+            result.setSpatialUnit(frame.unit());
+            result.setPixelSizeUmByImage(frame.byImageName());
             // The heatmap needs to know whether zero means anything in these
             // numbers; only Z-scored values have a centre to diverge about.
             if (config.getNormalization() != null) {
@@ -2613,7 +2616,8 @@ public class ClusteringWorkflow {
                                 result.getSpatialGraphType(),
                                 config.getSpatialGraphK(),
                                 config.getSpatialGraphRadius(),
-                                config.getSpatialGraphDelaunayMaxEdge(),
+                                resolveDelaunayMaxEdge(config, frame),
+                                frame.unit(),
                                 nCells),
                         "Spatial neighbor graph built for " + nCells + " cells",
                         -1);
@@ -5007,13 +5011,6 @@ public class ClusteringWorkflow {
     // ==================== Spatial Graph Overlay (v0.3) ====================
 
     /**
-     * Resolve the Delaunay max-edge threshold to send to Python in pixel
-     * units. Prefers the canonical micron value
-     * ({@link ClusteringConfig#getDelaunayMaxEdgeUm}) when the current
-     * image has a pixel calibration; otherwise falls back to the pixel
-     * preference. Negative values (no-pruning sentinel) pass through.
-     */
-    /**
      * Resolve the pixel size in microns for the run. Used to scale
      * per-cell distance + triangle-area columns from pixel units into
      * microns. Returns 1.0 (no scaling) when no calibration is available,
@@ -5064,26 +5061,110 @@ public class ClusteringWorkflow {
         return null;
     }
 
-    private double resolveDelaunayMaxEdgePixels(ClusteringConfig config) {
-        double micronValue = config.getDelaunayMaxEdgeUm();
-        if (micronValue > 0 && qupath != null) {
-            try {
-                ImageData<BufferedImage> imageData = qupath.getImageData();
-                if (imageData != null && imageData.getServer() != null) {
-                    PixelCalibration cal = imageData.getServer().getPixelCalibration();
-                    if (cal != null && cal.hasPixelSizeMicrons()) {
-                        double pxSize = cal.getAveragedPixelSizeMicrons();
-                        if (pxSize > 0) {
-                            return micronValue / pxSize;
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                logger.warn("Failed to resolve Delaunay max-edge microns to pixels: {}",
-                        e.getMessage());
-            }
+    /**
+     * The Delaunay max-edge threshold in the run's coordinate unit. The micron
+     * setting wins when there is one; the older pixel setting is converted when
+     * the coordinates are in microns. Negative values (no pruning) pass through.
+     */
+    private double resolveDelaunayMaxEdge(ClusteringConfig config, SpatialFrame frame) {
+        double um = config.getDelaunayMaxEdgeUm();
+        double px = config.getSpatialGraphDelaunayMaxEdge();
+        if (frame.inMicrons()) {
+            if (um > 0) return um;
+            return px > 0 ? px * frame.firstPixelSizeUm() : px;
         }
-        return config.getSpatialGraphDelaunayMaxEdge();
+        if (um > 0 && frame.firstPixelSizeUm() > 0 && !Double.isNaN(frame.firstPixelSizeUm())) {
+            return um / frame.firstPixelSizeUm();
+        }
+        return px;
+    }
+
+    /**
+     * Where the cells sit, in the unit every spatial result is reported in.
+     *
+     * <p>Microns whenever every image in the run has a pixel size: each image's
+     * centroids are scaled by its OWN pixel size, so images scanned at different
+     * resolutions share one unit and a radius means the same tissue distance in
+     * all of them. If any image is uncalibrated the run stays in pixels, because
+     * mixing the two would make every distance meaningless.
+     *
+     * @param pixelSizesUm per segment, NaN where uncalibrated
+     * @param starts       first detection index of each segment
+     */
+    record SpatialFrame(double[] pixelSizesUm, int[] starts, boolean inMicrons, String[] names) {
+        String unit() { return inMicrons ? "um" : "px"; }
+
+        double firstPixelSizeUm() {
+            return pixelSizesUm.length == 0 ? Double.NaN : pixelSizesUm[0];
+        }
+
+        double[][] centroids(List<PathObject> detections) {
+            double[][] c = MeasurementExtractor.extractCentroids(detections);
+            if (!inMicrons) return c;
+            for (int s = 0; s < starts.length; s++) {
+                int end = s + 1 < starts.length ? starts[s + 1] : c.length;
+                for (int i = starts[s]; i < end; i++) {
+                    c[i][0] *= pixelSizesUm[s];
+                    c[i][1] *= pixelSizesUm[s];
+                }
+            }
+            return c;
+        }
+
+        static SpatialFrame of(double[] pixelSizesUm, int[] starts) {
+            return of(pixelSizesUm, starts, new String[pixelSizesUm.length]);
+        }
+
+        static SpatialFrame of(double[] pixelSizesUm, int[] starts, String[] names) {
+            boolean all = pixelSizesUm.length > 0;
+            for (double p : pixelSizesUm) all &= p > 0 && Double.isFinite(p);
+            return new SpatialFrame(pixelSizesUm, starts, all, names);
+        }
+
+        /** Microns per pixel by image name, for the calibrated, named images. */
+        Map<String, Double> byImageName() {
+            Map<String, Double> out = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < names.length; i++) {
+                if (names[i] != null && pixelSizesUm[i] > 0 && Double.isFinite(pixelSizesUm[i])) {
+                    out.put(names[i], pixelSizesUm[i]);
+                }
+            }
+            return out;
+        }
+    }
+
+    private SpatialFrame resolveSpatialFrame(MeasurementExtractor.ExtractionResult extraction) {
+        var segs = extraction == null ? null : extraction.getImageSegments();
+        if (segs != null && !segs.isEmpty()) {
+            double[] sizes = new double[segs.size()];
+            int[] starts = new int[segs.size()];
+            String[] names = new String[segs.size()];
+            for (int i = 0; i < segs.size(); i++) {
+                @SuppressWarnings("unchecked")
+                ImageData<BufferedImage> data = (ImageData<BufferedImage>) segs.get(i).getImageData();
+                Double px = readPixelSizeMicrons(data);
+                sizes[i] = px == null ? Double.NaN : px;
+                starts[i] = segs.get(i).getStartIndex();
+                if (segs.get(i).getImageEntry() instanceof ProjectImageEntry<?> e) {
+                    names[i] = e.getImageName();
+                }
+            }
+            SpatialFrame f = SpatialFrame.of(sizes, starts, names);
+            if (!f.inMicrons()) {
+                logger.warn("Spatial results stay in pixels: at least one image in the run has "
+                        + "no pixel size.");
+            }
+            return f;
+        }
+        var data = qupath == null ? null : qupath.getImageData();
+        Double px = readPixelSizeMicrons(data);
+        String name = null;
+        if (data != null && qupath.getProject() != null) {
+            var entry = qupath.getProject().getEntry(data);
+            if (entry != null) name = entry.getImageName();
+        }
+        return SpatialFrame.of(new double[]{px == null ? Double.NaN : px}, new int[]{0},
+                new String[]{name});
     }
 
     /**
