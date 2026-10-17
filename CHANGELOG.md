@@ -20,6 +20,13 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
   old cell: scrolling alone turned 16 ticked rows of 31 into 31.
 
+- **In a narrow window the Cluster Explainer's Provider rows cut their labels to "...".**
+  At 640 px wide, "Provider:", "Endpoint:", "API key:", "(Ollama only)", the **Clear**
+  button and "How do I set that?" were squeezed to an ellipsis while the fields beside them
+  kept their width -- the "text that does not wrap" reported in September. The banner and
+  guide text above were never the problem; screenshots at 926 and 640 px showed both
+  wrapping. Labels, the button and the link now keep their width and the fields give way.
+
 - **The figure DPI was in the preferences twice, with different defaults.** *QP-CAT: Run
   Clustering* listed **Plot DPI** ("default: 150, range 72-300") and **Plot resolution
   (DPI)** ("default: 300, range 100-600") -- one setting, registered twice. 0.18.0 added the

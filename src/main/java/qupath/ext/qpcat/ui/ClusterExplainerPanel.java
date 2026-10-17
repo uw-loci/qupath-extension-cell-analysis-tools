@@ -415,21 +415,29 @@ public class ClusterExplainerPanel {
                 "Per-platform instructions for setting QPCAT_ANTHROPIC_KEY, plus\n"
                 + "where to create the key. QuPath reads the variable once at\n"
                 + "launch, so set it BEFORE starting QuPath."));
-        HBox keyWarningRow = new HBox(6, keyWarningLabel, keyHelpLink);
+        HBox keyWarningRow = new HBox(6, keyWarningLabel, keepWidth(keyHelpLink));
         keyWarningRow.setAlignment(Pos.CENTER_LEFT);
 
+        // Labels and buttons keep their width; the fields give way. In a narrow
+        // window the rows otherwise squeezed "Provider:", "Clear" and the help
+        // link down to "...", which read as text failing to wrap.
+        providerCombo.setMinWidth(80);
+        modelCombo.setMinWidth(80);
         HBox providerRow = new HBox(8,
-                new Label("Provider:"), providerCombo,
-                new Label("Model:"), modelCombo);
+                keepWidth(new Label("Provider:")), providerCombo,
+                keepWidth(new Label("Model:")), modelCombo);
         providerRow.setAlignment(Pos.CENTER_LEFT);
 
+        endpointField.setMinWidth(60);
         HBox endpointRow = new HBox(8,
-                new Label("Endpoint:"), endpointField,
-                new Label("(Ollama only)"));
+                keepWidth(new Label("Endpoint:")), endpointField,
+                keepWidth(new Label("(Ollama only)")));
         endpointRow.setAlignment(Pos.CENTER_LEFT);
 
+        apiKeyField.setMinWidth(60);
         HBox keyRow = new HBox(8,
-                new Label("API key:"), apiKeyField, clearKeyBtn, keyStatusLabel);
+                keepWidth(new Label("API key:")), apiKeyField, keepWidth(clearKeyBtn),
+                keepWidth(keyStatusLabel));
         keyRow.setAlignment(Pos.CENTER_LEFT);
 
         // The agent path is a page of its own, and this tab is where a user who
@@ -443,6 +451,12 @@ public class ClusterExplainerPanel {
                 + "off by default and started from Setup & help."));
         docLinks.getChildren().add(mcpLink);
         return new VBox(6, heading, providerRow, endpointRow, keyRow, keyWarningRow, docLinks);
+    }
+
+    /** A label, button or link that keeps its full text when its row runs short of room. */
+    private static <T extends javafx.scene.layout.Region> T keepWidth(T node) {
+        node.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+        return node;
     }
 
     private VBox buildRunSection() {
