@@ -493,7 +493,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 |---|---|
 | **Spatial Autocorrelation** (Moran's I) | Per measurement, ranked by I: I > 0 clustered, ~0 random, < 0 dispersed, plus in how many images the structure holds. Measurements high in I and consistent across images are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
 | **Geary's C** | Per measurement, ranked by C: C < 1 nearby cells similar, ~1 random, > 1 dissimilar, plus the same per-image count. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
-| **Neighborhood Enrichment** | Cluster x cluster permutation z-score: red = neighbours more often than chance, blue = less. The standard interaction matrix. [Full description below](#neighborhood-enrichment-tab). |
+| **Neighborhood Enrichment** | Cluster x cluster permutation z-score: brighter (toward yellow) = neighbours more often than chance, darker (toward purple) = less. The colour scale is not centred on zero, so read the colour bar. The standard interaction matrix. [Full description below](#neighborhood-enrichment-tab). |
 | **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
@@ -666,8 +666,10 @@ spatially structured", not as marker expression.
 ### Neighborhood Enrichment
 
 A cluster-by-cluster **permutation z-score**: how often two clusters are graph neighbours,
-against a null built by shuffling the cluster labels. Red is more often than chance, blue
-is less, and the diagonal is a cluster's tendency to neighbour itself.
+against a null built by shuffling the cluster labels. Brighter (toward yellow) is more often
+than chance, darker (toward purple) is less, and the diagonal is a cluster's tendency to
+neighbour itself. The colour scale runs from the matrix's own minimum to its maximum rather
+than being centred on zero, so read the colour bar to find where zero falls.
 
 This is the field's standard interaction matrix (squidpy's `nhood_enrichment`; imcRtools'
 `testInteractions` after Schapiro 2017), and it is the tab to read pairwise associations
