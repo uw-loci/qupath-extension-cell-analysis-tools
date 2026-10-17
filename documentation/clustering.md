@@ -491,6 +491,11 @@ scope, with its cell count. Untick what you do not want. Cells with **no**
 classification are listed last, in italics, and are a choice of their own -- "the ones
 nothing has labelled yet" is a legitimate population to cluster.
 
+Your ticks survive a change of scope. A ticked class that the new scope does not contain
+is named in the status line ("Ticked, but on no cell in this scope: ...") and stays
+ticked, so the run still covers only the classes you chose. Switching to **Specific
+images...** before you have picked any images does not reset the list either.
+
 The restriction is off by default, and leaving it off runs exactly as it did before this
 option existed.
 
