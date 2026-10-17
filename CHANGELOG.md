@@ -20,6 +20,19 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
   old cell: scrolling alone turned 16 ticked rows of 31 into 31.
 
+- **Neighborhood enrichment from *Spatial statistics on existing clusters* appeared
+  nowhere.** It is ticked by default and was computed, but the post-hoc path drew no
+  heatmap and the results window has no other view of the matrix, so the window showed
+  Ripley and co-occurrence only. It now gets the same Neighborhood Enrichment tab as a
+  clustering run. Found running the queue check "Ripley and co-occurrence no longer claim a
+  graph" over MCP (k=6 vs k=30: enrichment changed in all 55 pairs, Ripley in none -- as it
+  should).
+
+- **The enrichment tab and `spatial-statistics.md` described a red/blue map.** The figure is
+  squidpy's viridis (purple to yellow), scaled to the matrix's own range rather than centred
+  on zero, so "red = enriched, white = random" matched nothing on screen. Both now say which
+  way the colours run and to read zero off the colour bar.
+
 - **Changing the scope could drop or reset the classes you ticked.** The "Cells to cluster"
   ticks were rebuilt from whatever the new scope contained. A ticked class absent from the
   new images vanished from the choice without a word, and did not come back when the scope

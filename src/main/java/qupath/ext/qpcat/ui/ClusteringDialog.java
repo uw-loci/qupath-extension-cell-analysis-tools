@@ -6723,9 +6723,11 @@ public class ClusteringDialog {
                 case "nhood_enrichment" -> {
                     tabName = "Neighborhood Enrichment";
                     guide = "Z-score matrix of spatial co-localization between cluster pairs. "
-                            + "Red (positive) = clusters found as spatial neighbors more often "
-                            + "than expected by chance.\n"
-                            + "Blue (negative) = clusters that spatially avoid each other. "
+                            + "Brighter (toward yellow) = clusters found as spatial neighbors "
+                            + "more often; darker (toward purple) = less often. Only a positive "
+                            + "z-score means more often than chance and a negative one less "
+                            + "often: the colour scale is not centred on zero, so read the colour "
+                            + "bar to see where zero falls.\n"
                             + "Diagonal values show self-enrichment (spatial clustering). "
                             + "Use this to identify tissue microenvironment compositions.";
                     docAnchor = "neighborhood-enrichment-tab";

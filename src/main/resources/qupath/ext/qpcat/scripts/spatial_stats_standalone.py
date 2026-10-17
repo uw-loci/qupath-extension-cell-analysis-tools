@@ -301,6 +301,22 @@ if want_nhood:
         )
     except Exception as e:
         logger.warning("Neighborhood enrichment failed: %s", e)
+    # The heatmap is what the results window shows: without it the matrix was
+    # computed, ticked by default, and never displayed anywhere.
+    if out_dir and "cluster_nhood_enrichment" in adata.uns:
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            sq.pl.nhood_enrichment(adata, cluster_key="cluster", show=False)
+            p = os.path.join(out_dir, "nhood_enrichment.png")
+            plt.savefig(p, dpi=dpi, bbox_inches="tight")
+            plt.close("all")
+            plot_paths["nhood_enrichment"] = p
+        except Exception as e:
+            logger.warning("Failed to draw the neighborhood enrichment heatmap: %s", e)
 
 if want_moran:
     if feats is None or mnames is None:

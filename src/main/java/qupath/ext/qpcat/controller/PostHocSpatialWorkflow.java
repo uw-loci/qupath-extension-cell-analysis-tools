@@ -762,6 +762,17 @@ public class PostHocSpatialWorkflow {
         inputs.put("enable_nhood_enrichment", opts.nhood);
         inputs.put("enable_moran", opts.moran);
         inputs.put("coord_unit", coordUnit != null ? coordUnit : "px");
+        if (opts.nhood) {
+            // The enrichment matrix has no JavaFX view; the results window shows the
+            // same heatmap PNG a clustering run draws. Without a directory nothing was
+            // drawn, and a statistic ticked by default appeared nowhere.
+            try {
+                inputs.put("output_dir",
+                        java.nio.file.Files.createTempDirectory("qpcat-plots-").toString());
+            } catch (java.io.IOException e) {
+                logger.warn("No directory for the enrichment heatmap: {}", e.getMessage());
+            }
+        }
         if (featNd != null) {
             inputs.put("feature_matrix", featNd);
             inputs.put("marker_names", new ArrayList<>(List.of(markerNames)));
@@ -792,6 +803,11 @@ public class PostHocSpatialWorkflow {
                 classNames.toArray(new String[0]));
 
         Gson gson = new Gson();
+        if (outputs.containsKey("plot_paths")) {
+            Map<String, String> paths = gson.fromJson(String.valueOf(outputs.get("plot_paths")),
+                    new com.google.gson.reflect.TypeToken<Map<String, String>>(){}.getType());
+            result.setPlotPaths(paths);
+        }
         if (outputs.containsKey("spatial_graph_type")) {
             result.setSpatialGraphType(String.valueOf(outputs.get("spatial_graph_type")));
         }

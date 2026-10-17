@@ -71,9 +71,11 @@ Enable spatial analysis when:
 ### Interpreting Neighborhood Enrichment
 
 The z-score matrix shows:
-- **Positive values (red):** clusters appear together more than expected (co-localization)
-- **Negative values (blue):** clusters avoid each other (exclusion)
-- **Near-zero (white):** random spatial relationship
+- **Positive values (toward yellow):** clusters appear together more than expected (co-localization)
+- **Negative values (toward purple):** clusters avoid each other (exclusion)
+- **Near zero:** random spatial relationship. The colour scale runs from the matrix's own
+  minimum to its maximum and is not centred on zero, so read the colour bar to see which
+  colour zero is.
 
 <a name="autocorr-p-values"></a>
 ### Interpreting Moran's I and Geary's C
