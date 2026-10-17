@@ -14,11 +14,13 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Project rule (2026-10-12): an error the user sees in a dialog is also logged at ERROR, so a
- * bug report or a log review finds it. A scan of this repo on 2026-10-16 found 18 of its 55
- * error dialogs with no log line near them. These tests keep the unlogged form from coming
- * back -- a new dialog that skips the helper fails the build with its own file and line.
+ * bug report or a log review finds it. Scans that October found error dialogs with no log line
+ * near them in all three extensions that carry this test. These tests keep the unlogged form
+ * from coming back -- a new dialog that skips the helper fails the build with its own file and
+ * line.
  *
- * <p>Mirrors {@code qupath.ext.qpsc.ui.UserErrorsTest}, which established the rule.
+ * <p>Shared by copy, with {@code UserErrors}, among QPSC, QP-CAT and the DL classifier;
+ * {@code tools/check_appose_copies.py} keeps the copies identical. Change one, then sync.
  */
 class UserErrorsTest {
 
