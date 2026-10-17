@@ -912,17 +912,6 @@ public final class QpcatPreferences {
                         + "each other."))
                 .build());
 
-        items.add(new PropertyItemBuilder<>(clusterPlotDpi, Integer.class)
-                .name("Plot DPI")
-                .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Resolution for saved clustering plots in DPI (default: 150). "
-                        + "Higher = larger files but sharper images. Range: 72-300. "
-                        + "Also scales the 'Save plot...' button in the results window, which "
-                        + "snapshots the on-screen tab: at 150 the PNG is about 1.6x the "
-                        + "displayed size, so it holds up in a figure rather than looking "
-                        + "like a screenshot."))
-                .build());
-
         items.add(new PropertyItemBuilder<>(clusterPcaPrecursorComponents, Integer.class)
                 .name("PCA Precursor Components")
                 .category(CATEGORY_CLUSTERING)
@@ -1359,7 +1348,9 @@ public final class QpcatPreferences {
                 .description(Tooltips.wrap("Resolution of the saved analysis figures "
                         + "(default: 300). At 150 a stacked violin on 34 markers gives only "
                         + "about 42 pixels per violin, which no amount of zooming recovers. "
-                        + "Higher costs disk and render time. Range: 100-600."))
+                        + "Higher costs disk and render time. Range: 100-600. Also scales "
+                        + "the results window's 'Save plot...' export, which snapshots the "
+                        + "on-screen tab, so it matches these figures."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(acknowledgedBackupWarning, Boolean.class)

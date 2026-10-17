@@ -5458,7 +5458,7 @@ public class ClusteringDialog {
         Button savePlotBtn = new Button("Save plot...");
         savePlotBtn.setTooltip(Tooltips.of(
                 "Save the plot in the current tab as a PNG, exactly as displayed.\n"
-                + "Resolution follows the 'Plot DPI' preference, so it matches the\n"
+                + "Resolution follows the 'Plot resolution (DPI)' preference, so it matches the\n"
                 + "figures QP-CAT writes itself rather than being a screenshot."));
         savePlotBtn.setOnAction(e -> savePlotSnapshot(tabPane, stage, resultsFolder));
 
@@ -5902,7 +5902,7 @@ public class ClusteringDialog {
     /**
      * Save the currently selected results tab as a PNG, exactly as displayed.
      * <p>
-     * Rendered at the "Plot DPI" preference rather than 1:1, so the tabs with no
+     * Rendered at the "Plot resolution (DPI)" preference rather than 1:1, so the tabs with no
      * matplotlib equivalent (heatmap, marker fingerprints) do not end up as the
      * only screen-resolution figures in the folder.
      */

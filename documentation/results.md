@@ -733,7 +733,7 @@ Heatmap, Marker Fingerprints, Embedding and 3D View tabs are drawn live and have
 export, so this is the only way to get them out.
 
 The chooser opens in this result's own folder. The PNG includes content scrolled out of
-view, and resolution follows the **Plot DPI** preference, so it matches the figures
+view, and resolution follows the **Plot resolution (DPI)** preference, so it matches the figures
 QP-CAT writes itself rather than being a screenshot. The default filename is the tab
 name.
 

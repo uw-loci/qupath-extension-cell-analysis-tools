@@ -162,7 +162,7 @@ rather than per run.
 | Setting | Where | Effect |
 |---|---|---|
 | **Plot Feature Limit** | Preferences (default 40) | Above this, the dot plot / matrix plot / stacked violin show the most discriminative features rather than all of them. The stacked violin fits a curve per feature *per cluster*, so this is the dominant plotting cost on wide panels. The figure states how many of how many it shows. |
-| **Plot DPI** | Preferences (default 150) | Higher is slower to write and larger on disk. Also scales the results window's "Save plot..." export. |
+| **Plot resolution (DPI)** | Preferences (default 300) | Higher is slower to write and larger on disk. Also scales the results window's "Save plot..." export. |
 | Embedding scatter decimation | automatic | Above a threshold the interactive scatter draws a subsample; the tab title says so. Not configurable, and it never changes the clustering. |
 
 ### Not a setting, but the biggest lever

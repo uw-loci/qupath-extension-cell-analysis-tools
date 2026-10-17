@@ -20,6 +20,14 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
   old cell: scrolling alone turned 16 ticked rows of 31 into 31.
 
+- **The figure DPI was in the preferences twice, with different defaults.** *QP-CAT: Run
+  Clustering* listed **Plot DPI** ("default: 150, range 72-300") and **Plot resolution
+  (DPI)** ("default: 300, range 100-600") -- one setting, registered twice. 0.18.0 added the
+  second believing the first did not exist. One entry remains, *Plot resolution (DPI)*, with
+  the true default (300); `results.md`, `reproducibility.md` and the Save plot tooltip now
+  use that name, and `reproducibility.md` no longer says the default is 150. Checked over
+  MCP: a change to 200 survives a QuPath restart.
+
 - **Neighborhood enrichment from *Spatial statistics on existing clusters* appeared
   nowhere.** It is ticked by default and was computed, but the post-hoc path drew no
   heatmap and the results window has no other view of the matrix, so the window showed
