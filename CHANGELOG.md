@@ -6,8 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
-Seven items off the backlog, plus a results-tab audit. **Not released** -- version stays
-0.21.0 until there is more here.
+## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
+
+**Upgrade if you use 0.21.0 on several images at once:** a multi-image run while one of its
+images was open in the viewer could lose that image's labels on save (fixed below). Also new:
+naming clusters through any chatbot or an AI agent with no API key, Moran's I that actually
+works, cluster confidence, Choose k, gates that save and replay, crop + feature-table export,
+and every spatial distance from a clustering run reported in microns.
+
+**One behaviour change to know about:** the Radius graph and co-occurrence Matrix radius
+settings are now microns. A saved config that set either in pixels builds a different graph
+on 0.22.0 (the automatic values are unaffected).
 
 ### Changed
 
