@@ -11,6 +11,15 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
 
 ### Fixed
 
+- **Ticking a class in "Cells to cluster" ticked others too.** The list reuses its rows as
+  it scrolls, and each reuse added another listener that was never removed. A tick then
+  reached every class that row had shown, and scrolling copied one class's tick onto
+  others, so a run restricted to chosen classes could quietly cluster a different set of
+  cells. In the real dialog, ticking only the unclassified row also ticked four clusters.
+  Present since 0.12.0 (the list first belonged to *Analyze current cell classifications*,
+  which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
+  old cell: scrolling alone turned 16 ticked rows of 31 into 31.
+
 - **Every error dialog is now in the log.** All 55 error dialogs and notifications go through
   one helper, `ui/UserErrors`, which writes the title and text to the log at ERROR (a line
   starting `Error dialog "<title>"`) before showing it. 18 of them had no log line before, so

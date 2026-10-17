@@ -818,7 +818,7 @@ public class ClusteringDialog {
     // --- Analyze current classifications --------------------------------
 
     /** One class found in the scope, with its cell count and whether to include it. */
-    private static final class ClassRow {
+    static final class ClassRow {
         final String name;
         final int count;
         /**
@@ -838,6 +838,37 @@ public class ClusteringDialog {
             this.name = name;
             this.count = count;
             this.unclassified = unclassified;
+        }
+    }
+
+    /** One row of the "Cells to cluster" list: a checkbox carrying the class name and count. */
+    static final class ClassRowCell extends ListCell<ClassRow> {
+        private final CheckBox check = new CheckBox();
+        /** The row this cell shows now; null while it is being re-pointed. */
+        private ClassRow shown;
+
+        ClassRowCell() {
+            // One listener for the cell's lifetime, writing to whichever row it
+            // shows. Cells are recycled across rows, so a listener per updateItem
+            // wrote every tick to every row the cell had ever shown.
+            check.selectedProperty().addListener((o, was, now) -> {
+                if (shown != null) shown.included.set(now);
+            });
+        }
+
+        @Override
+        protected void updateItem(ClassRow row, boolean empty) {
+            super.updateItem(row, empty);
+            shown = null;
+            if (empty || row == null) {
+                setGraphic(null);
+                return;
+            }
+            check.setText(row.name + "  (" + row.count + " cells)");
+            check.setStyle(row.unclassified ? "-fx-font-style: italic;" : null);
+            check.setSelected(row.included.get());
+            shown = row;
+            setGraphic(check);
         }
     }
 
@@ -879,26 +910,7 @@ public class ClusteringDialog {
                 + "a heatmap row, a marker-ranking group, a composition column.\n\n"
                 + "Nothing here is written back -- unticking a class leaves it out\n"
                 + "of the comparison, it does not change any cell."));
-        classificationsList.setCellFactory(lv -> new ListCell<>() {
-            private final CheckBox check = new CheckBox();
-
-            @Override
-            protected void updateItem(ClassRow row, boolean empty) {
-                super.updateItem(row, empty);
-                if (empty || row == null) {
-                    setGraphic(null);
-                    return;
-                }
-                check.setText(row.name + "  (" + row.count + " cells)");
-                check.setStyle(row.unclassified ? "-fx-font-style: italic;" : null);
-                // Unbind before rebinding: cells are recycled across rows, and a
-                // stale bidirectional binding would tick the wrong class.
-                check.selectedProperty().unbind();
-                check.setSelected(row.included.get());
-                check.selectedProperty().addListener((o, was, now) -> row.included.set(now));
-                setGraphic(check);
-            }
-        });
+        classificationsList.setCellFactory(lv -> new ClassRowCell());
 
         classificationsStatus = new Label();
         classificationsStatus.setWrapText(true);
