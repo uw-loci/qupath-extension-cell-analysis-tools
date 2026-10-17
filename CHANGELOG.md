@@ -20,6 +20,14 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
   old cell: scrolling alone turned 16 ticked rows of 31 into 31.
 
+- **"Replace classifications?" counted cells that the run never touches.** With a class
+  restriction, the current-image prompt counted every classified cell on the image: ticking
+  only the 120 unclassified cells warned that "1,410 of 1,530 detections ... will be
+  REPLACED", and the run then left all 1,410 alone. It now counts the cells that enter the
+  run and says how many keep their classification. The project-scope prompt, which said
+  "any existing classification in these images will be REPLACED", now names the restriction.
+  `ReplaceMessageTest`.
+
 - **Every error dialog is now in the log.** All 55 error dialogs and notifications go through
   one helper, `ui/UserErrors`, which writes the title and text to the log at ERROR (a line
   starting `Error dialog "<title>"`) before showing it. 18 of them had no log line before, so

@@ -3796,7 +3796,7 @@ public class ClusteringDialog {
     }
 
     private boolean confirmClassificationOverwrite(
-            List<ProjectImageEntry<BufferedImage>> subsetEntries) {
+            List<ProjectImageEntry<BufferedImage>> subsetEntries, ClusteringConfig config) {
         boolean projectScope = scopeSection.isAllImages() || subsetEntries != null;
 
         if (mode == RunMode.ANALYZE_EXISTING) {
@@ -3870,29 +3870,49 @@ public class ClusteringDialog {
         if (projectScope) {
             int n = subsetEntries != null ? subsetEntries.size()
                     : (qupath.getProject() != null ? qupath.getProject().getImageList().size() : 0);
+            String what = config != null && config.isClassSubsetActive()
+                    ? "Only cells in " + config.describeClassSubset() + " enter this run. "
+                            + "Their classification will be REPLACED by the cluster label; "
+                            + "every other cell keeps its own. The results are saved back "
+                            + "to each image. This cannot be undone."
+                    : "Cluster labels are written as each cell's classification, so any "
+                            + "existing classification in these images will be REPLACED and "
+                            + "the results saved back to each image. This cannot be undone.";
             return Dialogs.showConfirmDialog("QPCAT - replace classifications?",
-                    "Cluster " + n + " project image(s)?\n\n"
-                    + "Cluster labels are written as each cell's classification, so any "
-                    + "existing classification in these images will be REPLACED and the "
-                    + "results saved back to each image. This cannot be undone.");
+                    "Cluster " + n + " project image(s)?\n\n" + what);
         }
 
         var imageData = qupath.getImageData();
         if (imageData == null) {
             return true;
         }
-        var dets = imageData.getHierarchy().getDetectionObjects();
-        long classified = dets.stream()
+        String message = replaceMessage(imageData.getHierarchy().getDetectionObjects(), config);
+        return message == null
+                || Dialogs.showConfirmDialog("QPCAT - replace classifications?", message);
+    }
+
+    /**
+     * The current-image confirmation, or null when no classification would be replaced.
+     * Counts only the cells that enter the run: with a class restriction the others are
+     * never relabelled, and warning about them would misstate what Run does.
+     */
+    static String replaceMessage(Collection<PathObject> dets, ClusteringConfig config) {
+        boolean restricted = config != null && config.isClassSubsetActive();
+        List<PathObject> entering = restricted
+                ? DetectionSelector.selectClasses(dets, config.getIncludedClasses(),
+                        config.isIncludeUnclassified()).getObjects()
+                : new ArrayList<>(dets);
+        long classified = entering.stream()
                 .filter(d -> d.getPathClass() != null
                         && d.getPathClass() != PathClass.getNullClass())
                 .count();
         if (classified == 0) {
-            return true;
+            return null;
         }
         // Name the classes being replaced. "Cluster 0, Cluster 1" is obviously a
         // re-run; "Tumor, Stroma" is the case worth stopping for.
         var names = new java.util.LinkedHashSet<String>();
-        for (PathObject d : dets) {
+        for (PathObject d : entering) {
             PathClass pc = d.getPathClass();
             if (pc != null && pc != PathClass.getNullClass()) {
                 names.add(pc.toString());
@@ -3903,10 +3923,16 @@ public class ClusteringDialog {
         if (names.size() >= 6) {
             shown += ", ...";
         }
-        return Dialogs.showConfirmDialog("QPCAT - replace classifications?",
-                String.format("%,d of %,d detections already have a classification (%s).%n%n"
-                        + "Cluster labels are written as the classification, so these will be "
-                        + "REPLACED. Continue?", classified, dets.size(), shown));
+        String text = String.format("%,d of %,d detections already have a classification (%s).%n%n"
+                + "Cluster labels are written as the classification, so these will be "
+                + "REPLACED.", classified, entering.size(), shown);
+        if (restricted) {
+            text = String.format("%,d of %,d detections enter this run (%s). ",
+                    entering.size(), dets.size(), config.describeClassSubset()) + text
+                    + String.format(" The other %,d keep their classification.",
+                            dets.size() - entering.size());
+        }
+        return text + " Continue?";
     }
 
     private void runClustering() {
@@ -3951,7 +3977,7 @@ public class ClusteringDialog {
             return;
         }
 
-        if (!confirmClassificationOverwrite(subsetEntries)) {
+        if (!confirmClassificationOverwrite(subsetEntries, config)) {
             return;
         }
 
