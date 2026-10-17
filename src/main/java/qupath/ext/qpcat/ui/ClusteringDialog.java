@@ -1029,10 +1029,52 @@ public class ClusteringDialog {
         for (ClassRow r : classRows) {
             r.included.set(included);
         }
+        rememberedClassChoice = included ? null : new LinkedHashSet<>();
+        rememberedUnclassifiedTick = included;
         // The cells bind their checkbox on updateItem, so a model change needs a
         // refresh to reach rows that are already realised.
         if (classificationsList != null) {
             classificationsList.refresh();
+        }
+    }
+
+    /**
+     * The classes the user has ticked, kept across scope changes, or null while every
+     * class is ticked (no choice made). Includes ticked classes the current scope does
+     * not have, so a scope that lacks a class -- or has no images at all -- can neither
+     * drop it from the choice nor reset the choice to every class.
+     */
+    private Set<String> rememberedClassChoice;
+    private boolean rememberedUnclassifiedTick = true;
+
+    /** Fold the list's current ticks into {@link #rememberedClassChoice}. */
+    private void rememberClassChoice() {
+        if (classRows.isEmpty()) {
+            return;
+        }
+        Set<String> shown = new HashSet<>();
+        Set<String> ticked = new LinkedHashSet<>();
+        boolean anyUnticked = false;
+        for (ClassRow r : classRows) {
+            if (r.unclassified) {
+                rememberedUnclassifiedTick = r.included.get();
+            } else {
+                shown.add(r.name);
+                if (r.included.get()) ticked.add(r.name);
+            }
+            anyUnticked |= !r.included.get();
+        }
+        if (rememberedClassChoice != null) {
+            for (String name : rememberedClassChoice) {
+                if (!shown.contains(name)) ticked.add(name);
+            }
+            anyUnticked |= !ticked.equals(shown);
+        }
+        if (anyUnticked) {
+            rememberedClassChoice = ticked;
+        } else {
+            rememberedClassChoice = null;
+            rememberedUnclassifiedTick = true;
         }
     }
 
@@ -1045,6 +1087,7 @@ public class ClusteringDialog {
      */
     private void refreshClassifications() {
         if (classificationsList == null) return;
+        rememberClassChoice();
         List<ProjectImageEntry<BufferedImage>> entries = null;
         Project<BufferedImage> project = qupath.getProject();
         if (scopeSection != null && !scopeSection.isCurrentImage() && project != null) {
@@ -1057,20 +1100,9 @@ public class ClusteringDialog {
             if (entries == null) entries = project.getImageList();
         }
 
-        Set<String> keep = new LinkedHashSet<>();
-        boolean keepUnclassifiedTick = false;
-        for (ClassRow r : classRows) {
-            if (!r.included.get()) {
-                continue;
-            }
-            if (r.unclassified) {
-                keepUnclassifiedTick = true;
-            } else {
-                keep.add(r.name);
-            }
-        }
-        final boolean keptUnclassified = keepUnclassifiedTick;
-        boolean hadRows = !classRows.isEmpty();
+        final Set<String> choice = rememberedClassChoice == null
+                ? null : new LinkedHashSet<>(rememberedClassChoice);
+        final boolean keptUnclassified = rememberedUnclassifiedTick;
 
         classificationsStatus.setText("Reading classifications...");
         final List<ProjectImageEntry<BufferedImage>> scope = entries;
@@ -1118,9 +1150,10 @@ public class ClusteringDialog {
                 classRows.clear();
                 for (Map.Entry<String, Integer> e : found.entrySet()) {
                     ClassRow row = new ClassRow(e.getKey(), e.getValue());
-                    // Keep the user's ticks across a refresh; a class that is new
-                    // since the last read starts included.
-                    row.included.set(!hadRows || keep.contains(e.getKey()));
+                    // Keep the user's ticks across a refresh. With no choice made
+                    // every class is ticked; under a choice a class seen for the
+                    // first time starts unticked.
+                    row.included.set(choice == null || choice.contains(e.getKey()));
                     classRows.add(row);
                 }
                 // Subsetting treats "nothing has labelled these yet" as a
@@ -1129,7 +1162,7 @@ public class ClusteringDialog {
                 if (subsetMode && unclassifiedCount > 0) {
                     ClassRow row = new ClassRow(CellClasses.UNCLASSIFIED_DISPLAY,
                             unclassifiedCount, true);
-                    row.included.set(!hadRows || keptUnclassified);
+                    row.included.set(choice == null || keptUnclassified);
                     classRows.add(row);
                 }
                 StringBuilder sb = new StringBuilder();
@@ -1139,6 +1172,17 @@ public class ClusteringDialog {
                       .append(subsetMode ? " listed last" : " will be excluded");
                 }
                 sb.append('.');
+                boolean ticksMatter = mode == RunMode.ANALYZE_EXISTING
+                        || (restrictToClassesCheck != null && restrictToClassesCheck.isSelected());
+                if (choice != null && ticksMatter) {
+                    List<String> absent = new ArrayList<>(choice);
+                    absent.removeAll(found.keySet());
+                    if (!absent.isEmpty()) {
+                        sb.append(" Ticked, but on no cell in this scope: ")
+                          .append(String.join(", ", absent))
+                          .append(". The run covers only the ticked classes listed here.");
+                    }
+                }
                 classificationsStatus.setText(sb.toString());
                 // A config applied before this read finished could not tick rows
                 // that did not exist; do it now.
@@ -3164,6 +3208,8 @@ public class ClusteringDialog {
                 found.add(row.name);
             }
         }
+        rememberedClassChoice = new LinkedHashSet<>(pendingClassSubset);
+        rememberedUnclassifiedTick = pendingIncludeUnclassified;
         List<String> missing = new ArrayList<>(pendingClassSubset);
         missing.removeAll(found);
         if (!missing.isEmpty()) {

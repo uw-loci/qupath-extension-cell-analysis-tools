@@ -20,6 +20,16 @@ Seven items off the backlog, plus a results-tab audit. **Not released** -- versi
   which has the same bug), in every release up to 0.21.0. `ClassRowCellTest` fails on the
   old cell: scrolling alone turned 16 ticked rows of 31 into 31.
 
+- **Changing the scope could drop or reset the classes you ticked.** The "Cells to cluster"
+  ticks were rebuilt from whatever the new scope contained. A ticked class absent from the
+  new images vanished from the choice without a word, and did not come back when the scope
+  did; and choosing **Specific images...**, which shows no images until you pick some,
+  turned every class back on, so the run covered every cell. The dialog now remembers the
+  choice across scope changes, and a ticked class the scope lacks is named in the status
+  line ("Ticked, but on no cell in this scope: ..."). Before, that line appeared only when a
+  saved config was loaded. Found by the manual-queue check "The subset survives a save and
+  reload", run over MCP.
+
 - **"Replace classifications?" counted cells that the run never touches.** With a class
   restriction, the current-image prompt counted every classified cell on the image: ticking
   only the 120 unclassified cells warned that "1,410 of 1,530 detections ... will be
