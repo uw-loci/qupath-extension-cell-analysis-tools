@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Fixed
+
+- **The composition pies used JavaFX's default colors, not the cluster colors.** The legend
+  above them showed the cluster palette, so a wedge could not be matched to its cluster. The
+  slice color was applied by a listener that was attached after the slice already existed, so
+  it never ran. The exported composition figure was not affected; it is drawn separately.
+
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 
 **Upgrade if you use 0.21.0 on several images at once:** a multi-image run while one of its

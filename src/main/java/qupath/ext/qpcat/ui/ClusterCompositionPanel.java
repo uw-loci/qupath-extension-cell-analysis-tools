@@ -307,13 +307,21 @@ public class ClusterCompositionPanel extends BorderPane {
             chart.getData().add(d);
             sliceRefs.add(new Object[]{c, d});
             double pct = total > 0 ? 100.0 * row[c] / total : 0;
-            // Node exists only once the slice is laid out; style + tooltip then.
+            // PieChart creates the slice's node as soon as the slice is added, so a
+            // listener alone never fired and every pie kept JavaFX's default colors.
+            // Style the node that exists now, and any node that later replaces it.
+            java.util.function.Consumer<javafx.scene.Node> style = n -> {
+                n.setStyle("-fx-pie-color: " + toHex(colorFor(cluster)) + ";");
+                Tooltip.install(n, Tooltips.of(String.format(
+                        "%s: %d cells (%.1f%%)",
+                        figure.clusterName(cluster), row[cluster], pct)));
+            };
+            if (d.getNode() != null) {
+                style.accept(d.getNode());
+            }
             d.nodeProperty().addListener((obs, oldN, newN) -> {
                 if (newN != null) {
-                    newN.setStyle("-fx-pie-color: " + toHex(colorFor(cluster)) + ";");
-                    Tooltip.install(newN, Tooltips.of(String.format(
-                            "%s: %d cells (%.1f%%)",
-                            figure.clusterName(cluster), row[cluster], pct)));
+                    style.accept(newN);
                 }
             });
         }
