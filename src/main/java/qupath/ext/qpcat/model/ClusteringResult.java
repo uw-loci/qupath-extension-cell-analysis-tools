@@ -40,6 +40,7 @@ public class ClusteringResult {
 
     // Post-analysis results (set after construction)
     private String markerRankingsJson;
+    private String validationJson;
     // How marginal each cell's hard label was. Null for the algorithms that
     // produce no such quantity (Leiden, Agglomerative, BANKSY, supplied labels).
     private MembershipConfidence membershipConfidence;
@@ -153,6 +154,10 @@ public class ClusteringResult {
     public String getMarkerRankingsJson() { return markerRankingsJson; }
     public void setMarkerRankingsJson(String json) { this.markerRankingsJson = json; }
     public boolean hasMarkerRankings() { return markerRankingsJson != null; }
+
+    /** Stability and agreement checks as JSON ({@code run_clustering.py} "validation"); may be null. */
+    public String getValidationJson() { return validationJson; }
+    public void setValidationJson(String json) { this.validationJson = json; }
 
     public double[][] getPagaConnectivity() { return pagaConnectivity; }
     public void setPagaConnectivity(double[][] conn) { this.pagaConnectivity = conn; }

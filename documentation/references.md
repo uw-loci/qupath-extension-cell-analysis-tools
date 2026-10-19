@@ -236,6 +236,41 @@ QP-CAT implements this directly (`scikit-learn` `NearestNeighbors` + `KMeans`); 
 
 ---
 
+<a name="validation"></a>
+### Validation: stability across seeds and agreement with known classes
+
+**Cluster consistency score (stability across seeds):**
+> Liu CC, Greenwald NF, Kong A, et al. "Robust phenotyping of highly multiplexed tissue imaging data using pixel-level clustering." *Nature Communications* 14, 4618 (2023).
+> https://doi.org/10.1038/s41467-023-40068-5
+
+QP-CAT follows the Methods section "Cluster consistency score": several runs that differ only
+in the seed (Pixie used five) and, per cluster, the fewest clusters of another run that hold
+95% of its cells. Pixie compares every replicate with every other; QP-CAT compares each
+re-run with the reported clustering, so the score attaches to the clusters on screen.
+
+**Adjusted Rand index:**
+> Hubert L, Arabie P. "Comparing partitions." *Journal of Classification* 2, 193-218 (1985).
+> https://doi.org/10.1007/BF01908075
+
+**Normalized mutual information (and why it is used beside ARI):**
+> Vinh NX, Epps J, Bailey J. "Information Theoretic Measures for Clusterings Comparison: Variants, Properties, Normalization and Correction for Chance." *Journal of Machine Learning Research* 11, 2837-2854 (2010).
+> https://jmlr.org/papers/v11/vinh10a.html
+
+**Cohen's kappa:**
+> Cohen J. "A Coefficient of Agreement for Nominal Scales." *Educational and Psychological Measurement* 20(1), 37-46 (1960).
+> https://doi.org/10.1177/001316446002000104
+
+**Matching clusters to classes (Hungarian algorithm):**
+> Kuhn HW. "The Hungarian method for the assignment problem." *Naval Research Logistics Quarterly* 2(1-2), 83-97 (1955).
+> https://doi.org/10.1002/nav.3800020109
+
+Computed with scikit-learn (`adjusted_rand_score`, `normalized_mutual_info_score`,
+`cohen_kappa_score`) and SciPy (`linear_sum_assignment`).
+
+**Used in:** Clustering dialog > Analysis > Validation; the [Validation tab](results.md#validation-tab)
+
+---
+
 ## Dimensionality Reduction
 
 ### UMAP

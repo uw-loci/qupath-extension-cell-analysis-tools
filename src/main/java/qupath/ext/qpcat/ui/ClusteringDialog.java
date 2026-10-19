@@ -31,6 +31,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.RunCostSummary;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
+import qupath.ext.qpcat.model.ValidationReport;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import qupath.ext.qpcat.service.AutocorrTables;
@@ -223,6 +224,9 @@ public class ClusteringDialog {
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
     private CheckBox pagaCheck;
+    private CheckBox stabilityCheck;
+    private Spinner<Integer> stabilityRepeatsSpinner;
+    private CheckBox compareClassesCheck;
     private CheckBox spatialAnalysisCheck;
     /** Why the spatial statistics are greyed out; shown only while subsetting. */
     private Label spatialStatsSubsetNote;
@@ -1807,11 +1811,83 @@ public class ClusteringDialog {
         VBox box = new VBox(5, generatePlotsCheck, pagaCheck, spatialStatsSubsetNote,
                 spatialAnalysisCheck,
                 smoothingRow, pcaPrecursorCheck, batchCorrectionCheck, batchKeyRow,
-                areasPane, spatialStatsPane);
+                createValidationPane(), areasPane, spatialStatsPane);
         // The class picker is built before this section, so its listener could not
         // reach these controls yet; settle the gate now that they exist.
         refreshSpatialStatsAvailability();
         return box;
+    }
+
+    /**
+     * The two optional checks of a run: stability across seeds and agreement with
+     * the classifications the cells already carry. Both off by default.
+     */
+    private TitledPane createValidationPane() {
+        stabilityCheck = new CheckBox("Stability across seeds (re-runs the clustering)");
+        stabilityCheck.setSelected(false);
+        stabilityCheck.setTooltip(Tooltips.of(
+                "Run the same clustering again with other random seeds and report how\n"
+                + "much the clusters move: the adjusted Rand index between every pair of\n"
+                + "runs, and per cluster how many re-run clusters it takes to hold 95% of\n"
+                + "its cells (Pixie's consistency score, Liu et al. 2023).\n\n"
+                + "A cluster that falls apart when only the seed changes was never a\n"
+                + "real population.\n\n"
+                + "COST: the clustering step runs (repeats + 1) times. The embedding and\n"
+                + "the statistics are not repeated.\n\n"
+                + "Only for Leiden, KMeans, MiniBatch KMeans and GMM: HDBSCAN and\n"
+                + "Agglomerative give the same clusters for the same data whatever the\n"
+                + "seed, and BANKSY is not supported."));
+        stabilityRepeatsSpinner = new Spinner<>(2, 20, 5);
+        stabilityRepeatsSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(stabilityRepeatsSpinner);
+        stabilityRepeatsSpinner.setPrefWidth(70);
+        stabilityRepeatsSpinner.setTooltip(Tooltips.of(
+                "How many extra runs, each with another seed. Pixie used 5."));
+        stabilityRepeatsSpinner.disableProperty().bind(
+                stabilityCheck.selectedProperty().not().or(stabilityCheck.disableProperty()));
+        Runnable refreshStabilityGate = () -> {
+            ClusteringConfig.Algorithm a = effectiveAlgorithm();
+            boolean usable = a != null && ClusteringConfig.isSeedStabilityApplicable(a);
+            stabilityCheck.setDisable(!usable);
+            if (!usable) stabilityCheck.setSelected(false);
+        };
+        algorithmCombo.valueProperty().addListener((o, ov, nv) -> refreshStabilityGate.run());
+        refreshStabilityGate.run();
+        stabilityCheck.selectedProperty().addListener((o, ov, nv) -> {
+            refreshRunCostLabel();
+            updatePreflight();
+        });
+        stabilityRepeatsSpinner.valueProperty().addListener((o, ov, nv) -> {
+            refreshRunCostLabel();
+            updatePreflight();
+        });
+        HBox stabilityRow = new HBox(8, stabilityCheck,
+                tipLabel("Extra runs:", stabilityRepeatsSpinner), stabilityRepeatsSpinner);
+        stabilityRow.setAlignment(Pos.CENTER_LEFT);
+
+        compareClassesCheck = new CheckBox(
+                "Agreement with the classifications the cells already have");
+        compareClassesCheck.setSelected(false);
+        compareClassesCheck.setTooltip(Tooltips.of(
+                "Compare the new clusters with the classes the cells carry BEFORE this\n"
+                + "run -- a prior phenotyping, a manual annotation, ground truth. Reports\n"
+                + "the adjusted Rand index and normalized mutual information, a cluster x\n"
+                + "class table, and Cohen's kappa after matching each cluster to at most\n"
+                + "one class. Cells with no class are left out and counted.\n\n"
+                + "If the cells still carry a previous run's 'Cluster N' classes, this\n"
+                + "compares the two runs."));
+        if (mode == RunMode.ANALYZE_EXISTING) {
+            compareClassesCheck.setDisable(true);
+            compareClassesCheck.setTooltip(Tooltips.of(
+                    "Not available when analysing existing classifications: the\n"
+                    + "classes ARE the labels here, so they would agree perfectly."));
+        }
+
+        VBox body = new VBox(5, stabilityRow, compareClassesCheck);
+        TitledPane pane = new TitledPane("Validation", body);
+        pane.setCollapsible(true);
+        pane.setExpanded(false);
+        return pane;
     }
 
     /**
@@ -3258,6 +3334,10 @@ public class ClusteringDialog {
         config.setPcaPrecursor(pcaPrecursorCheck.isSelected());
         config.setEnableBatchCorrection(batchCorrectionCheck.isSelected());
         config.setComputePaga(pagaCheck.isSelected());
+        config.setStabilityRepeats(stabilityCheck.isSelected() && !stabilityCheck.isDisabled()
+                ? stabilityRepeatsSpinner.getValue() : 0);
+        config.setCompareWithClasses(compareClassesCheck.isSelected()
+                && !compareClassesCheck.isDisabled());
         config.setAreaLevels(areasSection.getAreaLevels());
         config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
                 ? ClusteringConfig.BATCH_KEY_AREAS : ClusteringConfig.BATCH_KEY_IMAGES);
@@ -3722,6 +3802,14 @@ public class ClusteringDialog {
         pcaPrecursorCheck.setSelected(config.isPcaPrecursor());
         batchCorrectionCheck.setSelected(config.isEnableBatchCorrection());
         pagaCheck.setSelected(config.isComputePaga());
+        if (config.getStabilityRepeats() > 0 && !stabilityCheck.isDisabled()) {
+            stabilityRepeatsSpinner.getValueFactory().setValue(config.getStabilityRepeats());
+            stabilityCheck.setSelected(true);
+        } else {
+            stabilityCheck.setSelected(false);
+        }
+        compareClassesCheck.setSelected(config.isCompareWithClasses()
+                && !compareClassesCheck.isDisabled());
         areasSection.setAreaLevels(config.getAreaLevels());
         batchKeyCombo.setValue(
                 ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey())
@@ -5120,6 +5208,24 @@ public class ClusteringDialog {
                     "cluster-confidence-tab"));
             confTab.setClosable(false);
             tabPane.getTabs().add(confTab);
+        }
+
+        // Validation tab -- only when the run computed a stability or agreement check.
+        ValidationReport validation = ValidationReport.parse(result.getValidationJson());
+        if (validation != null) {
+            Tab valTab = new Tab("Validation", wrapWithGuide(
+                    new ValidationPanel(validation, result.clusterNameFn()),
+                    "Two checks you can ask for under Validation in the clustering dialog.\n"
+                    + "STABILITY: the same clustering re-run with other seeds. An adjusted "
+                    + "Rand index near 1 and consistency near 1 mean the clusters do not "
+                    + "depend on the seed; a cluster with high consistency splits or merges "
+                    + "between runs and should not be named as a population.\n"
+                    + "AGREEMENT: the clusters against the classes the cells had before the "
+                    + "run. High agreement says the clustering recovers those classes; it "
+                    + "says nothing about classes the cells did not carry.",
+                    "validation-tab"));
+            valTab.setClosable(false);
+            tabPane.getTabs().add(valTab);
         }
 
         // Marker rankings tab

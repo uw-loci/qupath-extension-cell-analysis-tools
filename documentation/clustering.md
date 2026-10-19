@@ -157,6 +157,12 @@ measurement you can map in the viewer, which is how you tell a real boundary fro
 through the middle of a continuum. **Leiden, Agglomerative and BANKSY produce no such
 quantity and none is invented for them**, so with those you still have hard labels only.
 
+Two checks you can ask for before a run, under **Analysis > Validation** (both off by default):
+**Stability across seeds** re-runs the clustering with other seeds and reports how much the
+clusters move, which works for Leiden too; **Agreement with the classifications the cells
+already have** compares the clusters with a prior phenotyping or ground truth. See
+[Validation](results.md#validation-tab).
+
 Either way:
 
 - **Re-run with different seeds and parameters** and check the boundary cells stay put.

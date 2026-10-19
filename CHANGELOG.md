@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Added
+
+- **Validation: stability across seeds, and agreement with known classes.** Two optional
+  checks under *Analysis > Validation* in the Clustering dialog, both off by default, shown
+  in a new **Validation** results tab and saved with the result.
+  - *Stability across seeds* re-runs the clustering (Leiden, KMeans, MiniBatch KMeans or
+    GMM) with other seeds -- 5 extra runs by default -- and reports the adjusted Rand index
+    between every pair of runs and, per cluster, Pixie's consistency score (how many re-run
+    clusters it takes to hold 95% of a cluster's cells; Liu et al. 2023). It multiplies the
+    clustering time, so the pre-run cost line says so and the scale guard counts it.
+  - *Agreement with the classifications the cells already have* compares the clusters with
+    a prior phenotyping or ground truth: adjusted Rand index, normalized mutual information,
+    a cluster x class table, purity, and Cohen's kappa after matching each cluster to at most
+    one class (Hungarian algorithm). Unclassified cells are left out and counted.
+
 ### Fixed
 
 - **Reproducibility guide: fewer spatial permutations are not free.** The guide listed the

@@ -56,6 +56,12 @@ public final class RunCostSummary {
         if (config.isEnableSpatialSmoothing()) {
             costs.add("Spatial smoothing is on -- repeatable, but not comparable to runs without it");
         }
+        if (config.getStabilityRepeats() > 0
+                && ClusteringConfig.isSeedStabilityApplicable(config.getAlgorithm())) {
+            costs.add("Stability check re-runs the clustering " + config.getStabilityRepeats()
+                    + " more times -- that step takes about " + (config.getStabilityRepeats() + 1)
+                    + "x as long");
+        }
         if (config.getAlgorithm() == ClusteringConfig.Algorithm.MINIBATCHKMEANS) {
             costs.add("MiniBatch KMeans is approximate -- results differ from full KMeans");
         }

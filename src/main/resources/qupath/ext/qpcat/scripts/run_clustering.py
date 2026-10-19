@@ -48,6 +48,10 @@ Optional inputs:
   supplied_labels: NDArray (N_cells,) int32 -- cluster label per cell, supplied by
     the caller instead of computed here. Required when algorithm == "existing",
     ignored otherwise. Must be dense 0..k-1; see validate_supplied_labels.
+  stability_repeats: int (default 0) -- re-run the clustering this many times with
+    other seeds and report stability_across_seeds (seeded algorithms only)
+  reference_labels: NDArray (N_cells,) int32 -- class code per cell, -1 for none;
+    with reference_names (list[str]) asks for agreement_with_classes
 
 Outputs (via task.outputs):
   cluster_labels: NDArray (N_cells,) int32
@@ -64,6 +68,8 @@ Outputs (via task.outputs):
   nhood_cluster_names: str (JSON) -- cluster names for enrichment matrix
   spatial_autocorr: str (JSON) -- per-marker Moran's I scores
   plot_paths: str (JSON) -- dict of plot type -> file path (if generate_plots)
+  validation: str (JSON) -- {"stability": ..., "agreement": ...}, each present only
+    when asked for and computed
 """
 
 import sys
@@ -263,6 +269,24 @@ try:
     supplied_labels_arr = np.asarray(raw_supplied).astype(np.int32).ravel()
 except NameError:
     supplied_labels_arr = None
+
+# Validation (both opt-in). stability_repeats re-runs the clustering that many
+# times with other seeds; reference_labels are the classes the cells carried
+# before this run (code per cell, -1 for none) and reference_names their names.
+try:
+    pref_stability_repeats = max(0, int(stability_repeats))
+except NameError:
+    pref_stability_repeats = 0
+try:
+    try:
+        _raw_ref = reference_labels.ndarray()
+    except AttributeError:
+        _raw_ref = list(reference_labels)
+    reference_codes = np.asarray(_raw_ref).astype(np.int32).ravel()
+    reference_class_names = [str(x) for x in reference_names]
+except NameError:
+    reference_codes = None
+    reference_class_names = None
 
 # Spatial stats expansion (v1) inputs
 try:
@@ -966,6 +990,8 @@ _progress(
 )
 
 labels = None
+# Parameters fit_seeded ran with, for the stability check; None for other algorithms.
+seeded_params = None
 
 # Clustering seed. The GUI exposes a single "Random seed" that drives both the
 # embedding and the (stochastic) clustering algorithm, so a run is fully
@@ -1188,6 +1214,230 @@ def validate_supplied_labels(labels, n_cells):
     return labels
 
 
+# ---- Seeded clustering, shared by the run and the stability check -----------
+#
+# The algorithms whose answer depends on the seed. HDBSCAN and Agglomerative are
+# deterministic for a given matrix, so "stability across seeds" means nothing for
+# them; BANKSY re-runs its own graph and PCA and is not offered.
+SEEDED_ALGORITHMS = ("leiden", "kmeans", "minibatchkmeans", "gmm")
+
+
+def fit_seeded(algorithm, params, matrix, seed):
+    """Run one of SEEDED_ALGORITHMS on ``matrix`` with ``seed``.
+
+    :param algorithm: one of SEEDED_ALGORITHMS
+    :param params: resolved parameters (n_neighbors, resolution, n_clusters,
+        batch_size, n_components, covariance_type)
+    :param matrix: cells x features
+    :param seed: random seed
+    :return: (labels, fitted model); the model is the AnnData for Leiden
+    """
+    if algorithm == "leiden":
+        import scanpy as sc
+        import anndata as ad
+
+        adata = ad.AnnData(X=matrix)
+        sc.pp.neighbors(
+            adata, n_neighbors=params["n_neighbors"], use_rep="X", random_state=seed
+        )
+        sc.tl.leiden(
+            adata,
+            resolution=params["resolution"],
+            flavor="igraph",
+            n_iterations=-1,
+            random_state=seed,
+        )
+        return adata.obs["leiden"].astype(int).values, adata
+    if algorithm == "kmeans":
+        from sklearn.cluster import KMeans
+
+        km = KMeans(n_clusters=params["n_clusters"], n_init=10, random_state=seed)
+        return km.fit_predict(matrix), km
+    if algorithm == "minibatchkmeans":
+        from sklearn.cluster import MiniBatchKMeans
+
+        mbkm = MiniBatchKMeans(
+            n_clusters=params["n_clusters"],
+            batch_size=params["batch_size"],
+            random_state=seed,
+        )
+        return mbkm.fit_predict(matrix), mbkm
+    if algorithm == "gmm":
+        from sklearn.mixture import GaussianMixture
+
+        gmm = GaussianMixture(
+            n_components=params["n_components"],
+            covariance_type=params["covariance_type"],
+            random_state=seed,
+        )
+        return gmm.fit_predict(matrix), gmm
+    raise ValueError("fit_seeded does not handle algorithm %r" % (algorithm,))
+
+
+# ---- Validation: stability across seeds, agreement with known classes -------
+#
+# Share of a cluster's cells that a set of clusters in another run must cover.
+# Pixie's cluster consistency score uses 95% (Liu et al. 2023, Nat Commun 14:4618,
+# doi 10.1038/s41467-023-40068-5, Methods "Cluster consistency score").
+CONSISTENCY_COVERAGE = 0.95
+
+
+def clusters_to_cover(cell_labels_in_other, coverage=CONSISTENCY_COVERAGE):
+    """Fewest clusters of another run holding ``coverage`` of one cluster's cells.
+
+    :param cell_labels_in_other: the other run's labels for this cluster's cells
+    :param coverage: share of the cells to cover
+    :return: 1 when the cluster is intact in the other run; 0 for no cells
+    """
+    vals = np.asarray(cell_labels_in_other)
+    if vals.size == 0:
+        return 0
+    _, counts = np.unique(vals, return_counts=True)
+    counts = np.sort(counts)[::-1]
+    need = coverage * vals.size
+    return int(np.searchsorted(np.cumsum(counts), need - 1e-9) + 1)
+
+
+def stability_across_seeds(reference, replicates, coverage=CONSISTENCY_COVERAGE):
+    """How much a clustering changes when only the seed changes.
+
+    :param reference: labels of the reported run
+    :param replicates: labels of each re-run with a different seed
+    :param coverage: share of a cluster's cells the consistency score must cover
+    :return: dict with pairwise adjusted Rand index over every pair of runs
+        (reference included), ARI of each replicate against the reference, and per
+        reference cluster: its size, the mean number of replicate clusters needed to
+        hold ``coverage`` of its cells (Pixie's consistency score, against the
+        reported clusters; 1 is perfectly stable) and the mean share of its cells
+        found together in one replicate cluster
+    """
+    from itertools import combinations
+    from sklearn.metrics import adjusted_rand_score
+
+    ref = np.asarray(reference).ravel()
+    reps = [np.asarray(r).ravel() for r in replicates]
+    for r in reps:
+        if r.size != ref.size:
+            raise ValueError(
+                "a replicate has %d labels but the reference has %d"
+                % (r.size, ref.size)
+            )
+    runs = [ref] + reps
+    pairwise = [
+        float(adjusted_rand_score(runs[i], runs[j]))
+        for i, j in combinations(range(len(runs)), 2)
+    ]
+    vs_ref = [float(adjusted_rand_score(ref, r)) for r in reps]
+
+    per_cluster = []
+    weighted = 0.0
+    counted = 0
+    for c in sorted(int(x) for x in np.unique(ref) if x >= 0):
+        idx = np.flatnonzero(ref == c)
+        scores = []
+        together = []
+        for r in reps:
+            other = r[idx]
+            scores.append(clusters_to_cover(other, coverage))
+            _, counts = np.unique(other, return_counts=True)
+            together.append(float(counts.max()) / idx.size)
+        mean_score = float(np.mean(scores)) if scores else float("nan")
+        per_cluster.append(
+            {
+                "cluster": c,
+                "n_cells": int(idx.size),
+                "consistency": mean_score,
+                "kept_together": float(np.mean(together)) if together else float("nan"),
+            }
+        )
+        if scores:
+            weighted += mean_score * idx.size
+            counted += idx.size
+    return {
+        "n_runs": len(runs),
+        "coverage": float(coverage),
+        "pairwise_ari": pairwise,
+        "ari_mean": float(np.mean(pairwise)) if pairwise else float("nan"),
+        "ari_min": float(np.min(pairwise)) if pairwise else float("nan"),
+        "ari_vs_reference": vs_ref,
+        "consistency_overall": weighted / counted if counted else float("nan"),
+        "per_cluster": per_cluster,
+    }
+
+
+def agreement_with_classes(cluster_labels, class_codes, class_names):
+    """Agreement between clusters and classifications the cells already carried.
+
+    Cells with no class (code < 0) are excluded and counted. Noise (label < 0) is
+    kept as a group of its own, so a run that discards cells is not flattered.
+
+    :param cluster_labels: per-cell cluster label; negative is noise
+    :param class_codes: per-cell class index into ``class_names``; negative is none
+    :param class_names: class name per code
+    :return: dict with ARI, NMI, a contingency table (rows: clusters, columns:
+        classes), Cohen's kappa after a one-to-one Hungarian matching of clusters to
+        classes, the matching itself, and majority-class purity
+    """
+    from scipy.optimize import linear_sum_assignment
+    from sklearn.metrics import (
+        adjusted_rand_score,
+        cohen_kappa_score,
+        normalized_mutual_info_score,
+    )
+
+    labels = np.asarray(cluster_labels).ravel()
+    codes = np.asarray(class_codes).ravel()
+    if labels.size != codes.size:
+        raise ValueError(
+            "%d cluster labels but %d class codes; they must be index-aligned"
+            % (labels.size, codes.size)
+        )
+    keep = codes >= 0
+    n_excluded = int(np.sum(~keep))
+    lab = labels[keep]
+    cod = codes[keep]
+    out = {"n_cells": int(lab.size), "n_unclassified_excluded": n_excluded}
+    if lab.size == 0:
+        out["error"] = "no cell in the run carries a classification"
+        return out
+
+    clusters = sorted(int(x) for x in np.unique(lab))
+    classes = sorted(int(x) for x in np.unique(cod))
+    row = {c: i for i, c in enumerate(clusters)}
+    col = {k: j for j, k in enumerate(classes)}
+    table = np.zeros((len(clusters), len(classes)), dtype=np.int64)
+    np.add.at(table, ([row[int(x)] for x in lab], [col[int(x)] for x in cod]), 1)
+
+    # One class per cluster at most, maximising the cells on the diagonal.
+    r_idx, c_idx = linear_sum_assignment(-table)
+    match = {clusters[i]: classes[j] for i, j in zip(r_idx, c_idx)}
+    unmatched = -1 - max(classes)  # a code no class has
+    predicted = np.array([match.get(int(x), unmatched) for x in lab])
+    kappa = float(cohen_kappa_score(cod, predicted))
+    matched_share = float(np.mean(predicted == cod))
+    purity = float(table.max(axis=1).sum()) / lab.size
+
+    def name(k):
+        return class_names[k] if 0 <= k < len(class_names) else str(k)
+
+    out.update(
+        {
+            "ari": float(adjusted_rand_score(cod, lab)),
+            "nmi": float(normalized_mutual_info_score(cod, lab)),
+            "kappa_matched": kappa,
+            "matched_share": matched_share,
+            "purity": purity,
+            "clusters": clusters,
+            "classes": [name(k) for k in classes],
+            "contingency": table.tolist(),
+            "matching": [
+                {"cluster": c, "class": name(match[c])} for c in clusters if c in match
+            ],
+        }
+    )
+    return out
+
+
 # Membership confidence, filled in by whichever branch below can compute one.
 # Left as None by Leiden / Agglomerative / BANKSY / supplied labels, which have
 # no such quantity -- the UI says so rather than showing an empty column.
@@ -1198,9 +1448,6 @@ confidence_runner_up_value = None
 confidence_entropy = None
 
 if algorithm == "leiden":
-    import scanpy as sc
-    import anndata as ad
-
     n_neighbors = algorithm_params.get("n_neighbors", 50)
     resolution = algorithm_params.get("resolution", 1.0)
     # Refuse here rather than let scikit-learn do it. Its message -- "The
@@ -1209,27 +1456,14 @@ if algorithm == "leiden":
     # the dialog, and arrives after the whole extraction has been paid for.
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
     logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
-
-    adata = ad.AnnData(X=cluster_matrix)
-    sc.pp.neighbors(
-        adata, n_neighbors=n_neighbors, use_rep="X", random_state=clustering_seed
-    )
-    sc.tl.leiden(
-        adata,
-        resolution=resolution,
-        flavor="igraph",
-        n_iterations=-1,
-        random_state=clustering_seed,
-    )
-    labels = adata.obs["leiden"].astype(int).values
+    seeded_params = {"n_neighbors": n_neighbors, "resolution": resolution}
+    labels, _ = fit_seeded("leiden", seeded_params, cluster_matrix, clustering_seed)
 
 elif algorithm == "kmeans":
-    from sklearn.cluster import KMeans
-
     n_clusters = algorithm_params.get("n_clusters", 10)
     logger.info("KMeans: n_clusters=%d", n_clusters)
-    km = KMeans(n_clusters=n_clusters, n_init=10, random_state=clustering_seed)
-    labels = km.fit_predict(cluster_matrix)
+    seeded_params = {"n_clusters": n_clusters}
+    labels, km = fit_seeded("kmeans", seeded_params, cluster_matrix, clustering_seed)
     try:
         _margin = distance_margin(km.transform(cluster_matrix))
         confidence_kind = "margin"
@@ -1308,15 +1542,13 @@ elif algorithm == "agglomerative":
     labels = agg.fit_predict(cluster_matrix)
 
 elif algorithm == "minibatchkmeans":
-    from sklearn.cluster import MiniBatchKMeans
-
     n_clusters = algorithm_params.get("n_clusters", 10)
     batch_size = algorithm_params.get("batch_size", pref_minibatch_batch_size)
     logger.info("MiniBatchKMeans: n_clusters=%d, batch_size=%d", n_clusters, batch_size)
-    mbkm = MiniBatchKMeans(
-        n_clusters=n_clusters, batch_size=batch_size, random_state=clustering_seed
+    seeded_params = {"n_clusters": n_clusters, "batch_size": batch_size}
+    labels, mbkm = fit_seeded(
+        "minibatchkmeans", seeded_params, cluster_matrix, clustering_seed
     )
-    labels = mbkm.fit_predict(cluster_matrix)
     try:
         _margin = distance_margin(mbkm.transform(cluster_matrix))
         confidence_kind = "margin"
@@ -1326,19 +1558,13 @@ elif algorithm == "minibatchkmeans":
         logger.warning("MiniBatchKMeans separation margin could not be computed: %s", _e)
 
 elif algorithm == "gmm":
-    from sklearn.mixture import GaussianMixture
-
     n_components = algorithm_params.get("n_components", 10)
     covariance_type = algorithm_params.get("covariance_type", "full")
     logger.info(
         "GMM: n_components=%d, covariance_type=%s", n_components, covariance_type
     )
-    gmm = GaussianMixture(
-        n_components=n_components,
-        covariance_type=covariance_type,
-        random_state=clustering_seed,
-    )
-    labels = gmm.fit_predict(cluster_matrix)
+    seeded_params = {"n_components": n_components, "covariance_type": covariance_type}
+    labels, gmm = fit_seeded("gmm", seeded_params, cluster_matrix, clustering_seed)
     # The whole point of fitting a mixture is the posterior, and fit_predict
     # discards it. A cell at 0.51/0.49 and one at 1.00/0.00 carry the same hard
     # label; this is the only output that tells them apart.
@@ -1879,6 +2105,98 @@ if _quality:
     for _w in _quality:
         logger.warning("Clustering quality: %s", _w)
 
+import math
+
+
+def _finite_or_none(v):
+    """Coerce NaN/Inf floats to None so json.dumps emits RFC-valid output.
+    Python's default json.dumps writes NaN/Infinity as bare tokens, which
+    strict JSON parsers (including Gson on the Java side) reject."""
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
+    return v
+
+
+def _sanitize_json_tree(obj):
+    """Recursively replace non-finite floats with None throughout obj."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_json_tree(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json_tree(v) for v in obj]
+    return _finite_or_none(obj)
+
+
+# 5a. Validation: stability across seeds and agreement with known classes.
+# Both are diagnostics of a run that already succeeded, so a failure in either
+# is reported and never fails the run.
+validation = {}
+_validation_notes = []
+if pref_stability_repeats > 0:
+    if algorithm in SEEDED_ALGORITHMS and seeded_params is not None:
+        try:
+            _replicates = []
+            for _i in range(pref_stability_repeats):
+                _progress(
+                    0.6,
+                    "Stability check: re-run %d of %d with another seed..."
+                    % (_i + 1, pref_stability_repeats),
+                )
+                _rep, _ = fit_seeded(
+                    algorithm, seeded_params, cluster_matrix, clustering_seed + 1 + _i
+                )
+                _replicates.append(_rep)
+            validation["stability"] = stability_across_seeds(labels, _replicates)
+            validation["stability"]["seeds"] = [
+                int(clustering_seed + 1 + _i) for _i in range(pref_stability_repeats)
+            ]
+            validation["stability"]["reference_seed"] = int(clustering_seed)
+            logger.info(
+                "Stability across %d seeds: mean pairwise ARI %.3f (min %.3f), "
+                "consistency %.2f",
+                pref_stability_repeats + 1,
+                validation["stability"]["ari_mean"],
+                validation["stability"]["ari_min"],
+                validation["stability"]["consistency_overall"],
+            )
+        except Exception as _e:
+            logger.warning("Stability check failed: %s", _e)
+            _validation_notes.append("Stability across seeds: failed (%s)." % _e)
+    else:
+        _validation_notes.append(
+            "Stability across seeds: not computed for %s, which %s."
+            % (
+                algorithm,
+                "gives the same clusters for the same matrix whatever the seed"
+                if algorithm in ("hdbscan", "agglomerative")
+                else "is not supported by this check",
+            )
+        )
+if reference_codes is not None and algorithm != "existing":
+    try:
+        if reference_codes.size != n_cells:
+            raise ValueError(
+                "%d reference labels for %d cells" % (reference_codes.size, n_cells)
+            )
+        validation["agreement"] = agreement_with_classes(
+            labels, reference_codes, reference_class_names
+        )
+        if "ari" in validation["agreement"]:
+            logger.info(
+                "Agreement with existing classes: ARI %.3f, NMI %.3f over %d cells "
+                "(%d unclassified excluded)",
+                validation["agreement"]["ari"],
+                validation["agreement"]["nmi"],
+                validation["agreement"]["n_cells"],
+                validation["agreement"]["n_unclassified_excluded"],
+            )
+    except Exception as _e:
+        logger.warning("Agreement with classes failed: %s", _e)
+        _validation_notes.append("Agreement with known classes: failed (%s)." % _e)
+if validation:
+    import json as _json_val
+
+    task.outputs["validation"] = _json_val.dumps(_sanitize_json_tree(validation))
+
 # 5b. Representative cells per cluster (medoids).
 # For each cluster, rank member cells by distance to the cluster center under
 # two definitions and emit the top-K indices (into the original cell order, so
@@ -1931,25 +2249,6 @@ _progress(0.66, "Ranking cluster markers (%d clusters)..." % n_clusters_found)
 import scanpy as sc
 import anndata as ad
 import json
-import math
-
-
-def _finite_or_none(v):
-    """Coerce NaN/Inf floats to None so json.dumps emits RFC-valid output.
-    Python's default json.dumps writes NaN/Infinity as bare tokens, which
-    strict JSON parsers (including Gson on the Java side) reject."""
-    if isinstance(v, float) and not math.isfinite(v):
-        return None
-    return v
-
-
-def _sanitize_json_tree(obj):
-    """Recursively replace non-finite floats with None throughout obj."""
-    if isinstance(obj, dict):
-        return {k: _sanitize_json_tree(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize_json_tree(v) for v in obj]
-    return _finite_or_none(obj)
 
 
 # Build full AnnData for scanpy analysis
@@ -2841,7 +3140,7 @@ import json as _json_fw
 _final_warnings = list(_quality) + list(_analysis_notes)
 if _final_warnings:
     task.outputs["quality_warnings"] = _json_fw.dumps(_final_warnings)
-_final_omitted = list(_omitted_outputs) + _spatial_notes
+_final_omitted = list(_omitted_outputs) + _spatial_notes + _validation_notes
 if _final_omitted:
     task.outputs["omitted_outputs"] = _json_fw.dumps(_final_omitted)
     for _w in _final_omitted:

@@ -17,6 +17,26 @@ tools/qp-harness/bin/qp-gui \
     /tmp/qph/project /tmp/qph/out
 ```
 
+## `QpcatValidationScenario`
+
+Stability across seeds and agreement with known classes, end to end. Gives every cell its
+true type from the dataset's ground truth (by centroid, 10 px; tumour split by Ki67, seven
+classes), then clusters all images with both checks on -- KMeans k=7 and Leiden -- writing
+the true types again before each run because a run replaces them.
+
+```bash
+tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatValidationScenario.java \
+    qupath-extension-cell-analysis-tools \
+    /tmp/qph/project tools/cell-phantom-creation/output/all_groundtruth.csv
+```
+
+Asserts that both checks arrive, that six runs were compared, that compared plus excluded
+cells is every cell and the excluded count is exactly the cells with no ground truth, that the
+classes compared are the true types (not a previous run's clusters), and that the checks are
+saved with the result. It prints the numbers quoted in `documentation/results.md`. Note that it
+LEAVES THE PROJECT'S CELLS CLASSIFIED with the last run's clusters.
+
 ## `QpcatAutocorrProbeScenario`
 
 Asks which per-marker spatial statistics a real clustering run actually

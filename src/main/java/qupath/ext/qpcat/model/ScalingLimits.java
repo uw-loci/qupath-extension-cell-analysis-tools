@@ -141,6 +141,8 @@ public final class ScalingLimits {
         public boolean ripley = false;
         public boolean coOccurrence = false;
         public int coOccurrenceIntervals = DEFAULT_COOC_INTERVALS;
+        /** Extra clusterings the stability check runs; 0 when it is off. */
+        public int stabilityRepeats = 0;
         /** Physical RAM budget in GB; <= 0 asks this machine. */
         public double availableRamGb = 0;
 
@@ -229,6 +231,26 @@ public final class ScalingLimits {
      */
     public static double leidenPeakGb(long nCells, int nNeighbors) {
         return BASE_GB + (double) nCells * nNeighbors * 3.52e-7;
+    }
+
+    /**
+     * Seconds for one clustering, for the methods the stability check repeats.
+     * From the same ladder (250,000 cells): Leiden 140 s, linear in the cell
+     * count; KMeans 2.3 s, MiniBatch KMeans 1.4 s, GMM 1.9 s.
+     *
+     * @param algorithm the algorithm
+     * @param nCells cells clustered
+     * @return predicted seconds, 0 for an algorithm the check does not repeat
+     */
+    public static double clusteringSeconds(ClusteringConfig.Algorithm algorithm, long nCells) {
+        double scale = nCells / 250_000.0;
+        return switch (algorithm) {
+            case LEIDEN -> 140.0 * scale;
+            case KMEANS -> 2.3 * scale;
+            case MINIBATCHKMEANS -> 1.4 * scale;
+            case GMM -> 1.9 * scale;
+            default -> 0.0;
+        };
     }
 
     /**
@@ -466,6 +488,15 @@ public final class ScalingLimits {
                 // KMeans, MiniBatch KMeans, GMM, BANKSY and None measured flat
                 // to 250,000 cells. Nothing to predict.
             }
+        }
+
+        if (r.stabilityRepeats > 0 && ClusteringConfig.isSeedStabilityApplicable(r.algorithm)) {
+            double sec = r.stabilityRepeats * clusteringSeconds(r.algorithm, r.nCells);
+            addTime(out, sec,
+                    "Stability check: " + r.stabilityRepeats + " extra " + r.algorithm.getId()
+                            + " runs on " + fmt(r.nCells) + " cells",
+                    "each repeat is a whole clustering with another seed",
+                    "Use fewer repeats (Pixie used 5), or run the check on a subset of images.");
         }
 
         if (r.coOccurrence) {

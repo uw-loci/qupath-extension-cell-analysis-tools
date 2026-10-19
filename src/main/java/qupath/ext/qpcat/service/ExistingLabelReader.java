@@ -196,6 +196,38 @@ public final class ExistingLabelReader {
         return new LabelSet(labels, names, analysed, counts, unclassified);
     }
 
+    /**
+     * Each cell's classification as a code, for comparing a run's clusters with
+     * the classes the cells already carried. Unlike {@link #read}, every cell is
+     * kept: an unclassified one gets -1.
+     *
+     * @param cells the cells, in the order the run uses
+     * @return codes index-aligned with {@code cells} and the class name per code,
+     *         sorted by name
+     */
+    public static ClassCodes classCodes(List<? extends PathObject> cells) {
+        java.util.TreeSet<String> sorted = new java.util.TreeSet<>();
+        for (PathObject c : cells) {
+            String n = classNameOf(c);
+            if (n != null) sorted.add(n);
+        }
+        List<String> names = new ArrayList<>(sorted);
+        Map<String, Integer> index = new java.util.HashMap<>();
+        for (int i = 0; i < names.size(); i++) index.put(names.get(i), i);
+        int[] codes = new int[cells.size()];
+        for (int i = 0; i < codes.length; i++) {
+            String n = classNameOf(cells.get(i));
+            codes[i] = n == null ? -1 : index.get(n);
+        }
+        return new ClassCodes(codes, names);
+    }
+
+    /**
+     * @param codes class code per cell, -1 for none
+     * @param names class name per code
+     */
+    public record ClassCodes(int[] codes, List<String> names) {}
+
     /** The class name of a detection, or null when it has none. */
     private static String classNameOf(PathObject det) {
         return CellClasses.nameOf(det);

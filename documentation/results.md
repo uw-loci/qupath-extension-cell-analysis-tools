@@ -408,6 +408,111 @@ those two cases.
   It uses the whole posterior rather than just the top component, so it separates "0.5 / 0.5"
   from "0.5 / 0.25 / 0.25".
 
+<a name="validation-tab"></a>
+## Validation -- stability across seeds and agreement with known classes
+
+Two checks you ask for before the run, under **Validation** in the Clustering dialog's
+Analysis section. Both are off by default. The tab appears only when at least one was
+computed, and both are saved with the result, so the tab comes back when you reopen it.
+
+<a name="stability-across-seeds"></a>
+### Stability across seeds
+
+**What it does.** After the run, QP-CAT clusters the same matrix again, **Extra runs** times
+(default 5), each with a different seed (your seed + 1, + 2, ...). Only the clustering step is
+repeated, on exactly the matrix the run clustered: the normalization, PCA precursor and batch
+correction are not redone, and the embedding is not recomputed. Leiden rebuilds its
+nearest-neighbour graph each time, because that graph is seeded too.
+
+**What it reports.**
+
+- **Adjusted Rand index (ARI)** between every pair of runs, the reported one included: its
+  mean and its lowest value. 1 means the same partition; it does not care which number a
+  cluster gets, so a re-run that only renumbers the clusters scores 1. 0 is what random
+  labels would score.
+- **Consistency score**, per cluster and overall. For each of your clusters and each re-run, QP-CAT
+  counts the fewest clusters of the re-run that together hold 95% of that cluster's cells,
+  then averages over the re-runs. 1 means the cluster came back intact every time; 2 means
+  it was typically split in two. The overall score is the average over cells. This is the
+  *cluster consistency score* of Pixie (Liu et al. 2023), measured against the clusters you
+  are looking at rather than between every pair of re-runs, so it can be read per cluster.
+- **Kept together**: the share of a cluster's cells that one re-run cluster holds, averaged
+  over the re-runs.
+
+**How to read it.** A cluster whose consistency is near 1 does not depend on the seed. One
+well above 1, or with a low kept-together share, splits or merges when nothing but the seed
+changes; do not name it as a population until it holds up. A low ARI with every cluster near
+1 usually means one or two small clusters move while the rest stay put.
+
+**Limitations.**
+
+- It tests the **seed only**. Stable clusters can still be wrong: a batch effect is perfectly
+  reproducible. It says nothing about stability to other cells or other measurements; Pixie
+  also checked subsampled data, which QP-CAT does not do here.
+- **Not for HDBSCAN, Agglomerative or BANKSY.** HDBSCAN and Agglomerative return the same
+  clusters for the same matrix whatever the seed, so the check would always say "perfectly
+  stable". BANKSY is not supported. The dialog greys the option out for them.
+- **It costs time.** The clustering step runs (Extra runs + 1) times; the pre-run cost line
+  says so, and the scale guard refuses a configuration whose repeats would take more than
+  two hours (a million-cell Leiden run with many repeats, for example).
+
+<a name="agreement-with-known-classes"></a>
+### Agreement with known classes
+
+**What it does.** Compares the new clusters with the classifications the cells carried
+**before** the run: a phenotyping, a manual annotation, ground truth you imported. It is
+read from the cells as the run extracts them, before the run writes its own classes.
+
+**What it reports.**
+
+- **Adjusted Rand index** and **normalized mutual information** (NMI, arithmetic
+  normalization as in scikit-learn): both 1 for the same partition and both blind to which
+  cluster number goes with which class.
+- A **cluster x class table** of cell counts.
+- **Cohen's kappa after matching.** Kappa needs each cluster to stand for one class, so each
+  cluster is first matched to at most one class, choosing the matching that puts the most
+  cells on the diagonal (the Hungarian algorithm, `scipy.optimize.linear_sum_assignment`).
+  A cluster left without a class counts as wrong. The share of cells in their matched class
+  is shown next to it.
+- **Purity**: each cluster read as its largest class. Unlike kappa, it does not penalise
+  splitting one class across two clusters.
+
+**Cells with no class are left out**, and the summary says how many. HDBSCAN noise is kept as
+a group of its own, so a run that sets cells aside is not flattered by it.
+
+**How to read it.** ARI and NMI near 1 mean the clustering recovers the known classes. Kappa
+lower than purity means at least one class was split across clusters; the table shows which.
+A low score is not automatically a failure of the clustering: the known classes may be wrong,
+coarser than the clusters, or defined by markers you did not cluster on.
+
+**Limitations.** If the cells still carry a previous run's "Cluster N" classes, this compares
+the two runs, which is a legitimate question but a different one. In *Analyze current
+classifications* the option is off, because the classes are the labels there.
+
+**Copy tables (TSV)** puts both tables on the clipboard.
+
+### What the numbers look like on data with a known answer
+
+Measured 2026-10-19 on the synthetic tumour-microenvironment dataset (v1.2, 8 images, 11,421
+detected cells), each cell classified with its true type matched by centroid, with tumour
+cells split by their Ki67 flag into seven classes (2 cells had no true cell within 10 px and
+were excluded). Clustered on the 24 "mean" measurements, z-score, seed 42, 5 extra runs:
+
+| | KMeans, k = 7 | Leiden, n_neighbors 50, resolution 1.0 |
+|---|---|---|
+| Clusters | 7 | 19 |
+| Pairwise ARI across seeds, mean (lowest) | 1.000 (1.000) | 0.839 (0.762) |
+| Consistency score | 1.00 | 1.32 |
+| ARI / NMI against the true types | 0.982 / 0.971 | 0.537 / 0.794 |
+| Kappa after matching / purity | 0.989 / 99.1% | 0.577 / 98.3% |
+
+The Leiden run is the instructive one. Its clusters are almost pure (98.3%), but it split the
+fibroblasts into seven clusters and the Ki67-negative tumour cells into three, so kappa and
+ARI are low. Five of the seven fibroblast clusters are also the ones that moved between seeds
+(consistency 1.6 to 2.2), against 1.00 for the B-cell and Ki67+ tumour clusters. Two clusters
+mixed CD8 and helper T cells (115 + 116 and 75 + 120 cells). Read together, the two checks
+point the same way: this many clusters is more than the data supports.
+
 <a name="marker-rankings-tab"></a>
 <a name="marker-fingerprints-tab"></a>
 ## Marker rankings and fingerprints

@@ -1925,6 +1925,7 @@ public class ClusteringWorkflow {
         }
         Object nn = params.get("n_neighbors");
         if (nn instanceof Number num && num.intValue() > 0) r.nNeighbors = num.intValue();
+        r.stabilityRepeats = config.getStabilityRepeats();
         r.ripley = config.isEnableRipley();
         r.coOccurrence = config.isEnableCoOccurrencePairwise()
                 || config.isEnableCoOccurrenceOneVsRest();
@@ -2143,6 +2144,19 @@ public class ClusteringWorkflow {
         if (suppliedLabels != null) {
             inputs.put("supplied_labels", buildLabelNDArray(suppliedLabels));
         }
+        // Validation. Comparing with the classes is meaningless when those
+        // classes ARE the labels (analyze-existing), so it is not sent there.
+        if (config.getStabilityRepeats() > 0) {
+            inputs.put("stability_repeats", config.getStabilityRepeats());
+        }
+        NDArray referenceNd = null;
+        if (config.isCompareWithClasses() && suppliedLabels == null) {
+            ExistingLabelReader.ClassCodes ref =
+                    ExistingLabelReader.classCodes(extraction.getDetections());
+            referenceNd = buildLabelNDArray(ref.codes());
+            inputs.put("reference_labels", referenceNd);
+            inputs.put("reference_names", ref.names());
+        }
         // Absent from an older saved config -> isPcaPrecursor() is false, so the
         // run reproduces on the full feature matrix as it originally did.
         inputs.put("compute_paga", config.isComputePaga());
@@ -2285,6 +2299,9 @@ public class ClusteringWorkflow {
                 if (qw != null) {
                     for (String w : qw) logger.warn("Clustering quality: {}", w);
                 }
+            }
+            if (task.outputs.containsKey("validation")) {
+                result.setValidationJson((String) task.outputs.get("validation"));
             }
             if (task.outputs.containsKey("omitted_outputs")) {
                 List<String> om = new Gson().fromJson(
@@ -2665,6 +2682,7 @@ public class ClusteringWorkflow {
             if (ruNd != null) ruNd.close();
             if (ruvNd != null) ruvNd.close();
             if (entNd != null) entNd.close();
+            if (referenceNd != null) referenceNd.close();
         }
     }
 

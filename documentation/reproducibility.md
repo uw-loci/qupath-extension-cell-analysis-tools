@@ -134,6 +134,9 @@ This is the only group where running the same thing twice can give you a differe
 
 **Changing the seed is a test, not a nuisance.** Re-run with a different seed and compare: a
 cluster boundary that moves when nothing but the seed moved was never a real boundary. The
+**Stability across seeds** option (Analysis > Validation) does this for you and reports the
+adjusted Rand index and a per-cluster consistency score; see
+[Validation](results.md#stability-across-seeds). The
 [Cluster confidence](results.md#cluster-confidence-tab) tab answers the same question within a
 single run, for the algorithms that can.
 

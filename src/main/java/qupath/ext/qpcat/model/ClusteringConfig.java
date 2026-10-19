@@ -132,6 +132,10 @@ public class ClusteringConfig {
      * dendrogram are all computed without it.
      */
     private boolean computePaga = true;
+    /** Extra clusterings with other seeds for the stability check; 0 is off. */
+    private int stabilityRepeats = 0;
+    /** Compare the clusters with the classifications the cells carried before the run. */
+    private boolean compareWithClasses = false;
     private int topNMarkers = 5;
     private boolean enableSpatialAnalysis = false;
     private boolean enableBatchCorrection = false;
@@ -397,6 +401,24 @@ public class ClusteringConfig {
 
     public boolean isComputePaga() { return computePaga; }
     public void setComputePaga(boolean v) { this.computePaga = v; }
+
+    public int getStabilityRepeats() { return stabilityRepeats; }
+    public void setStabilityRepeats(int v) { this.stabilityRepeats = Math.max(0, v); }
+
+    public boolean isCompareWithClasses() { return compareWithClasses; }
+    public void setCompareWithClasses(boolean v) { this.compareWithClasses = v; }
+
+    /**
+     * Whether the stability check can mean anything for an algorithm: only the
+     * seeded ones give a different answer for a different seed.
+     *
+     * @param a the algorithm
+     * @return true for Leiden, KMeans, MiniBatch KMeans and GMM
+     */
+    public static boolean isSeedStabilityApplicable(Algorithm a) {
+        return a == Algorithm.LEIDEN || a == Algorithm.KMEANS
+                || a == Algorithm.MINIBATCHKMEANS || a == Algorithm.GMM;
+    }
 
     public boolean isGeneratePlots() { return generatePlots; }
     public void setGeneratePlots(boolean generatePlots) { this.generatePlots = generatePlots; }

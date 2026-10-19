@@ -37,6 +37,7 @@ public class SavedClusteringResult {
 
     // Post-analysis
     private String markerRankingsJson;
+    private String validationJson;
     private double[][] pagaConnectivity;
     private String[] pagaClusterNames;
     private Map<String, String> plotPaths;   // relative to result directory
@@ -207,6 +208,9 @@ public class SavedClusteringResult {
     // --- Post-analysis ---
     public String getMarkerRankingsJson() { return markerRankingsJson; }
     public void setMarkerRankingsJson(String json) { this.markerRankingsJson = json; }
+
+    public String getValidationJson() { return validationJson; }
+    public void setValidationJson(String json) { this.validationJson = json; }
 
     public double[][] getPagaConnectivity() { return pagaConnectivity; }
     public void setPagaConnectivity(double[][] conn) { this.pagaConnectivity = conn; }
@@ -398,6 +402,7 @@ public class SavedClusteringResult {
         saved.setMarkerNames(result.getMarkerNames());
 
         saved.setMarkerRankingsJson(result.getMarkerRankingsJson());
+        saved.setValidationJson(result.getValidationJson());
         saved.setPagaConnectivity(result.getPagaConnectivity());
         saved.setPagaClusterNames(result.getPagaClusterNames());
         saved.setPlotPaths(result.getPlotPaths());
@@ -512,6 +517,7 @@ public class SavedClusteringResult {
                 clusterLabels, nClusters, embedding, clusterStats, markerNames);
         result.setNormalization(normalization);
         result.setMarkerRankingsJson(markerRankingsJson);
+        result.setValidationJson(validationJson);
         result.setPagaConnectivity(pagaConnectivity);
         result.setPagaClusterNames(pagaClusterNames);
         result.setPlotPaths(plotPaths);
