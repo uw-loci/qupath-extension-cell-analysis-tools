@@ -502,9 +502,9 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 <a name="co-occurrence-tabs"></a>
 ### Co-occurrence: the value, the radius, and what each view aggregates
 
-Four tabs come from this one statistic -- a table and a figure, each pairwise and
-one-vs-rest -- and they do not all show the same thing. This is where the in-app
-**Documentation** link on all four lands.
+Five tabs come from this one statistic -- a table and a figure, each pairwise and
+one-vs-rest, plus the curves figure -- and they do not all show the same thing. This is
+where the in-app **Documentation** link on all five lands.
 
 **The value.** For an ordered pair of clusters (A, B) at radius r:
 
