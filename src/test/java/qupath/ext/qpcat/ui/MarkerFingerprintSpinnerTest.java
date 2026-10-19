@@ -38,7 +38,7 @@ class MarkerFingerprintSpinnerTest {
     private static int spinnerMax(int perCluster) {
         return FxHarness.onFxGet(() -> {
             MarkerFingerprintPanel p = new MarkerFingerprintPanel(rankings(perCluster),
-                    new int[] {0, 1, 1}, 2, c -> Color.GRAY, null, c -> "Cluster " + c);
+                    new int[] {0, 1, 1}, 2, -1, c -> Color.GRAY, null, c -> "Cluster " + c);
             FxHarness.layOutOffscreen(p);
             Spinner<Integer> spinner = (Spinner<Integer>) p.lookup(".spinner");
             return ((SpinnerValueFactory.IntegerSpinnerValueFactory) spinner.getValueFactory()).getMax();
