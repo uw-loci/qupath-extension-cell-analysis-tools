@@ -106,7 +106,6 @@ They are grouped by what you give up, not by how much time you save. Nothing her
 | Setting | Where | Effect |
 |---|---|---|
 | **Ripley's L, co-occurrence, Geary's C, neighbourhood enrichment** | Run Clustering > Spatial statistics | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
-| **Spatial permutations** | Run Clustering > Spatial statistics | `0` picks adaptively by cell count (1000 / 100 / 50). A fixed high value multiplies the cost of every permuted statistic. |
 | **Generate plots** | Run Clustering > Analysis | Skips the static matplotlib figures. The interactive tabs still work. |
 
 QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
@@ -156,6 +155,12 @@ That is a different cost from the group above, and worth keeping separate in you
 
 Runs that differ in any of these are not comparable with each other. Choose once per study
 rather than per run.
+
+### Costs p-value resolution -- fewer permutations, coarser p
+
+| Setting | Where | Effect |
+|---|---|---|
+| **Spatial permutations** | Preferences > QP-CAT: Run Clustering (shown under Run Clustering > Spatial statistics) | `0` (default) picks by cell count: 1000 up to 50,000 cells, 100 up to 500,000, 50 above. Each permuted statistic costs in proportion to the count, so fewer is faster, but a permutation p-value can be no smaller than 1 / (permutations + 1): 0.001 at 1000, 0.0099 at 100, 0.0196 at 50, before any multiple-testing correction. A real effect can therefore read as "not significant" only because too few permutations were run. Raise it for a figure that reports p-values; use one fixed value across a study so the p-values are comparable. See [the empirical permutation p has a floor](spatial-statistics.md). |
 
 ### Costs completeness of a figure
 

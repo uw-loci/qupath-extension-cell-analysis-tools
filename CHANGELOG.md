@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Reproducibility guide: fewer spatial permutations are not free.** The guide listed the
+  permutation count among settings that cost nothing but the output. A permutation p-value
+  cannot be smaller than 1 / (permutations + 1) -- 0.001 at 1000, about 0.01 at 100 -- so
+  fewer permutations coarsen every p-value. It now has its own group saying so.
+
 - **Closing Modify Clusters threw away staged names without asking.** Names typed in, or
   sent over by the Cluster Explainer's *Use as cluster names...*, were lost if you pressed
   Close (or the window's X) before Apply. Closing with unapplied names now asks first, and
