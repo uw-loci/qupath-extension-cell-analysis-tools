@@ -173,6 +173,17 @@ public class MarkerFingerprintPanel extends BorderPane {
         rebuild();
     }
 
+    /** The longest per-cluster ranking in the payload, at least 1. */
+    static int rankedPerCluster(Map<String, List<Map<String, Object>>> rankings) {
+        int most = 1;
+        for (List<Map<String, Object>> list : rankings.values()) {
+            if (list != null) {
+                most = Math.max(most, list.size());
+            }
+        }
+        return most;
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, List<Map<String, Object>>> parse(String json) {
         if (json == null || json.isBlank()) {
@@ -199,9 +210,15 @@ public class MarkerFingerprintPanel extends BorderPane {
         noteLabel.setWrapText(true);
         noteLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
-        Spinner<Integer> topSpinner = new Spinner<>(1, 12, topK, 1);
+        // The run keeps only top_n_markers per cluster; past that the spinner would do nothing.
+        int ranked = rankedPerCluster(rankings);
+        topK = Math.min(topK, ranked);
+        Spinner<Integer> topSpinner = new Spinner<>(1, ranked, topK, 1);
         topSpinner.setPrefWidth(70);
         topSpinner.setEditable(true);
+        SpinnerUtils.commitOnFocusLoss(topSpinner);
+        topSpinner.setTooltip(Tooltips.of("The run ranked the top " + ranked
+                + " markers of each cluster, so this goes up to " + ranked + "."));
         topSpinner.valueProperty().addListener((o, a, b) -> {
             if (b != null) {
                 topK = b;

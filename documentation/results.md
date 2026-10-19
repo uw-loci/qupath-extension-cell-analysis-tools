@@ -45,7 +45,7 @@ Three views of the same per-cluster-per-marker matrix, side by side deliberately
 | View | Shows | Use for |
 |---|---|---|
 | **Heatmap** (interactive) | Column-normalised mean expression per cluster. Hover for values and cell counts; Ctrl+scroll or the zoom buttons to resize. | Exploring |
-| **Matrix Plot** (PNG) | The same, plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
+| **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a colour compares clusters within one marker, not markers with each other; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
 | **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = per-marker rescaled mean. Same zoom controls. [What size and colour mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
 
 Matrix Plot for figures, Heatmap for exploration, Dotplot when a marker is high in a few
@@ -430,7 +430,8 @@ T cells -- then validate against the heatmap.
 > [the marker p-values are circular](clustering.md#marker-pvalues-are-circular).
 
 **Marker Fingerprints** draws the same information per cluster as a compact profile, for
-comparing clusters at a glance rather than reading a table.
+comparing clusters at a glance rather than reading a table. **Markers per cluster** goes up to
+the number the run ranked, 5 per cluster.
 
 > **These tabs may be missing.** The ranking compares each cluster against all others,
 > so a result with only one group has nothing to compare against and the tabs do not appear.
@@ -767,6 +768,7 @@ The static matplotlib PNGs are already on disk and do not recolour by themselves
 **Auto-Regenerate Static Plots on Color Change** in preferences if you want them
 rewritten -- it costs a Python round-trip each time, which is why it is off by default.
 
+<a name="3d-view-tab"></a>
 ## 3D view
 
 Present when the result carries a 3D embedding. It reads the clustered images' detections
