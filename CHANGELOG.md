@@ -20,6 +20,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
     a prior phenotyping or ground truth: adjusted Rand index, normalized mutual information,
     a cluster x class table, purity, and Cohen's kappa after matching each cluster to at most
     one class (Hungarian algorithm). Unclassified cells are left out and counted.
+- **The 3D View tab has the guide bar and Documentation link every other results tab has**,
+  and the Embedding Plot tab now says that distances between clusters in the layout are not
+  interpretable, as the 2D tab did. The Matrix Plot and Stacked Violin guides say how values
+  are scaled (Matrix Plot: each marker 0-1 across clusters; Stacked Violin: not rescaled).
+- **The Neighborhood Enrichment tab is now a table with the edge count behind every
+  z-score**, e.g. `7.3 (6061)`, so a large z from a handful of edges reads as such, and the
+  line above it says how labels were shuffled. It has the same **Copy text / Copy CSV /
+  Save CSV...** buttons as the other spatial tables. The heatmap moved to **Neighborhood
+  Enrichment (plot)**. Results saved before this version show z without counts.
+- **A suggested threshold that calls more than 95% or fewer than 5% of cells positive is
+  flagged** under the histogram counts, and **Apply to All Markers** names the markers it
+  flagged, so a poor suggestion shows up whichever method made it.
 
 ### Fixed
 
@@ -104,21 +116,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 - **Marker Fingerprints' "Markers per cluster" went to 12** while the run keeps the top 5
   markers of each cluster, so 6 to 12 changed nothing. It now stops at the number ranked.
-
-### Added
-
-- **The 3D View tab has the guide bar and Documentation link every other results tab has**,
-  and the Embedding Plot tab now says that distances between clusters in the layout are not
-  interpretable, as the 2D tab did. The Matrix Plot and Stacked Violin guides say how values
-  are scaled (Matrix Plot: each marker 0-1 across clusters; Stacked Violin: not rescaled).
-- **The Neighborhood Enrichment tab is now a table with the edge count behind every
-  z-score**, e.g. `7.3 (6061)`, so a large z from a handful of edges reads as such, and the
-  line above it says how labels were shuffled. It has the same **Copy text / Copy CSV /
-  Save CSV...** buttons as the other spatial tables. The heatmap moved to **Neighborhood
-  Enrichment (plot)**. Results saved before this version show z without counts.
-- **A suggested threshold that calls more than 95% or fewer than 5% of cells positive is
-  flagged** under the histogram counts, and **Apply to All Markers** names the markers it
-  flagged, so a poor suggestion shows up whichever method made it.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 
