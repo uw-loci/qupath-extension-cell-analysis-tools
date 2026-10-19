@@ -14,6 +14,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   it never ran. The exported composition figure was not affected; it is drawn separately.
 - **Embedding plots drew cells past the plot frame after a pan or zoom.** Cells at the edge of
   the view painted across the axes. Points and gate outlines are now clipped to the plot box.
+- **GMM and Triangle auto-thresholds sat on the spike of zero-intensity cells.** Most
+  marker-negative cells have an intensity of exactly 0; fitted with that spike, GMM gave it
+  one of its two components and Triangle took the first bin past it, so both thresholds
+  landed at its edge. On the synthetic TME image tme_01 (*Cell: CD3 mean*, Percentile, 24.3%
+  T cells by ground truth) GMM suggested 0.0045 and Triangle 0.0059, calling 37.8% and 37.2%
+  of cells positive; they now suggest 0.129 (24.5%) and 0.033 (30.2%). Both now fit only the
+  values between a spike of identical values at either end of the range. Across the 8 images
+  x 6 lineage markers of that dataset, GMM's mean balanced accuracy against ground truth went
+  from 92.2% to 99.1% (Percentile; the other scalings move the same way) and Triangle's from
+  93.0% to 95.4%. Gamma is unchanged.
+- **The histogram's Pos/Neg counts were wrong for a threshold inside a bar.** Cells were
+  counted a whole bar at a time, by the bar's centre, so the GMM threshold above (0.0045,
+  inside the first bar, 0 to 0.02) read "Pos: 1568 (100.0%)" while it called 37.8% of cells
+  positive. The counts are now exact to 0.1% of cells.
+- **The threshold boxes showed a small gate as 0.** They rounded to two decimals, so the
+  0.0045 above read "0", and clicking into the box and out again set the gate to 0, which
+  calls every cell positive. The histogram's Threshold box and each marker's gate box now
+  show four decimals, the precision the suggestions are computed to.
+
+### Added
+
+- **A suggested threshold that calls more than 95% or fewer than 5% of cells positive is
+  flagged** under the histogram counts, and **Apply to All Markers** names the markers it
+  flagged, so a poor suggestion shows up whichever method made it.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

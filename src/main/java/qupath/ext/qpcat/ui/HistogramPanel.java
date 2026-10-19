@@ -8,6 +8,7 @@ import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import qupath.ext.qpcat.model.GateCoverage;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -15,7 +16,8 @@ import java.util.function.Consumer;
 /**
  * JavaFX component displaying a histogram with an interactive threshold line.
  * Shows histogram bars split-colored at the threshold, with auto-thresholding
- * method selection and pos/neg cell count statistics.
+ * method selection and pos/neg cell count statistics. A suggested threshold that
+ * calls more than 95% or fewer than 5% of cells positive is flagged.
  */
 public class HistogramPanel extends VBox {
 
@@ -30,6 +32,7 @@ public class HistogramPanel extends VBox {
     private final ComboBox<String> methodCombo;
     private final Spinner<Double> thresholdSpinner;
     private final Label statsLabel;
+    private final Label suggestionWarningLabel;
     private final Label markerLabel;
 
     private Consumer<Double> onThresholdChanged;
@@ -38,6 +41,7 @@ public class HistogramPanel extends VBox {
     private String currentMarker;
     private int[] counts;
     private double[] binEdges;
+    private double[] quantiles;
     private Map<String, Double> autoThresholds;
     private double currentThreshold = 0.5;
     private boolean dragging = false;
@@ -70,6 +74,8 @@ public class HistogramPanel extends VBox {
                 + "  GMM - 2-component Gaussian mixture model\n"
                 + "  Gamma - Gamma distribution fit, for right-skewed markers\n"
                 + "    (inspired by GammaGateR, Xiong et al. 2024, Bioinformatics)\n"
+                + "Triangle and GMM leave out a spike of identical values at\n"
+                + "either end (e.g. the cells with no signal, all at 0).\n"
                 + "See documentation/REFERENCES.md for full citations."));
 
         // Wide initial range; the real range/step is set per marker from the
@@ -97,6 +103,12 @@ public class HistogramPanel extends VBox {
         statsLabel = new Label("Pos: - | Neg: -");
         statsLabel.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
+        suggestionWarningLabel = new Label();
+        suggestionWarningLabel.setWrapText(true);
+        suggestionWarningLabel.setStyle("-fx-text-fill: #d2691e; -fx-font-weight: bold;");
+        suggestionWarningLabel.setManaged(false);
+        suggestionWarningLabel.setVisible(false);
+
         Label methodLabel = new Label("Method:");
         if (methodCombo.getTooltip() != null) {
             methodLabel.setTooltip(methodCombo.getTooltip());
@@ -110,20 +122,24 @@ public class HistogramPanel extends VBox {
                 thresholdLabel, thresholdSpinner);
         controlsRow.setAlignment(Pos.CENTER_LEFT);
 
-        getChildren().addAll(markerLabel, canvas, controlsRow, statsLabel);
+        getChildren().addAll(markerLabel, canvas, controlsRow, statsLabel, suggestionWarningLabel);
         clearDisplay();
     }
 
     /**
      * Set histogram data for a marker.
+     *
+     * @param quantiles the marker's values at evenly spaced probabilities 0..1,
+     *                  used for the positive/negative counts; null shows none
      */
-    public void setMarkerData(String marker, int[] counts, double[] binEdges,
+    public void setMarkerData(String marker, int[] counts, double[] binEdges, double[] quantiles,
                               Map<String, Double> autoThresholds, double currentGate) {
         updating = true;
         try {
             this.currentMarker = marker;
             this.counts = counts;
             this.binEdges = binEdges;
+            this.quantiles = quantiles;
             this.autoThresholds = autoThresholds;
 
             // Keep the user's chosen method when stepping between markers. If a
@@ -168,6 +184,7 @@ public class HistogramPanel extends VBox {
         double clamped = Math.max(min, Math.min(max, value));
         thresholdSpinner.setValueFactory(
                 new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, clamped, step));
+        SpinnerUtils.showFourDecimals(thresholdSpinner);
     }
 
     /** Map a method display name to its JSON key, or null for "Manual"/unknown. */
@@ -198,9 +215,11 @@ public class HistogramPanel extends VBox {
         currentMarker = null;
         counts = null;
         binEdges = null;
+        quantiles = null;
         autoThresholds = null;
         markerLabel.setText("Click a marker column header to view histogram");
         statsLabel.setText("Pos: - | Neg: -");
+        showSuggestionWarning(null);
         GraphicsContext gc = canvas.getGraphicsContext2D();
         gc.setFill(Color.gray(0.95));
         gc.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -243,6 +262,8 @@ public class HistogramPanel extends VBox {
             thresholdSpinner.getValueFactory().setValue(currentThreshold);
             redraw();
             fireThresholdChanged();
+        } else {
+            updateStats();
         }
     }
 
@@ -322,21 +343,34 @@ public class HistogramPanel extends VBox {
         if (counts == null || binEdges == null) return;
 
         long totalCells = 0;
-        long posCells = 0;
-        for (int i = 0; i < counts.length; i++) {
-            totalCells += counts[i];
-            double binCenter = (binEdges[i] + binEdges[i + 1]) / 2.0;
-            if (binCenter >= currentThreshold) {
-                posCells += counts[i];
-            }
+        for (int c : counts) {
+            totalCells += c;
         }
-        long negCells = totalCells - posCells;
+        // Counted from the quantiles, not by bin centre: a gate inside the first
+        // bin otherwise puts every cell of that bin on one side.
+        double posFrac = GateCoverage.positiveFraction(quantiles, currentThreshold);
+        if (Double.isNaN(posFrac) || totalCells == 0) {
+            statsLabel.setText("Pos: - | Neg: -");
+        } else {
+            long posCells = Math.round(posFrac * totalCells);
+            long negCells = totalCells - posCells;
+            statsLabel.setText(String.format("Pos: %d (%.1f%%) | Neg: %d (%.1f%%)",
+                    posCells, 100.0 * posCells / totalCells,
+                    negCells, 100.0 * negCells / totalCells));
+        }
 
-        double posPct = totalCells > 0 ? 100.0 * posCells / totalCells : 0;
-        double negPct = totalCells > 0 ? 100.0 * negCells / totalCells : 0;
+        String key = methodKey(methodCombo.getValue());
+        Double suggested = (key != null && autoThresholds != null) ? autoThresholds.get(key) : null;
+        String warning = suggested == null ? null
+                : GateCoverage.warning(GateCoverage.positiveFraction(quantiles, suggested));
+        showSuggestionWarning(warning == null ? null : methodCombo.getValue() + " suggestion: " + warning);
+    }
 
-        statsLabel.setText(String.format("Pos: %d (%.1f%%) | Neg: %d (%.1f%%)",
-                posCells, posPct, negCells, negPct));
+    private void showSuggestionWarning(String text) {
+        boolean show = text != null;
+        suggestionWarningLabel.setText(show ? text : "");
+        suggestionWarningLabel.setManaged(show);
+        suggestionWarningLabel.setVisible(show);
     }
 
     private void fireThresholdChanged() {

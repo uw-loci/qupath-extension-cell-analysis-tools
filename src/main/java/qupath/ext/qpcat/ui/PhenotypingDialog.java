@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
+import qupath.ext.qpcat.model.GateCoverage;
 import qupath.ext.qpcat.model.PhenotypeRuleSet;
 import qupath.ext.qpcat.service.ChannelValidator;
 import qupath.ext.qpcat.service.MeasurementExtractor;
@@ -475,6 +476,7 @@ public class PhenotypingDialog {
 
             Spinner<Double> gateSpinner = new Spinner<>(bounds[0], bounds[1], defaultGate, bounds[3]);
             gateSpinner.setEditable(true);
+            SpinnerUtils.showFourDecimals(gateSpinner);
             SpinnerUtils.commitOnFocusLoss(gateSpinner);
             gateSpinner.setPrefWidth(85);
             gateSpinner.setMaxWidth(85);
@@ -1270,6 +1272,8 @@ public class PhenotypingDialog {
             binEdges[i] = edgesList.get(i).doubleValue();
         }
 
+        double[] quantiles = parseQuantiles(markerData);
+
         // Parse thresholds
         Map<String, Number> thresholdsRaw = (Map<String, Number>) markerData.get("thresholds");
         Map<String, Double> autoThresholds = new LinkedHashMap<>();
@@ -1286,8 +1290,22 @@ public class PhenotypingDialog {
             currentGate = markerSpinner.getValue();
         }
 
-        histogramPanel.setMarkerData(marker, counts, binEdges, autoThresholds, currentGate);
+        histogramPanel.setMarkerData(marker, counts, binEdges, quantiles, autoThresholds, currentGate);
         histogramPane.setExpanded(true);
+    }
+
+    /** The marker's "quantiles" from compute_thresholds.py, or null when absent. */
+    @SuppressWarnings("unchecked")
+    private static double[] parseQuantiles(Map<String, Object> markerData) {
+        List<Number> list = (List<Number>) markerData.get("quantiles");
+        if (list == null) {
+            return null;
+        }
+        double[] quantiles = new double[list.size()];
+        for (int i = 0; i < quantiles.length; i++) {
+            quantiles[i] = list.get(i).doubleValue();
+        }
+        return quantiles;
     }
 
     @SuppressWarnings("unchecked")
@@ -1311,6 +1329,7 @@ public class PhenotypingDialog {
         }
 
         int updated = 0;
+        List<String> extreme = new ArrayList<>();
         for (Map.Entry<String, Spinner<Double>> entry : markerGateSpinners.entrySet()) {
             String marker = entry.getKey();
             if (cachedHistogramData.containsKey(marker)) {
@@ -1321,12 +1340,22 @@ public class PhenotypingDialog {
                     double threshold = thresholdsRaw.get(selectedMethod).doubleValue();
                     entry.getValue().getValueFactory().setValue(threshold);
                     updated++;
+                    double frac = GateCoverage.positiveFraction(parseQuantiles(markerData), threshold);
+                    if (GateCoverage.warning(frac) != null) {
+                        extreme.add(String.format("%s (%.0f%%)", shortenMarkerName(marker), 100.0 * frac));
+                    }
                 }
             }
         }
 
-        Dialogs.showInfoNotification("QPCAT",
-                "Applied '" + selectedMethod + "' thresholds to " + updated + " markers.");
+        String applied = "Applied '" + selectedMethod + "' thresholds to " + updated + " markers.";
+        if (extreme.isEmpty()) {
+            Dialogs.showInfoNotification("QPCAT", applied);
+        } else {
+            Dialogs.showWarningNotification("QPCAT", applied
+                    + " Check these - they call almost all or almost no cells positive: "
+                    + String.join(", ", extreme));
+        }
     }
 
     // ========== Results Display ==========

@@ -25,7 +25,8 @@ A recommended approach:
 
 - Use **auto-thresholding** as a starting point, then fine-tune
 - The **Triangle method** works best for markers with a large negative population (skewed right)
-- **GMM** works best for clearly bimodal distributions
+- **GMM** works best for clearly bimodal distributions, including a spike of zeros plus a
+  positive population (the zeros are left out of the fit)
 - **Gamma** works best for strictly positive, right-skewed markers
 - Always visually verify gate positions using the histogram
 
@@ -164,12 +165,30 @@ Automatically compute marker gate thresholds instead of setting them manually.
 5. The histogram shows:
    - Blue bars (below threshold) and red bars (above threshold)
    - A red dashed line at the current threshold
-   - Statistics: "Pos: X (Y%) | Neg: Z (W%)"
+   - Statistics: "Pos: X (Y%) | Neg: Z (W%)" -- the cells at or above the threshold,
+     which is how phenotyping gates them
 6. Change the **Method** dropdown to apply an auto-threshold:
    - **Triangle** -- geometric method, good for skewed distributions
    - **GMM (Gaussian)** -- 2-component mixture model, good for bimodal data
    - **Gamma** -- gamma distribution fit, good for strictly positive markers
 7. You can drag the red threshold line with the mouse for fine-tuning
 8. Click **Apply to All Markers** to set all gates using the selected method
+
+**A suggestion that calls more than 95% or fewer than 5% of cells positive is flagged** in
+orange under the counts, e.g. *"GMM (Gaussian) suggestion: Calls 100.0% of cells positive -
+check it against the histogram."* **Apply to All Markers** lists the markers it flagged. A
+flag is not always wrong (a marker can be truly rare, and a marker absent from an image puts
+every cell at the same value, which no threshold can split), but it is the first thing to check.
+
+**Cells with no signal.** Multiplex intensities usually put most marker-negative cells at
+exactly 0, which draws as one tall spike at the left of the histogram. Triangle and GMM leave
+that spike out (and the spike of values clipped to 1 by *Percentile* scaling) and fit the
+rest; cells on the spike are below any suggested threshold. Fitted with the spike included,
+both put the threshold at its edge: on the synthetic TME dataset (image tme_01, *Cell: CD3
+mean*, Percentile scaling, 1,568 cells of which 24.3% are T cells by ground truth) GMM
+suggested 0.0045 and Triangle 0.0059, calling 37.8% and 37.2% of cells positive. They now
+suggest 0.129 (24.5% positive) and 0.033 (30.2%); Gamma, which was not affected, gives
+0.361 (24.0%). Triangle still tends to call too many cells positive when a dim shoulder sits
+next to the spike, so check it against GMM and Gamma.
 
 ---

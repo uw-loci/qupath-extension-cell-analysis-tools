@@ -4,6 +4,9 @@ import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.util.StringConverter;
 
+import java.text.DecimalFormat;
+import java.text.ParseException;
+
 /**
  * Small helpers for JavaFX {@link Spinner} controls.
  * <p>
@@ -19,6 +22,42 @@ import javafx.util.StringConverter;
 public final class SpinnerUtils {
 
     private SpinnerUtils() {}
+
+    /**
+     * Show the spinner's value with up to four decimals instead of the factory
+     * default's two, so a gate such as 0.0045 is not shown -- and committed back
+     * on focus loss -- as 0. Call again after replacing the value factory.
+     */
+    public static void showFourDecimals(Spinner<Double> spinner) {
+        SpinnerValueFactory<Double> factory = spinner.getValueFactory();
+        if (factory == null) {
+            return;
+        }
+        factory.setConverter(fourDecimals());
+        spinner.getEditor().setText(factory.getConverter().toString(factory.getValue()));
+    }
+
+    static StringConverter<Double> fourDecimals() {
+        DecimalFormat format = new DecimalFormat("#.####");
+        return new StringConverter<>() {
+            @Override
+            public String toString(Double value) {
+                return value == null ? "" : format.format(value);
+            }
+
+            @Override
+            public Double fromString(String text) {
+                if (text == null || text.isBlank()) {
+                    return null;
+                }
+                try {
+                    return format.parse(text.trim()).doubleValue();
+                } catch (ParseException e) {
+                    throw new IllegalArgumentException("Not a number: " + text, e);
+                }
+            }
+        };
+    }
 
     /**
      * Commit the spinner's editor text to its value whenever it loses focus.
