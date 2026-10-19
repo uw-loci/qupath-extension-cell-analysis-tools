@@ -61,7 +61,7 @@ public class EmbeddingScatterPanel extends VBox {
     private static final double DEFAULT_PLOT_H = 520;
     private static final double MIN_PLOT_W = 320;
     private static final double MIN_PLOT_H = 260;
-    private static final double MARGIN = 40;
+    static final double MARGIN = 40;
     private static final double POINT_RADIUS = 1.5;
 
     /**
@@ -513,6 +513,13 @@ public class EmbeddingScatterPanel extends VBox {
         double plotH = ch - 2 * MARGIN;
         PlotTransform t = transform();
 
+        // Points and outlines stay inside the plot box after a pan or zoom.
+        gc.save();
+        gc.beginPath();
+        gc.rect(MARGIN, MARGIN, plotW, plotH);
+        gc.closePath();
+        gc.clip();
+
         // Draw points. When a gate is active, dim cells outside it and emphasize
         // the gated ones so the selection reads clearly.
         boolean haveGate = gatedMask != null && gatedCount > 0;
@@ -620,6 +627,8 @@ public class EmbeddingScatterPanel extends VBox {
             gc.setTextAlign(TextAlignment.CENTER);
             gc.fillText(committedLabels.get(gi), cx / m, cy / m);
         }
+
+        gc.restore();
 
         // Axes
         gc.setStroke(Color.BLACK);

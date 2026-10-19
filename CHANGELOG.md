@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   above them showed the cluster palette, so a wedge could not be matched to its cluster. The
   slice color was applied by a listener that was attached after the slice already existed, so
   it never ran. The exported composition figure was not affected; it is drawn separately.
+- **Embedding plots drew cells past the plot frame after a pan or zoom.** Cells at the edge of
+  the view painted across the axes. Points and gate outlines are now clipped to the plot box.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 
