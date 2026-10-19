@@ -123,7 +123,7 @@ class McpExplainerToolsTest {
         assertThat(r.isError()).isTrue();
         assertThat(r.texts().get(0))
                 .contains("already has 1 suggestions")
-                .contains("claude.ai via CHATBOT at 2026-10-01T10:00:00Z")
+                .contains("claude.ai, as you named it (reply pasted in) at 2026-10-01T10:00:00Z")
                 .contains("overwrite: true")
                 .contains("Nothing has changed");
     }

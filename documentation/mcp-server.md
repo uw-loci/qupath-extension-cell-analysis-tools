@@ -1022,7 +1022,7 @@ QuPath log.
 **What the agent is told**, as the tool result:
 
 ```
-The clustering result "auto_20261011_041855_kmeans" already has 6 suggestions, written by claude.ai via CHATBOT at 2026-10-11T17:02:40.512-05:00. Nothing has changed.
+The clustering result "auto_20261011_041855_kmeans" already has 6 suggestions, written by ChatGPT, as you named it (reply pasted in) at 2026-10-11T17:02:40.512-05:00. Nothing has changed.
 
 Check with the person at QuPath before replacing them. To replace, call this tool again with overwrite: true (the JSON boolean); the previous suggestions stay in the LLM audit log beside the result.
 ```

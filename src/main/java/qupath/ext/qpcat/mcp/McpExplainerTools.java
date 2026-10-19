@@ -761,10 +761,8 @@ public final class McpExplainerTools {
     }
 
     static String describeSource(LlmExplanationsBundle b) {
-        String who = b.getModel() != null && !b.getModel().isBlank() ? b.getModel() : "an unnamed source";
-        String how = b.getProvider() != null ? b.getProvider() : "UNKNOWN";
         String when = b.getTimestamp() != null ? b.getTimestamp() : "an unknown time";
-        return who + " via " + how + " at " + when;
+        return LlmExplainerService.describeAuthor(b.getProvider(), b.getModel()) + " at " + when;
     }
 
     private static String requireString(JsonObject args, String key) {

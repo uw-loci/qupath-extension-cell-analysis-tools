@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The Cluster Explainer said "claude.ai" wrote suggestions pasted from any chatbot.** With
+  *Any chatbot*, the Model box started on "claude.ai", and that label was saved as the author
+  unless you changed it. It now starts empty each time; left empty, the record says the
+  chatbot was not named. The source line under Suggestions now reads, for example, "written
+  by ChatGPT, as you named it (reply pasted in)" or "an AI agent that called itself ... (over
+  MCP)", not "via CHATBOT". The audit log's `Image:` row names the result's images ("8
+  images") rather than whichever image was open.
+
 - **HDBSCAN noise was counted as a cluster in several places.** A run that found 5 clusters
   and 606 noise cells was listed as "6 clusters" in View Past Results and in the composition
   tabs, whose Noise column read 0 in every row, as did the Noise card in Marker Fingerprints.

@@ -441,10 +441,6 @@ public final class QpcatPreferences {
     private static final StringProperty llmOllamaModel = PathPrefs.createPersistentPreference(
             "qpcat.llm.ollamaModel", "llama3.1:8b");
 
-    // Which chatbot the user carried the prompt to, for the record only.
-    private static final StringProperty llmChatbotLabel = PathPrefs.createPersistentPreference(
-            "qpcat.llm.chatbotLabel", "claude.ai");
-
     private static final StringProperty llmOllamaEndpoint = PathPrefs.createPersistentPreference(
             "qpcat.llm.ollamaEndpoint", "http://localhost:11434");
 
@@ -768,8 +764,6 @@ public final class QpcatPreferences {
     public static void setLlmAnthropicModel(String v) { llmAnthropicModel.set(v); }
     public static String getLlmOllamaModel() { return llmOllamaModel.get(); }
     public static void setLlmOllamaModel(String v) { llmOllamaModel.set(v); }
-    public static String getLlmChatbotLabel() { return llmChatbotLabel.get(); }
-    public static void setLlmChatbotLabel(String v) { llmChatbotLabel.set(v); }
     public static String getLlmOllamaEndpoint() { return llmOllamaEndpoint.get(); }
     public static void setLlmOllamaEndpoint(String v) { llmOllamaEndpoint.set(v); }
     public static int getLlmTopMarkers() { return llmTopMarkers.get(); }

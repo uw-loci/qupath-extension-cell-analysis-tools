@@ -63,8 +63,10 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -355,8 +357,6 @@ public class ClusterExplainerPanel {
                 QpcatPreferences.setLlmAnthropicModel(newV);
             } else if (p == Provider.OLLAMA) {
                 QpcatPreferences.setLlmOllamaModel(newV);
-            } else if (p == Provider.CHATBOT) {
-                QpcatPreferences.setLlmChatbotLabel(newV);
             }
         });
 
@@ -847,8 +847,11 @@ public class ClusterExplainerPanel {
                         req.projectName = projDir.getFileName().toString();
                     }
                 }
+                String scope = resultImages(result);
                 ImageData<?> imageData = qupath.getImageData();
-                if (imageData != null && imageData.getServer() != null) {
+                if (scope != null) {
+                    req.imageName = scope;
+                } else if (imageData != null && imageData.getServer() != null) {
                     String n = imageData.getServer().getMetadata().getName();
                     if (n != null) req.imageName = n;
                 }
@@ -860,6 +863,32 @@ public class ClusterExplainerPanel {
         String user = System.getProperty("user.name");
         req.operatorUser = user != null ? user : "";
         return req;
+    }
+
+    /**
+     * The images a result was clustered over, for the audit log: the image name
+     * for one, "N images" for several.
+     *
+     * @param r the result
+     * @return null when the result carries no per-cell image references
+     */
+    static String resultImages(ClusteringResult r) {
+        if (r == null || !r.hasCellRefs()) {
+            return null;
+        }
+        Set<String> ids = new LinkedHashSet<>();
+        String name = null;
+        for (var ref : r.getCellRefs()) {
+            if (ref == null) continue;
+            String key = ref.getImageId() != null ? ref.getImageId() : ref.getImageName();
+            if (key != null && ids.add(key) && name == null) {
+                name = ref.getImageName();
+            }
+        }
+        if (ids.size() > 1) {
+            return ids.size() + " images";
+        }
+        return ids.isEmpty() ? null : name;
     }
 
     private void onCancelPressed() {
@@ -1003,8 +1032,9 @@ public class ClusterExplainerPanel {
                 tableRows.setAll(bundle.getExplanations());
                 resultsTable.getSelectionModel().selectFirst();
                 showSource("Loaded from the saved result: written by "
-                        + sanitizeAgentLabel(bundle.getModel()) + " via "
-                        + safeStr(bundle.getProvider()) + " at " + shortTime(bundle.getTimestamp()) + ".");
+                        + LlmExplainerService.describeAuthor(bundle.getProvider(),
+                                sanitizeLabelOrBlank(bundle.getModel()))
+                        + " at " + shortTime(bundle.getTimestamp()) + ".");
             });
         }, "QPCAT-LlmExplainer-load");
         t.setDaemon(true);
@@ -1021,9 +1051,10 @@ public class ClusterExplainerPanel {
         if (!tableRows.isEmpty()) {
             resultsTable.getSelectionModel().selectFirst();
         }
-        String agent = sanitizeAgentLabel(bundle.getModel());
+        String agent = LlmExplainerService.describeAuthor(Provider.MCP.name(),
+                sanitizeLabelOrBlank(bundle.getModel()));
         String when = LocalTime.now().format(HH_MM);
-        showSource("Last written by " + agent + " over MCP at " + when
+        showSource("Last written by " + agent + " at " + when
                 + " -- by an AI agent, not from this panel. Saved to the result on disk.");
         mcpNoticeLabel.setText(mcpNoticeText(rows.size()));
         mcpNoticeLabel.setVisible(true);
@@ -1069,6 +1100,11 @@ public class ClusterExplainerPanel {
         sourceLabel.setText(text);
         sourceLabel.setVisible(true);
         sourceLabel.setManaged(true);
+    }
+
+    /** As {@link #sanitizeAgentLabel}, but blank for no label rather than a phrase. */
+    private static String sanitizeLabelOrBlank(String raw) {
+        return raw == null || raw.isBlank() ? "" : sanitizeAgentLabel(raw);
     }
 
     /** Agent labels are untrusted network text: no control characters, 60 chars at most. */
@@ -1275,11 +1311,13 @@ public class ClusterExplainerPanel {
             modelCombo.setValue(QpcatPreferences.getLlmOllamaModel());
             modelCombo.setDisable(false);
         } else if (p == Provider.CHATBOT) {
-            // A label for the record, not a model id anything is sent to: the
-            // saved result and the audit log say which chatbot answered.
+            // A label for the record, not a model id anything is sent to. Starts
+            // blank every time: only the user knows which chatbot answered.
             modelCombo.setItems(FXCollections.observableArrayList(
                     "claude.ai", "ChatGPT", "Gemini", "Copilot", "local model"));
-            modelCombo.setValue(QpcatPreferences.getLlmChatbotLabel());
+            modelCombo.setValue(null);
+            modelCombo.getEditor().clear();
+            modelCombo.setPromptText("Which chatbot? (optional, for the record)");
             modelCombo.setDisable(false);
         } else {
             // NONE, and MCP if it ever reached here: nothing to send a model id to.

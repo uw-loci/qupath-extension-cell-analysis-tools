@@ -74,6 +74,27 @@ class ClusterExplainerPanelMcpTest {
     }
 
     @Test
+    void theChatbotLabelStartsBlankSoNoChatbotIsAssumed() {
+        // It defaulted to "claude.ai", which was then recorded as the author of
+        // replies pasted from any chatbot.
+        Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
+        String before = qupath.ext.qpcat.preferences.QpcatPreferences.getLlmProvider();
+        try {
+            ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), null);
+            FxHarness.onFx(panel::build);
+            ComboBox<Provider> combo = field(panel, "providerCombo");
+            ComboBox<String> model = field(panel, "modelCombo");
+            FxHarness.onFx(() -> {
+                combo.setValue(Provider.ANTHROPIC);
+                combo.setValue(Provider.CHATBOT);
+            });
+            assertThat(FxHarness.onFxGet(model::getValue)).isNull();
+        } finally {
+            qupath.ext.qpcat.preferences.QpcatPreferences.setLlmProvider(before);
+        }
+    }
+
+    @Test
     void aLiveRunRegistersNoListener() {
         Assumptions.assumeTrue(FxHarness.available(), "no JavaFX display");
         ClusterExplainerPanel panel = new ClusterExplainerPanel(result(), null);
@@ -104,7 +125,8 @@ class ClusterExplainerPanelMcpTest {
         assertThat(rows.get(1).getPhenotype()).isEqualTo("Phenotype 1");
         assertThat(source.isManaged()).isTrue();
         assertThat(source.getText())
-                .startsWith("Last written by Claude Code (claude-fable-5-1) over MCP at ")
+                .startsWith("Last written by an AI agent that called itself "
+                        + "\"Claude Code (claude-fable-5-1)\" (over MCP) at ")
                 .contains("Saved to the result on disk");
         // The announcement is pinned above the scrolling content, not in the Run
         // section's status line, which at the default window size was below the fold.

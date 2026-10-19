@@ -89,9 +89,11 @@ than taking on trust:
 <summary><strong>Any chatbot (copy prompt, paste reply) -- no key</strong></summary>
 
 1. Pick **Any chatbot (copy prompt, paste reply) -- no key** as the provider. The **Model**
-   box becomes a label for the record (`claude.ai`, `ChatGPT`, ...); type whichever you are
-   about to use. It is saved with the result and written to the audit log, so a methods
-   section can still say what answered.
+   box becomes a label for the record (`claude.ai`, `ChatGPT`, ...); type or pick whichever
+   you are about to use. It starts empty each time, because only you know which chatbot
+   answered. It is saved with the result and written to the audit log, so a methods section
+   can still say what answered; left empty, the record says the chatbot was not named
+   (`Model: (not stated)` in the audit log) rather than guessing.
 2. Press **1. Copy prompt to clipboard**. The prompt is the one the API providers get --
    built in the same place, from the same marker rankings, with the same instructions
    (including the rule that no p-values are sent and no significance language is wanted).
@@ -108,7 +110,8 @@ What you give up against the API path: token counts (recorded as unknown), and t
 one-click re-run of a single cluster becomes copy, paste, paste again. What you gain: it
 works with every chatbot that exists, including ones with no API, and no key is ever typed
 into QuPath. The audit log entry has provider `CHATBOT`, the label you typed as the model,
-and the prompt and reply verbatim.
+and the prompt and reply verbatim. The tab shows the source of saved suggestions as, for
+example, "written by ChatGPT, as you named it (reply pasted in)".
 
 </details>
 
@@ -345,7 +348,7 @@ morphology-level reasoning.
 
 ### Audit-Log Discipline for Publications
 
-Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
+Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, the images the result covers (`Image:` names the image for a one-image result and reads `8 images` for an eight-image one), prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
 - **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
 - **For an MCP run: QP-CAT does not know which model answered.** The `Agent:` row is a label the agent wrote about itself (cut at 60 characters) and the `Client:` row is the client program's `User-Agent`, not a model. Take the model from the agent's own session (the model shown in the client, or its transcript) and report the `Agent:` label as the agent's self-description beside it. The recorded prompt is the text QP-CAT handed the agent; the model saw it inside the agent's conversation, with a system prompt and tool descriptions QP-CAT does not record, and with sampling settings QP-CAT neither sets nor sees. The `Agent:` and `Client:` rows are written as sent, unscrubbed

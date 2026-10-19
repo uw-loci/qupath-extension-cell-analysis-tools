@@ -50,6 +50,35 @@ public class LlmExplainerService {
         NONE, ANTHROPIC, OLLAMA, CHATBOT, MCP
     }
 
+    /**
+     * Who wrote a set of explanations, saying only what is known: a chatbot label
+     * is what the user typed, an MCP agent label is the agent's own description.
+     *
+     * @param provider the stored provider name ({@link Provider#name()}), may be null
+     * @param model    the stored model id or label, may be null or blank
+     * @return e.g. "claude-sonnet-5 (Anthropic API)", "a chatbot you did not name
+     *         (reply pasted in)", "an AI agent that called itself \"X\" (over MCP)"
+     */
+    public static String describeAuthor(String provider, String model) {
+        String m = model == null ? "" : model.trim();
+        String p = provider == null ? "" : provider;
+        switch (p) {
+            case "CHATBOT":
+                return (m.isEmpty() ? "a chatbot you did not name" : m + ", as you named it")
+                        + " (reply pasted in)";
+            case "MCP":
+                return (m.isEmpty() ? "an AI agent that gave no name"
+                        : "an AI agent that called itself \"" + m + "\"") + " (over MCP)";
+            case "ANTHROPIC":
+                return (m.isEmpty() ? "an unrecorded model" : m) + " (Anthropic API)";
+            case "OLLAMA":
+                return (m.isEmpty() ? "an unrecorded model" : m) + " (Ollama)";
+            default:
+                return (m.isEmpty() ? "an unrecorded source" : m)
+                        + (p.isEmpty() ? "" : " via " + p);
+        }
+    }
+
     /** Marshalled result of a single explain call. */
     public static class ExplainResult {
         public final List<ClusterExplanation> explanations;
@@ -397,7 +426,7 @@ public class LlmExplainerService {
         params.put("User", emptyToUnknown(req.operatorUser));
         params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
         params.put(req.provider == Provider.MCP ? "Agent" : "Model",
-                req.model != null ? req.model : "");
+                req.model != null && !req.model.isBlank() ? req.model : "(not stated)");
         if (req.provider == Provider.MCP) {
             params.put("Client", emptyToUnknown(req.client));
         }
