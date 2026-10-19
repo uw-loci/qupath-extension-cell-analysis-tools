@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **After a run on several images, the Clustering dialog reopened with no measurements
+  ticked.** Every other setting came back. The last run's ticks were applied while the list
+  of measurement names was still being read from the images, and the list that arrived then
+  replaced them. Ticks are now kept when the list is re-read, so they also survive a change
+  of scope; the same applies to the Analyze current classifications dialog.
+
 - **The composition pies used JavaFX's default colors, not the cluster colors.** The legend
   above them showed the cluster palette, so a wedge could not be matched to its cluster. The
   slice color was applied by a listener that was attached after the slice already existed, so

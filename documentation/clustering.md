@@ -100,6 +100,12 @@ hidden rows keep their ticks.
 way to work through a large panel. It is the same list moved into that window, not a copy, so
 the filter text, the buttons and every tick carry straight back when you close it.
 
+Ticks survive a change of scope and the dialog reopening. The dialog reopens with the last
+run's measurements ticked, including after a run on several images, where the list is read
+from the images after the dialog opens. A ticked measurement the new scope's cells lack is
+not shown, and comes back ticked if you return to a scope that has it. **Select None**,
+**Select 'Mean' only** and **Select 'Median' only** forget those hidden ticks.
+
 **Deselect QPCAT** unmarks every measurement QP-CAT wrote itself — embedding coordinates, spatial
 and component columns, cellular-neighborhood labels. These are *output*, not input; feeding them
 back into a later run clusters on a previous run's answer, which is how one run came back with a

@@ -29,6 +29,7 @@ import qupath.ext.qpcat.service.MeasurementExtractor;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -69,6 +70,8 @@ public class MeasurementSelectionPane extends VBox {
      * operations raise this, change every row, then fire ONCE.
      */
     private int bulkDepth;
+    /** Ticked names the current list lacks, re-ticked when a later list has them. */
+    private final Set<String> pendingSelection = new LinkedHashSet<>();
 
     private Button popOutButton;
     private Stage popOutStage;
@@ -287,6 +290,7 @@ public class MeasurementSelectionPane extends VBox {
 
     /** Checks the visible rows matching {@code predicate}, unchecking the other visible rows. */
     private void selectVisibleOnly(java.util.function.Predicate<String> predicate) {
+        pendingSelection.clear();
         inBulk(() -> {
             for (Item m : filtered) {
                 m.selected.set(predicate.test(m.name));
@@ -295,6 +299,9 @@ public class MeasurementSelectionPane extends VBox {
     }
 
     private void setVisibleChecked(boolean checked) {
+        if (!checked) {
+            pendingSelection.clear();
+        }
         inBulk(() -> {
             for (Item m : filtered) {
                 m.selected.set(checked);
@@ -319,13 +326,25 @@ public class MeasurementSelectionPane extends VBox {
         fireChanged();
     }
 
-    /** Replace the list of measurements; {@code defaultSelected} pre-checks matching ones. */
+    /**
+     * Replace the list of measurements. Names ticked before (or asked for by
+     * {@link #setSelected(Collection)} while absent) stay ticked if the new list has them.
+     *
+     * @param names the measurements to list
+     * @param defaultSelected pre-checks matching names; may be null
+     */
     public void setMeasurements(List<String> names, Predicate<String> defaultSelected) {
+        Set<String> carried = new LinkedHashSet<>(pendingSelection);
+        carried.addAll(getSelected());
+        pendingSelection.clear();
+        pendingSelection.addAll(carried);
+        pendingSelection.removeAll(names);
         inBulk(() -> {
             items.clear();
             for (String name : names) {
                 Item m = new Item(name);
-                if (defaultSelected != null && defaultSelected.test(name)) {
+                if (carried.contains(name)
+                        || (defaultSelected != null && defaultSelected.test(name))) {
                     m.selected.set(true);
                 }
                 m.selected.addListener((o, a, b) -> fireChanged());
@@ -335,9 +354,17 @@ public class MeasurementSelectionPane extends VBox {
         });
     }
 
-    /** Set the exact checked set (used to restore a prior selection). */
+    /**
+     * Set the exact checked set (used to restore a prior selection). Names not
+     * listed yet are ticked when a later {@link #setMeasurements} lists them.
+     *
+     * @param names the measurements to tick
+     */
     public void setSelected(Collection<String> names) {
         Set<String> want = new HashSet<>(names);
+        pendingSelection.clear();
+        pendingSelection.addAll(names);
+        pendingSelection.removeAll(getAllMeasurements());
         inBulk(() -> {
             for (Item m : items) {
                 m.selected.set(want.contains(m.name));
