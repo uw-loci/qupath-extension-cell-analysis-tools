@@ -17,6 +17,19 @@ tools/qp-harness/bin/qp-gui \
     /tmp/qph/project /tmp/qph/out
 ```
 
+## `QpcatTicksReopenScenario`
+
+Reopens the Clustering dialog after a stored "All project images" run and checks the
+measurement ticks came back. Run on 2026-10-19 against a jar of d6f211b it failed with the
+image open and with none open (127 rows, 0 ticked); with 2b9c290 both pass. Note that a
+dialog that stays open between runs never showed the bug -- only reopening does.
+
+```bash
+tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatTicksReopenScenario.java \
+    qupath-extension-cell-analysis-tools /tmp/qph/project open     # or: closed
+```
+
 ## `QpcatValidationScenario`
 
 Stability across seeds and agreement with known classes, end to end. Gives every cell its
