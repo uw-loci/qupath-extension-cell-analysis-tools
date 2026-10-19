@@ -243,7 +243,7 @@ A project must be open first; with none open the menu item shows an error and no
    the status line reads `NOT RUNNING. Nothing is listening. Press Start server to open the
    socket on this computer only (127.0.0.1).`
 
-   <!-- TODO: Add screenshot Docs_McpServer_Window_NotRunning.png: the QP-CAT MCP Server window as first opened -- amber banner, NOT RUNNING status line, empty Address and Token fields, the CAN / CANNOT block below. -->
+   ![The QP-CAT MCP Server window as first opened: an amber banner starting "EXPERIMENTAL, and this is a network listener", the status line "NOT RUNNING. Nothing is listening.", empty and grayed Address and Token fields with grayed Copy buttons, a Connect your agent pane showing the Claude Code command with <address> and <token> placeholders, and Start server, a grayed Stop server, and Close window buttons at the bottom. The CAN / CANNOT block is further down the window, below the scroll.](images/mcp-server-window-not-running.png)
 
 2. Read the amber banner, which says what you are about to start and ends with the same
    sentence as this page's top: `Research use only: these are suggestions to check, not
@@ -286,7 +286,7 @@ A project must be open first; with none open the menu item shows an error and no
    use; trying the next one` and `MCP port 51516 was in use; bound 51517 instead`); the
    project audit log gains a start line with the port. The token is in neither.
 
-   <!-- TODO: Add screenshot Docs_McpServer_Menu_On.png: the Setup & help submenu with "MCP server for AI agents (ON - port 51516)" checked and "Show MCP server window (address and token)" enabled below it. Take it, then press Stop server before publishing so the token in any visible window is dead, and say so in the alt text. -->
+   ![The QP-CAT menu with Setup & help open. The item "MCP server for AI agents (ON - port 51517)" has a check mark, and "Show MCP server window (address and token)" below it is enabled. The port reads 51517 because another program held 51516 on the machine it was taken on. No token is shown.](images/mcp-server-menu-on.png)
 
 4. Copy the address and the token into your agent's configuration -- the next section has
    one block per client -- or copy the ready-made command from the **Connect your agent**
