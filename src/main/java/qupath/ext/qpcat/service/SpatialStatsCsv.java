@@ -227,6 +227,63 @@ public final class SpatialStatsCsv {
         return perAreaCsv(byArea, r -> ripleyCsv(r, nameResolver));
     }
 
+    /**
+     * One ordered pair of the neighbourhood-enrichment matrix.
+     *
+     * @param center   the cluster of the cell (matrix row)
+     * @param neighbor the cluster of its neighbour (matrix column)
+     * @param z        z-score against the permutation null
+     * @param edges    graph edges from a center cell to a neighbor cell; NaN when not recorded
+     */
+    public record NhoodRow(String center, String neighbor, double z, double edges) {}
+
+    /**
+     * Every ordered pair, the diagonal included: the matrix is not symmetric (a kNN
+     * graph is directed), and the diagonal is the self-enrichment people read first.
+     *
+     * @param result       the result holding the matrix
+     * @param nameResolver maps a stored cluster key to its display name, or null for the key
+     * @return rows in matrix order; empty when the result has no matrix
+     */
+    public static List<NhoodRow> nhoodRows(ClusteringResult result, UnaryOperator<String> nameResolver) {
+        List<NhoodRow> rows = new java.util.ArrayList<>();
+        double[][] z = result == null ? null : result.getNhoodEnrichment();
+        if (z == null) {
+            return rows;
+        }
+        double[][] counts = result.getNhoodCounts();
+        String[] names = result.getNhoodClusterNames();
+        for (int i = 0; i < z.length; i++) {
+            for (int j = 0; j < z[i].length; j++) {
+                rows.add(new NhoodRow(
+                        resolve(nameResolver, names != null && i < names.length ? names[i] : String.valueOf(i)),
+                        resolve(nameResolver, names != null && j < names.length ? names[j] : String.valueOf(j)),
+                        z[i][j], at(counts, i, j)));
+            }
+        }
+        return rows;
+    }
+
+    /**
+     * Header + one row per ordered cluster pair:
+     * {@code center_cluster,neighbor_cluster,z_score,edges,permutation_null}.
+     *
+     * @param result       the result holding the matrix
+     * @param nameResolver maps a stored cluster key to its display name, or null for the key
+     */
+    public static String nhoodCsv(ClusteringResult result, UnaryOperator<String> nameResolver) {
+        StringBuilder sb = new StringBuilder("center_cluster,neighbor_cluster,z_score,edges,permutation_null\n");
+        String nullText = result == null || result.getNhoodNull() == null ? "" : result.getNhoodNull();
+        for (NhoodRow row : nhoodRows(result, nameResolver)) {
+            sb.append(escape(row.center())).append(',')
+                    .append(escape(row.neighbor())).append(',')
+                    .append(num(row.z())).append(',')
+                    .append(Double.isFinite(row.edges()) ? String.valueOf((long) row.edges()) : "").append(',')
+                    .append(escape(nullText)).append('\n');
+        }
+        return sb.toString();
+    }
+
     private static double at(double[][] values, int i, int r) {
         if (values == null || i >= values.length || values[i] == null || r >= values[i].length) {
             return Double.NaN;

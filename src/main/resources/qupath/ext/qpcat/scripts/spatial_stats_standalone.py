@@ -47,7 +47,6 @@ logger = logging.getLogger("qpcat.spatial_stats_standalone")
 
 import numpy as np
 import pandas as pd
-from appose import NDArray as PyNDArray
 
 
 def _update(msg):
@@ -257,50 +256,14 @@ except Exception:
     pass
 
 
-def _supported(fn, **kw):
-    import inspect
-
-    try:
-        params = inspect.signature(fn).parameters
-    except (TypeError, ValueError):
-        return {}
-    return {k: v for k, v in kw.items() if k in params}
-
-
 n_perms = _spatial.adaptive_permutations(n_cells, override=perm_override)
 plot_paths = {}
 any_stat = False
 
-# 4. Neighborhood enrichment + Moran's I (inline, matching run_clustering)
+# 4. Neighborhood enrichment + Moran's I (shared with run_clustering)
 if want_nhood:
-    try:
-        _update("Computing neighborhood enrichment...")
-        sq.gr.nhood_enrichment(
-            adata,
-            cluster_key="cluster",
-            **_supported(
-                sq.gr.nhood_enrichment,
-                numba_parallel=False,
-                n_jobs=1,
-                show_progress_bar=False,
-                seed=0,
-            )
-        )
-        zscore = adata.uns["cluster_nhood_enrichment"]["zscore"]
-        nhood_nd = PyNDArray(dtype="float64", shape=list(zscore.shape))
-        np.copyto(nhood_nd.ndarray(), zscore.astype(np.float64))
-        task.outputs["nhood_enrichment"] = nhood_nd
-        task.outputs["nhood_cluster_names"] = json.dumps(
-            list(adata.obs["cluster"].cat.categories)
-        )
-        any_stat = True
-        logger.info(
-            "Neighborhood enrichment computed (%d x %d)",
-            zscore.shape[0],
-            zscore.shape[1],
-        )
-    except Exception as e:
-        logger.warning("Neighborhood enrichment failed: %s", e)
+    _update("Computing neighborhood enrichment...")
+    any_stat |= _spatial.run_nhood_enrichment(adata, task, area_ids=sa_area_ids)
     # The heatmap is what the results window shows: without it the matrix was
     # computed, ticked by default, and never displayed anywhere.
     if out_dir and "cluster_nhood_enrichment" in adata.uns:

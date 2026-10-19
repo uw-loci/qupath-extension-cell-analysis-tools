@@ -32,9 +32,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   0.0045 above read "0", and clicking into the box and out again set the gate to 0, which
   calls every cell positive. The histogram's Threshold box and each marker's gate box now
   show four decimals, the precision the suggestions are computed to.
+- **Neighborhood enrichment shuffled labels across images.** The neighbor graph is built
+  per image (or core, or section), but the permutation null behind each z-score shuffled
+  cluster labels across every cell in the run, so a difference in composition between
+  images read as neighborhood structure. Labels are now shuffled within each image or area.
+  On the 8-image synthetic TME dataset (11,416 cells labelled by ground-truth type, kNN
+  graph, k = 15) this moved z by 3.0 on average over the 36 cluster pairs and by at most 8.9;
+  no pair changed sign, and three crossed |z| = 2 (fibroblast-to-helper-T went from 0.3 to
+  7.3). A single-image run is unchanged.
+- **The post-hoc spatial CSV left out most of the enrichment matrix.** It wrote one
+  direction of each cluster pair and no diagonal (a cluster next to itself), although a
+  kNN graph makes A-to-B and B-to-A different numbers. It now writes every ordered pair, as
+  `nhood_z` and `nhood_edges` rows keyed `A > B`.
 
 ### Added
 
+- **The Neighborhood Enrichment tab is now a table with the edge count behind every
+  z-score**, e.g. `7.3 (6061)`, so a large z from a handful of edges reads as such, and the
+  line above it says how labels were shuffled. It has the same **Copy text / Copy CSV /
+  Save CSV...** buttons as the other spatial tables. The heatmap moved to **Neighborhood
+  Enrichment (plot)**. Results saved before this version show z without counts.
 - **A suggested threshold that calls more than 95% or fewer than 5% of cells positive is
   flagged** under the histogram counts, and **Apply to All Markers** names the markers it
   flagged, so a poor suggestion shows up whichever method made it.

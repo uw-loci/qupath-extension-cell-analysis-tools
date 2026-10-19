@@ -2190,7 +2190,6 @@ public class ClusteringWorkflow {
         NDArray embNd = null;
         NDArray statsNd = null;
         NDArray pagaNd = null;
-        NDArray nhoodNd = null;
         NDArray confNd = null;
         NDArray ruNd = null;
         NDArray ruvNd = null;
@@ -2383,26 +2382,7 @@ public class ClusteringWorkflow {
             }
 
             // Parse spatial analysis outputs
-            if (task.outputs.containsKey("nhood_enrichment")) {
-                nhoodNd = (NDArray) task.outputs.get("nhood_enrichment");
-                int nhoodSize = nClusters;
-                double[][] nhoodData = new double[nhoodSize][nhoodSize];
-                var nhoodBuf = nhoodNd.buffer().asDoubleBuffer();
-                for (int i = 0; i < nhoodSize; i++) {
-                    nhoodBuf.get(nhoodData[i]);
-                }
-                result.setNhoodEnrichment(nhoodData);
-
-                String nhoodNamesJson = (String) task.outputs.get("nhood_cluster_names");
-                if (nhoodNamesJson != null) {
-                    Gson gson = new Gson();
-                    List<String> namesList = gson.fromJson(nhoodNamesJson,
-                            new TypeToken<List<String>>(){}.getType());
-                    result.setNhoodClusterNames(namesList.toArray(new String[0]));
-                }
-                logger.info("Received neighborhood enrichment ({} x {})",
-                        nhoodSize, nhoodSize);
-            }
+            readNhoodEnrichment(task.outputs, result, new Gson());
 
             if (task.outputs.containsKey("spatial_autocorr")) {
                 result.setSpatialAutocorrJson(
@@ -2681,7 +2661,6 @@ public class ClusteringWorkflow {
             if (embNd != null) embNd.close();
             if (statsNd != null) statsNd.close();
             if (pagaNd != null) pagaNd.close();
-            if (nhoodNd != null) nhoodNd.close();
             if (confNd != null) confNd.close();
             if (ruNd != null) ruNd.close();
             if (ruvNd != null) ruvNd.close();
@@ -4901,6 +4880,50 @@ public class ClusteringWorkflow {
         if (raw.get("threshold") instanceof Number t) out.setThreshold(t.doubleValue());
         if (raw.get("areas") != null) out.setAreas(raw.get("areas").toString());
         return out;
+    }
+
+    /**
+     * Read the neighbourhood-enrichment outputs of {@code spatial_stats.run_nhood_enrichment}
+     * (z-scores, edge counts, cluster names, the permutation-null description) into
+     * {@code result}, closing the arrays. Does nothing when there are none.
+     */
+    static void readNhoodEnrichment(Map<String, Object> outputs, ClusteringResult result, Gson gson) {
+        if (!outputs.containsKey("nhood_enrichment")) {
+            return;
+        }
+        try (NDArray z = (NDArray) outputs.get("nhood_enrichment");
+             NDArray counts = (NDArray) outputs.get("nhood_counts")) {
+            result.setNhoodEnrichment(squareMatrix(z));
+            if (counts != null) {
+                result.setNhoodCounts(squareMatrix(counts));
+            }
+            Object names = outputs.get("nhood_cluster_names");
+            if (names != null) {
+                List<String> namesList = gson.fromJson((String) names,
+                        new TypeToken<List<String>>(){}.getType());
+                result.setNhoodClusterNames(namesList.toArray(new String[0]));
+            }
+            Object nullText = outputs.get("nhood_null");
+            if (nullText != null) {
+                result.setNhoodNull(nullText.toString());
+            }
+            logger.info("Received neighborhood enrichment ({} x {})",
+                    result.getNhoodEnrichment().length, result.getNhoodEnrichment().length);
+        } catch (Exception e) {
+            logger.warn("Parse nhood enrichment failed: {}", e.getMessage());
+        }
+    }
+
+    /** A float64 (n, m) array as n rows of m. */
+    private static double[][] squareMatrix(NDArray nd) {
+        int[] shape = ApposeArrays.shape(nd);
+        double[] flat = ApposeArrays.toDoubles(nd);
+        int cols = shape.length > 1 ? shape[1] : 1;
+        double[][] m = new double[shape[0]][cols];
+        for (int i = 0; i < shape[0]; i++) {
+            System.arraycopy(flat, i * cols, m[i], 0, cols);
+        }
+        return m;
     }
 
     static qupath.ext.qpcat.model.CoOccurrenceResult parseCoOccurrence(String json, Gson gson) {

@@ -493,7 +493,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 |---|---|
 | **Spatial Autocorrelation** (Moran's I) | Per measurement, ranked by I: I > 0 clustered, ~0 random, < 0 dispersed, plus in how many images the structure holds. Measurements high in I and consistent across images are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
 | **Geary's C** | Per measurement, ranked by C: C < 1 nearby cells similar, ~1 random, > 1 dissimilar, plus the same per-image count. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
-| **Neighborhood Enrichment** | Cluster x cluster permutation z-score: brighter (toward yellow) = neighbours more often than chance, darker (toward purple) = less. The colour scale is not centred on zero, so read the colour bar. The standard interaction matrix. [Full description below](#neighborhood-enrichment-tab). |
+| **Neighborhood Enrichment** | Cluster x cluster permutation z-score, with the number of graph edges behind each one: z > 0 = neighbors more often than chance, z < 0 = less. The standard interaction matrix. The **(plot)** tab is the same matrix as a heatmap, whose colour scale is not centred on zero. [Full description below](#neighborhood-enrichment-tab). |
 | **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
@@ -680,13 +680,28 @@ matrix is not.
 **It reads the neighbour graph**, so the graph constructor at the top of the dialog
 changes these numbers.
 
-Two things to keep in mind:
+**Two tabs show it.** **Neighborhood Enrichment** is the table: rows are the cell's cluster,
+columns its neighbor's, and each entry reads `z (edges)`, e.g. `7.3 (6061)`. *Edges* is how
+many graph edges from a row-cluster cell to a column-cluster neighbor the z rests on. A
+large z from a handful of edges is weak evidence, so read the two together. The matrix is not
+symmetric, because a k-nearest-neighbor graph is not: B can be among A's nearest neighbors
+without A being among B's. **Neighborhood Enrichment (plot)** is squidpy's heatmap of the z
+column alone.
 
-- **A z-score carries no cell count.** A pair with very few edges between them can still
-  produce a large z. Read it next to the cluster sizes in the Composition tabs.
-- **The figure is a PNG only** in this window. For the numbers, run the statistic from
-  **Extensions > QP-CAT > Explore & spatial > Spatial statistics on existing clusters...**,
-  which writes `nhood_z` rows to its spreadsheet.
+**The line above the table says how the labels were shuffled.** When the run covered several
+images (or cores, or sections), labels are shuffled within each one, matching the neighbor
+graph, which never joins two of them. Before 0.23.0 they were shuffled across every cell in
+the run, so a difference in composition between images (one image with no B cells, say)
+counted as neighborhood structure. On the 8-image synthetic TME dataset (11,416 cells
+labelled by their ground-truth type, kNN graph, k = 15) the change moved z by 3.0 on average
+across the 36 pairs and by at most 8.9; no pair changed sign, and three crossed |z| = 2. The
+largest change in meaning was fibroblast-to-helper-T, from 0.3 (no association) to 7.3.
+
+An entry reads **n/a** when the null has no spread: every shuffle gives the same count, as
+happens when an image holds a single cluster.
+
+**Save CSV...** under the table writes one row per ordered pair with `z_score`, `edges` and
+the shuffling line (`qpcat_neighborhood_enrichment.csv`).
 
 <a name="spatial-scatter-tab"></a>
 ### Spatial Scatter
@@ -701,12 +716,12 @@ how the files happen to be numbered.
 
 ### Exporting spatial statistics tables
 
-The **Spatial Autocorrelation**, **Geary's C**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
+The **Spatial Autocorrelation**, **Geary's C**, **Neighborhood Enrichment**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
 
 Buttons above each table:
 - **Copy text** -- copies the table exactly as shown, spacing preserved (not Ripley L, which is a chart).
 - **Copy CSV** -- copies comma-separated rows in long form, ready to paste into a spreadsheet or R/Python.
-- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_moran_i.csv`, `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`).
+- **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_moran_i.csv`, `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`, `qpcat_neighborhood_enrichment.csv`).
 
 **Why long form?** The on-screen table for pairwise co-occurrence is one column per ordered cluster pair (20 clusters = 400 columns, labels scroll away). CSV writes one row per pair, so every comparison is explicit and legible in a cell editor or data frame.
 

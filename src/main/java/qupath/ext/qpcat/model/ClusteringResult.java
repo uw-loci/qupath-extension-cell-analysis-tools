@@ -378,6 +378,10 @@ public class ClusteringResult {
 
     // Spatial analysis results
     private double[][] nhoodEnrichment;
+    // Edges from a row-cluster cell to a column-cluster neighbour; null on results saved before 0.23.
+    private double[][] nhoodCounts;
+    // One line naming the permutation null (spatial_stats.describe_nhood_null).
+    private String nhoodNull;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
     private String spatialAutocorrPMethod;
@@ -387,6 +391,10 @@ public class ClusteringResult {
 
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }
     public void setNhoodEnrichment(double[][] m) { this.nhoodEnrichment = m; }
+    public double[][] getNhoodCounts() { return nhoodCounts; }
+    public void setNhoodCounts(double[][] m) { this.nhoodCounts = m; }
+    public String getNhoodNull() { return nhoodNull; }
+    public void setNhoodNull(String s) { this.nhoodNull = s; }
     public String[] getNhoodClusterNames() { return nhoodClusterNames; }
     public void setNhoodClusterNames(String[] names) { this.nhoodClusterNames = names; }
     public boolean hasNhoodEnrichment() { return nhoodEnrichment != null; }

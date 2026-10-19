@@ -114,21 +114,6 @@ def _progress(frac, message, phase=None):
     task.update(token + "|" + message, current=int(f * 1000), maximum=1000)
 
 
-def _supported_kwargs(fn, **kw):
-    """Filter kwargs to those `fn` actually accepts, so we can pass
-    single-threading hints (numba_parallel / n_jobs / show_progress_bar / seed)
-    to squidpy without a TypeError when a given version renamed or dropped one."""
-    import inspect
-
-    try:
-        params = inspect.signature(fn).parameters
-    except (TypeError, ValueError):
-        return kw
-    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
-        return kw
-    return {k: v for k, v in kw.items() if k in params}
-
-
 # 1. Reshape input NDArray to numpy and release shared memory.
 # UMAP, KMeans, and Leiden/BANKSY all reject NaN/Inf, and a marker can
 # legitimately be NaN for some cells when QuPath could not compute it (this is
@@ -2265,36 +2250,10 @@ if has_spatial and n_clusters_found > 1:
     # choice so a BANKSY run (which always supplies coordinates) does not trigger
     # these uninvited.
     if pref_enable_spatial_analysis:
-        # Neighborhood enrichment (z-score matrix)
-        try:
-            _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
-            sq.gr.nhood_enrichment(
-                adata,
-                cluster_key="cluster",
-                **_supported_kwargs(
-                    sq.gr.nhood_enrichment,
-                    numba_parallel=False,
-                    n_jobs=1,
-                    show_progress_bar=False,
-                    seed=0,
-                )
-            )
-            nhood_data = adata.uns["cluster_nhood_enrichment"]
-            zscore = nhood_data["zscore"]
-
-            nhood_nd = PyNDArray(dtype="float64", shape=list(zscore.shape))
-            np.copyto(nhood_nd.ndarray(), zscore.astype(np.float64))
-            task.outputs["nhood_enrichment"] = nhood_nd
-            task.outputs["nhood_cluster_names"] = json.dumps(
-                list(adata.obs["cluster"].cat.categories)
-            )
-            logger.info(
-                "Neighborhood enrichment computed (%d x %d)",
-                zscore.shape[0],
-                zscore.shape[1],
-            )
-        except Exception as e:
-            logger.warning("Neighborhood enrichment failed: %s", e)
+        # Neighborhood enrichment (z-score + edge-count matrices). Shared with
+        # spatial_stats_standalone.py; the null shuffles labels within each area.
+        _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
+        _qpcat_spatial.run_nhood_enrichment(adata, task, area_ids=area_ids_list)
 
         # Spatial autocorrelation (Moran's I per marker). The call lives in
         # spatial_stats.run_moran_i, which the standalone post-hoc script uses

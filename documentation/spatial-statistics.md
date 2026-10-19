@@ -76,6 +76,11 @@ The z-score matrix shows:
 - **Near zero:** random spatial relationship. The colour scale runs from the matrix's own
   minimum to its maximum and is not centred on zero, so read the colour bar to see which
   colour zero is.
+- **The edge count next to each z** (the table tab, and the CSV) is how many graph edges the
+  z rests on. A large z from a few edges is weak evidence.
+- **With several images or areas, labels are shuffled within each one**, so differences in
+  composition between images do not read as co-localization. See
+  [Neighborhood Enrichment](results.md#neighborhood-enrichment-tab) for what this changed.
 
 <a name="autocorr-p-values"></a>
 ### Interpreting Moran's I and Geary's C
@@ -355,7 +360,8 @@ parameter, the permutation count (0 = adaptive), and which statistics to run:
 areas open a **summary table** -- one row per area, with an "Open" button to
 drill into each window's full result and a "Save combined CSV" export. Each run is
 also auto-saved (a long-format CSV + a metadata JSON linked to the source result +
-per-area ROI identity) under `<project>/qpcat/spatial_stats/`. Nothing is written
+per-area ROI identity) under `<project>/qpcat/spatial_stats/`. Neighborhood enrichment
+writes two rows per ordered cluster pair (`key` = `A > B`): `nhood_z` and `nhood_edges`. Nothing is written
 to the object hierarchy -- this is read-only.
 
 **Interpretation caveats (important):**

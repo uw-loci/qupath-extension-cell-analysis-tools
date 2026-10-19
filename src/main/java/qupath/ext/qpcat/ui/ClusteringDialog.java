@@ -34,6 +34,7 @@ import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import qupath.ext.qpcat.service.AutocorrTables;
+import qupath.ext.qpcat.service.NhoodTable;
 import qupath.ext.qpcat.service.SpatialStatsCsv;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CellClasses;
@@ -5271,6 +5272,26 @@ public class ClusteringDialog {
             tabPane.getTabs().add(tab);
         }
 
+        if (result.hasNhoodEnrichment()) {
+            TextArea nhoodText = coOccurrenceTextArea(
+                    NhoodTable.text(result, k -> clusterNameForKey(result, k)));
+            Tab tab = new Tab("Neighborhood Enrichment", wrapWithGuide(withCsvExport(
+                    nhoodText,
+                    nhoodText::getText,
+                    () -> SpatialStatsCsv.nhoodCsv(result, k -> clusterNameForKey(result, k)),
+                    "qpcat_neighborhood_enrichment.csv"),
+                    "Each cell: how much more (z > 0) or less (z < 0) often a cell of the ROW\n"
+                    + "cluster has a neighbor of the COLUMN cluster than when cluster labels are\n"
+                    + "shuffled, and in brackets the number of graph edges that z rests on.\n"
+                    + "A large z from a handful of edges is weak evidence; read the two together.\n"
+                    + "The line above the table says how labels were shuffled: within each image\n"
+                    + "(or core, or section) when the run had several, so differences in\n"
+                    + "composition between images do not read as neighborhood structure.",
+                    "neighborhood-enrichment-tab"));
+            tab.setClosable(false);
+            tabPane.getTabs().add(tab);
+        }
+
         // Plot tabs (PNGs from Python). Iteration order = result.getPlotPaths
         // map order, which mirrors the order plots are produced in Python.
         // Dotplot and Matrix Plot are deliberately surfaced earlier (right
@@ -6732,7 +6753,7 @@ public class ClusteringDialog {
                     docAnchor = "embedding-plot-tab";
                 }
                 case "nhood_enrichment" -> {
-                    tabName = "Neighborhood Enrichment";
+                    tabName = "Neighborhood Enrichment (plot)";
                     guide = "Z-score matrix of spatial co-localization between cluster pairs. "
                             + "Brighter (toward yellow) = clusters found as spatial neighbors "
                             + "more often; darker (toward purple) = less often. Only a positive "

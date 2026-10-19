@@ -21,6 +21,7 @@ import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.SavedResultApplier;
+import qupath.ext.qpcat.service.SpatialStatsCsv;
 import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -344,8 +345,14 @@ public class PostHocSpatialWorkflow {
                 }
             }
             if (r.hasSpatialAutocorr()) any |= appendMoran(sb, base, r.getSpatialAutocorrJson());
-            if (r.hasNhoodEnrichment()) {
-                any |= appendNhood(sb, base, r.getNhoodEnrichment(), r.getNhoodClusterNames());
+            for (SpatialStatsCsv.NhoodRow row : SpatialStatsCsv.nhoodRows(r, null)) {
+                String key = csv(row.center() + " > " + row.neighbor());
+                sb.append(base).append("nhood_z,").append(key).append(",")
+                        .append(fmt(row.z())).append(",\n");
+                sb.append(base).append("nhood_edges,").append(key).append(",")
+                        .append(Double.isFinite(row.edges()) ? String.valueOf((long) row.edges()) : "")
+                        .append(",\n");
+                any = true;
             }
             for (String s : new String[]{
                     r.hasRipley() ? "ripley" : null,
@@ -373,21 +380,6 @@ public class PostHocSpatialWorkflow {
         } catch (Exception ex) {
             LoggerFactory.getLogger(PostHocSpatialWorkflow.class)
                     .debug("Moran JSON parse for CSV failed: {}", ex.getMessage());
-        }
-        return any;
-    }
-
-    private static boolean appendNhood(StringBuilder sb, String base, double[][] m, String[] names) {
-        if (m == null) return false;
-        boolean any = false;
-        for (int i = 0; i < m.length; i++) {
-            for (int j = i + 1; j < m[i].length; j++) {
-                String a = names != null && i < names.length ? names[i] : String.valueOf(i);
-                String b = names != null && j < names.length ? names[j] : String.valueOf(j);
-                sb.append(base).append("nhood_z,").append(csv(a + " | " + b)).append(",")
-                        .append(fmt(m[i][j])).append(",\n");
-                any = true;
-            }
         }
         return any;
     }
@@ -838,25 +830,8 @@ public class PostHocSpatialWorkflow {
                         (String) outputs.get("co_occurrence_one_vs_rest"), gson));
             } catch (Exception e) { logger.warn("Parse co-occurrence one-vs-rest failed: {}", e.getMessage()); }
         }
-        if (outputs.containsKey("nhood_enrichment")) {
-            try {
-                // try-with-resources: an NDArray owns a /dev/shm segment, and this
-                // one was never closed on ANY path -- so every post-hoc run with
-                // neighbourhood enrichment leaked one.
-                try (NDArray nd = (NDArray) outputs.get("nhood_enrichment")) {
-                    double[][] m = new double[nClasses][nClasses];
-                    var buf = nd.buffer().asDoubleBuffer();
-                    for (int i = 0; i < nClasses; i++) buf.get(m[i]);
-                    result.setNhoodEnrichment(m);
-                }
-                if (outputs.containsKey("nhood_cluster_names")) {
-                    List<String> namesList = gson.fromJson(
-                            (String) outputs.get("nhood_cluster_names"),
-                            new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
-                    result.setNhoodClusterNames(namesList.toArray(new String[0]));
-                }
-            } catch (Exception e) { logger.warn("Parse nhood enrichment failed: {}", e.getMessage()); }
-        }
+        // Closes the arrays: each NDArray owns a /dev/shm segment.
+        ClusteringWorkflow.readNhoodEnrichment(outputs, result, gson);
         if (outputs.containsKey("spatial_autocorr")) {
             result.setSpatialAutocorrJson(String.valueOf(outputs.get("spatial_autocorr")));
             if (outputs.containsKey("spatial_autocorr_p_method")) {

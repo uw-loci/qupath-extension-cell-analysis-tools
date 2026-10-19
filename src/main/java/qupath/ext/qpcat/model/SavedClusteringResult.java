@@ -103,6 +103,8 @@ public class SavedClusteringResult {
 
     // Spatial analysis
     private double[][] nhoodEnrichment;
+    private double[][] nhoodCounts;
+    private String nhoodNull;
     private String[] nhoodClusterNames;
     private String spatialAutocorrJson;
     private String spatialAutocorrPMethod;
@@ -311,6 +313,12 @@ public class SavedClusteringResult {
     public double[][] getNhoodEnrichment() { return nhoodEnrichment; }
     public void setNhoodEnrichment(double[][] m) { this.nhoodEnrichment = m; }
 
+    public double[][] getNhoodCounts() { return nhoodCounts; }
+    public void setNhoodCounts(double[][] m) { this.nhoodCounts = m; }
+
+    public String getNhoodNull() { return nhoodNull; }
+    public void setNhoodNull(String s) { this.nhoodNull = s; }
+
     public String[] getNhoodClusterNames() { return nhoodClusterNames; }
     public void setNhoodClusterNames(String[] names) { this.nhoodClusterNames = names; }
 
@@ -394,6 +402,8 @@ public class SavedClusteringResult {
         saved.setOmittedOutputs(result.getOmittedOutputs());
 
         saved.setNhoodEnrichment(result.getNhoodEnrichment());
+        saved.setNhoodCounts(result.getNhoodCounts());
+        saved.setNhoodNull(result.getNhoodNull());
         saved.setNhoodClusterNames(result.getNhoodClusterNames());
         saved.setSpatialAutocorrJson(result.getSpatialAutocorrJson());
         saved.setSpatialAutocorrPMethod(result.getSpatialAutocorrPMethod());
@@ -500,6 +510,8 @@ public class SavedClusteringResult {
         result.setPagaClusterNames(pagaClusterNames);
         result.setPlotPaths(plotPaths);
         result.setNhoodEnrichment(nhoodEnrichment);
+        result.setNhoodCounts(nhoodCounts);
+        result.setNhoodNull(nhoodNull);
         result.setNhoodClusterNames(nhoodClusterNames);
         result.setSpatialAutocorrJson(spatialAutocorrJson);
         result.setSpatialAutocorrPMethod(spatialAutocorrPMethod);

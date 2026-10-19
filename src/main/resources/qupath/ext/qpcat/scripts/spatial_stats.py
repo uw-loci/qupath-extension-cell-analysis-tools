@@ -1712,6 +1712,89 @@ def describe_areas(n_areas, skipped, min_cells=AUTOCORR_MIN_AREA_CELLS):
     return line
 
 
+NHOOD_AREA_KEY = "qpcat_area"
+
+
+def nhood_library_key(adata, area_ids):
+    """Store the area ids as a categorical obs column for squidpy's library_key.
+
+    :param area_ids: per-cell independent-area id, or None
+    :return: the obs column name, or None when there are fewer than two areas
+    """
+    if area_ids is None or len(set(area_ids)) < 2:
+        return None
+    import pandas as pd
+
+    adata.obs[NHOOD_AREA_KEY] = pd.Categorical(np.asarray(area_ids, dtype=np.int64))
+    return NHOOD_AREA_KEY
+
+
+def describe_nhood_null(n_permutations, n_areas):
+    """One line naming the permutation null, shown above the table."""
+    if n_areas > 1:
+        return "%d permutations; cluster labels shuffled within each of %d areas" % (
+            n_permutations,
+            n_areas,
+        )
+    return "%d permutations; cluster labels shuffled across all cells" % n_permutations
+
+
+def run_nhood_enrichment(adata, task, area_ids=None, n_permutations=1000):
+    """Neighbourhood enrichment z-scores and edge counts into task.outputs.
+
+    Writes nhood_enrichment (z), nhood_counts (edges from a row-cluster cell
+    to a column-cluster neighbour), nhood_cluster_names (JSON) and nhood_null
+    (describe_nhood_null). With several areas the permutation null shuffles
+    labels within each area, matching the per-area graph.
+
+    :param area_ids: per-cell independent-area id, or None
+    :return: True when the outputs were written
+    """
+    import squidpy as sq
+    from appose import NDArray as PyNDArray
+
+    try:
+        library_key = nhood_library_key(adata, area_ids)
+        # library_key is passed as-is, not through _safe_kwargs: a squidpy that
+        # dropped it must fail here, not silently shuffle across areas.
+        sq.gr.nhood_enrichment(
+            adata,
+            cluster_key="cluster",
+            library_key=library_key,
+            n_perms=n_permutations,
+            **_safe_kwargs(
+                sq.gr.nhood_enrichment,
+                numba_parallel=False,
+                n_jobs=1,
+                show_progress_bar=False,
+                seed=0,
+            ),
+        )
+        data = adata.uns["cluster_nhood_enrichment"]
+        for key, values in (
+            ("nhood_enrichment", data["zscore"]),
+            ("nhood_counts", data["count"]),
+        ):
+            nd = PyNDArray(dtype="float64", shape=list(values.shape))
+            np.copyto(nd.ndarray(), np.asarray(values, dtype=np.float64))
+            task.outputs[key] = nd
+        task.outputs["nhood_cluster_names"] = json.dumps(
+            list(adata.obs["cluster"].cat.categories)
+        )
+        n_areas = 1 if library_key is None else len(set(area_ids))
+        task.outputs["nhood_null"] = describe_nhood_null(n_permutations, n_areas)
+        logger.info(
+            "Neighborhood enrichment computed (%d x %d, %d area(s))",
+            data["zscore"].shape[0],
+            data["zscore"].shape[1],
+            n_areas,
+        )
+        return True
+    except Exception as e:
+        logger.warning("Neighborhood enrichment failed: %s", e)
+        return False
+
+
 def run_moran_i(
     adata,
     task,
