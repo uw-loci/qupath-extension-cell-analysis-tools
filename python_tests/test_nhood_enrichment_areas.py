@@ -81,7 +81,9 @@ def test_random_mixing_inside_an_area_is_not_called_enriched(spatial):
     adata, area_ids = _two_area_adata()
     spatial.build_spatial_graph(adata, graph_type="knn", k=8, area_ids=area_ids)
     task = _Task()
-    assert spatial.run_nhood_enrichment(adata, task, area_ids=area_ids, n_permutations=200)
+    assert spatial.run_nhood_enrichment(
+        adata, task, area_ids=area_ids, n_permutations=200
+    )
 
     names = json.loads(task.outputs["nhood_cluster_names"])
     z = task.outputs["nhood_enrichment"].ndarray()
