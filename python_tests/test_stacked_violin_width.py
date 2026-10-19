@@ -127,9 +127,11 @@ def test_report_whether_this_environment_dodges(capsys):
                 default,
                 sns.__version__,
                 pd.__version__,
-                "DODGES, dodge=False is load-bearing here"
-                if default < 0.5
-                else "does not dodge; dodge=False is a no-op here",
+                (
+                    "DODGES, dodge=False is load-bearing here"
+                    if default < 0.5
+                    else "does not dodge; dodge=False is a no-op here"
+                ),
             )
         )
     assert default > 0
@@ -154,7 +156,7 @@ def test_shipped_script_passes_dodge_false():
     assert calls, "run_clustering.py no longer calls sc.pl.stacked_violin"
     for call in calls:
         kwds = {k.arg: k.value for k in call.keywords}
-        assert "dodge" in kwds, (
-            "stacked_violin lost dodge=False: violins go back to hairlines"
-        )
+        assert (
+            "dodge" in kwds
+        ), "stacked_violin lost dodge=False: violins go back to hairlines"
         assert isinstance(kwds["dodge"], ast.Constant) and kwds["dodge"].value is False

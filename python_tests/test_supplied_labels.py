@@ -12,7 +12,9 @@ import numpy as np
 import pytest
 from conftest import load_script_symbol
 
-validate = load_script_symbol("run_clustering.py", "validate_supplied_labels", {"np": np})
+validate = load_script_symbol(
+    "run_clustering.py", "validate_supplied_labels", {"np": np}
+)
 
 
 def test_dense_labels_pass_and_come_back_int32():
@@ -68,8 +70,8 @@ def test_the_refused_gap_is_exactly_what_breaks_cluster_means_alignment():
     rule and its justification stay attached.
     """
     labels = np.array([0, 2, 5])
-    n_clusters_found = int(labels.max() + 1)          # 6, as the script computes
-    n_mean_rows = int(np.unique(labels).size)         # 3, what groupby produces
+    n_clusters_found = int(labels.max() + 1)  # 6, as the script computes
+    n_mean_rows = int(np.unique(labels).size)  # 3, what groupby produces
     assert n_clusters_found != n_mean_rows
     with pytest.raises(ValueError):
         validate(labels, labels.size)

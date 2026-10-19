@@ -182,7 +182,9 @@ except NameError:
 try:
     autocorr_threshold = float(spatial_autocorr_threshold)
 except NameError:
-    autocorr_threshold = 0.05  # spatial_stats.AUTOCORR_DEFAULT_THRESHOLD, not imported yet
+    autocorr_threshold = (
+        0.05  # spatial_stats.AUTOCORR_DEFAULT_THRESHOLD, not imported yet
+    )
 try:
     coord_unit = str(coord_unit)
 except NameError:
@@ -292,8 +294,12 @@ if want_moran:
         # of the squidpy call, and its own copy of that call's two defects.
         _update("Computing Moran's I spatial autocorrelation...")
         if _spatial.run_moran_i(
-            adata, task, measurements=list(mnames), n_permutations=n_perms,
-            area_ids=sa_area_ids, threshold=autocorr_threshold,
+            adata,
+            task,
+            measurements=list(mnames),
+            n_permutations=n_perms,
+            area_ids=sa_area_ids,
+            threshold=autocorr_threshold,
         ):
             any_stat = True
 

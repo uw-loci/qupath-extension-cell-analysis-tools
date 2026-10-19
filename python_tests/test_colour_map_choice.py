@@ -58,7 +58,9 @@ def test_the_caller_chooses_the_map_within_each_family(ratio_colour_scale):
     assert norm is None
 
 
-def test_the_caller_cannot_force_a_diverging_map_onto_one_sided_data(ratio_colour_scale):
+def test_the_caller_cannot_force_a_diverging_map_onto_one_sided_data(
+    ratio_colour_scale,
+):
     # The whole point. There is no parameter that overrides the family.
     name, _ = ratio_colour_scale(
         np.array([1.5, 2.0, 3.0]), diverging_cmap="RdBu_r", sequential_cmap="viridis"
@@ -69,15 +71,14 @@ def test_the_caller_cannot_force_a_diverging_map_onto_one_sided_data(ratio_colou
 def test_a_none_choice_falls_back_to_the_historical_default(ratio_colour_scale):
     # The Java side omits the input when the chosen map has no matplotlib
     # equivalent, and a stored empty string must behave the same way.
-    assert ratio_colour_scale(
-        np.array([0.5, 1.0, 2.0]), diverging_cmap=None
-    )[0] == "RdBu_r"
-    assert ratio_colour_scale(
-        np.array([1.5, 2.0]), sequential_cmap=None
-    )[0] == "viridis"
-    assert ratio_colour_scale(
-        np.array([1.5, 2.0]), sequential_cmap=""
-    )[0] == "viridis"
+    assert (
+        ratio_colour_scale(np.array([0.5, 1.0, 2.0]), diverging_cmap=None)[0]
+        == "RdBu_r"
+    )
+    assert (
+        ratio_colour_scale(np.array([1.5, 2.0]), sequential_cmap=None)[0] == "viridis"
+    )
+    assert ratio_colour_scale(np.array([1.5, 2.0]), sequential_cmap="")[0] == "viridis"
 
 
 def test_all_non_finite_data_still_returns_a_usable_map(ratio_colour_scale):

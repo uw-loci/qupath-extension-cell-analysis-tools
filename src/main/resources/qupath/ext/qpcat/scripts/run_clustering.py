@@ -1555,7 +1555,9 @@ elif algorithm == "minibatchkmeans":
         confidence_values = _margin["margin"]
         confidence_runner_up = _margin["runner_up"]
     except Exception as _e:
-        logger.warning("MiniBatchKMeans separation margin could not be computed: %s", _e)
+        logger.warning(
+            "MiniBatchKMeans separation margin could not be computed: %s", _e
+        )
 
 elif algorithm == "gmm":
     n_components = algorithm_params.get("n_components", 10)
@@ -1900,9 +1902,9 @@ def dot_size_caption(normalization, cutoff=0.0):
         )
     units = {
         "minmax": "each marker rescaled to [0, 1], so above 0 means any signal "
-                  "above that marker's minimum",
+        "above that marker's minimum",
         "percentile": "each marker clipped to [p1, p99] and rescaled to [0, 1], "
-                      "so above 0 means above the 1st percentile",
+        "so above 0 means above the 1st percentile",
     }.get(normalization, "raw measurement units, so above 0 means any signal")
     return "dot size = fraction of the cluster's cells above %.3g (%s: %s)" % (
         cutoff,
@@ -2166,9 +2168,11 @@ if pref_stability_repeats > 0:
             "Stability across seeds: not computed for %s, which %s."
             % (
                 algorithm,
-                "gives the same clusters for the same matrix whatever the seed"
-                if algorithm in ("hdbscan", "agglomerative")
-                else "is not supported by this check",
+                (
+                    "gives the same clusters for the same matrix whatever the seed"
+                    if algorithm in ("hdbscan", "agglomerative")
+                    else "is not supported by this check"
+                ),
             )
         )
 if reference_codes is not None and algorithm != "existing":
@@ -2249,7 +2253,6 @@ _progress(0.66, "Ranking cluster markers (%d clusters)..." % n_clusters_found)
 import scanpy as sc
 import anndata as ad
 import json
-
 
 # Build full AnnData for scanpy analysis
 adata = ad.AnnData(X=df_norm.drop(columns=["cluster"]).values)
@@ -3164,7 +3167,8 @@ if confidence_kind is not None and confidence_values is not None:
         _conf = np.asarray(confidence_values, dtype=np.float64).ravel()
         if _conf.size != n_cells:
             raise ValueError(
-                "confidence has %d entries but there are %d cells" % (_conf.size, n_cells)
+                "confidence has %d entries but there are %d cells"
+                % (_conf.size, n_cells)
             )
         _conf_nd = PyNDArray(dtype="float64", shape=[n_cells])
         np.copyto(_conf_nd.ndarray(), _conf)

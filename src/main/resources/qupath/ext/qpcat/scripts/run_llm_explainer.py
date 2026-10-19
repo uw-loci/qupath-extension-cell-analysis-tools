@@ -72,8 +72,18 @@ PASTE_PROVIDERS = ("CHATBOT", "MCP")
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def run_explainer(provider, model, api_key, endpoint, marker_table_json,
-                  top_n, cluster_ids_spec, timeout_sec, pasted_response=""):
+
+def run_explainer(
+    provider,
+    model,
+    api_key,
+    endpoint,
+    marker_table_json,
+    top_n,
+    cluster_ids_spec,
+    timeout_sec,
+    pasted_response="",
+):
     """
     Drive a single LLM call and return a dict suitable for assignment to
     `task.outputs`. Callers should pass through the dict's keys verbatim.
@@ -112,15 +122,23 @@ def run_explainer(provider, model, api_key, endpoint, marker_table_json,
     out["prompt"] = prompt
     out["prompt_hash"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
-    if (provider or "").strip().upper() in PASTE_PROVIDERS and not (pasted_response or "").strip():
+    if (provider or "").strip().upper() in PASTE_PROVIDERS and not (
+        pasted_response or ""
+    ).strip():
         # Step one of the round trip: the caller wants the prompt to carry to a
         # chatbot (or hand to an agent). Nothing to parse yet, nothing has gone wrong.
         return out
 
     try:
         raw, input_tokens, output_tokens = _call_provider(
-            provider, model, api_key, endpoint, prompt, int(timeout_sec),
-            pasted_response=pasted_response)
+            provider,
+            model,
+            api_key,
+            endpoint,
+            prompt,
+            int(timeout_sec),
+            pasted_response=pasted_response,
+        )
     except _LlmError as e:
         out["error_type"] = e.error_type
         out["error_detail"] = scrub_secrets(e.detail)
@@ -201,7 +219,9 @@ def build_prompt(marker_table, cluster_ids, top_n):
             # forbids. The score carries the ranking; the p-value adds nothing to it.
             lines.append(
                 "  - {0}  score={1:.2f}  log2fc={2:.2f}".format(
-                    name, float(score), float(log2fc)))
+                    name, float(score), float(log2fc)
+                )
+            )
         blocks.append("\n".join(lines))
     return PROMPT_TEMPLATE.format(cluster_blocks="\n\n".join(blocks))
 
@@ -240,6 +260,7 @@ def _resolve_cluster_ids(marker_table, spec):
 # Provider abstraction
 # ---------------------------------------------------------------------------
 
+
 class _LlmError(Exception):
     """Internal exception carrying a classified error_type."""
 
@@ -249,8 +270,9 @@ class _LlmError(Exception):
         self.detail = detail
 
 
-def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec,
-                   pasted_response=""):
+def _call_provider(
+    provider, model, api_key, endpoint, prompt, timeout_sec, pasted_response=""
+):
     """
     Dispatch to the chosen provider. Returns
     ``(raw_response_text, input_tokens, output_tokens)``. Either token count
@@ -274,21 +296,20 @@ def _call_provider(provider, model, api_key, endpoint, prompt, timeout_sec,
         if not (pasted_response or "").strip():
             raise _LlmError("MALFORMED_RESPONSE", "Nothing was pasted.")
         return str(pasted_response), -1, -1
-    raise _LlmError(
-        "UNKNOWN",
-        "Unsupported provider: " + str(provider))
+    raise _LlmError("UNKNOWN", "Unsupported provider: " + str(provider))
 
 
 def _call_anthropic(model, api_key, prompt, timeout_sec):
     if not api_key:
-        raise _LlmError("AUTH_INVALID",
-                        "No Anthropic API key provided (in-memory key empty).")
+        raise _LlmError(
+            "AUTH_INVALID", "No Anthropic API key provided (in-memory key empty)."
+        )
     try:
         import anthropic  # type: ignore
     except ImportError:
         raise _LlmError(
-            "UNKNOWN",
-            "anthropic package not installed in the QP-CAT pixi env.")
+            "UNKNOWN", "anthropic package not installed in the QP-CAT pixi env."
+        )
     try:
         client = anthropic.Anthropic(api_key=api_key, timeout=float(timeout_sec))
         msg = client.messages.create(
@@ -358,8 +379,8 @@ def _call_ollama(model, endpoint, prompt, timeout_sec):
         import requests  # type: ignore
     except ImportError:
         raise _LlmError(
-            "UNKNOWN",
-            "requests package not installed in the QP-CAT pixi env.")
+            "UNKNOWN", "requests package not installed in the QP-CAT pixi env."
+        )
 
     base = (endpoint or "http://localhost:11434").rstrip("/")
     url = base + "/api/generate"
@@ -373,33 +394,37 @@ def _call_ollama(model, endpoint, prompt, timeout_sec):
     except Exception as e:
         cls_name = type(e).__name__.lower()
         if "timeout" in cls_name:
-            raise _LlmError("TIMEOUT",
-                            "Ollama request timed out: " + _safe_str(e))
-        raise _LlmError("NETWORK_UNREACHABLE",
-                        "Cannot reach Ollama at " + base + ": " + _safe_str(e))
+            raise _LlmError("TIMEOUT", "Ollama request timed out: " + _safe_str(e))
+        raise _LlmError(
+            "NETWORK_UNREACHABLE",
+            "Cannot reach Ollama at " + base + ": " + _safe_str(e),
+        )
 
     if resp.status_code == 404:
-        raise _LlmError("MODEL_NOT_FOUND",
-                        "Ollama returned 404 -- model '" + str(model)
-                        + "' not pulled?")
+        raise _LlmError(
+            "MODEL_NOT_FOUND",
+            "Ollama returned 404 -- model '" + str(model) + "' not pulled?",
+        )
     if 500 <= resp.status_code < 600:
-        raise _LlmError("PROVIDER_DOWN",
-                        "Ollama 5xx: " + str(resp.status_code))
+        raise _LlmError("PROVIDER_DOWN", "Ollama 5xx: " + str(resp.status_code))
     if resp.status_code >= 400:
-        raise _LlmError("UNKNOWN",
-                        "Ollama HTTP " + str(resp.status_code) + ": "
-                        + _safe_str(resp.text)[:200])
+        raise _LlmError(
+            "UNKNOWN",
+            "Ollama HTTP " + str(resp.status_code) + ": " + _safe_str(resp.text)[:200],
+        )
 
     try:
         data = resp.json()
     except Exception as e:
-        raise _LlmError("MALFORMED_RESPONSE",
-                        "Ollama returned non-JSON: " + _safe_str(e))
+        raise _LlmError(
+            "MALFORMED_RESPONSE", "Ollama returned non-JSON: " + _safe_str(e)
+        )
 
     text = data.get("response", "")
     if not isinstance(text, str):
-        raise _LlmError("MALFORMED_RESPONSE",
-                        "Ollama 'response' field is not a string.")
+        raise _LlmError(
+            "MALFORMED_RESPONSE", "Ollama 'response' field is not a string."
+        )
     eval_count = data.get("eval_count")
     prompt_eval_count = data.get("prompt_eval_count")
     out_tokens = int(eval_count) if isinstance(eval_count, int) else -1
@@ -410,6 +435,7 @@ def _call_ollama(model, endpoint, prompt, timeout_sec):
 # ---------------------------------------------------------------------------
 # Response parsing
 # ---------------------------------------------------------------------------
+
 
 def parse_response(raw, cluster_ids):
     """
@@ -434,13 +460,15 @@ def parse_response(raw, cluster_ids):
     for cid in cluster_ids:
         entry = by_id.get(cid)
         if entry is None:
-            out.append({
-                "cluster_id": cid,
-                "phenotype": None,
-                "confidence": None,
-                "rationale": "LLM did not return a row for this cluster.",
-                "supporting_markers": [],
-            })
+            out.append(
+                {
+                    "cluster_id": cid,
+                    "phenotype": None,
+                    "confidence": None,
+                    "rationale": "LLM did not return a row for this cluster.",
+                    "supporting_markers": [],
+                }
+            )
             continue
         phenotype = entry.get("phenotype")
         if phenotype is not None and not isinstance(phenotype, str):
@@ -450,20 +478,22 @@ def parse_response(raw, cluster_ids):
             confidence = str(confidence)
         rationale = entry.get("rationale", "")
         if rationale is None:
-            rationale = ""          # a JSON null is "no rationale", not the string "None"
+            rationale = ""  # a JSON null is "no rationale", not the string "None"
         elif not isinstance(rationale, str):
             rationale = _safe_str(rationale)
         markers = entry.get("supporting_markers", []) or []
         if not isinstance(markers, list):
             markers = []
         markers = [str(m) for m in markers if m is not None]
-        out.append({
-            "cluster_id": cid,
-            "phenotype": phenotype,
-            "confidence": confidence,
-            "rationale": rationale,
-            "supporting_markers": markers,
-        })
+        out.append(
+            {
+                "cluster_id": cid,
+                "phenotype": phenotype,
+                "confidence": confidence,
+                "rationale": rationale,
+                "supporting_markers": markers,
+            }
+        )
     return out
 
 
@@ -488,7 +518,7 @@ def _try_parse_json_array(raw):
         elif ch == "]":
             depth -= 1
             if depth == 0:
-                snippet = raw[start:i + 1]
+                snippet = raw[start : i + 1]
                 try:
                     return json.loads(snippet)
                 except Exception:
@@ -504,12 +534,11 @@ def _try_parse_json_array(raw):
 # Appose boundary. The Java OperationLogger writes whatever we hand it
 # verbatim into the on-disk audit log, so this is the last line of defense.
 _AUTH_HEADER_RE = re.compile(
-    r"(?i)(authorization\s*:?\s*)(bearer\s+)?[A-Za-z0-9_\-./=+]+")
+    r"(?i)(authorization\s*:?\s*)(bearer\s+)?[A-Za-z0-9_\-./=+]+"
+)
 _ANTHROPIC_KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
-_GENERIC_BEARER_RE = re.compile(
-    r"(?i)\b(bearer\s+)[A-Za-z0-9_\-./=+]{8,}")
-_X_API_KEY_RE = re.compile(
-    r"(?i)(x-api-key\s*:?\s*)([A-Za-z0-9_\-./=+]+)")
+_GENERIC_BEARER_RE = re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9_\-./=+]{8,}")
+_X_API_KEY_RE = re.compile(r"(?i)(x-api-key\s*:?\s*)([A-Za-z0-9_\-./=+]+)")
 
 
 def scrub_secrets(text):
@@ -542,9 +571,11 @@ def _safe_str(obj):
 # Appose task entry point
 # ---------------------------------------------------------------------------
 
+
 def _optional_input(name, default):
     """An injected input that older Java callers do not send."""
     return globals().get(name, default)
+
 
 # When this module is loaded as an Appose task script (loaded fresh from
 # JAR resources every run, per the QP-CAT pattern), Appose 0.10.0+ injects
@@ -565,9 +596,11 @@ try:
     )
     for _k, _v in _result.items():
         task.outputs[_k] = _v
-    logger.info("LLM explainer done (template=%s, error=%s)",
-                _result.get("prompt_template"),
-                _result.get("error_type", "none"))
+    logger.info(
+        "LLM explainer done (template=%s, error=%s)",
+        _result.get("prompt_template"),
+        _result.get("error_type", "none"),
+    )
 except NameError:
     # Module imported for testing -- no Appose task context. That's fine.
     logger.debug("run_llm_explainer.py imported without Appose task context.")
@@ -577,7 +610,8 @@ except Exception as _e:  # noqa: BLE001
     try:
         task.outputs["error_type"] = "UNKNOWN"
         task.outputs["error_detail"] = scrub_secrets(
-            "Internal explainer error: " + _safe_str(_e))
+            "Internal explainer error: " + _safe_str(_e)
+        )
         task.outputs["prompt_template"] = PROMPT_TEMPLATE_ID
         task.outputs["explanations_json"] = ""
     except NameError:

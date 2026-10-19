@@ -106,6 +106,7 @@ def elbow_suggestion(ks, inertias):
     ks, inertias = ks[good], inertias[good]
     if ks.size < 3:
         return None
+
     # Normalise both axes: without it the answer depends on the units of the
     # measurements, so z-scored and raw runs would elbow at different k.
     def unit(v):
@@ -183,6 +184,7 @@ def build_sweep_result(ks, inertias, silhouettes, gaps, gap_errors, meta, warnin
     :param warnings: list of plain-language caveats for the caller to display
     :return: a JSON string
     """
+
     def clean(values):
         return [None if not np.isfinite(v) else float(v) for v in values]
 
@@ -277,11 +279,7 @@ def sweep_k(
             km.fit(matrix)
             inertias.append(float(km.inertia_))
             try:
-                labels = (
-                    km.labels_
-                    if not sil_subsampled
-                    else km.predict(sil_sample)
-                )
+                labels = km.labels_ if not sil_subsampled else km.predict(sil_sample)
                 if len(np.unique(labels)) < 2:
                     silhouettes.append(float("nan"))
                 else:
@@ -397,7 +395,9 @@ if _measurements is not None:
 
     def _report(frac, message):
         try:
-            task.update(message=message, current=int(frac * 100), maximum=100)  # noqa: F821
+            task.update(
+                message=message, current=int(frac * 100), maximum=100
+            )  # noqa: F821
         except Exception:
             pass
 

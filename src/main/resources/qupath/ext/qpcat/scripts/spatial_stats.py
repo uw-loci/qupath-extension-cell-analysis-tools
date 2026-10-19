@@ -1575,7 +1575,12 @@ def _autocorr_frame(adata, mode, genes, n_permutations=0):
 
 
 def per_area_autocorr(
-    adata, mode, genes, area_ids, area_names=None, value_key="I",
+    adata,
+    mode,
+    genes,
+    area_ids,
+    area_names=None,
+    value_key="I",
     min_cells=AUTOCORR_MIN_AREA_CELLS,
 ):
     """The statistic recomputed inside each independent area, no permutations.
@@ -1617,14 +1622,24 @@ def per_area_autocorr(
     if skipped:
         logger.warning(
             "%s per area: %d of %d area(s) not evaluated (first: %s -- %s)",
-            mode, len(skipped), len(slices), skipped[0][0], skipped[0][1],
+            mode,
+            len(skipped),
+            len(slices),
+            skipped[0][0],
+            skipped[0][1],
         )
     return per_area, n_evaluated, skipped
 
 
 def compute_autocorr(
-    adata, mode, measurements, n_permutations=0, value_key="I",
-    area_ids=None, area_names=None, threshold=AUTOCORR_DEFAULT_THRESHOLD,
+    adata,
+    mode,
+    measurements,
+    n_permutations=0,
+    value_key="I",
+    area_ids=None,
+    area_names=None,
+    threshold=AUTOCORR_DEFAULT_THRESHOLD,
 ):
     """Run sq.gr.spatial_autocorr for one mode and shape the per-marker stats.
 
@@ -1662,7 +1677,8 @@ def compute_autocorr(
         if p_col is not None and p_method is None:
             p_method = p_col
         areas_above = sum(
-            1 for v in per_area.get(str(marker), {}).values()
+            1
+            for v in per_area.get(str(marker), {}).values()
             if autocorr_passes(v, mode, threshold)
         )
         stats[str(marker)] = {
@@ -1820,9 +1836,14 @@ def run_moran_i(
     """
     try:
         res = compute_autocorr(
-            adata, "moran", measurements,
-            n_permutations=n_permutations, value_key="I",
-            area_ids=area_ids, area_names=area_names, threshold=threshold,
+            adata,
+            "moran",
+            measurements,
+            n_permutations=n_permutations,
+            value_key="I",
+            area_ids=area_ids,
+            area_names=area_names,
+            threshold=threshold,
         )
         stats = res["stats"]
         payload = {}
@@ -1848,7 +1869,9 @@ def run_moran_i(
         )
         logger.info(
             "Moran's I computed for %d markers (p from %s; %d area(s) compared)",
-            len(stats), res["p_method"], res["n_areas"],
+            len(stats),
+            res["p_method"],
+            res["n_areas"],
         )
         return len(stats)
     except Exception as e:
@@ -1901,9 +1924,14 @@ def run_geary_c(
     """
     try:
         res = compute_autocorr(
-            adata, "geary", measurements,
-            n_permutations=n_permutations, value_key="C",
-            area_ids=area_ids, area_names=area_names, threshold=threshold,
+            adata,
+            "geary",
+            measurements,
+            n_permutations=n_permutations,
+            value_key="C",
+            area_ids=area_ids,
+            area_names=area_names,
+            threshold=threshold,
         )
         p_method = res["p_method"]
         marker_stats = {}
@@ -2003,6 +2031,7 @@ def run_geary_c(
 # Panels in the curves figure. Past this the grid is taller than it is useful
 # and the per-panel legend stops being readable; the caption says it truncated.
 MAX_COOC_CURVE_PANELS = 12
+
 
 def pick_radius_bin(intervals, requested, median_nn=None, nn_multiple=5.0):
     """Which radius bin a cluster-by-cluster matrix should be drawn at.

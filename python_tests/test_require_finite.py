@@ -17,7 +17,9 @@ def require_finite():
 
 
 def test_finite_input_passes_quietly(require_finite):
-    require_finite(np.arange(12, dtype=float).reshape(4, 3), "Normalization", ["a", "b", "c"])
+    require_finite(
+        np.arange(12, dtype=float).reshape(4, 3), "Normalization", ["a", "b", "c"]
+    )
 
 
 def test_the_message_names_the_step_and_the_column(require_finite):

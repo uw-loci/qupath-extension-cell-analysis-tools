@@ -90,9 +90,9 @@ def test_a_single_component_has_no_runner_up(posterior_confidence):
 
 def test_posterior_confidence_rejects_malformed_input(posterior_confidence):
     with pytest.raises(ValueError):
-        posterior_confidence(np.array([0.5, 0.5]))        # 1-D
+        posterior_confidence(np.array([0.5, 0.5]))  # 1-D
     with pytest.raises(ValueError):
-        posterior_confidence(np.zeros((0, 3)))            # no cells
+        posterior_confidence(np.zeros((0, 3)))  # no cells
 
 
 # ---- distance_margin ----
@@ -136,9 +136,9 @@ def test_one_cluster_is_full_confidence_not_zero(distance_margin):
 
 def test_distance_margin_rejects_malformed_input(distance_margin):
     with pytest.raises(ValueError):
-        distance_margin(np.array([1.0, 2.0]))             # 1-D
+        distance_margin(np.array([1.0, 2.0]))  # 1-D
     with pytest.raises(ValueError):
-        distance_margin(np.zeros((0, 2)))                 # no cells
+        distance_margin(np.zeros((0, 2)))  # no cells
 
 
 # ---- The contract with the libraries that feed these ----
@@ -191,9 +191,7 @@ def test_a_continuum_is_less_confident_than_separated_blobs(posterior_confidence
 
     rng = np.random.default_rng(1)
     blobs = np.vstack([rng.normal(-4, 0.5, (200, 2)), rng.normal(4, 0.5, (200, 2))])
-    continuum = np.column_stack(
-        [np.linspace(-4, 4, 400), rng.normal(0, 0.5, 400)]
-    )
+    continuum = np.column_stack([np.linspace(-4, 4, 400), rng.normal(0, 0.5, 400)])
 
     def confidence(X):
         g = GaussianMixture(n_components=2, random_state=0)
@@ -244,11 +242,13 @@ def test_hdbscan_exposes_probabilities_and_noise_reads_as_zero():
     from sklearn.cluster import HDBSCAN
 
     rng = np.random.default_rng(3)
-    X = np.vstack([
-        rng.normal(-6, 0.3, (80, 2)),
-        rng.normal(6, 0.3, (80, 2)),
-        rng.uniform(-10, 10, (20, 2)),      # scattered points, likely noise
-    ])
+    X = np.vstack(
+        [
+            rng.normal(-6, 0.3, (80, 2)),
+            rng.normal(6, 0.3, (80, 2)),
+            rng.uniform(-10, 10, (20, 2)),  # scattered points, likely noise
+        ]
+    )
     hdb = HDBSCAN(min_cluster_size=10)
     labels = hdb.fit_predict(X)
     assert hasattr(hdb, "probabilities_")

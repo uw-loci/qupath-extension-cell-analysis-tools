@@ -93,8 +93,12 @@ def test_spatial_autocorr_returns_none_without_copy():
     """Defect 1. The results go to adata.uns and the return value is None."""
     a = _adata()
     returned = sq.gr.spatial_autocorr(
-        a, mode="moran", genes=list(a.var_names),
-        n_jobs=1, show_progress_bar=False, seed=0,
+        a,
+        mode="moran",
+        genes=list(a.var_names),
+        n_jobs=1,
+        show_progress_bar=False,
+        seed=0,
     )
     assert returned is None
     assert "moranI" in a.uns
@@ -106,8 +110,14 @@ def test_spatial_autocorr_with_copy_returns_a_frame_with_fdr_columns():
     """What the fixed call relies on: a DataFrame, and a corrected p column."""
     a = _adata()
     df = sq.gr.spatial_autocorr(
-        a, mode="moran", genes=list(a.var_names), n_perms=99,
-        n_jobs=1, show_progress_bar=False, seed=0, copy=True,
+        a,
+        mode="moran",
+        genes=list(a.var_names),
+        n_perms=99,
+        n_jobs=1,
+        show_progress_bar=False,
+        seed=0,
+        copy=True,
     )
     assert df is not None
     assert list(df.index) and set(df.index) <= set(MARKERS)
@@ -163,10 +173,20 @@ def _base_globals():
         # The real one takes (message, detail=None); only the message is user-facing.
         "note_for_user": lambda message, detail=None: _NOTES.append(message),
     }
-    for name in ("_safe_kwargs", "_json_number", "pick_p_column", "area_slices",
-                 "area_label", "autocorr_passes", "_autocorr_frame",
-                 "per_area_autocorr", "describe_p_method", "describe_areas",
-                 "compute_autocorr", "run_moran_i"):
+    for name in (
+        "_safe_kwargs",
+        "_json_number",
+        "pick_p_column",
+        "area_slices",
+        "area_label",
+        "autocorr_passes",
+        "_autocorr_frame",
+        "per_area_autocorr",
+        "describe_p_method",
+        "describe_areas",
+        "compute_autocorr",
+        "run_moran_i",
+    ):
         g[name] = load_script_symbol(SCRIPT, name, extra_globals=g)
     return g
 
@@ -252,8 +272,14 @@ def test_z_sim_p_has_no_permutation_floor():
     a.X[:, 0] = (a.obsm["spatial"][:, 0] / 1000.0).astype(np.float32)
     n_perms = 49
     df = sq.gr.spatial_autocorr(
-        a, mode="moran", genes=list(a.var_names), n_perms=n_perms,
-        n_jobs=1, show_progress_bar=False, seed=0, copy=True,
+        a,
+        mode="moran",
+        genes=list(a.var_names),
+        n_perms=n_perms,
+        n_jobs=1,
+        show_progress_bar=False,
+        seed=0,
+        copy=True,
     )
     floor = 1.0 / (n_perms + 1)
     assert df.loc[MARKERS[0], "pval_sim"] == pytest.approx(floor)
@@ -288,7 +314,9 @@ def test_autocorr_passes_mirrors_moran_and_geary():
     passes = _base_globals()["autocorr_passes"]
     assert passes(0.05, "moran") and not passes(0.049, "moran")
     assert passes(0.95, "geary") and not passes(0.951, "geary")
-    assert passes(0.2, "moran", threshold=0.1) and not passes(0.2, "moran", threshold=0.3)
+    assert passes(0.2, "moran", threshold=0.1) and not passes(
+        0.2, "moran", threshold=0.3
+    )
     assert not passes(None, "moran") and not passes(float("nan"), "geary")
 
 
@@ -297,8 +325,12 @@ def test_consistency_count_separates_one_image_structure_from_cohort_structure()
     a, area_ids = _two_area_adata()
     task = _Task()
     n = _base_globals()["run_moran_i"](
-        a, task, measurements=MARKERS, n_permutations=99,
-        area_ids=area_ids, area_names=["img_A", "img_B"],
+        a,
+        task,
+        measurements=MARKERS,
+        n_permutations=99,
+        area_ids=area_ids,
+        area_names=["img_A", "img_B"],
     )
     assert n == len(MARKERS), _NOTES
     payload = json.loads(task.outputs["spatial_autocorr"])
@@ -320,15 +352,20 @@ def test_small_areas_do_not_vote():
     # Shrink area B below the minimum by relabelling most of it into A.
     min_cells = _const("AUTOCORR_MIN_AREA_CELLS")
     area_ids = area_ids.copy()
-    area_ids[500:1000 - (min_cells - 1)] = 0
+    area_ids[500 : 1000 - (min_cells - 1)] = 0
     res = _base_globals()["compute_autocorr"](
-        a, "moran", MARKERS, n_permutations=0, area_ids=area_ids,
+        a,
+        "moran",
+        MARKERS,
+        n_permutations=0,
+        area_ids=area_ids,
         area_names=["img_A", "img_B"],
     )
     assert res["n_areas"] == 1
     assert [lab for lab, _ in res["skipped_areas"]] == ["img_B"]
     assert "1 skipped" in _base_globals()["describe_areas"](
-        res["n_areas"], res["skipped_areas"])
+        res["n_areas"], res["skipped_areas"]
+    )
 
 
 def test_pick_p_column_skips_missing_and_nan():

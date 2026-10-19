@@ -36,9 +36,7 @@ SCRIPT = "run_clustering.py"
 
 
 def _fn(name):
-    return load_script_symbol(
-        SCRIPT, name, extra_globals={"np": np, "math": math}
-    )
+    return load_script_symbol(SCRIPT, name, extra_globals={"np": np, "math": math})
 
 
 def _normalise(df, mode):
@@ -67,7 +65,7 @@ def _intensities(n=3000, m=6, seed=3):
     base = rng.lognormal(mean=3.0, sigma=0.6, size=(n, m))
     ctype = rng.integers(0, 3, n)
     for t in range(3):
-        base[ctype == t, 2 * t:2 * t + 2] *= 6.0
+        base[ctype == t, 2 * t : 2 * t + 2] *= 6.0
     return pd.DataFrame(base, columns=["M%d" % j for j in range(m)]), ctype
 
 
@@ -90,9 +88,10 @@ def test_without_a_zero_floor_three_of_four_normalisations_are_degenerate():
     for mode in ("minmax", "percentile", "none"):
         lo, _, hi = measured[mode]
         assert lo > 0.95, (mode, measured[mode])
-        assert not readable_fn(
-            fractions_fn(_normalise(df, mode).to_numpy(), ctype)
-        ), (mode, measured[mode])
+        assert not readable_fn(fractions_fn(_normalise(df, mode).to_numpy(), ctype)), (
+            mode,
+            measured[mode],
+        )
 
 
 def test_with_a_zero_floor_every_normalisation_is_informative():
@@ -148,9 +147,7 @@ def test_under_zscore_the_fraction_is_not_the_fraction_expressing():
 def test_dot_size_fractions_matches_scanpys_own_computation():
     """Pins the thing being reimplemented: obs_tidy > cutoff, per group."""
     fractions_fn = _fn("dot_size_fractions")
-    matrix = np.array(
-        [[-1.0, 2.0], [1.0, 2.0], [3.0, -2.0], [-3.0, -2.0]], dtype=float
-    )
+    matrix = np.array([[-1.0, 2.0], [1.0, 2.0], [3.0, -2.0], [-3.0, -2.0]], dtype=float)
     labels = np.array(["a", "a", "b", "b"])
     # group a: M0 -> 1 of 2 above 0, M1 -> 2 of 2
     # group b: M0 -> 1 of 2, M1 -> 0 of 2

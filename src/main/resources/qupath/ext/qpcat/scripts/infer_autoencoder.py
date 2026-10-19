@@ -21,6 +21,7 @@ Outputs (via task.outputs):
   n_classes: int
   label_names_json: str (JSON)
 """
+
 import sys
 import json
 import logging
@@ -34,10 +35,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from appose import NDArray as PyNDArray
+
 # detect_device() available from model_utils loaded during init
 
 LOGVAR_CLAMP_MIN = -10.0
 LOGVAR_CLAMP_MAX = 10.0
+
 
 # Architecture must match training exactly
 class CellVAE(nn.Module):
@@ -77,7 +80,9 @@ class CellVAE(nn.Module):
 
 
 class ConvCellVAE(nn.Module):
-    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0):
+    def __init__(
+        self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0
+    ):
         super().__init__()
         self.n_channels = n_channels
         self.tile_size = tile_size
@@ -85,10 +90,14 @@ class ConvCellVAE(nn.Module):
         self.n_classes = n_classes
         self.n_measurements = n_measurements
         self.encoder = nn.Sequential(
-            nn.Conv2d(n_channels, 32, 3, stride=2, padding=1), nn.LeakyReLU(),
-            nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.LeakyReLU(),
-            nn.Conv2d(64, 128, 3, stride=2, padding=1), nn.LeakyReLU(),
-            nn.AdaptiveAvgPool2d(1), nn.Flatten(),
+            nn.Conv2d(n_channels, 32, 3, stride=2, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(64, 128, 3, stride=2, padding=1),
+            nn.LeakyReLU(),
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
         )
         if n_measurements > 0:
             meas_hidden = min(64, max(16, n_measurements))
@@ -106,9 +115,13 @@ class ConvCellVAE(nn.Module):
         self.dec_spatial = max(tile_size // 8, 1)
         self.dec_fc = nn.Linear(latent_dim, 128 * self.dec_spatial * self.dec_spatial)
         self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1), nn.LeakyReLU(),
-            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1), nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, n_channels, 3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+            nn.LeakyReLU(),
+            nn.ConvTranspose2d(
+                32, n_channels, 3, stride=2, padding=1, output_padding=1
+            ),
         )
         if n_classes > 0:
             self.classifier = nn.Linear(latent_dim, n_classes)
@@ -135,43 +148,57 @@ task.update("Loading model checkpoint...", current=0, maximum=3)
 
 ckpt_bytes = base64.b64decode(model_state_base64)
 buf = io.BytesIO(ckpt_bytes)
-checkpoint = torch.load(buf, map_location='cpu', weights_only=False)
+checkpoint = torch.load(buf, map_location="cpu", weights_only=False)
 
-ldim = checkpoint['latent_dim']
-n_classes = checkpoint['n_classes']
-class_names = checkpoint['class_names']
-norm_method = checkpoint['normalization']
-norm_params = checkpoint['norm_params']
-ckpt_mode = checkpoint.get('input_mode', 'measurements')
-use_tiles = (ckpt_mode == 'tiles')
+ldim = checkpoint["latent_dim"]
+n_classes = checkpoint["n_classes"]
+class_names = checkpoint["class_names"]
+norm_method = checkpoint["normalization"]
+norm_params = checkpoint["norm_params"]
+ckpt_mode = checkpoint.get("input_mode", "measurements")
+use_tiles = ckpt_mode == "tiles"
 
 # 2. Load input data based on mode
 task.update("Normalizing and encoding...", current=1, maximum=3)
 
 if use_tiles:
-    ckpt_channels = checkpoint['n_channels']
-    ckpt_tile_size = checkpoint['tile_size']
+    ckpt_channels = checkpoint["n_channels"]
+    ckpt_tile_size = checkpoint["tile_size"]
     n_cells_tile = int(n_cells)
     # Memory-map tiles from temp file (avoids loading all into RAM)
-    raw_data = np.memmap(tile_file_path, dtype='<f4', mode='r',
-                         shape=(n_cells_tile, ckpt_channels, ckpt_tile_size, ckpt_tile_size))
+    raw_data = np.memmap(
+        tile_file_path,
+        dtype="<f4",
+        mode="r",
+        shape=(n_cells_tile, ckpt_channels, ckpt_tile_size, ckpt_tile_size),
+    )
     n_cells = raw_data.shape[0]
     tile_size_mb = raw_data.nbytes / (1024 * 1024)
-    logger.info("Tile inference: %d cells, %d channels (%.0f MB, memory-mapped)",
-                n_cells, ckpt_channels, tile_size_mb)
+    logger.info(
+        "Tile inference: %d cells, %d channels (%.0f MB, memory-mapped)",
+        n_cells,
+        ckpt_channels,
+        tile_size_mb,
+    )
 
     # Prepare normalization tensors for per-batch normalization (no full-array copy)
     tile_norm_mean = None
     tile_norm_std = None
     tile_norm_min = None
     tile_norm_range = None
-    if norm_method == "zscore" and norm_params.get('mean') is not None:
-        tile_norm_mean = torch.tensor(norm_params['mean'], dtype=torch.float32).view(1, -1, 1, 1)
-        tile_norm_std = torch.tensor(norm_params['std'], dtype=torch.float32).view(1, -1, 1, 1)
+    if norm_method == "zscore" and norm_params.get("mean") is not None:
+        tile_norm_mean = torch.tensor(norm_params["mean"], dtype=torch.float32).view(
+            1, -1, 1, 1
+        )
+        tile_norm_std = torch.tensor(norm_params["std"], dtype=torch.float32).view(
+            1, -1, 1, 1
+        )
         tile_norm_std[tile_norm_std == 0] = 1
-    elif norm_method == "minmax" and norm_params.get('min') is not None:
-        tile_norm_min = torch.tensor(norm_params['min'], dtype=torch.float32).view(1, -1, 1, 1)
-        dmax_t = torch.tensor(norm_params['max'], dtype=torch.float32).view(1, -1, 1, 1)
+    elif norm_method == "minmax" and norm_params.get("min") is not None:
+        tile_norm_min = torch.tensor(norm_params["min"], dtype=torch.float32).view(
+            1, -1, 1, 1
+        )
+        dmax_t = torch.tensor(norm_params["max"], dtype=torch.float32).view(1, -1, 1, 1)
         tile_norm_range = dmax_t - tile_norm_min
         tile_norm_range[tile_norm_range == 0] = 1
 
@@ -180,21 +207,23 @@ else:
     raw_data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
     raw_data = raw_data.astype(np.float32)
     n_cells, n_markers = raw_data.shape
-    ckpt_n_markers = checkpoint['n_markers']
+    ckpt_n_markers = checkpoint["n_markers"]
     logger.info("Measurement inference: %d cells x %d markers", n_cells, n_markers)
 
     if n_markers != ckpt_n_markers:
-        raise ValueError("Marker count mismatch: model expects %d, got %d" %
-                         (ckpt_n_markers, n_markers))
+        raise ValueError(
+            "Marker count mismatch: model expects %d, got %d"
+            % (ckpt_n_markers, n_markers)
+        )
 
-    if norm_method == "zscore" and norm_params.get('mean') is not None:
-        mean = np.array(norm_params['mean'], dtype=np.float32)
-        std = np.array(norm_params['std'], dtype=np.float32)
+    if norm_method == "zscore" and norm_params.get("mean") is not None:
+        mean = np.array(norm_params["mean"], dtype=np.float32)
+        std = np.array(norm_params["std"], dtype=np.float32)
         std[std == 0] = 1
         data_norm = (raw_data - mean) / std
-    elif norm_method == "minmax" and norm_params.get('min') is not None:
-        dmin = np.array(norm_params['min'], dtype=np.float32)
-        dmax = np.array(norm_params['max'], dtype=np.float32)
+    elif norm_method == "minmax" and norm_params.get("min") is not None:
+        dmin = np.array(norm_params["min"], dtype=np.float32)
+        dmax = np.array(norm_params["max"], dtype=np.float32)
         drange = dmax - dmin
         drange[drange == 0] = 1
         data_norm = (raw_data - dmin) / drange
@@ -204,12 +233,13 @@ else:
 # 3. Load model and run inference
 device = detect_device()
 if use_tiles:
-    n_tile_meas = checkpoint.get('n_tile_measurements', 0)
-    model = ConvCellVAE(ckpt_channels, ckpt_tile_size, ldim, n_classes,
-                        n_measurements=n_tile_meas).to(device)
+    n_tile_meas = checkpoint.get("n_tile_measurements", 0)
+    model = ConvCellVAE(
+        ckpt_channels, ckpt_tile_size, ldim, n_classes, n_measurements=n_tile_meas
+    ).to(device)
 else:
-    model = CellVAE(checkpoint['n_markers'], ldim, n_classes).to(device)
-model.load_state_dict(checkpoint['state_dict'])
+    model = CellVAE(checkpoint["n_markers"], ldim, n_classes).to(device)
+model.load_state_dict(checkpoint["state_dict"])
 model.eval()
 
 # Load hybrid measurements for tile mode if present
@@ -223,12 +253,14 @@ if use_tiles and n_tile_meas > 0:
                 tile_measurements.ndarray(), context="tile measurement"
             )
             infer_tile_meas = infer_tile_meas.astype(np.float32)
-            ckpt_meas_mean = checkpoint.get('tile_meas_mean')
-            ckpt_meas_std = checkpoint.get('tile_meas_std')
+            ckpt_meas_mean = checkpoint.get("tile_meas_mean")
+            ckpt_meas_std = checkpoint.get("tile_meas_std")
             if ckpt_meas_mean is not None:
                 infer_meas_mean = torch.tensor(ckpt_meas_mean, dtype=torch.float32)
                 infer_meas_std = torch.tensor(ckpt_meas_std, dtype=torch.float32)
-            logger.info("Hybrid inference: %d measurements alongside tiles", n_tile_meas)
+            logger.info(
+                "Hybrid inference: %d measurements alongside tiles", n_tile_meas
+            )
     except NameError:
         pass
 
@@ -250,10 +282,14 @@ with torch.no_grad():
             if infer_tile_meas is not None:
                 batch_meas = torch.tensor(infer_tile_meas[i:end], dtype=torch.float32)
                 if infer_meas_mean is not None:
-                    batch_meas = (batch_meas - infer_meas_mean) / (infer_meas_std + 1e-8)
+                    batch_meas = (batch_meas - infer_meas_mean) / (
+                        infer_meas_std + 1e-8
+                    )
                 batch_meas = batch_meas.to(device)
         else:
-            batch = torch.tensor(np.array(data_norm[i:end]), dtype=torch.float32).to(device)
+            batch = torch.tensor(np.array(data_norm[i:end]), dtype=torch.float32).to(
+                device
+            )
         if use_tiles:
             mu_b, _ = model.encode(batch, batch_meas)
         else:
@@ -263,8 +299,11 @@ with torch.no_grad():
             all_logits.append(model.classify(mu_b).cpu())
 
         if (i + encode_bs) % 5000 < encode_bs:
-            task.update("Encoding cells %d/%d..." % (min(i + encode_bs, n_cells), n_cells),
-                        current=1, maximum=3)
+            task.update(
+                "Encoding cells %d/%d..." % (min(i + encode_bs, n_cells), n_cells),
+                current=1,
+                maximum=3,
+            )
 
     mu_all = torch.cat(all_mu, dim=0)
     latent = mu_all.numpy()
@@ -286,12 +325,13 @@ if n_classes > 0:
 
 # Release tile memmap so Java can delete the temp file (Windows file locking)
 if use_tiles:
-    if hasattr(raw_data, '_mmap') and raw_data._mmap is not None:
+    if hasattr(raw_data, "_mmap") and raw_data._mmap is not None:
         raw_data._mmap.close()
     del raw_data
-    if 'data_norm' in dir():
+    if "data_norm" in dir():
         del data_norm
     import gc
+
     gc.collect()
 
 # 4. Package outputs

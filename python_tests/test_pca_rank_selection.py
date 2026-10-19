@@ -97,7 +97,10 @@ def test_dispatch_picks_the_method_by_feature_count():
 
     choose = _load(
         "choose_pca_rank",
-        {"pca_rank_parallel_analysis": fake_parallel, "pca_rank_marchenko_pastur": fake_mp},
+        {
+            "pca_rank_parallel_analysis": fake_parallel,
+            "pca_rank_marchenko_pastur": fake_mp,
+        },
     )
 
     narrow = np.zeros((100, 58))
@@ -120,7 +123,10 @@ def test_dispatch_subsamples_rows_for_the_decision():
 
     choose = _load(
         "choose_pca_rank",
-        {"pca_rank_parallel_analysis": fake_parallel, "pca_rank_marchenko_pastur": None},
+        {
+            "pca_rank_parallel_analysis": fake_parallel,
+            "pca_rank_marchenko_pastur": None,
+        },
     )
     choose(np.zeros((132109, 58)), 50, row_cap=20000)
     assert seen["rows"] == 20000

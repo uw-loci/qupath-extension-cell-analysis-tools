@@ -1,6 +1,7 @@
 """
 Collects Python environment information for the System Info dialog.
 """
+
 import sys
 import platform
 import logging
@@ -15,9 +16,18 @@ lines.append("")
 
 lines.append("=== Package Versions ===")
 packages = [
-    "numpy", "pandas", "scipy", "scikit-learn",
-    "scanpy", "anndata", "umap-learn", "leidenalg",
-    "igraph", "numba", "matplotlib", "seaborn"
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "scanpy",
+    "anndata",
+    "umap-learn",
+    "leidenalg",
+    "igraph",
+    "numba",
+    "matplotlib",
+    "seaborn",
 ]
 
 for pkg_name in packages:

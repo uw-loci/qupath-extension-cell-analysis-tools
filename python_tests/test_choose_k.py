@@ -210,7 +210,9 @@ def test_the_reference_is_seeded(reference_box):
 def test_three_clean_blobs_make_all_three_statistics_agree(sweep_k):
     rng = np.random.default_rng(100)
     X = np.vstack([rng.normal(c, 0.4, (200, 5)) for c in (-5, 0, 5)])
-    r = json.loads(sweep_k(X, 1, 8, seed=0, silhouette_max_cells=0, gap_n_references=10))
+    r = json.loads(
+        sweep_k(X, 1, 8, seed=0, silhouette_max_cells=0, gap_n_references=10)
+    )
 
     assert r["ks"] == list(range(1, 9))
     assert r["suggested"]["elbow"] == 3
@@ -225,7 +227,9 @@ def test_only_the_gap_can_say_there_is_no_structure(sweep_k):
     # five seeds: gap = 1 in 5 of 5, elbow in 3-4, silhouette in 6-8.
     rng = np.random.default_rng(0)
     Y = rng.normal(size=(400, 5))
-    r = json.loads(sweep_k(Y, 1, 8, seed=0, silhouette_max_cells=0, gap_n_references=10))
+    r = json.loads(
+        sweep_k(Y, 1, 8, seed=0, silhouette_max_cells=0, gap_n_references=10)
+    )
 
     assert r["suggested"]["gap"] == 1
     assert r["suggested"]["elbow"] not in (None, 1)
@@ -237,8 +241,8 @@ def test_k_equals_one_has_no_silhouette_but_does_have_a_gap(sweep_k):
     rng = np.random.default_rng(1)
     X = rng.normal(size=(150, 3))
     r = json.loads(sweep_k(X, 1, 3, seed=0, silhouette_max_cells=0, gap_n_references=5))
-    assert r["silhouette"][0] is None      # undefined: no other cluster exists
-    assert r["gap"][0] is not None         # defined, and the point of including it
+    assert r["silhouette"][0] is None  # undefined: no other cluster exists
+    assert r["gap"][0] is not None  # defined, and the point of including it
     assert r["inertia"][0] is not None
 
 
@@ -268,7 +272,9 @@ def test_skipping_the_gap_is_honoured_and_reported(sweep_k):
 def test_subsampling_the_silhouette_is_reported_in_the_warnings(sweep_k):
     rng = np.random.default_rng(4)
     X = np.vstack([rng.normal(c, 0.4, (150, 3)) for c in (-4, 4)])
-    r = json.loads(sweep_k(X, 2, 4, seed=0, silhouette_max_cells=100, gap_n_references=0))
+    r = json.loads(
+        sweep_k(X, 2, 4, seed=0, silhouette_max_cells=100, gap_n_references=0)
+    )
     assert r["meta"]["silhouette_subsampled"] is True
     assert r["meta"]["silhouette_cells"] == 100
     assert any("subsample" in w for w in r["warnings"])
@@ -288,7 +294,9 @@ def test_starting_above_one_warns_that_no_structure_cannot_be_detected(sweep_k):
 def test_k_max_above_the_cell_count_is_clamped_and_said(sweep_k):
     rng = np.random.default_rng(6)
     X = rng.normal(size=(12, 2))
-    r = json.loads(sweep_k(X, 2, 50, seed=0, silhouette_max_cells=0, gap_n_references=0))
+    r = json.loads(
+        sweep_k(X, 2, 50, seed=0, silhouette_max_cells=0, gap_n_references=0)
+    )
     assert r["meta"]["k_max"] == 11
     assert any("reduced" in w for w in r["warnings"])
 
@@ -309,8 +317,12 @@ def test_the_sweep_gives_the_same_ANSWER_at_a_fixed_seed(sweep_k):
     """
     rng = np.random.default_rng(7)
     X = np.vstack([rng.normal(c, 0.5, (100, 4)) for c in (-3, 0, 3)])
-    a = json.loads(sweep_k(X, 2, 5, seed=11, silhouette_max_cells=0, gap_n_references=5))
-    b = json.loads(sweep_k(X, 2, 5, seed=11, silhouette_max_cells=0, gap_n_references=5))
+    a = json.loads(
+        sweep_k(X, 2, 5, seed=11, silhouette_max_cells=0, gap_n_references=5)
+    )
+    b = json.loads(
+        sweep_k(X, 2, 5, seed=11, silhouette_max_cells=0, gap_n_references=5)
+    )
 
     assert a["ks"] == b["ks"]
     assert a["suggested"] == b["suggested"]
@@ -341,7 +353,12 @@ def test_progress_is_reported_and_reaches_one(sweep_k):
     rng = np.random.default_rng(8)
     X = rng.normal(size=(80, 3))
     sweep_k(
-        X, 2, 4, seed=0, silhouette_max_cells=0, gap_n_references=0,
+        X,
+        2,
+        4,
+        seed=0,
+        silhouette_max_cells=0,
+        gap_n_references=0,
         progress=lambda f, m: seen.append((f, m)),
     )
     assert seen

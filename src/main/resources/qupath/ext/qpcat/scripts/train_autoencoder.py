@@ -65,6 +65,7 @@ Outputs (via task.outputs):
   active_units: int
   model_state_base64: str -- base64-encoded state dict
 """
+
 import sys
 import json
 import logging
@@ -156,7 +157,9 @@ class CellVAE(nn.Module):
         h = F.leaky_relu(self.dec_ln1(self.dec1(z)))
         h = F.leaky_relu(self.dec_ln2(self.dec2(h)))
         recon_mu = self.dec_mu(h)
-        recon_logvar = torch.clamp(self.dec_logvar(h), LOGVAR_CLAMP_MIN, LOGVAR_CLAMP_MAX)
+        recon_logvar = torch.clamp(
+            self.dec_logvar(h), LOGVAR_CLAMP_MIN, LOGVAR_CLAMP_MAX
+        )
         return recon_mu, recon_logvar
 
     def classify(self, z):
@@ -186,7 +189,9 @@ class ConvCellVAE(nn.Module):
       Concatenated: 192-dim -> (mu, logvar) of latent_dim
     """
 
-    def __init__(self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0):
+    def __init__(
+        self, n_channels, tile_size, latent_dim, n_classes=0, n_measurements=0
+    ):
         super().__init__()
         self.n_channels = n_channels
         self.tile_size = tile_size
@@ -229,7 +234,9 @@ class ConvCellVAE(nn.Module):
             nn.LeakyReLU(),
             nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
             nn.LeakyReLU(),
-            nn.ConvTranspose2d(32, n_channels, 3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(
+                32, n_channels, 3, stride=2, padding=1, output_padding=1
+            ),
         )
 
         if n_classes > 0:
@@ -255,7 +262,7 @@ class ConvCellVAE(nn.Module):
         h = F.leaky_relu(self.dec_fc(z))
         h = h.view(-1, 128, self.dec_spatial, self.dec_spatial)
         h = self.decoder(h)
-        return h[:, :, :self.tile_size, :self.tile_size]
+        return h[:, :, : self.tile_size, : self.tile_size]
 
     def classify(self, z):
         if self.classifier is None:
@@ -272,6 +279,7 @@ class ConvCellVAE(nn.Module):
 
 
 # ==================== Loss Functions ====================
+
 
 def gaussian_nll_loss(recon_mu, recon_logvar, x):
     """
@@ -297,8 +305,13 @@ def kl_divergence_free_bits(mu, logvar, free_bits=FREE_BITS):
     return kl_clamped.sum()
 
 
-def get_kl_beta(epoch, total_epochs, n_cycles=N_KL_CYCLES, beta_max=KL_BETA_MAX,
-                ramp_fraction=KL_RAMP_FRACTION):
+def get_kl_beta(
+    epoch,
+    total_epochs,
+    n_cycles=N_KL_CYCLES,
+    beta_max=KL_BETA_MAX,
+    ramp_fraction=KL_RAMP_FRACTION,
+):
     """
     Cyclical KL annealing (Fu et al. 2019).
     Ramps KL weight 0->beta_max over ramp_fraction of each cycle, then holds.
@@ -312,6 +325,7 @@ def get_kl_beta(epoch, total_epochs, n_cycles=N_KL_CYCLES, beta_max=KL_BETA_MAX,
 
 
 # ==================== Early Stopping ====================
+
 
 class EarlyStopping:
     """Stops training when validation metric stops improving."""
@@ -329,7 +343,9 @@ class EarlyStopping:
         if self.best_score is None or score > self.best_score + self.min_delta:
             self.best_score = score
             self.best_epoch = epoch
-            self.best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            self.best_state = {
+                k: v.cpu().clone() for k, v in model.state_dict().items()
+            }
             self.counter = 0
         else:
             self.counter += 1
@@ -339,20 +355,33 @@ class EarlyStopping:
     def restore_best(self, model):
         if self.best_state is not None:
             model.load_state_dict(self.best_state)
-            logger.info("Restored best model from epoch %d (score=%.4f)",
-                        self.best_epoch + 1, self.best_score)
+            logger.info(
+                "Restored best model from epoch %d (score=%.4f)",
+                self.best_epoch + 1,
+                self.best_score,
+            )
 
 
 # ==================== Data Augmentation ====================
 
-def augment_tile(tile, flip_h=True, flip_v=True, rot90=True, elastic=False,
-                 elastic_alpha=120.0, intensity_mode="none", intensity_amount=0.2,
-                 gauss_noise=0.05):
+
+def augment_tile(
+    tile,
+    flip_h=True,
+    flip_v=True,
+    rot90=True,
+    elastic=False,
+    elastic_alpha=120.0,
+    intensity_mode="none",
+    intensity_amount=0.2,
+    gauss_noise=0.05,
+):
     """
     Tile-mode augmentation using torch operations (no albumentations needed).
     Applied per-tile in the DataLoader. tile shape: (C, H, W).
     """
     import random
+
     # Spatial: flips and 90-degree rotation (same as DL pixel classifier)
     if flip_h and random.random() > 0.5:
         tile = torch.flip(tile, [2])  # flip W
@@ -370,10 +399,18 @@ def augment_tile(tile, flip_h=True, flip_v=True, rot90=True, elastic=False,
         dx = torch.randn(1, h, w) * noise_scale
         dy = torch.randn(1, h, w) * noise_scale
         grid_y, grid_x = torch.meshgrid(
-            torch.linspace(-1, 1, h), torch.linspace(-1, 1, w), indexing='ij')
-        grid = torch.stack([grid_x + dx.squeeze(), grid_y + dy.squeeze()], dim=-1).unsqueeze(0)
-        tile = F.grid_sample(tile.unsqueeze(0), grid, mode='bilinear',
-                             padding_mode='zeros', align_corners=True).squeeze(0)
+            torch.linspace(-1, 1, h), torch.linspace(-1, 1, w), indexing="ij"
+        )
+        grid = torch.stack(
+            [grid_x + dx.squeeze(), grid_y + dy.squeeze()], dim=-1
+        ).unsqueeze(0)
+        tile = F.grid_sample(
+            tile.unsqueeze(0),
+            grid,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=True,
+        ).squeeze(0)
 
     # Intensity augmentation
     if intensity_mode == "brightfield" and intensity_amount > 0:
@@ -398,9 +435,20 @@ class TileMmapDataset(torch.utils.data.Dataset):
     """Dataset that reads tiles from a memory-mapped file on demand.
     Optionally includes per-cell measurements for hybrid ConvVAE input."""
 
-    def __init__(self, mmap_array, labels, norm_method, mean_stat, std_stat,
-                 dmin_stat, dmax_stat, augment_config=None,
-                 measurements=None, meas_mean=None, meas_std=None):
+    def __init__(
+        self,
+        mmap_array,
+        labels,
+        norm_method,
+        mean_stat,
+        std_stat,
+        dmin_stat,
+        dmax_stat,
+        augment_config=None,
+        measurements=None,
+        meas_mean=None,
+        meas_std=None,
+    ):
         self.mmap = mmap_array
         self.labels = labels
         self.norm_method = norm_method
@@ -457,7 +505,9 @@ def augment_measurements(data, noise_std=0.02, scale_range=0.1, dropout_p=0.1):
     # Gaussian noise
     augmented = data + torch.randn_like(data) * noise_std
     # Per-feature scaling
-    scale = 1.0 + (torch.rand(data.shape[1], device=data.device) - 0.5) * 2 * scale_range
+    scale = (
+        1.0 + (torch.rand(data.shape[1], device=data.device) - 0.5) * 2 * scale_range
+    )
     augmented = augmented * scale
     # Feature dropout (zero out random features)
     mask = torch.bernoulli(torch.full_like(data, 1.0 - dropout_p))
@@ -466,6 +516,7 @@ def augment_measurements(data, noise_std=0.02, scale_range=0.1, dropout_p=0.1):
 
 
 # ==================== Diagnostics ====================
+
 
 def count_active_units(mu_all, threshold=0.01):
     """
@@ -492,7 +543,7 @@ try:
 except NameError:
     mode = "measurements"
 
-use_tiles = (mode == "tiles")
+use_tiles = mode == "tiles"
 
 if use_tiles:
     img_channels = int(n_channels)
@@ -501,12 +552,22 @@ if use_tiles:
     # Memory-map tiles from temp file (little-endian float32, written by Java).
     # mmap_mode='r' avoids loading the entire file into RAM.
     tile_path = tile_file_path
-    raw_tiles = np.memmap(tile_path, dtype='<f4', mode='r',
-                          shape=(n_cells_tile, img_channels, img_tile_size, img_tile_size))
+    raw_tiles = np.memmap(
+        tile_path,
+        dtype="<f4",
+        mode="r",
+        shape=(n_cells_tile, img_channels, img_tile_size, img_tile_size),
+    )
     n_cells = raw_tiles.shape[0]
     tile_size_mb = raw_tiles.nbytes / (1024 * 1024)
-    logger.info("Tile mode: %d cells, %d channels, %dx%d tiles (%.0f MB, memory-mapped)",
-                n_cells, img_channels, img_tile_size, img_tile_size, tile_size_mb)
+    logger.info(
+        "Tile mode: %d cells, %d channels, %dx%d tiles (%.0f MB, memory-mapped)",
+        n_cells,
+        img_channels,
+        img_tile_size,
+        img_tile_size,
+        tile_size_mb,
+    )
     data = None
     n_markers = 0
 else:
@@ -574,14 +635,22 @@ tile_aug_config = None
 if do_augmentation:
     try:
         tile_aug_config = {
-            'flip_h': bool(aug_flip_h) if 'aug_flip_h' in dir() else True,
-            'flip_v': bool(aug_flip_v) if 'aug_flip_v' in dir() else True,
-            'rot90': bool(aug_rotation_90) if 'aug_rotation_90' in dir() else True,
-            'elastic': bool(aug_elastic) if 'aug_elastic' in dir() else False,
-            'elastic_alpha': float(aug_elastic_alpha) if 'aug_elastic_alpha' in dir() else 120.0,
-            'intensity_mode': str(aug_intensity_mode) if 'aug_intensity_mode' in dir() else 'none',
-            'intensity_amount': float(aug_intensity_amount) if 'aug_intensity_amount' in dir() else 0.2,
-            'gauss_noise': float(aug_gauss_noise) if 'aug_gauss_noise' in dir() else 0.05,
+            "flip_h": bool(aug_flip_h) if "aug_flip_h" in dir() else True,
+            "flip_v": bool(aug_flip_v) if "aug_flip_v" in dir() else True,
+            "rot90": bool(aug_rotation_90) if "aug_rotation_90" in dir() else True,
+            "elastic": bool(aug_elastic) if "aug_elastic" in dir() else False,
+            "elastic_alpha": (
+                float(aug_elastic_alpha) if "aug_elastic_alpha" in dir() else 120.0
+            ),
+            "intensity_mode": (
+                str(aug_intensity_mode) if "aug_intensity_mode" in dir() else "none"
+            ),
+            "intensity_amount": (
+                float(aug_intensity_amount) if "aug_intensity_amount" in dir() else 0.2
+            ),
+            "gauss_noise": (
+                float(aug_gauss_noise) if "aug_gauss_noise" in dir() else 0.05
+            ),
         }
     except Exception:
         tile_aug_config = None
@@ -638,7 +707,9 @@ n_labeled = int(labeled_mask.sum())
 n_unlabeled = n_cells - n_labeled
 has_labels = n_labeled > 0
 
-logger.info("Labeled: %d, Unlabeled: %d, Classes: %d", n_labeled, n_unlabeled, n_classes)
+logger.info(
+    "Labeled: %d, Unlabeled: %d, Classes: %d", n_labeled, n_unlabeled, n_classes
+)
 if has_labels:
     for i, name in enumerate(class_names):
         count = int((label_array == i).sum())
@@ -662,21 +733,28 @@ if use_tiles:
         ch_sum = np.zeros(img_channels, dtype=np.float64)
         ch_sq_sum = np.zeros(img_channels, dtype=np.float64)
         for i in range(0, n_cells, chunk_size):
-            chunk = np.array(raw_tiles[i:min(i + chunk_size, n_cells)], dtype=np.float32)
+            chunk = np.array(
+                raw_tiles[i : min(i + chunk_size, n_cells)], dtype=np.float32
+            )
             ch_sum += chunk.sum(axis=(0, 2, 3))
-            ch_sq_sum += (chunk ** 2).sum(axis=(0, 2, 3))
+            ch_sq_sum += (chunk**2).sum(axis=(0, 2, 3))
         n_pixels = n_cells * img_tile_size * img_tile_size
         mean_stat = (ch_sum / n_pixels).astype(np.float32)
-        std_stat = np.sqrt(ch_sq_sum / n_pixels - mean_stat ** 2).astype(np.float32)
+        std_stat = np.sqrt(ch_sq_sum / n_pixels - mean_stat**2).astype(np.float32)
         std_stat[std_stat == 0] = 1
-        logger.info("Tile normalization (zscore): mean=%s, std=%s",
-                    mean_stat.tolist(), std_stat.tolist())
+        logger.info(
+            "Tile normalization (zscore): mean=%s, std=%s",
+            mean_stat.tolist(),
+            std_stat.tolist(),
+        )
     elif norm_method == "minmax":
         chunk_size = 1000
         ch_min = np.full(img_channels, np.inf, dtype=np.float32)
         ch_max = np.full(img_channels, -np.inf, dtype=np.float32)
         for i in range(0, n_cells, chunk_size):
-            chunk = np.array(raw_tiles[i:min(i + chunk_size, n_cells)], dtype=np.float32)
+            chunk = np.array(
+                raw_tiles[i : min(i + chunk_size, n_cells)], dtype=np.float32
+            )
             ch_min = np.minimum(ch_min, chunk.min(axis=(0, 2, 3)))
             ch_max = np.maximum(ch_max, chunk.max(axis=(0, 2, 3)))
         dmin_stat = ch_min
@@ -708,23 +786,33 @@ if has_labels and do_class_weights and n_classes > 1:
     use_manual = False
     try:
         if manual_weight_names and manual_weight_values:
-            manual_map = dict(zip(list(manual_weight_names), list(manual_weight_values)))
-            weights = np.array([float(manual_map.get(name, 1.0)) for name in class_names],
-                               dtype=np.float32)
+            manual_map = dict(
+                zip(list(manual_weight_names), list(manual_weight_values))
+            )
+            weights = np.array(
+                [float(manual_map.get(name, 1.0)) for name in class_names],
+                dtype=np.float32,
+            )
             use_manual = True
-            logger.info("Using manual class weights: %s",
-                        {name: "%.2f" % w for name, w in zip(class_names, weights)})
+            logger.info(
+                "Using manual class weights: %s",
+                {name: "%.2f" % w for name, w in zip(class_names, weights)},
+            )
     except NameError:
         pass
 
     if not use_manual:
         # Auto-compute inverse-frequency weights
-        class_counts = np.array([int((label_array == i).sum()) for i in range(n_classes)])
+        class_counts = np.array(
+            [int((label_array == i).sum()) for i in range(n_classes)]
+        )
         class_counts = np.maximum(class_counts, 1)
         weights = 1.0 / class_counts
         weights = weights / weights.sum() * n_classes
-        logger.info("Auto class weights (inverse-frequency): %s",
-                    {name: "%.2f" % w for name, w in zip(class_names, weights)})
+        logger.info(
+            "Auto class weights (inverse-frequency): %s",
+            {name: "%.2f" % w for name, w in zip(class_names, weights)},
+        )
 
     class_weight_tensor = torch.tensor(weights, dtype=torch.float32)
 
@@ -733,8 +821,11 @@ if has_labels and do_class_weights and n_classes > 1:
 effective_sup_weight = sup_weight
 if has_labels and n_labeled < n_cells:
     effective_sup_weight = sup_weight * (n_cells / max(n_labeled, 1))
-    logger.info("Supervision weight scaled by label fraction: %.2f -> %.2f",
-                sup_weight, effective_sup_weight)
+    logger.info(
+        "Supervision weight scaled by label fraction: %.2f -> %.2f",
+        sup_weight,
+        effective_sup_weight,
+    )
 
 # Pre-training phase: unsupervised epochs before classification loss
 pretrain_epochs = int(epochs * PRETRAIN_FRACTION) if has_labels else 0
@@ -750,8 +841,11 @@ if device == "cuda":
     except Exception:
         _dev_label = "GPU"
 else:
-    _dev_label = "CPU (no GPU detected -- training will be slow)" \
-        if device == "cpu" else device.upper()
+    _dev_label = (
+        "CPU (no GPU detected -- training will be slow)"
+        if device == "cpu"
+        else device.upper()
+    )
 task.update("Training on %s" % _dev_label)
 
 if use_tiles:
@@ -784,50 +878,81 @@ if use_tiles:
             tile_meas_std = tile_meas_data.std(axis=0)
             tile_meas_std[tile_meas_std == 0] = 1
             has_tile_measurements = True
-            logger.info("Hybrid mode: %d measurements alongside tiles", n_tile_measurements)
+            logger.info(
+                "Hybrid mode: %d measurements alongside tiles", n_tile_measurements
+            )
     except NameError:
         pass
 
 # Build dataset
 if use_tiles:
-    full_dataset = TileMmapDataset(raw_tiles, label_array, norm_method,
-                                    mean_stat, std_stat, dmin_stat, dmax_stat,
-                                    augment_config=tile_aug_config if do_augmentation else None,
-                                    measurements=tile_meas_data,
-                                    meas_mean=tile_meas_mean, meas_std=tile_meas_std)
+    full_dataset = TileMmapDataset(
+        raw_tiles,
+        label_array,
+        norm_method,
+        mean_stat,
+        std_stat,
+        dmin_stat,
+        dmax_stat,
+        augment_config=tile_aug_config if do_augmentation else None,
+        measurements=tile_meas_data,
+        meas_mean=tile_meas_mean,
+        meas_std=tile_meas_std,
+    )
 else:
     full_dataset = TensorDataset(data_tensor, label_tensor)
 
 if val_split > 0 and n_cells > 20:
     from sklearn.model_selection import train_test_split
+
     indices = np.arange(n_cells)
     strat_labels = label_array.copy()
     strat_labels[strat_labels < 0] = n_classes
     try:
         train_idx, val_idx = train_test_split(
-            indices, test_size=val_split, random_state=42, stratify=strat_labels)
+            indices, test_size=val_split, random_state=42, stratify=strat_labels
+        )
     except ValueError:
         train_idx, val_idx = train_test_split(
-            indices, test_size=val_split, random_state=42)
+            indices, test_size=val_split, random_state=42
+        )
     train_dataset = Subset(full_dataset, train_idx)
     val_dataset = Subset(full_dataset, val_idx)
     n_val = len(val_idx)
-    logger.info("Train/val split: %d/%d (%.0f%% validation)", len(train_idx), n_val, val_split * 100)
+    logger.info(
+        "Train/val split: %d/%d (%.0f%% validation)",
+        len(train_idx),
+        n_val,
+        val_split * 100,
+    )
 else:
     train_dataset = full_dataset
     val_dataset = None
     n_val = 0
 
-train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, drop_last=False,
-                           num_workers=0, pin_memory=(device == "cuda"))
-val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
-                         num_workers=0) if val_dataset else None
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=bs,
+    shuffle=True,
+    drop_last=False,
+    num_workers=0,
+    pin_memory=(device == "cuda"),
+)
+val_loader = (
+    DataLoader(val_dataset, batch_size=bs, shuffle=False, num_workers=0)
+    if val_dataset
+    else None
+)
 
 # 5. Build model and optimizer
 if use_tiles:
-    model = ConvCellVAE(img_channels, img_tile_size, ldim,
-                        n_classes if has_labels else 0,
-                        n_measurements=n_tile_measurements).to(device)
+    model = ConvCellVAE(
+        img_channels,
+        img_tile_size,
+        ldim,
+        n_classes if has_labels else 0,
+        n_measurements=n_tile_measurements,
+    ).to(device)
 else:
     model = CellVAE(n_markers, ldim, n_classes if has_labels else 0).to(device)
 
@@ -836,10 +961,15 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr, eps=1e-8)
 
 # ReduceLROnPlateau (standard for VAEs, monitors val loss or train loss)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, mode='min', factor=lr_sched_factor, patience=lr_sched_patience, min_lr=1e-6)
+    optimizer,
+    mode="min",
+    factor=lr_sched_factor,
+    patience=lr_sched_patience,
+    min_lr=1e-6,
+)
 
 # Mixed precision (CUDA only)
-use_amp = (device == "cuda")
+use_amp = device == "cuda"
 scaler = torch.amp.GradScaler("cuda") if use_amp else None
 
 # Early stopping
@@ -848,15 +978,23 @@ early_stopper = EarlyStopping(patience=es_patience) if es_patience > 0 else None
 if class_weight_tensor is not None:
     class_weight_tensor = class_weight_tensor.to(device)
 
-logger.info("Training config: latent=%d, epochs=%d (pretrain=%d), lr=%g, bs=%d, "
-            "val=%.0f%%, beta_max=%.2f, free_bits=%.2f, "
-            "early_stop=%s, class_weights=%s, augment=%s, AMP=%s",
-            ldim, epochs, pretrain_epochs, lr, bs, val_split * 100,
-            KL_BETA_MAX, FREE_BITS,
-            "patience=%d" % es_patience if es_patience > 0 else "off",
-            "on" if class_weight_tensor is not None else "off",
-            "on" if do_augmentation else "off",
-            "on" if use_amp else "off")
+logger.info(
+    "Training config: latent=%d, epochs=%d (pretrain=%d), lr=%g, bs=%d, "
+    "val=%.0f%%, beta_max=%.2f, free_bits=%.2f, "
+    "early_stop=%s, class_weights=%s, augment=%s, AMP=%s",
+    ldim,
+    epochs,
+    pretrain_epochs,
+    lr,
+    bs,
+    val_split * 100,
+    KL_BETA_MAX,
+    FREE_BITS,
+    "patience=%d" % es_patience if es_patience > 0 else "off",
+    "on" if class_weight_tensor is not None else "off",
+    "on" if do_augmentation else "off",
+    "on" if use_amp else "off",
+)
 
 # 6. Training loop
 best_val_acc = -1.0
@@ -897,12 +1035,14 @@ for epoch in range(epochs):
         # Augmentation target: original (clean) data for reconstruction
         target_data = batch_data
         if do_augmentation and not use_tiles:
-            batch_data = augment_measurements(batch_data, aug_noise, aug_scale, aug_drop)
+            batch_data = augment_measurements(
+                batch_data, aug_noise, aug_scale, aug_drop
+            )
 
         with torch.amp.autocast(device, enabled=use_amp):
             if use_tiles:
                 recon, _, mu, logvar, z, class_logits = model(batch_data, batch_meas)
-                recon_loss = F.mse_loss(recon, target_data, reduction='mean')
+                recon_loss = F.mse_loss(recon, target_data, reduction="mean")
             else:
                 recon_mu, recon_logvar, mu, logvar, z, class_logits = model(batch_data)
                 recon_loss = gaussian_nll_loss(recon_mu, recon_logvar, target_data)
@@ -917,11 +1057,14 @@ for epoch in range(epochs):
                     class_loss = F.cross_entropy(
                         class_logits[labeled_in_batch],
                         batch_labels[labeled_in_batch],
-                        weight=class_weight_tensor)
+                        weight=class_weight_tensor,
+                    )
                     loss = loss + effective_sup_weight * class_loss
 
                     preds = class_logits[labeled_in_batch].argmax(dim=1)
-                    train_correct += (preds == batch_labels[labeled_in_batch]).sum().item()
+                    train_correct += (
+                        (preds == batch_labels[labeled_in_batch]).sum().item()
+                    )
                     train_labeled += labeled_in_batch.sum().item()
 
         optimizer.zero_grad()
@@ -992,23 +1135,34 @@ for epoch in range(epochs):
     # Logging
     if (epoch + 1) % 10 == 0 or epoch == 0 or epoch == epochs - 1:
         msg = "Epoch %d/%d: recon=%.4f, KL=%.4f, beta=%.3f" % (
-            epoch + 1, epochs, avg_recon, avg_kl, kl_beta)
+            epoch + 1,
+            epochs,
+            avg_recon,
+            avg_kl,
+            kl_beta,
+        )
         if classify_active and has_labels:
             msg += ", train_acc=%.1f%%" % (train_acc * 100)
         elif epoch < pretrain_epochs:
             msg += " [pretrain]"
         if val_acc >= 0:
             msg += ", val_acc=%.1f%%" % (val_acc * 100)
-        current_lr = optimizer.param_groups[0]['lr']
+        current_lr = optimizer.param_groups[0]["lr"]
         msg += ", lr=%.2e" % current_lr
         logger.info(msg)
         task.update(msg, current=epoch + 1, maximum=epochs + 2)
 
     if early_stopper and early_stopper.should_stop:
-        logger.info("Early stopping at epoch %d (patience=%d, best=%d)",
-                    epoch + 1, es_patience, early_stopper.best_epoch + 1)
-        task.update("Early stopping at epoch %d (best: epoch %d)" %
-                    (epoch + 1, early_stopper.best_epoch + 1))
+        logger.info(
+            "Early stopping at epoch %d (patience=%d, best=%d)",
+            epoch + 1,
+            es_patience,
+            early_stopper.best_epoch + 1,
+        )
+        task.update(
+            "Early stopping at epoch %d (best: epoch %d)"
+            % (epoch + 1, early_stopper.best_epoch + 1)
+        )
         break
 
 # Restore best model
@@ -1024,7 +1178,9 @@ model.eval()
 
 with torch.no_grad():
     # Encode in batches to handle large datasets
-    encode_loader = DataLoader(full_dataset, batch_size=bs * 2, shuffle=False, num_workers=0)
+    encode_loader = DataLoader(
+        full_dataset, batch_size=bs * 2, shuffle=False, num_workers=0
+    )
     all_mu = []
     all_logits = []
 
@@ -1064,8 +1220,12 @@ with torch.no_grad():
     n_active = count_active_units(mu_all)
     logger.info("Active latent units: %d / %d", n_active, ldim)
     if n_active < ldim * 0.5:
-        logger.warning("Low active units (%d/%d) -- possible posterior collapse. "
-                       "Try reducing latent_dim or increasing epochs.", n_active, ldim)
+        logger.warning(
+            "Low active units (%d/%d) -- possible posterior collapse. "
+            "Try reducing latent_dim or increasing epochs.",
+            n_active,
+            ldim,
+        )
 
     # Per-feature reconstruction quality (measurement mode only)
     if not use_tiles:
@@ -1073,8 +1233,12 @@ with torch.no_grad():
         recon_mu_all, _ = model.decode(mu_all.to(device))
         r2 = compute_r_squared(all_data, recon_mu_all)
         mean_r2 = float(r2.mean())
-        logger.info("Reconstruction R-squared: mean=%.3f, min=%.3f, max=%.3f",
-                    mean_r2, float(r2.min()), float(r2.max()))
+        logger.info(
+            "Reconstruction R-squared: mean=%.3f, min=%.3f, max=%.3f",
+            mean_r2,
+            float(r2.min()),
+            float(r2.max()),
+        )
         poor_features = [n for n, v in zip(list(marker_names), r2) if v < 0.5]
         if poor_features:
             logger.warning("Poorly reconstructed features (R2<0.5): %s", poor_features)
@@ -1084,7 +1248,7 @@ logger.info("Encoding complete: %d cells x %d latent dims", n_cells, ldim)
 # 7b. Release tile memmap so Java can delete the temp file (Windows file locking)
 if use_tiles and raw_tiles is not None:
     # Close the memmap file handle explicitly
-    if hasattr(raw_tiles, '_mmap') and raw_tiles._mmap is not None:
+    if hasattr(raw_tiles, "_mmap") and raw_tiles._mmap is not None:
         raw_tiles._mmap.close()
     del raw_tiles
     # Also release dataset/dataloader references
@@ -1092,6 +1256,7 @@ if use_tiles and raw_tiles is not None:
     if val_loader is not None:
         del val_loader
     import gc
+
     gc.collect()
     logger.info("Tile memmap released for temp file cleanup")
 
@@ -1103,32 +1268,32 @@ if save_path:
 
 buf = io.BytesIO()
 checkpoint_data = {
-    'state_dict': model.state_dict(),
-    'input_mode': mode,
-    'latent_dim': ldim,
-    'n_classes': n_classes,
-    'class_names': class_names,
-    'normalization': norm_method,
-    'norm_params': {
-        'mean': mean_stat.tolist() if mean_stat is not None else None,
-        'std': std_stat.tolist() if std_stat is not None else None,
-        'min': dmin_stat.tolist() if dmin_stat is not None else None,
-        'max': dmax_stat.tolist() if dmax_stat is not None else None,
+    "state_dict": model.state_dict(),
+    "input_mode": mode,
+    "latent_dim": ldim,
+    "n_classes": n_classes,
+    "class_names": class_names,
+    "normalization": norm_method,
+    "norm_params": {
+        "mean": mean_stat.tolist() if mean_stat is not None else None,
+        "std": std_stat.tolist() if std_stat is not None else None,
+        "min": dmin_stat.tolist() if dmin_stat is not None else None,
+        "max": dmax_stat.tolist() if dmax_stat is not None else None,
     },
 }
 if use_tiles:
-    checkpoint_data['n_channels'] = img_channels
-    checkpoint_data['tile_size'] = img_tile_size
-    checkpoint_data['n_tile_measurements'] = n_tile_measurements
+    checkpoint_data["n_channels"] = img_channels
+    checkpoint_data["tile_size"] = img_tile_size
+    checkpoint_data["n_tile_measurements"] = n_tile_measurements
     if tile_meas_mean is not None:
-        checkpoint_data['tile_meas_mean'] = tile_meas_mean.tolist()
-        checkpoint_data['tile_meas_std'] = tile_meas_std.tolist()
+        checkpoint_data["tile_meas_mean"] = tile_meas_mean.tolist()
+        checkpoint_data["tile_meas_std"] = tile_meas_std.tolist()
 else:
-    checkpoint_data['n_markers'] = n_markers
-    checkpoint_data['marker_names'] = list(marker_names)
+    checkpoint_data["n_markers"] = n_markers
+    checkpoint_data["marker_names"] = list(marker_names)
 
 torch.save(checkpoint_data, buf)
-model_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+model_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
 # 9. Package outputs
 task.update("Packaging results...", current=epochs + 2, maximum=epochs + 2)
@@ -1154,5 +1319,9 @@ task.outputs["active_units"] = n_active
 task.outputs["model_state_base64"] = model_b64
 task.outputs["label_names_json"] = json.dumps(class_names)
 
-logger.info("Autoencoder training complete (best epoch: %d, active units: %d/%d)",
-            best_epoch + 1, n_active, ldim)
+logger.info(
+    "Autoencoder training complete (best epoch: %d, active units: %d/%d)",
+    best_epoch + 1,
+    n_active,
+    ldim,
+)
