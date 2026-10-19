@@ -53,8 +53,9 @@ class ModifyClustersCloseTest {
 
     @Test
     void thePromptSaysHowManyAndHowToKeepThem() {
-        assertThat(ClusterManagementDialog.discardPrompt(1)).startsWith("1 cluster has a new name");
+        assertThat(ClusterManagementDialog.discardPrompt(1))
+                .startsWith("1 cluster has a new name").contains("discard it?");
         assertThat(ClusterManagementDialog.discardPrompt(7))
-                .startsWith("7 clusters have new names").contains("press Apply");
+                .startsWith("7 clusters have new names").contains("discard them?").contains("press Apply");
     }
 }

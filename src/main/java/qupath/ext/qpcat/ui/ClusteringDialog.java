@@ -5218,7 +5218,7 @@ public class ClusteringDialog {
                     "Two checks you can ask for under Validation in the clustering dialog.\n"
                     + "STABILITY: the same clustering re-run with other seeds. An adjusted "
                     + "Rand index near 1 and consistency near 1 mean the clusters do not "
-                    + "depend on the seed; a cluster with high consistency splits or merges "
+                    + "depend on the seed; a cluster whose consistency is well above 1 splits or merges "
                     + "between runs and should not be named as a population.\n"
                     + "AGREEMENT: the clusters against the classes the cells had before the "
                     + "run. High agreement says the clustering recovers those classes; it "

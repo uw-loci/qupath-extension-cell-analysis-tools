@@ -450,7 +450,8 @@ public class ClusterManagementDialog {
     static String discardPrompt(int n) {
         return n + (n == 1 ? " cluster has a new name" : " clusters have new names")
                 + " that you have not applied.\n\n"
-                + "Close and discard them? Choose No to go back and press Apply.";
+                + "Close and discard " + (n == 1 ? "it" : "them")
+                + "? Choose No to go back and press Apply.";
     }
 
     // --- Cluster list population ------------------------------------------
