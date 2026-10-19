@@ -5529,7 +5529,7 @@ public class ClusteringWorkflow {
         sb.append(String.format(java.util.Locale.US,
                 "%nMean across %d images: %.1f connections/cell.", perImage.size(), meanAvg));
         String msg = sb.toString();
-        Platform.runLater(() -> Dialogs.showPlainMessage("QP-CAT - spatial graph overlay", msg));
+        Platform.runLater(() -> Dialogs.showPlainMessage("QP-CAT - spatial graph summary", msg));
     }
 
     private void writeNodeMeasurements(List<PathObject> detections,

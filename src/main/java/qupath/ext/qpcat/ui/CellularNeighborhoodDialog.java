@@ -727,7 +727,7 @@ public class CellularNeighborhoodDialog {
         if (heatmapPath == null || heatmapPath.isEmpty()) return;
         File f = new File(heatmapPath);
         if (!f.isFile()) return;
-        boolean open = Dialogs.showConfirmDialog("QPCAT",
+        boolean open = Dialogs.showConfirmDialog("QPCAT - open enrichment heatmap?",
                 "Open the neighborhood enrichment heatmap?");
         if (!open) return;
         // Desktop.open blocks; run it off the FX thread to avoid freezing the UI.

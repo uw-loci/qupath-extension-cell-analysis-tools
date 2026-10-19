@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Different windows shared one title.** The per-image spatial-graph summary was titled
+  like the question before it ("QP-CAT - spatial graph overlay"); it is now "QP-CAT -
+  spatial graph summary". The image picker in *Analyze current classifications* said
+  "Select images to cluster" (now "...to analyze"; sub-clustering says "...to sub-cluster"),
+  and three confirmation prompts in Phenotyping and Cellular Neighborhoods were titled just
+  "QPCAT". QuPath remembers a window's position by its title, so these shared positions too.
+
 - **The MCP server window could show a tool call after "stopped".** A call the agent made
   just before the server stopped (a project change, the idle timeout, or Stop) could finish
   afterwards and replace "stopped: ..." with "tool call: ...", so the window looked as if

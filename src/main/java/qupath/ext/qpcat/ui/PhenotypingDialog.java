@@ -782,7 +782,7 @@ public class PhenotypingDialog {
             } else {
                 scopeEntries = new ArrayList<>(project.getImageList());
             }
-            boolean proceed = Dialogs.showConfirmDialog("QPCAT",
+            boolean proceed = Dialogs.showConfirmDialog("QPCAT - phenotype these images?",
                     "Phenotype " + scopeEntries.size() + " project image(s)?\n"
                     + "Existing classifications in each image will be overwritten and the "
                     + "results saved back to each image. This cannot be undone.");
@@ -796,7 +796,7 @@ public class PhenotypingDialog {
                         .filter(d -> !CellClasses.isUnclassified(d))
                         .count();
                 if (classified > 0) {
-                    boolean proceed = Dialogs.showConfirmDialog("QPCAT",
+                    boolean proceed = Dialogs.showConfirmDialog("QPCAT - replace classifications?",
                             classified + " of " + imageData.getHierarchy().getDetectionObjects().size()
                             + " detections already have classifications.\n"
                             + "Running phenotyping will overwrite them. Continue?");

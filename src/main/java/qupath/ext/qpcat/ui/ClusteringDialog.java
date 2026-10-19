@@ -521,8 +521,22 @@ public class ClusteringDialog {
     }
 
     private ScopeSection createScopeSection() {
-        scopeSection = new ScopeSection(qupath, "QPCAT - Select images to cluster");
+        scopeSection = new ScopeSection(qupath, pickerTitle(mode));
         return scopeSection;
+    }
+
+    /**
+     * Title of the image picker, which names what this mode does to the images.
+     *
+     * @param mode the dialog's run mode
+     * @return the picker window title
+     */
+    static String pickerTitle(RunMode mode) {
+        switch (mode) {
+            case SUBCLUSTER: return "QPCAT - Select images to sub-cluster";
+            case ANALYZE_EXISTING: return "QPCAT - Select images to analyze";
+            default: return "QPCAT - Select images to cluster";
+        }
     }
 
     private TitledPane createMeasurementSection() {
