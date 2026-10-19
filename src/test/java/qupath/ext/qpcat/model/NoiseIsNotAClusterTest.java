@@ -49,6 +49,16 @@ class NoiseIsNotAClusterTest {
     }
 
     @Test
+    void theCountShownToAUserLeavesNoiseOutOfTheClusters() {
+        assertThat(withNoise().clusterCountText()).isEqualTo("2 clusters (+2 noise)");
+        assertThat(new ClusteringResult(new int[]{0}, 1, null, null, new String[]{"m"})
+                .clusterCountText()).isEqualTo("1 cluster");
+        assertThat(ClusterNaming.column(-1, 3, 2)).isEqualTo(2);
+        assertThat(ClusterNaming.column(-1, 3, -1)).isEqualTo(-1);
+        assertThat(ClusterNaming.column(1, 3, 2)).isEqualTo(1);
+    }
+
+    @Test
     void resultsWithoutNoiseAreUnaffected() {
         ClusteringResult r = new ClusteringResult(
                 new int[]{0, 1}, 2, null, null, new String[]{"m"});

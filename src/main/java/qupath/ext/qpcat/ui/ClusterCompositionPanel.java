@@ -79,22 +79,26 @@ public class ClusterCompositionPanel extends BorderPane {
      */
     public ClusterCompositionPanel(int[] clusterLabels, int nClusters, String[] cellGroups,
                                    String groupDimensionLabel, IntFunction<Color> clusterColorFn) {
-        this(clusterLabels, nClusters, cellGroups, groupDimensionLabel, clusterColorFn, null);
+        this(clusterLabels, nClusters, -1, cellGroups, groupDimensionLabel, clusterColorFn, null);
     }
 
     /**
      * As above, but labelling clusters with {@code clusterNameFn} -- the custom
      * names of a renamed / merged result. Pass null for the default "Cluster N".
      *
+     * @param noiseColumn   the noise row of the result, which counts the noise cells;
+     *                      -1 when the run has none
      * @param clusterNameFn cluster id -> display name
      */
-    public ClusterCompositionPanel(int[] clusterLabels, int nClusters, String[] cellGroups,
+    public ClusterCompositionPanel(int[] clusterLabels, int nClusters, int noiseColumn,
+                                   String[] cellGroups,
                                    String groupDimensionLabel, IntFunction<Color> clusterColorFn,
                                    IntFunction<String> clusterNameFn) {
         this.nClusters = Math.max(nClusters, 0);
         this.clusterColor = clusterColorFn;
         this.figure = CompositionFigure.tally(
-                        clusterLabels, this.nClusters, cellGroups, groupDimensionLabel)
+                        clusterLabels, this.nClusters, noiseColumn, cellGroups,
+                        groupDimensionLabel)
                 .withClusterNames(clusterNameFn == null ? null : clusterNameFn::apply);
 
         setPadding(new Insets(10));

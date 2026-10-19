@@ -95,4 +95,32 @@ public final class ClusterNaming {
         }
         return "0".repeat(digits - s.length()) + s;
     }
+
+    /**
+     * A cluster count as a user reads it: noise shown, never counted as a cluster.
+     *
+     * @param realClusters clusters excluding any noise row
+     * @param noiseCells   cells left unclustered as noise; 0 for none
+     * @return e.g. "6 clusters", "1 cluster", "5 clusters (+606 noise)"
+     */
+    public static String countText(int realClusters, long noiseCells) {
+        return realClusters + (realClusters == 1 ? " cluster" : " clusters")
+                + (noiseCells > 0 ? " (+" + noiseCells + " noise)" : "");
+    }
+
+    /**
+     * The column a per-cell label is counted in, for a table with one column per
+     * row of the cluster statistics.
+     *
+     * @param label         per-cell label; negative is noise
+     * @param nColumns      columns in the table, noise column included
+     * @param noiseColumn   the noise row's column, or -1 when the run has none
+     * @return the column, or -1 when the label belongs in none
+     */
+    public static int column(int label, int nColumns, int noiseColumn) {
+        if (label < 0) {
+            return noiseColumn >= 0 && noiseColumn < nColumns ? noiseColumn : -1;
+        }
+        return label < nColumns ? label : -1;
+    }
 }

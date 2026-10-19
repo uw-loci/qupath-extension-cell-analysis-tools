@@ -192,6 +192,10 @@ exports via **Export figure + table...** or in bulk from [Exporting](exporting.m
 describes, so it has a statistics table instead of pies, and a block of warnings above the
 numbers that you should read before the numbers.
 
+An HDBSCAN result with noise has a **Noise (unclustered)** column and slice holding those
+cells, so each row still adds up to every cell in the group; the heading counts clusters
+without it ("5 clusters (+606 noise)").
+
 <a name="composition-by-image-tab"></a>
 <a name="composition-by-image"></a>
 ### By image

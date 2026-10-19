@@ -111,4 +111,24 @@ class ClusteringResultManagerListingTest {
         assertThat(ClusteringResultManager.parseTimestampMillis(null)).isNull();
         assertThat(ClusteringResultManager.parseTimestampMillis("")).isNull();
     }
+
+    @Test
+    void theListSaysNoiseRatherThanCountingItAsACluster() throws Exception {
+        SavedClusteringResult saved = new SavedClusteringResult();
+        saved.setName("hdb");
+        saved.setTimestamp("2026-10-15T10:00:00");
+        saved.setAlgorithm("hdbscan");
+        saved.setNClusters(6);
+        saved.setNCells(4197);
+        saved.setNoiseRowIndex(5);
+        saved.setNNoiseCells(606);
+        Files.writeString(results.resolve("hdb.json"), new Gson().toJson(saved));
+        // View Past Results reads the scalar-only listing; Manage reads the entries.
+        assertThat(ClusteringResultManager.listResultSummaries(project).get("hdb"))
+                .contains("5 clusters (+606 noise), 4197 cells");
+        assertThat(ClusteringResultManager.listResultEntries(project))
+                .extracting(e -> e.summary)
+                .singleElement().asString()
+                .startsWith("5 clusters (+606 noise), 4197 cells");
+    }
 }

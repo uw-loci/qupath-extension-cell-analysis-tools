@@ -47,6 +47,8 @@ public final class CompositionFigure {
 
     private final String dimension;
     private final int nClusters;
+    /** Column holding the noise cells, or -1 when the run has no noise. */
+    private final int noiseColumn;
     /**
      * Zero-pad width of the default cluster names, from the labels this figure was
      * tallied over. It is also the width of the PathClass whose colour
@@ -63,9 +65,11 @@ public final class CompositionFigure {
     // names as the screen instead of reverting to the raw label.
     private IntFunction<String> clusterNames;
 
-    private CompositionFigure(String dimension, int nClusters, int clusterDigits) {
+    private CompositionFigure(String dimension, int nClusters, int noiseColumn,
+                              int clusterDigits) {
         this.dimension = (dimension == null || dimension.isBlank()) ? "Group" : dimension;
         this.nClusters = Math.max(nClusters, 0);
+        this.noiseColumn = noiseColumn >= 0 && noiseColumn < this.nClusters ? noiseColumn : -1;
         this.clusterDigits = Math.max(1, clusterDigits);
         this.clusterTotals = new long[this.nClusters];
         this.clusterNames = defaultClusterName();
@@ -79,21 +83,25 @@ public final class CompositionFigure {
     /**
      * Tally per-cell cluster labels against per-cell group labels.
      *
-     * @param clusterLabels per-cell cluster id; negative ids (noise) are excluded
-     * @param nClusters     number of clusters
+     * @param clusterLabels per-cell cluster id; negative ids are noise
+     * @param nClusters     number of columns: the rows of the cluster statistics,
+     *                      noise row included
+     * @param noiseColumn   the noise row, which counts the negative ids; -1 when the
+     *                      run has none (negative ids are then not charted)
      * @param cellGroups    per-cell group label, index-aligned with clusterLabels;
      *                      null entries bucket under {@value #NONE_LABEL}
      * @param dimension     column header for the grouping ("Image" / "Annotation")
+     * @return the tally
      */
-    public static CompositionFigure tally(int[] clusterLabels, int nClusters,
+    public static CompositionFigure tally(int[] clusterLabels, int nClusters, int noiseColumn,
                                           String[] cellGroups, String dimension) {
-        CompositionFigure f = new CompositionFigure(dimension, nClusters,
+        CompositionFigure f = new CompositionFigure(dimension, nClusters, noiseColumn,
                 ClusterNaming.digitsForLabels(clusterLabels));
         int n = clusterLabels == null ? 0 : clusterLabels.length;
         for (int i = 0; i < n; i++) {
-            int c = clusterLabels[i];
-            if (c < 0 || c >= f.nClusters) {
-                continue;  // noise / out-of-range labels are not charted
+            int c = ClusterNaming.column(clusterLabels[i], f.nClusters, f.noiseColumn);
+            if (c < 0) {
+                continue;  // out-of-range labels, and noise when there is no noise column
             }
             String g = (cellGroups != null && i < cellGroups.length && cellGroups[i] != null)
                     ? cellGroups[i] : NONE_LABEL;
@@ -151,10 +159,10 @@ public final class CompositionFigure {
     /** Per-cluster totals across every group. */
     public long[] getClusterTotals() { return clusterTotals.clone(); }
 
-    /** Total charted cells (noise excluded). */
+    /** Total charted cells, noise included when there is a noise column. */
     public long getGrandTotal() { return grandTotal; }
 
-    /** True when nothing was charted -- no groups, or every label was noise. */
+    /** True when nothing was charted -- no groups, or no label could be charted. */
     public boolean isEmpty() { return groups.isEmpty() || grandTotal == 0 || nClusters == 0; }
 
     /** The trailing summary row's label, e.g. "All images". */
@@ -364,9 +372,11 @@ public final class CompositionFigure {
 
     /** Title line, matching the header of the interactive panel. */
     public String title() {
-        return String.format("%d cells across %d %s%s, %d clusters",
+        long noise = noiseColumn >= 0 ? clusterTotals[noiseColumn] : 0;
+        int real = noiseColumn >= 0 ? nClusters - 1 : nClusters;
+        return String.format("%d cells across %d %s%s, %s",
                 grandTotal, groups.size(), dimension.toLowerCase(),
-                groups.size() == 1 ? "" : "s", nClusters);
+                groups.size() == 1 ? "" : "s", ClusterNaming.countText(real, noise));
     }
 
     /** @return the y coordinate just below the legend block. */

@@ -543,7 +543,7 @@ public final class YamlBatchOrchestrator {
                     config.getNormalization().getId(),
                     config.getEmbeddingMethod().getId());
             emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
-                    + clustering.getNClusters() + " clusters, " + clustering.getNCells()
+                    + clustering.clusterCountText() + ", " + clustering.getNCells()
                     + " cells across " + n + " image(s); saved as '" + resultName + "'");
             return true;
         } catch (Exception e) {

@@ -179,6 +179,12 @@ public class SavedClusteringResult {
         return (getNoiseRowIndex() >= 0 && nNoiseCells > 0) ? nClusters - 1 : nClusters;
     }
 
+    /** The cluster count as a user reads it, e.g. "5 clusters (+606 noise)". */
+    public String clusterCountText() {
+        return ClusterNaming.countText(getNRealClusters(),
+                getNoiseRowIndex() >= 0 ? nNoiseCells : 0);
+    }
+
     public int getNCells() { return nCells; }
     public void setNCells(int n) { this.nCells = n; }
 
@@ -586,8 +592,7 @@ public class SavedClusteringResult {
      * Short summary string for listing in the UI.
      */
     public String getSummary() {
-        return getNRealClusters() + " clusters, " + nCells + " cells"
-                + (nNoiseCells > 0 ? " (+" + nNoiseCells + " noise)" : "")
+        return clusterCountText() + ", " + nCells + " cells"
                 + (algorithm != null ? " (" + algorithm + ")" : "");
     }
 

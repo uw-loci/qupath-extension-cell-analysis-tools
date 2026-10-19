@@ -393,7 +393,7 @@ public final class SavedResultApplier {
             String script = String.join("\n",
                     "// QP-CAT: " + actionLabel + " from saved clustering result '"
                             + saved.getName() + "'",
-                    "// " + saved.getNClusters() + " clusters; " + applied
+                    "// " + saved.clusterCountText() + "; " + applied
                             + " detections relabelled"
                             + (unmatched > 0
                                 ? " (" + unmatched + " saved cells had no matching detection)" : ""),

@@ -80,7 +80,7 @@ public class SpatialStatsDialog {
             } else {
                 savedLabels[0] = chosen;
                 labelSourceInfo.setText("Using saved result: " + chosen.getName()
-                        + " (" + chosen.getNClusters() + " clusters); matched by centroid, "
+                        + " (" + chosen.clusterCountText() + "); matched by centroid, "
                         + "not written to the hierarchy.");
             }
         });

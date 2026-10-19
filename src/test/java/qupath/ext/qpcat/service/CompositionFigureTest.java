@@ -20,7 +20,7 @@ class CompositionFigureTest {
     private static CompositionFigure sample() {
         int[] labels =    {0, 0, 1, 1, 1, 2,  0, 2, 2,  1};
         String[] groups = {"a", "a", "a", "a", "a", "a",  "b", "b", "b",  "c"};
-        return CompositionFigure.tally(labels, 3, groups, "Image");
+        return CompositionFigure.tally(labels, 3, -1, groups, "Image");
     }
 
     @Test
@@ -41,7 +41,7 @@ class CompositionFigureTest {
         // both invent a slice and inflate every percentage denominator.
         int[] labels = {0, -1, -1, 1};
         String[] groups = {"a", "a", "a", "a"};
-        CompositionFigure f = CompositionFigure.tally(labels, 2, groups, "Image");
+        CompositionFigure f = CompositionFigure.tally(labels, 2, -1, groups, "Image");
         assertThat(f.getGrandTotal()).isEqualTo(2);
         assertThat(f.groupTotal("a")).isEqualTo(2);
     }
@@ -49,7 +49,7 @@ class CompositionFigureTest {
     @Test
     void outOfRangeLabelsAreExcluded() {
         int[] labels = {0, 7};
-        CompositionFigure f = CompositionFigure.tally(labels, 2, new String[]{"a", "a"}, "Image");
+        CompositionFigure f = CompositionFigure.tally(labels, 2, -1, new String[]{"a", "a"}, "Image");
         assertThat(f.getGrandTotal()).isEqualTo(1);
     }
 
@@ -57,7 +57,7 @@ class CompositionFigureTest {
     void nullGroupsBucketUnderNone() {
         int[] labels = {0, 0, 1};
         String[] groups = {"a", null, null};
-        CompositionFigure f = CompositionFigure.tally(labels, 2, groups, "Annotation");
+        CompositionFigure f = CompositionFigure.tally(labels, 2, -1, groups, "Annotation");
         assertThat(f.getGroups()).contains(CompositionFigure.NONE_LABEL);
         assertThat(f.groupTotal(CompositionFigure.NONE_LABEL)).isEqualTo(2);
     }
@@ -67,7 +67,7 @@ class CompositionFigureTest {
         // Defensive: a saved result whose per-cell arrays disagree in length
         // must degrade to "(none)", not blow up the export.
         int[] labels = {0, 0, 0};
-        CompositionFigure f = CompositionFigure.tally(labels, 1, new String[]{"a"}, "Image");
+        CompositionFigure f = CompositionFigure.tally(labels, 1, -1, new String[]{"a"}, "Image");
         assertThat(f.getGrandTotal()).isEqualTo(3);
         assertThat(f.groupTotal(CompositionFigure.NONE_LABEL)).isEqualTo(2);
     }
@@ -115,7 +115,7 @@ class CompositionFigureTest {
     void csvQuotesGroupNamesContainingCommas() {
         // Real image names do contain commas ("slide 3, region B.ome.tif").
         CompositionFigure f = CompositionFigure.tally(
-                new int[]{0}, 1, new String[]{"slide 3, region B"}, "Image");
+                new int[]{0}, 1, -1, new String[]{"slide 3, region B"}, "Image");
         assertThat(f.toCsv()).contains("\"slide 3, region B\"");
     }
 
@@ -123,17 +123,17 @@ class CompositionFigureTest {
     void percentagesAreZeroNotNaNForAnEmptyGroup() {
         // A group can end up empty when every one of its cells was noise.
         CompositionFigure f = CompositionFigure.tally(
-                new int[]{-1}, 2, new String[]{"a"}, "Image");
+                new int[]{-1}, 2, -1, new String[]{"a"}, "Image");
         assertThat(f.toCsv()).doesNotContain("NaN");
     }
 
     @Test
     void renderProducesAnImageSizedByTheGroupCount() {
         BufferedImage one = CompositionFigure.tally(
-                new int[]{0}, 1, new String[]{"a"}, "Image")
+                new int[]{0}, 1, -1, new String[]{"a"}, "Image")
                 .render(1.0, c -> 0xFF0000);
         BufferedImage many = CompositionFigure.tally(
-                new int[]{0, 0, 0, 0, 0}, 1,
+                new int[]{0, 0, 0, 0, 0}, 1, -1,
                 new String[]{"a", "b", "c", "d", "e"}, "Image")
                 .render(1.0, c -> 0xFF0000);
         assertThat(many.getHeight()).isGreaterThan(one.getHeight());
@@ -163,7 +163,7 @@ class CompositionFigureTest {
         assertThat(legend.getWidth()).isGreaterThan(0);
         // One row per cluster, so the legend grows with the cluster count.
         BufferedImage bigger = CompositionFigure.tally(
-                new int[]{0, 1, 2, 3, 4, 5}, 6,
+                new int[]{0, 1, 2, 3, 4, 5}, 6, -1,
                 new String[]{"a", "a", "a", "a", "a", "a"}, "Image")
                 .renderLegend(1.0, c -> 0x336699);
         assertThat(bigger.getHeight()).isGreaterThan(legend.getHeight());
@@ -190,7 +190,7 @@ class CompositionFigureTest {
         // Everything was noise: still produce a readable stub, because an export
         // that throws here would abort a whole batch over an empty pie.
         CompositionFigure f = CompositionFigure.tally(
-                new int[]{-1, -1}, 3, new String[]{"a", "a"}, "Image");
+                new int[]{-1, -1}, 3, -1, new String[]{"a", "a"}, "Image");
         assertThat(f.isEmpty()).isTrue();
         BufferedImage img = f.render(1.0, c -> 0x000000);
         assertThat(img).isNotNull();
@@ -199,7 +199,7 @@ class CompositionFigureTest {
 
     @Test
     void renderSurvivesNullLabels() {
-        CompositionFigure f = CompositionFigure.tally(null, 3, null, "Image");
+        CompositionFigure f = CompositionFigure.tally(null, 3, -1, null, "Image");
         assertThat(f.isEmpty()).isTrue();
         assertThat(f.render(1.0, null)).isNotNull();
         assertThat(f.toCsv()).isNotBlank();
@@ -218,8 +218,20 @@ class CompositionFigureTest {
     void titleMatchesTheInteractivePanelHeader() {
         assertThat(sample().title()).isEqualTo("10 cells across 3 images, 3 clusters");
         CompositionFigure single = CompositionFigure.tally(
-                new int[]{0}, 1, new String[]{"a"}, "Annotation");
-        assertThat(single.title()).isEqualTo("1 cells across 1 annotation, 1 clusters");
+                new int[]{0}, 1, -1, new String[]{"a"}, "Annotation");
+        assertThat(single.title()).isEqualTo("1 cells across 1 annotation, 1 cluster");
+    }
+
+    @Test
+    void noiseCellsAreCountedInTheNoiseColumnButNotAsACluster() {
+        // Two real clusters and a noise row (index 2); noise arrives as -1.
+        int[] labels = {0, 1, -1, -1, -1};
+        String[] groups = {"a", "b", "a", "b", "b"};
+        CompositionFigure f = CompositionFigure.tally(labels, 3, 2, groups, "Image");
+        assertThat(f.getClusterTotals()).containsExactly(1, 1, 3);
+        assertThat(f.countsFor("b")).containsExactly(0, 1, 2);
+        assertThat(f.getGrandTotal()).isEqualTo(5);
+        assertThat(f.title()).isEqualTo("5 cells across 2 images, 2 clusters (+3 noise)");
     }
 
     private static org.assertj.core.data.Offset<Double> within(double v) {

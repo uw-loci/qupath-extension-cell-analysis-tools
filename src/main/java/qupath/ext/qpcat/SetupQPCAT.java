@@ -956,8 +956,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
                 Platform.runLater(() ->
                         Dialogs.showInfoNotification(EXTENSION_NAME,
-                                "Quick " + algoName + " complete: " + result.getNClusters()
-                                + " clusters, " + result.getNCells() + " cells."));
+                                "Quick " + algoName + " complete: " + result.clusterCountText()
+                                + ", " + result.getNCells() + " cells."));
             } catch (Exception e) {
                 logger.error("Quick clustering failed", e);
                 OperationLogger.getInstance().logFailure("QUICK CLUSTERING",

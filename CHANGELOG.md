@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **HDBSCAN noise was counted as a cluster in several places.** A run that found 5 clusters
+  and 606 noise cells was listed as "6 clusters" in View Past Results and in the composition
+  tabs, whose Noise column read 0 in every row, as did the Noise card in Marker Fingerprints.
+  Noise now has its real count in those tables and cards, and every cluster count, including
+  the completion messages, reads "5 clusters (+606 noise)".
+
 - **After a run on several images, the Clustering dialog reopened with no measurements
   ticked.** Every other setting came back. The last run's ticks were applied while the list
   of measurement names was still being read from the images, and the list that arrived then

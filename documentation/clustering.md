@@ -325,8 +325,9 @@ used. O(n^2), so subsample large datasets, and merges are greedy and never undon
 <a name="caution-hdbscan"></a>
 **HDBSCAN** -- finds clusters as dense regions; needs neither k nor a distance threshold.
 Cells in no dense region are labelled **noise**: QP-CAT keeps them in the result and
-counts them, leaves them Unclassified in the viewer, and excludes them from composition
-charts. Noise is not a cluster.
+counts them, and leaves them Unclassified in the viewer. Noise is not a cluster: it is
+shown wherever cluster sizes are (its own column and slice in the composition tabs, its own
+card in Marker Fingerprints), and every cluster count reads like "5 clusters (+606 noise)".
 
 *Know the failure mode before choosing it.* HDBSCAN can only cut where there is a **gap in
 density**. Populations can be well separated and still have no gap -- cell morphometry

@@ -272,6 +272,11 @@ public class ClusteringResult {
      */
     public int getNRealClusters() { return hasNoise() ? nClusters - 1 : nClusters; }
 
+    /** The cluster count as a user reads it, e.g. "5 clusters (+606 noise)". */
+    public String clusterCountText() {
+        return ClusterNaming.countText(getNRealClusters(), hasNoise() ? nNoiseCells : 0);
+    }
+
     /** Degenerate-partition warnings, most important first; never null. */
     public java.util.List<String> getQualityWarnings() {
         return qualityWarnings == null ? java.util.List.of() : qualityWarnings;

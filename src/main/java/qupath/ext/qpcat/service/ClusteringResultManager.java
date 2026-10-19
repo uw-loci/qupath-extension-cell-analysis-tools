@@ -60,12 +60,16 @@ public class ClusteringResultManager {
         String algorithm;
         int nClusters;
         int nCells;
+        Integer noiseRowIndex;
+        int nNoiseCells;
         String scopeKey;
         String derivedFrom;
         String derivedOp;
 
         String summary() {
-            return nClusters + " clusters, " + nCells + " cells"
+            boolean noise = noiseRowIndex != null && noiseRowIndex >= 0 && nNoiseCells > 0;
+            return ClusterNaming.countText(noise ? nClusters - 1 : nClusters,
+                    noise ? nNoiseCells : 0) + ", " + nCells + " cells"
                     + (algorithm != null ? " (" + algorithm + ")" : "")
                     // Show the edit chain, so a list of five near-identical names
                     // reads as a history instead of five unrelated results.

@@ -493,8 +493,8 @@ public class ClusteringWorkflow {
 
         String completeMsg = config.getAlgorithm() == ClusteringConfig.Algorithm.NONE
                 ? "Embedding computed for " + result.getNCells() + " cells."
-                : "Clustering complete: " + result.getNClusters()
-                    + " clusters found for " + result.getNCells() + " cells.";
+                : "Clustering complete: " + result.clusterCountText()
+                    + " found for " + result.getNCells() + " cells.";
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -1064,8 +1064,8 @@ public class ClusteringWorkflow {
 
         refreshOpenImageIfIn(groups);
 
-        String completeMsg = "Project clustering complete: " + result.getNClusters()
-                + " clusters found for " + result.getNCells() + " cells across "
+        String completeMsg = "Project clustering complete: " + result.clusterCountText()
+                + " found for " + result.getNCells() + " cells across "
                 + extraction.getImageSegments().size() + " images.";
         report(progressCallback, completeMsg);
 
@@ -1153,7 +1153,7 @@ public class ClusteringWorkflow {
             writeAreaCsvs(resultsDir, savedName, result);
 
             OperationLogger.getInstance().logEvent("RESULTS AUTO-SAVED",
-                    "Saved '" + savedName + "' (" + result.getNClusters() + " clusters, "
+                    "Saved '" + savedName + "' (" + result.clusterCountText() + ", "
                     + result.getNCells() + " cells) to " + resultsDir
                     + "; " + scopeCount + " result(s) for scope '" + scopeLabel + "'");
         } catch (Exception e) {
@@ -1247,7 +1247,7 @@ public class ClusteringWorkflow {
                 // areas line above: re-running without it does NOT reproduce.
                 lines.add("// PCA precursor: " + result.getPcaPrecursor());
             }
-            lines.add("// Result: " + result.getNClusters() + " clusters, "
+            lines.add("// Result: " + result.clusterCountText() + ", "
                     + result.getNCells() + " cells"
                     + (crossImage ? " across " + nImages + " images" : ""));
             lines.add("// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',");
@@ -1255,7 +1255,7 @@ public class ClusteringWorkflow {
             lines.add("//   SAME scope), or the headless YAML batch (see YAML_SCHEMA.md).");
 
             String stepName = "QP-CAT: clustering (" + algo + ", "
-                    + result.getNClusters() + " clusters"
+                    + result.clusterCountText()
                     + (crossImage ? ", " + nImages + " images" : "") + ")";
             imageData.getHistoryWorkflow().addStep(
                     new DefaultScriptableWorkflowStep(stepName, String.join("\n", lines)));

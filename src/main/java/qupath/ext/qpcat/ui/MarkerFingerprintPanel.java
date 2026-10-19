@@ -22,6 +22,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,22 +104,16 @@ public class MarkerFingerprintPanel extends BorderPane {
     /**
      * @param markerRankingsJson the run's {@code marker_rankings} payload (may be null)
      * @param clusterLabels      per-cell cluster id (for cluster sizes)
-     * @param nClusters          number of clusters
+     * @param nClusters          number of clusters, noise row included
+     * @param noiseRowIndex      the noise row, which counts the noise cells; -1 for none
      * @param clusterColorFn     cluster id -> palette color (matches the other tabs)
      * @param channelColors      channel name -> packed RGB (from the image), or null
+     * @param clusterNameFn      custom names of a renamed / merged result; null gives
+     *                           the default "Cluster N"
      */
     public MarkerFingerprintPanel(String markerRankingsJson, int[] clusterLabels,
-                                  int nClusters, IntFunction<Color> clusterColorFn,
-                                  Map<String, Integer> channelColors) {
-        this(markerRankingsJson, clusterLabels, nClusters, clusterColorFn, channelColors, null);
-    }
-
-    /**
-     * As above, labelling clusters with {@code clusterNameFn} -- the custom names
-     * of a renamed / merged result. Null gives the default "Cluster N".
-     */
-    public MarkerFingerprintPanel(String markerRankingsJson, int[] clusterLabels,
-                                  int nClusters, IntFunction<Color> clusterColorFn,
+                                  int nClusters, int noiseRowIndex,
+                                  IntFunction<Color> clusterColorFn,
                                   Map<String, Integer> channelColors,
                                   IntFunction<String> clusterNameFn) {
         this.clusterName = clusterNameFn;
@@ -130,8 +125,9 @@ public class MarkerFingerprintPanel extends BorderPane {
         long total = 0;
         if (clusterLabels != null) {
             for (int lab : clusterLabels) {
-                if (lab >= 0 && lab < n) {
-                    sizes[lab]++;
+                int col = ClusterNaming.column(lab, n, noiseRowIndex);
+                if (col >= 0) {
+                    sizes[col]++;
                     total++;
                 }
             }

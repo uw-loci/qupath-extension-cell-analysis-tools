@@ -453,7 +453,8 @@ public final class BatchFigureExporter {
         }
         // Custom names from a rename / merge, so an exported figure says "Tumor"
         // wherever the results window does.
-        return CompositionFigure.tally(labels, clustering.getNClusters(), groups, dimension)
+        return CompositionFigure.tally(labels, clustering.getNClusters(),
+                        clustering.getNoiseRowIndex(), groups, dimension)
                 .withClusterNames(clustering::clusterName);
     }
 

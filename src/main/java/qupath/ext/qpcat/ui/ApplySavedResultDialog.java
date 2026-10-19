@@ -169,7 +169,7 @@ public final class ApplySavedResultDialog {
     @SuppressWarnings("unchecked")
     private static String buildPreflight(QuPathGUI qupath, SavedClusteringResult saved) {
         StringBuilder sb = new StringBuilder();
-        sb.append(saved.getNClusters()).append(" clusters, ")
+        sb.append(saved.clusterCountText()).append(", ")
                 .append(saved.getNCells()).append(" cells");
         if (saved.getAlgorithm() != null) sb.append("  (").append(saved.getAlgorithm()).append(")");
         sb.append("\n");

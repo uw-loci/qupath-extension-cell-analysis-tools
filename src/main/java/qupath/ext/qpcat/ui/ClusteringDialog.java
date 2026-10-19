@@ -4179,11 +4179,11 @@ public class ClusteringDialog {
                                 + " (labels '" + subclusterParentClass + ".0', '"
                                 + subclusterParentClass + ".1', ...). " + persistNote + savedNote);
                     } else {
-                        statusLabel.setText("Complete: " + finalResult.getNClusters()
-                                + " clusters, " + finalResult.getNCells() + " cells");
+                        statusLabel.setText("Complete: " + finalResult.clusterCountText()
+                                + ", " + finalResult.getNCells() + " cells");
                         Dialogs.showInfoNotification("QPCAT",
-                                "Clustering complete: " + finalResult.getNClusters()
-                                + " clusters found.");
+                                "Clustering complete: " + finalResult.clusterCountText()
+                                + " found.");
                     }
 
                     // Always open the results interface so the run is
@@ -4769,7 +4769,8 @@ public class ClusteringDialog {
             long distinctImages = java.util.Arrays.stream(imageGroups).distinct().count();
             if (distinctImages >= 2) {
                 ClusterCompositionPanel byImage = new ClusterCompositionPanel(
-                        result.getClusterLabels(), result.getNClusters(), imageGroups,
+                        result.getClusterLabels(), result.getNClusters(),
+                        result.getNoiseRowIndex(), imageGroups,
                         "Image", clusterColorFn, result.clusterNameFn());
                 Tab imgTab = new Tab("Composition by image", wrapWithGuide(byImage,
                         "Cluster counts and proportions per source image.\n"
@@ -4854,6 +4855,7 @@ public class ClusteringDialog {
             if (result.isAnnotationInput() && result.hasCellParentNames()) {
                 ClusterCompositionPanel byAnnotation = new ClusterCompositionPanel(
                         result.getClusterLabels(), result.getNClusters(),
+                        result.getNoiseRowIndex(),
                         result.getCellParentNames(), "Annotation", clusterColorFn,
                         result.clusterNameFn());
                 Tab annTab = new Tab("Composition by annotation", wrapWithGuide(byAnnotation,
@@ -4881,6 +4883,7 @@ public class ClusteringDialog {
             if (result.hasCellParentClasses()) {
                 ClusterCompositionPanel byClass = new ClusterCompositionPanel(
                         result.getClusterLabels(), result.getNClusters(),
+                        result.getNoiseRowIndex(),
                         result.getCellParentClasses(), "Class", clusterColorFn,
                         result.clusterNameFn());
                 Tab classTab = new Tab("Composition by class", wrapWithGuide(byClass,
@@ -4912,6 +4915,7 @@ public class ClusteringDialog {
             if (areaCount >= 2 && areaCount <= MAX_AREA_TABLE_ROWS) {
                 ClusterCompositionPanel byArea = new ClusterCompositionPanel(
                         result.getClusterLabels(), result.getNClusters(),
+                        result.getNoiseRowIndex(),
                         result.getCellAreaNames(), "Area", clusterColorFn,
                         result.clusterNameFn());
                 Tab areaTab = new Tab("Composition by area", wrapWithGuide(byArea,
@@ -5053,7 +5057,7 @@ public class ClusteringDialog {
         if (result.hasMarkerRankings()) {
             MarkerFingerprintPanel fingerprints = new MarkerFingerprintPanel(
                     result.getMarkerRankingsJson(), result.getClusterLabels(),
-                    result.getNClusters(),
+                    result.getNClusters(), result.getNoiseRowIndex(),
                     // Color follows the same class the rename moved the cells to.
                     id -> EmbeddingScatterPanel.clusterColorFor(id, result.clusterNameFn()),
                     channelColors, result.clusterNameFn());
@@ -5335,8 +5339,8 @@ public class ClusteringDialog {
         // could leave the tab pane empty. Always give the user something so the
         // dialog -- and the save-location footer below -- is never blank.
         if (tabPane.getTabs().isEmpty()) {
-            Label summary = new Label("Clustering complete: " + result.getNClusters()
-                    + " clusters, " + result.getNCells()
+            Label summary = new Label("Clustering complete: " + result.clusterCountText()
+                    + ", " + result.getNCells()
                     + " cells.\n\nNo plots or spatial statistics were generated for this "
                     + "run. The cluster labels were applied to the objects and the result "
                     + "was saved; enable analysis plots or spatial analysis to populate "
@@ -5446,7 +5450,7 @@ public class ClusteringDialog {
                         "Results saved: " + nameResult.get().trim());
                 OperationLogger.getInstance().logEvent("RESULTS SAVED",
                         "Saved '" + nameResult.get().trim() + "' ("
-                        + result.getNClusters() + " clusters, "
+                        + result.clusterCountText() + ", "
                         + result.getNCells() + " cells)");
             } catch (Exception ex) {
                 logger.error("Failed to save results", ex);
