@@ -93,6 +93,8 @@ public final class McpServerController {
     private volatile Project<?> servedProject;
     private McpHttpEndpoint endpoint;
     private McpJsonRpc rpc;
+    /** Bumped at every start and stop; a tool call from an older run is not shown. */
+    private volatile long generation;
     private ScheduledExecutorService idleTimer;
     private volatile Supplier<Project<?>> projectSupplier = () -> {
         QuPathGUI gui = QuPathGUI.getInstance();
@@ -161,8 +163,9 @@ public final class McpServerController {
         String version = GeneralTools.getPackageVersion(McpServerController.class);
         if (version == null || version.isBlank()) version = "dev";
         McpExplainerTools tools = new McpExplainerTools(this::currentProject);
+        final long run = generation + 1;
         McpJsonRpc jsonRpc = new McpJsonRpc(version, INSTRUCTIONS, tools.tools(),
-                MAX_TOOL_CALLS_PER_MINUTE, this::onToolCall);
+                MAX_TOOL_CALLS_PER_MINUTE, (name, outcome) -> onToolCall(run, name, outcome));
 
         McpHttpEndpoint bound = null;
         int boundPort = -1;
@@ -181,6 +184,7 @@ public final class McpServerController {
             throw new IOException(PORTS_EXHAUSTED_TEXT);
         }
 
+        this.generation = run;
         this.endpoint = bound;
         this.rpc = jsonRpc;
         this.servedProject = project;
@@ -227,6 +231,7 @@ public final class McpServerController {
         token = null;
         startedAt = null;
         runningFlag = false;
+        generation++;
         logger.info("MCP endpoint stopped (reason: {})", why);
         auditEvent(servedProject, "stopped (reason: " + why + ")");
         servedProject = null;
@@ -283,12 +288,27 @@ public final class McpServerController {
         }
     }
 
-    private void onToolCall(String toolName, String outcome) {
+    /**
+     * Counts a tool call and shows it, unless the run it belongs to has ended: a
+     * call that finishes after a stop must not replace "stopped" in the window.
+     *
+     * @param run      the {@link #generation} of the run that served the call
+     * @param toolName the tool
+     * @param outcome  its short outcome text
+     */
+    void onToolCall(long run, String toolName, String outcome) {
+        if (run != generation) return;
         touch();
         fx(() -> {
+            if (run != generation) return;
             toolCallCount.set(toolCallCount.get() + 1);
             lastEvent.set("tool call: " + toolName + " -> " + outcome);
         });
+    }
+
+    /** @return the current run's generation, for tests */
+    long generation() {
+        return generation;
     }
 
     private void touch() {

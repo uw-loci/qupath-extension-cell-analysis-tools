@@ -38,6 +38,21 @@ class McpServerControllerTest {
         controller.stop("test teardown");
     }
 
+    /**
+     * Waits until every task already queued on the FX thread has run. The
+     * controller's observable state is set there, so an assertion straight after
+     * a call can read the value from before it. A no-op when no toolkit runs.
+     */
+    private static void drainFx() throws InterruptedException {
+        java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+        try {
+            javafx.application.Platform.runLater(done::countDown);
+        } catch (IllegalStateException noToolkit) {
+            return;
+        }
+        assertThat(done.await(30, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    }
+
     @Test
     void startRefusesWithoutAProjectAndLeavesNothingRunning() {
         controller.bindToProjectProperty(new SimpleObjectProperty<Project<?>>(null));
@@ -117,6 +132,7 @@ class McpServerControllerTest {
         assertThat(controller.getUrl()).isEqualTo("http://127.0.0.1:" + controller.getPort() + "/mcp");
         assertThat(controller.getToken()).matches("[A-Za-z0-9_-]{43}");
         assertThat(controller.getStartedAt()).isNotNull();
+        drainFx();
         assertThat(controller.lastEventProperty().get()).startsWith("started on port");
         String token = controller.getToken();
 
@@ -141,6 +157,7 @@ class McpServerControllerTest {
         assertThat(result.get("isError").getAsBoolean()).isFalse();
         assertThat(result.getAsJsonArray("content").get(0).getAsJsonObject().get("text").getAsString())
                 .contains("no saved clustering results yet");
+        drainFx();
         assertThat(controller.toolCallCountProperty().get()).isEqualTo(1);
 
         // A second start is a no-op and keeps the same token.
@@ -150,6 +167,7 @@ class McpServerControllerTest {
         property.set(null);
         assertThat(controller.isRunning()).isFalse();
         assertThat(controller.getToken()).isNull();
+        drainFx();
         assertThat(controller.lastEventProperty().get()).isEqualTo("stopped: project changed");
         assertThat(controller.runningProperty().get()).isFalse();
 
@@ -161,5 +179,20 @@ class McpServerControllerTest {
         assertThat(controller.getToken()).isNull();
         assertThat(controller.getStartedAt()).isNull();
         controller.stop("again");
+    }
+
+    @Test
+    void aToolCallThatFinishesAfterTheStopDoesNotReplaceStopped() throws Exception {
+        Assumptions.assumeTrue(anyPortFree(), "no free port in the MCP range; skipping");
+        Project<BufferedImage> project = Projects.createProject(dir.toFile(), BufferedImage.class);
+        controller.bindToProjectProperty(new SimpleObjectProperty<>(project));
+        controller.start();
+        long run = controller.generation();
+        controller.stop("requested");
+        // The HTTP thread reports a call it was still answering when the stop came.
+        controller.onToolCall(run, "qpcat_list_results", "ok (5 ms)");
+        drainFx();
+        assertThat(controller.lastEventProperty().get()).isEqualTo("stopped: requested");
+        assertThat(controller.toolCallCountProperty().get()).isZero();
     }
 }

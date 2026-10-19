@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The MCP server window could show a tool call after "stopped".** A call the agent made
+  just before the server stopped (a project change, the idle timeout, or Stop) could finish
+  afterwards and replace "stopped: ..." with "tool call: ...", so the window looked as if
+  the server were still answering. Calls from a run that has ended are no longer shown.
+
 - **The Cluster Explainer said "claude.ai" wrote suggestions pasted from any chatbot.** With
   *Any chatbot*, the Model box started on "claude.ai", and that label was saved as the author
   unless you changed it. It now starts empty each time; left empty, the record says the
