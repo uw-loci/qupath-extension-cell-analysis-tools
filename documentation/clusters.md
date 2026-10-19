@@ -125,7 +125,9 @@ You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Result
 6. **To split a merge:** select the merged cluster, click **Split...**, and choose which of
    its constituents to separate out (all of them by default). See below.
 7. Edits are **staged** -- nothing is written until you click **Apply**. (Use **Reset** to
-   discard staged edits.)
+   discard staged edits.) Closing the window with staged names you have not applied asks
+   first ("QPCAT - Modify Clusters - discard edits?"); **No** keeps the window open so you
+   can press Apply.
 8. Click **Apply**. You are asked to name the **new copy** (default `<result>_renamed`). QP-CAT
    then writes that copy and relabels the detections across all referenced images; a busy
    indicator runs while it works, and a summary reports how many cells were relabelled per

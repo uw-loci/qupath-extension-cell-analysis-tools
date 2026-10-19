@@ -408,8 +408,49 @@ public class ClusterManagementDialog {
             if (savedResultRadio.isSelected()) reloadClusters();
         });
 
+        // Closing with staged names that were never applied would lose them silently.
+        dialog.setOnCloseRequest(ev -> {
+            int n = pendingEditCount(isSavedPath(), workingName, activeSaved, workingManual);
+            if (n > 0 && !Dialogs.showYesNoDialog("QPCAT - Modify Clusters - discard edits?",
+                    discardPrompt(n))) {
+                ev.consume();
+            }
+        });
+
         reloadClusters();
         dialog.show();
+    }
+
+    /**
+     * How many staged names Apply would write.
+     *
+     * @param savedPath     true when editing a saved result, false for manual images
+     * @param working       staged label -> name for a saved result
+     * @param saved         the saved result being edited, or null
+     * @param workingManual staged class -> name for manual images
+     * @return the number of labels or classes whose staged name is not their current one
+     */
+    static int pendingEditCount(boolean savedPath, Map<Integer, String> working,
+                                SavedClusteringResult saved, Map<String, String> workingManual) {
+        int n = 0;
+        if (savedPath) {
+            if (saved == null || working == null) return 0;
+            for (Map.Entry<Integer, String> e : working.entrySet()) {
+                if (!Objects.equals(e.getValue(), saved.displayNameForLabel(e.getKey()))) n++;
+            }
+        } else if (workingManual != null) {
+            for (Map.Entry<String, String> e : workingManual.entrySet()) {
+                if (!Objects.equals(e.getKey(), e.getValue())) n++;
+            }
+        }
+        return n;
+    }
+
+    /** @return the question asked when closing with {@code n} unapplied edits */
+    static String discardPrompt(int n) {
+        return n + (n == 1 ? " cluster has a new name" : " clusters have new names")
+                + " that you have not applied.\n\n"
+                + "Close and discard them? Choose No to go back and press Apply.";
     }
 
     // --- Cluster list population ------------------------------------------
@@ -921,11 +962,7 @@ public class ClusterManagementDialog {
      * @return true when at least one label's staged name differs from its saved one
      */
     static boolean hasPendingEdits(Map<Integer, String> working, SavedClusteringResult saved) {
-        if (saved == null || working == null) return false;
-        for (Map.Entry<Integer, String> e : working.entrySet()) {
-            if (!Objects.equals(e.getValue(), saved.displayNameForLabel(e.getKey()))) return true;
-        }
-        return false;
+        return pendingEditCount(true, working, saved, null) > 0;
     }
 
     /**

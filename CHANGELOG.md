@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Closing Modify Clusters threw away staged names without asking.** Names typed in, or
+  sent over by the Cluster Explainer's *Use as cluster names...*, were lost if you pressed
+  Close (or the window's X) before Apply. Closing with unapplied names now asks first, and
+  says how many would be lost.
+
 - **Different windows shared one title.** The per-image spatial-graph summary was titled
   like the question before it ("QP-CAT - spatial graph overlay"); it is now "QP-CAT -
   spatial graph summary". The image picker in *Analyze current classifications* said
