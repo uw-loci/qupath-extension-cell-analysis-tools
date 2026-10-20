@@ -19,7 +19,7 @@ one view of the same result.
 
 The sections follow the order you would read the results in, not the order of the tabs. The
 window opens on the composition and marker tabs; every tab's **Documentation** link opens its
-own section here.
+own section here, except the Cluster Explainer's, which opens [LLM explainer](llm-explainer.md).
 
 ## Saving and reopening
 
@@ -656,7 +656,7 @@ Appears whenever the result has marker rankings. It suggests a cell-type name pe
 from the cluster's top markers: from any chatbot you already use (copy the prompt, paste the
 reply; no key), the Anthropic API, a local Ollama server (never run), or an AI agent over the
 [MCP server](mcp-server.md). It is marked Experimental: check every suggestion against Marker
-Rankings and the Heatmap. Full guide: [LLM explainer](llm-explainer.md).
+Rankings and the Heatmap. The tab's **Documentation** link opens the full guide, [LLM explainer](llm-explainer.md).
 
 <a name="paga-trajectory-tab"></a>
 

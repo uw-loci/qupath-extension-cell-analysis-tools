@@ -671,7 +671,7 @@ All items are under **Extensions > QP-CAT**. Everything except **Setup & help** 
 | Results & populations > Modify cell populations (rename, merge, split, sub-cluster)... | Rename, merge, split and sub-cluster | A saved result |
 | Results & populations > Analyze current cell classifications... | Results window for classes the cells already carry | Classified detections |
 | Results & populations > Apply saved result to detections... / Apply cluster color palette... | Write a saved result back; set cluster colors | Project |
-| Export > Export figures (batch)... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [Exporting](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
+| Export > Export figures (batch)... | Export figures (batch): pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [Exporting](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
 | Export > Export cells for Python / scanpy (AnnData)... | Export data for external analysis tools | Image + detections |
 | Export > Export cell crops + feature table (TraitHorizon / CSV)... | Cell crops plus a per-cell feature table | Project + detections |
 | Export > Export clustered cells for VEST (3D viewer)... / Stop VEST viewer | Standalone 3D viewer | Clustered detections |
@@ -742,7 +742,7 @@ for the reasoning and sources.
 
 ### Cluster Explainer (LLM) issues
 
-The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, malformed response, Ollama endpoint down, Ollama model not pulled, request canceled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
+The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, a reply with no usable rows, a reply cut off at the output limit, a refused prompt, Ollama endpoint down, Ollama model not pulled, request canceled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
 
 See the [LLM explainer troubleshooting section](documentation/llm-explainer.md#troubleshooting) for the full list with what-you-see / what-it-means / what-to-do for every case.
 

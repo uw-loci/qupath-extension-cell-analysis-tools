@@ -289,14 +289,16 @@ A project must be open first; with none open, **Start server** shows an error an
            asks to, and the old ones stay in the audit log).
    CANNOT: read or write any other file, run a script, change your images,
            delete a result, or reach anything outside this project.
-   REACH:  programs running on this computer as you. A web page you visit is
-           refused (we check the Origin header), and nothing on your network can
-           connect (we listen on 127.0.0.1 only). A different program on this
-           machine, running as you, could use the token if it could read it --
-           but such a program could read your project directly anyway.
+   REACH:  any program on this computer that has the token, under your
+           account or another one. A web page you visit is refused (we check
+           the Origin header), and nothing on your network can connect (we
+           listen on 127.0.0.1 only). Keep the token where only you can read
+           it: a config file in your home folder, not a project file you
+           share or commit.
    LIMITS: 120 tool calls a minute (listing results is not counted), one at a
            time; a refusal says how long to wait. It stops by itself after 60
-           minutes with no tool calls, and whenever the project changes.
+           minutes with no request carrying the token, and whenever the
+           project changes.
    LOGS:   each tool call -- tool, result name, outcome -- to the QuPath
            log; the prompt and reply to the project audit log; never the
            token.
@@ -382,10 +384,10 @@ status line says otherwise) and `<TOKEN>` is the token it shows.
 
 The window has three panes for this, titled **Claude Code  (tested by us on Linux)**, **Any
 other MCP client  (the two values it needs)** and **Claude Desktop, Cursor, Codex, Gemini
-CLI  (untested snippets)**. The third holds a shorter set than this page: a Claude Desktop
-block and one generic JSON block, with the address filled in and `<token>` left for you to
-paste. That generic block fits Cursor only: Codex reads TOML, and Gemini CLI needs `httpUrl`
-rather than `url`, so use the blocks below for those two.
+CLI  (untested snippets)**. The third holds a shorter set than this page, with the address filled in and `<token>` left
+for you to paste: Claude Desktop (through the `mcp-remote` bridge), Cursor (JSON), Gemini CLI
+(the Cursor block with `httpUrl` in place of `url`) and Codex (TOML with `http_headers`). The
+per-client blocks below carry each one's status line.
 
 <details>
 <summary><strong>Claude Code</strong> -- one command</summary>
@@ -1158,9 +1160,10 @@ agents, press Start server, and paste the new token into your agent.
 `MCP endpoint stopped (reason: project changed)`: you opened or closed a project. The three
 tools are scoped to one project, and a project switch must not quietly repoint your agent at a
 different project's results, so the server stops instead. `MCP endpoint stopped (reason: idle
-for 60 minutes)`: nothing connected and no tool was called for an hour, so the server you
-forgot about turned itself off. The window's status line reads `STOPPED - no tool calls for
-60 minutes. Press Start server to turn it on again; you will get a new token.` in that case.
+for 60 minutes)`: no request carrying the token arrived for an hour, so the server you
+forgot about turned itself off. The window's status line reads `STOPPED - no request carrying
+the token for 60 minutes. Press Start server to turn it on again; you will get a new token.`
+in that case.
 There is no setting for the hour, and this stop has never been observed to fire.
 
 **What to do:** start it again -- and note that you get a **new token**, so your client

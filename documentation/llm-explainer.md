@@ -116,9 +116,10 @@ labels to publish.
    fence with a sentence or two around it; that is fine.
 4. Copy the whole reply, paste it into the box under step 2, and press **3. Read pasted
    reply**. The reply goes through the same parser as a live response: a cluster the chatbot
-   skipped gets an "LLM did not return a row" line rather than an error, and a reply with no
-   JSON in it at all gives that line for every cluster -- the usual cause is the chatbot
-   answering in prose, so ask it again for only the JSON array.
+   skipped gets an "LLM did not return a row" line rather than an error. A reply with no
+   row for any requested cluster fails with `Failed: provider returned an unexpected response
+   shape.` -- the usual cause is the chatbot answering in prose, so ask it again for only the
+   JSON array.
 
    A reply that parses looks like this; code fences and a sentence around it are fine, prose
    with no `[` is not:
@@ -291,7 +292,7 @@ one-paragraph rationale for it in the **Rationale** box under the table.
 | **Confidence** | `HI`, `MD` or `LO`: the model's own `high` / `medium` / `low` from the reply (`med` and `moderate` are read as `MD`). Blank when the model set it to null **or used any other word**; the `Response:` block in the audit log keeps the original. Treat with skepticism; `HI` does not mean correct |
 | **Top supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
 
-**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale box still explains *why* the model refused (e.g. "insufficient signal: the top markers are mutually inconsistent, spanning myeloid and epithelial lineages"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer. If the rationale reads "LLM did not return a row for this cluster.", the model did not answer that cluster at all; that is not a refusal (see [Every row reads (no suggestion)](#troubleshooting)).
+**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale box still explains *why* the model refused (e.g. "insufficient signal: the top markers are mutually inconsistent, spanning myeloid and epithelial lineages"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer. If the rationale reads "LLM did not return a row for this cluster.", the model skipped that cluster; that is not a refusal. A reply that answers none of the requested clusters fails instead (see [Troubleshooting](#troubleshooting)).
 
 **The LLM may be wrong.** Common failure modes:
 - **Marker name confusion** -- if your panel uses a non-standard naming convention (e.g. `MarkerCh01` or `tumor_marker_1`), the LLM has no way to know what the marker actually targets. Use real marker names in measurement columns whenever possible
@@ -332,9 +333,10 @@ One **Run Explainer** click is one LLM call with all clusters batched into the s
 
 Pricing changes; the audit log captures the exact `Input tokens:` and `Output tokens:` for every call (Anthropic and Ollama only; the chatbot and MCP paths record `unknown`) so you can compute real spend at the right rate. (Anthropic charges different rates for input vs output -- Sonnet output is ~5x input -- so a combined number alone undercounts cost.) The combined `Token count:` is still emitted for backward compatibility. Ollama is free.
 
-QP-CAT asks Anthropic for at most 2,048 output tokens per call, so a run with many clusters
-(the 20-cluster row above) can be cut off. That shows as every row reading "LLM did not return
-a row for this cluster."; explain the clusters one at a time with **Selected:** instead. The
+QP-CAT asks Anthropic for at most 16,000 output tokens per call; with the default model, its
+own reasoning counts toward that limit too. A reply cut off at the limit (Anthropic's, or
+Ollama's own) fails with `Failed: the reply was cut off at the model's output limit. Explain
+fewer clusters at a time (Selected:).`, and the cut-off text is kept in the audit log. The
 model is not told how many cells each cluster has, so a 12-cell cluster and a 12,000-cell
 cluster read the same to it.
 
@@ -415,7 +417,7 @@ Archive the audit log alongside your other reproducibility artifacts (clustering
 
 This page covers the error states you may see in the **Cluster Explainer (LLM)** tab of the cluster results dialog, what each one typically means, and what to do about it.
 
-On most failures the status line under the Run button reads `Failed: ...` with a one-sentence summary. The error type and the provider's message (with keys removed) are in the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the most recent `=== LLM EXPLAIN ===` entry. Both the Java (`LlmAuditScrubber`) and Python (`scrub_secrets`) sides strip `Authorization:` headers and `sk-ant-*` keys from any logged payload, so you can share an audit log without leaking your API key. If the status reads `Failed:` and there is no new audit entry, the error is in QuPath's own log (**View > Show log**).
+On a failure the status line under the Run button reads `Failed: ...` with a one-sentence summary, and the same line, with the error type and the provider's message (keys removed), is written to QuPath's own log (**View > Show log**) at ERROR level. The error type and message are also in the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the most recent `=== LLM EXPLAIN ===` entry. Both the Java (`LlmAuditScrubber`) and Python (`scrub_secrets`) sides strip `Authorization:` headers and `sk-ant-*` keys from any logged payload, so you can share an audit log without leaking your API key. A failure before any provider was called (for example `Failed: no result returned.`) writes no audit entry; QuPath's log has it.
 
 See also:
 
@@ -469,30 +471,41 @@ See also:
 </details>
 
 <details>
-<summary><strong>Every row reads "(no suggestion)", rationale "LLM did not return a row for this cluster."</strong></summary>
+<summary><strong>"Failed: provider returned an unexpected response shape."</strong></summary>
 
-**What you see:** Every row of the table shows **(no suggestion)**, and each rationale reads "LLM did not return a row for this cluster." Check the rows, not only the status line.
+**What you see:** The status line reads *"Failed: provider returned an unexpected response shape."* No table rows are applied.
 
-**What it usually means:** The reply contained no JSON array QP-CAT could read, or was cut off (see the output cap under [Cost Expectations](#cost-expectations)).
+**What it usually means:** The reply held no JSON array with a row for any of the requested clusters: the model answered in prose, wrapped the array in too much text, or numbered its clusters from a different result. With Ollama it can also mean the server's reply was not Ollama's JSON envelope; with Any chatbot, that nothing was pasted.
 
 **What to do:**
 1. Open `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` and find the most recent `=== LLM EXPLAIN ===` entry. The `Response:` block contains the actual text the LLM returned
 2. If the response looks plausible but isn't valid JSON, use a stronger model, or ask again for only the JSON array
-3. With many clusters, explain them one at a time with **Selected:**
+3. With Ollama, check the endpoint and that it is an Ollama server
 4. File an issue with the audit-log entry attached so the prompt template can be hardened
 
-**Not the same as a refusal:** a single row showing **(no suggestion)** with a rationale ("insufficient signal") is the LLM declining that cluster, which is expected behavior -- see [Interpreting the Output](#interpreting-the-output).
+**Not the same as "(no suggestion)":** a reply that answers some clusters and skips others loads, with the skipped ones reading "LLM did not return a row for this cluster."; a well-formed reply that declines every cluster (`phenotype: null`) also loads, as rows of **(no suggestion)** -- see [Interpreting the Output](#interpreting-the-output).
 
 </details>
 
 <details>
-<summary><strong>"Failed: provider returned an unexpected response shape."</strong></summary>
+<summary><strong>"Failed: the reply was cut off at the model's output limit."</strong></summary>
 
-**What you see:** The status line reads *"Failed: provider returned an unexpected response shape."*
+**What you see:** The status line reads *"Failed: the reply was cut off at the model's output limit. Explain fewer clusters at a time (Selected:)."*
 
-**What it usually means:** With Ollama, the server returned something that is not Ollama's JSON reply. With Any chatbot, nothing was pasted, or the marker table could not be read.
+**What it usually means:** The reply hit the output limit (16,000 tokens for Anthropic, or the Ollama model's own limit) before it finished. The cut-off text is in the audit log's `Response:` block.
 
-**What to do:** Check the Ollama endpoint, or paste the reply again. The audit-log entry has the details.
+**What to do:** Explain the clusters one at a time with **Selected:**, or lower **Top markers sent per cluster**.
+
+</details>
+
+<details>
+<summary><strong>"Failed: the provider declined to answer this prompt."</strong></summary>
+
+**What you see:** The status line reads *"Failed: the provider declined to answer this prompt."*
+
+**What it usually means:** Anthropic stopped with a refusal rather than an answer. This is not the per-cluster "(no suggestion)", where the model answers and declines a cluster.
+
+**What to do:** Open the audit-log entry to read what came back, then try again or use another provider.
 
 </details>
 
@@ -560,6 +573,8 @@ See also:
 | `Failed: no response within timeout.` | The **Request Timeout (seconds)** preference (60) elapsed | Raise it in **Edit > Preferences > QP-CAT: [Experimental] LLM Cluster Explainer**; slow models need more |
 | `Failed: provider returned 5xx.` | Provider-side outage | Try again later |
 | `Failed: no result returned.` | The Python worker returned nothing | Check QuPath's log and report it |
+| `Failed: prompt exceeded the model's context window.` | Anthropic answered that the prompt is too long | Explain fewer clusters at a time with **Selected:**, or lower **Top markers sent per cluster** |
+| `Failed: No cluster ids selected for explanation.` | No cluster was selected to explain | Pick **All clusters**, or a cluster under **Selected:** |
 | `Failed: anthropic package not installed in the QP-CAT pixi env.` | The environment was built before the explainer existed | **Extensions > QP-CAT > Setup & help > Rebuild analysis environment** |
 | `Enter your Anthropic API key, or set QPCAT_ANTHROPIC_KEY and reopen QuPath.` | No key | Paste the key |
 | `Copy the prompt (step 1), get a reply, and paste it (step 2) first.` | Nothing pasted | Paste the reply |
