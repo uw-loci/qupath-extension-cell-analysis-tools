@@ -105,8 +105,9 @@ They are grouped by what you give up, not by how much time you save. Nothing her
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Ripley's L, co-occurrence, Geary's C, neighbourhood enrichment** | Run Clustering > Spatial statistics | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
-| **Generate plots** | Run Clustering > Analysis | Skips the static matplotlib figures. The interactive tabs still work. |
+| **Ripley's L, co-occurrence, Geary's C, neighbourhood enrichment** | Run Clustering > Spatial statistics (neighbourhood enrichment and Moran's I: the *Neighborhood enrichment + Moran's I* tick-box above it) | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
+| **Stability across seeds** | Run Clustering > Validation | Re-runs the clustering step **Extra runs** more times (5 by default), so that step takes about 6x as long; the line above the Run button says so. Off by default. |
+| **Generate analysis plots** | Run Clustering, the analysis tick-boxes | Skips the static matplotlib figures. The interactive tabs still work. |
 
 QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
 large, a prompt appears with the number and a one-minute countdown. Computation has already
@@ -126,7 +127,7 @@ This is the only group where running the same thing twice can give you a differe
 | Setting | Where | Effect |
 |---|---|---|
 | **Random seed** | Run Clustering > **Clustering Algorithm** | One seed for the whole run: the embedding *and* the stochastic algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). Leiden is the default, so this normally decides whether your cluster assignments repeat. Default 42. Greyed out only when the algorithm is deterministic (HDBSCAN, Agglomerative) **and** no embedding is being computed. |
-| **UMAP speed vs reproducibility** | Run Clustering > Embedding > Advanced | `auto` (default) pins the seed below 200,000 cells and uses every core above it. `reproducible` always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. `fast` never pins it. |
+| **UMAP speed vs reproducibility** | Run Clustering > Dimensionality Reduction > Advanced | *Automatic (seed under 200,000 cells)* (default; YAML `auto`) pins the seed below 200,000 cells and uses every core above it. *Reproducible (always seeded, 1 core)* (`reproducible`) always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. *Fast (all cores, layout varies)* (`fast`) never pins it. |
 
 > **The seed moved.** It used to sit under *Embedding > Advanced*, a collapsed pane
 > in a section you may have set to **None** -- while it governed whether the *clustering*
@@ -134,7 +135,7 @@ This is the only group where running the same thing twice can give you a differe
 
 **Changing the seed is a test, not a nuisance.** Re-run with a different seed and compare: a
 cluster boundary that moves when nothing but the seed moved was never a real boundary. The
-**Stability across seeds** option (Analysis > Validation) does this for you and reports the
+**Stability across seeds** option (the Validation section of the Clustering dialog) does this for you and reports the
 adjusted Rand index and a per-cluster consistency score; see
 [Validation](results.md#stability-across-seeds). The
 [Cluster confidence](results.md#cluster-confidence-tab) tab answers the same question within a
@@ -163,7 +164,7 @@ rather than per run.
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Spatial permutations** | Preferences > QP-CAT: Run Clustering (shown under Run Clustering > Spatial statistics) | `0` (default) picks by cell count: 1000 up to 50,000 cells, 100 up to 500,000, 50 above. Each permuted statistic costs in proportion to the count, so fewer is faster, but a permutation p-value can be no smaller than 1 / (permutations + 1): 0.001 at 1000, 0.0099 at 100, 0.0196 at 50, before any multiple-testing correction. A real effect can therefore read as "not significant" only because too few permutations were run. Raise it for a figure that reports p-values; use one fixed value across a study so the p-values are comparable. See [the empirical permutation p has a floor](spatial-statistics.md). |
+| **Spatial permutations** | Preferences > QP-CAT: Run Clustering (shown under Run Clustering > Spatial statistics) | `0` (default) picks by cell count: 1000 up to 50,000 cells, 100 up to 500,000, 50 above. Each permuted statistic costs in proportion to the count, so fewer is faster, but a permutation p-value can be no smaller than 1 / (permutations + 1): 0.001 at 1000, 0.0099 at 100, 0.0196 at 50, before any multiple-testing correction. A real effect can therefore read as "not significant" only because too few permutations were run. Raise it for a figure that reports p-values; use one fixed value across a study so the p-values are comparable. Neighbourhood enrichment does not follow this setting: it always runs 1000 permutations. See [the empirical permutation p has a floor](spatial-statistics.md). |
 
 ### Costs completeness of a figure
 

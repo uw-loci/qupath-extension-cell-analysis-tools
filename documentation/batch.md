@@ -77,7 +77,7 @@ For a fixture-project regression that runs every night:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-QUPATH=~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath
+QUPATH=/path/to/QuPath/bin/QuPath
 SCRIPT=/usr/local/share/qpcat/qpcat_batch.groovy
 YAML=tests/fixtures/cohort_smoke/analysis.yaml
 
@@ -106,14 +106,14 @@ What works:
 - Comments that drift -- put rationale in a sidecar `.md`, not in YAML comments that will get stale.
 - One-off debug flags. The YAML is for *runnable analyses*; debugging happens in the GUI or via a Groovy script.
 
-Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` reproducibility pattern; QP-CAT's variant runs inside QuPath's existing extension surface so the YAML's actions are identical to the GUI's.
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` reproducibility pattern; QP-CAT's variant runs inside QuPath's existing extension surface so the YAML's actions are the GUI's, except the optional Validation checks, which are dialog-only.
 
 ---
 ## Running one
 
-Run QP-CAT without opening the QuPath GUI by writing a YAML config file and invoking it via QuPath's `script` subcommand. Same analysis surface as the dialog; same Appose env; same audit log. The right call when you need to run the identical analysis across many projects, or when you want a reproducible record of "this is the analysis we ran for this paper." Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` command; QP-CAT's variant runs inside QuPath's extension class loader so the analysis is identical to the GUI.
+Run QP-CAT without opening the QuPath GUI by writing a YAML config file and invoking it via QuPath's `script` subcommand. Same analysis surface as the dialog; same Appose env; same audit log. The right call when you need to run the identical analysis across many projects, or when you want a reproducible record of "this is the analysis we ran for this paper." Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` command; QP-CAT's variant runs inside QuPath's extension class loader so the analysis is the GUI's (the optional Validation checks are dialog-only).
 
-The full YAML field-by-field reference is in [YAML_SCHEMA.md](yaml-reference.md). This chapter is the workflow narrative.
+The full YAML field-by-field reference is in [YAML reference](yaml-reference.md). This chapter is the workflow narrative.
 
 ### Prerequisites
 
@@ -121,18 +121,18 @@ The full YAML field-by-field reference is in [YAML_SCHEMA.md](yaml-reference.md)
 2. Confirm the QuPath launcher's `script` subcommand is reachable:
 
    ```bash
-   ~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath script --help
+   /path/to/QuPath/bin/QuPath script --help
    ```
 
-   On macOS / Windows substitute `/Applications/QuPath.app/Contents/MacOS/QuPath` or `C:\Program Files\QuPath\QuPath.exe`.
+   (`/path/to/QuPath` is wherever you unpacked QuPath on Linux.) On macOS / Windows substitute `/Applications/QuPath.app/Contents/MacOS/QuPath` or `C:\Program Files\QuPath\QuPath.exe`.
 
 ### Quick Start (3 steps)
 
-1. **Write the YAML.** Start from one of the examples in [YAML_SCHEMA.md](yaml-reference.md#examples); copy the closest one, point `scope.projects` at your project, save as `analysis.yaml`.
+1. **Write the YAML.** Start from one of the examples in [YAML reference](yaml-reference.md#examples); copy the closest one, point `scope.projects` at your project, save as `analysis.yaml`.
 2. **Run.** From a terminal:
 
    ```bash
-   ~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath \
+   /path/to/QuPath/bin/QuPath \
        script /path/to/qpcat_batch.groovy \
        --args /path/to/analysis.yaml
    ```
@@ -174,7 +174,7 @@ If the batch errors out or any image fails:
 
 1. **Read the audit log** at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`. The failure row records image, step, and the exception message.
 2. **Read the QuPath stderr.** The Groovy entry logs progress per image; the last printed line before the failure is the breadcrumb.
-3. **Cross-reference [TROUBLESHOOTING_YAML_BATCH.md](batch.md#when-it-fails).** The error-code map covers parse errors, validation errors, env-not-built, image-not-found, mid-run failure, and launcher-not-found.
+3. **Cross-reference [Batch: when it fails](batch.md#when-it-fails).** The error-code map covers parse errors, validation errors, env-not-built, image-not-found, mid-run failure, and launcher-not-found.
 4. **Re-run with `--args=--dry-run`** to confirm the YAML is structurally valid. If dry-run succeeds and the actual run still fails, the failure is in the analysis or env, not the YAML.
 
 ### Recovering from a partial failure
@@ -250,7 +250,7 @@ The YAML parses but doesn't match the schema -- a value is wrong-typed, an enum 
 **What to do:**
 
 1. The error message names the offending field path (e.g. `clustering.type`) and what was expected.
-2. Cross-reference [YAML_SCHEMA.md](yaml-reference.md) for the field's valid values, type, and required-ness.
+2. Cross-reference [YAML reference](yaml-reference.md) for the field's valid values, type, and required-ness.
 3. **Watch case sensitivity.** The validator normalises algorithm names to lowercase, but error messages echo the value as-typed; a `Leiden` in your YAML becomes `leiden` internally.
 4. **Watch types.** `dpi: 300` is valid; `dpi: "300"` parses as a string. SnakeYAML interprets unquoted numbers as numeric; quoted numbers are strings.
 
@@ -388,13 +388,12 @@ The QuPath launcher is not on `PATH`, or your QuPath build doesn't expose the `s
 
 **What to do:**
 
-1. **Linux / WSL:** use the absolute path to the QPSC dev launcher:
+1. **Linux / WSL:** use the absolute path to the `bin/QuPath` launcher inside your QuPath
+   installation:
 
    ```bash
-   ~/QPSC_Project/qupath-qpsc-dev/build/install/QuPath/bin/QuPath script --help
+   /path/to/QuPath/bin/QuPath script --help
    ```
-
-   See [WSL_LAUNCH.md](../../WSL_LAUNCH.md) for build instructions.
 2. **macOS / Windows:** invoke the installed app's launcher by absolute path:
    - macOS: `/Applications/QuPath.app/Contents/MacOS/QuPath`
    - Windows: `C:\Program Files\QuPath\QuPath.exe`
@@ -419,7 +418,7 @@ The headless batch can only export matplotlib-rendered plots. JavaFX-rendered pl
 
 1. Drop the JavaFX kinds from `figure_export.figures` -- only matplotlib slugs export headlessly.
 2. To export `heatmap` etc., use the interactive **Export Figures** dialog after loading the saved result in QuPath.
-3. See [SCRIPTING.md `FigureExportScripts`](scripting.md#figureexportscripts) for the full plot-kind reference.
+3. See [Scripting: `FigureExportScripts`](scripting.md#figureexportscripts) for the full plot-kind reference.
 
 </details>
 
@@ -564,6 +563,6 @@ clustering starts, and fails the image.
 
 ## See also
 
-- [YAML_SCHEMA.md](yaml-reference.md) -- field-by-field schema reference
-- [BEST_PRACTICES](batch.md#when-to-use-a-batch-instead-of-the-dialog) -- reproducibility / CI / version-control guidance
-- [SCRIPTING.md `YamlBatchScripts`](scripting.md#yamlbatchscripts) -- programmatic Groovy facade
+- [YAML reference](yaml-reference.md) -- field-by-field schema reference
+- [Batch: when to use a batch instead of the dialog](batch.md#when-to-use-a-batch-instead-of-the-dialog) -- reproducibility / CI / version-control guidance
+- [Scripting: `YamlBatchScripts`](scripting.md#yamlbatchscripts) -- programmatic Groovy facade

@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 ### Added
 
 - **Validation: stability across seeds, and agreement with known classes.** Two optional
-  checks under *Analysis > Validation* in the Clustering dialog, both off by default, shown
+  checks in a new *Validation* section of the Clustering dialog, both off by default, shown
   in a new **Validation** results tab and saved with the result.
   - *Stability across seeds* re-runs the clustering (Leiden, KMeans, MiniBatch KMeans or
     GMM) with other seeds -- 5 extra runs by default -- and reports the adjusted Rand index

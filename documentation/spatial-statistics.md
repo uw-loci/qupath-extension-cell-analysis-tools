@@ -38,7 +38,7 @@ A rule of thumb: **start with neighborhood enrichment** (cheap, headline answer)
 
 ### Permutation count tradeoffs at scale
 
-Permutation-based significance testing is exact in principle but expensive: each permutation re-shuffles the labels and re-evaluates the statistic. v1's adaptive default scales the count to the cell count (1000 / 100 / 50). Override via `qpcat.spatial.permutations` if you need a fixed value (e.g. for a paper that needs every image analysed at the same count). The audit log records the value used.
+Permutation-based significance testing is exact in principle but expensive: each permutation re-shuffles the labels and re-evaluates the statistic. v1's adaptive default scales the count to the cell count (1000 / 100 / 50) for Ripley L, Geary's C, Moran's I and co-occurrence; neighbourhood enrichment always runs 1000. Override via `qpcat.spatial.permutations` if you need a fixed value (e.g. for a paper that needs every image analysed at the same count). The audit log records the value used.
 
 A common pattern: **explore with the adaptive default; lock to 1000 for the final figure-grade run, on a subset of images if cell counts make 1000 prohibitive**.
 
@@ -70,13 +70,21 @@ Enable spatial analysis when:
 
 ### Interpreting Neighborhood Enrichment
 
-The z-score matrix shows:
-- **Positive values (toward yellow):** clusters appear together more than expected (co-localization)
-- **Negative values (toward purple):** clusters avoid each other (exclusion)
-- **Near zero:** random spatial relationship. The colour scale runs from the matrix's own
-  minimum to its maximum and is not centred on zero, so read the colour bar to see which
+The **Neighborhood Enrichment** tab is a table headed `z-score (edges)`: each entry reads like
+`7.3 (6061)`, the z-score and then the number of graph edges it rests on, with the cell's
+cluster as the row and its neighbour's as the column. The line above the table names the
+permutation null, for example *1000 permutations; cluster labels shuffled within each of 8
+areas*. **Copy text**, **Copy CSV** and **Save CSV...** export it
+(`qpcat_neighborhood_enrichment.csv`). The same z-scores are drawn as a heatmap in the
+**Neighborhood Enrichment (plot)** tab.
+
+The z-scores show:
+- **Positive values (toward yellow in the plot):** clusters appear together more than expected (co-localization)
+- **Negative values (toward purple in the plot):** clusters avoid each other (exclusion)
+- **Near zero:** random spatial relationship. The plot's colour scale runs from the matrix's
+  own minimum to its maximum and is not centred on zero, so read the colour bar to see which
   colour zero is.
-- **The edge count next to each z** (the table tab, and the CSV) is how many graph edges the
+- **The edge count next to each z** (in the table, and the CSV) is how many graph edges the
   z rests on. A large z from a few edges is weak evidence.
 - **With several images or areas, labels are shuffled within each one**, so differences in
   composition between images do not read as co-localization. See
@@ -163,11 +171,11 @@ Use BANKSY when spatial proximity should influence cluster membership (e.g., tis
 
 Beyond the default neighborhood enrichment + Moran's I, QP-CAT v1 exposes the rest of squidpy's standard spatial-statistics catalog: Ripley's L, Geary's C, and co-occurrence (pairwise + one-vs-rest). Each is driven by a single graph constructor you pick once at the top of the dialog; the same graph backs spatial feature smoothing (when the preference is enabled) so the parameters are visible and consistent across the run. QP-CAT's v1 catalog closes the gap with [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats surface while keeping the squidpy backend the extension already ships with -- no new dependencies.
 
-> These statistics use permutation testing and can be slow on large slides. Before clustering is submitted, a dialog estimates the computation time and lets you proceed, skip, or cancel. Estimates under 2 minutes do not show a prompt. For longer estimates, the dialog waits 60 seconds for your choice; if you leave it unattended, it automatically proceeds rather than stalling the run. For a fast, scalable way to map recurring tissue micro-environments instead, see [chapter 22 -- Finding Cellular Neighborhoods](spatial-neighborhoods.md).
+> These statistics use permutation testing and can be slow on large slides. Before clustering is submitted, a dialog estimates the computation time and lets you proceed, skip, or cancel. Estimates under 2 minutes do not show a prompt. For longer estimates, the dialog waits 60 seconds for your choice; if you leave it unattended, it automatically proceeds rather than stalling the run. For a fast, scalable way to map recurring tissue micro-environments instead, see [Finding cellular neighborhoods](spatial-neighborhoods.md).
 
 ### When to use each statistic
 
-- **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" Cheap, no permutation cost.
+- **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" A permutation test with a fixed 1000 permutations, whatever the permutation preference says; with several images or areas, labels are shuffled within each one.
 - **Ripley's L** -- *a cluster against itself at a range of distances*: "are CD8 cells within 50 microns of each other more often than chance would predict? What about within 200 microns?" It is the variance-stabilised transform of Ripley's K, which cumulates the neighbour count within radius r normalised by density. Curves **above** the null mean clustering at that radius; **below** means dispersion or inhibition.
 
   **The null is a simulated band, not a line.** QP-CAT computes L itself and draws, per cluster, the 2.5-97.5 percentile band of 99 complete-spatial-randomness realisations with that cluster's own cell count, in the same tissue outline, through the same estimator. Read each curve against its band: above = clustering, below = inhibition, inside = indistinguishable from random at that radius.
@@ -196,7 +204,7 @@ BANKSY is excluded from the kNN/Radius/Delaunay constructor in v1. BANKSY's pyba
 
 ### Adaptive permutation defaults
 
-Ripley L, Geary's C, and co-occurrence use permutation tests for significance. v1 picks the permutation count automatically based on cell count:
+Ripley L, Geary's C, Moran's I and co-occurrence use permutation tests for significance. v1 picks the permutation count automatically based on cell count (neighbourhood enrichment is the exception: it always runs 1000 permutations):
 
 | Cells | Permutations | Notes |
 |---|---|---|
@@ -212,15 +220,18 @@ Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permu
 2. **Extensions > QP-CAT > Find cell populations (clustering)...**
 3. Configure measurements, normalization, algorithm as usual
 4. In the **Analysis options** group:
-   - Optionally check **Neighborhood enrichment + Moran's I** (the v0 cheap checkbox)
+   - Optionally check **Neighborhood enrichment + Moran's I** (the original pair of statistics)
    - Expand the **Spatial statistics** group
    - Pick a graph type (**kNN** / **Radius** / **Delaunay**) and the matching parameter
-   - Tick any of: **Ripley L**, **Geary's C**, **Co-occurrence -- pairwise**, **Co-occurrence -- one vs rest**
+   - Tick any of: **Ripley L (point-pattern)**, **Geary's C (local autocorrelation)**, **Co-occurrence -- pairwise**, **Co-occurrence -- one vs rest**
 5. (Optional) Check **Spatial feature smoothing** as a pre-clustering pass
 6. Click **Run Clustering**
 7. In the results dialog, navigate to the new tabs:
    - **Ripley L** -- line chart with a dashed simulated-randomness band per cluster
-   - **Geary's C** -- per-marker table with C, p-value, permutation count
+   - **Geary's C** -- per-marker table: Geary C, an **Areas <= cut** count on runs with several
+     areas, and q
+   - **Spatial Autocorrelation** (Moran's I) and **Neighborhood Enrichment** /
+     **Neighborhood Enrichment (plot)** -- when *Neighborhood enrichment + Moran's I* was ticked
    - **Co-occurrence (pairwise)** -- per-pair table indexed by radius
    - **Co-occurrence (one vs rest)** -- per-cluster table indexed by radius
 
@@ -230,9 +241,9 @@ no combined curve is offered, because a combined point pattern describes how the
 laid out rather than anything in the tissue. Moran's I and Geary's C stay a single figure --
 they read the spatial graph, which is already partitioned.
 
-Each table tab has **Copy CSV** and **Save CSV...** buttons to export the data in long form (one row per observation), which is more suitable for re-analysis than the on-screen fixed-width layout. For multi-image runs, **Save CSV...** writes every area in a single file with the area as the first column, so rows can be concatenated with post-hoc spatial results from other tools.
+Each table tab has **Copy CSV** and **Save CSV...** buttons to export the data in long form (one row per observation), which is more suitable for re-analysis than the on-screen fixed-width layout. For multi-image runs, **Save CSV...** writes every area in a single file with the area as the first column, so rows can be concatenated with post-hoc spatial results from other tools. Neighborhood Enrichment is the exception: it is one matrix for the whole run, so its CSV has no area column.
 
-After the run completes, see [Chapter 21 -- Spatial graph overlay](spatial-neighborhoods.md) for how to view the underlying graph in the QuPath viewer.
+After the run completes, see [Spatial graph overlay](spatial-neighborhoods.md) for how to view the underlying graph in the QuPath viewer.
 
 ### What gets logged
 
@@ -240,7 +251,7 @@ Each enabled statistic logs its own audit-log row (`SPATIAL STATS RIPLEY`, `SPAT
 
 **When a requested statistic does not arrive**, it says so rather than leaving you to notice a missing tab. Each statistic is computed inside its own error handler, so one that fails used to leave no tab and no message -- indistinguishable from not having ticked it. Now:
 
-- In a **clustering run**, the reason appears in the result's quality warnings, e.g. *"Moran's I was requested but did not run (...), so the Spatial Autocorrelation tab is absent. Everything else in this result is unaffected."*
+- In a **clustering run**, the reason appears in the result's quality warnings, e.g. *"Moran's I did not run, so there is no Spatial Autocorrelation tab. Everything else in this result stands. The QuPath log has the error; re-running the statistic from Explore & spatial > Spatial statistics on existing clusters... is the quickest retry."*
 - In a **post-hoc run**, the summary window's **Statistics** column names what is missing (`REQUESTED BUT NOT PRODUCED: Moran`), and the reason is logged as `Spatial: <reason>`.
 
 ### Matplotlib PNG output
@@ -349,7 +360,7 @@ To configure:
 (e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.
 
 **Graph + statistics.** Pick the neighbor graph (kNN / radius / Delaunay) and its
-parameter, the permutation count (0 = adaptive), and which statistics to run:
+parameter, the permutation count (0 = adaptive; neighbourhood enrichment always runs 1000), and which statistics to run:
 - **Ripley L**, **Co-occurrence** (pairwise / one-vs-rest), **Neighborhood
   enrichment** -- from the labels + positions.
 - **Geary's C**, **Moran's I** -- from the cells' marker measurements (coordinate /
@@ -358,7 +369,7 @@ parameter, the permutation count (0 = adaptive), and which statistics to run:
 
 **Results.** A single window opens the standard Results window (spatial tabs). Many
 areas open a **summary table** -- one row per area, with an "Open" button to
-drill into each window's full result and a "Save combined CSV" export. Each run is
+drill into each window's full result and a **Save combined CSV...** export. Each run is
 also auto-saved (a long-format CSV + a metadata JSON linked to the source result +
 per-area ROI identity) under `<project>/qpcat/spatial_stats/`. Neighborhood enrichment
 writes two rows per ordered cluster pair (`key` = `A > B`): `nhood_z` and `nhood_edges`. Nothing is written

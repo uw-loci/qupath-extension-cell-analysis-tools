@@ -19,7 +19,8 @@ Batch figure export ([below](#figure-export)) writes every plot from one or more
 | Slide deck for a group meeting -- need 10-30 figures across 5-15 images | Batch export |
 | Reviewer requests "the dotplot" for one image | Batch-export with a single plot checked is the cleanest path |
 | Iterating on cluster labels and want to compare before / after | Batch-export both runs to separate directories, then diff |
-| Headless / scripted / YAML-driven analysis pipeline | Scripting API (`FigureExportScripts.exportFigures`) -- see [SCRIPTING.md](scripting.md#figureexportscripts) |
+| Headless / scripted / YAML-driven analysis pipeline | Scripting API (`FigureExportScripts.exportFigures`) -- see [Scripting](scripting.md#figureexportscripts) |
+| The numbers behind a spatial statistic (Moran's I, Geary's C, neighborhood enrichment, Ripley L, co-occurrence) | **Copy CSV** / **Save CSV...** under that tab in the results window -- see [Exporting spatial statistics tables](results.md#exporting-spatial-statistics-tables) |
 
 A rule of thumb: **if you need more than two figures at a time, batch-export is faster.** If you need one figure, picking a single image + a single plot in the batch dialog is still a one-click operation.
 
@@ -102,7 +103,7 @@ Not every plot exists for every image / clustering result. The dialog shows this
 - **Cluster composition** (composition pies by image / by annotation, and the matching CSV tables) -- **always available**, because QP-CAT draws them from the saved result itself rather than reading a PNG the run happened to write. They need no open image, no results dialog, and no plotting options ticked at run time. The two "by annotation" kinds need a result that was clustered on annotation input; they are off by default for that reason. See [Exporting the composition figures](#exporting-the-composition-figures) below.
 - **Live JavaFX plots** (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) -- only exportable when the results dialog is open for that image. Default off in the checklist for v1; flip on if you have the right dialog open.
 
-For the **headless scripting API** (see [SCRIPTING.md](scripting.md#figureexportscripts)), the saved matplotlib plots and the cluster-composition figures / tables are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
+For the **headless scripting API** (see [Scripting](scripting.md#figureexportscripts)), the saved matplotlib plots and the cluster-composition figures / tables are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
 
 ### Exporting the composition figures
 
@@ -164,14 +165,14 @@ Validation rules:
 - Invalid filename characters (`< > : " / \ | ? *`) are stripped per `qupath.lib.common.GeneralTools.stripInvalidFilenameChars`.
 - Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) are guarded by prepending `_` after substitution.
 - If a token expands to the empty string after sanitisation, the literal `figure` is substituted.
-- The filename-pattern section is collapsed under "Advanced" by default -- 90% of users will not touch it.
+- The **Filename pattern (advanced)** section is collapsed by default -- 90% of users will not touch it.
 
 ### Large-batch tips
 
 Where to put the output directory:
 
 - **Not inside the QuPath project directory.** Output goes into a sibling directory or a paper / thesis folder. Mixing QuPath project metadata with export artifacts makes both harder to manage.
-- **A new subdirectory under a paper folder** is the canonical choice -- e.g. `~/paper-cd8-spatial/figures/2026-05-13_qpcat_run3/`. The **Project** button in the Output Directory section creates `<project>/qpcat/figures/<date>/` as a starting point.
+- **A new subdirectory under a paper folder** is the canonical choice -- e.g. `~/paper-cd8-spatial/figures/2026-05-13_qpcat_run3/`. The **Project** button in the **Output directory** section creates `<project>/qpcat/figures/<date>/` as a starting point.
 
 Expected file counts for a typical project:
 
@@ -196,7 +197,7 @@ Each export run writes one row to the project's audit log at `<project>/qpcat/lo
 - File count written, total bytes
 - Failure count (zero on a clean run)
 
-For the programmatic Groovy API see [SCRIPTING.md](scripting.md#figureexportscripts).
+For the programmatic Groovy API see [Scripting](scripting.md#figureexportscripts).
 
 ---
 ## AnnData for Python

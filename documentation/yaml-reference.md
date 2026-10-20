@@ -2,9 +2,9 @@
 
 Field-by-field reference for the YAML config file consumed by `qpcat_batch.groovy`. v1 covers clustering, rule-based phenotyping, the LLM cluster explainer (optional), spatial statistics, and figure export. Schema version `1.0` (shorthand `1` accepted).
 
-For the workflow narrative ("when to use, how to debug a failed run"), see [HOW_TO_GUIDE section 19](batch.md#running-one). For reproducibility / CI guidance, see [BEST_PRACTICES](batch.md#when-to-use-a-batch-instead-of-the-dialog). For error-by-error remediation, see [TROUBLESHOOTING_YAML_BATCH.md](batch.md#when-it-fails).
+For the workflow narrative ("when to use, how to debug a failed run"), see [Batch](batch.md#running-one). For reproducibility / CI guidance, see [Batch: when to use a batch instead of the dialog](batch.md#when-to-use-a-batch-instead-of-the-dialog). For error-by-error remediation, see [Batch: when it fails](batch.md#when-it-fails).
 
-Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's `script` subcommand so the analysis surface is identical to the dialog.
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's `script` subcommand so the analysis surface is the dialog's, except the optional Validation checks (stability across seeds, agreement with known classes), which are dialog-only.
 
 ## Top-level shape
 
@@ -253,7 +253,7 @@ Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, stat
 | `enabled` | boolean | `true` | Master switch. |
 | `graph` | object | `{type: knn, k: 15}` | Graph constructor for every statistic. |
 | `statistics` | list[string] | `[]` | At least one entry. Valid slugs below. |
-| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. |
+| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. Does not apply to `neighborhood_enrichment`, which always runs 1000. |
 | `persist_plots` | boolean | `true` | Write per-stat PNGs to the saved-result's plot directory so `figure_export` can pick them up. |
 
 Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
@@ -267,7 +267,7 @@ Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ri
 | `radius` | double | `-1` (auto) | Radius only (microns; pixels only if an image in the run has no pixel size). |
 | `max_edge` | double | `-1` (no pruning) | Delaunay only (microns; pixels only if an image in the run has no pixel size). |
 
-> **Note:** `spatial_stats.statistics` slugs mirror the `SpatialStatsScripts` keys 1:1. See [SCRIPTING.md `SpatialStatsScripts`](scripting.md#spatialstatsscripts).
+> **Note:** `spatial_stats.statistics` slugs mirror the `SpatialStatsScripts` keys 1:1. See [Scripting: `SpatialStatsScripts`](scripting.md#spatialstatsscripts).
 
 ## `figure_export` (optional, object)
 
@@ -498,16 +498,17 @@ figure_export:
 - E007 Schema major version unsupported
 - E008 Image listed in `scope.images` not found in any project
 - E009 Unknown statistic slug
-- E010 Marker not found (deferred to the run)
+- E010 Marker not found (reserved; not emitted yet)
 - E011 JavaFX-only plot kind requested (not exportable headlessly)
 - E012 Filename pattern missing required token
-- E013 Project resolution failed
+- E013 Project resolution failed (reserved; not emitted yet)
 - E014 Project file not found
 - E015 Mixed list / map shape in `scope.images`
 - E017 Malformed `version` string
 - E018 Inline API key in YAML, or missing env var
 - E019 Output directory not writable
 - E020 Invalid override block in `per_image_overrides`
+- E021 Marker gated at more than one threshold across phenotyping rules
 
 Warnings (non-fatal):
 

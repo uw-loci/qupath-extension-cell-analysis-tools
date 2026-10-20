@@ -1,6 +1,6 @@
 # QP-CAT -- Scripting (Groovy)
 
-Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page.
+Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page. The one exception is re-running a recorded sub-clustering from the Groovy script in its `_RUN_INFO.txt` ([Reproducibility](reproducibility.md)).
 
 ## When to script vs. use the dialog
 
@@ -97,7 +97,7 @@ def graph = SpatialGraphScripts.buildGraph([
 
 Convenience overload returning the literal-default map (kNN, k = 15, radius = -1, maxEdge = -1, no areas). Equivalent to `buildGraph([:])`.
 
-> **These facades stage parameters; they do not execute.** As the class javadoc says, the graph is built Python-side as part of `run_clustering`. To actually RUN an analysis from a script -- with areas or without -- use the headless YAML batch (`YamlBatchScripts.runBatch`) with `clustering.area_levels`; see [YAML_SCHEMA.md](yaml-reference.md). The `spatial_stats` YAML block runs inline with clustering, so it inherits the same areas.
+> **These facades stage parameters; they do not execute.** As the class javadoc says, the graph is built Python-side as part of `run_clustering`. To actually RUN an analysis from a script -- with areas or without -- use the headless YAML batch (`YamlBatchScripts.runBatch`) with `clustering.area_levels`; see [YAML reference](yaml-reference.md). The `spatial_stats` YAML block runs inline with clustering, so it inherits the same areas.
 
 ## SpatialStatsScripts
 
@@ -176,7 +176,7 @@ def coOcc = SpatialStatsScripts.coOccurrence(graph, [
 
 ### `neighborhoodEnrichment(graphHandle, Map opts = [:]) -> Map<String, Object>`
 
-Stages the cluster-pair Z-score matrix (the existing v0 statistic). Options map is currently empty; reserved for future extension.
+Stages neighbourhood enrichment: a z-score and an edge count per ordered cluster pair, with cluster labels shuffled within each independent area and a fixed 1000 permutations. Options map is currently empty; reserved for future extension.
 
 ## SpatialConnectionsScripts
 
@@ -211,7 +211,7 @@ import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
 SpatialConnectionsScripts.applySameClassFilter(getCurrentImageData(), true)
 ```
 
-The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](references.md#spatial-graph-overlay-pathobjectconnections) and [HOW_TO_GUIDE chapter 21 -- API deprecation note](spatial-neighborhoods.md#api-deprecation-note) for the rationale.
+The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](references.md#spatial-graph-overlay-pathobjectconnections) and [API deprecation note](spatial-neighborhoods.md#api-deprecation-note) for the rationale.
 
 ### `clearConnections(ImageData imageData) -> ClearResult`
 
@@ -251,7 +251,7 @@ Exports figures from one or more images to a directory.
 | Option key | Type | Default | Notes |
 |---|---|---|---|
 | `imageNames` | `List<String>` | empty = current image only | Image names within the project. Empty = current image; explicit list = those images; `["*"]` = every image in the project. |
-| `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
+| `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `cooc_curves`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
 | `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. Unrecognised values are warned and skipped; there is no vector format. |
 | `dpi` | int | 300 | Output DPI. Range 72-1200. Applies to the Java-rendered composition figures; matplotlib PNGs are copied at the DPI they were written with. |
 | `outputDir` | `String` or `Path` | required | Directory to write into. Created if it does not exist. |
@@ -311,14 +311,14 @@ println result.summary()
 
 | Key | Source | JavaFX-only? |
 |---|---|---|
-| `dotplot` | scanpy `sc.pl.rank_genes_groups_dotplot` saved PNG | No -- exportable headlessly |
+| `dotplot` | scanpy `sc.pl.dotplot` saved PNG | No -- exportable headlessly |
 | `matrixplot` | scanpy `sc.pl.matrixplot` saved PNG | No |
 | `paga` | scanpy `sc.pl.paga` saved PNG | No |
 | `violin` | scanpy `sc.pl.stacked_violin` saved PNG | No |
 | `embedding_scanpy` | scanpy `sc.pl.embedding` saved PNG | No |
 | `neighborhood` | squidpy `sq.pl.nhood_enrichment` saved PNG | No |
 | `spatial_scatter` | scanpy `sc.pl.spatial` saved PNG | No |
-| `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest` | Spatial-statistics PNGs, saved with the result | No (when persisted) |
+| `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `cooc_curves` | Spatial-statistics PNGs, saved with the result | No (when persisted) |
 | `heatmap`, `embedding_interactive` | JavaFX `Canvas.snapshot()` | **Yes -- requires open dialog** |
 | `autoencoder_pie`, `histogram` | JavaFX `PieChart` / `Canvas` snapshot | **Yes -- requires open dialog** |
 
@@ -342,7 +342,7 @@ The primary user-facing surface for headless QP-CAT is the YAML config file cons
 - Run the batch from inside an existing Groovy workflow that has other QuPath steps before / after.
 - Re-use the validator + orchestrator from a custom CI harness.
 
-For users who just want to run an existing YAML file from the command line, ignore this section and use `qpcat_batch.groovy` directly per [HOW_TO_GUIDE section 19](batch.md#running-one).
+For users who just want to run an existing YAML file from the command line, ignore this section and use `qpcat_batch.groovy` directly per [Batch](batch.md#running-one).
 
 ### `runBatch(Map opts) -> BatchOutcome`
 
@@ -458,7 +458,7 @@ Each row captures method name, graph type, permutation count, cell count, and a 
 ## Not in v1 (deferred)
 
 - **Clustering, embedding, phenotyping, autoencoder training/inference, LLM cluster explainer.** All still dialog-only.
-- **Reading results back as `AnnData`.** Use the existing AnnData export from the dialog or the script-level **QP-CAT > Export AnnData** menu.
+- **Reading results back as `AnnData`.** Use the existing AnnData export from the dialog or **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**.
 - **End-to-end "run a stats call from a script without the dialog."** v1 stages the option-map vocabulary; v2 will execute the full pipeline programmatically.
 
 ## v2 roadmap
