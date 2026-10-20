@@ -388,6 +388,9 @@ public class BatchFigureExportDialog {
         tiffCheck.setTooltip(tip(
                 "Lossless raster, larger files. Preferred by some journals. Written uncompressed."));
 
+        Label rasterNote = new Label("No vector formats (SVG, PDF, EPS): raster only.");
+        // #595959 reaches 7:1 against white -- WCAG AA-safe for small text.
+        rasterNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         dpiSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(dpiSpinner);
@@ -395,7 +398,7 @@ public class BatchFigureExportDialog {
         dpiSpinner.setTooltip(tip(
                 "Pixel density of the PNG / TIFF files. 300 is the publication standard."));
 
-        HBox formatRow = new HBox(8, new Label("Format:"), pngCheck, tiffCheck);
+        HBox formatRow = new HBox(8, new Label("Format:"), pngCheck, tiffCheck, rasterNote);
         formatRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox dpiRow = new HBox(8, new Label("DPI:"), dpiSpinner,

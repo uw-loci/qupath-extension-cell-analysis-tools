@@ -45,7 +45,8 @@ class NoVersionPromisesTest {
     void theFigureExportDialogOffersOnlyWhatItWrites() throws IOException {
         String src = Files.readString(
                 MAIN.resolve("qupath/ext/qpcat/ui/BatchFigureExportDialog.java"), StandardCharsets.UTF_8);
-        assertThat(src).doesNotContainIgnoringCase("vector formats")
-                .doesNotContain("SVG / PDF / EPS");
+        assertThat(src).doesNotContainIgnoringCase("vector formats ignore")
+                .doesNotContain("SVG / PDF / EPS planned")
+                .contains("No vector formats (SVG, PDF, EPS): raster only.");
     }
 }

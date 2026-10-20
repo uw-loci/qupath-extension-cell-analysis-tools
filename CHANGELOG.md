@@ -172,7 +172,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   Documentation link now opens the explainer's own page instead of the spatial tabs.
 - **Export figures (batch) promised formats it does not write.** The dialog showed
   "SVG / PDF / EPS planned for v1.1" and said vector formats ignore the DPI; it writes PNG
-  and TIFF only, and now says so. A skipped interactive plot now points to **Save plot...**
+  and TIFF only, and now says "No vector formats (SVG, PDF, EPS): raster only." A skipped interactive plot now points to **Save plot...**
   in the Results window instead of a "GUI exporter" that cannot export it either. The YAML
   batch's `workers` warning and the in-memory-config error no longer promise a v1.1.
 - **The MCP server window described its idle stop and its reach too narrowly.** It said the
