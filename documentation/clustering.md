@@ -35,18 +35,24 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
 7. **Analysis options** (the untitled block below the algorithm section):
    - *Generate analysis plots (dotplot, matrix plot, violin, embedding)* -- the static PNGs;
      Marker Rankings and Marker Fingerprints are computed either way
-   - *Cluster connectivity graph (PAGA)* -- off by default, greyed out while the plots are off
+   - *Cluster connectivity graph (PAGA)* -- on by default and remembered between runs; grayed
+     out while the plots are off. Untick it if you do not read the PAGA tab: it is usually the
+     slowest step after the clustering itself
    - *Neighborhood enrichment + Moran's I* -- the two spatial statistics that run
      alongside clustering
-   - *Spatial feature smoothing* -- [below](#spatial-feature-smoothing)
-   - *Reduce features with PCA before clustering* -- off by default,
-     [below](#reducing-features-with-pca-first)
-   - *Batch correction (Harmony)* -- enabled when the run spans several images **or**
+   - *Spatial feature smoothing (slower; not comparable to runs without it)* --
+     [below](#spatial-feature-smoothing)
+   - *Reduce features with PCA before clustering (faster; not comparable to runs without it)* --
+     off by default, [below](#reducing-features-with-pca-first)
+   - *Batch correction (Harmony) - for multi-image clustering* -- enabled when the run spans several images **or**
      several independent areas within one image; the **Batch key** dropdown picks **Images**
      or **Independent areas** as the batch
    - *Validation* (a collapsed section) -- optional checks that the clusters hold up across
      seeds and agree with classes the cells already carry; see
-     [Validation](results.md#validation-tab)
+     [Checking the clusters](#checking-the-clusters-the-validation-section)
+   - *Independent areas* (collapsed unless a TMA is detected) -- see
+     [Independent areas](spatial-neighborhoods.md#independent-areas)
+   - *Spatial statistics* (collapsed) -- see [Spatial statistics](spatial-statistics.md)
 8. **Run Clustering**.
 
 A line above the Run button says what this run trades -- reproducibility,
@@ -55,9 +61,11 @@ comparability, or nothing. See [Reproducibility and run cost](reproducibility.md
 ### Before it runs
 
 **Pre-flight scale check.** An amber box means the run will work but may be slow or
-near your memory ceiling. A red box means it cannot finish on this machine and Run is
-disabled; the message names the problem ("Agglomerative clustering needs about 50 GB
-but you have 16 GB") and an alternative. Both are machine-dependent -- the same config
+near your memory ceiling. A red box means the run cannot finish on this machine (it
+would run out of memory, or is predicted to take more than two hours) and Run is disabled.
+The message names the problem and an alternative: for example, that Agglomerative
+clustering of your cells needs more memory than the machine has, and to use Leiden or
+MiniBatch KMeans instead. Both are machine-dependent -- the same config
 may warn on a laptop and run fine on a server.
 
 If QP-CAT cannot read your machine's total memory it says so and shows only the
@@ -80,10 +88,11 @@ one-time modal says so. Duplicate the project folder before continuing. Re-arm i
 ### What it writes
 
 - A **PathClass** per detection -- "Cluster 0", "Cluster 1", ...
-- **QPCAT UMAP1/UMAP2** measurements (or QPCAT PCA1/2, QPCAT tSNE1/2) if an embedding was computed.
-  The "QPCAT " prefix marks these as output so they are not mistaken for your own measurements.
-  The default embedding name includes dimensionality (e.g., "QPCAT 2D UMAP1", "QPCAT 3D UMAP1"),
-  so a 2D and a 3D run of the same method do not overwrite one another.
+- **QPCAT 2D UMAP1 / QPCAT 2D UMAP2** measurements (or `QPCAT 2D PCA1/2`, `QPCAT 2D tSNE1/2`;
+  `3D` and a third column with **Dimensions: 3D**) if an embedding was computed. The name comes
+  from the **Name** box beside **Dimensions**, which defaults to the dimensionality and method,
+  so a 2D and a 3D run of the same method do not overwrite one another. The "QPCAT " prefix
+  marks these as output so they are not mistaken for your own measurements.
 - Viewer colours update to match
 
 **Cells vs. detections.** If the hierarchy has cell objects, QP-CAT analyses only cells,
@@ -110,7 +119,8 @@ Ticks survive a change of scope and the dialog reopening. The dialog reopens wit
 run's measurements ticked, including after a run on several images, where the list is read
 from the images after the dialog opens. A ticked measurement the new scope's cells lack is
 not shown, and comes back ticked if you return to a scope that has it. **Select None**,
-**Select 'Mean' only** and **Select 'Median' only** forget those hidden ticks.
+**Select 'Mean' only** and **Select 'Median' only** also forget ticks on measurements the
+current scope does not have. A change of scope clears the filter box.
 
 **Deselect QPCAT** unmarks every measurement QP-CAT wrote itself — embedding coordinates, spatial
 and component columns, cellular-neighborhood labels. These are *output*, not input; feeding them
@@ -135,7 +145,7 @@ helps separate cell states.
 | Method | Use when | Avoid when |
 |---|---|---|
 | **Z-score** | General clustering. Every marker weighted equally. | Distributions are extremely non-normal |
-| **Min-Max [0,1]** | Gating, where an intuitive scale matters | Outliers dominate the range |
+| **Min-Max [0,1]** | Gating, with a scale that reads directly (0 = lowest cell, 1 = highest) | Outliers dominate the range |
 | **Percentile** | A robust Min-Max. Tolerates outliers. | Very few cells |
 | **None** | Already normalized, or raw scale matters | Markers have very different scales |
 
@@ -155,7 +165,7 @@ The number of clusters depends on the parameters you choose, and **every method 
 assigns each cell to exactly one cluster** -- which hides gradients such as
 epithelial-mesenchymal transitions.
 
-QP-CAT now reports how marginal each assignment was, for the algorithms that compute such a
+QP-CAT reports how marginal each assignment was, for the algorithms that compute such a
 quantity: GMM (posterior probability), HDBSCAN (membership strength) and KMeans /
 MiniBatch KMeans (separation margin). See
 [Cluster confidence](results.md#cluster-confidence-tab) -- it is a results tab and a per-cell
@@ -163,14 +173,8 @@ measurement you can map in the viewer, which is how you tell a real boundary fro
 through the middle of a continuum. **Leiden, Agglomerative and BANKSY produce no such
 quantity and none is invented for them**, so with those you still have hard labels only.
 
-Two checks you can ask for before a run, in the **Validation** section of the dialog (collapsed,
-under the analysis tick-boxes; both off by default). **Stability across seeds (re-runs the
-clustering)** re-runs the clustering **Extra runs** times (default 5, 2 to 20) with other seeds
-and reports how much the clusters move, which works for Leiden too; it is greyed out for
-HDBSCAN, Agglomerative and BANKSY. **Agreement with the classifications the cells already
-have** compares the clusters with a prior phenotyping or ground truth; it is greyed out in
-*Analyze current classifications*, where the classes are the labels. See
-[Validation](results.md#validation-tab).
+The **Validation** section of the dialog can check this for you; see
+[Checking the clusters](#checking-the-clusters-the-validation-section) below.
 
 Either way:
 
@@ -178,7 +182,30 @@ Either way:
   A cell that jumps clusters between runs does not have a reliable label.
 - **Read the marker heatmap** rather than trusting one labelling; it shows which markers
   actually separate the clusters.
-- Treat labels as a hypothesis to validate.
+
+<a name="checking-the-clusters-the-validation-section"></a>
+### Checking the clusters: the Validation section
+
+1. **Expand Validation** (below the analysis tick-boxes; collapsed, both checks off by default).
+2. **Tick Stability across seeds (re-runs the clustering).** It re-runs the clustering
+   **Extra runs** times (default 5, 2 to 20) with other seeds and reports how much the clusters
+   move, which works for Leiden too.
+3. Optional: **tick Agreement with the classifications the cells already have** when the cells
+   carry a phenotyping, a manual annotation or ground truth. Use it after phenotyping with
+   marker rules, to see which clusters a rule set merges or splits, or on the synthetic dataset
+   with its ground-truth types.
+4. **Run Clustering.** A **Validation** tab appears in the results, for example "6 runs: seed 42
+   plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000".
+   See [Validation](results.md#validation-tab).
+
+Stability is grayed out for HDBSCAN, Agglomerative and BANKSY, and in *Analyze current
+classifications*; picking one of those algorithms also clears the tick. Agreement is grayed
+out in *Analyze current classifications*, where the classes are the labels.
+
+Stability reports the adjusted Rand index and Pixie's cluster consistency score (Liu et al.
+2023); agreement reports ARI, normalized mutual information, purity and Cohen's kappa after
+Hungarian matching. Sources in
+[References](references.md#validation-stability-across-seeds-and-agreement-with-known-classes).
 
 <a name="marker-pvalues-are-circular"></a>
 ### The marker p-values are circular -- read the ranking, not the p
@@ -186,8 +213,7 @@ Either way:
 The **Marker Rankings** and **Marker Fingerprints** tabs run scanpy's Wilcoxon rank-sum
 test (`rank_genes_groups`) comparing each cluster against the rest. The ranking is standard
 practice and it is how candidate cell types get found. **The p-value beside it is not
-evidence that the cluster is real**, and QP-CAT used to label it "smaller is more
-significant", which invited exactly that reading.
+evidence that the cluster is real**.
 
 The reason is circularity, sometimes called *double dipping*: the clusters were built
 **from these same measurements**, and the test then asks whether those measurements differ
@@ -233,10 +259,6 @@ three statistics the literature recommends for the decision. It runs on **the ma
 configuration would cluster** -- same measurements, same normalization, same PCA precursor --
 because a k chosen on a different matrix is a k chosen for a different problem.
 
-Earlier versions of this page recommended these three and did not provide them, which was
-the actual complaint: a user reasonably read the recommendation as a claim the tool computed
-them.
-
 #### The three, and what each is worth
 
 | | What it is | Has an optimum? | Can it say "no clusters"? |
@@ -253,7 +275,7 @@ reproducible, not correct. Erich Schubert's [*Stop using the elbow criterion for
 argues it should not be used at all; we show it because it is asked for, and we say this.
 
 **The gap statistic uses Tibshirani's rule, not the argmax.** The suggestion is the
-*smallest* k whose gap reaches the next k's gap minus that k's standard error. Taking the
+smallest k with Gap(k) >= Gap(k+1) - s(k+1), where s(k+1) is the next k's standard error. Taking the
 argmax instead overestimates k, which is precisely why the original paper states the rule
 this way. When no k satisfies it, QP-CAT reports **no suggestion** rather than k_max -- the
 range was too small, and naming the largest value tried would present a boundary artifact as
@@ -333,8 +355,8 @@ boundaries, same caveats. Confirm anything important with a full KMeans run.
 
 <a name="caution-agglomerative"></a>
 **Agglomerative** -- merges cells into a dendrogram you cut at k. Results depend strongly
-on **linkage and distance metric** (Ward + Euclidean is a safe default); say which you
-used. O(n^2), so subsample large datasets, and merges are greedy and never undone.
+on **linkage and distance metric** (Ward linkage is the default; the distance is always
+Euclidean); say which linkage you used. O(n^2), so subsample large datasets, and merges are greedy and never undone.
 (Gere 2023.)
 
 <a name="caution-hdbscan"></a>
@@ -355,10 +377,10 @@ makes this worse.
 HDBSCAN over 12 morphology and OD measurements returned one cluster (77.9% of cells), a
 15-cell artefact, and 22.1% noise. KMeans over the **identical matrix** separated the cores
 91-99% cleanly, and the discarded noise was spread evenly across all four KMeans clusters
-(27/25/24/23%) -- every population's fringe, not a set of outliers. **Evenly-distributed
-noise is the tell.** When you see it, change the algorithm first, to Leiden or KMeans,
-which partition the data whether or not it has density gaps. Adding intensity or texture
-measurements is worth doing on its own merits but is not the fix.
+(27/25/24/23%) -- every population's fringe, not a set of outliers. If the noise is spread
+evenly across the populations, change the algorithm to Leiden or KMeans, which partition the
+data whether or not it has density gaps. Adding intensity or texture measurements does not
+fix this.
 
 *One big cluster with LITTLE noise is a different problem, with a different fix.* The
 failure above leaves evenly-spread noise behind, because each population's fringe was
@@ -423,7 +445,7 @@ Starting points, all of them the dialog defaults:
 | **KMeans / MiniBatch** | k = 10 | adjust from biology or the heatmap |
 | **HDBSCAN** | min_cluster_size 15, min_samples 0 (auto), Cluster selection "Excess of mass (default)" | lower min_cluster_size to find smaller clusters; switch to "Leaf (finest clusters)" when one cluster swallows the run |
 | **Agglomerative** | k = 10, Ward linkage | justify any other linkage |
-| **GMM** | 10 components, full covariance | |
+| **GMM** | 10 components (covariance is fixed at "full") | |
 | **BANKSY** | lambda 0.2, k_geom 15, resolution 0.7 | raise lambda toward tissue domains |
 
 The random seed (default 42) is shared by the embedding and by every stochastic
@@ -447,7 +469,9 @@ its own spatial weighting.
 **Controls.** The dialog exposes **Iterations** (1-5, default 1); each pass smooths
 again over the same graph, so more passes reach further. The neighbourhood size *k* is
 not in the dialog -- it comes from the **Spatial Smoothing K-NN** preference (default 15). Larger
-*k* or more iterations means broader domains and less cell-level detail.
+*k* or more iterations means broader domains and less cell-level detail. With the preference
+**Spatial Smoothing: Use Squidpy Graph** turned on (off by default), smoothing uses the
+Spatial statistics graph instead, without the self-loop.
 
 ### Smoothing or BANKSY
 
@@ -492,15 +516,16 @@ those runs still reproduce exactly.
 
 **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**. Each selects all
 "Mean" measurements, Z-score normalization and a UMAP embedding, then runs immediately --
-no dialog. Good for a first look.
+no dialog. Good for a first look. They run on the image open in the viewer only; for
+several images use the full dialog.
 
 | Preset | Runs |
 |---|---|
 | Quick Leiden (auto) | Leiden, n_neighbors 50, resolution 1.0 |
 | Quick KMeans (k=10) | KMeans, 10 clusters |
 | Quick HDBSCAN (auto) | HDBSCAN, min_cluster_size 15 |
-| Quick Delaunay | Leiden on features smoothed over a Delaunay graph |
-| Quick Delaunay (custom)... | the same, with the graph and smoothing parameters exposed |
+| Quick Delaunay (Leiden + Delaunay smoothing) | Leiden on features smoothed over a Delaunay graph |
+| Quick Delaunay (custom)... | the same, asking first for the Delaunay maximum edge length and whether to limit edges to cells of the same class |
 
 ## Clustering a subset of cells
 

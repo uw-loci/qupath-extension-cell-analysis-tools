@@ -16,12 +16,27 @@ Every run auto-saves to `<project>/qpcat/cluster_results/`. Four routes back, fr
 **Results & populations > View Past Results...** reloads the labels, plots and spatial
 statistics exactly as computed.
 
-**Note: Multi-image results from v0.16.x and earlier.** A saved result from before v0.17.0 carries whatever it stored at the time. If it was a multi-image run, the spatial statistics are pooled (images stacked in one coordinate frame) rather than partitioned. Re-run the analysis to get the corrected, per-image spatial statistics; the pooled results cannot be repaired in-place.
+**Note: Multi-image results from v0.16.x and earlier.** A saved result from before v0.17.0 carries whatever it stored at the time. If it was a multi-image run, the spatial statistics are pooled (images stacked in one coordinate frame) rather than partitioned. Re-run the analysis to get the corrected, per-image spatial statistics; the pooled results cannot be repaired in-place. Multi-image results saved by 0.22.0 or earlier also carry neighborhood-enrichment z-scores whose null shuffled labels across images, and show z without edge counts; re-run to get the per-image null.
 
 **2. Re-run in the GUI with the same settings.**
 In the results window click **Open results folder**. Each run leaves three files there:
 `<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and
-`<name>_RUN_INFO.txt` (a readable record of every parameter, plus these steps).
+`<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps; the config file
+beside it is the complete one, and the only one that holds the Validation settings).
+
+Both `RUN_INFO.txt` and the audit log record the QP-CAT and QuPath versions. The Python
+packages are fixed per QP-CAT release by its bundled lock file (one for the CPU environment,
+one for the GPU environment), so the same QP-CAT version installs the same scanpy,
+scikit-learn and umap-learn.
+
+A Methods sentence can be filled in from `RUN_INFO.txt`; each bracketed name is the line of
+that name in the file:
+
+```
+Cells were clustered with QP-CAT [QP-CAT] (QuPath [QuPath]) using [Algorithm]
+([Algorithm params]) on [Measurements] measurements, normalization [Normalization];
+embedding [Embedding].
+```
 
 In the clustering dialog use **Load Config from file...**, pick the `<name>_config.json`,
 set the **Scope**, and run. The chooser offers only `_config.json` files, because the
@@ -76,11 +91,15 @@ What it is good for: a per-image audit trail of what produced that image's label
 ## The audit log
 
 Every operation is appended to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` -- plain text,
-one file per day. Each entry records the timestamp, operation type, every input parameter,
-a result summary and the duration.
+one file per day. Each entry records the timestamp, the QP-CAT and QuPath versions, the main
+settings, a result summary and the duration. It is an audit trail, not a full record: for a
+clustering run the full settings are in `<name>_RUN_INFO.txt` and `<name>_config.json`; for
+phenotyping, only a rule file saved with **Save Rules...** keeps the gates.
 
 ```
 === CLUSTERING === 2026-03-09 14:23:05
+  QPCAT version: 0.22.0
+  QuPath version: 0.7.0
   Algorithm: Leiden (graph-based)
   Algorithm params: {n_neighbors=50, resolution=1.0}
   Normalization: zscore
@@ -98,16 +117,16 @@ to the features they belong to -- this section exists so you can see the whole p
 when a run is taking longer than you expected, and so the **cost** of each speed-up is stated
 next to the saving.
 
-They are grouped by what you give up, not by how much time you save. Nothing here is a
-"performance" switch you can flip freely: only the first group is free.
+They are grouped by what you give up, not by how much time you save. Only the first group
+is free.
 
 ### Free -- you only lose the output itself
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Ripley's L, co-occurrence, Geary's C, neighbourhood enrichment** | Run Clustering > Spatial statistics (neighbourhood enrichment and Moran's I: the *Neighborhood enrichment + Moran's I* tick-box above it) | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
-| **Stability across seeds** | Run Clustering > Validation | Re-runs the clustering step **Extra runs** more times (5 by default), so that step takes about 6x as long; the line above the Run button says so. Off by default. |
-| **Generate analysis plots** | Run Clustering, the analysis tick-boxes | Skips the static matplotlib figures. The interactive tabs still work. |
+| **Ripley's L, co-occurrence, Geary's C, neighborhood enrichment** | Run Clustering > Spatial statistics (neighborhood enrichment and Moran's I: the *Neighborhood enrichment + Moran's I* tick-box above it) | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
+| **Stability across seeds** | Run Clustering > Validation | Re-runs the clustering step **Extra runs** more times (5 by default), so that step takes about 6x as long; the line above the Run button says so. Off by default. Gives a **Validation** tab with the adjusted Rand index between runs and a consistency score per cluster. |
+| **Generate analysis plots** | Run Clustering, analysis options (the untitled block below Clustering Algorithm) | Skips the static matplotlib figures. The interactive tabs still work. |
 
 QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
 large, a prompt appears with the number and a one-minute countdown. Computation has already
@@ -126,17 +145,15 @@ This is the only group where running the same thing twice can give you a differe
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Random seed** | Run Clustering > **Clustering Algorithm** | One seed for the whole run: the embedding *and* the stochastic algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). Leiden is the default, so this normally decides whether your cluster assignments repeat. Default 42. Greyed out only when the algorithm is deterministic (HDBSCAN, Agglomerative) **and** no embedding is being computed. |
+| **Random seed (clustering + embedding)** | Run Clustering > **Clustering Algorithm** | One seed for the whole run: the embedding *and* the stochastic algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). Leiden is the default, so this normally decides whether your cluster assignments repeat. Default 42. Grayed out only when the algorithm is deterministic (HDBSCAN, Agglomerative) **and** no embedding is being computed. |
 | **UMAP speed vs reproducibility** | Run Clustering > Dimensionality Reduction > Advanced | *Automatic (seed under 200,000 cells)* (default; YAML `auto`) pins the seed below 200,000 cells and uses every core above it. *Reproducible (always seeded, 1 core)* (`reproducible`) always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. *Fast (all cores, layout varies)* (`fast`) never pins it. |
 
-> **The seed moved.** It used to sit under *Embedding > Advanced*, a collapsed pane
-> in a section you may have set to **None** -- while it governed whether the *clustering*
-> repeated. It is now a visible row in the Clustering Algorithm section.
-
-**Changing the seed is a test, not a nuisance.** Re-run with a different seed and compare: a
-cluster boundary that moves when nothing but the seed moved was never a real boundary. The
-**Stability across seeds** option (the Validation section of the Clustering dialog) does this for you and reports the
-adjusted Rand index and a per-cluster consistency score; see
+Re-run with a different seed and compare. A boundary that moves when only the seed changes is
+not supported by the data at this resolution; a boundary that does not move is not proven
+either. The **Stability across seeds** option (the Validation section of the Clustering
+dialog) does this for you and reports the adjusted Rand index (Hubert & Arabie 1985) and
+Pixie's per-cluster consistency score (Liu et al. 2023; see
+[References](references.md#validation-stability-across-seeds-and-agreement-with-known-classes)); see
 [Validation](results.md#stability-across-seeds). The
 [Cluster confidence](results.md#cluster-confidence-tab) tab answers the same question within a
 single run, for the algorithms that can.
@@ -148,12 +165,11 @@ non-reproducible. See [Reproducing a run](#reproducing-a-run).
 
 Everything here is seeded and fully repeatable: the same cells, settings and seed give the same
 answer every time. What changes is the result *relative to the same run with the option off*.
-That is a different cost from the group above, and worth keeping separate in your head.
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Reduce features with PCA before clustering** | Run Clustering > Analysis | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. Repeatable, but the clusters differ from the same run with it off -- see [Clustering](clustering.md#reducing-features-with-pca-first). |
-| **Spatial feature smoothing** | Run Clustering > Analysis | Slower, but repeatable: the result differs from the same run without it. Adds a graph-convolution pre-step so every algorithm sees the smoothed feature matrix. |
+| **Reduce features with PCA before clustering (faster; not comparable to runs without it)** | Run Clustering, analysis options | Off by default. On wide panels (hundreds of marker x compartment features) a large saving, and usually less noisy. Repeatable, but the clusters differ from the same run with it off -- see [Clustering](clustering.md#reducing-features-with-pca-first). |
+| **Spatial feature smoothing (slower; not comparable to runs without it)** | Run Clustering, analysis options | Slower, but repeatable: the result differs from the same run without it. Adds a graph-convolution pre-step so every algorithm sees the smoothed feature matrix. |
 | **MiniBatch KMeans** instead of KMeans | Run Clustering > Algorithm | Much faster on large cohorts, at some cost in cluster quality. |
 | **BANKSY PCA dimensions** | Preferences | Fewer dimensions is faster and retains less variance. Repeatable, but BANKSY runs at different values are not comparable. |
 
@@ -164,7 +180,7 @@ rather than per run.
 
 | Setting | Where | Effect |
 |---|---|---|
-| **Spatial permutations** | Preferences > QP-CAT: Run Clustering (shown under Run Clustering > Spatial statistics) | `0` (default) picks by cell count: 1000 up to 50,000 cells, 100 up to 500,000, 50 above. Each permuted statistic costs in proportion to the count, so fewer is faster, but a permutation p-value can be no smaller than 1 / (permutations + 1): 0.001 at 1000, 0.0099 at 100, 0.0196 at 50, before any multiple-testing correction. A real effect can therefore read as "not significant" only because too few permutations were run. Raise it for a figure that reports p-values; use one fixed value across a study so the p-values are comparable. Neighbourhood enrichment does not follow this setting: it always runs 1000 permutations. See [the empirical permutation p has a floor](spatial-statistics.md). |
+| **Spatial Stats Permutations** | **Edit > Preferences > QP-CAT: Run Clustering** (the count in use shows under Run Clustering > Spatial statistics) | `0` (default) picks by cell count: 1000 up to 50,000 cells, 100 up to 500,000, 50 above. Each permuted statistic costs in proportion to the count, so fewer is faster, but a permutation p-value can be no smaller than 1 / (permutations + 1): 0.001 at 1000, 0.0099 at 100, 0.0196 at 50, before any multiple-testing correction. A real effect can therefore read as "not significant" only because too few permutations were run. Raise it for a figure that reports p-values; use one fixed value across a study so the p-values are comparable. Neighborhood enrichment does not follow this setting: it always runs 1000 permutations. The `perms=` value in `RUN_INFO.txt` is the setting, so it reads `0` when the count was chosen automatically. See [the empirical permutation p has a floor](spatial-statistics.md). |
 
 ### Costs completeness of a figure
 

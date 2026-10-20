@@ -1,12 +1,12 @@
 # Phenotyping
 
-Labelling cells by marker rules instead of by clustering. Use it when you already
+Labeling cells by marker rules instead of by clustering. Use it when you already
 know the cell types you are looking for and can express them as marker gates;
 use [clustering](clustering.md) when you want the data to tell you what is there.
 
 ## Choosing between phenotyping and clustering
 
-### Unsupervised First, Then Supervised
+### Unsupervised first, then supervised
 
 A recommended approach:
 1. Run **unsupervised clustering** first to understand the data
@@ -14,14 +14,14 @@ A recommended approach:
 3. **Rename clusters** to biological names (via **Results & populations > Modify cell populations**)
 4. OR define **phenotype rules** based on what you learned about marker distributions
 
-### Rule Design
+### Rule design
 
 - **Start broad, then refine** -- define a few major types first, then add subtypes
 - **Use the histogram** to verify that positive/negative populations are separable for each marker
 - **Rule order matters** -- more specific rules should come first (first match wins)
 - **Not all cells need a rule** -- unmatched cells are classified as "Unknown"
 
-### Gate Selection
+### Gate selection
 
 - Use **auto-thresholding** as a starting point, then fine-tune
 - The **Triangle method** works best for markers with a large negative population (skewed right)
@@ -36,7 +36,7 @@ A recommended approach:
 Rule-based phenotyping assigns cell types by gating on marker intensities -- you define
 which markers (and thresholds) characterize each phenotype.
 
-### When to Use Rule-Based Phenotyping
+### When to use rule-based phenotyping
 
 - **Well-characterized multiplexed panels** -- when you know exactly which markers define each cell type
 - **Reproducibility** -- rules are deterministic and produce identical results on the same data
@@ -44,8 +44,9 @@ which markers (and thresholds) characterize each phenotype.
 - **Fine-grained control** -- rule order, per-marker thresholds, and positive/negative logic give precise control
 - **Large panels (>10 markers)** -- rule-based gating scales well with many markers
 
-For unsupervised discovery when you don't yet know the phenotypes, use **clustering** (and
-optionally the LLM cluster explainer, below) instead.
+For unsupervised discovery when you don't yet know the phenotypes, use
+[clustering](clustering.md) (and, to suggest names for the clusters, the
+[Cluster Explainer](llm-explainer.md)) instead.
 
 ---
 ## Running phenotyping
@@ -57,7 +58,7 @@ measurements -- multiplex IF, conventional fluorescence, brightfield/IHC (e.g. D
 H&E (after stain separation). This tool reads **measurements, not pixels**, so it is
 modality-independent; run cell detection first so the measurements exist.
 
-**Reading the marker columns:** each column is one selected measurement, labelled with its
+**Reading the marker columns:** each column is one selected measurement, labeled with its
 channel **and statistic** (e.g. `PCNA Mean` vs `PCNA Median`) so measurements of the same
 channel are distinguishable, with the marker in bold ("Cell **CD3** mean") -- hover or click a
 header for the full QuPath name and its histogram. A cell is **pos** for a marker when its (normalized) value is `>=` that marker's
@@ -66,12 +67,21 @@ marker name, and it shows up to four decimals, so a small gate such as 0.0045 re
 rather than rounding to 0.
 
 **Gate range depends on normalization:** Min-Max / Percentile scale values to `[0, 1]` (gate
-0.0-1.0, 0.5 = midpoint); Z-score centers at 0 in SD units (gate -3.0 to 3.0, 0 = mean);
-None keeps raw measurement units. The banner above the gate spinner always states the active
-range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary value. Use
-**Compute Thresholds** + **Apply to All Markers** to set data-driven gates instead.
+0.0-1.0, 0.5 = midpoint); Z-score centers at 0 in SD units (gate -3.0 to 3.0, 0 = mean;
+a suggestion outside that range is clipped to the nearest end when it is applied); None keeps
+raw measurement units. The banner under **Normalization** and **Default gate** states the
+active range. Normalization starts on **Min-Max** with a default gate of 0.5, the midpoint
+between the lowest and highest value in scope; a single bright outlier shifts it, which is why
+Percentile is the more robust choice. Use **Compute Thresholds** + **Apply to All Markers** to
+set data-driven gates instead.
 
-### Step-by-step:
+**A gate is relative to the cells it was set on.** Values are normalized over the cells in
+scope, so the same rule set run on a different set of images applies the same number to a
+different scale; check the histogram again when you change the images. Click **Save Rules...**
+before you run: the rule file (normalization, markers, gates, rules) is the only record of
+your gates, because the audit log records how many rules ran, not what they were.
+
+### Step by step
 
 1. **Extensions > QP-CAT > Classify cells > Label cells by marker rules (phenotyping)...**
 2. **Choose the scope** at the top -- **Current image** (the default),
@@ -94,8 +104,8 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 5. **Set per-marker gates** -- each marker column header has a spinner
    - Values represent the positive/negative threshold for that marker
    - You can drag the red threshold line on the histogram (see [Auto-Thresholding](#auto-thresholding))
-6. **Define rules** -- each row is a phenotype. Every marker column has six states:
-   - **Cell Type**: name for this phenotype (e.g., "CD8+ T Cell")
+6. **Define rules** -- click **Add Rule**; each row is a phenotype. Type its name in **Cell
+   Type** (e.g., "CD8+ T Cell"). Each marker column then takes one of six states:
    - **`pos`** -- the cell must be at/above this marker's gate
    - **`neg`** -- the cell must be below this marker's gate (this is what makes a rule
      *exclusive* -- see "How matching works" below)
@@ -142,7 +152,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
   over-strict rules: your `neg` conditions are rejecting co-expressing cells. If you see
   this, relax the `neg` conditions to `--`.
 
-### Example rule set for immune panel:
+### Example rule set for an immune panel
 
 | Cell Type | CD3 | CD8 | CD4 | CD20 | PanCK |
 |-----------|-----|-----|-----|------|-------|
@@ -163,6 +173,8 @@ Automatically compute marker gate thresholds instead of setting them manually.
 2. Expand the **Histogram & Auto-Thresholding** section
 3. Click **Compute Thresholds**
 4. Click any marker column header to view its histogram
+   A marker with fewer than 10 finite values (the **Min Valid Values for Threshold**
+   preference) gets no histogram or suggestion.
 5. The histogram shows:
    - Blue bars (below threshold) and red bars (above threshold)
    - A red dashed line at the current threshold
@@ -170,32 +182,48 @@ Automatically compute marker gate thresholds instead of setting them manually.
      which is how phenotyping gates them. They are counted from the distribution of the
      values, not bar by bar, so they are right to within 0.1% of the cells even when the
      threshold falls inside a bar
-6. Change the **Method** dropdown to apply an auto-threshold:
+6. Change the **Method** dropdown from **Manual** (the default) to apply an auto-threshold:
    - **Triangle** -- geometric method, good for skewed distributions
    - **GMM (Gaussian)** -- 2-component mixture model, good for bimodal data
    - **Gamma** -- gamma distribution fit, good for strictly positive markers
 7. You can drag the red threshold line with the mouse for fine-tuning (it moves in steps of
    0.001), or type a value into the **Threshold** box (up to four decimals, the precision the
    suggestions are computed to)
-8. Click **Apply to All Markers** to set all gates using the selected method
+8. Click **Apply to All Markers** to set all gates using the selected method. A notification
+   confirms it, e.g. "Applied 'gmm' thresholds to 6 markers."; with **Manual** selected there is
+   nothing to apply, and the dialog asks you to pick a method first
+
+| Method | What it fits | Where the threshold goes | Source |
+|---|---|---|---|
+| **Triangle** | scikit-image `threshold_triangle` on the values left after dropping end spikes | the triangle rule on the histogram | [Zack et al. 1977](references.md#triangle-threshold-method) |
+| **GMM (Gaussian)** | a two-component Gaussian mixture (`random_state=42`, up to 200 iterations) on the same values | where the two weighted densities cross between the means; the midpoint of the means if they do not cross | [References](references.md#phenotyping-and-gating) |
+| **Gamma** | one gamma distribution (location fixed at 0) on every value, shifted to be positive | the mode plus 1 standard deviation of that gamma (when the fitted shape is 1 or less the mode is 0) | inspired by [GammaGateR](references.md#gammagater-gamma-distribution-gating), which fits a gamma *mixture*; QP-CAT's single-gamma rule is a different, simpler method |
+
+The Phenotyping preferences (**Edit > Preferences > QP-CAT: Run Phenotyping**) set **Histogram
+Bins** (50), **Min Valid Values for Threshold** (10), **GMM Max Iterations** (200) and **Gamma
+Threshold Std Multiplier** (1.0).
 
 ![The Histogram & Auto-Thresholding section of the Phenotyping dialog for Cell CD3 mean on image tme_01 with Percentile scaling. Most cells sit in one tall bar at 0 (1067 cells); a long, low tail of red bars runs up to 1.00. The GMM (Gaussian) method is selected, the red dashed threshold line sits at 0.129 just past the spike, the Threshold box reads 0.1291, and the counts under it read "Pos: 384 (24.5%) | Neg: 1184 (75.5%)"](images/phenotyping-histogram-gmm.png)
 
-**A suggestion that calls more than 95% or fewer than 5% of cells positive is flagged** in
+**A suggestion that classifies more than 95% or fewer than 5% of cells as positive is flagged** in
 orange under the counts, e.g. *"GMM (Gaussian) suggestion: Calls 100.0% of cells positive -
 check it against the histogram."* **Apply to All Markers** lists the markers it flagged. A
 flag is not always wrong (a marker can be truly rare, and a marker absent from an image puts
 every cell at the same value, which no threshold can split), but it is the first thing to check.
 
-**Cells with no signal.** Multiplex intensities usually put most marker-negative cells at
-exactly 0, which draws as one tall spike at the left of the histogram. Triangle and GMM leave
-that spike out (and the spike of values clipped to 1 by *Percentile* scaling) and fit the
-rest; cells on the spike are below any suggested threshold. Fitted with the spike included,
+**Cells with no signal.** Background-subtracted intensities often put many marker-negative
+cells at exactly 0 (851 of 1,568 cells for CD3 on the synthetic image tme_01), which draws as
+one tall spike at the left of the histogram. Triangle and GMM leave that spike out (and the
+spike of values clipped to 1 by *Percentile* scaling) and fit the rest. Cells on the low spike
+fall below any suggested threshold; cells clipped to 1 sit above it. An end of the range counts
+as a spike when at least 2 cells and at least 0.5% of cells sit exactly on it, unless fewer
+than 10 values would remain; a spike of 0.4% of cells stays in the fit. Fitted with the spike included,
 both would put the threshold at its edge: on the synthetic TME dataset (image tme_01, *Cell: CD3
 mean*, Percentile scaling, 1,568 cells of which 24.3% are T cells by ground truth) GMM
-suggested 0.0045 and Triangle 0.0059 that way, calling 37.8% and 37.2% of cells positive.
+suggested 0.0045 and Triangle 0.0059 that way, marking 37.8% and 37.2% of cells positive.
 Leaving the spike out, they suggest 0.129 (24.5% positive, the figure above) and 0.033
-(30.2%); Gamma, which was not affected, gives 0.361 (24.0%). Triangle still tends to call too many cells positive when a dim shoulder sits
-next to the spike, so check it against GMM and Gamma.
+(30.2%); Gamma, which still fits every value including the spike and whose method did not
+change, gives 0.361 (24.0%). Triangle still tends to mark too many cells positive when a dim
+shoulder sits next to the spike, so check it against GMM and Gamma.
 
 ---

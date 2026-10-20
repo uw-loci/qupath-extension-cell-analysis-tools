@@ -1,6 +1,7 @@
 # Troubleshooting
 
 - [Common pitfalls](#common-pitfalls)
+- [Messages you may see](#messages-you-may-see)
 - [The Python console](#the-python-console)
 - [Reporting a bug](#reporting-a-bug)
 - [Removed features](#removed-features)
@@ -10,7 +11,10 @@
 ### 1. Using raw (un-normalized) data
 
 **Problem:** Markers with higher absolute intensity dominate the clustering, regardless of biological importance.
-**Solution:** Always normalize. Z-score is the safest default.
+**Solution:** Normalize before clustering markers; Z-score is the safest default. The
+exception is clustering on embedding coordinates (pitfall 5), where **None (raw values)** keeps
+the embedding's geometry. For phenotyping gates, use Min-Max or Percentile (see
+[Phenotyping](phenotyping.md)).
 
 ### 2. Including too many irrelevant measurements
 
@@ -21,35 +25,37 @@
 
 **Problem:** Too many clusters that are not biologically distinct.
 **Symptoms:** Heatmap rows look similar; many clusters have the same marker pattern.
-**Solution:** Decrease Leiden resolution, decrease KMeans k, or merge clusters after the fact.
+**Solution:** Lower Leiden's **resolution** or KMeans' **n_clusters** (Clustering Algorithm
+section; GMM and Agglomerative have the same **n_components** / **n_clusters** spinners), or
+merge clusters after the fact.
 
 ### 4. Under-clustering
 
 **Problem:** Biologically distinct populations are lumped together.
 **Symptoms:** Known cell types are not separated; embedding shows sub-structure within clusters.
-**Solution:** Increase Leiden resolution, increase KMeans k, or run sub-clustering on specific
+**Solution:** Raise Leiden's **resolution** or KMeans' **n_clusters**, or run sub-clustering on specific
 clusters (*Results & populations > Modify cell populations (rename, merge, split,
 sub-cluster)...* -> select one cluster -> **Sub-cluster...**, which reopens the clustering
 dialog scoped to that class and labels the result `<name>.0`, `<name>.1`, ...).
 
 ### 5. HDBSCAN returns one giant cluster and almost no noise
 
-**Problem:** A run returns two or three clusters, one of which holds 90%+ of the cells, and
+**Problem:** A run returns two or three clusters, one of which holds 80% or more of the cells, and
 under 5% of cells are noise. This is common when clustering on embedding coordinates, where
 the groups are visibly separated on the plot.
 
 **Symptoms:** The quality banner says "One cluster holds N% of the clustered cells" while the
-noise count is small. In the viewer the slide is one colour.
+noise count is small. In the viewer the slide is one color.
 
-**This is not the same failure as pitfall 3 or 4, and the usual advice makes it worse.** The
-documented HDBSCAN failure -- no density gap exists, so each population's sparse fringe is
-written off -- leaves **a lot** of noise behind, spread evenly. Little noise means the
-opposite: no boundary was cut *anywhere*.
+This is a different failure from the one in [Clustering: HDBSCAN](clustering.md#caution-hdbscan),
+where no density gap exists and each population's sparse fringe is written off as noise; that
+one leaves **a lot** of noise, spread evenly. Little noise means no boundary was cut *anywhere*.
+Raising `min_cluster_size`, the usual first move, makes both worse.
 
 **Solution:** it is the cluster-selection setting, not the data.
 
 1. **Cluster selection -> Leaf.** The default, *Excess of mass*, is scikit-learn's and keeps
-   the most *persistent* clusters, which favours large ones: where the lobes of a space differ
+   the most *persistent* clusters, which favors large ones: where the lobes of a space differ
    in density it returns their common parent instead of the lobes. *Leaf* takes the leaves of
    the density tree -- scikit-learn's own wording is "the most fine grained and homogeneous
    clusters".
@@ -77,7 +83,23 @@ holding 97.0% of them, with 0.9% noise, on the defaults. See the full walkthroug
 ### 8. Batch effects in multi-image analysis
 
 **Problem:** Cells cluster by image source rather than biology.
-**Solution:** Enable Harmony batch correction, or verify that technical variation is minimal before clustering without it.
+**Symptoms:** In the results, **Composition by image** shows each cluster sitting almost entirely
+in one image.
+**Solution:** Tick **Batch correction (Harmony) - for multi-image clustering** in the analysis
+options (it needs several images or independent areas in scope), or check the
+[Composition by image](results.md#composition-by-image) tab to confirm technical variation is
+minimal before clustering without it.
+
+## Messages you may see
+
+| Message | Where | Cause | Fix |
+|---|---|---|---|
+| "The open image has no detections. Run cell detection first." | Clustering dialog | no cells on the open image | run cell detection |
+| "No image is open." | Quick clustering presets | the presets use the open image only | open an image, or use the full dialog with a project scope |
+| "No mean-intensity measurements found on these detections (...)" | Quick clustering presets | the presets select only "Mean" measurements | use **Find cell populations (clustering)...** and pick measurements |
+| "Compute thresholds first before applying." | Phenotyping | **Apply to All Markers** before **Compute Thresholds** | click **Compute Thresholds** |
+| "Select an auto-threshold method (Triangle, GMM, or Gamma) in the Histogram & Auto-Thresholding panel, then Apply to All. 'Manual' has no computed value to apply." | Phenotyping | **Method** still on **Manual** | pick a method |
+| "Spatial statistics are off because this run is restricted to chosen classifications. ..." | Clustering dialog | a classification subset is ticked | see [Spatial statistics are unavailable while subsetting](clustering.md#spatial-statistics-are-unavailable-while-subsetting) |
 
 ---
 ## The Python console
@@ -104,8 +126,8 @@ instead of "clustering failed". **Reports are filed anonymously** -- the issue i
 a shared reporting service, not from your GitHub account, so you will not be notified of
 replies unless you add your contact information below. No GitHub account is needed.
 
-**Summary and description.** Provide a **Summary** (used as the issue title) and a **description** --
-there is a minimum length, because a one-line report is rarely actionable.
+**Summary and description.** Provide a **Summary** (used as the issue title, 8 to 80 characters)
+and a **description** of at least 20 characters ("Describe the bug (minimum 20 characters):").
 
 **Contact (optional).** To be notified when someone replies to your issue, add a **GitHub username**
 and/or **image.sc forum username**. Both fields are optional -- leave them blank to stay anonymous.
@@ -117,7 +139,7 @@ which are automatically cleaned up. Both handles appear publicly in the issue.
 | Checkbox | What it sends |
 |---|---|
 | **Include system info (versions, OS)** | QP-CAT, QuPath, Java and OS versions. Almost always worth sending; a surprising number of reports come down to a version mismatch. |
-| **Include QP-CAT operation log** | QP-CAT's own audit trail (see [Reproducibility](reproducibility.md#the-audit-log)): which tools ran, with which parameters, in what order. Greyed out with "(none yet)" if you have not run anything. |
+| **Include QP-CAT operation log** | QP-CAT's own audit trail (see [Reproducibility](reproducibility.md#the-audit-log)): which tools ran, with which parameters, in what order. Grayed out with "(none yet)" if you have not run anything. |
 | **Include QuPath log** | QuPath's log as captured in memory this session. QuPath writes no log file by default, so this checkbox is the only way to get a stack trace attached. Shows "(none captured this session)" when there is nothing to send. |
 | **Include a screenshot of the QuPath window** | The window as it looks now. |
 
@@ -136,6 +158,8 @@ follow up if you left the contact fields blank -- does need a GitHub account.
 this build. File the issue on GitHub directly; the text you have typed is still on
 screen to copy. A failed submission likewise leaves your text in place and shows the
 error rather than discarding it.
+
+---
 ## Removed features
 
 Capabilities that shipped in earlier versions but were removed to keep the tool
@@ -161,7 +185,3 @@ working feature that was set aside; it is an unvalidated one.
 
 There is therefore nothing here to reinstate. Anyone wanting appearance-based clustering
 should treat it as new work rather than as a revival.
-
----
-
-<a name="10-explaining-clusters-with-an-llm-beta"></a>
