@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to QP-CAT (the QuPath cluster analysis tools extension) are recorded here.
+All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
@@ -12,32 +12,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   checks in a new *Validation* section of the Clustering dialog, both off by default, shown
   in a new **Validation** results tab and saved with the result.
   - *Stability across seeds* re-runs the clustering (Leiden, KMeans, MiniBatch KMeans or
-    GMM) with other seeds -- 5 extra runs by default -- and reports the adjusted Rand index
-    between every pair of runs and, per cluster, Pixie's consistency score (how many re-run
-    clusters it takes to hold 95% of a cluster's cells; Liu et al. 2023). It multiplies the
-    clustering time, so the pre-run cost line says so and the scale guard counts it.
+    GMM) with other seeds -- 5 extra runs by default, with seeds seed+1 to seed+N, recorded
+    with the result -- and reports the adjusted Rand index between every pair of runs and,
+    per cluster, Pixie's consistency score (how many re-run clusters it takes to hold 95% of
+    a cluster's cells; [Liu et al. 2023](documentation/references.md#validation-stability-across-seeds-and-agreement-with-known-classes)).
+    It multiplies the clustering time, so the pre-run cost line says so and the scale guard
+    counts it.
   - *Agreement with the classifications the cells already have* compares the clusters with
     a prior phenotyping or ground truth: adjusted Rand index, normalized mutual information,
     a cluster x class table, purity, and Cohen's kappa after matching each cluster to at most
     one class (Hungarian algorithm). Unclassified cells are left out and counted.
+  - Neither check is available in YAML batch runs. *Agreement* is off in *Analyze current
+    cell classifications*, where the classes are the labels.
 - **The 3D View tab has the guide bar and Documentation link every other results tab has**,
   and the Embedding Plot tab now says that distances between clusters in the layout are not
   interpretable, as the 2D tab did. The Matrix Plot and Stacked Violin guides say how values
   are scaled (Matrix Plot: each marker 0-1 across clusters; Stacked Violin: not rescaled).
+- **A suggested threshold that marks more than 95% or fewer than 5% of cells positive is
+  flagged** under the histogram counts, and **Apply to All Markers** names the markers it
+  flagged, so a poor suggestion shows up whichever method made it.
+
+### Changed
+
 - **The Neighborhood Enrichment tab is now a table with the edge count behind every
   z-score**, e.g. `7.3 (6061)`, so a large z from a handful of edges reads as such, and the
   line above it says how labels were shuffled. It has the same **Copy text / Copy CSV /
   Save CSV...** buttons as the other spatial tables. The heatmap moved to **Neighborhood
   Enrichment (plot)**. Results saved before this version show z without counts.
-- **A suggested threshold that calls more than 95% or fewer than 5% of cells positive is
-  flagged** under the histogram counts, and **Apply to All Markers** names the markers it
-  flagged, so a poor suggestion shows up whichever method made it.
-
 - **Stacked violin: twice the row height, angled labels, the marker in bold.** At 34
   measurements the rows were too flat to read a shape, an inch above the plot was empty, and
   the marker was hard to find in vertical labels such as "Nucleus: CD3 std dev". Rows are now
   twice scanpy's height with no empty strip, labels sit at 45 degrees, the marker part of
-  each label is bold, and the colour scale moved under the dendrogram, which makes the
+  each label is bold, and the color scale moved under the dendrogram, which makes the
   figure narrower. The tab guide and results.md now explain the flat-based violins: each
   violin stops at the lowest value a cell has, and most cells often sit exactly there.
 - **Marker names in bold everywhere QP-CAT lists measurements, not just the violin.** The
@@ -46,25 +52,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   measurement lists of the Clustering, Phenotyping, Compute Embedding and crop/table export
   dialogs, the phenotyping column headers and histogram title, and the axis titles of a
   two-marker plot. QuPath's "Cell: PCNA: Mean" names and the channel-first "CD3: Nucleus:
-  Mean" names of the cell-detection extensions are recognised, and a hyphenated marker such
+  Mean" names of the cell-detection extensions are recognized, and a hyphenated marker such
   as Ki-67 now draws with a hyphen in the figures rather than a spaced minus sign ("Ki - 67").
   The Marker Rankings, Spatial Autocorrelation and Geary's C text tables, tooltips and every
   CSV stay plain text. A highlighted Marker Fingerprints row is also readable in the dark
   theme now (it was light text on pale yellow).
-- **The expression figures' colour scales name their units.** scanpy's titles, "Median
+- **The expression figures' color scales name their units.** scanpy's titles, "Median
   expression in group" on the stacked violin and "Mean expression in group" on the dotplot and
   matrix plot, never said that these figures draw the run's normalized values, so a violin
   scale running to 2 read as raw intensity. They now read "Median in cluster (z-score)" (or
   min-max 0-1, p1-p99 scaled 0-1, raw values, by Normalization) and "Mean in cluster (each
   marker scaled 0-1)". The dotplot's size legend reads "% of cluster above 0 (see note
   below)" instead of "Fraction of cells in group". The Heatmap tab names the units under its
-  colour bar and in the hover, and its "low (per marker)" / "high (per marker)" end labels no
-  longer overlap.
+  color bar and in the hover, and its end labels read "low" / "high", with "per marker" moved
+  into the caption, so they no longer overlap.
 
 ### Fixed
 
-- **Class names lost their underscores in check-box lists.** JavaFX reads an underscore in a
-  check box's text as a keyboard-shortcut marker, so "b_cell" showed as "bcell" in the
+- **Class names lost their underscores in check-box lists.** "b_cell" showed as "bcell" in the
   Clustering dialog's **Cells to cluster** list, and the same applied to the spatial-statistics
   class picker, the result picker and the figure-export plot list. They now show names as
   written.
@@ -73,29 +78,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   height to the rows.
 - **The figure-export dialog promised the interactive plots "in v1.1".** It now says those
   plots are drawn in the Results window and points to **Save plot...** there.
-
 - **Reproducibility guide: fewer spatial permutations are not free.** The guide listed the
   permutation count among settings that cost nothing but the output. A permutation p-value
   cannot be smaller than 1 / (permutations + 1) -- 0.001 at 1000, about 0.01 at 100 -- so
   fewer permutations coarsen every p-value. It now has its own group saying so.
-
 - **Closing Modify Clusters threw away staged names without asking.** Names typed in, or
   sent over by the Cluster Explainer's *Use as cluster names...*, were lost if you pressed
   Close (or the window's X) before Apply. Closing with unapplied names now asks first, and
   says how many would be lost.
-
 - **Different windows shared one title.** The per-image spatial-graph summary was titled
   like the question before it ("QP-CAT - spatial graph overlay"); it is now "QP-CAT -
   spatial graph summary". The image picker in *Analyze current classifications* said
   "Select images to cluster" (now "...to analyze"; sub-clustering says "...to sub-cluster"),
   and three confirmation prompts in Phenotyping and Cellular Neighborhoods were titled just
   "QPCAT". QuPath remembers a window's position by its title, so these shared positions too.
-
 - **The MCP server window could show a tool call after "stopped".** A call the agent made
   just before the server stopped (a project change, the idle timeout, or Stop) could finish
   afterwards and replace "stopped: ..." with "tool call: ...", so the window looked as if
   the server were still answering. Calls from a run that has ended are no longer shown.
-
 - **The Cluster Explainer said "claude.ai" wrote suggestions pasted from any chatbot.** With
   *Any chatbot*, the Model box started on "claude.ai", and that label was saved as the author
   unless you changed it. It now starts empty each time; left empty, the record says the
@@ -103,56 +103,52 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   by ChatGPT, as you named it (reply pasted in)" or "an AI agent that called itself ... (over
   MCP)", not "via CHATBOT". The audit log's `Image:` row names the result's images ("8
   images") rather than whichever image was open.
-
 - **HDBSCAN noise was counted as a cluster in several places.** A run that found 5 clusters
   and 606 noise cells was listed as "6 clusters" in View Past Results and in the composition
   tabs, whose Noise column read 0 in every row, as did the Noise card in Marker Fingerprints.
   Noise now has its real count in those tables and cards, and every cluster count, including
   the completion messages, reads "5 clusters (+606 noise)".
-
 - **After a run on several images, the Clustering dialog reopened with no measurements
-  ticked.** Every other setting came back. The last run's ticks were applied while the list
-  of measurement names was still being read from the images, and the list that arrived then
-  replaced them. Ticks are now kept when the list is re-read, so they also survive a change
+  ticked.** Every other setting came back. Ticks are now kept when the list of measurement
+  names is re-read from the images, so they also survive a change
   of scope; the same applies to the Analyze current classifications dialog.
-
 - **The composition pies used JavaFX's default colors, not the cluster colors.** The legend
   above them showed the cluster palette, so a wedge could not be matched to its cluster. The
-  slice color was applied by a listener that was attached after the slice already existed, so
-  it never ran. The exported composition figure was not affected; it is drawn separately.
+  pies now use the cluster colors. The exported composition figure was not affected; it is
+  drawn separately.
 - **Embedding plots drew cells past the plot frame after a pan or zoom.** Cells at the edge of
   the view painted across the axes. Points and gate outlines are now clipped to the plot box.
 - **GMM and Triangle auto-thresholds sat on the spike of zero-intensity cells.** Most
   marker-negative cells have an intensity of exactly 0; fitted with that spike, GMM gave it
   one of its two components and Triangle took the first bin past it, so both thresholds
   landed at its edge. On the synthetic TME image tme_01 (*Cell: CD3 mean*, Percentile, 24.3%
-  T cells by ground truth) GMM suggested 0.0045 and Triangle 0.0059, calling 37.8% and 37.2%
+  T cells by ground truth) GMM suggested 0.0045 and Triangle 0.0059, marking 37.8% and 37.2%
   of cells positive; they now suggest 0.129 (24.5%) and 0.033 (30.2%). Both now fit only the
-  values between a spike of identical values at either end of the range. Across the 8 images
+  values between a spike of identical values at either end of the range (a spike: at least
+  0.5% of cells at exactly the end value). Across the 8 images
   x 6 lineage markers of that dataset, GMM's mean balanced accuracy against ground truth went
   from 92.2% to 99.1% (Percentile; the other scalings move the same way) and Triangle's from
   93.0% to 95.4%. Gamma is unchanged.
 - **The histogram's Pos/Neg counts were wrong for a threshold inside a bar.** Cells were
-  counted a whole bar at a time, by the bar's centre, so the GMM threshold above (0.0045,
-  inside the first bar, 0 to 0.02) read "Pos: 1568 (100.0%)" while it called 37.8% of cells
+  counted a whole bar at a time, by the bar's center, so the GMM threshold above (0.0045,
+  inside the first bar, 0 to 0.02) read "Pos: 1568 (100.0%)" while it marked 37.8% of cells
   positive. The counts are now exact to 0.1% of cells.
 - **The threshold boxes showed a small gate as 0.** They rounded to two decimals, so the
-  0.0045 above read "0", and clicking into the box and out again set the gate to 0, which
-  calls every cell positive. The histogram's Threshold box and each marker's gate box now
-  show four decimals, the precision the suggestions are computed to.
+  0.0045 above read "0", and clicking into the box and out again set the threshold to 0,
+  which marks every cell positive. The histogram's Threshold box and each marker's gate box
+  now show up to four decimals, the precision the suggestions are computed to.
 - **Neighborhood enrichment shuffled labels across images.** The neighbor graph is built
   per image (or core, or section), but the permutation null behind each z-score shuffled
   cluster labels across every cell in the run, so a difference in composition between
   images read as neighborhood structure. Labels are now shuffled within each image or area.
-  On the 8-image synthetic TME dataset (11,416 cells labelled by ground-truth type, kNN
-  graph, k = 15) this moved z by 3.0 on average over the 36 cluster pairs and by at most 8.9;
+  On the 8-image synthetic TME dataset (11,416 cells labeled by ground-truth type, kNN
+  graph, k = 15, 1000 permutations, seed 0) this moved z by 3.0 on average over the 36 cluster pairs and by at most 8.9;
   no pair changed sign, and three crossed |z| = 2 (fibroblast-to-helper-T went from 0.3 to
   7.3). A single-image run is unchanged.
 - **The post-hoc spatial CSV left out most of the enrichment matrix.** It wrote one
   direction of each cluster pair and no diagonal (a cluster next to itself), although a
   kNN graph makes A-to-B and B-to-A different numbers. It now writes every ordered pair, as
   `nhood_z` and `nhood_edges` rows keyed `A > B`.
-
 - **Marker Fingerprints' "Markers per cluster" went to 12** while the run keeps the top 5
   markers of each cluster, so 6 to 12 changed nothing. It now stops at the number ranked.
 - **Tooltips and help text pointed at documentation pages that have moved.** Five tooltips
@@ -426,12 +422,10 @@ on 0.22.0 (the automatic values are unaffected).
   the saved result and the audit log carry provider `CHATBOT`, that label, and the prompt and
   reply verbatim; token counts are recorded as unknown. Run end-to-end on 2026-10-12 in a
   real QuPath: prompt copied off the system clipboard (3,124 characters, six clusters),
-  answered by a Claude model outside QuPath, pasted back, six rows in the table. This is the
-  universal half of the plan to drop the API-key requirement; the MCP half, for agents that
-  can call into QuPath, is next.
+  answered by a Claude model outside QuPath, pasted back, six rows in the table.
 
-- **An AI agent you already use can name the clusters, with no API key and no copying.** The
-  MCP half, promised above. QP-CAT can open a small local [MCP](https://modelcontextprotocol.io)
+- **An AI agent you already use can name the clusters, with no API key and no copying.**
+  QP-CAT can open a small local [MCP](https://modelcontextprotocol.io)
   server offering exactly three tools -- `qpcat_list_results`, `qpcat_explain_prompt`,
   `qpcat_set_explanations` -- so "explain the clusters in my latest QP-CAT result" in Claude
   Code, Codex, Cursor or Gemini CLI does the whole round trip: the agent reads the prompt out of

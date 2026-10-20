@@ -2,15 +2,15 @@
 
 Python-powered cell analysis for highly multiplexed imaging data in [QuPath](https://qupath.github.io/).
 
-Warning: This is a continuation of my work integrating other people's software into Qupath, like with Caleb's [CytoMap](https://forum.image.sc/t/there-and-back-again-qupath-cytomap-cluster-analysis/43352) and Alan's [QuBaLab](https://github.com/saramcardle/FS2K/blob/main/Clustering%20using%20Python.ipynb), attempting to make clustering and analysis more accessible on the QuPath side, but many of the features are lightly tested or entirely untested! 
+Warning: This is a continuation of my work integrating other people's software into QuPath, like with Caleb's [CytoMap](https://forum.image.sc/t/there-and-back-again-qupath-cytomap-cluster-analysis/43352) and Alan's [QuBaLab](https://github.com/qupath/qubalab) (as in [this clustering notebook](https://github.com/saramcardle/FS2K/blob/main/Clustering%20using%20Python.ipynb)), attempting to make clustering and analysis more accessible on the QuPath side, but many of the features are lightly tested or entirely untested! 
 
 QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, autoencoder-based cell classification, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
-![QP-CAT clustering in three panels. Left, the Run Clustering dialog: the Measurements list with each marker name in bold and the mean measurements ticked, Z-score normalization, a 2D UMAP, and KMeans with 7 clusters. Middle, a synthetic multiplexed tissue image with every detected cell filled in its cluster's colour. Right, the results window's UMAP 2D tab: 11,421 cells in seven well-separated, colour-coded groups with a legend of cluster sizes](documentation/images/clustering-overview.png)
+![QP-CAT clustering in three panels. Left, the Run Clustering dialog: the Measurements list with each marker name in bold and the mean measurements ticked, Z-score normalization, a 2D UMAP, and KMeans with 7 clusters. Middle, a synthetic multiplexed tissue image with every detected cell filled in its cluster's color. Right, the results window's UMAP 2D tab: 11,421 cells in seven well-separated, color-coded groups with a legend of cluster sizes](documentation/images/clustering-overview.png)
 
 **Repository:** [uw-loci/qupath-extension-cell-analysis-tools](https://github.com/uw-loci/qupath-extension-cell-analysis-tools)
 
-### Documentation
+## Documentation
 
 Start at **[documentation/README.md](documentation/README.md)** -- it routes by task.
 One page per topic:
@@ -21,8 +21,8 @@ One page per topic:
 | [Clustering](documentation/clustering.md) | Running a clustering, and which measurements, normalization and algorithm to choose |
 | [Results](documentation/results.md) | The results window: heatmap, embedding, composition, markers, validation |
 | [Working with clusters](documentation/clusters.md) | Judging, renaming, merging, sub-clustering, gating |
-| [Phenotyping](documentation/phenotyping.md) | Labelling cells by marker rules |
-| [Spatial statistics](documentation/spatial-statistics.md) | Ripley, Geary, co-occurrence, Moran's I |
+| [Phenotyping](documentation/phenotyping.md) | Labeling cells by marker rules |
+| [Spatial statistics](documentation/spatial-statistics.md) | Neighborhood enrichment, Ripley, Geary, co-occurrence, Moran's I |
 | [Neighborhoods](documentation/spatial-neighborhoods.md) | Spatial niches, independent areas, the viewer overlay |
 | [Autoencoder](documentation/autoencoder.md) | Classifying cells by appearance |
 | [Exporting](documentation/exporting.md) | Figures, AnnData, VEST 3D |
@@ -34,7 +34,7 @@ One page per topic:
 | [MCP server](documentation/mcp-server.md) | An AI agent you already use names the clusters; off by default [Experimental] |
 | [Troubleshooting](documentation/troubleshooting.md) | Common pitfalls, the Python console, bug reports |
 | [Recipes](documentation/recipes.md) | Worked examples |
-- **[References](documentation/references.md)** -- Original papers and DOI links for every algorithm and tool used in this extension
+| [References](documentation/references.md) | Original papers and DOI links for every algorithm and tool used in this extension |
 
 ---
 
@@ -44,32 +44,32 @@ One line each -- what you can *do*, with the method named in small text. Follow
 a link for the detail: which algorithm to pick, when to reach for it, and the
 caveats.
 
-**Set up**
+### Set up
 
 - **[No-setup install](documentation/setup.md)** -- one click configures the full Python environment. No conda, no command line. <sub>~1.5-2.5 GB download, ~2.5 GB on disk</sub>
 
-**Find cell types**
+### Find cell types
 
 - **[Discover cell types without labels](documentation/clustering.md)** -- group cells automatically by marker expression. <sub>Leiden or KMeans to start, HDBSCAN for rare populations, BANKSY when architecture matters; plus 3 more</sub>
 - **[Marker gating with auto-thresholds](documentation/phenotyping.md#running-phenotyping)** -- classic flow-cytometry-style cell typing, with a threshold suggested per marker. <sub>Triangle, GMM, Gamma</sub>
 - **[Cleaner clusters via tissue context](documentation/clustering.md#spatial-feature-smoothing)** -- blend each cell with its neighbors first, so niches come out as regions, not salt-and-pepper. <sub>Graph convolution; makes any algorithm above spatially aware</sub>
-- **[Annotate a few cells, classify the rest](documentation/autoencoder.md)** -- label a small subset and have the rest of the project labelled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
+- **[Annotate a few cells, classify the rest](documentation/autoencoder.md)** -- label a small subset and have the rest of the project labeled for you. <sub>Variational autoencoder over marker measurements, image patches, or both; original to QP-CAT, unpublished</sub>
 - **[Get a phenotype suggestion in plain English](documentation/llm-explainer.md)** -- a proposed cell-type label per cluster, with a rationale citing the markers. <sub>Any chatbot by clipboard (no key needed), an MCP-capable AI agent (no key; local server, off by default), Anthropic Claude, or a local Ollama endpoint; prompt and response always logged. *[Experimental]; Ollama path never run*</sub>
 
-**Ask spatial questions**
+### Ask spatial questions
 
-- **[Test where cell types live in tissue](documentation/spatial-statistics.md)** -- do two phenotypes co-localise or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
+- **[Test where cell types live in tissue](documentation/spatial-statistics.md)** -- do two phenotypes co-localize or avoid each other, and at what range? <sub>Neighborhood enrichment, Ripley L, Geary's C, Moran's I, co-occurrence (squidpy); kNN / Radius / Delaunay graphs</sub>
 - **[Find cellular neighborhoods](documentation/spatial-neighborhoods.md#cellular-neighborhoods)** -- recurring tissue niches, from the cell-type composition around each cell. <sub>Windowed composition + clustering</sub>
 - **[Compare across slides and batches](documentation/clustering.md)** -- clusters that reflect biology, not slide-of-origin or staining day. <sub>Harmony, across a multi-image project</sub>
 
-**Look at results**
+### Look at results
 
 - **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
 - **[Gate cells on a 2D plot](documentation/clusters.md#gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
 - **[Publication-ready follow-up](documentation/results.md)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
 - **[Check that clusters hold up](documentation/results.md#validation-tab)** -- re-run with other seeds, or compare against classes the cells already carry. <sub>Adjusted Rand index, Pixie consistency, NMI, purity, Cohen's kappa; off by default</sub>
 
-**Get results out**
+### Get results out
 
 - **[Hand off to Python / R](documentation/exporting.md#anndata-for-python)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
 - **[Export every figure in one click](documentation/exporting.md#figure-export)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF (no vector formats); callable from Groovy</sub>
@@ -83,44 +83,59 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 ## Requirements
 
 - **QuPath** 0.7.0 or later
-- **Java** 21+
+- **Java**: nothing to install; QuPath includes its own Java runtime (building from source needs a JDK, see [Building from Source](#building-from-source))
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
 - **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/setup.md#cpu-or-gpu) for details on what does and doesn't benefit.
-- **LLM provider account or local Ollama** (optional) -- for the *Cluster Explainer (LLM) [Experimental]* feature. Nothing is required if you use the "Any chatbot" provider (copy the prompt, paste it into claude.ai / ChatGPT / Gemini / Copilot / your own model, paste the reply back), or if you let an MCP-capable AI agent you already use (Claude Code, Codex, Cursor, Gemini CLI) do the round trip through QP-CAT's local [MCP server](documentation/mcp-server.md), which is off until you start it and has so far connected only to Claude Code and a Python test client, on Linux. Alternatively, choose: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported in v1.
+- **LLM provider account or local Ollama** (optional) -- for the *Cluster Explainer (LLM) [Experimental]* feature. Nothing is required if you use the "Any chatbot" provider (copy the prompt, paste it into claude.ai / ChatGPT / Gemini / Copilot / your own model, paste the reply back), or if you let an MCP-capable AI agent you already use (Claude Code, Codex, Cursor, Gemini CLI) do the round trip through QP-CAT's local [MCP server](documentation/mcp-server.md), which is off until you start it and has so far connected only to Claude Code and a Python test client, on Linux. Alternatively, choose: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported.
 
 ---
 
 ## Installation
 
+### From the LOCI extension catalog (recommended)
+
+Installing from the catalog is the only route that tells you when an update is available.
+
+1. In QuPath, go to **Extensions > Manage extensions**
+2. Click **Manage extension catalogs**, then **Add**, and enter `https://github.com/uw-loci/qupath-catalog-mikenelson`
+3. Install **QP-CAT Cell Analysis Tools** from the list, then restart QuPath
+4. Go to **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** and click **Setup Environment**
+5. Wait for the Python environment to build (first time only, 5-15 minutes, mostly download; see [Setup](documentation/setup.md))
+
 ### From GitHub Releases
 
-1. Download the latest `.jar` from the [Releases](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/releases) page
+1. Download the latest `-all.jar` from the [Releases](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/releases) page
 2. Drag the JAR onto the QuPath window, or place it in your QuPath extensions directory
 3. Restart QuPath
-4. Go to **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** and click "Setup"
-5. Wait for the Python environment to build (first time only, ~5-10 minutes)
+4. Continue from step 4 above
+
+A jar installed this way does not get update notices.
 
 ### Building from Source
 
+QP-CAT depends on [cluster3d-core](https://github.com/uw-loci/cluster3d-core), which is not on a public Maven repository, so publish it to your local Maven repository first:
+
 ```bash
+git clone https://github.com/uw-loci/cluster3d-core.git
+(cd cluster3d-core && ./gradlew publishToMavenLocal)
 git clone https://github.com/uw-loci/qupath-extension-cell-analysis-tools.git
 cd qupath-extension-cell-analysis-tools
 ./gradlew build
 ```
 
-The built JAR will be in `build/libs/`. Copy it to your QuPath extensions directory.
+Copy `build/libs/qupath-extension-cell-analysis-tools-<version>-all.jar` to your QuPath extensions directory. To compile without running the tests, use `./gradlew compileJava`.
 
 ---
 
 ## Quick Start
 
-1. Open an image in QuPath with cell detections (run cell detection first if needed)
-2. **Extensions > QP-CAT > Find cell populations (clustering)...**
-3. Select measurements (defaults to "Mean" intensity channels)
+1. Open a project and an image with cell detections (run cell detection first if needed; no data yet? see [Sample data](#sample-data))
+2. **Extensions > QP-CAT > Find cell populations (clustering)...** The first time, QP-CAT asks you to back up the project before it changes any classifications; confirm to continue
+3. In **Measurements**, click **Select 'Mean' only**, or tick the measurements you want. Nothing is ticked the first time; later runs start with your last selection
 4. Choose algorithm (Leiden recommended) and click **Run Clustering**
-5. Results are applied directly to detections as classifications (Cluster 0, Cluster 1, ...)
-6. View interactive heatmaps, scatter plots, and marker rankings in the results dialog
+5. The cells take the classes **Cluster 0**, **Cluster 1**, ... in the viewer, and a results window opens on its **Heatmap** tab
+6. View interactive heatmaps, scatter plots, and marker rankings in the results window
 
 For even faster exploration, use **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**, which run with sensible defaults.
 
@@ -180,13 +195,13 @@ QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python 
 
 **When the checkbox is enabled in the Clustering dialog:**
 
-- Either multiple images are selected (Scope: "All project images"), OR independent areas are configured (Independent areas > Add level), AND
+- Two or more images are in scope (**All project images**, or **Specific images...** with two or more chosen), OR independent areas are configured (Independent areas > Add level), AND
 - The harmonypy package was successfully imported when the QP-CAT Python environment started.
 - A **"Batch key" dropdown** appears below the checkbox to choose the grouping level.
 
 **When the checkbox is grayed out:**
 
-- "All project images" is not selected -> single-image clustering does not need batch correction.
+- Fewer than two images are in scope and no independent areas are configured -> there is only one batch, so there is nothing to correct.
 - harmonypy failed to install in the Python environment -> the tooltip on the disabled checkbox links you here.
 
 **Platform support matrix:**
@@ -201,8 +216,8 @@ QP-CAT pins `harmonypy >= 0.2.0, < 2`. Version 2.0.0+ is a pybind11/CMake build 
 
 **If the checkbox is unexpectedly grayed out:**
 
-1. Open the QP-CAT Python log (Extensions > QP-CAT > Setup & help > System Info..., or check the QuPath log).
-2. Look for the line `harmonypy: <version>` -- if you instead see `harmonypy: NOT INSTALLED`, the env build skipped or failed for this package.
+1. Open QuPath's log (**View > Show log**) or **Extensions > QP-CAT > Setup & help > Python Console**. (**System Info...** does not list harmonypy.)
+2. Look for the startup line `harmonypy: <version>` -- if you instead see `harmonypy: NOT INSTALLED`, the env build skipped or failed for this package.
 3. **Use Extensions > QP-CAT > Setup & help > Rebuild analysis environment** to delete and re-create the pixi env from a clean slate. This re-resolves the harmonypy pin and should produce a working install.
 4. If rebuild still fails, file a bug report with the full QuPath log attached.
 
@@ -235,7 +250,7 @@ Click **Compute Thresholds** to calculate suggested gate values for each marker 
 
 Select a marker column header to view its histogram with an interactive draggable threshold line.
 
-Triangle and GMM fit only the values between a spike of identical values (for example, many cells at exactly 0) at either end of the range. A suggestion that calls more than 95% or fewer than 5% of cells positive is flagged under the histogram counts, and **Apply to All Markers** names the flagged markers. The threshold and gate boxes show up to four decimals. Details in [Phenotyping](documentation/phenotyping.md#auto-thresholding).
+Triangle and GMM fit only the values between a spike of identical values (for example, many cells at exactly 0) at either end of the range; an end value counts as a spike when at least 0.5% of cells sit exactly on it. A suggestion that marks more than 95% or fewer than 5% of cells positive is flagged under the histogram counts, and **Apply to All Markers** names the flagged markers. The threshold and gate boxes show up to four decimals. Details in [Phenotyping](documentation/phenotyping.md#auto-thresholding).
 
 ### Saving and Loading Rule Sets
 
@@ -248,7 +263,7 @@ Phenotype rules, gates, and marker selections can be saved to and loaded from th
 <details>
 <summary><h2>Spatial Analysis</h2></summary>
 
-When enabled in the clustering dialog, QP-CAT computes spatial statistics over cell centroid coordinates. v1 covers the catalog OpenIMC ships (Ripley L, Geary's C, neighborhood enrichment, co-occurrence) on top of squidpy, with one explicit graph constructor driving every analysis so the parameters are visible and the same neighborhood backs every result.
+When enabled in the clustering dialog, QP-CAT computes spatial statistics over cell centroid coordinates. It covers the catalog OpenIMC ships (Ripley L, Geary's C, neighborhood enrichment, co-occurrence) on top of squidpy. One graph constructor, set in the dialog, defines the neighbors for neighborhood enrichment, Moran's I and Geary's C; Ripley L and co-occurrence work from the cell coordinates and use no graph.
 
 ### Available statistics
 
@@ -258,25 +273,25 @@ When enabled in the clustering dialog, QP-CAT computes spatial statistics over c
 - **Moran's I autocorrelation** -- per-marker spatial autocorrelation
 - **Co-occurrence** (pairwise + one-vs-rest) -- how often cluster A is found within distance r of cluster B across a range of r. Pairwise gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison
 
-Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [Scripting](documentation/scripting.md) for the Groovy API.
+Results live in their own tabs in the clustering results dialog and are saved with the result, so **Results & populations > View Past Results...** re-draws the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [Scripting](documentation/scripting.md) for the Groovy API.
 
 ### Graph constructor (kNN / Radius / Delaunay)
 
-Spatial statistics need a definition of "neighbor". In v1 the clustering dialog exposes this explicitly:
+Spatial statistics need a definition of "neighbor". The clustering dialog exposes this explicitly:
 
 - **kNN** (default) -- each cell is connected to its k nearest neighbors by centroid distance. Default k = 15. Recommended starting point.
 - **Radius** -- each cell is connected to every neighbor within a fixed radius (in microns; pixels only if an image in the run has no pixel size). Use when the biology has a natural distance scale (e.g. immune synapse distance ~ 20 microns).
 - **Delaunay** -- a triangulation that connects each cell to its geometric neighbors; no k or radius. Optional max-edge pruning drops over-long edges (use for tissue with large gaps).
 
-The same graph backs **spatial feature smoothing** (the pre-clustering step) and **all post-clustering spatial stats** when you opt in via Preferences. The shared graph parameters are visible in the dialog and recorded in the audit log on every run.
+The same graph backs **spatial feature smoothing** (the pre-clustering step) and **all post-clustering spatial stats** when you turn on **Edit > Preferences > QP-CAT: Run Clustering > Spatial Smoothing: Use Squidpy Graph** (off by default). The shared graph parameters are visible in the dialog and recorded in the audit log on every run.
 
-**BANKSY is independent.** When BANKSY is selected as the clustering algorithm, it keeps its own internal pybanksy neighbor model (the `k_geom` spinner). BANKSY's graph is not surfaced as the kNN/Radius/Delaunay constructor in v1 because pybanksy does not expose a "bring your own graph" hook. This is by design and documented in the dialog.
+**BANKSY is independent.** When BANKSY is selected as the clustering algorithm, it keeps its own internal pybanksy neighbor model (the `k_geom` spinner). BANKSY's graph is not surfaced as the kNN/Radius/Delaunay constructor because pybanksy does not expose a "bring your own graph" hook. This is by design and documented in the dialog.
 
-QP-CAT's v1 statistic surface matches [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats catalog (Ripley + Geary + co-occurrence + neighborhood enrichment) while keeping the squidpy backend the extension already ships with -- no new dependencies.
+QP-CAT's statistic surface matches [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s spatial-stats catalog (Ripley + Geary + co-occurrence + neighborhood enrichment) while keeping the squidpy backend the extension already ships with -- no new dependencies.
 
 ### Permutation tests
 
-Ripley L, Geary's C, Moran's I and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
+Ripley L, Geary's C and Moran's I use permutations, and QP-CAT picks the number **adaptively** by default. Co-occurrence is a ratio with no permutation test; the count is recorded with it only as part of the run record.
 
 | Cell count | Permutations |
 |---|---|
@@ -284,7 +299,7 @@ Ripley L, Geary's C, Moran's I and co-occurrence support permutation-based signi
 | 50k - 500k | 100 |
 | > 500k | 50 |
 
-The chosen value shows next to the result and is recorded in the audit log. Override via the `qpcat.spatial.permutations` preference (set to a positive integer to force; leave at 0 for adaptive).
+The chosen value shows next to the result and is recorded in the audit log. Override it in **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations** (`qpcat.spatial.permutations`; a positive integer forces that count, 0 keeps it adaptive).
 
 Neighborhood enrichment is also a permutation test, but it always runs 1000 permutations, whatever the cell count or the preference, shuffling cluster labels within each image or area; the line above its table says so.
 
@@ -303,7 +318,7 @@ Parameters:
 
 **If BANKSY selection shows an error:**
 
-1. Open the QP-CAT Python log to see why pybanksy failed to import (Extensions > QP-CAT > Setup & help > System Info..., or check the QuPath log).
+1. Open QuPath's log (**View > Show log**) or **Extensions > QP-CAT > Setup & help > Python Console** to see why pybanksy failed to import. (**System Info...** does not list pybanksy.)
 2. Look for the line `pybanksy: <version>` or `pybanksy: NOT USABLE` in the startup messages.
 3. **Use Setup & help > Rebuild analysis environment** to delete and re-create the pixi env from a clean slate. This re-resolves all dependencies and should produce a working pybanksy install.
 4. If rebuild still fails, file a bug report with the full QuPath log attached.
@@ -342,11 +357,11 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 | Provider | Pros | Cons | Default model |
 |---|---|---|---|
 | **Any chatbot (copy prompt, paste reply)** | No key, no installation, works with any LLM (claude.ai, ChatGPT, Gemini, Copilot, Ollama, local model) | Multi-step workflow (copy → paste into chatbot → paste back) | — (user types chatbot name for the record) |
-| **MCP server (AI agents)** | No key; the agent does the whole round trip from one sentence you type; explanations saved into the result | Needs an MCP-capable agent (Claude Code, Codex, Cursor, Gemini CLI); a local server you start and stop, with a [security model](documentation/mcp-server.md#security) to read; only Claude Code and a Python test client, on Linux, have connected so far | — (the agent supplies its own label for the record) |
-| **Anthropic Claude** | Hosted; structured output via tool use | Costs money per call; key must be re-entered each session | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
+| **MCP server (AI agents)** (not in the Provider box; the agent starts it, see [MCP server](documentation/mcp-server.md)) | No key; the agent does the whole round trip from one sentence you type; explanations saved into the result | Needs an MCP-capable agent (Claude Code, Codex, Cursor, Gemini CLI); a local server you start and stop, with a [security model](documentation/mcp-server.md#security) to read; only Claude Code and a Python test client, on Linux, have connected so far | — (the agent supplies its own label for the record) |
+| **Anthropic (Claude API)** | Hosted; structured output via tool use | Costs money per call; key must be re-entered each session | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
-OpenAI is intentionally **not** supported in v1.
+OpenAI is intentionally **not** supported.
 
 ### How It Works
 
@@ -364,7 +379,7 @@ Per cluster: the cluster id and its top-N markers (default 10) by Wilcoxon score
 
 ### BYO Key Handling
 
-The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never serialized into `SavedClusteringResult`. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
+The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never written into the saved result. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
 
 See [LLM explainer documentation](documentation/llm-explainer.md) for the full workflow and [guidance on when to trust the output](documentation/llm-explainer.md#when-it-is-worth-using).
 
@@ -377,7 +392,7 @@ See [LLM explainer documentation](documentation/llm-explainer.md) for the full w
 
 **Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...** trains a variational autoencoder (VAE) with a semi-supervised classifier head on cell measurements. Tested and working.
 
-This is an **original QP-CAT implementation**, not a wrapper around a published Python library -- the VAE, the classifier head, the KL annealing schedule and the tile-mode masking were written for this extension -- and it is **unpublished and not peer reviewed**. The design draws on published methods ([REFERENCES.md](documentation/references.md#autoencoder-cell-classification)), but this combination has not been through review; validate it on your own data, and describe it as software rather than citing it as a method.
+This is an **original QP-CAT implementation**, not a wrapper around a published Python library -- the VAE, the classifier head, the KL annealing schedule and the tile-mode masking were written for this extension -- and it is **unpublished and not peer reviewed**. The design draws on published methods ([References](documentation/references.md#autoencoder-cell-classification)), but this combination has not been through review; validate it on your own data, and describe it as software rather than citing it as a method.
 
 ### How It Works
 
@@ -439,6 +454,8 @@ For additional discriminative power, morphology measurements such as Solidity, A
 | Tile images 32x32 | 10,000 cells | ~20-60 minutes | Significant |
 | Tile images 64x64 | 10,000 cells | ~1-3 hours | Required |
 
+These times are rough; the hardware and data they came from were not recorded.
+
 Tile mode is substantially slower than measurement mode because the convolutional network processes spatial pixel data. For large datasets or tile sizes above 32x32, GPU is strongly recommended.
 
 Inference (applying a trained model) is much faster than training -- typically seconds per image regardless of mode.
@@ -494,15 +511,15 @@ After clustering, QP-CAT can generate:
 | **Marker rankings** | Top differentially expressed markers per cluster (Wilcoxon rank-sum test) |
 | **Marker fingerprints** | At-a-glance cluster/channel explorer, 3 toggle views: per-cluster top markers (log2FC bars), per-cluster channels (Viewer-colored chips), and channels->clusters |
 | **PAGA graph** | Cluster connectivity/trajectory graph |
-| **Dotplot** | Percent of each cluster above 0 in the normalized units (dot size; not "fraction expressing" under z-score) and the mean with each marker scaled 0-1 (colour) |
-| **Stacked violin** | Expression distributions per cluster, coloured by the median in the run's normalized units |
+| **Dotplot** | Percent of each cluster above 0 in the normalized units (dot size; not "fraction expressing" under z-score) and the mean with each marker scaled 0-1 (color) |
+| **Stacked violin** | Expression distributions per cluster, colored by the median in the run's normalized units |
 | **Validation** | Optional: stability across seeds (adjusted Rand index, per-cluster consistency) and agreement with the classes the cells already carry (ARI, NMI, purity, kappa) |
 | **Neighborhood enrichment** | Table of `z (edges)` per cluster pair, with Copy text / Copy CSV / Save CSV...; heatmap on the **Neighborhood Enrichment (plot)** tab |
 | **Spatial scatter** | Cell positions colored by cluster (when spatial analysis enabled) |
 | **Per-area composition** | `<name>_areas_summary.csv` -- wide table, one row per area with columns: area name, area type (Image / TMA Core / Annotation-<class>), cell count, cluster count, then cluster fraction and count per column (when independent areas are configured). Written next to the saved result. |
 | **Per-area spatial statistics** | `<name>_areas_statistics.csv` -- long table, one row per area / statistic / key (when independent areas are configured). Same column shape as the post-hoc spatial stats CSV, so the two concatenate. |
 
-![The interactive UMAP 2D tab: one point per cell, coloured by cluster, seven separated groups of 11,421 cells, a legend with each cluster's cell count, and the Gate buttons underneath](documentation/images/umap-scatter.png)
+![The interactive UMAP 2D tab: one point per cell, colored by cluster, seven separated groups of 11,421 cells, a legend with each cluster's cell count, and the Gate buttons underneath](documentation/images/umap-scatter.png)
 
 ![Cells across a tissue section colored by their cluster assignment](documentation/images/cells-colored-by-cluster.png)
 
@@ -599,9 +616,10 @@ The console includes a **Save Log...** button to export its contents to a text f
 QP-CAT manages its own isolated Python environment via [Appose](https://github.com/apposed/appose) and [pixi](https://pixi.sh/). By default, the environment is stored at:
 
 ```
-~/.local/share/appose/qupath-qpcat/    (Linux/macOS)
-%LOCALAPPDATA%\appose\qupath-qpcat\    (Windows)
+~/.local/share/appose/qupath-qpcat/    (all platforms; on Windows, ~ is %USERPROFILE%)
 ```
+
+See [Where the environment goes](documentation/setup.md#where-the-environment-goes).
 
 **The location is configurable** via **Edit > Preferences > QP-CAT: Python environment > Environment location** (or by setting it before the first download in the setup dialog). This is useful when the home directory is quota-limited, such as on HPC or managed desktops -- point it to scratch or project storage instead. Two separate environments (CPU and GPU variants) can coexist at the same base directory.
 
@@ -628,7 +646,7 @@ If the environment becomes corrupted or you need to update packages:
 
 1. **Extensions > QP-CAT > Setup & help > Rebuild analysis environment**
 2. Confirm the rebuild (this deletes the existing environment)
-3. Click "Setup" in the dialog that appears
+3. Click **Setup Environment** in the dialog that appears
 
 </details>
 
@@ -647,12 +665,12 @@ All items are under **Extensions > QP-CAT**. Everything except **Setup & help** 
 | Explore & spatial > Quick clustering presets > Quick Leiden (auto) / Quick KMeans (k=10) / Quick HDBSCAN (auto) / Quick Delaunay (Leiden + Delaunay smoothing) / Quick Delaunay (custom)... | One-click clustering with defaults | Image + detections |
 | Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)... | Embedding without clustering | Image + detections |
 | Explore & spatial > Plot & gate cells (2D)... | Biaxial or embedding plot with lasso gating | Image + detections |
-| Explore & spatial > Find cellular neighborhoods (spatial niches)... | Recurring tissue niches from neighbourhood composition | Classified detections |
+| Explore & spatial > Find cellular neighborhoods (spatial niches)... | Recurring tissue niches from neighborhood composition | Classified detections |
 | Explore & spatial > Spatial statistics on existing clusters... | Post-hoc spatial statistics | Classified detections |
 | Results & populations > View Past Results... / Manage Saved Results... | Reopen or delete saved results | Project |
 | Results & populations > Modify cell populations (rename, merge, split, sub-cluster)... | Rename, merge, split and sub-cluster | A saved result |
 | Results & populations > Analyze current cell classifications... | Results window for classes the cells already carry | Classified detections |
-| Results & populations > Apply saved result to detections... / Apply cluster color palette... | Write a saved result back; set cluster colours | Project |
+| Results & populations > Apply saved result to detections... / Apply cluster color palette... | Write a saved result back; set cluster colors | Project |
 | Export > Export figures (batch)... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [Exporting](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
 | Export > Export cells for Python / scanpy (AnnData)... | Export data for external analysis tools | Image + detections |
 | Export > Export cell crops + feature table (TraitHorizon / CSV)... | Cell crops plus a per-cell feature table | Project + detections |
@@ -694,7 +712,7 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 
 ### Large datasets (hundreds of thousands to millions of cells)
 
-- **QP-CAT v0.9.8+ refuses doomed configurations before they start.** If you select
+- **QP-CAT refuses doomed configurations before they start.** If you select
   Agglomerative clustering with 1 million cells, or co-occurrence with 60 clusters,
   QP-CAT predicts whether it can finish on *your machine's actual RAM* and refuses
   runs that would crash or hang. The clustering dialog shows this as a red box with
@@ -708,7 +726,7 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
   CPU core, which is 6-8x faster. (umap-learn switches parallelism off whenever a
   fixed random seed is supplied, so *Reproducible* mode really does run on one
   core.) The mode used is recorded in the audit log.
-- **Cancel works from v0.9.7 on**, but only between phases -- a UMAP fit or Leiden
+- **Cancel works only between phases** -- a UMAP fit or Leiden
   partition already in progress has to finish first.
 - Use MiniBatch KMeans or Leiden rather than Agglomerative (O(n^2)) or HDBSCAN.
 - Enable permutation-based spatial statistics (Ripley, Geary, co-occurrence) only
@@ -724,7 +742,7 @@ for the reasoning and sources.
 
 ### Cluster Explainer (LLM) issues
 
-The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, malformed response, Ollama endpoint down, Ollama model not pulled, request cancelled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
+The LLM explainer can fail in a handful of well-defined ways: network unreachable, invalid API key, rate limit, malformed response, Ollama endpoint down, Ollama model not pulled, request canceled, or the **Run Explainer** button disabled because no provider is selected in the tab or the clustering result has no Wilcoxon marker rankings. Each error message includes a concrete next step.
 
 See the [LLM explainer troubleshooting section](documentation/llm-explainer.md#troubleshooting) for the full list with what-you-see / what-it-means / what-to-do for every case.
 
@@ -733,27 +751,9 @@ See the [LLM explainer troubleshooting section](documentation/llm-explainer.md#t
 ---
 
 <details>
-<summary><h2>Building from Source</h2></summary>
+<summary><h2>Key source files</h2></summary>
 
-```bash
-git clone https://github.com/uw-loci/qupath-extension-cell-analysis-tools.git
-cd qupath-extension-cell-analysis-tools
-./gradlew build
-```
-
-The extension JAR is output to `build/libs/`.
-
-To compile only (no tests):
-```bash
-./gradlew compileJava
-```
-
-</details>
-
----
-
-<details>
-<summary><h2>Project Structure</h2></summary>
+A partial map of the main classes and scripts; to build, see [Building from Source](#building-from-source).
 
 ```
 src/main/java/qupath/ext/qpcat/
@@ -806,7 +806,7 @@ src/main/resources/qupath/ext/qpcat/
 
 ## Acknowledgments
 
-Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI)](https://eliceirilab.org/) at the University of Wisconsin-Madison.
+Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI)](https://loci.wisc.edu/) at the University of Wisconsin-Madison.
 
 **Key dependencies:**
 - [QuPath](https://qupath.github.io/) -- Open-source bioimage analysis
@@ -821,6 +821,12 @@ Developed at the [Laboratory for Optical and Computational Instrumentation (LOCI
 ## Support
 
 For general support and feature requests, please post on the [image.sc forum](https://forum.image.sc/) with the `#qupath` tag and mention `@Mike_Nelson` to flag the topic for my attention.
+
+Found a bug? **Extensions > QP-CAT > Setup & help > Report a Bug...** files it with the log attached, or open an issue on [GitHub Issues](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues).
+
+## How to cite
+
+QP-CAT has no paper yet. Cite it by its repository URL and the version you ran (shown in **Extensions > Manage extensions**), and cite the methods you used from [References](documentation/references.md): for example Leiden, UMAP, squidpy or Harmony.
 
 ## License
 

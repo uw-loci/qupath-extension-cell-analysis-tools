@@ -1,6 +1,6 @@
 # QP-CAT documentation
 
-Find your task below. Each page covers one topic end to end -- how to do it, and
+Find your task below. Most pages cover one topic end to end -- how to do it, and
 which options to pick for which kind of data.
 
 ## By task
@@ -12,8 +12,8 @@ which options to pick for which kind of data.
 | Understand the results window -- heatmap, embedding, composition, markers, validation | [Results](results.md) |
 | Rename, merge, sub-cluster, or gate populations after a run | [Working with clusters](clusters.md) |
 | Label cells by marker rules instead of clustering | [Phenotyping](phenotyping.md) |
-| Measure spatial organisation -- Ripley, Geary, co-occurrence, Moran's I | [Spatial statistics](spatial-statistics.md) |
-| Find spatial niches, or see the neighbour graph in the viewer | [Neighborhoods and the spatial graph](spatial-neighborhoods.md) |
+| Measure spatial organization -- neighborhood enrichment, Ripley, Geary, co-occurrence, Moran's I | [Spatial statistics](spatial-statistics.md) |
+| Find spatial niches, or see the neighbor graph in the viewer | [Neighborhoods and the spatial graph](spatial-neighborhoods.md) |
 | Classify cells by appearance with the autoencoder | [Autoencoder](autoencoder.md) |
 | Save figures, tables, or AnnData | [Exporting](exporting.md) |
 | Run QP-CAT headlessly over a whole project | [Batch runs](batch.md), with the [YAML reference](yaml-reference.md) |
@@ -23,8 +23,9 @@ which options to pick for which kind of data.
 | Let an AI agent I already use name the clusters, with no key | [MCP server](mcp-server.md) |
 | Fix something that went wrong | [Troubleshooting](troubleshooting.md) |
 | Cluster *on* a UMAP instead of on the markers | [Recipes](recipes.md) |
-| See a worked example end to end | [Recipes](recipes.md) |
-| Cite the method behind an option | [References](references.md) |
+| Try QP-CAT on ground-truthed sample data | [Sample data](../README.md#sample-data) |
+| Cite QP-CAT, or the method behind an option | [How to cite](../README.md#how-to-cite), [References](references.md) |
+| Install or update the extension, or see what changed | [README](../README.md#installation), [CHANGELOG](../CHANGELOG.md) |
 
 ## The menu
 
@@ -62,12 +63,12 @@ Setup & help >
     Set up analysis environment (first run)...            Setup (hidden once set up)
     Python Console                                        Troubleshooting
     Clear cell connections...                             Neighborhoods
-    System Info...                                        Troubleshooting
+    System Info...                                        Troubleshooting (appears once set up)
     Rebuild analysis environment                          Troubleshooting
     Documentation (How-to guide)...                       opens this page
     Report a Bug...                                       Troubleshooting
     [ ] MCP server for AI agents (off)                    MCP server (off by default)
-    Show MCP server window (address and token)            MCP server (greyed until it is on)
+    Show MCP server window (address and token)            MCP server (grayed out until it is on)
 ```
 
 Menu paths are written in full throughout, e.g.
@@ -76,4 +77,7 @@ Menu paths are written in full throughout, e.g.
 ## Start here
 
 New to QP-CAT: [Setup](setup.md), then [Clustering](clustering.md), then
-[Results](results.md). That is the whole core loop.
+[Results](results.md). Those three pages take you from install to a clustered,
+checked result. No data yet? The
+[multiplex synthetic dataset](https://github.com/uw-loci/multiplex-synthetic-data)
+has 8 ground-truthed images; see [Sample data](../README.md#sample-data).
