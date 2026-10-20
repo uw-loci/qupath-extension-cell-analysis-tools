@@ -6,7 +6,7 @@ Warning: This is a continuation of my work integrating other people's software i
 
 QP-CAT embeds a full scientific Python environment (via [Appose](https://github.com/apposed/appose)) directly within QuPath -- no external servers, no conda environments to manage manually, no command-line tools. It provides unsupervised clustering, rule-based phenotyping, autoencoder-based cell classification, dimensionality reduction, spatial analysis, and interoperability export, all accessible through a GUI.
 
-![QP-CAT clustering: the Run Clustering dialog, a multiplexed tissue image, and the resulting UMAP scatter plot colored by cluster](documentation/images/clustering-overview.png)
+![QP-CAT clustering in three panels. Left, the Run Clustering dialog: the Measurements list with each marker name in bold and the mean measurements ticked, Z-score normalization, a 2D UMAP, and KMeans with 7 clusters. Middle, a synthetic multiplexed tissue image with every detected cell filled in its cluster's colour. Right, the results window's UMAP 2D tab: 11,421 cells in seven well-separated, colour-coded groups with a legend of cluster sizes](documentation/images/clustering-overview.png)
 
 **Repository:** [uw-loci/qupath-extension-cell-analysis-tools](https://github.com/uw-loci/qupath-extension-cell-analysis-tools)
 
@@ -19,7 +19,7 @@ One page per topic:
 |---|---|
 | [Setup](documentation/setup.md) | Installing the Python environment, its location, CPU vs GPU |
 | [Clustering](documentation/clustering.md) | Running a clustering, and which measurements, normalization and algorithm to choose |
-| [Results](documentation/results.md) | The results window: heatmap, embedding, composition, markers |
+| [Results](documentation/results.md) | The results window: heatmap, embedding, composition, markers, validation |
 | [Working with clusters](documentation/clusters.md) | Judging, renaming, merging, sub-clustering, gating |
 | [Phenotyping](documentation/phenotyping.md) | Labelling cells by marker rules |
 | [Spatial statistics](documentation/spatial-statistics.md) | Ripley, Geary, co-occurrence, Moran's I |
@@ -67,12 +67,13 @@ caveats.
 - **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
 - **[Gate cells on a 2D plot](documentation/clusters.md#gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
 - **[Publication-ready follow-up](documentation/results.md)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
+- **[Check that clusters hold up](documentation/results.md#validation-tab)** -- re-run with other seeds, or compare against classes the cells already carry. <sub>Adjusted Rand index, Pixie consistency, NMI, purity, Cohen's kappa; off by default</sub>
 
 **Get results out**
 
 - **[Hand off to Python / R](documentation/exporting.md#anndata-for-python)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
-- **[Export every figure in one click](documentation/exporting.md#figure-export)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF; SVG / PDF / EPS in v1.1; callable from Groovy</sub>
-- **[Run in batch from one YAML config](documentation/yaml-reference.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is identical to the dialog</sub>
+- **[Export every figure in one click](documentation/exporting.md#figure-export)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF (no vector formats); callable from Groovy</sub>
+- **[Run in batch from one YAML config](documentation/yaml-reference.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is the dialog's, except the optional Validation checks</sub>
 - **[Reproducible audit trail](documentation/reproducibility.md#the-audit-log)** -- every run's parameters, cell counts and results, in plain text. <sub>Per-project log, diff-friendly</sub>
 
 <sub>Batch export and YAML batch mode were inspired by
@@ -121,7 +122,7 @@ The built JAR will be in `build/libs/`. Copy it to your QuPath extensions direct
 5. Results are applied directly to detections as classifications (Cluster 0, Cluster 1, ...)
 6. View interactive heatmaps, scatter plots, and marker rankings in the results dialog
 
-For even faster exploration, use **Quick Cluster** submenu items which run with sensible defaults.
+For even faster exploration, use **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**, which run with sensible defaults.
 
 ### Sample data
 
@@ -148,7 +149,7 @@ The BINA / I2K 2026 workshop uses the earlier
 |-----------|------|:---:|-------|
 | **Leiden** | Graph-based | Yes | Recommended default. Resolution parameter controls granularity. |
 | **KMeans** | Centroid-based | No | Requires specifying number of clusters. |
-| **HDBSCAN** | Density-based | Yes | Also identifies noise/outlier cells. |
+| **HDBSCAN** | Density-based | Yes | Also identifies noise cells; they stay unclassified and are counted separately, e.g. "5 clusters (+606 noise)". |
 | **Agglomerative** | Hierarchical | No | Supports ward, complete, average, and single linkage. |
 | **MiniBatch KMeans** | Centroid-based | No | Scalable variant of KMeans for very large datasets. |
 | **GMM** | Probabilistic | No | Gaussian mixture model with soft cluster assignment. |
@@ -165,9 +166,9 @@ The BINA / I2K 2026 workshop uses the earlier
 
 ### Dimensionality Reduction
 
-UMAP, PCA, and t-SNE embeddings are computed alongside clustering and added as measurements (e.g., `UMAP1`, `UMAP2`) to each detection. These can be used for visualization in QuPath or downstream tools.
+UMAP, PCA, and t-SNE embeddings are computed alongside clustering and added as measurements (e.g., `QPCAT 2D UMAP1`, `QPCAT 2D UMAP2`) to each detection. These can be used for visualization in QuPath or downstream tools.
 
-The **Compute Embedding Only** dialog allows computing embeddings without clustering, preserving existing classifications.
+**Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...** computes an embedding without clustering, preserving existing classifications.
 
 ### Multi-Image Project Clustering
 
@@ -234,6 +235,8 @@ Click **Compute Thresholds** to calculate suggested gate values for each marker 
 
 Select a marker column header to view its histogram with an interactive draggable threshold line.
 
+Triangle and GMM fit only the values between a spike of identical values (for example, many cells at exactly 0) at either end of the range. A suggestion that calls more than 95% or fewer than 5% of cells positive is flagged under the histogram counts, and **Apply to All Markers** names the flagged markers. The threshold and gate boxes show up to four decimals. Details in [Phenotyping](documentation/phenotyping.md#auto-thresholding).
+
 ### Saving and Loading Rule Sets
 
 Phenotype rules, gates, and marker selections can be saved to and loaded from the QuPath project directory (`<project>/qpcat/phenotype_rules/`). This allows reuse across sessions and sharing between team members.
@@ -249,13 +252,13 @@ When enabled in the clustering dialog, QP-CAT computes spatial statistics over c
 
 ### Available statistics
 
-- **Neighborhood enrichment** -- Z-score matrix showing which clusters tend to co-localize (or avoid each other) in tissue space
-- **Ripley's L** -- cumulative distance distribution of a cluster around itself, tested against a Poisson null. Under complete spatial randomness `L(r) = r`, so the null is the diagonal: curves above it mean clustering at that radius, below means dispersion
+- **Neighborhood enrichment** -- a z-score per cluster pair showing which clusters tend to co-localize (or avoid each other) in tissue space, shown with the number of graph edges behind it, e.g. `7.3 (6061)`. With several images or areas, labels are shuffled within each one, so composition differences between images do not read as neighborhood structure. The heatmap is on the **Neighborhood Enrichment (plot)** tab
+- **Ripley's L** -- cumulative distance distribution of a cluster around itself, read against a band simulated from complete spatial randomness for that cluster's cell count. The chart plots each curve relative to its simulated median, so randomness is the line at zero: above it means clustering at that radius, below means dispersion
 - **Geary's C** -- per-marker spatial autocorrelation. Sensitive to short-range / local patterns; complements Moran's I which weights long-range structure more heavily
-- **Moran's I autocorrelation** -- per-marker spatial autocorrelation (already in QP-CAT v0)
+- **Moran's I autocorrelation** -- per-marker spatial autocorrelation
 - **Co-occurrence** (pairwise + one-vs-rest) -- how often cluster A is found within distance r of cluster B across a range of r. Pairwise gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison
 
-Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [SCRIPTING.md](documentation/scripting.md) for the Groovy API.
+Results live in their own tabs in the clustering results dialog and are persisted to `SavedClusteringResult` so reopening past results re-renders the same charts and tables. Programmatic access via the `qupath.ext.qpcat.scripting` package -- see [Scripting](documentation/scripting.md) for the Groovy API.
 
 ### Graph constructor (kNN / Radius / Delaunay)
 
@@ -273,7 +276,7 @@ QP-CAT's v1 statistic surface matches [OpenIMC](https://github.com/dean-tessone/
 
 ### Permutation tests
 
-Ripley L, Geary's C, and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
+Ripley L, Geary's C, Moran's I and co-occurrence support permutation-based significance testing. QP-CAT picks the number of permutations **adaptively** by default:
 
 | Cell count | Permutations |
 |---|---|
@@ -282,6 +285,8 @@ Ripley L, Geary's C, and co-occurrence support permutation-based significance te
 | > 500k | 50 |
 
 The chosen value shows next to the result and is recorded in the audit log. Override via the `qpcat.spatial.permutations` preference (set to a positive integer to force; leave at 0 for adaptive).
+
+Neighborhood enrichment is also a permutation test, but it always runs 1000 permutations, whatever the cell count or the preference, shuffling cluster labels within each image or area; the line above its table says so.
 
 ### BANKSY Spatial Clustering
 
@@ -404,7 +409,7 @@ Follows the scANVI pattern (Xu et al. 2021) adapted for continuous protein measu
 - `AE_0` through `AE_N` measurements: latent features per cell
 - `AE_confidence`: classifier confidence score
 - PathClass labels: predicted cell type
-- Trained model can be applied to other images via "Apply to All Project Images"
+- Trained model can be applied to other images via "Apply to Checked Images"
 
 ### Input Modes
 
@@ -466,7 +471,6 @@ VAE best practices and training infrastructure:
 
 ### Current Limitations (Test Feature)
 
-- No data augmentation for tile mode yet (spatial transforms planned)
 - Fixed encoder architecture (3-layer conv or 2-layer MLP); no architecture tuning
 - Training loss displayed in log only, no live chart
 - Tile mode with many channels (40+) and large tiles (64x64) can exhaust GPU memory
@@ -490,13 +494,15 @@ After clustering, QP-CAT can generate:
 | **Marker rankings** | Top differentially expressed markers per cluster (Wilcoxon rank-sum test) |
 | **Marker fingerprints** | At-a-glance cluster/channel explorer, 3 toggle views: per-cluster top markers (log2FC bars), per-cluster channels (Viewer-colored chips), and channels->clusters |
 | **PAGA graph** | Cluster connectivity/trajectory graph |
-| **Dotplot** | Fraction expressing + mean expression per cluster per marker |
-| **Stacked violin** | Expression distributions per cluster |
+| **Dotplot** | Percent of each cluster above 0 in the normalized units (dot size; not "fraction expressing" under z-score) and the mean with each marker scaled 0-1 (colour) |
+| **Stacked violin** | Expression distributions per cluster, coloured by the median in the run's normalized units |
+| **Validation** | Optional: stability across seeds (adjusted Rand index, per-cluster consistency) and agreement with the classes the cells already carry (ARI, NMI, purity, kappa) |
+| **Neighborhood enrichment** | Table of `z (edges)` per cluster pair, with Copy text / Copy CSV / Save CSV...; heatmap on the **Neighborhood Enrichment (plot)** tab |
 | **Spatial scatter** | Cell positions colored by cluster (when spatial analysis enabled) |
 | **Per-area composition** | `<name>_areas_summary.csv` -- wide table, one row per area with columns: area name, area type (Image / TMA Core / Annotation-<class>), cell count, cluster count, then cluster fraction and count per column (when independent areas are configured). Written next to the saved result. |
 | **Per-area spatial statistics** | `<name>_areas_statistics.csv` -- long table, one row per area / statistic / key (when independent areas are configured). Same column shape as the post-hoc spatial stats CSV, so the two concatenate. |
 
-![Interactive UMAP scatter plot, one point per cell colored by cluster assignment](documentation/images/umap-scatter.png)
+![The interactive UMAP 2D tab: one point per cell, coloured by cluster, seven separated groups of 11,421 cells, a legend with each cluster's cell count, and the Gate buttons underneath](documentation/images/umap-scatter.png)
 
 ![Cells across a tissue section colored by their cluster assignment](documentation/images/cells-colored-by-cluster.png)
 
@@ -542,7 +548,8 @@ reflected immediately in QuPath's viewer. Each edit is **non-destructive**: it w
 saved result, records which result it came from, and leaves the original alone -- so an
 iterative session leaves a chain of versions you can step through in either direction. Your
 names then appear throughout the Results window (heatmap, embedding legend, composition table
-and pies, fingerprints, gallery) and in exported figures and CSVs.
+and pies, fingerprints, gallery) and in exported figures and CSVs. Closing the dialog with
+names you typed but have not applied asks first, and says how many would be lost.
 
 See [Iterating, and stepping backwards](documentation/clusters.md#iterating-and-stepping-backwards).
 
@@ -630,24 +637,33 @@ If the environment becomes corrupted or you need to update packages:
 <details>
 <summary><h2>Menu Reference</h2></summary>
 
-All items are under **Extensions > QP-CAT**:
+All items are under **Extensions > QP-CAT**. Everything except **Setup & help** appears once the analysis environment is set up.
 
 | Menu Item | Description | Requirements |
 |-----------|-------------|--------------|
-| Setup Clustering Environment | One-time Python environment installation | Internet connection |
-| Run Clustering... | Full clustering dialog with all options | Image + detections |
-| Compute Embedding Only... | UMAP/PCA/t-SNE without clustering | Image + detections |
-| Autoencoder Classifier... | Train VAE classifier, apply across project | Image + detections + labels |
-| Run Phenotyping... | Rule-based cell type classification | Image + detections + project |
-| Quick Cluster > Quick Leiden | One-click Leiden clustering with defaults | Image + detections |
-| Quick Cluster > Quick KMeans | One-click KMeans (k=10) | Image + detections |
-| Quick Cluster > Quick HDBSCAN | One-click HDBSCAN with defaults | Image + detections |
-| Manage Clusters... | Rename and merge cluster classifications | Image |
-| Export AnnData (.h5ad)... | Export data for external analysis tools | Image + detections |
-| Export Figures... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [HOW_TO_GUIDE chapter 18](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
+| Find cell populations (clustering)... | Full clustering dialog with all options | Image + detections |
+| Classify cells > Label cells by marker rules (phenotyping)... | Rule-based cell type classification | Image + detections |
+| Classify cells > Classify cells by appearance (deep learning)... | Train a VAE classifier, apply across the project | Project + detections + labels |
+| Explore & spatial > Quick clustering presets > Quick Leiden (auto) / Quick KMeans (k=10) / Quick HDBSCAN (auto) / Quick Delaunay (Leiden + Delaunay smoothing) / Quick Delaunay (custom)... | One-click clustering with defaults | Image + detections |
+| Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)... | Embedding without clustering | Image + detections |
+| Explore & spatial > Plot & gate cells (2D)... | Biaxial or embedding plot with lasso gating | Image + detections |
+| Explore & spatial > Find cellular neighborhoods (spatial niches)... | Recurring tissue niches from neighbourhood composition | Classified detections |
+| Explore & spatial > Spatial statistics on existing clusters... | Post-hoc spatial statistics | Classified detections |
+| Results & populations > View Past Results... / Manage Saved Results... | Reopen or delete saved results | Project |
+| Results & populations > Modify cell populations (rename, merge, split, sub-cluster)... | Rename, merge, split and sub-cluster | A saved result |
+| Results & populations > Analyze current cell classifications... | Results window for classes the cells already carry | Classified detections |
+| Results & populations > Apply saved result to detections... / Apply cluster color palette... | Write a saved result back; set cluster colours | Project |
+| Export > Export figures (batch)... | Multi-Figure Batch Export: pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [Exporting](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
+| Export > Export cells for Python / scanpy (AnnData)... | Export data for external analysis tools | Image + detections |
+| Export > Export cell crops + feature table (TraitHorizon / CSV)... | Cell crops plus a per-cell feature table | Project + detections |
+| Export > Export clustered cells for VEST (3D viewer)... / Stop VEST viewer | Standalone 3D viewer | Clustered detections |
+| Setup & help > Set up analysis environment (first run)... | One-time Python environment installation | Internet connection |
 | Setup & help > Python Console | View Python debug output | None |
+| Setup & help > Clear cell connections... | Remove a spatial graph overlay | Image |
 | Setup & help > System Info... | Show version and environment details | Environment ready |
 | Setup & help > Rebuild analysis environment | Delete and re-download Python environment | None |
+| Setup & help > Documentation (How-to guide)... / Report a Bug... | Open the docs; send a bug report | None |
+| Setup & help > MCP server for AI agents / Show MCP server window (address and token) | Local MCP server for AI agents (experimental) | Project |
 
 </details>
 
@@ -660,7 +676,7 @@ All items are under **Extensions > QP-CAT**:
 
 - Check your internet connection -- the initial download is ~1.5-2.5 GB
 - Check available disk space (~2.5 GB required)
-- Try **Rebuild Environment** to start fresh
+- Try **Setup & help > Rebuild analysis environment** to start fresh
 - Check the Python Console for detailed error messages
 
 ### "No detections found"
@@ -683,7 +699,7 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
   QP-CAT predicts whether it can finish on *your machine's actual RAM* and refuses
   runs that would crash or hang. The clustering dialog shows this as a red box with
   the reason and an alternative; YAML batch runs fail the image with a clear error
-  message. See [TROUBLESHOOTING_YAML_BATCH.md](documentation/batch.md#when-it-fails)
+  message. See [Batch: when it fails](documentation/batch.md#when-it-fails)
   for the list of guarded analyses and remedies.
 
 - **A run that seems stuck is usually the embedding.** UMAP dominates wall time at
@@ -703,7 +719,7 @@ QP-CAT operates on detection objects (cells). Run cell detection first:
 - Above 150,000 cells the embedding scatter plot draws a cluster-stratified
   subsample, stated in the plot title. Clustering still uses every cell.
 
-See [BEST_PRACTICES: Large datasets](documentation/clustering.md)
+See [Clustering](documentation/clustering.md)
 for the reasoning and sources.
 
 ### Cluster Explainer (LLM) issues

@@ -21,7 +21,9 @@ column labels, the dotplot, matrix plot, stacked violin and Geary's C figures, t
 Fingerprints cards, the measurement lists in the dialogs, the phenotyping column headers --
 the marker part of the name is bold and the compartment and statistic are not:
 "Nucleus: **CD3** std dev", "Cell: **PCNA**: Mean", "**CD3**: Nucleus: Mean". With no
-statistic, everything after the compartment is bold ("Cell: **Area**"). The monospaced text
+statistic, everything after the compartment is bold ("Cell: **Area**"). The heatmap's column
+labels and the phenotyping column headers drop the colons to save width ("Nucleus **CD3** mean").
+The monospaced text
 tables (Marker Rankings, Spatial Autocorrelation, Geary's C) and every CSV stay plain text, so
 what you copy out of them is the name itself.
 
@@ -61,6 +63,8 @@ Matrix Plot for figures, Heatmap for exploration, Dotplot when a marker is high 
 cells rather than low in many -- a distinction the other two cannot show, because they
 collapse to per-cluster means.
 
+![The Heatmap tab for a seven-cluster KMeans run on the eight-image synthetic dataset. Rows are Cluster 0 to Cluster 6, columns are the 24 "mean" measurements (Nucleus, Cell and Cytoplasm compartments of DAPI, PanCK, Ki67, aSMA, CD3, CD8, CD20 and CD68), with each marker name in bold. Each cluster has a few saturated red columns, for example Cluster 4 in the three CD20 columns and Cluster 6 in PanCK and Ki67. Above the map are the Scale, Colours, Zoom and Rows/columns controls; the colour bar underneath runs from "- per marker" through 0 to "+ per marker" and is titled "cluster mean (z-score)"](images/cluster-marker-heatmap.png)
+
 In the Heatmap, red is high relative expression and blue is low, per marker across
 clusters. This is the tab that tells you which markers define each cluster, and the one
 to work from when annotating cell types. Hover over a square for the mean value and the number
@@ -99,6 +103,8 @@ highest mean for that marker and pale the lowest; colours are **not** comparable
 columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
 The colour scale is titled "Mean in cluster (each marker scaled 0-1)" to say so; scanpy's own
 title, "Mean expression in group", did not.
+
+![A dotplot from the same seven-cluster run under z-score normalization. Rows are clusters 2, 5, 1, 6, 0, 3 and 4 in dendrogram order, columns the 24 mean measurements with the marker in bold. Large yellow dots pick out each cluster's markers (cluster 2 in CD3 and CD8, cluster 4 in CD20, cluster 6 in PanCK and Ki67). The size legend is titled "% of cluster above 0 (see note below)", the colour bar "Mean in cluster (each marker scaled 0-1)", and the caption under the plot reads "dot size = fraction of the cluster's cells above each marker's MEAN OVER ALL CELLS IN THIS RUN (z-score > 0); not the fraction expressing"](images/dotplot.png)
 
 **The figure is skipped when the size carries nothing.** On measurements with no zero
 floor, Min-Max puts every cell except one per marker above the cutoff, so every dot is
@@ -148,6 +154,8 @@ The marker part of each label is bold, as in every figure (see the top of this p
 labels are angled at 45 degrees, each cluster row is twice scanpy's default height, and the colour scale
 sits under the dendrogram rather than in a column of its own.
 
+![A stacked violin from the same seven-cluster run. One row per cluster, one violin per measurement, filled by the cluster's median on a white-to-dark-blue scale titled "Median in cluster (z-score)". Most violins are thin lines with a flat base; the DAPI violins are full ovals, and the defining markers stand out as wide dark violins, such as cluster 6 in Ki67 and cluster 4 in CD20. Labels are angled at 45 degrees with the marker in bold, and a dendrogram on the right groups the clusters](images/stacked-violin.png)
+
 <a name="heatmap-colours"></a>
 ### Choosing the colour map
 
@@ -187,9 +195,13 @@ the colour is taken over what is shown, so colours do change when you filter. Th
 <a name="embedding-plot-tab"></a>
 ## Embedding
 
-Interactive 2D scatter of every cell, coloured by cluster. Scroll to zoom, middle-drag to
-pan, hover for details. The plot fills the window and redraws as you resize. A scrollable
+Interactive 2D scatter of every cell, coloured by cluster, in a tab named after the embedding
+(**UMAP 2D**, for example). Scroll to zoom, middle-drag to
+pan, hover for details. The plot fills the window and redraws as you resize, and cells and
+gate outlines are clipped to the plot frame when you zoom or pan. A scrollable
 legend lists each cluster with its live colour and cell count.
+
+![The UMAP 2D tab for the seven-cluster run: the guide text at the top, the title "UMAP 2D scatter (11421 cells)" with "7 clusters" under it, seven well-separated groups of points, and a legend on the right listing Cluster 0 to Cluster 6 with their cell counts (3299, 1934, 1385, 1553, 1089, 1371, 790). Below the plot are the Gate, Clear, Clear all, Select in open image and Assign class buttons and Save gates / Load gates](images/umap-scatter.png)
 
 **Click a point** to ring it, load a crop preview, open that cell's image (switching
 images if needed), centre the viewer on it and select it in the hierarchy. That closes
@@ -227,6 +239,11 @@ numbers that you should read before the numbers.
 An HDBSCAN result with noise has a **Noise (unclustered)** column and slice holding those
 cells, so each row still adds up to every cell in the group; the heading counts clusters
 without it ("5 clusters (+606 noise)").
+
+The pies use the cluster colours, the same ones as the legend above them, the embedding and
+the viewer.
+
+![The Composition by image tab for the seven-cluster run. The heading reads "11421 cells across 8 images, 7 clusters", followed by a colour legend for Cluster 0 to Cluster 6, the Counts / Row % toggle, Copy table (TSV) and Export figure + table buttons, a table of per-image counts (tme_00.tif: 403, 296, 189, 216, 106, 200, 120, total 1530) and one pie per image in the same colours as the legend. Every pie holds every cluster in similar proportions, which is what clusters that are not a batch effect look like](images/composition-by-image.png)
 
 <a name="composition-by-image-tab"></a>
 <a name="composition-by-image"></a>
@@ -443,9 +460,11 @@ those two cases.
 <a name="validation-tab"></a>
 ## Validation -- stability across seeds and agreement with known classes
 
-Two checks you ask for before the run, under **Validation** in the Clustering dialog's
-Analysis section. Both are off by default. The tab appears only when at least one was
+Two checks you ask for before the run, in the **Validation** section of the Clustering dialog
+(collapsed by default, under the analysis tick-boxes). Both are off by default. The tab appears only when at least one was
 computed, and both are saved with the result, so the tab comes back when you reopen it.
+
+![The Validation tab for a KMeans run with k = 7 on the eight-image synthetic dataset, with both checks on. Under "Stability across seeds": "6 runs: seed 42 plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000", and a table of the seven clusters with their cells, a consistency of 1.00 and 100.0% kept together for each. Under "Agreement with known classes": "11,419 cells compared, 2 unclassified excluded. Adjusted Rand index 0.982, normalized mutual information 0.971", Cohen's kappa 0.989 after matching and purity 99.1%, followed by a cluster x class table in which each cluster is matched to one true cell type, for example Cluster 0 to fibroblast with 3294 cells](images/validation-tab.png)
 
 <a name="stability-across-seeds"></a>
 ### Stability across seeds
@@ -809,10 +828,8 @@ spatially structured", not as marker expression.
 ### Neighborhood Enrichment
 
 A cluster-by-cluster **permutation z-score**: how often two clusters are graph neighbours,
-against a null built by shuffling the cluster labels. Brighter (toward yellow) is more often
-than chance, darker (toward purple) is less, and the diagonal is a cluster's tendency to
-neighbour itself. The colour scale runs from the matrix's own minimum to its maximum rather
-than being centred on zero, so read the colour bar to find where zero falls.
+against a null built by shuffling the cluster labels. z > 0 means more often than chance,
+z < 0 less, and the diagonal is a cluster's tendency to neighbour itself.
 
 This is the field's standard interaction matrix (squidpy's `nhood_enrichment`; imcRtools'
 `testInteractions` after Schapiro 2017), and it is the tab to read pairwise associations
@@ -828,11 +845,15 @@ many graph edges from a row-cluster cell to a column-cluster neighbor the z rest
 large z from a handful of edges is weak evidence, so read the two together. The matrix is not
 symmetric, because a k-nearest-neighbor graph is not: B can be among A's nearest neighbors
 without A being among B's. **Neighborhood Enrichment (plot)** is squidpy's heatmap of the z
-column alone.
+values alone: brighter (toward yellow) is more often than chance, darker (toward purple) is
+less. Its colour scale runs from the matrix's own minimum to its maximum rather than being
+centred on zero, so read the colour bar to find where zero falls.
+
+![The Neighborhood Enrichment tab for the seven-cluster run. The guide text explains the table; the table's header reads "z-score (edges)" and "1000 permutations; cluster labels shuffled within each of 8 areas". Rows and columns are Cluster 0 to Cluster 6; for example Cluster 4 next to itself reads 147.6 (9500) and Cluster 1 next to Cluster 6 reads 72.6 (5187). Copy text, Copy CSV and Save CSV buttons sit under the table](images/neighborhood-enrichment-table.png)
 
 **The line above the table says how the labels were shuffled.** When the run covered several
 images (or cores, or sections), labels are shuffled within each one, matching the neighbor
-graph, which never joins two of them. Before 0.23.0 they were shuffled across every cell in
+graph, which never joins two of them. Earlier versions shuffled them across every cell in
 the run, so a difference in composition between images (one image with no B cells, say)
 counted as neighborhood structure. On the 8-image synthetic TME dataset (11,416 cells
 labelled by their ground-truth type, kNN graph, k = 15) the change moved z by 3.0 on average
@@ -842,8 +863,9 @@ largest change in meaning was fibroblast-to-helper-T, from 0.3 (no association) 
 An entry reads **n/a** when the null has no spread: every shuffle gives the same count, as
 happens when an image holds a single cluster.
 
-**Save CSV...** under the table writes one row per ordered pair with `z_score`, `edges` and
-the shuffling line (`qpcat_neighborhood_enrichment.csv`).
+**Save CSV...** under the table writes one row per ordered pair, with the columns
+`center_cluster`, `neighbor_cluster`, `z_score`, `edges` and `permutation_null` (the shuffling
+line), to `qpcat_neighborhood_enrichment.csv`.
 
 <a name="spatial-scatter-tab"></a>
 ### Spatial Scatter
@@ -912,8 +934,11 @@ rewritten -- it costs a Python round-trip each time, which is why it is off by d
 <a name="3d-view-tab"></a>
 ## 3D view
 
-Present when the result carries a 3D embedding. It reads the clustered images' detections
-and their embedding measurements directly. Loading starts automatically about 5 seconds
+Every result gets this tab. Like the others it has a guide line and a **Documentation** link at
+the top. It reads the clustered images' detections and their measurements directly, and opens
+on the run's 3D embedding when the run computed one (Dimensions **3D** in the Dimensionality
+Reduction section). With only a 2D embedding, or none, it says "no embedding detected -- pick 3
+axes" and starts on three ordinary measurements; choose the axes with **Change axes...**. Loading starts automatically about 5 seconds
 after the results window opens; this avoids dead time waiting for a click.
 
 **As with the 2D embedding**, clusters are computed in your measurements (or their

@@ -9,7 +9,7 @@ which options to pick for which kind of data.
 |---|---|
 | Install the Python environment, or move it off a quota-limited home directory | [Setup](setup.md) |
 | Find cell populations by clustering, and choose an algorithm | [Clustering](clustering.md) |
-| Understand the results window -- heatmap, embedding, composition, markers | [Results](results.md) |
+| Understand the results window -- heatmap, embedding, composition, markers, validation | [Results](results.md) |
 | Rename, merge, sub-cluster, or gate populations after a run | [Working with clusters](clusters.md) |
 | Label cells by marker rules instead of clustering | [Phenotyping](phenotyping.md) |
 | Measure spatial organisation -- Ripley, Geary, co-occurrence, Moran's I | [Spatial statistics](spatial-statistics.md) |
@@ -47,13 +47,15 @@ Explore & spatial >
 Results & populations >
     View Past Results...                                  Results
     Manage Saved Results...                               Results
-    Modify cell populations (rename, merge, split, sub-cluster)...                   Working with clusters
+    Modify cell populations (rename, merge, split, sub-cluster)...   Working with clusters
+    Analyze current cell classifications...               Working with clusters
     Apply saved result to detections...                   Working with clusters
     Apply cluster color palette...                        Results
 Export >
     Export figures (batch)...                             Exporting
     Export cells for Python / scanpy (AnnData)...         Exporting
-    Export clustered cells for VEST (3D viewer)...        Results
+    Export cell crops + feature table (TraitHorizon / CSV)...   Exporting
+    Export clustered cells for VEST (3D viewer)...        Exporting
     Stop VEST viewer
 --------
 Setup & help >
