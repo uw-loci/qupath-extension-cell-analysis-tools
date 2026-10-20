@@ -49,7 +49,7 @@ import java.util.function.Consumer;
  * Dialog for cellular-neighborhood (CN) analysis. Groups cells by the cell-type
  * composition of their local spatial window, on top of an existing categorical
  * column (cluster or phenotype labels). See
- * {@link CellularNeighborhoodWorkflow} and REFERENCES.md.
+ * {@link CellularNeighborhoodWorkflow} and references.md.
  *
  * <p>The categorical column is read from the detections' current classifications,
  * so the user runs clustering or phenotyping first. The dialog reports how many

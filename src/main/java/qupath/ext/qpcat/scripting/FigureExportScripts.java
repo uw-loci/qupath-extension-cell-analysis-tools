@@ -29,7 +29,7 @@ import java.util.Set;
  * <p><strong>Stability promise (v1).</strong> Package path
  * ({@code qupath.ext.qpcat.scripting}), class name
  * ({@code FigureExportScripts}), method name ({@code exportFigures}),
- * and the recognised option-key set listed in the SCRIPTING.md docs are
+ * and the recognised option-key set listed in documentation/scripting.md are
  * part of QP-CAT's public scripting API. Breaking changes go through a
  * deprecation period of at least one minor version.</p>
  *

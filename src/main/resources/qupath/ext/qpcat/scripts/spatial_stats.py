@@ -2737,7 +2737,7 @@ def build_smoothing_adjacency_squidpy(
 
     The legacy path (run_clustering.py inline) uses (A + I) row-normalised
     on a sklearn kNN graph. Numerical equivalence between the two paths
-    is checked at the workstation (see SCRIPTING.md).
+    is checked at the workstation (see documentation/scripting.md).
     """
     import anndata as ad
     import scipy.sparse as sp

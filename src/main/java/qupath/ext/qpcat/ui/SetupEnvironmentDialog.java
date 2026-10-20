@@ -102,7 +102,7 @@ public class SetupEnvironmentDialog {
                 + "everyone: only the autoencoder uses a GPU at all, so clustering,\n"
                 + "UMAP and spatial statistics are exactly as fast either way.\n\n"
                 + "GPU requires an NVIDIA GPU -- the environment CANNOT be installed\n"
-                + "without one. See documentation/GPU_ACCELERATION.md."));
+                + "without one. See documentation/setup.md, \"CPU or GPU\"."));
         variantCombo.valueProperty().addListener((obs, o, n) -> {
             if (n != null) {
                 QpcatPreferences.setEnvVariant(n.name());

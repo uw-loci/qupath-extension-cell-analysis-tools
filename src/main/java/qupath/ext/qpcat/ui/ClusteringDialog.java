@@ -586,7 +586,7 @@ public class ClusteringDialog {
                 + "  t-SNE - preserves local neighborhoods (van der Maaten & Hinton 2008)\n"
                 + "  PCA - linear projection onto top 2 principal components\n"
                 + "  None - skip embedding computation\n"
-                + "See documentation/REFERENCES.md for full citations."));
+                + "See documentation/references.md for full citations."));
 
         umapNeighborsSpinner = new Spinner<>(2, 200, 15);
         umapNeighborsSpinner.setEditable(true);
@@ -1252,7 +1252,7 @@ public class ClusteringDialog {
                 + "  GMM - Gaussian mixture, elliptical clusters; reports its posterior\n"
                 + "  BANKSY - spatially-aware (Singhal et al. 2024, Nature Genetics)\n"
                 + "  None - embedding only, no clustering\n"
-                + "See documentation/REFERENCES.md for full citations."));
+                + "See documentation/references.md for full citations."));
 
         algorithmParamsBox = new VBox(5);
 
@@ -1465,7 +1465,7 @@ public class ClusteringDialog {
     }
 
     /** Append a per-method info box (code-accurate caution + a "Learn more"
-     *  link into BEST_PRACTICES.md) to the algorithm parameter box. */
+     *  link into clustering.md) to the algorithm parameter box. */
     /**
      * "Choose k..." -- sweep k and show the elbow, silhouette and gap curves.
      *
@@ -1622,7 +1622,7 @@ public class ClusteringDialog {
                 + "  Neighborhood enrichment - which clusters co-localize?\n"
                 + "  Moran's I - spatial autocorrelation per marker.\n"
                 + "Powered by squidpy (Palla et al. 2022, Nature Methods).\n"
-                + "See documentation/REFERENCES.md for citations."));
+                + "See documentation/references.md for citations."));
 
         spatialSmoothingCheck = new CheckBox(
                 "Spatial feature smoothing (slower; not comparable to runs without it)");
@@ -2192,7 +2192,7 @@ public class ClusteringDialog {
                 + "each other through edges), write QPCAT component: size and "
                 + "QPCAT component: mean: <X> for each existing measurement. "
                 + "NOTE: graph components are NOT the same as QP-CAT's Leiden "
-                + "clusters; see the BEST_PRACTICES guide. Default: off."));
+                + "clusters; see documentation/spatial-neighborhoods.md. Default: off."));
         writeComponentMeasurementsCheck.setAccessibleText(
                 "Write connected-component measurements to the measurement table");
 
@@ -5942,7 +5942,7 @@ public class ClusteringDialog {
         return wrapWithGuide(content, guideText, null, java.util.List.of());
     }
 
-    /** Adds a Documentation hyperlink pointing at HOW_TO_GUIDE#docAnchor. */
+    /** Adds a Documentation hyperlink pointing at results.md#docAnchor. */
     private static VBox wrapWithGuide(javafx.scene.Node content, String guideText,
                                       String docAnchor) {
         return wrapWithGuide(content, guideText, docAnchor, java.util.List.of());

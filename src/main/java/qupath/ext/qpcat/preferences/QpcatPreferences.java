@@ -979,7 +979,7 @@ public final class QpcatPreferences {
                         + "without one).\n\n"
                         + "These cannot be one environment: a lockfile pins exact package "
                         + "builds, and a CPU build of PyTorch cannot use a GPU. Today only the "
-                        + "autoencoder benefits; see documentation/GPU_ACCELERATION.md for "
+                        + "autoencoder benefits; see documentation/setup.md (\"CPU or GPU\") for "
                         + "what is and is not accelerated.\n\n"
                         + "Switching builds a separate environment and re-downloads several GB."))
                 .build());
@@ -1215,7 +1215,7 @@ public final class QpcatPreferences {
                         + "component, write QPCAT component: size and "
                         + "QPCAT component: mean: <X> for every existing numeric "
                         + "measurement. NOTE: graph components are NOT Leiden "
-                        + "clusters; see BEST_PRACTICES.md."))
+                        + "clusters; see documentation/spatial-neighborhoods.md."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialLimitEdgesBySameClass, Boolean.class)

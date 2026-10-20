@@ -155,6 +155,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 - **Marker Fingerprints' "Markers per cluster" went to 12** while the run keeps the top 5
   markers of each cluster, so 6 to 12 changed nothing. It now stops at the number ranked.
+- **Tooltips and help text pointed at documentation pages that have moved.** Five tooltips
+  named `documentation/REFERENCES.md`, and others `GPU_ACCELERATION.md`, `BEST_PRACTICES.md`,
+  `YAML_SCHEMA.md` and `HOW_TO_GUIDE`, all of which are now one-paragraph "Moved" notes. They
+  name the live pages (`references.md`, `setup.md`, `spatial-neighborhoods.md`,
+  `yaml-reference.md`, `batch.md`).
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

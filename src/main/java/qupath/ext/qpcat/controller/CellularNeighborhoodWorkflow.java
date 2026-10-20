@@ -54,7 +54,7 @@ import java.util.function.Consumer;
  * KD/Ball-tree neighbor search plus a small k-means, single-process, no
  * permutation machinery. It mirrors the neighborhood method of Goltsev et al.
  * (Cell 2018) and Schurch et al. (Cell 2020); see the Python script header and
- * REFERENCES.md. It is distinct from BANKSY (expression-space kernel), which
+ * references.md. It is distinct from BANKSY (expression-space kernel), which
  * QP-CAT offers as a clustering algorithm.</p>
  *
  * <p>The single-image entry point ({@link #run}) must be called off the JavaFX

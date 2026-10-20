@@ -77,7 +77,7 @@ public class HistogramPanel extends VBox {
                 + "    (inspired by GammaGateR, Xiong et al. 2024, Bioinformatics)\n"
                 + "Triangle and GMM leave out a spike of identical values at\n"
                 + "either end (e.g. the cells with no signal, all at 0).\n"
-                + "See documentation/REFERENCES.md for full citations."));
+                + "See documentation/references.md for full citations."));
 
         // Wide initial range; the real range/step is set per marker from the
         // histogram's data extent in setMarkerData (so raw "None" intensities or

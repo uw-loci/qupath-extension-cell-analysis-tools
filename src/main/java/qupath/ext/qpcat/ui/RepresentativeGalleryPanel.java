@@ -62,7 +62,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * result plots.
  *
  * <p>A medoid is a real cell, not a synthetic prototype; "representative" means
- * "near the center", not "pure". See BEST_PRACTICES.md.</p>
+ * "near the center", not "pure". See documentation/clusters.md.</p>
  */
 public class RepresentativeGalleryPanel extends VBox {
 

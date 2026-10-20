@@ -286,7 +286,7 @@ public final class SpatialConnectionsScripts {
      * no-op.</p>
      *
      * <p>Cells with null pathClass drop their edges entirely under the
-     * filter (intended behaviour -- the tooltip and HOW_TO_GUIDE call
+     * filter (intended behaviour -- the tooltip and the docs call
      * this out).</p>
      */
     public static FilterResult applySameClassFilter(ImageData<?> imageData, boolean enabled) {

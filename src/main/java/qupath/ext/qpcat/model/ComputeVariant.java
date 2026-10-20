@@ -19,7 +19,7 @@ package qupath.ext.qpcat.model;
  *
  * <p>CPU is the default because it works everywhere. Which operations actually
  * benefit from the GPU is documented in
- * {@code documentation/GPU_ACCELERATION.md} -- the honest summary is that today
+ * {@code documentation/setup.md} ("CPU or GPU") -- the honest summary is that today
  * only the autoencoder uses it.
  *
  * <p>Modelled on {@code CellposeModelFamily} in qupath-extension-cellAPpose,

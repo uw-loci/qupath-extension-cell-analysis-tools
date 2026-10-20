@@ -386,7 +386,7 @@ public final class ClusteringRunRecord {
         sb.append("3. Re-run headless / in a script (no dialog):\n");
         sb.append("   Use the YAML headless batch -- 'qpcat_batch.groovy'. Translate the\n");
         sb.append("   parameters above into a batch YAML; the schema and a worked example\n");
-        sb.append("   are in documentation/YAML_SCHEMA.md and HOW_TO_GUIDE section 19.\n\n");
+        sb.append("   are in documentation/yaml-reference.md and documentation/batch.md.\n\n");
 
         sb.append("Note on the QuPath 'Workflow' tab\n");
         sb.append("---------------------------------\n");

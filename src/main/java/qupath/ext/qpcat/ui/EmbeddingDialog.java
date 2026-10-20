@@ -131,7 +131,7 @@ public class EmbeddingDialog {
                 + "  UMAP - preserves local + global structure (McInnes et al. 2018)\n"
                 + "  t-SNE - preserves local neighborhoods (van der Maaten & Hinton 2008)\n"
                 + "  PCA - linear projection onto top 2 principal components\n"
-                + "See documentation/REFERENCES.md for full citations."));
+                + "See documentation/references.md for full citations."));
 
         umapNeighborsSpinner = new Spinner<>(2, 200, 15);
         umapNeighborsSpinner.setEditable(true);

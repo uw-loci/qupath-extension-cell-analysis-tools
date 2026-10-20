@@ -1252,7 +1252,7 @@ public class ClusteringWorkflow {
                     + (crossImage ? " across " + nImages + " images" : ""));
             lines.add("// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',");
             lines.add("//   or Load Config from file -> '" + saved + "_config.json' (then set the");
-            lines.add("//   SAME scope), or the headless YAML batch (see YAML_SCHEMA.md).");
+            lines.add("//   SAME scope), or the headless YAML batch (see documentation/batch.md).");
 
             String stepName = "QP-CAT: clustering (" + algo + ", "
                     + result.clusterCountText()
