@@ -8,7 +8,9 @@ import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.text.TextFlow;
 import qupath.ext.qpcat.model.GateCoverage;
+import qupath.ext.qpcat.model.MeasurementNames;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -33,7 +35,7 @@ public class HistogramPanel extends VBox {
     private final Spinner<Double> thresholdSpinner;
     private final Label statsLabel;
     private final Label suggestionWarningLabel;
-    private final Label markerLabel;
+    private final TextFlow markerTitle = new TextFlow();
 
     private Consumer<Double> onThresholdChanged;
 
@@ -54,8 +56,7 @@ public class HistogramPanel extends VBox {
         setSpacing(5);
         setPadding(new Insets(5));
 
-        markerLabel = new Label("No marker selected");
-        markerLabel.setStyle("-fx-font-weight: bold;");
+        showTitle(message("No marker selected"));
 
         canvas = new Canvas(CANVAS_WIDTH, CANVAS_HEIGHT);
         canvas.setOnMousePressed(this::onMousePressed);
@@ -122,7 +123,7 @@ public class HistogramPanel extends VBox {
                 thresholdLabel, thresholdSpinner);
         controlsRow.setAlignment(Pos.CENTER_LEFT);
 
-        getChildren().addAll(markerLabel, canvas, controlsRow, statsLabel, suggestionWarningLabel);
+        getChildren().addAll(markerTitle, canvas, controlsRow, statsLabel, suggestionWarningLabel);
         clearDisplay();
     }
 
@@ -160,7 +161,7 @@ public class HistogramPanel extends VBox {
                     ? binEdges[binEdges.length - 1] : 1.0;
             configureThresholdSpinnerRange(dataMin, dataMax, display);
 
-            markerLabel.setText(PhenotypingDialog.shortenMarkerName(marker));
+            showTitle(MeasurementNames.splitShortened(marker));
             redraw();
         } finally {
             updating = false;
@@ -208,6 +209,16 @@ public class HistogramPanel extends VBox {
         return methodKey(methodCombo.getValue());
     }
 
+    /** Title above the histogram: the marker's name with the marker in bold. */
+    private void showTitle(MeasurementNames.Parts parts) {
+        markerTitle.getChildren().setAll(MeasurementNameText.texts(parts));
+    }
+
+    /** A status message in the title slot, all of it bold. */
+    private static MeasurementNames.Parts message(String text) {
+        return new MeasurementNames.Parts("", text, "");
+    }
+
     /**
      * Clear the display when no marker is selected.
      */
@@ -217,7 +228,7 @@ public class HistogramPanel extends VBox {
         binEdges = null;
         quantiles = null;
         autoThresholds = null;
-        markerLabel.setText("Click a marker column header to view histogram");
+        showTitle(message("Click a marker column header to view histogram"));
         statsLabel.setText("Pos: - | Neg: -");
         showSuggestionWarning(null);
         GraphicsContext gc = canvas.getGraphicsContext2D();

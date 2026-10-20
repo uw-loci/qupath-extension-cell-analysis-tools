@@ -1,9 +1,9 @@
 package qupath.ext.qpcat.ui;
 
-import javafx.scene.control.Labeled;
+import javafx.scene.layout.Region;
 
 /**
- * Make a wrapping {@link Labeled} tall enough for the text it actually holds.
+ * Make a wrapping Label (or TextFlow) tall enough for the text it actually holds.
  * <p>
  * A Label with {@code wrapText} set still reports its preferred height as ONE
  * LINE, because {@code computePrefHeight(-1)} is asked at an unknown width and
@@ -24,9 +24,9 @@ final class WrapHeight {
      * Call after setting {@code wrapText}; safe to call before the text is set,
      * since it recomputes on every width change.
      *
-     * @param label the wrapping label to keep tall enough
+     * @param label the wrapping label or text flow to keep tall enough
      */
-    static void bind(Labeled label) {
+    static void bind(Region label) {
         if (label == null) {
             return;
         }

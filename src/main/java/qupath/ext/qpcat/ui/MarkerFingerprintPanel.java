@@ -22,7 +22,9 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.scene.text.TextFlow;
 import qupath.ext.qpcat.model.ClusterNaming;
+import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.service.MeasurementSearch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -392,9 +394,12 @@ public class MarkerFingerprintPanel extends BorderPane {
         double score = num(marker.get("score"));
 
         // Full-width, wrapping name so long measurement names read without hovering.
-        Label nameLbl = new Label(mName);
+        // A search hit is bold throughout, so it still stands out from the bold marker.
+        boolean hit = isHit(mName);
+        TextFlow nameLbl = MeasurementNameText.flow(hit
+                ? new MeasurementNames.Parts("", mName, "")
+                : MeasurementNames.split(mName));
         nameLbl.setStyle("-fx-font-size: 11px;");
-        nameLbl.setWrapText(true);
         WrapHeight.bind(nameLbl);
         nameLbl.setMaxWidth(Double.MAX_VALUE);
 
@@ -434,8 +439,7 @@ public class MarkerFingerprintPanel extends BorderPane {
         barLine.setAlignment(Pos.CENTER_LEFT);
 
         VBox cell = new VBox(1, nameLbl, barLine);
-        if (isHit(mName)) {
-            nameLbl.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+        if (hit) {
             cell.setPadding(new Insets(2, 4, 2, 4));
             markHit(cell);
             matchCount++;
@@ -643,8 +647,9 @@ public class MarkerFingerprintPanel extends BorderPane {
      * cluster tints and channel colours are data here, not decoration).
      */
     private static void markHit(javafx.scene.layout.Region node) {
+        // -fx-background as well as the colour, so the text on it is dark in either theme.
         node.setStyle((node.getStyle() == null ? "" : node.getStyle())
-                + "-fx-background-color: #fff2b8; -fx-border-color: #d9a400; "
+                + "-fx-background: #fff2b8; -fx-background-color: #fff2b8; -fx-border-color: #d9a400; "
                 + "-fx-border-width: 1; -fx-border-radius: 4; -fx-background-radius: 4;");
     }
 

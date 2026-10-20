@@ -28,6 +28,7 @@ import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.GateSet;
+import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.service.CellCropService;
 import qupath.ext.qpcat.service.ClusterPalette;
 import qupath.ext.qpcat.service.ViewerNavigator;
@@ -327,6 +328,13 @@ public class EmbeddingScatterPanel extends VBox {
     /** Crop window size as a multiple of each cell's bounding box. */
     public void setCropScale(double cropScale) {
         this.cropScale = cropScale;
+    }
+
+    /** A measurement axis title with its marker in bold; an embedding axis stays plain. */
+    private static MeasurementNames.Parts axisTitle(String measurement, String embeddingAxis) {
+        return measurement != null
+                ? MeasurementNames.split(measurement)
+                : new MeasurementNames.Parts(embeddingAxis, "", "");
     }
 
     /** Override the axis titles (e.g. marker names for a biaxial plot). Pass
@@ -644,7 +652,8 @@ public class EmbeddingScatterPanel extends VBox {
         gc.setTextAlign(TextAlignment.CENTER);
         gc.fillText(String.format("%.1f", viewMinX), MARGIN, ch - MARGIN + 15);
         gc.fillText(String.format("%.1f", viewMaxX), cw - MARGIN, ch - MARGIN + 15);
-        gc.fillText(axisLabelX != null ? axisLabelX : (pretty + " 1"), cw / 2, ch - 5);
+        MeasurementNameText.fill(gc, axisTitle(axisLabelX, pretty + " 1"), cw / 2, ch - 5,
+                TextAlignment.CENTER);
 
         // Y axis labels
         gc.setTextAlign(TextAlignment.RIGHT);
@@ -655,7 +664,8 @@ public class EmbeddingScatterPanel extends VBox {
         gc.translate(12, ch / 2);
         gc.rotate(-90);
         gc.setTextAlign(TextAlignment.CENTER);
-        gc.fillText(axisLabelY != null ? axisLabelY : (pretty + " 2"), 0, 0);
+        MeasurementNameText.fill(gc, axisTitle(axisLabelY, pretty + " 2"), 0, 0,
+                TextAlignment.CENTER);
         gc.restore();
     }
 

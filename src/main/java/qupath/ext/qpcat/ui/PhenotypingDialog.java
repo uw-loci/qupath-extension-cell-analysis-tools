@@ -15,6 +15,7 @@ import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.text.TextFlow;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
@@ -22,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
 import qupath.ext.qpcat.model.GateCoverage;
+import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.model.PhenotypeRuleSet;
 import qupath.ext.qpcat.service.ChannelValidator;
 import qupath.ext.qpcat.service.MeasurementExtractor;
@@ -452,7 +454,7 @@ public class PhenotypingDialog {
 
         // One column per marker with embedded gate spinner in header
         for (String marker : currentMarkers) {
-            String shortName = shortenMarkerName(marker);
+            String shortName = MeasurementNames.shorten(marker);
             TableColumn<PhenotypeRule, String> col = new TableColumn<>();
             col.setCellValueFactory(data ->
                     new ReadOnlyStringWrapper(data.getValue().getCondition(marker)));
@@ -462,12 +464,11 @@ public class PhenotypingDialog {
             col.setSortable(false);
 
             // Header with full channel + statistic (so PCNA Mean vs PCNA Median
-            // are distinguishable), plus the gate spinner.
-            Label header = new Label(shortName);
-            header.setTooltip(Tooltips.of(marker
+            // are distinguishable), marker in bold, plus the gate spinner.
+            TextFlow header = MeasurementNameText.flow(MeasurementNames.splitShortened(marker));
+            Tooltip.install(header, Tooltips.of(marker
                     + "\n(click to view this marker's histogram)"));
             header.setMaxWidth(Double.MAX_VALUE);
-            header.setWrapText(true);
             WrapHeight.bind(header);
 
             // Make header clickable to show histogram
@@ -993,7 +994,7 @@ public class PhenotypingDialog {
             StringBuilder sb = new StringBuilder();
             sb.append("The following markers from the rule set are missing in the current image:\n\n");
             for (String m : match.missing()) {
-                sb.append("  - ").append(shortenMarkerName(m)).append(" (").append(m).append(")\n");
+                sb.append("  - ").append(MeasurementNames.shorten(m)).append(" (").append(m).append(")\n");
             }
             sb.append("\nContinue with available markers only?");
 
@@ -1342,7 +1343,7 @@ public class PhenotypingDialog {
                     updated++;
                     double frac = GateCoverage.positiveFraction(parseQuantiles(markerData), threshold);
                     if (GateCoverage.warning(frac) != null) {
-                        extreme.add(String.format("%s (%.0f%%)", shortenMarkerName(marker), 100.0 * frac));
+                        extreme.add(String.format("%s (%.0f%%)", MeasurementNames.shorten(marker), 100.0 * frac));
                     }
                 }
             }
@@ -1438,32 +1439,5 @@ public class PhenotypingDialog {
         } catch (Exception e) {
             logger.warn("Failed to render Unknown breakdown: {}", e.getMessage());
         }
-    }
-
-    /**
-     * Extracts a short marker name from a full QuPath measurement name.
-     * E.g., "Cell: CD3: Mean" -> "CD3"
-     */
-    static String shortenMarkerName(String fullName) {
-        if (fullName == null) return "";
-        String[] parts = fullName.split(":\\s*");
-        if (parts.length <= 1) return fullName.trim();
-        // Drop only a leading GENERIC compartment ("Cell"/"Detection"); keep
-        // meaningful compartments (Nucleus/Cytoplasm/Membrane) and ALWAYS keep
-        // the trailing statistic (Mean/Median/Max/...). Otherwise every
-        // statistic of one channel collapses to an identical header
-        // (e.g. "Cell: PCNA: Mean" and "Cell: PCNA: Median" both -> "PCNA").
-        int start = 0;
-        String first = parts[0].trim();
-        if (parts.length >= 3
-                && (first.equalsIgnoreCase("Cell") || first.equalsIgnoreCase("Detection"))) {
-            start = 1;
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < parts.length; i++) {
-            if (sb.length() > 0) sb.append(' ');
-            sb.append(parts[i].trim());
-        }
-        return sb.toString();
     }
 }

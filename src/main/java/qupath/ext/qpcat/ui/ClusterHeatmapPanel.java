@@ -4,6 +4,7 @@ import javafx.geometry.Insets;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
+import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.QpcatColorMaps;
 import javafx.scene.control.Label;
@@ -393,8 +394,8 @@ public class ClusterHeatmapPanel extends VBox {
         // and so never appeared at all. Measure, as the left gutter already does.
         double widest = 0;
         for (String name : markerNames) {
-            probe.setText(PhenotypingDialog.shortenMarkerName(name));
-            widest = Math.max(widest, probe.getLayoutBounds().getWidth());
+            widest = Math.max(widest,
+                    MeasurementNameText.width(MeasurementNames.splitShortened(name), LABEL_FONT));
         }
         double reach = Math.min(widest * Math.cos(Math.toRadians(LABEL_ANGLE)), 200);
         marginBottom = LABEL_GAP + reach + LEGEND_BAND;
@@ -561,8 +562,8 @@ public class ClusterHeatmapPanel extends VBox {
             gc.save();
             gc.translate(x, y);
             gc.rotate(LABEL_ANGLE);
-            String shortName = PhenotypingDialog.shortenMarkerName(markerNames[j]);
-            gc.fillText(shortName, 0, 0);
+            MeasurementNameText.fill(gc, MeasurementNames.splitShortened(markerNames[j]),
+                    0, 0, TextAlignment.LEFT);
             gc.restore();
         }
         gc.restore();
@@ -864,7 +865,7 @@ public class ClusterHeatmapPanel extends VBox {
         int row = (int) (my / cellH);
 
         if (row >= 0 && row < nClusters && col >= 0 && col < nMarkers) {
-            String marker = PhenotypingDialog.shortenMarkerName(markerNames[col]);
+            String marker = MeasurementNames.shorten(markerNames[col]);
             double rawVal = data[row][col];
             String cells = "";
             int sourceRow = row < rowSource.length ? rowSource[row] : row;

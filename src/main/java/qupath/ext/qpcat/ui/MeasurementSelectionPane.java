@@ -9,21 +9,25 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Pane;
 import javafx.scene.Scene;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
-import javafx.scene.control.cell.CheckBoxListCell;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
+import javafx.scene.text.TextFlow;
 import javafx.scene.layout.VBox;
-import javafx.util.StringConverter;
 
+import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 
 import java.util.ArrayList;
@@ -53,6 +57,40 @@ public class MeasurementSelectionPane extends VBox {
         final BooleanProperty selected = new SimpleBooleanProperty(false);
         Item(String name) { this.name = name; }
         BooleanProperty selectedProperty() { return selected; }
+    }
+
+    /** A checkbox row whose measurement name shows its marker in bold. */
+    private static final class NameCell extends ListCell<Item> {
+        private final CheckBox box = new CheckBox();
+        private final TextFlow name = new TextFlow();
+        private final HBox row = new HBox(4, box, name);
+        private BooleanProperty bound;
+
+        NameCell() {
+            row.setAlignment(Pos.CENTER_LEFT);
+            // Never wrap: a long name runs on to the right like the plain text did.
+            name.setMinWidth(Region.USE_PREF_SIZE);
+        }
+
+        @Override
+        protected void updateItem(Item item, boolean empty) {
+            super.updateItem(item, empty);
+            if (bound != null) {
+                box.selectedProperty().unbindBidirectional(bound);
+                bound = null;
+            }
+            setText(null);
+            if (empty || item == null) {
+                setGraphic(null);
+                setAccessibleText(null);
+                return;
+            }
+            bound = item.selectedProperty();
+            box.selectedProperty().bindBidirectional(bound);
+            name.getChildren().setAll(MeasurementNameText.texts(MeasurementNames.split(item.name)));
+            setGraphic(row);
+            setAccessibleText(item.name);
+        }
     }
 
     /** Listeners beyond the single {@code onSelectionChanged} slot the dialog owns. */
@@ -88,12 +126,7 @@ public class MeasurementSelectionPane extends VBox {
         list.setPrefHeight(150);
         list.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(list, Priority.ALWAYS);
-        list.setCellFactory(CheckBoxListCell.forListView(
-                Item::selectedProperty,
-                new StringConverter<Item>() {
-                    @Override public String toString(Item m) { return m == null ? "" : m.name; }
-                    @Override public Item fromString(String s) { return null; }
-                }));
+        list.setCellFactory(lv -> new NameCell());
         list.setTooltip(Tooltips.of(
                 "Tick the measurements to use. Use the filter above to narrow the list;\n"
                 + "checked items stay checked even when filtered out."));
