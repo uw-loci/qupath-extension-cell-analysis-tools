@@ -145,6 +145,10 @@ public final class ScalingLimits {
         public int stabilityRepeats = 0;
         /** Physical RAM budget in GB; <= 0 asks this machine. */
         public double availableRamGb = 0;
+        /** What the Python worker keeps from earlier runs for reuse, in GB. */
+        public double reuseHeldGb = 0;
+        /** Most this run will keep for reuse, in GB; see {@link #reuseKeepGb}. */
+        public double reuseKeepGb = 0;
 
         public Request() {}
 
@@ -222,12 +226,55 @@ public final class ScalingLimits {
         return 151.0 * Math.pow(nCells / 100_000.0, 2.13);
     }
 
+    /** Share of this machine's RAM the worker may keep between runs for reuse. */
+    public static final double REUSE_RAM_FRACTION = 0.10;
+
+    /**
+     * Most the worker may keep between runs for reuse.
+     *
+     * @param ram this machine's RAM, if known
+     * @return bytes; 0 when the RAM is unknown, so nothing is kept
+     */
+    public static long reuseBudgetBytes(OptionalDouble ram) {
+        return ram.isPresent() ? (long) (ram.getAsDouble() * REUSE_RAM_FRACTION * GB) : 0;
+    }
+
+    /**
+     * The Leiden neighbour graph the worker keeps for reuse (scanpy's
+     * connectivities). Measured 2026-10-20 in the QP-CAT env: 18 MB at
+     * 100k/k=15, 60 MB at 100k/k=50, 182 MB at 300k/k=50 -- 12.1 bytes per
+     * cell per neighbour.
+     */
+    public static double reuseGraphGb(long nCells, int nNeighbors) {
+        return nCells * (double) nNeighbors * 12.1 / GB;
+    }
+
+    /** An embedding kept for reuse: one float64 per cell per component. */
+    public static double reuseEmbeddingGb(long nCells, int nComponents) {
+        return nCells * (double) nComponents * 8.0 / GB;
+    }
+
+    /**
+     * Most a run will keep for reuse: its graph (Leiden only) and embedding,
+     * capped at the budget, above which nothing more is kept.
+     *
+     * @param graph whether the run builds a Leiden neighbour graph
+     * @param embeddingComponents embedding dimensions; 0 for none
+     */
+    public static double reuseKeepGb(long nCells, boolean graph, int nNeighbors,
+                                     int embeddingComponents, long budgetBytes) {
+        double gb = (graph ? reuseGraphGb(nCells, nNeighbors) : 0)
+                + reuseEmbeddingGb(nCells, embeddingComponents);
+        return Math.min(gb, budgetBytes / GB);
+    }
+
     /**
      * Leiden peak RSS. Measured 2026-08-05 in the QP-CAT env, 20 features:
      * 50k/k=15 0.87 GB, 50k/k=50 1.51, 100k/k=15 1.51, 100k/k=50 2.56,
-     * 200k/k=50 4.19. The stored graph is only ~21 bytes/edge; the rest is
-     * pynndescent's transient candidate arrays, which is why this scales with
-     * n_neighbors far more steeply than the final CSR would suggest.
+     * 200k/k=50 4.19. The peak is scanpy's conversion of the graph to igraph
+     * for Leiden, not the neighbour search: at 300k/k=50, measured 2026-10-20,
+     * RSS was 1.90 GB after the search and 5.74 GB after the conversion, while
+     * the graph itself is 182 MB.
      */
     public static double leidenPeakGb(long nCells, int nNeighbors) {
         return BASE_GB + (double) nCells * nNeighbors * 3.52e-7;
@@ -457,16 +504,24 @@ public final class ScalingLimits {
         OptionalDouble ram = r.availableRamGb > 0
                 ? OptionalDouble.of(r.availableRamGb) : detectRamGb();
         if (r.nCells <= 0) return out;
+        // Kept between runs, so it is allocated alongside everything below.
+        // The larger of the two, not the sum: a run that builds a new graph
+        // frees the old one first.
+        double reserve = Math.max(r.reuseHeldGb, r.reuseKeepGb);
+        String reuseNote = reserve <= 0 ? "" : " That includes " + formatGb(reserve)
+                + " QP-CAT keeps between runs to reuse; turning off 'Reuse the neighbor "
+                + "graph between runs' in Preferences frees it.";
 
         switch (r.algorithm) {
             case AGGLOMERATIVE -> {
-                double gb = agglomerativePeakGb(r.nCells);
+                double gb = agglomerativePeakGb(r.nCells) + reserve;
                 addMemory(out, gb, ram,
                         "Agglomerative clustering of " + fmt(r.nCells) + " cells",
                         "hierarchical clustering has to hold every pairwise distance in memory "
                                 + "at once, which grows with the SQUARE of the cell count",
                         "Use Leiden (graph-based) for large panels, or MiniBatch KMeans if you "
-                                + "need a fixed number of clusters. Both handle millions of cells.");
+                                + "need a fixed number of clusters. Both handle millions of cells."
+                                + reuseNote);
             }
             case HDBSCAN -> {
                 double sec = hdbscanSeconds(r.nCells);
@@ -476,13 +531,13 @@ public final class ScalingLimits {
                         "Use Leiden, which is graph-based and scales roughly linearly.");
             }
             case LEIDEN -> {
-                double gb = leidenPeakGb(r.nCells, r.nNeighbors);
+                double gb = leidenPeakGb(r.nCells, r.nNeighbors) + reserve;
                 addMemory(out, gb, ram,
                         "Leiden on " + fmt(r.nCells) + " cells with n_neighbors="
                                 + r.nNeighbors,
                         "the nearest-neighbour graph holds n_neighbors entries per cell",
                         "Lower n_neighbors (15 is a common default) to shrink the graph "
-                                + "proportionally.");
+                                + "proportionally." + reuseNote);
             }
             default -> {
                 // KMeans, MiniBatch KMeans, GMM, BANKSY and None measured flat
@@ -503,7 +558,7 @@ public final class ScalingLimits {
             // Per area, not per run: co-occurrence is computed once per
             // independent area, so the peak is set by the biggest one.
             long unit = spatialUnitCells(r);
-            double gb = coOccurrencePeakGb(unit, r.nClusters, r.coOccurrenceIntervals);
+            double gb = coOccurrencePeakGb(unit, r.nClusters, r.coOccurrenceIntervals) + reserve;
             // Time, unlike memory, still accumulates across areas.
             double sec = coOccurrenceSeconds(r.nCells);
             String basis = r.clusterCountIsExact
@@ -517,17 +572,18 @@ public final class ScalingLimits {
                     "co-occurrence allocates one counter per cell per distance interval per "
                             + "CLUSTER PAIR, and compares every cell against every other one",
                     "Turn off co-occurrence, or reduce the number of clusters. Neighbourhood "
-                            + "enrichment answers a similar question at a fraction of the cost.");
+                            + "enrichment answers a similar question at a fraction of the cost."
+                            + reuseNote);
         }
 
         if (r.ripley) {
             long m = assumedLargestCluster(r);
-            double gb = ripleyPeakGb(m);
+            double gb = ripleyPeakGb(m) + reserve;
             addMemory(out, gb, ram,
                     "Ripley's L with a largest cluster of " + fmt(m) + " cells",
                     "Ripley's L computes every pairwise distance WITHIN each cluster, so the "
                             + "largest cluster sets the peak",
-                    "Turn off Ripley, or use neighbourhood enrichment instead.");
+                    "Turn off Ripley, or use neighbourhood enrichment instead." + reuseNote);
         }
 
         out.sort((a, b) -> b.severity.compareTo(a.severity));

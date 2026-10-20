@@ -400,4 +400,55 @@ class ScalingLimitsTest {
         // Linux is served by /proc/meminfo before this point.
         assertThat(ScalingLimits.ramCommandsFor("linux")).isEmpty();
     }
+
+    // ---- Memory kept between runs for reuse (knn_cache.py) -----------------
+
+    @Test
+    void reuseGraphMatchesMeasuredSizes() {
+        // Measured 2026-10-20: 18 MB at 100k/k=15, 60 MB at 100k/k=50,
+        // 182 MB at 300k/k=50 (connectivities CSR).
+        double mb = 1024.0;
+        assertThat(ScalingLimits.reuseGraphGb(100_000, 15) * mb).isCloseTo(17.3, within(2.0));
+        assertThat(ScalingLimits.reuseGraphGb(100_000, 50) * mb).isCloseTo(57.7, within(3.0));
+        assertThat(ScalingLimits.reuseGraphGb(300_000, 50) * mb).isCloseTo(173.6, within(9.0));
+    }
+
+    @Test
+    void nothingIsKeptWhenTheMachinesMemoryIsUnknown() {
+        assertThat(ScalingLimits.reuseBudgetBytes(java.util.OptionalDouble.empty())).isZero();
+        assertThat(ScalingLimits.reuseBudgetBytes(java.util.OptionalDouble.of(16)))
+                .isEqualTo((long) (1.6 * 1024 * 1024 * 1024));
+    }
+
+    @Test
+    void whatARunKeepsIsCappedAtTheBudget() {
+        double uncapped = ScalingLimits.reuseKeepGb(1_000_000, true, 50, 2, Long.MAX_VALUE);
+        assertThat(uncapped).isCloseTo(ScalingLimits.reuseGraphGb(1_000_000, 50)
+                + ScalingLimits.reuseEmbeddingGb(1_000_000, 2), within(1e-9));
+        long budget = 100L * 1024 * 1024;
+        assertThat(ScalingLimits.reuseKeepGb(1_000_000, true, 50, 2, budget))
+                .isCloseTo(100.0 / 1024, within(1e-9));
+        assertThat(ScalingLimits.reuseKeepGb(1_000_000, false, 50, 0, budget)).isZero();
+    }
+
+    @Test
+    void memoryKeptForReuseCountsAgainstTheRunAndSaysHowToFreeIt() {
+        Request r = new Request(Algorithm.LEIDEN, 300_000, 20);
+        r.availableRamGb = 16;
+        double peak = ScalingLimits.leidenPeakGb(300_000, 50);
+        assertThat(ScalingLimits.check(r)).isEmpty(); // 5.5 GB < 8 GB warn line
+
+        r.reuseHeldGb = 3.0;
+        List<Finding> f = ScalingLimits.check(r);
+        assertThat(f).singleElement().satisfies(x -> {
+            assertThat(x.severity()).isEqualTo(Severity.WARN);
+            assertThat(x.predictedPeakGb()).isCloseTo(peak + 3.0, within(1e-9));
+            assertThat(x.remedy()).contains("Reuse the neighbor graph between runs");
+        });
+
+        // Held and about-to-be-kept never add up: a new graph frees the old first.
+        r.reuseKeepGb = 2.0;
+        assertThat(ScalingLimits.check(r).get(0).predictedPeakGb())
+                .isCloseTo(peak + 3.0, within(1e-9));
+    }
 }

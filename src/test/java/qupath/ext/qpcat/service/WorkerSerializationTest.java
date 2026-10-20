@@ -99,7 +99,7 @@ class WorkerSerializationTest {
         String src = source();
         assertThat(count(src, Pattern.compile("TASK_LOCK\\.unlock\\(\\)")))
                 .as("every acquireWorker() needs a matching unlock in a finally")
-                .isEqualTo(count(src, Pattern.compile("acquireWorker\\(scriptName\\)")));
+                .isEqualTo(count(src, Pattern.compile("acquireWorker\\([^)]*\\);")));
         // The unlocks must be in finally blocks, not on the success path.
         assertThat(src).contains("} finally {");
         for (int i = src.indexOf("TASK_LOCK.unlock()"); i >= 0;

@@ -128,6 +128,37 @@ is free.
 | **Stability across seeds** | Run Clustering > Validation | Re-runs the clustering step **Extra runs** more times (5 by default), so that step takes about 6x as long; the line above the Run button says so. Off by default. Gives a **Validation** tab with the adjusted Rand index between runs and a consistency score per cluster. |
 | **Generate analysis plots** | Run Clustering, analysis options (the untitled block below Clustering Algorithm) | Skips the static matplotlib figures. The interactive tabs still work. |
 
+### Reusing the last run's graph and embedding
+
+A run that changes only the Leiden **resolution** clusters the same matrix as the run before
+it, so QP-CAT reuses that run's neighbor graph and embedding instead of rebuilding them. This
+is on by default (**Edit > Preferences > QP-CAT: Run Clustering > Reuse the neighbor graph
+between runs**) and gives up nothing in the results: a graph is reused only for the same
+cells, in the same order, after the same normalization, smoothing, batch correction and PCA,
+with the same `n_neighbors` and seed, and on one machine a reused graph is identical to a
+rebuilt one. The embedding is reused on the same terms, for any algorithm, so a run that
+changes only k or the clustering method reuses it too.
+
+What it costs is memory. The Leiden neighbor graph is about 0.6 KB per cell at
+`n_neighbors` 50 (about 180 MB at 300,000 cells), and QP-CAT keeps at most a tenth of this
+machine's memory, or nothing when it cannot read how much the machine has. It is freed when
+you close the Run Clustering dialog (not when the *Close the clustering dialog when a run
+finishes* preference closes it), open another project, or start another kind of analysis
+(the autoencoder, the standalone spatial statistics, Choose k, among others), and the
+memory check before each run counts it. Nothing is written to disk: graphs built on
+different processors are not identical, so a saved one could not stand in for a rebuild on
+another computer.
+
+The saving depends on your data. Measured on synthetic data with 13 markers: the graph took
+107 s at 300,000 cells (`n_neighbors` 50), and a seeded UMAP 60 s at 100,000 cells. A run
+that reuses them pays only for the clustering and everything after it, and **Stability across
+seeds** still rebuilds the graph for every seed, because that variation is part of what it
+measures.
+
+When a run reused something, its `RUN_INFO.txt` says so on a `reuse` line under
+*Embedding*, and the audit log has a **REUSED FROM EARLIER RUN** entry just before the run's
+own entry.
+
 QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
 large, a prompt appears with the number and a one-minute countdown. Computation has already
 started when you see it, and continues if you do nothing, so an unattended run is never blocked

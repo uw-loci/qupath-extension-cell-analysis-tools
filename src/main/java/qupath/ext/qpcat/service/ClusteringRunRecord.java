@@ -260,6 +260,12 @@ public final class ClusteringRunRecord {
             sb.append("  ").append(mapToString(config.getEmbeddingParams()));
         }
         sb.append('\n');
+        // A reused graph or embedding is byte-identical to a rebuilt one on the
+        // same machine, so this changes nothing in how to reproduce the run; it
+        // says why the run was faster than a fresh one.
+        if (result != null && result.getReuseNote() != null) {
+            sb.append("      reuse      : ").append(result.getReuseNote()).append('\n');
+        }
         sb.append("Batch correction : ").append(config.isEnableBatchCorrection());
         if (config.isEnableBatchCorrection()) {
             sb.append("  (batch key: ").append(config.getBatchKey()).append(')');

@@ -28,6 +28,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   and the Embedding Plot tab now says that distances between clusters in the layout are not
   interpretable, as the 2D tab did. The Matrix Plot and Stacked Violin guides say how values
   are scaled (Matrix Plot: each marker 0-1 across clusters; Stacked Violin: not rescaled).
+- **Changing only the Leiden resolution no longer rebuilds the neighbor graph or the
+  embedding.** QP-CAT keeps the last run's graph and embedding in memory and reuses them
+  when the next run has the same cells, in the same order, the same preprocessing and the
+  same `n_neighbors` and seed; the embedding is reused for any algorithm. Results are
+  identical to a rebuild. At 300,000 cells (`n_neighbors` 50) the graph took 107 s, and a
+  seeded UMAP took 60 s at 100,000 cells (synthetic data). At most a tenth of RAM is kept;
+  it is freed when the Run Clustering dialog closes, another project opens or another kind
+  of analysis starts, and the pre-run memory check counts it. `RUN_INFO.txt` and the audit
+  log record what was reused. Preference: **Reuse the neighbor graph between runs** (on).
+  Suggested by an outside collaborator benchmarking QP-CAT.
 - **A suggested threshold that marks more than 95% or fewer than 5% of cells positive is
   flagged** under the histogram counts, and **Apply to All Markers** names the markers it
   flagged, so a poor suggestion shows up whichever method made it.

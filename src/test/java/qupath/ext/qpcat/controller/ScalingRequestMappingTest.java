@@ -110,4 +110,20 @@ class ScalingRequestMappingTest {
         r.availableRamGb = 16;
         assertThat(ScalingLimits.check(r)).isEmpty();
     }
+
+    @Test
+    void onlyLeidenCountsAGraphKeptForReuse() {
+        var leiden = config(Algorithm.LEIDEN, Map.of("n_neighbors", 50));
+        leiden.setEmbeddingMethod(ClusteringConfig.EmbeddingMethod.NONE);
+        var kmeans = config(Algorithm.KMEANS, Map.of("n_clusters", 8));
+        kmeans.setEmbeddingMethod(ClusteringConfig.EmbeddingMethod.NONE);
+        double leidenKeep = ClusteringWorkflow.scalingRequest(1_000_000, 20, leiden).reuseKeepGb;
+        double kmeansKeep = ClusteringWorkflow.scalingRequest(1_000_000, 20, kmeans).reuseKeepGb;
+        assertThat(kmeansKeep).isZero();
+        // Zero too when this machine's memory cannot be read: nothing is kept then.
+        assertThat(leidenKeep).isIn(0.0,
+                Math.min(ScalingLimits.reuseGraphGb(1_000_000, 50),
+                        ScalingLimits.reuseBudgetBytes(ScalingLimits.detectRamGb())
+                                / (1024.0 * 1024 * 1024)));
+    }
 }

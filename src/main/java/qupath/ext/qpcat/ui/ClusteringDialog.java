@@ -155,6 +155,9 @@ public class ClusteringDialog {
 
     /** The settings window itself, so a finished run can close it. Null until shown. */
     private Dialog<ButtonType> settingsDialog;
+    // Set when the "close after run" preference closes the dialog, which is the
+    // middle of exploring rather than the end of it.
+    private boolean closingAfterRun;
 
     private final RunMode mode;
     private final String subclusterParentClass;
@@ -520,6 +523,15 @@ public class ClusteringDialog {
         // Restore whatever the last run used, now that the controls and the
         // measurement list exist.
         restoreLastRunSettings();
+
+        // Closing the dialog ends the exploring that the kept neighbor graph and
+        // embedding are for, so free them.
+        dialog.addEventHandler(DialogEvent.DIALOG_HIDDEN, e -> {
+            if (!closingAfterRun) {
+                ApposeClusteringService.getInstance()
+                        .releaseReuseCache("the Run Clustering dialog was closed");
+            }
+        });
 
         dialog.show();
     }
@@ -4300,6 +4312,7 @@ public class ClusteringDialog {
                     // a cancelled or failed run leaves the dialog up, because the
                     // settings that produced it are what you want to change.
                     if (QpcatPreferences.isCloseDialogAfterRun() && settingsDialog != null) {
+                        closingAfterRun = true;
                         settingsDialog.close();
                     }
                 });

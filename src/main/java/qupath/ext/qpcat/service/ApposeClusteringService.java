@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -155,6 +156,22 @@ public class ApposeClusteringService {
                 + "a single Python interpreter.", scriptName);
         TASK_LOCK.lock();
     }
+
+    /**
+     * Tasks that leave the reuse cache ({@code knn_cache.py}) in place: the
+     * clustering run that fills it, and tasks too small for its memory to
+     * matter. Every other task frees it first, so what a clustering run kept
+     * never adds to a heavy task's peak.
+     */
+    private static final Set<String> KEEPS_REUSE_CACHE = Set.of(
+            "run_clustering", "estimate_spatial_time", "regenerate_plots",
+            "compute_thresholds", "run_phenotyping", "system_info", "run_llm_explainer");
+
+    private static final String RELEASE_REUSE_SCRIPT =
+            "import knn_cache\ntask.outputs['freed'] = knn_cache.release(reason)\n";
+
+    /** Bytes knn_cache.py holds, as the last clustering run reported. */
+    private volatile long reuseHeldBytes;
 
     private Environment environment;
     // Read outside the synchronized methods by the task path; a restart swaps
@@ -480,7 +497,7 @@ public class ApposeClusteringService {
 
     /**
      * Creates the Python worker, queues its init script and registers the
-     * {@code spatial_stats} module. Used by {@link #initialize} and by
+     * {@code spatial_stats} and {@code knn_cache} modules. Used by {@link #initialize} and by
      * {@link #restartWorker(Service)}, so a replaced worker has the same
      * globals as the original.
      *
@@ -523,16 +540,32 @@ public class ApposeClusteringService {
         fresh.init(initScript);
         pythonService = fresh;
 
-        // Register spatial_stats.py as an importable module in the
-        // persistent worker. Task scripts run via exec(compile(..., "<string>"))
-        // so they have NO __file__ and the bundled sibling scripts are not on
-        // sys.path -- so `import spatial_stats` (spatial smoothing + spatial
-        // statistics in run_clustering.py) would fail, and the old
-        // __file__-based fallback raised "name '__file__' is not defined".
-        // Passing the source as an Appose INPUT (not a Java string literal)
-        // avoids escaping issues, and registering in sys.modules persists for
-        // every subsequent task in this worker process. This is also the task
-        // that starts the subprocess, so isAlive() is meaningful on return.
+        // Register the importable modules in the persistent worker. Task
+        // scripts run via exec(compile(..., "<string>")) so they have NO
+        // __file__ and the bundled sibling scripts are not on sys.path, so a
+        // plain `import spatial_stats` would fail. The first registration is
+        // also the task that starts the subprocess, so isAlive() is meaningful
+        // on return.
+        registerModule(fresh, "spatial_stats",
+                "spatial smoothing and spatial statistics may be unavailable");
+        // A module outlives a task, which is what lets one clustering run keep
+        // its neighbour graph and embedding for the next.
+        registerModule(fresh, "knn_cache", "nothing is reused between clustering runs");
+        reuseHeldBytes = 0;
+        ApposeGpu.checkWorker(fresh, "QPCAT", logger);
+    }
+
+    /**
+     * Registers a bundled script as an importable module in the worker.
+     * Non-fatal: the scripts that import it say so when it is missing. The
+     * source travels as an Appose INPUT, not a Java string literal, to avoid
+     * escaping issues.
+     *
+     * @param worker the fresh worker
+     * @param name script name without {@code .py}
+     * @param ifMissing what the user loses, for the warning
+     */
+    private void registerModule(Service worker, String name, String ifMissing) {
         try {
             String regScript =
                     "import sys as _sys, types as _types\n" +
@@ -540,24 +573,20 @@ public class ApposeClusteringService {
                     "exec(compile(module_source, module_name + '.py', 'exec'), _mod.__dict__)\n" +
                     "_sys.modules[module_name] = _mod\n" +
                     "task.outputs['registered'] = module_name\n";
-            Task regTask = fresh.task(regScript, Map.of(
-                    "module_name", "spatial_stats",
-                    "module_source", loadScript("spatial_stats.py")));
+            Task regTask = worker.task(regScript, Map.of(
+                    "module_name", name,
+                    "module_source", loadScript(name + ".py")));
             regTask.listen(event -> {
                 if (event.responseType == ResponseType.FAILURE
                         || event.responseType == ResponseType.CRASH) {
-                    logger.error("spatial_stats module registration failed: {}",
-                            regTask.error);
+                    logger.error("{} module registration failed: {}", name, regTask.error);
                 }
             });
             regTask.waitFor();
-            logger.info("Registered spatial_stats as an importable module");
-            ApposeGpu.checkWorker(fresh, "QPCAT", logger);
+            logger.info("Registered {} as an importable module", name);
         } catch (Exception regEx) {
-            // Non-fatal: only spatial smoothing / spatial statistics need it.
-            // run_clustering.py raises a clear error if it is still missing.
-            logger.warn("Could not register spatial_stats module; spatial "
-                    + "analysis features may be unavailable: {}", regEx.getMessage());
+            logger.warn("Could not register the {} module; {}: {}",
+                    name, ifMissing, regEx.getMessage());
         }
     }
 
@@ -643,9 +672,77 @@ public class ApposeClusteringService {
                 .onCreated(onTaskCreated);
         acquireWorker(scriptName);
         try {
-            return ApposeTaskRunner.run("QPCAT", workerSource, scriptName, script, inputs, options);
+            if (!KEEPS_REUSE_CACHE.contains(scriptName)) {
+                releaseReuseCacheLocked("before " + scriptName, false);
+            }
+            if (!"run_clustering".equals(scriptName)) {
+                return ApposeTaskRunner.run("QPCAT", workerSource, scriptName, script, inputs, options);
+            }
+            Task task;
+            try {
+                task = ApposeTaskRunner.run("QPCAT", workerSource, scriptName, script, inputs, options);
+            } catch (IOException | RuntimeException e) {
+                // A failed or cancelled run may have kept something without
+                // reporting it, so its size is unknown: free it.
+                releaseReuseCacheLocked("the clustering run did not finish", true);
+                throw e;
+            }
+            Object held = task.outputs.get("reuse_held_bytes");
+            reuseHeldBytes = held instanceof Number n ? n.longValue() : 0;
+            return task;
         } finally {
             TASK_LOCK.unlock();
+        }
+    }
+
+    /**
+     * Bytes the worker keeps between clustering runs for reuse (the last
+     * neighbour graph and embedding), as the last run reported. The scaling
+     * check counts it, because it stays allocated while the next task runs.
+     */
+    public long getReuseHeldBytes() {
+        return reuseHeldBytes;
+    }
+
+    /**
+     * Frees what the worker keeps between clustering runs, on a background
+     * thread; waits for a running task first. A no-op when nothing is kept.
+     *
+     * @param reason why, for the log
+     */
+    public void releaseReuseCache(String reason) {
+        if (reuseHeldBytes == 0 || !isAvailable()) return;
+        Thread t = new Thread(() -> {
+            acquireWorker("release reuse cache");
+            try {
+                releaseReuseCacheLocked(reason, false);
+            } finally {
+                TASK_LOCK.unlock();
+            }
+        }, "QPCAT-ReuseRelease");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Caller holds {@link #TASK_LOCK}.
+     *
+     * @param force free even when the last report said nothing is kept
+     */
+    private void releaseReuseCacheLocked(String reason, boolean force) {
+        if (reuseHeldBytes == 0 && !force) return;
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(ApposeSupport.extensionClassLoader());
+        try {
+            ApposeTaskRunner.run("QPCAT", workerSource, "knn_cache release",
+                    RELEASE_REUSE_SCRIPT, Map.of("reason", reason),
+                    new ApposeTaskRunner.Options().maxAttempts(1));
+            reuseHeldBytes = 0;
+        } catch (Exception e) {
+            logger.warn("Could not free the memory kept for reuse ({}): {}",
+                    reason, e.getMessage());
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
         }
     }
 

@@ -80,6 +80,10 @@ public class ClusteringResult {
     // model_utils.resolve_umap_execution.
     private String embeddingExecution;
 
+    // What the run reused from an earlier run in the same session (the Leiden
+    // neighbor graph, the embedding), or null when it built everything itself.
+    private String reuseNote;
+
     // Measurement-name prefix the embedding columns were written under ("UMAP",
     // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
     // from names. A custom name is not recognisable by pattern, which is how the 3D view
@@ -117,6 +121,12 @@ public class ClusteringResult {
 
     /** @see #embeddingExecution */
     public void setEmbeddingExecution(String note) { this.embeddingExecution = note; }
+
+    /** @see #reuseNote */
+    public String getReuseNote() { return reuseNote; }
+
+    /** @see #reuseNote */
+    public void setReuseNote(String note) { this.reuseNote = note; }
 
     /** Measurement prefix of the embedding columns ("UMAP1"/"UMAP2" -> "UMAP"), or null. */
     public String getEmbeddingPrefix() { return embeddingPrefix; }

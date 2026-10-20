@@ -1929,7 +1929,20 @@ public class ClusteringWorkflow {
         r.ripley = config.isEnableRipley();
         r.coOccurrence = config.isEnableCoOccurrencePairwise()
                 || config.isEnableCoOccurrenceOneVsRest();
+        r.reuseHeldGb = ApposeClusteringService.getInstance().getReuseHeldBytes()
+                / (1024.0 * 1024.0 * 1024.0);
+        r.reuseKeepGb = ScalingLimits.reuseKeepGb(nCells,
+                config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN, r.nNeighbors,
+                config.getEmbeddingMethod() == ClusteringConfig.EmbeddingMethod.NONE
+                        ? 0 : embeddingNComponents(config),
+                reuseBudgetBytes());
         return r;
+    }
+
+    /** What the worker may keep between runs; 0 when the preference is off. */
+    private static long reuseBudgetBytes() {
+        return QpcatPreferences.isReuseBetweenRuns()
+                ? ScalingLimits.reuseBudgetBytes(ScalingLimits.detectRamGb()) : 0;
     }
 
     /**
@@ -2064,6 +2077,7 @@ public class ClusteringWorkflow {
         inputs.put("embedding_method", config.getEmbeddingMethod().getId());
         inputs.put("embedding_params", config.getEmbeddingParams());
         inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
+        inputs.put("reuse_budget_bytes", reuseBudgetBytes());
         // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
         // in embeddingParams as "n_components"; forwarded as the top-level input the
         // Python task reads so a missing key cleanly defaults to 2.
@@ -2618,6 +2632,16 @@ public class ClusteringWorkflow {
                                 nCells),
                         "Spatial neighbor graph built for " + nCells + " cells",
                         -1);
+            }
+
+            // What this run reused from an earlier one. The results are the ones a
+            // rebuild gives, but the record says so rather than leave it implied.
+            Object reuseNote = task.outputs.get("reuse_note");
+            if (reuseNote != null) {
+                result.setReuseNote(String.valueOf(reuseNote));
+                OperationLogger.getInstance().logOperation("REUSED FROM EARLIER RUN",
+                        Map.of("Reused", String.valueOf(reuseNote)),
+                        String.valueOf(reuseNote), -1);
             }
 
             // How UMAP was actually run. Recorded so a non-reproducible layout is

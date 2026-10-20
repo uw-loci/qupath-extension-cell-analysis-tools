@@ -228,8 +228,11 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             addMenuItem(qupath);
 
             // Track project changes for operation logging
-            qupath.projectProperty().addListener((obs, oldProject, newProject) ->
-                    OperationLogger.getInstance().setProject(newProject));
+            qupath.projectProperty().addListener((obs, oldProject, newProject) -> {
+                OperationLogger.getInstance().setProject(newProject);
+                ApposeClusteringService.getInstance()
+                        .releaseReuseCache("another project was opened");
+            });
             // Set initial project if already open
             OperationLogger.getInstance().setProject(qupath.getProject());
             // The MCP server serves the open project only: any project change stops it.

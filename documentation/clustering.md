@@ -344,6 +344,9 @@ Do you know how many clusters to expect?
 **Leiden** -- builds a neighbour graph and splits it into communities. Scales to millions
 of cells, does not need k. Hard labels, so no gradients. There is no single correct
 **resolution** -- sweep it, and note the graph's `n_neighbors` matters as much.
+Changing only the resolution reuses the previous run's neighbor graph and embedding, so a
+sweep costs little after the first run; see
+[Reusing the last run's graph and embedding](reproducibility.md#reusing-the-last-runs-graph-and-embedding).
 (Traag et al. 2019.)
 
 <a name="caution-kmeans"></a>

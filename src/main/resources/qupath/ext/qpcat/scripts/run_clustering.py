@@ -52,6 +52,9 @@ Optional inputs:
     other seeds and report stability_across_seeds (seeded algorithms only)
   reference_labels: NDArray (N_cells,) int32 -- class code per cell, -1 for none;
     with reference_names (list[str]) asks for agreement_with_classes
+  reuse_budget_bytes: int (default 0) -- most the worker may keep between runs for
+    reuse (the Leiden neighbour graph and the embedding; see knn_cache.py).
+    0 keeps nothing and frees whatever an earlier run kept.
 
 Outputs (via task.outputs):
   cluster_labels: NDArray (N_cells,) int32
@@ -70,6 +73,8 @@ Outputs (via task.outputs):
   plot_paths: str (JSON) -- dict of plot type -> file path (if generate_plots)
   validation: str (JSON) -- {"stability": ..., "agreement": ...}, each present only
     when asked for and computed
+  reuse_held_bytes: int -- bytes the worker keeps for reuse after this run
+  reuse_note: str -- what this run reused from an earlier one; absent when nothing
 """
 
 import sys
@@ -287,6 +292,12 @@ try:
 except NameError:
     reference_codes = None
     reference_class_names = None
+
+# Reuse between runs (knn_cache). 0 keeps nothing.
+try:
+    pref_reuse_budget_bytes = max(0, int(reuse_budget_bytes))
+except NameError:
+    pref_reuse_budget_bytes = 0
 
 # Spatial stats expansion (v1) inputs
 try:
@@ -879,8 +890,55 @@ if resolve_pca_precursor(
             _n_comps,
         )
 
+# 3a. What an earlier run in this session kept for reuse (knn_cache.py). Anything
+# built from a different matrix is freed here, before the embedding allocates.
+# The digest covers the cells, their order and every step above: normalization,
+# smoothing, Harmony and the PCA precursor.
+try:
+    import knn_cache
+except ImportError:
+    knn_cache = None
+    logger.warning("knn_cache is not registered in this worker; nothing is reused")
+_reuse_on = knn_cache is not None and pref_reuse_budget_bytes > 0
+_reuse_notes = []
+_matrix_digest = None
+if _reuse_on:
+    _matrix_digest = knn_cache.matrix_digest(cluster_matrix)
+    knn_cache.keep_only_matrix(_matrix_digest, "this run clusters a different matrix")
+elif knn_cache is not None:
+    knn_cache.release("reuse between runs is off")
+
 embedding_result = None
-if embedding_method == "umap":
+_emb_key = None
+_emb_reused = False
+if _reuse_on and embedding_method in ("umap", "pca", "tsne"):
+    _emb_key = knn_cache.make_key(
+        _matrix_digest,
+        method=embedding_method,
+        params=embedding_params,
+        n_components=embedding_n_components,
+        seed=embedding_seed,
+        mode=embedding_mode,
+        tsne_perplexity_default=pref_tsne_perplexity,
+    )
+    _emb_hit = knn_cache.get("embedding", _emb_key)
+    if _emb_hit is not None:
+        embedding_result = np.array(_emb_hit[0])
+        _emb_reused = True
+        for _k, _v in (_emb_hit[2] or {}).items():
+            task.outputs[_k] = _v
+        _reuse_notes.append("embedding computed at %s" % _emb_hit[1])
+        logger.info(
+            "%s: reusing the embedding computed at %s from the same matrix and settings",
+            embedding_method.upper(),
+            _emb_hit[1],
+        )
+    else:
+        knn_cache.drop("embedding", "embedding settings changed")
+
+if embedding_result is not None:
+    pass
+elif embedding_method == "umap":
     import umap
 
     n_neighbors = embedding_params.get("n_neighbors", 15)
@@ -975,6 +1033,20 @@ elif embedding_method == "tsne":
 
 elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)
+
+if _emb_key is not None and embedding_result is not None and not _emb_reused:
+    knn_cache.put(
+        "embedding",
+        embedding_result,
+        _emb_key,
+        pref_reuse_budget_bytes,
+        meta={
+            k: task.outputs[k]
+            for k in ("embedding_execution", "embedding_reproducible")
+            if k in task.outputs
+        },
+        copy=True,
+    )
 
 # 4. Clustering -- or, for algorithm="existing", simply reading the labels that
 # are already on the objects. Saying "Running existing clustering" there was
@@ -1222,6 +1294,48 @@ def validate_supplied_labels(labels, n_cells):
 SEEDED_ALGORITHMS = ("leiden", "kmeans", "minibatchkmeans", "gmm")
 
 
+def knn_graph(matrix, n_neighbors, seed):
+    """scanpy's neighbour graph over ``matrix``, the input Leiden reads.
+
+    Above 4,096 cells scanpy's search is approximate and the seed changes the
+    graph, so ``seed`` is part of what identifies it.
+
+    :param matrix: cells x features
+    :param n_neighbors: neighbours per cell
+    :param seed: random seed for the neighbour search
+    :return: connectivities, a cells x cells CSR matrix
+    """
+    import scanpy as sc
+    import anndata as ad
+
+    adata = ad.AnnData(X=matrix)
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X", random_state=seed)
+    return adata.obsp["connectivities"]
+
+
+def leiden_labels(connectivities, resolution, seed):
+    """Leiden on a graph from knn_graph; reads the graph, never writes it.
+
+    :param connectivities: cells x cells CSR matrix
+    :param resolution: Leiden resolution
+    :param seed: random seed for Leiden
+    :return: integer label per cell
+    """
+    import scanpy as sc
+    import anndata as ad
+
+    adata = ad.AnnData(X=np.zeros((connectivities.shape[0], 0), dtype=np.float32))
+    sc.tl.leiden(
+        adata,
+        resolution=resolution,
+        adjacency=connectivities,
+        flavor="igraph",
+        n_iterations=-1,
+        random_state=seed,
+    )
+    return adata.obs["leiden"].astype(int).values
+
+
 def fit_seeded(algorithm, params, matrix, seed):
     """Run one of SEEDED_ALGORITHMS on ``matrix`` with ``seed``.
 
@@ -1230,24 +1344,11 @@ def fit_seeded(algorithm, params, matrix, seed):
         batch_size, n_components, covariance_type)
     :param matrix: cells x features
     :param seed: random seed
-    :return: (labels, fitted model); the model is the AnnData for Leiden
+    :return: (labels, fitted model); the model is the neighbour graph for Leiden
     """
     if algorithm == "leiden":
-        import scanpy as sc
-        import anndata as ad
-
-        adata = ad.AnnData(X=matrix)
-        sc.pp.neighbors(
-            adata, n_neighbors=params["n_neighbors"], use_rep="X", random_state=seed
-        )
-        sc.tl.leiden(
-            adata,
-            resolution=params["resolution"],
-            flavor="igraph",
-            n_iterations=-1,
-            random_state=seed,
-        )
-        return adata.obs["leiden"].astype(int).values, adata
+        graph = knn_graph(matrix, params["n_neighbors"], seed)
+        return leiden_labels(graph, params["resolution"], seed), graph
     if algorithm == "kmeans":
         from sklearn.cluster import KMeans
 
@@ -1457,7 +1558,31 @@ if algorithm == "leiden":
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
     logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
     seeded_params = {"n_neighbors": n_neighbors, "resolution": resolution}
-    labels, _ = fit_seeded("leiden", seeded_params, cluster_matrix, clustering_seed)
+    # The graph depends on the matrix, n_neighbors and the seed, never on the
+    # resolution, so a resolution change reuses the last one (knn_cache.py).
+    _graph = None
+    _graph_key = None
+    if _reuse_on:
+        _graph_key = knn_cache.make_key(
+            _matrix_digest, n_neighbors=n_neighbors, seed=clustering_seed
+        )
+        _graph_hit = knn_cache.get("graph", _graph_key)
+        if _graph_hit is not None:
+            _graph = _graph_hit[0]
+            _reuse_notes.append("neighbor graph built at %s" % _graph_hit[1])
+            logger.info(
+                "Leiden: reusing the neighbor graph built at %s (same matrix, "
+                "n_neighbors and seed)",
+                _graph_hit[1],
+            )
+        else:
+            knn_cache.drop("graph", "n_neighbors or seed changed")
+    if _graph is None:
+        _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)
+        if _graph_key is not None:
+            knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
+    labels = leiden_labels(_graph, resolution, clustering_seed)
+    del _graph
 
 elif algorithm == "kmeans":
     n_clusters = algorithm_params.get("n_clusters", 10)
@@ -3263,6 +3388,11 @@ labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), labels.astype(np.int32))
 task.outputs["cluster_labels"] = labels_nd
 task.outputs["n_clusters"] = n_clusters_found
+task.outputs["reuse_held_bytes"] = 0 if knn_cache is None else knn_cache.held_bytes()
+if _reuse_notes:
+    task.outputs["reuse_note"] = "Reused from an earlier run: " + "; ".join(
+        _reuse_notes
+    )
 
 # Membership confidence, when the algorithm produced one. The KIND travels with
 # the numbers: a posterior probability, a condensed-tree membership strength and

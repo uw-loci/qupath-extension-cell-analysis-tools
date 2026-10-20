@@ -68,6 +68,16 @@ public final class QpcatPreferences {
             PathPrefs.createPersistentPreference("qpcat.cluster.computePaga", true);
 
     /**
+     * Keep the last Leiden neighbor graph and embedding in the Python worker
+     * so a run on the same cells and settings reuses them (knn_cache.py). On:
+     * a reused graph is byte-identical to a rebuilt one on the same machine,
+     * so results do not change, and what is kept is capped at
+     * {@code ScalingLimits.REUSE_RAM_FRACTION} of RAM.
+     */
+    private static final BooleanProperty reuseBetweenRuns =
+            PathPrefs.createPersistentPreference("qpcat.cluster.reuseBetweenRuns", true);
+
+    /**
      * Heatmap colour scale: one shared scale centred on zero, or each marker
      * rescaled between its own extremes.
      * <p>
@@ -481,6 +491,10 @@ public final class QpcatPreferences {
     /** Default for the PAGA graph, which alone needs the neighbour graph. */
     public static boolean isComputePaga() { return computePaga.get(); }
     public static void setComputePaga(boolean v) { computePaga.set(v); }
+
+    /** Whether a run may reuse the last run's neighbor graph and embedding. */
+    public static boolean isReuseBetweenRuns() { return reuseBetweenRuns.get(); }
+    public static void setReuseBetweenRuns(boolean v) { reuseBetweenRuns.set(v); }
 
     /** True when the heatmap uses one shared scale centred on zero. */
     public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }
@@ -1144,6 +1158,21 @@ public final class QpcatPreferences {
                         + "Default 0.05. Set 0 to draw every edge (scanpy's own default is "
                         + "0.01, which keeps very nearly all of them); raise it to keep only "
                         + "the strongest connections."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(reuseBetweenRuns, Boolean.class)
+                .name("Reuse the neighbor graph between runs")
+                .category(CATEGORY_CLUSTERING)
+                .description(Tooltips.wrap("Keep the last run's Leiden neighbor graph and "
+                        + "embedding in memory, so a run that changes only the resolution "
+                        + "(or anything else downstream of them) skips rebuilding them. On "
+                        + "by default. Results are the same either way: a graph is reused "
+                        + "only for the same cells, in the same order, after the same "
+                        + "normalization, batch correction and PCA, with the same "
+                        + "n_neighbors and seed. At most a tenth of this machine's memory is "
+                        + "kept, and it is freed when you close the Run Clustering dialog, "
+                        + "open another project, or start another kind of analysis. Turn "
+                        + "off to keep nothing between runs."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(closeDialogAfterRun, Boolean.class)
