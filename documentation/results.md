@@ -53,8 +53,8 @@ Three views of the same per-cluster-per-marker matrix, side by side deliberately
 
 | View | Shows | Use for |
 |---|---|---|
-| **Heatmap** (interactive) | Column-normalised mean expression per cluster. Hover for values and cell counts; Ctrl+scroll or the zoom buttons to resize. | Exploring |
-| **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a colour compares clusters within one marker, not markers with each other; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
+| **Heatmap** (interactive) | Column-normalised mean expression per cluster. The line under the colour bar names the units of the means ("cluster mean (z-score)"), and so does the hover, with the cell count. Ctrl+scroll or the zoom buttons to resize. | Exploring |
+| **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a colour compares clusters within one marker, not markers with each other -- the colour scale is titled "Mean in cluster (each marker scaled 0-1)"; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
 | **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = per-marker rescaled mean. Same zoom controls. [What size and colour mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
 
 Matrix Plot for figures, Heatmap for exploration, Dotplot when a marker is high in a few
@@ -79,7 +79,9 @@ only `...: Mean` columns is a run in which only those were ticked.
 **Dot size** is the fraction of a cluster's cells above a cutoff. scanpy puts that cutoff at
 **0 in the units of the matrix being plotted**, and QP-CAT plots the **normalized** matrix,
 not the raw intensities. So the Normalization setting decides what a large dot means, and
-the caption printed under the figure states the cutoff and the units for that run.
+the caption printed under the figure states the cutoff and the units for that run. The size
+legend is titled "% of cluster above 0 (see note below)" rather than scanpy's "Fraction of
+cells in group", which reads as "fraction expressing".
 
 | Normalization | A large dot means | Is that "fraction expressing"? |
 |---|---|---|
@@ -95,6 +97,8 @@ z-score against the fraction carrying any signal: **DAPI 0.495 vs 1.000**, CD3 0
 0-1** (scanpy's `standard_scale="var"`). So within one column, dark is the cluster with the
 highest mean for that marker and pale the lowest; colours are **not** comparable across
 columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
+The colour scale is titled "Mean in cluster (each marker scaled 0-1)" to say so; scanpy's own
+title, "Mean expression in group", did not.
 
 **The figure is skipped when the size carries nothing.** On measurements with no zero
 floor, Min-Max puts every cell except one per marker above the cutoff, so every dot is
@@ -124,6 +128,14 @@ marker is expressed -- compare shapes across clusters, not sizes. Unlike the Mat
 Dotplot the values are *not* rescaled per marker, so the value axis is directly comparable
 across clusters within a marker, and across markers only to the extent the normalization
 made them so.
+
+**The fill colour is each violin's median**, in the same normalized units, and the colour
+scale's title names them: "Median in cluster (z-score)", "(min-max 0-1)", "(p1-p99 scaled
+0-1)" or, with Normalization set to None, "(raw values)". Under z-score a scale running to 2
+means two standard deviations above that marker's mean over every cell in the run, not an
+intensity of 2. scanpy's own title, "Median expression in group", named no units. When spatial
+smoothing or Harmony batch correction ran, the values are smoothed or corrected as well, in
+every one of these views.
 
 **A violin with a flat base is not cut off.** Each violin stops at the lowest value a cell in
 that cluster actually has (scanpy's `cut=0`), so it never draws density at values no cell

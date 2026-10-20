@@ -51,6 +51,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   The Marker Rankings, Spatial Autocorrelation and Geary's C text tables, tooltips and every
   CSV stay plain text. A highlighted Marker Fingerprints row is also readable in the dark
   theme now (it was light text on pale yellow).
+- **The expression figures' colour scales name their units.** scanpy's titles, "Median
+  expression in group" on the stacked violin and "Mean expression in group" on the dotplot and
+  matrix plot, never said that these figures draw the run's normalized values, so a violin
+  scale running to 2 read as raw intensity. They now read "Median in cluster (z-score)" (or
+  min-max 0-1, p1-p99 scaled 0-1, raw values, by Normalization) and "Mean in cluster (each
+  marker scaled 0-1)". The dotplot's size legend reads "% of cluster above 0 (see note
+  below)" instead of "Fraction of cells in group". The Heatmap tab names the units under its
+  colour bar and in the hover, and its "low (per marker)" / "high (per marker)" end labels no
+  longer overlap.
 
 ### Fixed
 
