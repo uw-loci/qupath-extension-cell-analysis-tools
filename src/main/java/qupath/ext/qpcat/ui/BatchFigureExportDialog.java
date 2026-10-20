@@ -386,24 +386,20 @@ public class BatchFigureExportDialog {
         pngCheck.setTooltip(tip(
                 "Lossless raster, broadest compatibility. Recommended for publications and slides."));
         tiffCheck.setTooltip(tip(
-                "Lossless raster, larger files. Preferred by some journals; LZW compression not used in v1."));
+                "Lossless raster, larger files. Preferred by some journals. Written uncompressed."));
 
-        Label vectorNote = new Label("[ SVG / PDF / EPS planned for v1.1 ]");
-        // #595959 reaches 7:1 against white -- WCAG AA-safe for small text.
-        vectorNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
 
         dpiSpinner.setEditable(true);
         SpinnerUtils.commitOnFocusLoss(dpiSpinner);
         dpiSpinner.setAccessibleText("DPI for raster output");
         dpiSpinner.setTooltip(tip(
-                "Pixel density for raster formats. 300 is the publication standard. "
-                + "Vector formats ignore this."));
+                "Pixel density of the PNG / TIFF files. 300 is the publication standard."));
 
-        HBox formatRow = new HBox(8, new Label("Format:"), pngCheck, tiffCheck, vectorNote);
+        HBox formatRow = new HBox(8, new Label("Format:"), pngCheck, tiffCheck);
         formatRow.setAlignment(Pos.CENTER_LEFT);
 
         HBox dpiRow = new HBox(8, new Label("DPI:"), dpiSpinner,
-                new Label("(range 72-1200; vector formats ignore)"));
+                new Label("(range 72-1200)"));
         dpiRow.setAlignment(Pos.CENTER_LEFT);
 
         pngCheck.setOnAction(e -> updateExpectedFiles());

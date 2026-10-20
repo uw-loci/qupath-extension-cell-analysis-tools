@@ -613,7 +613,7 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E004", "workers", "must be >= 1; got " + w));
         } else if (w > 1) {
             r.add(ValidationIssue.warning("W002", "workers",
-                    "workers=" + w + " coerced to 1 in v1 (parallel workers reserved for v1.1)"));
+                    "workers=" + w + " coerced to 1 (images are processed one at a time)"));
             s.setWorkers(1);
         }
     }

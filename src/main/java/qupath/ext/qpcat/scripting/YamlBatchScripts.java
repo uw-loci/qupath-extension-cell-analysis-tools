@@ -136,8 +136,8 @@ public final class YamlBatchScripts {
             return out;
         }
         if (config instanceof Map<?, ?>) {
-            throw new IOException("In-memory Map config is reserved for v1.1; "
-                    + "in v1, pass a YAML file path or YAML string content");
+            throw new IOException("An in-memory Map config is not supported; "
+                    + "pass a YAML file path or YAML string content");
         }
         throw new IOException("Unsupported 'config' type: "
                 + config.getClass().getSimpleName());

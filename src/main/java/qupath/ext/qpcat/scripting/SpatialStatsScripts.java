@@ -150,7 +150,7 @@ public final class SpatialStatsScripts {
                                                               Map<String, ?> opts) {
         Map<String, Object> resolved = baseOptions(graphHandle, "neighborhood_enrichment");
         if (opts != null && !opts.isEmpty()) {
-            logger.warn("[spatial-stats][nhood] No options recognised in v1; received {} keys",
+            logger.warn("[spatial-stats][nhood] Takes no options; ignored {} key(s)",
                     opts.size());
         }
         return resolved;

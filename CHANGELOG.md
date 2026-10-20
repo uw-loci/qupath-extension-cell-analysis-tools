@@ -170,6 +170,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   blue low, true for one colour map; both now point at the colour bar. The Cluster Explainer
   said its API key lasts a QuPath session; it lasts one results window, and its
   Documentation link now opens the explainer's own page instead of the spatial tabs.
+- **Export figures (batch) promised formats it does not write.** The dialog showed
+  "SVG / PDF / EPS planned for v1.1" and said vector formats ignore the DPI; it writes PNG
+  and TIFF only, and now says so. A skipped interactive plot now points to **Save plot...**
+  in the Results window instead of a "GUI exporter" that cannot export it either. The YAML
+  batch's `workers` warning and the in-memory-config error no longer promise a v1.1.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

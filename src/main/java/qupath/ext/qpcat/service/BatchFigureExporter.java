@@ -294,10 +294,12 @@ public final class BatchFigureExporter {
                 case JAVAFX -> {
                     if (!options.isSkipMissingPlots()) {
                         result.addFailure(imageName + " - " + plot.getSlug()
-                                + ": JavaFX plots are not exportable from the headless path");
+                                + ": interactive plots are not exportable here; save it from the "
+                                + "Results window with Save plot...");
                     } else {
                         result.addFailure(imageName + " - " + plot.getSlug()
-                                + ": skipped (JavaFX-only plot; open the results dialog and use the GUI exporter)");
+                                + ": skipped (interactive plot; save it from the Results window "
+                                + "with Save plot...)");
                     }
                 }
                 case TEXT_ONLY -> result.addFailure(imageName + " - " + plot.getSlug()
