@@ -1,6 +1,21 @@
 # QP-CAT -- Algorithm References and Citations
 
-This document lists the original publications and key application papers for every algorithm, method, and tool used in the QP-CAT extension. If you use QP-CAT in your research, please cite the relevant methods below.
+This document lists the original publications and key application papers for every algorithm, method, and tool used in the QP-CAT extension. If you use QP-CAT in your research, cite QP-CAT itself ([How to cite](../README.md#how-to-cite)) and the relevant methods below. For example, a Leiden clustering with UMAP and Wilcoxon marker ranking cites QuPath, Scanpy, Leiden (Traag 2019), UMAP (McInnes 2018) and the Wilcoxon rank-sum test; if you used the Validation section, also cite Hubert & Arabie 1985 and Liu 2023.
+
+- [Clustering Algorithms](#clustering-algorithms)
+- [Dimensionality Reduction](#dimensionality-reduction)
+- [Spatial Analysis](#spatial-analysis)
+- [Batch Correction](#batch-correction)
+- [Trajectory Analysis](#trajectory-analysis)
+- [Between-Group Composition Comparison](#between-group-composition-comparison)
+- [Phenotyping and Gating](#phenotyping-and-gating)
+- [Core Frameworks](#core-frameworks)
+- [Spatial Feature Smoothing](#spatial-feature-smoothing)
+- [Autoencoder Cell Classification](#autoencoder-cell-classification)
+- [Subsampling and Sketching (VEST 3D export)](#subsampling-and-sketching-vest-3d-export)
+- [Crops + Feature Table Export (TraitHorizon)](#traithorizon)
+- [LLM cluster explainer](#llm-cluster-explainer)
+- [Key Application Papers (Multiplexed Imaging)](#key-application-papers-multiplexed-imaging)
 
 ---
 
@@ -43,6 +58,7 @@ Classic centroid-based partitioning algorithm.
 ---
 
 <a name="choosing-k"></a>
+
 ### Choosing the number of clusters (elbow / silhouette / gap)
 
 What **"Choose k..."** computes, with primary sources, one reputable argument against part of
@@ -55,8 +71,7 @@ retractions and corrections; where a paper carries an editorial notice it is nam
 > Thorndike RL. "Who belongs in the family?" *Psychometrika* 18(4), 267-276 (1953).
 > https://doi.org/10.1007/BF02289263
 
-The origin of the elbow idea. Worth reading for how tentative it is in the original compared
-with how it is now cited.
+The origin of the elbow idea.
 
 > Rousseeuw PJ. "Silhouettes: a graphical aid to the interpretation and validation of cluster analysis." *Journal of Computational and Applied Mathematics* 20, 53-65 (1987).
 > https://doi.org/10.1016/0377-0427(87)90125-7
@@ -75,7 +90,7 @@ null.
 
 **Why the three disagree, and an alternative to all of them:**
 
-> Fu W, Perry PO. "Estimating the Number of Clusters Using Cross-Validation." *Journal of Computational and Graphical Statistics* 29(1), 162-173 (2019).
+> Fu W, Perry PO. "Estimating the Number of Clusters Using Cross-Validation." *Journal of Computational and Graphical Statistics* 29(1), 162-173 (2020).
 > https://doi.org/10.1080/10618600.2019.1647846
 
 **Used in single-cell and imaging practice:**
@@ -112,7 +127,7 @@ what QP-CAT does.
 - scikit-learn, [Selecting the number of clusters with silhouette analysis](https://scikit-learn.org/stable/auto_examples/cluster/plot_kmeans_silhouette_analysis.html)
   -- the clearest worked example, and `silhouette_score` is literally the function QP-CAT calls.
 - scikit-learn, [Clustering performance evaluation](https://scikit-learn.org/stable/modules/clustering.html#silhouette-coefficient)
-  -- the silhouette's stated weaknesses, including that it favours convex clusters and so reads
+  -- the silhouette's stated weaknesses, including that it favors convex clusters and so reads
   high for KMeans on data KMeans suits whether or not the clusters are real.
 - R, [`cluster::clusGap`](https://search.r-project.org/CRAN/refmans/cluster/html/clusGap.html)
   -- the reference implementation of the gap statistic, including the `firstSEmax` rule QP-CAT
@@ -172,12 +187,12 @@ Probabilistic clustering assuming data is generated from a mixture of Gaussian d
 > Note: QP-CAT's GMM assigns each cell's CLASS from its most-likely component, a hard label
 > (`run_clustering.py` calls `GaussianMixture.fit_predict`). It does additionally export
 > summaries of the posterior behind that label -- the component's probability, the runner-up
-> component, and a normalised entropy -- as per-cell measurements and the Cluster confidence
+> component, and a normalized entropy -- as per-cell measurements and the Cluster confidence
 > results tab; the full per-cell by per-component probability matrix is not exported.
 > `n_components` is set by the user, not chosen by BIC/AIC. The mclust / Baudry references
 > describe model-based component selection and merging in general.
 
-**Used in:** Clustering Dialog (GMM algorithm), Auto-thresholding (2-component GMM for gate estimation)
+**Used in:** Clustering Dialog (GMM algorithm), Auto-thresholding (2-component GMM for gate estimation). For auto-thresholding QP-CAT fits only the values between a spike of identical values at either end of the range (for example, cells at exactly 0); see [Phenotyping](phenotyping.md#auto-thresholding).
 
 ---
 
@@ -232,11 +247,16 @@ QP-CAT implements this directly (`scikit-learn` `NearestNeighbors` + `KMeans`); 
 > https://doi.org/10.1016/j.celrep.2020.107523
 > Workflow guides: image.sc "There and back again, QuPath<==>CytoMAP cluster analysis" (t/43352) and "Won't you be my neighbor? CytoMAP for multiplex tissue microenvironment analysis" (t/46260).
 
-**Used in:** Find Cellular Neighborhoods (`cellular_neighborhoods.py`; window k-NN OR physical radius -> per-type composition -> joint k-means; neighborhood id written as the `QPCAT CN` measurement; CN x cell-type log2 enrichment, per-sample / per-group proportions, and CN x CN neighborhood-adjacency enrichment as log2 observed/expected from the cell neighbor graph), embedding gating (`EmbeddingScatterPanel` / `GateApplier` / `PlotAndGateDialog`), and post-hoc ROI-scoped spatial statistics (`spatial_stats_standalone.py` / `PostHocSpatialWorkflow` / `SpatialStatsDialog`; run Ripley/co-occurrence/neighborhood-enrichment/Geary/Moran over cells inside selected annotation "analysis windows" using their existing classification, without re-clustering -- the annotation-as-window, don't-reparent pattern is directly from the CytoMAP round-trip guides). Distinct from BANKSY above, which augments each cell's EXPRESSION vector with a neighborhood-averaged kernel before clustering; here we cluster the COMPOSITION of pre-assigned cell types.
+**Used in:**
+
+- **Find cellular neighborhoods (spatial niches)...**: window k-NN or physical radius -> per-type composition -> joint k-means; the neighborhood id is written as the `QPCAT CN` measurement, with CN x cell-type log2 enrichment, per-sample / per-group proportions, and CN x CN neighborhood-adjacency enrichment as log2 observed/expected from the cell neighbor graph.
+- Gating on the embedding scatter in the Results window and in **Plot & gate cells (2D)...**.
+- **Spatial statistics on existing clusters...** on selected annotations: Ripley, co-occurrence, neighborhood enrichment, Geary and Moran over the cells inside each annotation, using their existing classification and without re-clustering. The annotation-as-area, don't-reparent pattern is directly from the CytoMAP round-trip guides. Distinct from BANKSY above, which augments each cell's EXPRESSION vector with a neighborhood-averaged kernel before clustering; here we cluster the COMPOSITION of pre-assigned cell types.
 
 ---
 
 <a name="validation"></a>
+
 ### Validation: stability across seeds and agreement with known classes
 
 **Cluster consistency score (stability across seeds):**
@@ -252,17 +272,30 @@ re-run with the reported clustering, so the score attaches to the clusters on sc
 > Hubert L, Arabie P. "Comparing partitions." *Journal of Classification* 2, 193-218 (1985).
 > https://doi.org/10.1007/BF01908075
 
-**Normalized mutual information (and why it is used beside ARI):**
+**Normalized mutual information:**
 > Vinh NX, Epps J, Bailey J. "Information Theoretic Measures for Clusterings Comparison: Variants, Properties, Normalization and Correction for Chance." *Journal of Machine Learning Research* 11, 2837-2854 (2010).
 > https://jmlr.org/papers/v11/vinh10a.html
 
-**Cohen's kappa:**
+QP-CAT reports NMI with the arithmetic-mean normalization, not adjusted for chance. Vinh et al. argue for correcting these measures for chance, which matters most when the number of cells is small compared to the number of clusters; ARI, which is chance-adjusted, is reported beside it.
+
+**Cohen's kappa** (computed after the matching below):
 > Cohen J. "A Coefficient of Agreement for Nominal Scales." *Educational and Psychological Measurement* 20(1), 37-46 (1960).
 > https://doi.org/10.1177/001316446002000104
 
-**Matching clusters to classes (Hungarian algorithm):**
+**Matching clusters to classes (the assignment problem):**
 > Kuhn HW. "The Hungarian method for the assignment problem." *Naval Research Logistics Quarterly* 2(1-2), 83-97 (1955).
 > https://doi.org/10.1002/nav.3800020109
+
+Kuhn's paper is the origin of the problem's standard solution. SciPy's `linear_sum_assignment`, which QP-CAT calls, uses a modified Jonker-Volgenant algorithm instead; it finds the same optimal matching, and only ties may resolve differently:
+> Crouse DF. "On implementing 2D rectangular assignment algorithms." *IEEE Transactions on Aerospace and Electronic Systems* 52(4), 1679-1696 (2016).
+> https://doi.org/10.1109/TAES.2016.140952
+
+Noise cells (HDBSCAN) are left out of the per-cluster consistency scores.
+
+Run stability across seeds before reporting any clustering. Run agreement with known classes
+when the cells already carry a classification, such as a ground-truthed synthetic dataset or a
+pathologist-labeled training set; the [Validation tab](results.md#validation-tab) shows both
+on the synthetic dataset (ARI 0.982, NMI 0.971, kappa 0.989).
 
 Computed with scikit-learn (`adjusted_rand_score`, `normalized_mutual_info_score`,
 `cohen_kappa_score`) and SciPy (`linear_sum_assignment`).
@@ -302,6 +335,7 @@ Uniform Manifold Approximation and Projection for dimensionality reduction. Pres
 ---
 
 <a name="embedding-layout-is-not-stable"></a>
+
 ### The layout belongs to the run, not to the cells
 
 A gate drawn on an embedding is only replayable onto the coordinates it was drawn on
@@ -367,19 +401,19 @@ Principal Component Analysis. Linear dimensionality reduction projecting onto to
 
 ### Squidpy
 
-Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis. Used by QP-CAT as the Python-side backend for every spatial-stat exposed in v1: `sq.gr.spatial_neighbors` for graph construction (kNN / Radius / Delaunay), `sq.gr.nhood_enrichment` for neighborhood enrichment, `sq.gr.spatial_autocorr` for Moran's I and Geary's C, `sq.gr.ripley` for Ripley L, and `sq.gr.co_occurrence` for pairwise + one-vs-rest co-occurrence.
+Spatial single-cell analysis framework providing neighborhood graphs, spatial statistics, and image analysis. Used by QP-CAT as the Python-side backend for every spatial statistic: `sq.gr.spatial_neighbors` for graph construction (kNN / Radius / Delaunay), `sq.gr.nhood_enrichment` for neighborhood enrichment, `sq.gr.spatial_autocorr` for Moran's I and Geary's C, `sq.gr.ripley` for Ripley L, and `sq.gr.co_occurrence` for pairwise + one-vs-rest co-occurrence.
 
 **Original paper:**
 > Palla G, Spitzer H, Klein M, et al. "Squidpy: a scalable framework for spatial omics analysis." *Nature Methods* 19, 171-178 (2022).
 > https://doi.org/10.1038/s41592-021-01358-2
 
-**Used in:** Spatial analysis (every v1 spatial statistic and graph constructor; see the individual entries below for the underlying mathematics)
+**Used in:** Spatial analysis (every spatial statistic and graph constructor; see the individual entries below for the underlying mathematics)
 
 ---
 
 ### Moran's I Spatial Autocorrelation
 
-Measures the degree to which expression values are spatially clustered, dispersed, or random. Weighted toward long-range / global structure.
+Measures the degree to which expression values are spatially clustered, dispersed, or random: the correlation between each cell's value and its neighbors' values, measured about the global mean.
 
 **Original paper:**
 > Moran PAP. "Notes on Continuous Stochastic Phenomena." *Biometrika* 37(1-2), 17-23 (1950).
@@ -393,7 +427,7 @@ Measures the degree to which expression values are spatially clustered, disperse
 
 ### Geary's C Spatial Autocorrelation
 
-Dual to Moran's I. Weighted toward short-range / local differences, so it is more sensitive to sharp tissue boundaries and small immune-infiltrate niches than Moran's I. v0.2.7 surfaces Geary's C in the clustering dialog and the YAML batch alongside Moran's I.
+Dual to Moran's I. Based on squared differences between neighbors, so it is more sensitive to local, sharp differences (tissue boundaries, small immune-infiltrate niches) than Moran's I; both use the same neighbor graph. QP-CAT reports Geary's C in the clustering dialog and the YAML batch alongside Moran's I.
 
 **Original paper:**
 > Geary RC. "The Contiguity Ratio and Statistical Mapping." *The Incorporated Statistician* 5(3), 115-145 (1954).
@@ -401,21 +435,21 @@ Dual to Moran's I. Weighted toward short-range / local differences, so it is mor
 
 **Implementation:** `squidpy.gr.spatial_autocorr(mode="geary")`.
 
-**Used in:** Spatial analysis (per-marker local spatial autocorrelation; v0.2.7+)
+**Used in:** Spatial analysis (per-marker spatial autocorrelation)
 
 ---
 
 ### Ripley's L Functions
 
-Cumulative point-pattern statistics for cluster-on-cluster spatial relationships at a range of distances. K(r) is the cumulative count of neighbors within distance r normalised by cluster density (above the Poisson null = clustering / co-localization; below = dispersion / avoidance); L is the variance-stabilised transform L(r) = sqrt(K(r) / pi) - r and is the recommended reading on radial plots because L is centred at 0 under the Poisson null at every r.
+Cumulative point-pattern statistics for cluster-on-cluster spatial relationships at a range of distances. K(r) is the cumulative count of neighbors within distance r normalized by cluster density (above complete spatial randomness = clustering / co-localization; below = dispersion / avoidance). L(r) = sqrt(K(r) / pi) is the variance-stabilized transform; under complete spatial randomness it equals r. QP-CAT's default view plots L(r) minus the median of that cluster's own simulated random patterns, so 0 means random and the dashed band is the simulation envelope; untick **Relative to random** for raw L(r).
 
 **Original paper:**
 > Ripley BD. "The Second-Order Analysis of Stationary Point Processes." *Journal of Applied Probability* 13(2), 255-266 (1976).
 > https://doi.org/10.2307/3212829
 
-**Implementation:** `squidpy.gr.ripley(mode="K")` and `squidpy.gr.ripley(mode="L")`. QP-CAT plots both panels in a single chart with the Poisson null overlay; the permutation count adapts to the cell count (1000 / 100 / 50) unless overridden via the `qpcat.spatial.permutations` preference.
+**Implementation:** QP-CAT calls `squidpy.gr.ripley(mode="L")`, with `n_simulations` set to the permutation count, but replaces its L with its own, computed from the coordinates (squidpy's L is scaled by the cluster's share of all cells; see [Spatial statistics](spatial-statistics.md#when-to-use-each-statistic)). The band is always 99 simulations of complete spatial randomness inside the convex hull of the area's cells. squidpy 1.6.6 no longer offers `mode="K"`, so QP-CAT shows L only.
 
-**Used in:** Spatial analysis (Ripley L tabs in the clustering results dialog; v0.2.7+)
+**Used in:** Spatial analysis (Ripley L tab in the clustering results dialog)
 
 ---
 
@@ -423,9 +457,9 @@ Cumulative point-pattern statistics for cluster-on-cluster spatial relationships
 
 Probability that a cluster-B cell is found within distance r of a cluster-A cell, evaluated across a range of r. Pairwise mode gives every cluster against every other cluster; one-vs-rest collapses "all other clusters" into a single comparison.
 
-**Implementation:** `squidpy.gr.co_occurrence`. Permutation count follows the same adaptive default as Ripley and Geary; results render in their own tabs and persist on `SavedClusteringResult`.
+**Implementation:** `squidpy.gr.co_occurrence`. Co-occurrence is not a permutation test: squidpy computes it once from the observed positions, with no null distribution and no p-value, so the permutation preference does not affect it. Results render in their own tabs and are saved with the result.
 
-**Used in:** Spatial analysis (Co-occurrence pairwise / one-vs-rest tabs; v0.2.7+)
+**Used in:** Spatial analysis (Co-occurrence pairwise / one-vs-rest tabs)
 
 ---
 
@@ -437,6 +471,10 @@ Tests whether cell types (clusters) are enriched or depleted as spatial neighbor
 > Palla G, Spitzer H, Klein M, et al. "Squidpy: a scalable framework for spatial omics analysis." *Nature Methods* 19, 171-178 (2022).
 > https://doi.org/10.1038/s41592-021-01358-2
 
+**The interaction test it follows (histoCAT):**
+> Schapiro D, Jackson HW, Raghuraman S, et al. "histoCAT: analysis of cell phenotypes and interactions in multiplex image cytometry data." *Nature Methods* 14(9), 873-876 (2017).
+> https://doi.org/10.1038/nmeth.4391
+
 **Implementation:** `squidpy.gr.nhood_enrichment`.
 
 **Used in:** Spatial analysis (cluster co-localization z-score matrix)
@@ -445,38 +483,38 @@ Tests whether cell types (clusters) are enriched or depleted as spatial neighbor
 
 ### Delaunay Triangulation (Graph Constructor)
 
-Parameter-free planar triangulation connecting each cell to its geometric neighbors. Used in v0.2.7 as one of three explicit graph constructors backing the post-clustering spatial-stats catalog (kNN / Radius / Delaunay); optional max-edge pruning drops over-long edges so cells across a tissue gap are not artificially connected.
+Parameter-free planar triangulation connecting each cell to its geometric neighbors. Used as one of three explicit graph constructors backing the post-clustering spatial-stats catalog (kNN / Radius / Delaunay); optional max-edge pruning drops over-long edges so cells across a tissue gap are not artificially connected.
 
 **Foundational reference:**
 > Delaunay BN. "Sur la sphere vide." *Bulletin de l'Academie des Sciences de l'URSS, Classe des sciences mathematiques et naturelles* 6, 793-800 (1934).
 
 **Why cap Delaunay edges by distance (filtering spurious long edges):**
-> Moretti M, et al. "Nfinder: automatic inference of cell neighborhood in 2D and 3D using nuclear markers." *BMC Bioinformatics* 24, 230 (2023).
+> Moretti B, Rodriguez Alvarez SN, Grecco HE. "Nfinder: automatic inference of cell neighborhood in 2D and 3D using nuclear markers." *BMC Bioinformatics* 24, 230 (2023).
 > https://doi.org/10.1186/s12859-023-05284-2
 
 **k-NN graphs for continuous / differential-abundance analysis:**
-> Dann E, Henderson NC, Teichmann SA, Morgan MD, Marioni JC. "Differential abundance testing on single-cell data using k-nearest neighbor graphs." *Nature Biotechnology* (2021).
+> Dann E, Henderson NC, Teichmann SA, Morgan MD, Marioni JC. "Differential abundance testing on single-cell data using k-nearest neighbor graphs." *Nature Biotechnology* 40, 245-253 (2022).
 > https://doi.org/10.1038/s41587-021-01033-z
 
 **Implementation:** `squidpy.gr.spatial_neighbors(coord_type="generic", delaunay=True)` with QP-CAT-side max-edge pruning.
 
-**Used in:** Spatial analysis (Delaunay option in the graph-constructor dropdown; v0.2.7+)
+**Used in:** Spatial analysis (Delaunay option in the graph-constructor dropdown)
 
 ---
 
 ### Spatial Graph Overlay (PathObjectConnections)
 
-QuPath core's `qupath.lib.objects.PathObjectConnections` is the slot on `ImageData` that drives **View -> Show object connections**. QP-CAT v0.3 writes its per-cell spatial neighbor graph (kNN / Radius / Delaunay) into this slot so the same QuPath core overlay machinery used by the legacy Delaunay Clustering plugin renders QP-CAT's modern graph constructors.
+QuPath core's `qupath.lib.objects.PathObjectConnections` is the slot on `ImageData` that drives **View -> Show object connections**. QP-CAT writes its per-cell spatial neighbor graph (kNN / Radius / Delaunay) into this slot so the same QuPath core overlay machinery used by the legacy Delaunay Clustering plugin renders QP-CAT's modern graph constructors.
 
 **Note on the API status:** `PathObjectConnections`, `PathObjectConnectionGroup`, and `DefaultPathObjectConnectionGroup` are marked `@Deprecated` in QuPath 0.7.0 with a JavaDoc comment indicating they will be replaced by `qupath.lib.analysis.DelaunayTools.Subdivision` in a future release. QP-CAT uses the deprecated API deliberately because the `Subdivision` replacement is a Delaunay-triangulation type and cannot represent kNN or Radius graphs -- the API surface QP-CAT needs has no non-deprecated equivalent in QuPath 0.7. The JavaDoc itself does not link a specific GitHub issue; track the QuPath GitHub issue tracker for the eventual removal milestone.
 
-**Legacy parity target:** QuPath core's `qupath.opencv.features.DelaunayClusteringPlugin` is the plugin QP-CAT's overlay + measurement output is designed to be a drop-in successor to. QP-CAT v0.3 reproduces its connecting-line overlay, its per-cell node measurements (`Num neighbors`, `Mean/Median/Max/Min distance`, `Mean/Max triangle area`), its per-cluster aggregate measurements (renamed to `QPCAT component: ...` for namespace clarity -- see [Component vs cluster](spatial-neighborhoods.md#component-vs-cluster-naming)), its `limit by class` edge filter (applied post-hoc instead of at build time), and its micron-aware distance threshold. The migration table in [Legacy Delaunay clustering migration](spatial-neighborhoods.md#legacy-delaunay-clustering-migration) shows the one-for-one mapping.
+**Legacy parity target:** QuPath core's `qupath.opencv.features.DelaunayClusteringPlugin` is the plugin QP-CAT's overlay + measurement output is designed to be a drop-in successor to. QP-CAT reproduces its connecting-line overlay, its per-cell node measurements, written as `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean/Median/Max/Min distance` and `QPCAT spatial: Mean/Max triangle area`, its per-cluster aggregate measurements (renamed to `QPCAT component: ...` for namespace clarity -- see [Component vs cluster](spatial-neighborhoods.md#component-vs-cluster-naming)), its `limit by class` edge filter (applied post-hoc instead of at build time), and its micron-aware distance threshold. The migration table in [Legacy Delaunay clustering migration](spatial-neighborhoods.md#legacy-delaunay-clustering-migration) shows the one-for-one mapping.
 
 **Forum context:**
 > Pete Bankhead, "QuPath Delauney clustering" thread, image.sc, 2021-ongoing.
 > https://forum.image.sc/t/qupath-delauney-clustering/49959/5
 
-The post linked above is the image.sc thread that motivated the v0.3 overlay feature -- Pete's note that QuPath core is phasing out the built-in Delaunay clustering tool, plus user demand for a parametrised modern replacement, opened the door for QP-CAT to populate the same overlay slot.
+The post linked above is the image.sc thread that motivated the overlay feature -- Pete's note that QuPath core is phasing out the built-in Delaunay clustering tool, plus user demand for a parametrized modern replacement, opened the door for QP-CAT to populate the same overlay slot.
 
 **Used in:** Spatial Statistics workflow ([Spatial statistics](spatial-statistics.md) and the spatial graph overlay in [Spatial neighborhoods](spatial-neighborhoods.md)); viewer overlay after a Spatial Statistics run; per-cell and per-component measurement table writes.
 
@@ -499,6 +537,7 @@ Fast, scalable batch correction algorithm that projects cells into a shared embe
 ## Trajectory Analysis
 
 <a name="paga"></a>
+
 ### PAGA
 
 Partition-based Graph Abstraction. Constructs a connectivity graph between cell clusters to infer developmental trajectories.
@@ -510,7 +549,9 @@ Partition-based Graph Abstraction. Constructs a connectivity graph between cell 
 **Used in:** Post-analysis (PAGA connectivity graph between clusters)
 
 <a name="trajectory-teaching"></a>
-**Teaching material, and the warnings we took from it:**
+
+#### Teaching material, and the warnings we took from it
+
 > Galaxy Training Network. "Trajectory Analysis using Python (Jupyter Notebook) in Galaxy."
 > https://training.galaxyproject.org/training-material/topics/single-cell/tutorials/scrna-case_JUPYTER-trajectories/tutorial.html
 
@@ -536,6 +577,7 @@ The **Composition by group** results tab ([what it does, and what it refuses to
 do](results.md#composition-by-group-tab)).
 
 <a name="unit-of-replication"></a>
+
 ### The unit of replication
 
 The test compares **per-image proportions**, not pooled cells. A thousand cells from one
@@ -551,6 +593,7 @@ replicates is the standard way significance gets inflated in this kind of work.
 ---
 
 <a name="mann-whitney"></a>
+
 ### Mann-Whitney U and Kruskal-Wallis H
 
 Rank-based tests, so no normality assumption -- which matters because proportions are
@@ -574,6 +617,7 @@ cases scipy's exact method declines) and `scipy.stats.kruskal`.
 ---
 
 <a name="benjamini-hochberg"></a>
+
 ### Benjamini-Hochberg false discovery rate
 
 The `q` column: the step-up adjustment across the clusters in the table.
@@ -588,6 +632,7 @@ The `q` column: the step-up adjustment across the clusters in the table.
 ---
 
 <a name="compositional-caveat"></a>
+
 ### Why cluster proportions are not independent -- and what to use instead
 
 Proportions sum to 1, so one cluster rising forces the others down. The per-cluster tests
@@ -597,13 +642,19 @@ shadow. **QP-CAT's tab is a screen, not a publication analysis.** Copy the table
 use a model built for compositional single-cell data:
 
 <a name="sccoda"></a>
-**scCODA** -- Bayesian model with an explicit reference cell type, so the "everything else
+
+#### scCODA
+
+Bayesian model with an explicit reference cell type, so the "everything else
 went down" artifact is accounted for rather than reported:
 > Büttner M, Ostner J, Müller CL, Theis FJ, Schubert B. "scCODA is a Bayesian model for compositional single-cell data analysis." *Nature Communications* 12, 6876 (2021).
 > https://doi.org/10.1038/s41467-021-27150-6
 
 <a name="propeller"></a>
-**propeller** -- a transformation plus empirical Bayes moderated tests, designed for the
+
+#### propeller
+
+A transformation plus empirical Bayes moderated tests, designed for the
 small sample sizes real cohorts have:
 > Phipson B, Sim CB, Porrello ER, Hewitt AW, Powell J, Oshlack A. "propeller: testing for differences in cell type proportions in single cell data." *Bioinformatics* 38(20), 4720-4726 (2022).
 > https://doi.org/10.1093/bioinformatics/btac582
@@ -617,6 +668,7 @@ small sample sizes real cohorts have:
 ---
 
 <a name="imaging-cohort-workflow"></a>
+
 ### Where this sits in a multiplexed-imaging workflow
 
 An end-to-end protocol for multiplexed image analysis, including comparing cell-type
@@ -640,7 +692,7 @@ Geometric auto-thresholding method that works well for distributions with a domi
 > Zack GW, Rogers WE, Latt SA. "Automatic measurement of sister chromatid exchange frequency." *Journal of Histochemistry & Cytochemistry* 25(7), 741-753 (1977).
 > https://doi.org/10.1177/25.7.70454
 
-**Used in:** Auto-thresholding (Triangle method)
+**Used in:** Auto-thresholding (Triangle method). QP-CAT fits only the values between a spike of identical values at either end of the range (for example, cells at exactly 0); see [Phenotyping](phenotyping.md#auto-thresholding).
 
 ---
 
@@ -652,7 +704,7 @@ Uses gamma mixture models for marker gating, better suited to the right-skewed, 
 > Xiong J, Kaur H, Heiser CN, et al. "GammaGateR: semi-automated marker gating for single-cell multiplexed imaging." *Bioinformatics* 40(6), btae356 (2024).
 > https://doi.org/10.1093/bioinformatics/btae356
 
-**Used in:** Auto-thresholding (Gamma method, inspired by GammaGateR approach)
+**Used in:** Auto-thresholding (Gamma method). QP-CAT does **not** implement GammaGateR's mixture model. It fits a single gamma distribution to all values and sets the threshold at mode + N x SD, with N from the preference **Gamma Threshold Std Multiplier** (default 1.0). GammaGateR inspired the choice of a gamma rather than a Gaussian.
 
 ---
 
@@ -683,7 +735,7 @@ methods below.
 > Zhang JM, Kamath GM, Tse DN. "Valid Post-clustering Differential Analysis for Single-Cell RNA-Seq." *Cell Systems* 9(4), 383-392 (2019).
 > https://doi.org/10.1016/j.cels.2019.07.012
 
-> Lee C, Song D, Chen S, Li JJ. "ClusterDE: A Statistical Software Package for Removing Double-Dipping Bias in Post-Clustering Differential Expression Analysis." *Journal of Computational Biology* 33(1), 36-42 (2025).
+> Lee C, Song D, Chen S, Li JJ. "ClusterDE: A Statistical Software Package for Removing Double-Dipping Bias in Post-Clustering Differential Expression Analysis." *Journal of Computational Biology* 33(1), 36-42 (2026; online 2025).
 > https://doi.org/10.1177/15578666251383562
 
 The ClusterDE method itself was first described in a preprint:
@@ -693,10 +745,10 @@ The ClusterDE method itself was first described in a preprint:
 
 Selective inference conditioned on the clustering event, and sample-splitting alternatives:
 
-> Gao LL, Bien J, Witten D. "Selective Inference for Hierarchical Clustering." *Journal of the American Statistical Association* 119(545), 332-342 (2022).
+> Gao LL, Bien J, Witten D. "Selective Inference for Hierarchical Clustering." *Journal of the American Statistical Association* 119(545), 332-342 (2024).
 > https://doi.org/10.1080/01621459.2022.2116331
 
-> Neufeld A, Gao LL, Popp J, Battle A, Witten D. "Inference after latent variable estimation for single-cell RNA sequencing data." *Biostatistics* 25(1), 270-293 (2022).
+> Neufeld A, Gao LL, Popp J, Battle A, Witten D. "Inference after latent variable estimation for single-cell RNA sequencing data." *Biostatistics* 25(1), 270-287 (2024; online 2022).
 > https://doi.org/10.1093/biostatistics/kxac047
 
 **Used in:** the caveat above the Marker Rankings table, and the Marker Fingerprints tooltips
@@ -726,7 +778,7 @@ Large-scale single-cell gene expression data analysis framework. Provides the co
 Annotated data format for single-cell analysis. Standard interchange format for the single-cell ecosystem.
 
 **Original paper:**
-> Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. "anndata: Annotated data." *Journal of Open Source Software* 9(101), 4371 (2024).
+> Virshup I, Rybakov S, Theis FJ, Angerer P, Wolf FA. "anndata: Access and store annotated data matrices." *Journal of Open Source Software* 9(101), 4371 (2024).
 > https://doi.org/10.21105/joss.04371
 
 **Preprint:**
@@ -770,7 +822,7 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 > Kipf TN, Welling M. "Semi-Supervised Classification with Graph Convolutional Networks." *Proceedings of the 5th International Conference on Learning Representations (ICLR)* (2017).
 > https://doi.org/10.48550/arXiv.1609.02907
 
-**Approach reference (the tool the feature is modelled on):**
+**Approach reference (the tool the feature is modeled on):**
 > Zheng Y, Abila E, Chrenková E, Buljan I, Winkler J, Rendeiro AF. "LazySlide: accessible and interoperable whole-slide image analysis." *Nature Methods* 23, 728-731 (2026).
 > https://doi.org/10.1038/s41592-026-03044-7
 
@@ -855,6 +907,7 @@ brianhie) so the mode adds no new environment dependency; see the header of
 ---
 
 <a name="traithorizon"></a>
+
 ## Crops + Feature Table Export (TraitHorizon)
 
 "Export cell crops + feature table" writes one PNG per cell plus a table in the input
@@ -896,7 +949,7 @@ notation all parse and text columns are passed to `--hide_axes` instead.
 shows medoids -- what a cluster typically looks like. Putting the image next to the full
 feature vector for every object answers the other question, "is this cluster real or is it
 a cluster of bad segmentations", and that is what the parallel-coordinates view at
-population scale is for. Shipping the export buys it for the cost of a file writer.
+population scale is for.
 
 **The interaction it provides, for context on why the format is shaped this way:**
 > Inselberg A. "The plane with parallel coordinates." *The Visual Computer* 1, 69-91 (1985).
@@ -904,6 +957,18 @@ population scale is for. Shipping the export buys it for the cost of a file writ
 > (The origin of the parallel-coordinates plot, which is TraitHorizon's central view: one
 > vertical axis per feature, one polyline per object, and a drag on an axis as a range
 > filter.)
+
+---
+
+## LLM cluster explainer
+
+The Cluster Explainer uses no published method: the prompt and the reply parser are QP-CAT's
+own, and its output has no published validation. Prior art and the protocol it speaks:
+
+- [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping inspired it; see
+  [LLM explainer](llm-explainer.md).
+- The MCP server follows the [Model Context Protocol](https://modelcontextprotocol.io)
+  specification; see [MCP server](mcp-server.md).
 
 ---
 
