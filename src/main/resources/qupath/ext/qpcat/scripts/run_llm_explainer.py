@@ -67,6 +67,14 @@ PROMPT_TEMPLATE_ID = "cluster_phenotype_v2"
 # share one branch so the prompt and the parser can never drift between them.
 PASTE_PROVIDERS = ("CHATBOT", "MCP")
 
+# Output cap for one Anthropic call. 2048 cut a 20-cluster reply off mid-array;
+# thinking tokens count against it too. 16000 keeps a non-streaming request
+# inside the SDK's HTTP timeout.
+ANTHROPIC_MAX_TOKENS = 16000
+
+# Anthropic stop reasons meaning the reply ended before the model finished.
+TRUNCATED_STOP_REASONS = ("max_tokens", "model_context_window_exceeded")
+
 
 # ---------------------------------------------------------------------------
 # Public entry point
@@ -142,6 +150,11 @@ def run_explainer(
     except _LlmError as e:
         out["error_type"] = e.error_type
         out["error_detail"] = scrub_secrets(e.detail)
+        if e.raw is not None:
+            # A cut-off or refused reply still belongs in the audit log.
+            out["response_raw"] = e.raw
+            out["input_tokens"] = e.input_tokens
+            out["output_tokens"] = e.output_tokens
         return out
     except Exception as e:  # noqa: BLE001 - last-resort guard
         out["error_type"] = "UNKNOWN"
@@ -158,6 +171,14 @@ def run_explainer(
 
     explanations = parse_response(raw, cluster_ids)
     out["explanations_json"] = json.dumps(explanations)
+    # MCP refuses such a reply itself, with text written for the agent.
+    provider_norm = (provider or "").strip().upper()
+    if provider_norm != "MCP" and not set(_rows_by_id(raw)) & set(cluster_ids):
+        out["error_type"] = "MALFORMED_RESPONSE"
+        out["error_detail"] = (
+            "The reply held no JSON array with a row for any requested cluster; "
+            "the full reply is in the audit log's Response block."
+        )
     return out
 
 
@@ -264,10 +285,13 @@ def _resolve_cluster_ids(marker_table, spec):
 class _LlmError(Exception):
     """Internal exception carrying a classified error_type."""
 
-    def __init__(self, error_type, detail):
+    def __init__(self, error_type, detail, raw=None, input_tokens=-1, output_tokens=-1):
         super().__init__(detail)
         self.error_type = error_type
         self.detail = detail
+        self.raw = raw
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 def _call_provider(
@@ -314,7 +338,7 @@ def _call_anthropic(model, api_key, prompt, timeout_sec):
         client = anthropic.Anthropic(api_key=api_key, timeout=float(timeout_sec))
         msg = client.messages.create(
             model=model,
-            max_tokens=2048,
+            max_tokens=ANTHROPIC_MAX_TOKENS,
             messages=[{"role": "user", "content": prompt}],
         )
     except Exception as e:
@@ -322,6 +346,27 @@ def _call_anthropic(model, api_key, prompt, timeout_sec):
 
     text = _extract_anthropic_text(msg)
     inp_tokens, out_tokens = _extract_anthropic_tokens(msg)
+    stop = getattr(msg, "stop_reason", None)
+    if stop in TRUNCATED_STOP_REASONS:
+        raise _LlmError(
+            "RESPONSE_TRUNCATED",
+            "Anthropic stopped the reply early (stop_reason "
+            + str(stop)
+            + ", "
+            + str(out_tokens)
+            + " output tokens).",
+            raw=text,
+            input_tokens=inp_tokens,
+            output_tokens=out_tokens,
+        )
+    if stop == "refusal":
+        raise _LlmError(
+            "PROVIDER_REFUSED",
+            "Anthropic declined to answer (stop_reason refusal).",
+            raw=text,
+            input_tokens=inp_tokens,
+            output_tokens=out_tokens,
+        )
     return text, inp_tokens, out_tokens
 
 
@@ -429,6 +474,16 @@ def _call_ollama(model, endpoint, prompt, timeout_sec):
     prompt_eval_count = data.get("prompt_eval_count")
     out_tokens = int(eval_count) if isinstance(eval_count, int) else -1
     inp_tokens = int(prompt_eval_count) if isinstance(prompt_eval_count, int) else -1
+    if data.get("done_reason") == "length":
+        raise _LlmError(
+            "RESPONSE_TRUNCATED",
+            "Ollama stopped the reply at its output limit (done_reason length, "
+            + str(out_tokens)
+            + " output tokens).",
+            raw=text,
+            input_tokens=inp_tokens,
+            output_tokens=out_tokens,
+        )
     return text, inp_tokens, out_tokens
 
 
@@ -443,19 +498,7 @@ def parse_response(raw, cluster_ids):
     requested cluster id; missing or malformed rows fall back to the
     "insufficient signal" representation so the UI always has a row.
     """
-    parsed = _try_parse_json_array(raw)
-    by_id = {}
-    if isinstance(parsed, list):
-        for entry in parsed:
-            if not isinstance(entry, dict):
-                continue
-            cid = entry.get("cluster_id")
-            try:
-                cid = int(cid)
-            except (TypeError, ValueError):
-                continue
-            by_id[cid] = entry
-
+    by_id = _rows_by_id(raw)
     out = []
     for cid in cluster_ids:
         entry = by_id.get(cid)
@@ -495,6 +538,23 @@ def parse_response(raw, cluster_ids):
             }
         )
     return out
+
+
+def _rows_by_id(raw):
+    """The reply's JSON-array rows keyed by integer cluster_id; {} when none parse."""
+    parsed = _try_parse_json_array(raw)
+    by_id = {}
+    if isinstance(parsed, list):
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            cid = entry.get("cluster_id")
+            try:
+                cid = int(cid)
+            except (TypeError, ValueError):
+                continue
+            by_id[cid] = entry
+    return by_id
 
 
 def _try_parse_json_array(raw):

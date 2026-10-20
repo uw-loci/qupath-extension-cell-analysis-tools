@@ -182,6 +182,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   now says that and where to keep the token. The client examples gave one JSON block for
   Cursor, Codex and Gemini CLI; Codex reads TOML and Gemini CLI uses `httpUrl`, and each
   now has its own. Nothing about the server's behaviour changed.
+- **The Cluster Explainer reported "Done" for replies it could not read.** A reply with no
+  JSON array naming the clusters (prose, or the wrong shape) showed "Done. N clusters
+  explained" over a table of "(no suggestion)"; it now reads "Failed: provider returned an
+  unexpected response shape." An Anthropic reply was capped at 2,048 tokens, which a
+  20-cluster run exceeds, and a cut-off reply looked the same; the cap is now 16,000, and a
+  reply the provider stopped early (Anthropic `max_tokens`, Ollama's length limit) reads
+  "Failed: the reply was cut off at the model's output limit". An Anthropic refusal is
+  reported as one. Every failure shown in the tab is also written to the QuPath log at
+  ERROR, and the cut-off or refused reply is kept in the audit log.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

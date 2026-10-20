@@ -47,6 +47,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult.LlmExplanationsBundle;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.LlmAuditScrubber;
 import qupath.ext.qpcat.service.LlmExplainerService;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainRequest;
 import qupath.ext.qpcat.service.LlmExplainerService.ExplainResult;
@@ -937,11 +938,12 @@ public class ClusterExplainerPanel {
                     return;
                 }
                 if (finalRes == null) {
+                    logger.error("LLM explainer: no result returned");
                     statusLabel.setText("Failed: no result returned.");
                     return;
                 }
                 if (!finalRes.isSuccess()) {
-                    statusLabel.setText(formatErrorBanner(finalRes));
+                    statusLabel.setText(reportFailure(logger, finalRes.errorType, finalRes.errorDetail));
                     LlmExplainerService.writeAuditLog(req, finalRes, durationMs);
                     return;
                 }
@@ -1262,8 +1264,27 @@ public class ClusterExplainerPanel {
         return s != null ? s : "";
     }
 
-    private static String formatErrorBanner(ExplainResult res) {
-        String et = res.errorType != null ? res.errorType : "UNKNOWN";
+    /**
+     * Status-line text for a failed run, logged first: at ERROR, or INFO for a cancel.
+     *
+     * @param log         the logger to write to
+     * @param errorType   the classified failure, e.g. "AUTH_INVALID"; null reads as UNKNOWN
+     * @param errorDetail the provider's detail, scrubbed of keys before logging; may be null
+     * @return the status-line text
+     */
+    static String reportFailure(Logger log, String errorType, String errorDetail) {
+        String banner = formatErrorBanner(errorType, errorDetail);
+        if ("REQUEST_CANCELLED".equals(errorType)) {
+            log.info("LLM explainer: {}", banner);
+        } else {
+            log.error("LLM explainer: {} [{}] {}", banner, errorType,
+                    LlmAuditScrubber.scrub(errorDetail != null ? errorDetail : ""));
+        }
+        return banner;
+    }
+
+    private static String formatErrorBanner(String errorType, String errorDetail) {
+        String et = errorType != null ? errorType : "UNKNOWN";
         return switch (et) {
             case "NETWORK_UNREACHABLE" -> "Failed: cannot reach the provider.";
             case "AUTH_INVALID" -> "Failed: 401 -- API key was rejected.";
@@ -1274,7 +1295,10 @@ public class ClusterExplainerPanel {
             case "REQUEST_CANCELLED" -> "Cancelled. No results applied.";
             case "TIMEOUT" -> "Failed: no response within timeout.";
             case "INPUT_TOO_LARGE" -> "Failed: prompt exceeded the model's context window.";
-            default -> "Failed: " + (res.errorDetail != null ? res.errorDetail : et);
+            case "RESPONSE_TRUNCATED" -> "Failed: the reply was cut off at the model's output "
+                    + "limit. Explain fewer clusters at a time (Selected:).";
+            case "PROVIDER_REFUSED" -> "Failed: the provider declined to answer this prompt.";
+            default -> "Failed: " + (errorDetail != null ? errorDetail : et);
         };
     }
 

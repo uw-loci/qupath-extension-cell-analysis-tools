@@ -119,6 +119,8 @@ def test_pasting_prose_instead_of_json_gives_a_row_per_cluster_not_a_crash(mod):
     assert len(rows) == 2
     assert all(r["phenotype"] is None for r in rows)
     assert all("did not return a row" in r["rationale"] for r in rows)
+    # ...and the caller is told it failed, so the panel cannot report "Done".
+    assert out["error_type"] == "MALFORMED_RESPONSE"
 
 
 def test_chatbot_never_touches_the_network_even_with_a_key_present(mod, monkeypatch):
