@@ -160,6 +160,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   `YAML_SCHEMA.md` and `HOW_TO_GUIDE`, all of which are now one-paragraph "Moved" notes. They
   name the live pages (`references.md`, `setup.md`, `spatial-neighborhoods.md`,
   `yaml-reference.md`, `batch.md`).
+- **Results-window guide text described controls and colours that are not there.** The UMAP
+  2D guide and the in-plot help said a double-click opens the image; one click already opens
+  it, centres on the cell and selects it. The Stacked Violin guide sent you to a "Cluster
+  Management dialog" (the button is **Modify clusters...**, then **Sub-cluster...**), the
+  Embedding Plot guide to a right-click menu (use **Save plot...**), and the GMM note to an
+  arcsinh option Normalization does not have. The Dotplot guide said dark means highest,
+  which is backwards on the default Viridis map, and the Heatmap guide said red is high and
+  blue low, true for one colour map; both now point at the colour bar. The Cluster Explainer
+  said its API key lasts a QuPath session; it lasts one results window, and its
+  Documentation link now opens the explainer's own page instead of the spatial tabs.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

@@ -376,9 +376,10 @@ public class ClusterExplainerPanel {
         apiKeyField.setPromptText("sk-ant-...");
         apiKeyField.setPrefColumnCount(40);
         apiKeyField.setTooltip(Tooltips.of(
-                "Your Anthropic API key (starts with 'sk-ant-...'). Held in "
-                + "memory only; not written to disk. Re-enter each QuPath "
-                + "session, or set QPCAT_ANTHROPIC_KEY in your environment."));
+                "Your Anthropic API key (starts with 'sk-ant-...'). Held by "
+                + "this results window only; not written to disk. Closing the "
+                + "window discards it, so each results window asks again unless "
+                + "QPCAT_ANTHROPIC_KEY is set in your environment."));
         apiKeyField.setAccessibleText("Anthropic API key, password field, "
                 + "in-memory only");
         apiKeyField.textProperty().addListener((obs, oldV, newV) -> refreshState());
@@ -398,8 +399,8 @@ public class ClusterExplainerPanel {
         keyStatusLabel.setStyle("-fx-font-size: 11px;");
 
         keyWarningLabel = new Label(
-                "Key is held in memory only. Re-enter each QuPath session, "
-                + "or set QPCAT_ANTHROPIC_KEY.");
+                "Key is held by this results window only. Closing the window "
+                + "discards it; set QPCAT_ANTHROPIC_KEY to skip re-entering it.");
         keyWarningLabel.setStyle(
                 "-fx-text-fill: -fx-text-base-color; -fx-font-style: italic; "
                 + "-fx-font-size: 11px;");

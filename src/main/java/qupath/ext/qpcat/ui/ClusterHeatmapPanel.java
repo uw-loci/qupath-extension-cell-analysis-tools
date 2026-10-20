@@ -242,16 +242,17 @@ public class ClusterHeatmapPanel extends VBox {
                 ? ScaleMode.SHARED_CENTERED : ScaleMode.PER_MARKER;
         scaleCombo.setStyle("-fx-font-size: 10px;");
         scaleCombo.setTooltip(Tooltips.of(
-                "How cell values become colours. WHITE IS ZERO in both: with the\n"
-                + "default Z-score normalization, zero means this cluster is average\n"
-                + "for this marker, red is above it and blue below.\n\n"
+                "How cell values become colours. THE MIDDLE OF THE COLOUR BAR IS\n"
+                + "ZERO in both: with the default Z-score normalization, zero means\n"
+                + "this cluster is average for this marker; colours toward the bar's\n"
+                + "right end are above it and toward its left end below.\n\n"
                 + "What differs is the reach of the colour:\n\n"
                 + "Per marker: each column uses its own strongest value, so a weakly\n"
                 + "varying marker still shows its pattern. Colour is comparable DOWN\n"
                 + "a column, not across columns.\n\n"
                 + "Shared across markers: one reach for the whole map, so the same\n"
                 + "colour is the same number anywhere in it -- and a marker that\n"
-                + "barely varies correctly looks almost white.\n\n"
+                + "barely varies correctly looks like the middle of the bar.\n\n"
                 + "With Normalization set to None the values are raw intensities and\n"
                 + "zero is not a meaningful centre, so neither mode is informative."));
         scaleCombo.valueProperty().addListener((o, a, b) -> {

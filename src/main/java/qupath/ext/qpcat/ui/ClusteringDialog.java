@@ -3046,8 +3046,10 @@ public class ClusteringDialog {
                         + "also reports the posterior behind it: the Cluster confidence tab and "
                         + "a per-cell measurement show which cells were close to a coin flip, "
                         + "which is how 'partly A, partly B' shows up. You set n_components "
-                        + "directly (not chosen by BIC/AIC). Transform skewed markers first "
-                        + "(e.g. arcsinh via Normalization).",
+                        + "directly (not chosen by BIC/AIC). A skewed marker fits poorly, and "
+                        + "no Normalization option removes skew (Percentile only clips the "
+                        + "extreme 1% at each end): transform such measurements (e.g. arcsinh) "
+                        + "before clustering.",
                         "caution-gmm");
             }
             case BANKSY -> {
@@ -4751,9 +4753,11 @@ public class ClusteringDialog {
             ScrollPane heatmapScroll = new ScrollPane(heatmap);
             heatmapScroll.setFitToWidth(true);
             Tab tab = new Tab("Heatmap", wrapWithGuide(heatmapScroll,
-                    "Mean marker expression per cluster (column-normalized).\n"
-                    + "Red = high relative expression, blue = low. Each row is a cluster, "
-                    + "each column is a marker. Hover over cells for exact values.\n"
+                    "Mean marker expression per cluster. Each row is a cluster, each "
+                    + "column is a marker. The colour bar under the map is the key: its "
+                    + "right end is high, and with Z-score normalization its middle is zero "
+                    + "(average for that marker). Scale: and Colours: above the map change "
+                    + "the range and the colours. Hover over cells for exact values.\n"
                     + "Use this to identify which markers define each cluster and to guide "
                     + "cell type annotation in the Phenotyping dialog.",
                     "heatmap-tab",
@@ -4811,7 +4815,8 @@ public class ClusteringDialog {
                     + "Cells close together have similar marker expression profiles.\n"
                     + "Well-separated groups indicate distinct cell populations. "
                     + "Scroll to zoom, middle-drag to pan, hover for details; click a point "
-                    + "to preview its cell, double-click to open the image and center on it.\n"
+                    + "to open its image if needed, center on the cell and select it, with a "
+                    + "crop preview beside the plot.\n"
                     + "Use Gate to lasso a region of the plot and select or classify the "
                     + "enclosed cells across their images.\n"
                     + clusteringSpaceNote(result),
@@ -5492,10 +5497,13 @@ public class ClusteringDialog {
                     "Asks an LLM to suggest cell-type names for each cluster from its top "
                     + "markers. 'Any chatbot' needs no key: copy the prompt, paste it into "
                     + "the chatbot you already use, paste the reply back. The Anthropic "
-                    + "API key, if you use that path instead, is held in memory only; "
-                    + "re-enter it each QuPath session, or set QPCAT_ANTHROPIC_KEY in "
-                    + "your shell.",
-                    "cluster-explainer-llm-tab"));
+                    + "API key, if you use that path instead, is held by this results "
+                    + "window only and never saved: closing the window discards it, unless "
+                    + "it came from QPCAT_ANTHROPIC_KEY in your shell.",
+                    null,
+                    // The explainer has its own page; results.md has no section for it.
+                    java.util.List.of(QpcatDocLinks.page(
+                            "Documentation", "llm-explainer.md", null))));
             tab.setClosable(false);
             tabPane.getTabs().add(tab);
             // Stacks with the other WINDOW_HIDDEN handlers: lets the panel stop
@@ -6825,8 +6833,8 @@ public class ClusteringDialog {
                     // produced it; this text cannot, because it is shared.
                     guide = "Dot size = fraction of the cluster's cells above the cutoff named "
                             + "in the caption under the figure. Dot color = the cluster's mean, "
-                            + "rescaled per marker so the darkest dot in a column is that "
-                            + "column's highest cluster -- colors are not comparable across "
+                            + "rescaled per marker so the column's highest cluster takes the "
+                            + "top of the colour scale (1) -- colors are not comparable across "
                             + "columns.\n"
                             + "What the size means follows the Normalization setting, and the "
                             + "caption says which. Min-Max or None: a large dot means most of the "
@@ -6834,8 +6842,9 @@ public class ClusteringDialog {
                             + "the marker's 1st percentile. Z-score, the default: above the marker's "
                             + "MEAN OVER EVERY CELL IN THIS RUN, which is not the same as expressing "
                             + "it -- a marker present in every cell can show a half-size dot.\n"
-                            + "Large, dark dots indicate markers that are both highly expressed and "
-                            + "broadly active in that cluster -- strong candidate markers for cell type identity.";
+                            + "Large dots at the top of the colour scale indicate markers that are "
+                            + "both highly expressed and broadly active in that cluster -- strong "
+                            + "candidate markers for cell type identity.";
                     docAnchor = "dotplot-tab";
                 }
                 case "matrixplot" -> {
@@ -6859,7 +6868,7 @@ public class ClusteringDialog {
                             + "cell has, and many cells sit exactly there.\n"
                             + "Bimodal (double-peaked) distributions within a single cluster suggest "
                             + "the cluster may contain two distinct subpopulations -- consider "
-                            + "subclustering via the Cluster Management dialog.";
+                            + "Sub-cluster... under Modify clusters... at the bottom of this window.";
                     docAnchor = "stacked-violin-tab";
                 }
                 case "paga" -> {
@@ -6882,7 +6891,7 @@ public class ClusteringDialog {
                             + "Distances between clusters in this layout are not interpretable; "
                             + "only local neighborhoods are. Clusters were computed from the "
                             + "measurements, not from this layout.\n"
-                            + "Right-click to save this image for use in presentations or publications.";
+                            + "Save plot... at the bottom of this window exports it as a PNG.";
                     docAnchor = "embedding-plot-tab";
                 }
                 case "nhood_enrichment" -> {

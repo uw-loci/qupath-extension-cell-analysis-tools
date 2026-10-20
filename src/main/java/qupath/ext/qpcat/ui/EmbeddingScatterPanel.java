@@ -65,6 +65,10 @@ public class EmbeddingScatterPanel extends VBox {
     static final double MARGIN = 40;
     private static final double POINT_RADIUS = 1.5;
 
+    /** Help line once clicks navigate; a single click does all of it. */
+    static final String NAVIGATION_HELP = "Scroll to zoom  -  middle-drag to pan  -  click a point "
+            + "to open its image if needed, center on the cell and select it";
+
     /**
      * Most points drawn in one repaint. Above this the canvas is saturated -- the
      * plot is redrawn on every scroll, pan, resize and color edit, and a million
@@ -284,17 +288,6 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     /**
-     * Enable click-to-navigate + crop preview. When wired, single-click selects
-     * the nearest cell (rings it, selects it in the hierarchy if its image is
-     * open, loads a crop preview) and double-click opens the image and centers
-     * the field of view on it. Index-aligned with the {@code embedding}/
-     * {@code labels} passed to {@link #setData}.
-     *
-     * @param cellRefs    per-cell back-references (may be null to stay display-only)
-     * @param qupath      the QuPath GUI instance
-     * @param cropService shared crop reader (owned by the dialog; not closed here)
-     */
-    /**
      * Supply per-cluster display channels for the crop preview, and reveal the
      * option that turns them on.
      * <p>
@@ -314,14 +307,23 @@ public class EmbeddingScatterPanel extends VBox {
         }
     }
 
+    /**
+     * Enable click-to-navigate + crop preview. When wired, a click on a point
+     * rings the nearest cell, opens its image if needed, centers the field of
+     * view on it, selects it and loads a crop preview. Index-aligned with the
+     * {@code embedding}/{@code labels} passed to {@link #setData}.
+     *
+     * @param cellRefs    per-cell back-references (may be null to stay display-only)
+     * @param qupath      the QuPath GUI instance
+     * @param cropService shared crop reader (owned by the dialog; not closed here)
+     */
     public void setNavigation(CellRef[] cellRefs, QuPathGUI qupath, CellCropService cropService) {
         this.cellRefs = cellRefs;
         this.qupath = qupath;
         this.cropService = cropService;
         boolean enabled = cellRefs != null && qupath != null;
         helpLabel.setText(enabled
-                ? "Scroll to zoom  -  middle-drag to pan  -  click a point to center + select its cell "
-                  + "(double-click opens its image)"
+                ? NAVIGATION_HELP
                 : "Scroll to zoom  -  drag to pan");
     }
 
@@ -1031,8 +1033,8 @@ public class EmbeddingScatterPanel extends VBox {
         return bestIdx;
     }
 
-    // Click: single = select + preview, double = navigate. Only active when
-    // navigation has been wired via setNavigation().
+    // Click: ring, navigate to and select the cell, and preview it. Only active
+    // when navigation has been wired via setNavigation().
     private void onMouseClicked(MouseEvent e) {
         // Gate mode intercepts clicks: left adds a vertex, double-click or
         // right-click closes the polygon and computes the enclosed cells.
