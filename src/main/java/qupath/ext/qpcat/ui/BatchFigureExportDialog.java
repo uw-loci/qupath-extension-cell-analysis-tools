@@ -307,12 +307,12 @@ public class BatchFigureExportDialog {
         compBox.getChildren().add(compNote);
         VBox fxBox = new VBox(4);
         Label fxHeader = new Label(
-                "Interactive plots (JavaFX, GUI-only -- not exportable in v1):");
+                "Interactive plots (drawn in the Results window; this export cannot write them):");
         fxHeader.setStyle("-fx-font-weight: bold;");
         fxBox.getChildren().add(fxHeader);
         Label fxNote = new Label(
-                "These rows are listed for visibility; v1 records them as failures at export time. "
-                        + "Planned for v1.1.");
+                "Listed so you know they exist: a ticked one is recorded as not exported. "
+                        + "Save them from the Results window with Save plot... instead.");
         fxNote.setWrapText(true);
         WrapHeight.bind(fxNote);
         fxNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
@@ -320,16 +320,16 @@ public class BatchFigureExportDialog {
         for (PlotKind plot : PlotKind.values()) {
             String label = plot.getDisplayName();
             if (plot.getSource() == PlotKind.Source.JAVAFX) {
-                label = label + "  (GUI-only -- not exportable in v1)";
+                label = label + "  (Results window only)";
             }
-            CheckBox cb = new CheckBox(label);
+            CheckBox cb = DataCheckBoxes.of(label);
             cb.setSelected(plot.isDefaultEnabled());
             cb.setOnAction(e -> updateExpectedFiles());
             cb.setAccessibleText("Plot kind: " + plot.getDisplayName());
             if (plot.getSource() == PlotKind.Source.JAVAFX) {
                 cb.setTooltip(tip(
-                        "JavaFX-rendered plot. Not exportable in v1 -- skipped at export time. "
-                                + "Planned for v1.1 via a snapshot of the open Clustering Results dialog."));
+                        "Drawn live in the Results window, so this export skips it. Open the "
+                                + "result and use Save plot... on its tab."));
             } else if (plot.getSource() == PlotKind.Source.COMPUTED) {
                 cb.setTooltip(tip(
                         "Cluster composition, drawn from the saved result itself -- the same "

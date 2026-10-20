@@ -1817,8 +1817,10 @@ def _wrap_caption(caption, width=95):
     )
 
 
-def size_stacked_violin(plot_obj, row_scale=2.0):
-    """Make each cluster row ``row_scale`` times scanpy's height, with no blank strip.
+def size_without_top_strip(plot_obj, row_scale=1.0):
+    """Size a scanpy dotplot, matrix plot or stacked violin with no blank strip.
+
+    Each cluster row is ``row_scale`` times scanpy's height.
 
     Left to itself scanpy adds an inch above the plot "for labels" that the labels
     never use. Giving it an explicit size puts all of the height into the rows.
@@ -2981,6 +2983,7 @@ if do_plots and plot_dir and can_analyze:
             show=False,
             return_fig=True,
         )
+        size_without_top_strip(dp)
         dotplot_path = os.path.join(plot_dir, "cluster_dotplot.png")
         _dot_caption = dot_size_caption(normalization, _dot_cutoff)
         if plot_feature_caption:
@@ -3011,6 +3014,7 @@ if do_plots and plot_dir and can_analyze:
             show=False,
             return_fig=True,
         )
+        size_without_top_strip(mp)
         matrixplot_path = os.path.join(plot_dir, "cluster_matrixplot.png")
         save_scanpy_plot(
             mp,
@@ -3071,7 +3075,7 @@ if do_plots and plot_dir and can_analyze:
                 dodge=False,
             )
             violin_path = os.path.join(plot_dir, "stacked_violin.png")
-            size_stacked_violin(sv)
+            size_without_top_strip(sv, row_scale=2.0)
             save_scanpy_plot(
                 sv,
                 violin_path,

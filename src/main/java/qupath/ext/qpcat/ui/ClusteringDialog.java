@@ -862,7 +862,7 @@ public class ClusteringDialog {
 
     /** One row of the "Cells to cluster" list: a checkbox carrying the class name and count. */
     static final class ClassRowCell extends ListCell<ClassRow> {
-        private final CheckBox check = new CheckBox();
+        private final CheckBox check = DataCheckBoxes.of("");
         /** The row this cell shows now; null while it is being re-pointed. */
         private ClassRow shown;
 
@@ -5879,7 +5879,7 @@ public class ClusteringDialog {
                             ? "   <- " + (entry.derivedOp != null ? entry.derivedOp : "edit")
                               + " of '" + entry.derivedFrom + "'"
                             : "");
-                CheckBox cb = new CheckBox(label);
+                CheckBox cb = DataCheckBoxes.of(label);
                 cb.setUserData(entry.name);
                 checks.add(cb);
                 rows.getChildren().add(cb);
@@ -7400,7 +7400,7 @@ public class ClusteringDialog {
             if (!show) {
                 hidden.add(name);
             }
-            CheckBox cb = new CheckBox(name);
+            CheckBox cb = DataCheckBoxes.of(name);
             cb.setSelected(show);
             String hex = hexByName.get(name);
             if (hex != null && hex.startsWith("#")) {

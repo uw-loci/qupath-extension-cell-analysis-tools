@@ -63,6 +63,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Class names lost their underscores in check-box lists.** JavaFX reads an underscore in a
+  check box's text as a keyboard-shortcut marker, so "b_cell" showed as "bcell" in the
+  Clustering dialog's **Cells to cluster** list, and the same applied to the spatial-statistics
+  class picker, the result picker and the figure-export plot list. They now show names as
+  written.
+- **The dotplot and matrix plot had an empty band across the top**, the inch scanpy reserves
+  for labels above the plot; the stacked violin already dropped it. All three now give that
+  height to the rows.
+- **The figure-export dialog promised the interactive plots "in v1.1".** It now says those
+  plots are drawn in the Results window and points to **Save plot...** there.
+
 - **Reproducibility guide: fewer spatial permutations are not free.** The guide listed the
   permutation count among settings that cost nothing but the output. A permutation p-value
   cannot be smaller than 1 / (permutations + 1) -- 0.001 at 1000, about 0.01 at 100 -- so

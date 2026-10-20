@@ -435,7 +435,7 @@ public class SpatialStatsDialog {
         FlowPane flow = new FlowPane(8, 4);
         flow.setPadding(new Insets(4));
         for (String cn : classNames) {
-            CheckBox cb = new CheckBox(cn);
+            CheckBox cb = DataCheckBoxes.of(cn);
             // Pre-check the usual "ignore these" classes as a convenience.
             String low = cn.toLowerCase();
             if (low.contains("ignore") || low.contains("necros") || low.contains("exclude")) {

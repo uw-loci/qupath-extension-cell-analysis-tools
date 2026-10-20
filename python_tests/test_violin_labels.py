@@ -25,7 +25,7 @@ def test_rows_are_twice_as_tall_with_no_blank_strip_and_labels_render():
     matplotlib.use("Agg")
     import scanpy as sc
 
-    size = load_script_symbol("run_clustering.py", "size_stacked_violin")
+    size = load_script_symbol("run_clustering.py", "size_without_top_strip")
     angle = load_script_symbol(
         "run_clustering.py", "angle_marker_labels", {"bold_marker_label": bold}
     )
@@ -46,7 +46,7 @@ def test_rows_are_twice_as_tall_with_no_blank_strip_and_labels_render():
         adata, names, groupby="cluster", show=False, return_fig=True, dodge=False
     )
     row_height = sv.DEFAULT_CATEGORY_HEIGHT
-    size(sv)
+    size(sv, row_scale=2.0)
     sv.make_figure()
     angle(sv)
     sv.fig.canvas.draw()  # mathtext errors surface here
@@ -107,3 +107,39 @@ def test_the_colour_scale_sits_under_the_dendrogram_and_the_figure_narrows():
     assert scale.x0 == tree.x0
     assert scale.y1 < main.y0
     assert moved_width < default_width - 0.5  # inches
+
+
+@requires("scanpy")
+def test_the_dotplot_has_no_blank_strip_above_it_either():
+    import anndata as ad
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import scanpy as sc
+
+    size = load_script_symbol("run_clustering.py", "size_without_top_strip")
+    rng = np.random.default_rng(2)
+    names = ["Cell: M%d mean" % i for i in range(10)]
+    adata = ad.AnnData(rng.gamma(0.6, 2.0, size=(500, 10)).astype(np.float32))
+    adata.var_names = names
+    adata.obs["cluster"] = [str(v) for v in rng.integers(0, 6, 500)]
+    adata.obs["cluster"] = adata.obs["cluster"].astype("category")
+
+    def top(sized):
+        dp = sc.pl.dotplot(
+            adata,
+            names,
+            groupby="cluster",
+            standard_scale="var",
+            show=False,
+            return_fig=True,
+        )
+        if sized:
+            size(dp)
+        dp.make_figure()
+        return dp.ax_dict["mainplot_ax"].get_position().y1, dp.fig.subplotpars.top
+
+    sized_top, frame_top = top(True)
+    default_top, _ = top(False)
+    assert sized_top == frame_top
+    assert default_top < sized_top - 0.1
