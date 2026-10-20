@@ -2,7 +2,8 @@
 Shared utilities for QP-CAT task scripts.
 
 Provides device detection, UMAP execution resolution, cancellation checks, the
-shared non-finite measurement guard and the bold-marker figure labels. Loaded into every task script's global scope by
+shared non-finite measurement guard and the figure labels (bold markers, colour
+scale titles). Loaded into every task script's global scope by
 ApposeClusteringService at init, so task scripts use these without importing.
 
 Spatial feature smoothing approach inspired by LazySlide (MIT License).
@@ -290,3 +291,22 @@ def bold_marker_ticks(ax, axis="x"):
     else:
         ax.set_yticks(ax.get_yticks())
         ax.set_yticklabels(text, **style)
+
+
+def legend_title(statistic, normalization, per_marker_scaled=False):
+    """Colour-scale title for a cluster x marker figure that names its units.
+
+    scanpy's default, "Mean expression in group", hides that the figures draw the
+    run's NORMALIZED matrix. ``"Median"``, ``"zscore"`` ->
+    ``"Median in cluster\\n(z-score)"``. The unit words are shared with the Java
+    heatmap through ``normalization_units.json``.
+    """
+    if per_marker_scaled:
+        units = "each marker scaled 0-1"
+    else:
+        units = {
+            "zscore": "z-score",
+            "minmax": "min-max 0-1",
+            "percentile": "p1-p99 scaled 0-1",
+        }.get(normalization, "raw values")
+    return "%s in cluster\n(%s)" % (statistic, units)

@@ -1,0 +1,9 @@
+{
+  "_comment": "Units named in colour-scale legends, per normalization id. Read by python_tests/test_legend_title.py (model_utils.legend_title) and NormalizationUnitsTest (ClusteringConfig.Normalization), so the figures and the Java heatmap use the same words.",
+  "units": {
+    "zscore": "z-score",
+    "minmax": "min-max 0-1",
+    "percentile": "p1-p99 scaled 0-1",
+    "none": "raw values"
+  }
+}

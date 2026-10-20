@@ -45,21 +45,40 @@ public class ClusteringConfig {
     }
 
     public enum Normalization {
-        ZSCORE("zscore", "Z-score (standard)"),
-        MINMAX("minmax", "Min-Max [0,1]"),
-        PERCENTILE("percentile", "Percentile [p1-p99]"),
-        NONE("none", "None (raw values)");
+        ZSCORE("zscore", "Z-score (standard)", "z-score"),
+        MINMAX("minmax", "Min-Max [0,1]", "min-max 0-1"),
+        PERCENTILE("percentile", "Percentile [p1-p99]", "p1-p99 scaled 0-1"),
+        NONE("none", "None (raw values)", "raw values");
 
         private final String id;
         private final String displayName;
+        private final String units;
 
-        Normalization(String id, String displayName) {
+        Normalization(String id, String displayName, String units) {
             this.id = id;
             this.displayName = displayName;
+            this.units = units;
         }
 
         public String getId() { return id; }
         public String getDisplayName() { return displayName; }
+
+        /**
+         * Units of normalized values, for legends; the same words as
+         * {@code model_utils.legend_title} (shared fixture normalization_units.json).
+         */
+        public String getUnits() { return units; }
+
+        /**
+         * @param id a normalization id such as "zscore"
+         * @return its units, or "" when the id is unknown (an old result)
+         */
+        public static String unitsOf(String id) {
+            for (Normalization n : values()) {
+                if (n.id.equalsIgnoreCase(id)) return n.units;
+            }
+            return "";
+        }
 
         @Override
         public String toString() { return displayName; }

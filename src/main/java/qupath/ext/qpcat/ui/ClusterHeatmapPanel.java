@@ -4,6 +4,7 @@ import javafx.geometry.Insets;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
+import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.QpcatColorMaps;
@@ -135,6 +136,7 @@ public class ClusterHeatmapPanel extends VBox {
      */
     public void setNormalization(String normalizationId) {
         this.centred = "zscore".equalsIgnoreCase(normalizationId);
+        this.units = ClusteringConfig.Normalization.unitsOf(normalizationId);
         // Which colour-map family is correct follows from this, so reload it.
         refreshColorMaps();
         if (data != null) {
@@ -175,6 +177,8 @@ public class ClusterHeatmapPanel extends VBox {
      * raw / min-max / percentile values, which have no centre to diverge about.
      */
     private boolean centred = true;
+    /** Units of the cluster means, e.g. "z-score"; "" when the run did not say. */
+    private String units = "";
     /** Half-width of the shared scale, in the units of the incoming means. */
     private double sharedExtent = 1;
     /** Low end of the shared scale when the data has no centre. */
@@ -520,6 +524,20 @@ public class ClusterHeatmapPanel extends VBox {
         }
     }
 
+    /**
+     * Line under the colour bar naming what the colours are.
+     *
+     * @param centred   true for Z-scored values
+     * @param perMarker true when each column has its own colour range
+     * @param units     the normalization's units, "" when unknown
+     * @return the caption ("" for centred values of unknown units)
+     */
+    static String legendCaption(boolean centred, boolean perMarker, String units) {
+        if (centred) return units.isEmpty() ? "" : "cluster mean (" + units + ")";
+        String what = units.isEmpty() ? "not Z-scored" : "cluster mean (" + units + ")";
+        return what + (perMarker ? ", per marker" : "") + " -- no centre";
+    }
+
     private void redraw() {
         GraphicsContext gc = canvas.getGraphicsContext2D();
         double w = canvas.getWidth();
@@ -584,13 +602,13 @@ public class ClusterHeatmapPanel extends VBox {
         boolean shared = scaleMode == ScaleMode.SHARED_CENTERED;
         if (!centred) {
             // Say so, rather than leave a sequential ramp to be read as diverging.
-            gc.fillText(shared ? String.format("%.3g", sharedLow) : "low (per marker)",
+            // "per marker" goes in the caption: in both end labels they overlapped.
+            gc.fillText(shared ? String.format("%.3g", sharedLow) : "low",
                     legendX, legendY + 22);
             gc.setTextAlign(TextAlignment.CENTER);
-            gc.fillText("no centre -- values are not Z-scored",
-                    legendX + legendW / 2, legendY + 34);
+            gc.fillText(legendCaption(false, !shared, units), legendX + legendW / 2, legendY + 34);
             gc.setTextAlign(TextAlignment.RIGHT);
-            gc.fillText(shared ? String.format("%.3g", sharedExtent) : "high (per marker)",
+            gc.fillText(shared ? String.format("%.3g", sharedExtent) : "high",
                     legendX + legendW, legendY + 22);
             return;
         }
@@ -603,6 +621,8 @@ public class ClusterHeatmapPanel extends VBox {
         gc.setTextAlign(TextAlignment.RIGHT);
         gc.fillText(shared ? String.format("+%.2f", sharedExtent) : "+ per marker",
                 legendX + legendW, legendY + 22);
+        gc.setTextAlign(TextAlignment.CENTER);
+        gc.fillText(legendCaption(true, !shared, units), legendX + legendW / 2, legendY + 34);
 
         // Grid border
         gc.setStroke(Color.gray(0.7));
@@ -872,8 +892,9 @@ public class ClusterHeatmapPanel extends VBox {
             if (clusterCounts != null && sourceRow < clusterCounts.length) {
                 cells = String.format("%n%,d cells", clusterCounts[sourceRow]);
             }
-            tooltip.setText(String.format("%s | %s%nMean: %.4f%s",
-                    clusterName(row), marker, rawVal, cells));
+            tooltip.setText(String.format("%s | %s%nMean%s: %.4f%s",
+                    clusterName(row), marker, units.isEmpty() ? "" : " (" + units + ")",
+                    rawVal, cells));
         } else {
             tooltip.setText("");
         }

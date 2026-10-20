@@ -1984,6 +1984,13 @@ def dot_size_caption(normalization, cutoff=0.0):
     )
 
 
+def dot_size_title(cutoff=0.0):
+    """Dot-size legend title. scanpy's "Fraction of cells in group" reads as
+    "fraction expressing", which under z-score it is not; the note under the
+    figure (dot_size_caption) says what the cutoff means in these units."""
+    return "%% of cluster above %.3g\n(see note below)" % cutoff
+
+
 def plot_feature_note(n_shown, n_total, subset_applied):
     """Caption stating how many features a plot actually draws, or "" if all.
 
@@ -2969,6 +2976,8 @@ if do_plots and plot_dir and can_analyze:
             standard_scale="var",
             cmap=pref_cmap_sequential,
             expression_cutoff=_dot_cutoff,
+            colorbar_title=legend_title("Mean", normalization, per_marker_scaled=True),
+            size_title=dot_size_title(_dot_cutoff),
             show=False,
             return_fig=True,
         )
@@ -2998,6 +3007,7 @@ if do_plots and plot_dir and can_analyze:
             dendrogram=True,
             standard_scale="var",
             cmap=pref_cmap_sequential,
+            colorbar_title=legend_title("Mean", normalization, per_marker_scaled=True),
             show=False,
             return_fig=True,
         )
@@ -3043,6 +3053,7 @@ if do_plots and plot_dir and can_analyze:
                 var_names=plot_var_names,
                 groupby="cluster",
                 dendrogram=True,
+                colorbar_title=legend_title("Median", normalization),
                 show=False,
                 return_fig=True,
                 # Every violin was drawn as a hairline, whatever the figure size
