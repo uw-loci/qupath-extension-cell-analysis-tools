@@ -291,9 +291,9 @@ public final class McpServerWindow {
                 + "can read a saved clustering result's marker table and write back suggested "
                 + "cluster names. It serves three tools and nothing else: no file access, no "
                 + "scripting, no code execution. Nothing listens until you press Start server. "
-                + "It stops when you close or switch project, after 60 minutes with no tool "
-                + "calls, and it is OFF again the next time you start QuPath. Research use "
-                + "only: these are suggestions to check, not diagnoses.");
+                + "It stops when you close or switch project, after 60 minutes with no request "
+                + "carrying the token, and it is OFF again the next time you start QuPath. "
+                + "Research use only: these are suggestions to check, not diagnoses.");
         bannerLabel = banner;
         banner.setWrapText(true);
         banner.setMaxWidth(Double.MAX_VALUE);
@@ -541,14 +541,16 @@ public final class McpServerWindow {
                 + "        asks to, and the old ones stay in the audit log).\n"
                 + "CANNOT: read or write any other file, run a script, change your images,\n"
                 + "        delete a result, or reach anything outside this project.\n"
-                + "REACH:  programs running on this computer as you. A web page you visit is\n"
-                + "        refused (we check the Origin header), and nothing on your network can\n"
-                + "        connect (we listen on 127.0.0.1 only). A different program on this\n"
-                + "        machine, running as you, could use the token if it could read it --\n"
-                + "        but such a program could read your project directly anyway.\n"
+                + "REACH:  any program on this computer that has the token, under your\n"
+                + "        account or another one. A web page you visit is refused (we check\n"
+                + "        the Origin header), and nothing on your network can connect (we\n"
+                + "        listen on 127.0.0.1 only). Keep the token where only you can read\n"
+                + "        it: a config file in your home folder, not a project file you\n"
+                + "        share or commit.\n"
                 + "LIMITS: 120 tool calls a minute (listing results is not counted), one at a\n"
                 + "        time; a refusal says how long to wait. It stops by itself after 60\n"
-                + "        minutes with no tool calls, and whenever the project changes.\n"
+                + "        minutes with no request carrying the token, and whenever the\n"
+                + "        project changes.\n"
                 + "LOGS:   each tool call -- tool, result name, outcome -- to the QuPath\n"
                 + "        log; the prompt and reply to the project audit log; never the\n"
                 + "        token.");
@@ -623,7 +625,8 @@ public final class McpServerWindow {
                     + "project; you will get a new token.";
         }
         if (ev.startsWith(EVENT_IDLE_PREFIX)) {
-            return "STOPPED - no tool calls for 60 minutes. Press Start server to turn it on "
+            return "STOPPED - no request carrying the token for 60 minutes. Press Start server "
+                    + "to turn it on "
                     + "again; you will get a new token.";
         }
         if (ev.startsWith(EVENT_USER_PREFIX)) {
@@ -654,11 +657,19 @@ public final class McpServerWindow {
                 + "               \"--header\", \"Authorization: Bearer <token>\"]\n"
                 + "    }\n"
                 + "\n"
-                + "Cursor / Codex / Gemini CLI -- each reads a JSON block of this shape:\n"
+                + "Cursor -- in ~/.cursor/mcp.json, under \"mcpServers\":\n"
                 + "    \"qpcat\": {\n"
                 + "      \"url\": \"" + url + "\",\n"
                 + "      \"headers\": { \"Authorization\": \"Bearer <token>\" }\n"
-                + "    }";
+                + "    }\n"
+                + "\n"
+                + "Gemini CLI -- the same block in ~/.gemini/settings.json, but with\n"
+                + "\"httpUrl\" in place of \"url\".\n"
+                + "\n"
+                + "Codex -- in ~/.codex/config.toml:\n"
+                + "    [mcp_servers.qpcat]\n"
+                + "    url = \"" + url + "\"\n"
+                + "    http_headers = { \"Authorization\" = \"Bearer <token>\" }";
     }
 
     private void startServer() {

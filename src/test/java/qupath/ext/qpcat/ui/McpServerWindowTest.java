@@ -116,11 +116,22 @@ class McpServerWindowTest {
     }
 
     @Test
+    void eachClientSnippetHasThatClientsShape() {
+        String s = McpServerWindow.untestedSnippets("http://127.0.0.1:51516/mcp");
+        // Codex reads TOML, Gemini CLI wants httpUrl: one JSON block for all three was wrong.
+        assertThat(s).contains("Cursor -- in ~/.cursor/mcp.json")
+                .contains("\"httpUrl\" in place of \"url\"")
+                .contains("[mcp_servers.qpcat]")
+                .contains("http_headers = { \"Authorization\" = \"Bearer <token>\" }")
+                .doesNotContain("Cursor / Codex / Gemini CLI");
+    }
+
+    @Test
     void anUnexpectedStopSaysWhy() {
         assertThat(McpServerWindow.statusText(stopped("stopped: project changed")))
                 .startsWith("STOPPED - the project changed");
         assertThat(McpServerWindow.statusText(stopped("stopped: idle for 60 minutes")))
-                .startsWith("STOPPED - no tool calls for 60 minutes");
+                .startsWith("STOPPED - no request carrying the token for 60 minutes");
         assertThat(McpServerWindow.statusText(stopped("stopped: user turned it off")))
                 .startsWith("STOPPED - you turned it off");
     }
@@ -177,7 +188,13 @@ class McpServerWindowTest {
         assertThat(w.canCannotShown()).contains(
                 "LIMITS: " + perMinute + " tool calls a minute (listing results is not counted), one at a\n"
                 + "        time; a refusal says how long to wait. It stops by itself after 60\n"
-                + "        minutes with no tool calls, and whenever the project changes.\n");
+                + "        minutes with no request carrying the token, and whenever the\n"
+                + "        project changes.\n");
+        // Any process holding the token can connect, under any account: nothing checks the user.
+        assertThat(w.canCannotShown()).contains("REACH:  any program on this computer that has "
+                + "the token, under your\n        account or another one.")
+                .doesNotContain("as you");
+        assertThat(w.bannerShown()).doesNotContain("no tool calls");
         // The copied command itself is unchanged: an idempotent form differs per shell.
         FxHarness.onFx(() -> w.apply(running(51516, 0)));
         assertThat(w.commandShown()).startsWith("claude mcp add --transport http qpcat");

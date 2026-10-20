@@ -29,7 +29,8 @@ import java.util.function.Supplier;
 
 /**
  * Lifecycle of the QP-CAT MCP server: off at every launch, started and
- * stopped by the user, stopped by any project change or 60 idle minutes.
+ * stopped by the user, stopped by any project change or 60 minutes without
+ * an authenticated request.
  * Holds the only copy of the per-session token. No preference records
  * whether it runs. An administrator disables it for an installation with
  * the JVM property {@code -Dqpcat.mcp.disabled=true}, read once at load.

@@ -175,6 +175,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   and TIFF only, and now says so. A skipped interactive plot now points to **Save plot...**
   in the Results window instead of a "GUI exporter" that cannot export it either. The YAML
   batch's `workers` warning and the in-memory-config error no longer promise a v1.1.
+- **The MCP server window described its idle stop and its reach too narrowly.** It said the
+  server stops after "60 minutes with no tool calls"; any request carrying the token resets
+  the clock, so it now says that. Its REACH line said "programs running on this computer as
+  you"; any program on the machine that has the token can connect, under any account, so it
+  now says that and where to keep the token. The client examples gave one JSON block for
+  Cursor, Codex and Gemini CLI; Codex reads TOML and Gemini CLI uses `httpUrl`, and each
+  now has its own. Nothing about the server's behaviour changed.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 
