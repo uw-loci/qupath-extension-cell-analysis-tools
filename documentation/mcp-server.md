@@ -209,7 +209,7 @@ Each row answers one question a security review asks.
 | Request checks | `Host` must be present and loopback; `Origin`, if present, must be loopback; anything else is `403`. Body capped at 1 MB (`413`). No chunked bodies (`411`) |
 | Outbound connections | None. QuPath opens no client connection for this feature. The **agent** is the online component: whatever the tools return to it, the agent may forward to its own LLM provider under that vendor's data handling, not ours |
 | Where the token ends up | In QP-CAT: memory only, cleared at Stop; never logged, never in a preference or a file. On the client side: in plain text in the agent's configuration (Claude Code's config for `claude mcp add`; the JSON/TOML files under [Connecting your agent](#connecting-your-agent)), and in the shell history of whoever pasted the command |
-| What is logged, QuPath log (in memory unless the user has set a log file) | One line per start (the URL) and per stop (the reason); one ERROR line, `MCP server failed to start: <message>`, whenever Start server is refused; one line per tool call with the tool name, the result name and the outcome; a rejected `Host`/`Origin` value, truncated to 80 printable characters; the fact of a rejected token, never the token itself |
+| What is logged, QuPath log (in memory unless the user has set a log file) | One line per start (the URL) and per stop (the reason); two ERROR lines whenever Start server is refused, `MCP server failed to start: <message>` and `Error dialog "QP-CAT MCP Server - Error": <message>`; one line per tool call with the tool name, the result name and the outcome; a rejected `Host`/`Origin` value, truncated to 80 printable characters; the fact of a rejected token, never the token itself |
 | What is logged, project audit log (`<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`) | One `MCP SERVER` event per start (`started on 127.0.0.1 port 51516 (loopback only; the token is not recorded)`) and per stop (`stopped (reason: ...)`); one `=== LLM EXPLAIN ===` block per accepted write with the agent's self-reported label, the client's `User-Agent`, the coarse image scope, the prompt actually answered and the reply verbatim; a `=== LLM EXPLAIN [REFUSED] ===` block per refused write with the reason; an `Overwrite:` row when stored explanations were replaced. Credential-shaped strings are scrubbed; nothing else is -- the scrubber de-identifies nothing |
 | Persistence of "on" | None. No preference, no file, no autostart. Every QuPath launch begins with the server off |
 | Rate | 120 tool calls per minute (`qpcat_list_results` exempt), one in flight; a Python round trip is abandoned after five minutes |
@@ -233,7 +233,7 @@ including one from a script, refuses with
 
 ## Turning it on and off
 
-A project must be open first; with none open the menu item shows an error and nothing starts.
+A project must be open first; with none open, **Start server** shows an error and nothing starts.
 
 **Turn it on**
 
@@ -312,7 +312,7 @@ Either way the connection works, and the window's status line now reads
 `RUNNING since HH:mm - 1 tool call so far`.
 
 **About the token.** It is shown for as long as that server session runs. If you close the
-window while the server is on, the second item under the checked menu item, **Show MCP server
+window while the server is on, the item just below the checked menu item, **Show MCP server
 window (address and token)**, is enabled and reopens it with the same token (the checked item
 itself would stop the server, so it is not the way back in). A new token exists only after you
 stop and start the server, at which point any configuration holding the old one stops
@@ -321,8 +321,9 @@ preference, not a file -- so inside QuPath the window is the only place it appea
 QuPath it lives wherever you put it: your agent's configuration and your shell history, until
 you remove the registration (see [Residual risk](#residual-risk-stated-plainly)).
 
-If the status line still reads `0 tool calls so far` after an hour, nothing has used the
-server.
+If the status line still reads `0 tool calls so far` long after you registered your agent, the
+agent has not called a tool. If nothing makes an authenticated request for 60 minutes, the
+server stops itself and the line says so.
 
 When the server stops for a reason you did not ask for, the window's status line says why,
 the menu item returns to `(off)`, and the log line `MCP endpoint stopped (reason: ...)` names
@@ -349,8 +350,10 @@ status line says otherwise) and `<TOKEN>` is the token it shows.
 
 The window has three panes for this, titled **Claude Code  (tested by us on Linux)**, **Any
 other MCP client  (the two values it needs)** and **Claude Desktop, Cursor, Codex, Gemini
-CLI  (untested snippets)**; the third holds the same untested blocks as this page, with
-`<token>` left for you to paste.
+CLI  (untested snippets)**. The third holds a shorter set than this page: a Claude Desktop
+block and one generic JSON block for Cursor, Codex and Gemini CLI, with the address filled
+in and `<token>` left for you to paste. The per-client blocks below are more specific; prefer
+them.
 
 <details>
 <summary><strong>Claude Code</strong> -- one command</summary>
@@ -639,18 +642,19 @@ Where you see the result:
   pinned to the top of the tab, in view at any window size and scroll position, reads `An AI
   agent just wrote 6 suggestions over MCP. They are saved with this result; review them in
   the Suggestions table below.`; the tab scrolls so the **Suggestions** heading is at the top;
-  the table repopulates; and the line under the heading reads `Last written by Claude Code
-  (claude-fable-5-1) over MCP at 14:07 -- by an AI agent, not from this panel. Saved to the
-  result on disk.` No popup, no toast. If no results window shows that result, the tool
+  the table repopulates; and the line under the heading reads `Last written by an AI agent
+  that called itself "Claude Code (claude-fable-5-1)" (over MCP) at 14:07 -- by an AI agent,
+  not from this panel. Saved to the result on disk.` No popup, no toast. If no results window shows that result, the tool
   result says so instead and names the menu path, and you open the result from **View Past
-  Results...** to see them; the line then reads `Loaded from the saved result: written by
-  Claude Code (claude-fable-5-1) via MCP at 14:07 on 2026-10-11.`
+  Results...** to see them; the line then reads `Loaded from the saved result: written by an
+  AI agent that called itself "Claude Code (claude-fable-5-1)" (over MCP) at 14:07 on
+  2026-10-11.` The agent's label is quoted as the agent sent it, because QP-CAT cannot check it.
 - **The audit log**, at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log`, under the
   `=== LLM EXPLAIN ===` entry: provider `MCP`; `Agent:`, the label the agent chose to send,
   recorded as sent and **not verified** by QP-CAT -- check it against the agent's own
   transcript; `Client:`, the agent's `User-Agent` header, which real clients set and which is
   harder to misreport by accident than a label the model composes; `Image:`, the coarse scope
-  (`1 image`, `8 images`); `QPCAT version:` and `QuPath version:`; `Prompt hash:`,
+  (`1 image`, `8 images`, or `unknown scope`); `QPCAT version:` and `QuPath version:`; `Prompt hash:`,
   `Top markers:` (the `top_n` used) and `Cluster ids:` as actually answered; and the prompt
   and the reply verbatim; a `Dropped rows:` row when the reply named cluster ids the result
   does not have. An overwrite adds an `Overwrite: replaced <provider>/<label>
@@ -748,8 +752,9 @@ not one.
 <details>
 <summary><strong>"Could not start the MCP server: ports 51516 to 51525 are all in use"</strong></summary>
 
-**What the code shows** (this popup has not been seen by anyone): an ERROR line in the QuPath
-log, `MCP server failed to start: <message>`, and a popup titled **QP-CAT MCP Server - Error**:
+**What the code shows** (this popup has not been seen by anyone): two ERROR lines in the QuPath
+log, `MCP server failed to start: <message>` and `Error dialog "QP-CAT MCP Server - Error":
+<message>`, and a popup titled **QP-CAT MCP Server - Error**:
 
 ```
 Could not start the MCP server: ports 51516 to 51525 are all in use on this
@@ -779,8 +784,9 @@ port chooser.
 <details>
 <summary><strong>"No project is open, so there are no saved clustering results to serve"</strong></summary>
 
-**What the code shows** (seen in a screenshot of the design walk, not in a user's hands): an
-ERROR line in the QuPath log, `MCP server failed to start: <message>`, and a popup titled
+**What the code shows** (seen in a screenshot of the design walk, not in a user's hands): two
+ERROR lines in the QuPath log, `MCP server failed to start: <message>` and `Error dialog
+"QP-CAT MCP Server - Error": <message>`, and a popup titled
 **QP-CAT MCP Server - Error**:
 
 ```
@@ -1028,14 +1034,17 @@ Check with the person at QuPath before replacing them. To replace, call this too
 ```
 
 **What it usually means:** `qpcat_set_explanations` was called on a result that already has
-explanations, without `overwrite: true`. The source reads `<agent or model> via <PROVIDER> at
-<timestamp>`.
+explanations, without `overwrite: true`. The source names who wrote them as far as QP-CAT
+knows it -- `<model> (Anthropic API)`, `<model> (Ollama)`, `<label>, as you named it (reply pasted in)` or `a
+chatbot you did not name (reply pasted in)`, `an AI agent that called itself "<label>" (over
+MCP)` -- then `at <timestamp>`.
 
 **What to do:** decide. If you want them replaced, tell the agent to call again with
 `overwrite: true` -- the JSON boolean; the string `"true"` and the number `1` are refused
 with a message saying so. The earlier explanations stay in the audit log, the success text
-then begins `Saved 6 suggestions (6 with a phenotype, 0 the model declined or did not answer)
-to the clustering result "...", REPLACING the 6 suggestions that were already stored there`,
+then begins, over two lines, `Saved 6 suggestions (6 with a phenotype, 0 the model declined
+or did not answer) to the clustering result "...",` / `REPLACING the 6 suggestions that were
+already stored there (written by <source> at <timestamp>).`,
 and the new entry in the audit log carries an `Overwrite: replaced ...` row naming what it
 replaced. If you did not mean to touch that
 result, the refusal has cost you nothing -- it changed nothing, and it is recorded in the
@@ -1213,8 +1222,8 @@ one-in-flight refusal reads
 `Another tool call is still running; this server handles one at a time. Nothing has changed.
 Wait for it to finish and try again.`
 
-**What is logged.** QuPath log -- start: the URL; a refused start: an ERROR line `MCP server
-failed to start: <message>`; stop: the reason; per call: tool name,
+**What is logged.** QuPath log -- start: the URL; a refused start: two ERROR lines, `MCP server
+failed to start: <message>` and `Error dialog "QP-CAT MCP Server - Error": <message>`; stop: the reason; per call: tool name,
 result name, outcome, duration (`MCP tool call: qpcat_set_explanations [result=...] -> ok
 (140 ms)`). Project audit log (`OperationLogger`) -- one `MCP SERVER` event per start and
 stop with the port and reason; per accepted write an `=== LLM EXPLAIN ===` block carrying

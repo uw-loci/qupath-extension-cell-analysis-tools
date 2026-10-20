@@ -63,13 +63,16 @@ OpenAI is **not** supported in v1.
 4. Click **Run Explainer** -- wait 5-30 seconds depending on provider and model. With **Any
    chatbot** the button is replaced by three steps: **1. Copy prompt to clipboard**, paste it
    into the chatbot, paste its reply into the box, **3. Read pasted reply**
-5. Read the table: suggested phenotype, confidence, supporting markers, one-paragraph rationale per cluster
+5. Read the table (suggested phenotype, confidence, top supporting markers) and select a row to see its one-paragraph rationale in the **Rationale** box below
 
-The results are also persisted to `SavedClusteringResult` so reopening past results shows the same table without re-paying the API call.
+When the tab is open on a saved result (opened from **View Past Results...**), the suggestions are also saved into that result, so reopening it shows the same table without re-paying the API call. A results window that opened straight after a run has nowhere to write them; they stay in that window and in the audit log.
 
-The **"Use as cluster names..."** button takes the suggested phenotypes into **Modify cell populations** with the rename boxes pre-filled, after a preview of every old → new pair. Names are cleaned for use as class names: a trailing parenthetical like "(CD4+ T cell, inferred)" is dropped (the rationale keeps it), and colons and slashes are replaced with hyphens (a colon makes QuPath read the name as a derived class). Colliding suggestions get a numeric suffix to keep them distinct. Nothing is written by this button -- the rename dialog is where you review them and press Apply, which writes a renamed copy and leaves the original result alone.
+The **"Use as cluster names..."** button takes the suggested phenotypes into **Modify cell populations** with the rename boxes pre-filled, after a preview of every old → new pair. Names are cleaned for use as class names: a trailing parenthetical like "(CD4+ T cell, inferred)" is dropped (the rationale keeps it), and colons and slashes are replaced with hyphens (a colon makes QuPath read the name as a derived class). Colliding suggestions get a numeric suffix to keep them distinct. Nothing is written by this button -- the rename dialog is where you review them and press Apply, which writes a renamed copy and leaves the original result alone. If you close the rename dialog before pressing Apply, it asks first and says how many names would be lost.
 
 ![The Cluster Explainer tab after a run. Provider is set to ANTHROPIC with model claude-sonnet-5, the API key field is masked, and the status line reads "Done. 7 clusters explained (23s)". A Suggestions table gives one row per cluster: proliferating epithelial/tumor cell from Ki67 and PanCK, myofibroblast/smooth muscle cell from aSMA, B cell from CD20, epithelial/tumor cell from PanCK, macrophage from CD68, and cytotoxic T cell from CD8 and CD3, all at HI confidence; helper T cell from CD3 and CD8 at MD confidence. Below, a Rationale box explains cluster 0, and buttons offer Copy results as TSV and Regenerate selected cluster](images/cluster-explainer-suggestions.png)
+
+*Screenshot from an earlier build: the Provider box now reads "Anthropic (Claude API)", and a
+third button, **Use as cluster names...**, sits beside the two shown.*
 
 The run above is the one the warning at the top refers to, on the synthetic demo dataset whose
 ground truth is known. All seven suggestions matched it. Two details are worth noticing rather
@@ -110,8 +113,10 @@ What you give up against the API path: token counts (recorded as unknown), and t
 one-click re-run of a single cluster becomes copy, paste, paste again. What you gain: it
 works with every chatbot that exists, including ones with no API, and no key is ever typed
 into QuPath. The audit log entry has provider `CHATBOT`, the label you typed as the model,
-and the prompt and reply verbatim. The tab shows the source of saved suggestions as, for
-example, "written by ChatGPT, as you named it (reply pasted in)".
+and the prompt and reply verbatim. Reopened later from a saved result, the tab shows who wrote
+the suggestions above the table, for example `Loaded from the saved result: written by
+ChatGPT, as you named it (reply pasted in) at 14:07 on 2026-10-11.`; with the Model box left
+empty it reads `a chatbot you did not name (reply pasted in)`.
 
 </details>
 
@@ -157,9 +162,9 @@ managed install, IT can remove the feature with a launcher option; see
 <summary><strong>Anthropic Claude (cloud, paid)</strong></summary>
 
 1. Go to [platform.claude.com](https://platform.claude.com/), create an account if needed, and create a new API key
-2. In the explainer tab, set **Provider** to "Anthropic"
+2. In the explainer tab, set **Provider** to **Anthropic (Claude API)**
 3. Set **Model**. The dropdown lists a few current ids as suggestions; it is **editable**, so you can type any id the provider accepts, including a model released after your version of QP-CAT. The id is sent verbatim, and an unrecognized one comes back as a provider error rather than falling back to something else. Anthropic's [model overview](https://platform.claude.com/docs/en/models/overview) lists the current ids.
-4. Paste your API key into the **API Key** field. The key is held in memory only for this QuPath session and is never written to disk
+4. Paste your API key into the **API key** field. The key is held in memory only for this QuPath session and is never written to disk
 5. Click **Run Explainer**
 
 **Environment variable shortcut:** set `QPCAT_ANTHROPIC_KEY` to your key before launching QuPath, and the field fills itself. This is the better setup on a machine you use regularly -- the key follows your user account rather than being retyped every session.
@@ -203,9 +208,9 @@ A key set this way is stored in plain text in your user environment. On a shared
 1. Install [Ollama](https://ollama.com/) on your machine (or a machine reachable from this one)
 2. Pull a chat model: `ollama pull llama3.1:8b` (or any other model)
 3. Confirm Ollama is running: `curl http://localhost:11434/api/tags` should list your installed models
-4. In the explainer tab, set **Provider** to "Ollama"
+4. In the explainer tab, set **Provider** to **Ollama (local) -- never run**
 5. The **Endpoint** field is pre-populated with `http://localhost:11434` -- the standard Ollama default. Change it only if your Ollama server runs on a different host or port
-6. Set **Model** to the exact tag you pulled (e.g. `llama3.1:8b`). The dropdown will be pre-populated with whatever the endpoint reports; you can also type a tag manually
+6. Set **Model** to the exact tag you pulled (e.g. `llama3.1:8b`). The dropdown suggests `llama3.1:8b` and `phi3:14b`; type the exact tag you pulled if it is anything else
 7. Click **Run Explainer**
 
 **Tips:**
@@ -242,17 +247,17 @@ You can see the exact prompt that was sent by opening the audit log at `<project
 
 ### Interpreting the Output
 
-Each row of the result table has:
+Each row of the result table has the columns below. Select a row to read the model's
+one-paragraph rationale for it in the **Rationale** box under the table.
 
 | Column | Meaning |
 |---|---|
-| **Cluster** | The cluster id (`Cluster 0`, `Cluster 1`, ...) |
+| **Cluster** | The cluster id (`0`, `1`, ...) |
 | **Suggested phenotype** | The LLM's primary phenotype guess (e.g. "CD8+ cytotoxic T lymphocyte"). May show **(no suggestion)** -- see "Refused-to-guess rows" below |
 | **Confidence** | `HI`, `MD` or `LO`: the model's own `high` / `medium` / `low` from the reply (`med` and `moderate` are read as `MD`). Blank when the model set it to null **or used any other word**; the `Response:` block in the audit log keeps the original. Treat with skepticism; `HI` does not mean correct |
-| **Supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
-| **Rationale** | One-paragraph explanation of why the LLM made this call |
+| **Top supporting markers** | Top markers the LLM cited as evidence (e.g. "CD3, CD8, GZMB") |
 
-**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale column still explains *why* the model refused (e.g. "insufficient signal: the top markers are mutually inconsistent, spanning myeloid and epithelial lineages"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer.
+**Refused-to-guess rows ("(no suggestion)").** The LLM is allowed to emit `phenotype: null` for a cluster when the marker signature is too weak or incoherent to support a guess. This is **expected behavior**, not an error -- the result table shows **(no suggestion)** in the Suggested phenotype column and the Rationale box still explains *why* the model refused (e.g. "insufficient signal: the top markers are mutually inconsistent, spanning myeloid and epithelial lineages"). Treat these rows as a useful signal that the cluster itself may need a closer look, not as a failure of the explainer.
 
 **The LLM may be wrong.** Common failure modes:
 - **Marker name confusion** -- if your panel uses a non-standard naming convention (e.g. `MarkerCh01` or `tumor_marker_1`), the LLM has no way to know what the marker actually targets. Use real marker names in measurement columns whenever possible
@@ -292,7 +297,7 @@ One **Run Explainer** click is one LLM call with all clusters batched into the s
 
 Pricing changes; the audit log captures the exact `Input tokens:` and `Output tokens:` for every call (Anthropic and Ollama only; the chatbot and MCP paths record `unknown`) so you can compute real spend at the right rate. (Anthropic charges different rates for input vs output -- Sonnet output is ~5x input -- so a combined number alone undercounts cost.) The combined `Token count:` is still emitted for backward compatibility. Ollama is free.
 
-A **Cancel** button is exposed during the in-flight call. Canceled calls are still logged (with a `Cancelled: true` field) but **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
+A **Cancel** button is exposed during the in-flight call. A cancelled call is not written to the project audit log -- only a QuPath log line, `LLM explainer cancelled; not applying results.`, records it -- but it **may still consume tokens depending on provider and request stage; check your billing**. The cancel is a "soft" cancel on the Java side -- the Python HTTP request is allowed to complete in the background -- so an already-sent request may still be billed for input tokens even if you stop reading the response.
 
 ### [Experimental] notice
 
@@ -320,7 +325,7 @@ Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets` in 
 ## When it is worth using
 
 
-The LLM cluster explainer ([HOW_TO_GUIDE section 10](llm-explainer.md)) sits alongside Rule-Based Phenotyping and clustering as a complementary tool. It operates on **per-cluster statistics** rather than per-cell data.
+The LLM cluster explainer sits alongside Rule-Based Phenotyping and clustering as a complementary tool. It operates on **per-cluster statistics** rather than per-cell data.
 
 ### When to Trust the LLM Output
 
@@ -348,7 +353,7 @@ morphology-level reasoning.
 
 ### Audit-Log Discipline for Publications
 
-Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, the images the result covers (`Image:` names the image for a one-image result and reads `8 images` for an eight-image one), prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
+Every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, the images the result covers (`Image:` names the image for a one-image result run from the tab and reads `8 images` for an eight-image one; over MCP it is the coarse scope, `1 image`, `8 images` or `unknown scope`, never a name; a result saved without per-cell image references records the image that was open), prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
 - **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
 - **For an MCP run: QP-CAT does not know which model answered.** The `Agent:` row is a label the agent wrote about itself (cut at 60 characters) and the `Client:` row is the client program's `User-Agent`, not a model. Take the model from the agent's own session (the model shown in the client, or its transcript) and report the `Agent:` label as the agent's self-description beside it. The recorded prompt is the text QP-CAT handed the agent; the model saw it inside the agent's conversation, with a system prompt and tool descriptions QP-CAT does not record, and with sampling settings QP-CAT neither sets nor sees. The `Agent:` and `Client:` rows are written as sent, unscrubbed
@@ -369,11 +374,11 @@ Archive the audit log alongside your other reproducibility artifacts (clustering
 
 This page covers the error states you may see in the **Cluster Explainer (LLM)** tab of the cluster results dialog, what each one typically means, and what to do about it.
 
-The Java side of QP-CAT shows a red status banner on every failure with a one-sentence summary. The full provider response, including any stack traces, is in the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the most recent `=== LLM EXPLAIN ===` entry. Both the Java (`LlmAuditScrubber`) and Python (`scrub_secrets`) sides strip `Authorization:` headers and `sk-ant-*` keys from any logged payload, so you can share an audit log without leaking your API key.
+On every failure the status line under the Run button reads `Failed: ...` with a one-sentence summary. The full provider response, including any stack traces, is in the project audit log at `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the most recent `=== LLM EXPLAIN ===` entry. Both the Java (`LlmAuditScrubber`) and Python (`scrub_secrets`) sides strip `Authorization:` headers and `sk-ant-*` keys from any logged payload, so you can share an audit log without leaking your API key.
 
 See also:
 
-- [How-To Guide section 10](llm-explainer.md) -- the full workflow walkthrough
+- [Quick Start](#quick-start) -- the full workflow walkthrough
 - [above](#when-it-is-worth-using) -- when to trust the output and how to cite it
 - [MCP server troubleshooting](mcp-server.md#troubleshooting) -- connection refused, 401, 403,
   port in use, and the messages an agent relays; none of them are repeated here
@@ -383,7 +388,7 @@ See also:
 <details>
 <summary><strong>"No network connection" or "Could not reach Anthropic"</strong></summary>
 
-**What you see:** The Run Explainer button completes quickly with a red status banner: *"Failed: cannot reach the provider."*
+**What you see:** The Run Explainer button completes quickly and the status line reads *"Failed: cannot reach the provider."*
 
 **What it usually means:** Your machine cannot reach `api.anthropic.com` over HTTPS. Most common causes: laptop is offline, corporate firewall/proxy is blocking the request, or DNS is misconfigured.
 
@@ -397,7 +402,7 @@ See also:
 <details>
 <summary><strong>"Invalid API key" or "401 Authentication failed"</strong></summary>
 
-**What you see:** Red status banner: *"Failed: 401 -- API key was rejected."*
+**What you see:** The status line reads *"Failed: 401 -- API key was rejected."*
 
 **What it usually means:** The key was mistyped, has been revoked, or has been rotated and the old value is still in the TextField or env var.
 
@@ -411,7 +416,7 @@ See also:
 <details>
 <summary><strong>"Rate limit exceeded" or "429"</strong></summary>
 
-**What you see:** Red status banner: *"Failed: 429 -- provider rate limit hit."* The Run button re-enables immediately; the provider's own `Retry-After` header is not currently surfaced in the UI.
+**What you see:** The status line reads *"Failed: 429 -- provider rate limit hit."* The Run button re-enables immediately; the provider's own `Retry-After` header is not currently surfaced in the UI.
 
 **What it usually means:** You've made too many calls in too short a window, or your account is on a free/trial tier with low per-minute limits.
 
@@ -425,7 +430,7 @@ See also:
 <details>
 <summary><strong>"Malformed response" or "Could not parse LLM output"</strong></summary>
 
-**What you see:** Red status banner: *"Failed: provider returned an unexpected response shape."* The full response is in the audit log; please file an issue.
+**What you see:** The status line reads *"Failed: provider returned an unexpected response shape."* The full response is in the audit log; please file an issue.
 
 **What it usually means:** The LLM did not produce JSON in the expected schema. Often happens with Ollama + a small/weak model, or after a provider-side change to default behavior.
 
@@ -435,14 +440,14 @@ See also:
 3. If the response is gibberish, the model may not be capable of this task -- switch models
 4. File an issue with the audit-log entry attached so the prompt template can be hardened
 
-**Not the same as "(no suggestion)":** A row showing **(no suggestion)** in the result table is *not* a malformed response. The LLM is allowed to emit `phenotype: null` with a rationale ("insufficient signal") when a cluster's marker signature is too weak or incoherent to support a guess. That is expected behavior, not an error -- see HOW_TO_GUIDE section 10, "Interpreting the Output".
+**Not the same as "(no suggestion)":** A row showing **(no suggestion)** in the result table is *not* a malformed response. The LLM is allowed to emit `phenotype: null` with a rationale ("insufficient signal") when a cluster's marker signature is too weak or incoherent to support a guess. That is expected behavior, not an error -- see [Interpreting the Output](#interpreting-the-output).
 
 </details>
 
 <details>
 <summary><strong>"Could not reach Ollama at &lt;endpoint&gt;"</strong></summary>
 
-**What you see:** Red status banner: *"Failed: cannot reach the provider."* (This is the same banner the Anthropic-network-down case uses; the audit-log entry's `Endpoint:` row and `Error detail:` line will name Ollama and the URL it could not reach.)
+**What you see:** The status line reads *"Failed: cannot reach the provider."* (This is the same message the Anthropic-network-down case uses; the audit-log entry's `Endpoint:` row and `Error detail:` line will name Ollama and the URL it could not reach.)
 
 **What it usually means:** The Ollama server is not running, has crashed, or is listening on a different host/port.
 
@@ -457,7 +462,7 @@ See also:
 <details>
 <summary><strong>"Ollama model not found" or "model '&lt;tag&gt;' not pulled"</strong></summary>
 
-**What you see:** Red status banner: *"Failed: model not found on provider."* The audit-log `Error detail:` line names the missing tag and suggests `ollama pull <tag>`.
+**What you see:** The status line reads *"Failed: model not found on provider."* The audit-log `Error detail:` line names the missing tag and suggests `ollama pull <tag>`.
 
 **What it usually means:** The model tag you selected (or typed) is not present on the Ollama server.
 
@@ -472,33 +477,33 @@ See also:
 <details>
 <summary><strong>"Cancelled. No results applied." / Cancel button was clicked</strong></summary>
 
-**What you see:** Status banner: *"Cancelled. No results applied."*
+**What you see:** The status line reads *"Cancelled. No results applied."*
 
 **What it usually means:** You clicked Cancel while the call was in flight, or QuPath was closed before the call returned.
 
 **What to do:**
-- Nothing -- this is the expected behavior. The audit log notes the canceled call (look for `Cancelled: true`). The cancel is a "soft" cancel on the Java side -- the underlying HTTP request is allowed to complete in the background -- so cancelled calls **may still consume tokens depending on provider and request stage; check your billing**. Anthropic, in particular, may bill for input tokens on a request that was already in flight.
+- Nothing -- this is the expected behavior. A cancelled call is not written to the project audit log; the QuPath log has the line `LLM explainer cancelled; not applying results.`. The cancel is a "soft" cancel on the Java side -- the underlying HTTP request is allowed to complete in the background -- so cancelled calls **may still consume tokens depending on provider and request stage; check your billing**. Anthropic, in particular, may bill for input tokens on a request that was already in flight.
 - Click Run Explainer again when ready.
 
 </details>
 
 <details>
-<summary><strong>The tab is grayed out / Run Explainer is disabled</strong></summary>
+<summary><strong>Run Explainer is disabled, or the tab is missing</strong></summary>
 
-**What you see:** The Cluster Explainer (LLM) [Experimental] tab opens but the **Run Explainer** button is disabled with a tooltip like *"Marker rankings not available for this clustering result"* or *"Select a provider"*.
+**What you see:** Either there is no Cluster Explainer (LLM) [Experimental] tab in the results window, or the tab opens but **Run Explainer** is disabled. The status line may read *"Choose a provider to begin."*
 
-**What it usually means:** Either the clustering result does not contain Wilcoxon marker rankings (some algorithms or partial runs skip this), or you have not selected a provider in the tab's Provider dropdown.
+**What it usually means:** No tab means the result has no Wilcoxon marker rankings (a result with only one group, or a partial run), so there is nothing to send. A disabled button means the **Provider** is **None**, the **API key** box is empty (Anthropic), or nothing has been pasted yet (Any chatbot).
 
 **What to do:**
-1. Re-run clustering with marker rankings enabled (default for all standard algorithms)
-2. In the explainer tab itself, pick a provider from the **Provider** dropdown (Anthropic or Ollama). The provider config lives in the tab -- there is no global "set this once in Preferences" step to do separately
+1. No tab: re-run clustering; marker rankings are computed for every standard algorithm, and the [quality warnings](results.md#marker-rankings-and-fingerprints) at the top of the results window say why they are missing
+2. Disabled button: pick a provider from the **Provider** dropdown (Any chatbot, Anthropic or Ollama) and give it what it needs. The provider config lives in the tab -- there is no global "set this once in Preferences" step to do separately
 
 </details>
 
 <details>
 <summary><strong>The Python environment rebuilds on first upgrade</strong></summary>
 
-**What you see:** The first time you launch QuPath after upgrading to a QP-CAT version that includes the LLM explainer, the QP-CAT Python environment performs a one-time additive rebuild as Appose detects the new pixi.toml. The clustering UI will not be available until the rebuild completes.
+**What you see:** (Only when upgrading from a QP-CAT older than 0.2.6.) The first time you launch QuPath after upgrading to a QP-CAT version that includes the LLM explainer, the QP-CAT Python environment performs a one-time additive rebuild as Appose detects the new pixi.toml. The clustering UI will not be available until the rebuild completes.
 
 **What it usually means:** The Appose Python env's `pixi.toml` gained two new pure-Python dependencies (`anthropic`, `requests`) and the environment version bumped to `0.2.6`. This triggers an incremental pixi rebuild -- typically ~30 seconds to 2 minutes for pure-Python packages -- not a full ~1.5-2.5 GB re-download.
 
