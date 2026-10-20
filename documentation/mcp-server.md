@@ -428,8 +428,8 @@ on Windows, join it onto one line before running it:
 ```
 claude mcp add --transport http qpcat http://127.0.0.1:<PORT>/mcp --header "Authorization: Bearer <TOKEN>"
 ```
- Untested there, like the rest of the
-Windows path.
+
+Untested there, like the rest of the Windows path.
 
 </details>
 

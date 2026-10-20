@@ -156,14 +156,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   `YAML_SCHEMA.md` and `HOW_TO_GUIDE`, all of which are now one-paragraph "Moved" notes. They
   name the live pages (`references.md`, `setup.md`, `spatial-neighborhoods.md`,
   `yaml-reference.md`, `batch.md`).
-- **Results-window guide text described controls and colours that are not there.** The UMAP
+- **Results-window guide text described controls and colors that are not there.** The UMAP
   2D guide and the in-plot help said a double-click opens the image; one click already opens
-  it, centres on the cell and selects it. The Stacked Violin guide sent you to a "Cluster
+  it, centers on the cell and selects it. The Stacked Violin guide sent you to a "Cluster
   Management dialog" (the button is **Modify clusters...**, then **Sub-cluster...**), the
   Embedding Plot guide to a right-click menu (use **Save plot...**), and the GMM note to an
   arcsinh option Normalization does not have. The Dotplot guide said dark means highest,
   which is backwards on the default Viridis map, and the Heatmap guide said red is high and
-  blue low, true for one colour map; both now point at the colour bar. The Cluster Explainer
+  blue low, true for one color map; both now point at the color bar. The Cluster Explainer
   said its API key lasts a QuPath session; it lasts one results window, and its
   Documentation link now opens the explainer's own page instead of the spatial tabs.
 - **Export figures (batch) promised formats it does not write.** The dialog showed
@@ -177,7 +177,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   you"; any program on the machine that has the token can connect, under any account, so it
   now says that and where to keep the token. The client examples gave one JSON block for
   Cursor, Codex and Gemini CLI; Codex reads TOML and Gemini CLI uses `httpUrl`, and each
-  now has its own. Nothing about the server's behaviour changed.
+  now has its own. Nothing about the server's behavior changed.
 - **The Cluster Explainer reported "Done" for replies it could not read.** A reply with no
   JSON array naming the clusters (prose, or the wrong shape) showed "Done. N clusters
   explained" over a table of "(no suggestion)"; it now reads "Failed: provider returned an
