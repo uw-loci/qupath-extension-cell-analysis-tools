@@ -7,11 +7,8 @@ measurement in the table captures it. When a marker panel does capture it,
 
 ## When to use it
 
-### When to Use
-
 - **Measurement mode**: When marker expression patterns distinguish cell types. Fast, works on CPU. Start here.
 - **Tile mode**: When morphology or spatial texture matters (e.g., differentiating activated vs resting T cells by size/shape). Slower, benefits from GPU.
-- **vs Clustering**: Use the autoencoder when you have labeled examples and want to propagate labels. Use clustering when exploring unlabeled data.
 - **vs Clustering**: Use the autoencoder when you have labeled training data and want a supervised classifier. Use clustering when you have no labels and want to discover populations.
 
 ### Labeling Strategy
@@ -87,7 +84,7 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
    - Validation split: 0.2 (20% holdout for early stopping and best model selection)
    - Early stop patience: 15 (epochs without val improvement before stopping; 0 = disabled)
    - Class weighting: ON (handles imbalanced cell populations via inverse-frequency weights)
-   - Data augmentation: expand the collapsible **Advanced -- Augmentation** section to configure augmentation options (Gaussian noise + per-channel scaling for measurement mode). The section is collapsed by default to reduce dialog clutter.
+   - Data augmentation: expand the collapsible **Advanced -- Augmentation** section to configure augmentation options (Gaussian noise + per-channel scaling for measurement mode; flips, 90-degree rotation, optional elastic deformation and intensity changes for tile mode). The section is collapsed by default to reduce dialog clutter.
 8. Click **Train on Selected Images**
 9. Review accuracy on labeled cells in the status bar
 

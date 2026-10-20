@@ -28,8 +28,9 @@
 **Problem:** Biologically distinct populations are lumped together.
 **Symptoms:** Known cell types are not separated; embedding shows sub-structure within clusters.
 **Solution:** Increase Leiden resolution, increase KMeans k, or run sub-clustering on specific
-clusters (*Manage Clusters* -> select one cluster -> **Sub-cluster...**, which reopens the Run
-Clustering dialog scoped to that class and labels the result `<name>.0`, `<name>.1`, ...).
+clusters (*Results & populations > Modify cell populations (rename, merge, split,
+sub-cluster)...* -> select one cluster -> **Sub-cluster...**, which reopens the clustering
+dialog scoped to that class and labels the result `<name>.0`, `<name>.1`, ...).
 
 ### 5. HDBSCAN returns one giant cluster and almost no noise
 
@@ -116,7 +117,7 @@ which are automatically cleaned up. Both handles appear publicly in the issue.
 | Checkbox | What it sends |
 |---|---|
 | **Include system info (versions, OS)** | QP-CAT, QuPath, Java and OS versions. Almost always worth sending; a surprising number of reports come down to a version mismatch. |
-| **Include QP-CAT operation log** | QP-CAT's own audit trail (see [chapter 16](reproducibility.md#the-audit-log)): which tools ran, with which parameters, in what order. Greyed out with "(none yet)" if you have not run anything. |
+| **Include QP-CAT operation log** | QP-CAT's own audit trail (see [Reproducibility](reproducibility.md#the-audit-log)): which tools ran, with which parameters, in what order. Greyed out with "(none yet)" if you have not run anything. |
 | **Include QuPath log** | QuPath's log as captured in memory this session. QuPath writes no log file by default, so this checkbox is the only way to get a stack trace attached. Shows "(none captured this session)" when there is nothing to send. |
 | **Include a screenshot of the QuPath window** | The window as it looks now. |
 

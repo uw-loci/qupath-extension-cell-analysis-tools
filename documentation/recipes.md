@@ -13,12 +13,12 @@ plots), so to cluster *on the embedding* you run it in two steps.
 
 **Steps.**
 
-1. **Compute the embedding.** Run **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...
-   (UMAP / PCA / t-SNE)...** ([section 5](clustering.md#embeddings-without-clustering)) with UMAP.
+1. **Compute the embedding.** Run **Extensions > QP-CAT > Explore & spatial > Map cells in 2D (UMAP / PCA / t-SNE)...**
+   ([Embeddings without clustering](clustering.md#embeddings-without-clustering)) with UMAP.
    This writes `QPCAT UMAP1` and `QPCAT UMAP2` measurements onto every detection. (A normal
    clustering run with UMAP embedding writes them too.)
 2. **Cluster on those two columns.** Open **Find cell populations
-   (clustering)...** ([section 2](clustering.md)) and:
+   (clustering)...** ([Clustering](clustering.md)) and:
    - In the measurement picker, select **only `QPCAT UMAP1` and `QPCAT UMAP2`** (use the
      filter box to find them, Select none, then check just those two).
    - **Algorithm: HDBSCAN.**
@@ -43,7 +43,7 @@ plots), so to cluster *on the embedding* you run it in two steps.
      markers.
 
 **Then find out what the clusters ARE.** This is the step the recipe is incomplete without.
-Clustering on three embedding columns means Marker Rankings, the heatmap and the fingerprints
+Clustering on two (or three) embedding columns means Marker Rankings, the heatmap and the fingerprints
 can only rank those three columns -- they will tell you a cluster is high in `UMAP2`, which is
 not a phenotype. The markers are still on the cells; nothing has read them yet.
 
@@ -78,12 +78,16 @@ So the pair is: cluster in the embedding, characterise in marker space.
   separated.
 - **HDBSCAN is the DBSCAN to use here.** QP-CAT ships **HDBSCAN** (not plain
   DBSCAN); it is the strict upgrade -- no global `eps` to guess, it handles
-  variable density, and it labels low-density points as a noise cluster (shown as
-  its own class, which you can ignore or reclassify). See the HDBSCAN parameters
+  variable density, and it leaves low-density points as noise: they stay unclassified
+  and are counted separately, never as a cluster ("5 clusters (+606 noise)"). See the HDBSCAN parameters
   in [the algorithm reference](clustering.md#caution-hdbscan).
-- **Scale of the work / reproducibility.** Because UMAP itself is stochastic, fix
-  the **random seed** (Dimensionality Reduction > Advanced) in step 1 so the same
-  embedding -- and therefore the same HDBSCAN result -- reproduces.
+- **Scale of the work / reproducibility.** UMAP itself is stochastic. **Map cells in 2D**
+  has no seed box; it uses seed 42, so step 1 reproduces on fewer than 200,000 cells. Above
+  that its *Automatic* mode drops the seed for speed (see [Reproducibility](reproducibility.md)).
+  If you compute the embedding in a clustering run instead, keep **Random seed (clustering +
+  embedding)** in the Clustering Algorithm section fixed and set the embedding's mode to
+  *Reproducible* under Dimensionality Reduction > Advanced, so the same embedding -- and
+  therefore the same HDBSCAN result -- reproduces at any size.
 - **Caveat (cite this).** Clustering on a 2-D UMAP "works" and is widely used,
   but the UMAP authors caution against treating it as ground truth: UMAP "does
   not completely preserve density" and "can also create false tears in clusters,

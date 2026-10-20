@@ -11,7 +11,7 @@ use [clustering](clustering.md) when you want the data to tell you what is there
 A recommended approach:
 1. Run **unsupervised clustering** first to understand the data
 2. Use the **heatmap and marker rankings** to identify biological populations
-3. **Rename clusters** to biological names (via Manage Clusters)
+3. **Rename clusters** to biological names (via **Results & populations > Modify cell populations**)
 4. OR define **phenotype rules** based on what you learned about marker distributions
 
 ### Rule Design
@@ -59,10 +59,11 @@ modality-independent; run cell detection first so the measurements exist.
 
 **Reading the marker columns:** each column is one selected measurement, labelled with its
 channel **and statistic** (e.g. `PCNA Mean` vs `PCNA Median`) so measurements of the same
-channel are distinguishable -- hover or click a header for the full QuPath name and its
-histogram. A cell is **pos** for a marker when its (normalized) value is `>=` that marker's
+channel are distinguishable, with the marker in bold ("Cell **CD3** mean") -- hover or click a
+header for the full QuPath name and its histogram. A cell is **pos** for a marker when its (normalized) value is `>=` that marker's
 gate and **neg** when below; `--` ignores the marker. The gate is the spinner beneath each
-marker name.
+marker name, and it shows up to four decimals, so a small gate such as 0.0045 reads as itself
+rather than rounding to 0.
 
 **Gate range depends on normalization:** Min-Max / Percentile scale values to `[0, 1]` (gate
 0.0-1.0, 0.5 = midpoint); Z-score centers at 0 in SD units (gate -3.0 to 3.0, 0 = mean);
@@ -76,7 +77,7 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 2. **Choose the scope** at the top -- **Current image** (the default),
    **All project images**, or **Specific images...** (click **Choose images...**
    for the subset picker with name + metadata filters and checkboxes; see
-   [chapter 4](clustering.md#clustering-several-images-together)). Across multiple images the
+   [Clustering](clustering.md#clustering-several-images-together)). Across multiple images the
    same rules and gates are applied to all of them; cells from the chosen images
    are normalized together (global gating, so a `pos` threshold means the same
    thing across them), labels are written back, and each image is saved. The
@@ -87,13 +88,13 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
 3. **Select markers** from the measurement list
    - These should be biologically meaningful markers (e.g., CD3, CD8, CD20, PanCK)
    - Use **Select 'Mean' only** (or **Select 'Median' only** if your measurements are medians) then deselect irrelevant markers
-3. **Set normalization** -- determines how marker values are scaled before gating
+4. **Set normalization** -- determines how marker values are scaled before gating
    - Min-Max or Percentile recommended for gating (values in [0,1] range)
    - The "Default gate" spinner sets the initial gate for all markers
-4. **Set per-marker gates** -- each marker column header has a spinner
+5. **Set per-marker gates** -- each marker column header has a spinner
    - Values represent the positive/negative threshold for that marker
    - You can drag the red threshold line on the histogram (see [Auto-Thresholding](#auto-thresholding))
-5. **Define rules** -- each row is a phenotype. Every marker column has six states:
+6. **Define rules** -- each row is a phenotype. Every marker column has six states:
    - **Cell Type**: name for this phenotype (e.g., "CD8+ T Cell")
    - **`pos`** -- the cell must be at/above this marker's gate
    - **`neg`** -- the cell must be below this marker's gate (this is what makes a rule
@@ -109,11 +110,11 @@ range -- 0.5 is the principled midpoint default for Min-Max, not an arbitrary va
      still left as `--`. Set them to `ignore` to make the choice explicit (and silence the
      prompt).
    - Example: CD8+ T Cell = CD3: `pos`, CD8: `pos`, CD20: `neg`, everything else `ignore`
-6. **Rule order matters** -- rules are evaluated top-to-bottom, first match wins
-   - Use the up/down arrows to reorder
+7. **Rule order matters** -- rules are evaluated top-to-bottom, first match wins
+   - Use **Move Up** / **Move Down** to reorder
    - Place more specific rules above more general ones
-7. Click **Run Phenotyping**
-8. Results dialog shows phenotype counts and distributions
+8. Click **Run Phenotyping**
+9. Results dialog shows phenotype counts and distributions
 
 ### How matching works (read this before writing rules)
 
@@ -166,13 +167,19 @@ Automatically compute marker gate thresholds instead of setting them manually.
    - Blue bars (below threshold) and red bars (above threshold)
    - A red dashed line at the current threshold
    - Statistics: "Pos: X (Y%) | Neg: Z (W%)" -- the cells at or above the threshold,
-     which is how phenotyping gates them
+     which is how phenotyping gates them. They are counted from the distribution of the
+     values, not bar by bar, so they are right to within 0.1% of the cells even when the
+     threshold falls inside a bar
 6. Change the **Method** dropdown to apply an auto-threshold:
    - **Triangle** -- geometric method, good for skewed distributions
    - **GMM (Gaussian)** -- 2-component mixture model, good for bimodal data
    - **Gamma** -- gamma distribution fit, good for strictly positive markers
-7. You can drag the red threshold line with the mouse for fine-tuning
+7. You can drag the red threshold line with the mouse for fine-tuning (it moves in steps of
+   0.001), or type a value into the **Threshold** box (up to four decimals, the precision the
+   suggestions are computed to)
 8. Click **Apply to All Markers** to set all gates using the selected method
+
+![The Histogram & Auto-Thresholding section of the Phenotyping dialog for Cell CD3 mean on image tme_01 with Percentile scaling. Most cells sit in one tall bar at 0 (1067 cells); a long, low tail of red bars runs up to 1.00. The GMM (Gaussian) method is selected, the red dashed threshold line sits at 0.129 just past the spike, the Threshold box reads 0.1291, and the counts under it read "Pos: 384 (24.5%) | Neg: 1184 (75.5%)"](images/phenotyping-histogram-gmm.png)
 
 **A suggestion that calls more than 95% or fewer than 5% of cells positive is flagged** in
 orange under the counts, e.g. *"GMM (Gaussian) suggestion: Calls 100.0% of cells positive -
@@ -184,11 +191,11 @@ every cell at the same value, which no threshold can split), but it is the first
 exactly 0, which draws as one tall spike at the left of the histogram. Triangle and GMM leave
 that spike out (and the spike of values clipped to 1 by *Percentile* scaling) and fit the
 rest; cells on the spike are below any suggested threshold. Fitted with the spike included,
-both put the threshold at its edge: on the synthetic TME dataset (image tme_01, *Cell: CD3
+both would put the threshold at its edge: on the synthetic TME dataset (image tme_01, *Cell: CD3
 mean*, Percentile scaling, 1,568 cells of which 24.3% are T cells by ground truth) GMM
-suggested 0.0045 and Triangle 0.0059, calling 37.8% and 37.2% of cells positive. They now
-suggest 0.129 (24.5% positive) and 0.033 (30.2%); Gamma, which was not affected, gives
-0.361 (24.0%). Triangle still tends to call too many cells positive when a dim shoulder sits
+suggested 0.0045 and Triangle 0.0059 that way, calling 37.8% and 37.2% of cells positive.
+Leaving the spike out, they suggest 0.129 (24.5% positive, the figure above) and 0.033
+(30.2%); Gamma, which was not affected, gives 0.361 (24.0%). Triangle still tends to call too many cells positive when a dim shoulder sits
 next to the spike, so check it against GMM and Gamma.
 
 ---

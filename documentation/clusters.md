@@ -180,7 +180,7 @@ writes a copy and records what that copy came from. So a session naturally leave
 
 **The chain is visible.** Each derived result shows its parent in
 **Manage Saved Results...** (with the edit type: `<- split of '<parent>'`, `<- merge of...`, etc.), in the **View Past Results**
-picker, in the Results-window title bar, and in the Manage Clusters status line. Without that,
+picker, in the Results-window title bar, and in the Modify Clusters status line. Without that,
 five near-identical names read as five unrelated results rather than a history.
 
 **Stepping back is one button.** With a derived result selected, **Step back to '<parent>'...**
@@ -246,7 +246,7 @@ that the saved-result path takes over and this one disappears.
 ### Sub-clustering: cluster within a cluster
 
 Select **exactly one** cluster and click **Sub-cluster...** to re-cluster only that population.
-The Run Clustering dialog reopens scoped to that class, and the result is written back as
+The clustering dialog reopens as **QPCAT - Sub-cluster '<class>'**, scoped to that class, and the result is written back as
 `<name>.0`, `<name>.1`, ... replacing the parent class on those cells.
 
 This is the answer to having too few clusters when raising the resolution globally would over-split
@@ -268,7 +268,7 @@ markers.
   too -- the counts are there so you see that before agreeing.
 - The result is auto-saved like any other run: it appears in **View Past Results**, opens the full
   results window (heatmap, embedding, plots, 3D view), and its sub-clusters can themselves be
-  renamed or merged in Manage Clusters.
+  renamed or merged in Modify Clusters.
 
 ---
 ## Seeing a sub-cluster next to the clusters it came from
@@ -321,7 +321,8 @@ survives reload.
 
 ### Two places to gate
 
-- **In the clustering Results dialog -- the "Embedding" tab.** After any run with
+- **In the clustering Results dialog -- the embedding tab** (named after the embedding, e.g.
+  **UMAP 2D**). After any run with
   an embedding, the scatter has a **Gate** toggle. This gates on the run's own
   UMAP/t-SNE/PCA, colored by cluster. Works on reopened past results too.
 - **The standalone tool: Extensions > QP-CAT > Explore & spatial > Plot & gate cells (2D)...** Pick a

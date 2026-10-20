@@ -33,14 +33,20 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
    name so both can coexist without overwriting.
 6. **Algorithm** -- Leiden by default. See [Choosing an algorithm](#choosing-an-algorithm).
 7. **Analysis options** (the untitled block below the algorithm section):
-   - *Generate analysis plots* -- the static PNGs (marker ranking, PAGA, dotplot)
+   - *Generate analysis plots (dotplot, matrix plot, violin, embedding)* -- the static PNGs;
+     Marker Rankings and Marker Fingerprints are computed either way
+   - *Cluster connectivity graph (PAGA)* -- off by default, greyed out while the plots are off
    - *Neighborhood enrichment + Moran's I* -- the two spatial statistics that run
      alongside clustering
    - *Spatial feature smoothing* -- [below](#spatial-feature-smoothing)
    - *Reduce features with PCA before clustering* -- off by default,
      [below](#reducing-features-with-pca-first)
    - *Batch correction (Harmony)* -- enabled when the run spans several images **or**
-     several independent areas within one image; the **Batch key** dropdown picks which
+     several independent areas within one image; the **Batch key** dropdown picks **Images**
+     or **Independent areas** as the batch
+   - *Validation* (a collapsed section) -- optional checks that the clusters hold up across
+     seeds and agree with classes the cells already carry; see
+     [Validation](results.md#validation-tab)
 8. **Run Clustering**.
 
 A line above the Run button says what this run trades -- reproducibility,
@@ -92,7 +98,7 @@ is comparable across cells of different sizes, and is the standard single-cell i
 **Select 'Mean' only** does this. If your measurements are medians rather than means,
 **Select 'Median' only** is the same shortcut for those; prefer mean when you have both.
 
-All buttons (**Select All**, **Select None**, **Select 'Mean'**, **Select 'Median'**, and **Deselect QPCAT**)
+All buttons (**Select All**, **Select None**, **Select 'Mean' only**, **Select 'Median' only**, and **Deselect QPCAT**)
 act on the rows currently shown. Filter the list first and they apply only to what you can see;
 hidden rows keep their ticks.
 
@@ -157,10 +163,13 @@ measurement you can map in the viewer, which is how you tell a real boundary fro
 through the middle of a continuum. **Leiden, Agglomerative and BANKSY produce no such
 quantity and none is invented for them**, so with those you still have hard labels only.
 
-Two checks you can ask for before a run, under **Analysis > Validation** (both off by default):
-**Stability across seeds** re-runs the clustering with other seeds and reports how much the
-clusters move, which works for Leiden too; **Agreement with the classifications the cells
-already have** compares the clusters with a prior phenotyping or ground truth. See
+Two checks you can ask for before a run, in the **Validation** section of the dialog (collapsed,
+under the analysis tick-boxes; both off by default). **Stability across seeds (re-runs the
+clustering)** re-runs the clustering **Extra runs** times (default 5, 2 to 20) with other seeds
+and reports how much the clusters move, which works for Leiden too; it is greyed out for
+HDBSCAN, Agglomerative and BANKSY. **Agreement with the classifications the cells already
+have** compares the clusters with a prior phenotyping or ground truth; it is greyed out in
+*Analyze current classifications*, where the classes are the labels. See
 [Validation](results.md#validation-tab).
 
 Either way:
@@ -401,7 +410,7 @@ changes results as much as the clustering parameters do. See
 | **KMeans** | Fast, simple, reproducible when k is known. | Assumes spherical clusters; initialisation-sensitive. |
 | **HDBSCAN** | Arbitrary shapes; identifies noise. | Slow on very large data; needs a density gap. |
 | **Agglomerative** | Produces a hierarchy. | Needs k; O(n^2). |
-| **GMM** | Elliptical, unequal, overlapping populations. | Hard labels in QP-CAT; assumes Gaussian markers. |
+| **GMM** | Elliptical, unequal, overlapping populations. | Each cell gets one label, but the posterior is reported ([Cluster confidence](results.md#cluster-confidence-tab)); assumes Gaussian markers. |
 | **BANKSY** | Spatial context; finds tissue domains. | Needs coordinates; more parameters. |
 
 ## Algorithm parameters
@@ -412,7 +421,7 @@ Starting points, all of them the dialog defaults:
 |---|---|---|
 | **Leiden** | resolution 1.0, n_neighbors 50 | raise resolution for more clusters |
 | **KMeans / MiniBatch** | k = 10 | adjust from biology or the heatmap |
-| **HDBSCAN** | min_cluster_size 15, min_samples 0 (auto), Cluster selection "Excess of mass" | lower min_cluster_size to find smaller clusters; switch to "Leaf" when one cluster swallows the run |
+| **HDBSCAN** | min_cluster_size 15, min_samples 0 (auto), Cluster selection "Excess of mass (default)" | lower min_cluster_size to find smaller clusters; switch to "Leaf (finest clusters)" when one cluster swallows the run |
 | **Agglomerative** | k = 10, Ward linkage | justify any other linkage |
 | **GMM** | 10 components, full covariance | |
 | **BANKSY** | lambda 0.2, k_geom 15, resolution 0.7 | raise lambda toward tissue domains |
@@ -437,7 +446,7 @@ its own spatial weighting.
 
 **Controls.** The dialog exposes **Iterations** (1-5, default 1); each pass smooths
 again over the same graph, so more passes reach further. The neighbourhood size *k* is
-not in the dialog -- it comes from the **Spatial kNN** preference (default 15). Larger
+not in the dialog -- it comes from the **Spatial Smoothing K-NN** preference (default 15). Larger
 *k* or more iterations means broader domains and less cell-level detail.
 
 ### Smoothing or BANKSY
@@ -527,7 +536,7 @@ arrangement** while reading as a statement about the tissue. Enrichment between 
 classes is meaningless when one of them is not in the graph.
 
 If you want a spatial statistic over a population, cluster or phenotype the whole
-tissue and use [post-hoc spatial statistics](spatial.md), which keeps every cell in the
+tissue and use [post-hoc spatial statistics](spatial-statistics.md#running-them-on-existing-clusters), which keeps every cell in the
 graph and asks the question about the labels.
 
 **BANKSY and spatial feature smoothing are still allowed**, because their output is
@@ -571,8 +580,9 @@ anything under **Independent areas**. Cell centroids are per-image pixel coordin
 offset between images, so pooling them would stack the images on top of each other and hand
 every cell neighbours from a different slide. No spatial graph edge crosses an image, and
 Ripley L and co-occurrence -- which read the coordinates rather than the graph -- are computed
-once per image and shown behind an **Area** selector. Moran's I, Geary's C and neighbourhood
-enrichment read the graph, so partitioning it is all they need and they stay as one figure.
+once per image and shown behind an **Area** selector. Moran's I and Geary's C read the graph,
+so partitioning it is all they need. Neighbourhood enrichment reads the graph too, and its
+permutation null shuffles cluster labels only within each image. All three stay as one figure.
 
 For physically separate tissue on one slide -- TMA cores, multiple sections -- see
 [independent areas](spatial-neighborhoods.md#independent-areas), which also lets Harmony
