@@ -64,7 +64,7 @@ caveats.
 
 ### Look at results
 
-- **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; double-click to jump to one. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
+- **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; click one to open its image and center on it. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
 - **[Gate cells on a 2D plot](documentation/clusters.md#gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
 - **[Publication-ready follow-up](documentation/results.md)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
 - **[Check that clusters hold up](documentation/results.md#validation-tab)** -- re-run with other seeds, or compare against classes the cells already carry. <sub>Adjusted Rand index, Pixie consistency, NMI, purity, Cohen's kappa; off by default</sub>
