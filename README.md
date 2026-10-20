@@ -134,7 +134,7 @@ Copy `build/libs/qupath-extension-cell-analysis-tools-<version>-all.jar` to your
 2. **Extensions > QP-CAT > Find cell populations (clustering)...** The first time, QP-CAT asks you to back up the project before it changes any classifications; confirm to continue
 3. In **Measurements**, click **Select 'Mean' only**, or tick the measurements you want. Nothing is ticked the first time; later runs start with your last selection
 4. Choose algorithm (Leiden recommended) and click **Run Clustering**
-5. The cells take the classes **Cluster 0**, **Cluster 1**, ... in the viewer, and a results window opens on its **Heatmap** tab
+5. The cells take the classes **Cluster 0**, **Cluster 1**, ... in the viewer, and the results window opens
 6. View interactive heatmaps, scatter plots, and marker rankings in the results window
 
 For even faster exploration, use **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**, which run with sensible defaults.
