@@ -122,7 +122,7 @@ def run_explainer(
 
     cluster_ids = _resolve_cluster_ids(marker_table, cluster_ids_spec)
     if not cluster_ids:
-        out["error_type"] = "INPUT_TOO_LARGE"
+        out["error_type"] = "NO_CLUSTERS"
         out["error_detail"] = "No cluster ids selected for explanation."
         return out
 
@@ -408,6 +408,8 @@ def _classify_anthropic_error(e):
         return _LlmError("AUTH_INVALID", "Anthropic auth rejected: " + msg)
     if status == 429 or "rate" in cls_name:
         return _LlmError("RATE_LIMIT", "Anthropic rate limit: " + msg)
+    if status == 400 and "prompt is too long" in msg.lower():
+        return _LlmError("INPUT_TOO_LARGE", "Anthropic: " + msg)
     if status == 404 or "not_found" in cls_name:
         return _LlmError("MODEL_NOT_FOUND", "Anthropic model not found: " + msg)
     if status is not None and 500 <= int(status) < 600:

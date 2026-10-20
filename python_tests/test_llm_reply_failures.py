@@ -180,3 +180,18 @@ def test_the_sdk_still_reports_the_stop_reasons_we_read():
     assert "stop_reason" in Message.model_fields
     reasons = set(typing.get_args(StopReason))
     assert {"max_tokens", "refusal", "end_turn"} <= reasons
+
+
+def test_no_cluster_selected_is_not_called_a_too_large_prompt(mod):
+    out = mod.run_explainer("CHATBOT", "x", "", "", "{}", 10, "all", 30)
+    assert out["error_type"] == "NO_CLUSTERS"
+
+
+def test_anthropics_too_long_prompt_is_classified_as_too_large(mod):
+    class BadRequestError(Exception):
+        status_code = 400
+
+    err = mod._classify_anthropic_error(
+        BadRequestError("prompt is too long: 1200000 tokens > 1000000 maximum")
+    )
+    assert err.error_type == "INPUT_TOO_LARGE"

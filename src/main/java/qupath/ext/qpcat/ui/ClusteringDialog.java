@@ -2223,7 +2223,7 @@ public class ClusteringDialog {
         if (!canPushNow) {
             pushNowButton.setTooltip(Tooltips.of(
                     "No saved spatial-stats result on this image yet -- "
-                    + "run clustering with the Viewer overlay enabled first."));
+                    + "run clustering with Push graph edges to viewer ticked first."));
         }
         pushNowButton.setOnAction(e -> runPushToViewerNow());
 
@@ -2344,7 +2344,7 @@ public class ClusteringDialog {
         if (candidates.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT",
                     "No saved spatial-stats result on this image yet -- "
-                    + "run clustering with the Viewer overlay enabled first.");
+                    + "run clustering with Push graph edges to viewer ticked first.");
             return;
         }
         final String resultName;
@@ -6483,7 +6483,7 @@ public class ClusteringDialog {
         // Pre-selects the loaded result (or, for a fresh run, its auto-saved name)
         // in the manage dialog so the relabel reaches exactly the run's images.
         Button manageBtn = new Button("Modify clusters...");
-        manageBtn.setTooltip(Tooltips.of("Rename, merge or sub-cluster these populations, across "
+        manageBtn.setTooltip(Tooltips.of("Rename, merge, sub-cluster or split these populations, across "
                 + "the same images this result was clustered over."));
         manageBtn.setDisable(qupath == null);
         final String presetName = loadedResultName != null

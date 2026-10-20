@@ -377,7 +377,7 @@ public final class QpcatPreferences {
     // Phase 5 enhancement (cross-feature with multi-figure batch export):
     // persist Ripley K/L, Geary's C, and co-occurrence as matplotlib PNGs
     // alongside the existing clustering plots. Default true so the new
-    // Multi-Figure Batch Export dialog (Feature B) can pick them up out of
+    // figure batch export (Export figures (batch)...) can pick them up out of
     // the box. Disable to skip the savefig step and keep JSON-only output.
     private static final BooleanProperty spatialPersistPlots = PathPrefs.createPersistentPreference(
             "qpcat.spatial.persistPlots", true);
@@ -1164,7 +1164,7 @@ public final class QpcatPreferences {
                         + "(Ripley L, Geary's C, co-occurrence) also writes a matplotlib PNG "
                         + "into the per-result plot directory. Filenames: ripley_k_l.png, "
                         + "geary_c.png, co_occurrence_pairwise.png, co_occurrence_one_vs_rest.png. "
-                        + "Required for the Multi-Figure Batch Export dialog to include these "
+                        + "Required for Export > Export figures (batch)... to include these "
                         + "plots; disable only to skip the savefig step entirely."))
                 .build());
 

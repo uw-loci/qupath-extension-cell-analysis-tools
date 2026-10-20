@@ -191,6 +191,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   "Failed: the reply was cut off at the model's output limit". An Anthropic refusal is
   reported as one. Every failure shown in the tab is also written to the QuPath log at
   ERROR, and the cut-off or refused reply is kept in the audit log.
+- **Smaller text fixes.** **Push to viewer now** now says to tick **Push graph edges to
+  viewer**, not a "Viewer overlay" option that no longer goes by that name; the
+  spatial-plots preference names **Export figures (batch)...**; Modify clusters lists
+  **Split...** with rename, merge and sub-cluster. The Cluster Explainer no longer calls an
+  empty cluster selection a too-large prompt, and an Anthropic "prompt is too long" error
+  reads as one instead of a generic failure.
 
 ## [0.22.0] -- 2026-10-17 -- name clusters with any chatbot or agent; spatial results in microns
 

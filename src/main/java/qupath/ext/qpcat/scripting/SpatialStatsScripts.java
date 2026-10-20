@@ -32,7 +32,7 @@ public final class SpatialStatsScripts {
      * Phase 5 cross-feature contract. When {@code persistPlots} is set on
      * an options map, the corresponding statistic also writes a
      * matplotlib PNG into the result's plot directory so the
-     * Multi-Figure Batch Export dialog (Feature B) can pick it up.
+     * Export figures (batch)... can pick it up.
      * Default behaviour (no key set) reads
      * {@code QpcatPreferences.isSpatialPersistPlots()} which itself
      * defaults to {@code true}.
@@ -57,7 +57,7 @@ public final class SpatialStatsScripts {
      *   <li>{@code persistPlots} - boolean. When true (default) a
      *       matplotlib PNG named {@code ripley_k_l.png} is also written
      *       to the result's plot directory (Phase 5 cross-feature
-     *       contract with Multi-Figure Batch Export).</li>
+     *       contract with Export figures (batch)...).</li>
      * </ul>
      */
     public static Map<String, Object> ripley(Map<String, Object> graphHandle,

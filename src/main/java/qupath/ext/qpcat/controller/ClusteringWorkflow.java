@@ -2175,7 +2175,7 @@ public class ClusteringWorkflow {
         inputs.put("use_squidpy_graph_for_smoothing",
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
         // Phase 5 enhancement: PNG output for spatial-stats plots so the
-        // Multi-Figure Batch Export dialog (Feature B) can pick them up.
+        // Export figures (batch)... can pick them up.
         inputs.put("spatial_persist_plots",
                 QpcatPreferences.isSpatialPersistPlots());
         // Gate neighborhood-enrichment + Moran's I on the explicit spatial-

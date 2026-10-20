@@ -205,7 +205,7 @@ public final class SpatialConnectionsScripts {
         if (bundle == null || !bundle.isAnyPresent()) {
             throw new IllegalStateException(
                     "Saved result '" + resultName + "' has no spatial graph payload"
-                    + " (run clustering with the Viewer overlay enabled first)");
+                    + " (run clustering with Push graph edges to viewer ticked first)");
         }
 
         PathObjectHierarchy hierarchy = imageData.getHierarchy();

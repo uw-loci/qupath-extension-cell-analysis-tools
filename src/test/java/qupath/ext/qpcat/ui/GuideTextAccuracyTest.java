@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test;
  * and was wrong: a double-click that does nothing a single click does not, a dialog and a
  * right-click menu that do not exist, an arcsinh option Normalization never had, colour words
  * true only for one colour map, and an API key said to last a QuPath session when it lasts one
- * results window.
+ * results window. Also names from older dialogs: a "Viewer overlay" group and a
+ * "Multi-Figure Batch Export" dialog that no longer exist under those names.
  */
 class GuideTextAccuracyTest {
 
@@ -33,11 +34,17 @@ class GuideTextAccuracyTest {
             "Red = high relative expression",
             "red is above it and blue below",
             "Re-enter each QuPath session",
-            "re-enter it each QuPath session");
+            "re-enter it each QuPath session",
+            "Viewer overlay enabled",
+            "Multi-Figure Batch Export");
 
     private static String allUiSource() throws IOException {
+        return allSource(UI);
+    }
+
+    private static String allSource(Path root) throws IOException {
         StringBuilder sb = new StringBuilder();
-        try (Stream<Path> files = Files.walk(UI)) {
+        try (Stream<Path> files = Files.walk(root)) {
             for (Path f : files.filter(p -> p.toString().endsWith(".java")).toList()) {
                 sb.append(Files.readString(f, StandardCharsets.UTF_8)).append('\n');
             }
@@ -47,7 +54,7 @@ class GuideTextAccuracyTest {
 
     @Test
     void noRetiredGuidePhraseIsBack() throws IOException {
-        String src = allUiSource();
+        String src = allSource(Path.of("src/main/java"));
         List<String> found = new ArrayList<>();
         for (String phrase : RETIRED) {
             if (src.contains(phrase)) {
@@ -67,6 +74,10 @@ class GuideTextAccuracyTest {
         String dialog = Files.readString(UI.resolve("ClusteringDialog.java"), StandardCharsets.UTF_8);
         assertThat(dialog).contains("Sub-cluster... under Modify clusters...")
                 .contains("Save plot... at the bottom of this window");
+        // Split... is the fourth action in Modify clusters; its header and button tip omitted it.
+        assertThat(src).contains("Rename, merge, sub-cluster or split the populations")
+                .contains("Rename, merge, sub-cluster or split these populations")
+                .contains("new Button(\"Split...\")");
     }
 
     @Test
