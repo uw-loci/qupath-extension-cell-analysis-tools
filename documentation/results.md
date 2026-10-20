@@ -16,6 +16,15 @@ one view of the same result.
 - [Cluster colours](#cluster-colours)
 - [3D view](#3d-view)
 
+**Marker names are bold.** Wherever QP-CAT lists measurement names -- the heatmap's
+column labels, the dotplot, matrix plot, stacked violin and Geary's C figures, the Marker
+Fingerprints cards, the measurement lists in the dialogs, the phenotyping column headers --
+the marker part of the name is bold and the compartment and statistic are not:
+"Nucleus: **CD3** std dev", "Cell: **PCNA**: Mean", "**CD3**: Nucleus: Mean". With no
+statistic, everything after the compartment is bold ("Cell: **Area**"). The monospaced text
+tables (Marker Rankings, Spatial Autocorrelation, Geary's C) and every CSV stay plain text, so
+what you copy out of them is the name itself.
+
 ## Saving and reopening
 
 Every successful run **auto-saves** to `<project>/qpcat/cluster_results/` under a
@@ -123,8 +132,8 @@ the violin is widest right there and ends at its widest point, which looks like 
 of a violin. On the synthetic demo data 54% to 93% of cells are exactly at the lowest value
 for every marker except DAPI, and DAPI is the one marker drawn as full ovals.
 
-The marker part of each label is bold (**CD3** in "Nucleus: **CD3** mean"), the labels are
-angled at 45 degrees, each cluster row is twice scanpy's default height, and the colour scale
+The marker part of each label is bold, as in every figure (see the top of this page), the
+labels are angled at 45 degrees, each cluster row is twice scanpy's default height, and the colour scale
 sits under the dendrogram rather than in a column of its own.
 
 <a name="heatmap-colours"></a>

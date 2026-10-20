@@ -40,6 +40,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   each label is bold, and the colour scale moved under the dendrogram, which makes the
   figure narrower. The tab guide and results.md now explain the flat-based violins: each
   violin stops at the lowest value a cell has, and most cells often sit exactly there.
+- **Marker names in bold everywhere QP-CAT lists measurements, not just the violin.** The
+  marker part of a name ("Nucleus: **CD3** mean") is now bold in the dotplot, matrix plot and
+  Geary's C figures, the Heatmap tab's column labels, the Marker Fingerprints cards, the
+  measurement lists of the Clustering, Phenotyping, Compute Embedding and crop/table export
+  dialogs, the phenotyping column headers and histogram title, and the axis titles of a
+  two-marker plot. QuPath's "Cell: PCNA: Mean" names and the channel-first "CD3: Nucleus:
+  Mean" names of the cell-detection extensions are recognised, and a hyphenated marker such
+  as Ki-67 now draws with a hyphen in the figures rather than a spaced minus sign ("Ki - 67").
+  The Marker Rankings, Spatial Autocorrelation and Geary's C text tables, tooltips and every
+  CSV stay plain text. A highlighted Marker Fingerprints row is also readable in the dark
+  theme now (it was light text on pale yellow).
 
 ### Fixed
 
