@@ -1,6 +1,6 @@
 # QP-CAT -- Scripting (Groovy)
 
-Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. v1 covers spatial graph construction, the stats catalog (Ripley L, Geary's C, co-occurrence, Moran's I, neighborhood enrichment), batch figure export, and the YAML headless-batch runner. Clustering, phenotyping, embeddings, and the LLM explainer are **not** scriptable in v1 -- see the v2 roadmap at the bottom of this page. The one exception is re-running a recorded sub-clustering from the Groovy script in its `_RUN_INFO.txt` ([Reproducibility](reproducibility.md)).
+Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export, and YAML-batch surfaces, callable from QuPath workflow scripts. Clustering, embeddings, rule-based phenotyping and spatial statistics run from Groovy through the YAML batch (`YamlBatchScripts.runBatch`); there is no separate per-step Groovy API for them. The graph and statistics facades below only validate and normalize options. The LLM explainer, the autoencoder and the Validation checks are dialog-only. A recorded sub-clustering can also be re-run from the Groovy script in its `_RUN_INFO.txt` ([Reproducibility](reproducibility.md)).
 
 ## When to script vs. use the dialog
 
@@ -9,7 +9,7 @@ Programmatic access to QP-CAT's spatial graph, spatial-statistics, figure-export
 
 ## Invocation pattern
 
-QP-CAT scripting follows QuPath's standard pattern: import the static facade, call it from a Groovy script (typically inside **Automate > Script editor** or as part of a recorded workflow). The reference precedent is `qupath.ext.classifyobjectsubset.scripting.ClassifySubsetScripts` -- single options-map argument, static methods, no UI dependency.
+QP-CAT scripting follows QuPath's standard pattern: import the static facade, call it from a Groovy script (typically inside **Automate > Script editor** or as part of a recorded workflow). Each method takes a single options map, is static, and has no UI dependency.
 
 ```groovy
 import qupath.ext.qpcat.scripting.SpatialGraphScripts
@@ -34,9 +34,9 @@ def geary = SpatialStatsScripts.gearyC(graph, [
 ])
 ```
 
-Each method returns a normalised, canonical options map. To execute, pass these maps to the clustering workflow via the standard `Run Clustering...` dialog or wire them into a recorded workflow step that calls into the dialog programmatically. v1 ships the option-map vocabulary as the public API; full end-to-end "run from script without the dialog" is on the v2 roadmap.
+Each method returns a normalized, canonical options map; `println ripley` shows it. Nothing in QP-CAT reads the returned maps yet. To run spatial statistics from a script, use the YAML batch (`YamlBatchScripts.runBatch`) with a `spatial_stats` block.
 
-> **Stability promise (v1).** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`, `FigureExportScripts`, `YamlBatchScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`, `exportFigures`, `runBatch`), and recognised option keys listed in this document are part of QP-CAT's public scripting API. Breaking changes will be announced in release notes and accompanied by a deprecation period of at least one minor version. New option keys may be added at any time (additive); semantics of existing keys will not change without notice.
+> **Stability.** The package path (`qupath.ext.qpcat.scripting`), class names (`SpatialGraphScripts`, `SpatialStatsScripts`, `FigureExportScripts`, `YamlBatchScripts`), method names (`buildGraph`, `ripley`, `gearyC`, `coOccurrence`, `moranI`, `neighborhoodEnrichment`, `exportFigures`, `runBatch`), and recognized option keys listed in this document are QP-CAT's scripting API. A breaking change will be listed in the changelog. New option keys may be added at any time.
 
 ## SpatialGraphScripts
 
@@ -56,7 +56,7 @@ Static facade for graph construction. Returns a `Map<String, Object>` describing
 
 #### `areas` -- independent areas
 
-An *area* is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. Cells in different areas are never neighbours, because the distance between them is not a distance through tissue.
+An *area* is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. Cells in different areas are never neighbors, because the distance between them is not a distance through tissue.
 
 Each entry is `[level: ..., classes: [...]]`, outermost first. `images` is always the outermost level and is **implicit** -- listing it is an error, because accepting it would imply the ordering is yours to choose.
 
@@ -86,7 +86,7 @@ Unlike the other keys, an unknown `level` **throws** rather than falling back to
 **Example:**
 
 ```groovy
-// Build a radius-based graph at 30 microns (assuming 1 micron / pixel)
+// Build a radius-based graph at 30 um (pixels only if an image has no pixel size)
 def graph = SpatialGraphScripts.buildGraph([
     type:   "radius",
     radius: 30.0
@@ -101,7 +101,7 @@ Convenience overload returning the literal-default map (kNN, k = 15, radius = -1
 
 ## SpatialStatsScripts
 
-Static facade for the spatial-statistics catalog. Each method takes a graph handle plus an options map and returns a normalised options map for the corresponding statistic.
+Static facade for the spatial-statistics catalog. Each method takes a graph handle plus an options map and returns a normalized options map for the corresponding statistic.
 
 ### `ripley(graphHandle, Map opts) -> Map<String, Object>`
 
@@ -113,7 +113,7 @@ Stages Ripley's L for every cluster (or the subset listed in `clusters`).
 | `nSteps` | int | 50 | Number of r values between 0 and `maxRadius`. |
 | `nPermutations` | int | -1 (adaptive) | Permutation count. -1 = adaptive default (1000 / 100 / 50 by cell count). |
 | `clusters` | List<String> | empty = all | Cluster labels to evaluate. Empty = all clusters present on detections. |
-| `persistPlots` | boolean | true | Also write the Ripley L PNG to the per-result plot directory so the Multi-Figure Batch Export dialog can pick it up (filename: `ripley_k_l.png`). Defaults to the `qpcat.spatial.persistPlots` preference when omitted. |
+| `persistPlots` | boolean | true | Also write the Ripley L PNG to the per-result plot directory so the **Export figures (batch)...** dialog can pick it up (filename: `ripley_k_l.png`). Defaults to the `qpcat.spatial.persistPlots` preference when omitted. |
 
 **Example:**
 
@@ -147,7 +147,7 @@ def geary = SpatialStatsScripts.gearyC(graph, [
 
 ### `moranI(graphHandle, Map opts) -> Map<String, Object>`
 
-Same signature as `gearyC`; sets `method = "moran"` for downstream dispatch. Surfaces the existing v0 statistic so a Groovy script can re-run it against a different graph constructor without going through the dialog.
+Same signature as `gearyC`; sets `method = "moran"` in the returned map.
 
 ### `coOccurrence(graphHandle, Map opts) -> Map<String, Object>`
 
@@ -159,8 +159,9 @@ Stages co-occurrence as a function of radius.
 | `minRadius` | double | -1 (auto) | Smallest r (microns; pixels only if an image in the run has no pixel size). |
 | `maxRadius` | double | -1 (auto) | Largest r (microns; pixels only if an image in the run has no pixel size). |
 | `nIntervals` | int | 50 | Number of radius bins. |
-| `matrixRadius` | double | -1 (auto) | (Pairwise only) Radius at which to draw the cluster x cluster heatmap figure. -1 = auto: about five median nearest-neighbour distances. Affects the figure only; the table and curves keep every bin. |
 | `persistPlots` | boolean | true | Also write `co_occurrence_pairwise.png` or `co_occurrence_one_vs_rest.png` (per `mode`) to the per-result plot directory. |
+
+The radius at which the pairwise matrix figure is drawn is the dialog's **Matrix radius**; it is not a scripting key, and an unrecognized key is logged and ignored.
 
 **Example:**
 
@@ -174,35 +175,41 @@ def coOcc = SpatialStatsScripts.coOccurrence(graph, [
 ])
 ```
 
-### `neighborhoodEnrichment(graphHandle, Map opts = [:]) -> Map<String, Object>`
+### `neighborhoodEnrichment(graphHandle, Map opts) -> Map<String, Object>`
 
-Stages neighbourhood enrichment: a z-score and an edge count per ordered cluster pair, with cluster labels shuffled within each independent area and a fixed 1000 permutations. Options map is currently empty; reserved for future extension.
+Pass `[:]` as the options map; no option keys are read, and there is no one-argument form. Returns `[method: 'neighborhood_enrichment', graph: ...]`. When a run computes neighborhood enrichment it uses a fixed 1000 permutations, shuffling labels within each image or area (see [Spatial statistics](spatial-statistics.md#interpreting-neighborhood-enrichment)).
 
 ## SpatialConnectionsScripts
 
-Static facade for the v0.3 spatial graph overlay. Materialises the spatial neighbor graph from a saved spatial-stats result as `PathObjectConnections` on the active `ImageData`, and toggles the post-hoc same-class edge filter without re-running clustering.
+Static facade for the spatial graph overlay. Materializes the spatial neighbor graph from a saved spatial-stats result as `PathObjectConnections` on the active `ImageData`, and toggles the post-hoc same-class edge filter without re-running clustering.
 
-### `pushConnectionsToViewer(ImageData imageData, String resultName) -> void`
+### `pushConnectionsToViewer(ImageData imageData, String resultName) -> PushResult`
 
 Reads the named saved spatial-stats result from the active project and materializes its graph as `PathObjectConnections` on `imageData`. Equivalent to clicking "Push to viewer now" in the **Run Clustering...** dialog. Raises `IllegalStateException` when no project is open, the named result does not exist, the saved result has no spatial-stats bundle, or the detection count does not match.
 
-The action is recorded in the image's history workflow so it can be replayed.
+Returns a `PushResult` with `getResultName()`, `getNEdges()`, `getNDetections()` and `isLegacyBundle()`. The action is recorded in the image's history workflow so it can be replayed.
 
 ```groovy
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+import qupath.ext.qpcat.service.ClusteringResultManager
 
-// Push the saved spatial-stats result named "default" onto the current viewer
-SpatialConnectionsScripts.pushConnectionsToViewer(
+// List the saved results, then push one onto the current viewer
+def names = ClusteringResultManager.listResults(getProject())
+println names
+def pushed = SpatialConnectionsScripts.pushConnectionsToViewer(
     getCurrentImageData(),
-    "default"
+    names[0]
 )
+println "${pushed.getNEdges()} edges on ${pushed.getNDetections()} detections"
 ```
 
-### `applySameClassFilter(ImageData imageData, boolean enabled) -> void`
+### `applySameClassFilter(ImageData imageData, boolean enabled) -> FilterResult`
 
 Toggle the post-hoc same-class edge filter on the currently-attached `PathObjectConnections`. When `enabled` is `true`, the unfiltered source group is stashed under the ImageData property `QPCAT_SPATIAL_OVERLAY_SOURCE_GROUP`, a fresh filtered group is built via `removeGroup + addGroup`, and a hierarchy change event fires. When `enabled` is `false`, the stashed source group is restored.
 
-Cells with no `PathClass` drop their edges entirely under the filter. This is intended behaviour -- the filter is a viewer affordance; it does not retroactively change any computed statistic.
+Returns a `FilterResult` with `isEnabled()`, `getNEdgesBefore()` and `getNEdgesAfter()`.
+
+Cells with no `PathClass` drop their edges entirely under the filter. This is intended behavior -- the filter is a viewer affordance; it does not retroactively change any computed statistic.
 
 ```groovy
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
@@ -211,7 +218,7 @@ import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
 SpatialConnectionsScripts.applySameClassFilter(getCurrentImageData(), true)
 ```
 
-The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [REFERENCES.md -- Spatial Graph Overlay](references.md#spatial-graph-overlay-pathobjectconnections) and [API deprecation note](spatial-neighborhoods.md#api-deprecation-note) for the rationale.
+The underlying `PathObjectConnections` API is marked `@Deprecated` in QuPath 0.7. See [References: Spatial Graph Overlay](references.md#spatial-graph-overlay-pathobjectconnections) and [API deprecation note](spatial-neighborhoods.md#api-deprecation-note) for the rationale.
 
 ### `clearConnections(ImageData imageData) -> ClearResult`
 
@@ -226,15 +233,16 @@ def result = SpatialConnectionsScripts.clearConnections(getCurrentImageData())
 println "Removed ${result.getNGroupsRemoved()} group(s), ${result.getNEdgesRemoved()} edges"
 ```
 
-## Result types
+## What a clustering run saves
 
-When the dialog dispatches the staged option maps, results materialise as:
+A clustering run (dialog or YAML batch) that computes spatial statistics saves them as:
 
-- `qupath.ext.qpcat.model.RipleyResult` -- carries cluster names, the radius axis, per-cluster K(r) and L(r) curves, the Poisson null curves, and the per-cluster p-values.
-- `qupath.ext.qpcat.model.GearyCResult` -- per-marker `{c, pValue}` map.
+- `qupath.ext.qpcat.model.RipleyResult` -- carries cluster names, the radius axis, per-cluster K(r) and L(r) curves, the per-cluster p-values, and the simulated envelopes the chart draws (`getEnvelopeLow()`, `getEnvelopeMedian()`, `getEnvelopeHigh()`, and the simulation count). Results saved before the envelopes existed carry the analytical Poisson null curves instead.
+- `qupath.ext.qpcat.model.GearyCResult` -- per-marker `{c, pValue}` map, plus `getPValueMethod()`, the per-area values (`getPerArea()`) and the threshold (`getThreshold()`).
+- Neighborhood enrichment, on `ClusteringResult`: `getNhoodEnrichment()` (z), `getNhoodCounts()` (edges) and `getNhoodNull()` (the shuffling line).
 - `qupath.ext.qpcat.model.CoOccurrenceResult` -- the radius-vs-ratio tensor (`[clusterA][clusterB][interval]` for pairwise, `[cluster][1][interval]` for one-vs-rest), the interval axis, and the cluster names.
 
-All three are Gson-serialisable and persist on `SavedClusteringResult.spatialStats` so reopening a saved result re-renders the same charts and tables.
+All of these are Gson-serializable and persist on `SavedClusteringResult.spatialStats` so reopening a saved result re-renders the same charts and tables.
 
 ## FigureExportScripts
 
@@ -252,7 +260,7 @@ Exports figures from one or more images to a directory.
 |---|---|---|---|
 | `imageNames` | `List<String>` | empty = current image only | Image names within the project. Empty = current image; explicit list = those images; `["*"]` = every image in the project. |
 | `plotKinds` | `List<String>` | empty = every matplotlib kind | Plot kind slugs to export. Valid keys: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `cooc_curves`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`. (The four JavaFX-only kinds -- `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram` -- are accepted but recorded as failures.) Note that an empty list means matplotlib only -- pass the composition slugs explicitly, or use `FigureExportScripts.headlessKinds()`. Unknown slugs are warned and skipped. |
-| `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. Unrecognised values are warned and skipped; there is no vector format. |
+| `formats` | `List<String>` | `["png"]` | One or more of `"png"`, `"tiff"`. Unrecognized values are warned and skipped; there is no vector format. |
 | `dpi` | int | 300 | Output DPI. Range 72-1200. Applies to the Java-rendered composition figures; matplotlib PNGs are copied at the DPI they were written with. |
 | `outputDir` | `String` or `Path` | required | Directory to write into. Created if it does not exist. |
 | `filenamePattern` | `String` | `"{image}_{plot}.{ext}"` | Substitution tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain at least `{image}`, `{plot}`, `{ext}`. |
@@ -262,7 +270,7 @@ Exports figures from one or more images to a directory.
 
 **Returns:** `ExportResult` -- a thin POJO with `getFilesWritten()`, `getFailures()` (list of per-file failure messages, including "skipped (JavaFX-only plot...)" rows), `getTotalBytes()`, `isCancelled()`, and `summary()`.
 
-**Logs:** one audit-log row (`FIGURE EXPORT`) on the project's `qpcat/logs/qpcat_YYYY-MM-DD.log` capturing output directory, image / plot subset, format / DPI, filename pattern, file count, and bytes. (The dialog produces the same log row; the headless path skips it on direct `BatchFigureExporter` calls, so wire `OperationLogger` yourself if you need audit rows from a Groovy pipeline.)
+**Logs:** nothing. The `FIGURE EXPORT` audit row is written by the dialog only; log it yourself with `OperationLogger` if a pipeline needs it.
 
 **Example: export a 5-image subset as PNG at 300 DPI**
 
@@ -326,11 +334,11 @@ If `plotKinds` includes a JavaFX-only key when called from script mode, the call
 
 ### Ripley slug shorthand
 
-The YAML schema accepts `ripley` in `figure_export.figures` as shorthand for `ripley_l`, the one Ripley figure there is. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass `plotKinds: ["ripley_l"]` explicitly, or use the YAML batch entry point if you want the shorthand. See [YAML_SCHEMA.md "Filename slug shorthand"](yaml-reference.md#filename-slug-shorthand) for the YAML-side rule.
+The YAML schema accepts `ripley` in `figure_export.figures` as shorthand for `ripley_l`, the one Ripley figure there is. The Groovy `FigureExportScripts.exportFigures` facade does **not** auto-expand this shorthand -- pass `plotKinds: ["ripley_l"]` explicitly, or use the YAML batch entry point if you want the shorthand. See [YAML reference: Filename slug shorthand](yaml-reference.md#filename-slug-shorthand) for the YAML-side rule.
 
 ### Integration with the YAML batch
 
-The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds` (with the `ripley` slug shorthand already expanded); `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface in v1 -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
+The YAML batch executor passes its `figure_export` config block straight into `FigureExportScripts.exportFigures(...)`. The YAML schema's `figure_export.images` becomes `imageNames`; `figure_export.figures` becomes `plotKinds` (with the `ripley` slug shorthand already expanded); `figure_export.formats` / `figure_export.dpi` / `figure_export.output_dir` map 1:1. The YAML batch is the primary consumer of this scripting surface -- the dialog is for ad-hoc / exploratory exports, the script for reproducible pipelines.
 
 ## YamlBatchScripts
 
@@ -393,7 +401,7 @@ println "Run complete; exit code ${outcome.getExitCode()}"
 
 ### Integration with the YAML file entry point
 
-`qpcat_batch.groovy` is a thin shim that parses its `--args` argument and calls `YamlBatchScripts.runBatch(config: <yaml-path>)`. Anything you can express via the YAML file works through the scripting facade as well. The file entry point is the recommended user-facing surface (diff-friendly, committable); the Groovy facade is for users who specifically need programmatic dispatch.
+`qpcat_batch.groovy` and `YamlBatchScripts.runBatch` both parse, validate and hand the config to `YamlBatchOrchestrator.runBatch`; anything you can express in the YAML file works through either. The file entry point is the recommended user-facing surface (diff-friendly, committable); the Groovy facade is for users who specifically need programmatic dispatch.
 
 ## Batch Workflows
 
@@ -407,7 +415,7 @@ import java.nio.file.Paths
 def yamlTemplate = """
 version: '1.0'
 scope:
-  projects: [{{PROJECT}}]
+  projects: ['{{PROJECT}}']
 clustering:
   type: leiden
   resolution: 0.8
@@ -438,11 +446,11 @@ projectFiles.each { pf ->
 
 ## Adaptive permutation default
 
-Use `SpatialStatsScripts.PERMUTATIONS_ADAPTIVE` (== -1) to request the adaptive default. The Java side resolves the actual permutation count from the cell count just before dispatching the Python task; the resolved value is recorded in the audit-log row for each statistic.
+`SpatialStatsScripts.PERMUTATIONS_ADAPTIVE` (== -1) means "use the adaptive default". The YAML batch's `spatial_stats.permutations: auto` is the runnable equivalent; the count a run resolves is recorded in the audit-log row for each statistic.
 
 ## Audit log
 
-Every staged statistic that runs through the dialog produces one row in the project's `qpcat/logs/qpcat_YYYY-MM-DD.log` file:
+Every statistic computed by a clustering run (dialog or YAML batch) produces one row in the project's `qpcat/logs/qpcat_YYYY-MM-DD.log` file:
 
 - `=== SPATIAL GRAPH === ...` -- one row per graph build
 - `=== SPATIAL STATS RIPLEY === ...` -- one row per Ripley L run
@@ -455,16 +463,10 @@ Every staged statistic that runs through the dialog produces one row in the proj
 
 Each row captures method name, graph type, permutation count, cell count, and a short result summary. Re-running with different graph constructors leaves a clear comparative trail.
 
-## Not in v1 (deferred)
+## Not available from scripts
 
-- **Clustering, embedding, phenotyping, autoencoder training/inference, LLM cluster explainer.** All still dialog-only.
-- **Reading results back as `AnnData`.** Use the existing AnnData export from the dialog or **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**.
-- **End-to-end "run a stats call from a script without the dialog."** v1 stages the option-map vocabulary; v2 will execute the full pipeline programmatically.
+- **Autoencoder training and inference, the LLM cluster explainer, and the Validation checks.** Dialog-only.
+- **A per-step Groovy API for clustering, embedding or phenotyping.** Use the YAML batch (`YamlBatchScripts.runBatch`).
+- **AnnData export.** Use **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**.
 
-## v2 roadmap
-
-- Scriptable clustering with the same options map as the dialog.
-- Scriptable AnnData round-trip (`exportAnnData(...)`, `importAnnData(...)`).
-- Result-attach helpers so script-generated stats can populate the `SavedClusteringResult` of the active session.
-
-If you need any of the deferred features urgently, file an issue with your use case attached.
+If you need one of these, file an issue with your use case attached.

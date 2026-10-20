@@ -73,8 +73,9 @@ neighborhood workflow: cells in different areas never share a spatial graph. Two
 need more than that. Ripley L and co-occurrence read the coordinates directly rather than the
 graph, so they are computed once per area and shown behind an **Area** selector. Moran's I
 and Geary's C read the graph, so partitioning it is enough. Neighbourhood enrichment reads the
-graph too, and its permutation null shuffles cluster labels only within each area. Each stays
-a single figure for the run.
+graph too, and its permutation null shuffles cluster labels only within each area (squidpy's
+`library_key`; see [References](references.md#squidpy)). Each stays a single figure for the
+run.
 
 You can partition cells **below** the image level by configuring **Independent areas**.
 Each area gets its own neighborhood windows (no window ever crosses an area boundary),
@@ -112,7 +113,8 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
    sections or cores in one file.
 5. **Window by** -- how each cell's window is defined:
    - **Nearest neighbors (k)**: the k nearest cells. Density-adaptive (the window
-     shrinks in dense tissue). 20-30 is a common start; Schurch et al. used ~10.
+     shrinks in dense tissue). The window counts the cell itself. 20-30 is a common start;
+     Schurch et al. used ~10.
    - **Radius (um)**: every cell within a fixed physical radius (the CytoMAP-style
      neighborhood -- more interpretable and density-aware). 50 um is a common
      start. Needs image pixel calibration; an uncalibrated image treats the radius
@@ -124,13 +126,16 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
    runs; **Cancel** stops it -- if you cancel before it finishes, **nothing
    is written**.
 
+Runs are deterministic: the k-means step is seeded, so the same classes and settings give the
+same neighborhood labels.
+
 ### What happens to your data
 
 - Each detection gets a numeric **measurement** `QPCAT CN` (0-based neighborhood
   id). Your cell-type **classification is preserved** -- it is the input to the
   analysis. Color cells by neighborhood with **Measure > Show measurement maps**
   and pick `QPCAT CN`.
-- Re-running just overwrites the `QPCAT CN` measurement; it never touches the
+- Re-running overwrites the `QPCAT CN` measurement; it never touches the
   cell-type classification.
 - The run is recorded as a step in the image's **Workflow** history (with the
   `run_id` and `params_hash`) and as a `CELLULAR NEIGHBORHOODS` row in the
@@ -150,8 +155,8 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
 ### Reading the enrichment heatmap
 
 Rows are neighborhoods, columns are cell types. Each cell is the **log2 fold
-enrichment** of that cell type in the neighborhood versus its overall frequency
-across the slide (red = enriched, blue = depleted). Read each row across to name
+enrichment** of that cell type in the neighborhood versus its frequency across all cells
+in the run (one slide, or every image of a joint run; red = enriched, blue = depleted). Read each row across to name
 the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). For a
 single-image run the heatmap is written to a temporary folder and a prompt,
 **QPCAT - open enrichment heatmap?**, offers to open it; for a joint run it lands in the results folder.
@@ -219,46 +224,53 @@ Schurch et al. (Cell 2020), Windhager et al. (Nat Protoc 2023) -- see
 Every spatial method starts by deciding which cells are neighbours. The constructor
 -- kNN, fixed radius, or Delaunay -- changes results as much as the statistic does:
 Delaunay is parameter-free but adds long edges across gaps (cap them with the
-max-edge control), kNN adapts to local density but fixes neighbourhood size
+max-edge control), kNN adapts to local density but fixes neighborhood size
 everywhere, and fixed-radius uses a real micron radius but over-connects dense
 regions. Set it in the Spatial statistics block of the clustering dialog; the same
-graph drives every statistic in the run.
+graph drives neighborhood enrichment, Moran's I, Geary's C and spatial smoothing (when the
+**Spatial Smoothing: Use Squidpy Graph** preference is on). Ripley's L and co-occurrence use
+the cell coordinates, not the graph.
 
 ## The viewer overlay
 
-QP-CAT v0.3 makes the spatial neighbor graph visible. Every time you run Spatial Statistics ([Spatial statistics](spatial-statistics.md)), QP-CAT builds a per-cell graph -- kNN, Radius, or Delaunay -- and the same graph drives every spatial metric in the run. Until v0.3 that graph lived only as a sparse matrix inside the Python session and was invisible from the viewer. v0.3 pushes the graph back to QuPath as a `PathObjectConnections` object so you can toggle the edges on and off via **View -> Show object connections**, the same menu that drove QuPath core's now-deprecated Delaunay Clustering tool. You can also write per-cell neighbor measurements and per-component aggregate measurements to the measurement table on the same run, mirroring the legacy plugin's output one-for-one.
+QP-CAT draws the spatial neighbor graph in the viewer. Every clustering run with spatial statistics ([Spatial statistics](spatial-statistics.md)) builds a per-cell graph -- kNN, Radius, or Delaunay -- and pushes it back to QuPath as a `PathObjectConnections` object, so you can toggle the edges on and off via **View -> Show object connections**, the same menu that drove QuPath core's now-deprecated Delaunay Clustering tool. (*Spatial statistics on existing clusters* does not push the graph.) You can also write per-cell neighbor measurements and per-component aggregate measurements to the measurement table on the same run, mirroring the legacy plugin's output one-for-one.
 
 <a name="overview"></a>
+
 ### Overview
 
-The overlay is a sanity-check tool first and a presentation tool second. Seeing the edges your neighborhood-enrichment, Ripley L, Geary's C, and co-occurrence runs are using catches three classes of mistake at a glance: a Delaunay graph spanning a tissue gap; a kNN graph with k too high in dense regions; a Radius graph too sparse for the cell density. Use the overlay early to validate the graph, then turn it off for the rest of the analysis.
+The overlay is a sanity-check tool first and a presentation tool second. Seeing the edges your neighborhood-enrichment, Moran's I and Geary's C runs are using catches three classes of mistake at a glance: a Delaunay graph spanning a tissue gap; a kNN graph with k too high in dense regions; a Radius graph too sparse for the cell density. Use the overlay early to validate the graph, then turn it off for the rest of the analysis.
 
 <a name="view-show-object-connections"></a>
+
 ### Turning the overlay on -- View -> Show object connections
 
-The toggle is a QuPath core menu item: **View -> Show object connections**. QP-CAT's job is to populate the data the menu reads from; QuPath core's job is to draw the edges. If the menu is unchecked, nothing renders -- check it once after your first v0.3 run and QuPath remembers the choice.
+The toggle is a QuPath core menu item: **View -> Show object connections**. QP-CAT's job is to populate the data the menu reads from; QuPath core's job is to draw the edges. If the menu is unchecked, nothing renders -- check it once and QuPath remembers the choice.
 
 By default the menu is off (QuPath core default `OverlayOptions.showConnections = false`); the overlay color is fixed to translucent black on brightfield, translucent white on fluorescence (QuPath core's choice, not a QP-CAT preference); the alpha drops at high downsample so the edges fade out at whole-slide zoom.
 
 <a name="viewer-overlay-group"></a>
-### The Spatial Statistics "Viewer overlay" group
 
-A new sub-section at the bottom of the Spatial Statistics section of the **Find cell populations (clustering)...** dialog. The controls:
+### The overlay controls in Spatial statistics
 
-- **Push graph edges to viewer** (default on) -- top-level toggle. When on, the graph is materialised as `PathObjectConnections` after every Spatial Statistics run.
+At the bottom of the **Spatial statistics** section of **Find cell populations (clustering)...**, below a divider:
+
+- **Push graph edges to viewer** (default on) -- top-level toggle. When on, the graph is materialized as `PathObjectConnections` after every clustering run with spatial statistics.
 - **Prompt above N edges** (default 250000) -- when the graph has more than this many undirected edges, QP-CAT prompts before pushing.
-- **Delaunay max edge (microns)** -- shown only when the current image has a pixel-size calibration; an equivalent pixel-only spinner sits in the Graph constructor row above for uncalibrated images.
+- **Delaunay max edge (microns)** -- shown only when the current image has a pixel-size calibration. For an uncalibrated image the dialog shows **Delaunay max edge (px):** in the Graph constructor rows above instead.
 - **Write per-cell node measurements** (default on) -- writes `QPCAT spatial:` columns to every cell.
 - **Write component cluster measurements** (default off) -- writes `QPCAT component:` columns for each graph-connected component.
 - **Limit edges to same class (post-hoc filter)** (default off) -- hides cross-class edges in the overlay.
 - **Push to viewer now** -- retroactive rebuild, see below.
 
 <a name="push-to-viewer-now"></a>
+
 ### Push to viewer now -- retroactive overlay for saved results
 
-If you ran spatial stats in v0.3 without "Push graph edges to viewer" enabled, or you opened a project saved with v0.2.x that has no `PathObjectConnections` on disk, the **Push to viewer now** button reads the most recent saved spatial-stats result and reconstructs the connections without re-running clustering. This is the workflow for testers handed a finished project to look at. The button re-applies both the overlay and the per-cell / per-component measurements (honouring the current toggles); it does not re-run any statistic.
+If you ran spatial stats without "Push graph edges to viewer" enabled, or the image has no `PathObjectConnections` on disk, the **Push to viewer now** button reads a saved spatial-stats result -- the only one, or the one you choose when the project holds several (**QP-CAT - choose saved result**) -- and reconstructs the connections without re-running clustering. This is the workflow for testers handed a finished project to look at. The button re-applies both the overlay and the per-cell / per-component measurements (honoring the current toggles); it does not re-run any statistic. If no saved result has spatial statistics, it says so; a result saved before QP-CAT 0.3 stored no graph edges, and it warns about that too.
 
 <a name="edge-count-threshold"></a>
+
 ### The 250k-edge prompt threshold
 
 When the graph has more than 250,000 undirected edges, QP-CAT asks before pushing (**QP-CAT - spatial graph overlay**) -- a large graph rendered at high zoom can make panning feel sluggish. The threshold is **Spatial Overlay: Prompt Above N Edges** (`qpcat.spatial.connectionsPromptThreshold`) under **Edit > Preferences > QP-CAT: Run Clustering**; raise it (e.g., to 1000000) to suppress the prompt for big slides, or lower it for cautious behavior on slow machines.
@@ -268,13 +280,15 @@ The threshold counts undirected edges (each pair `(i, j)` listed once). kNN(k=15
 > **Multi-image / cohort runs:** you are asked **once for the whole run**, not once per image -- the decision (based on the densest image) is applied to every image. After the run, a single window, **QP-CAT - spatial graph summary**, lists the average connections per cell for each image plus the run mean.
 
 <a name="per-cell-neighbor-measurements"></a>
+
 ### Per-cell neighbor measurements
 
-QP-CAT v0.3 writes `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean distance`, `QPCAT spatial: Median distance`, `QPCAT spatial: Max distance`, and `QPCAT spatial: Min distance` to every cell in the measurement table whenever Spatial Statistics runs. Distances are in microns when the image has pixel calibration, in pixels otherwise -- both cases write the same column name. For Delaunay graphs only, `QPCAT spatial: Mean triangle area` and `QPCAT spatial: Max triangle area` are also written. These are the columns the legacy QuPath core Delaunay Clustering tool wrote as `Delaunay: ...`.
+QP-CAT writes `QPCAT spatial: Num neighbors`, `QPCAT spatial: Mean distance`, `QPCAT spatial: Median distance`, `QPCAT spatial: Max distance`, and `QPCAT spatial: Min distance` to every cell in the measurement table whenever a clustering run computes spatial statistics. Distances are in microns when the image has pixel calibration, in pixels otherwise -- both cases write the same column name. For Delaunay graphs only, `QPCAT spatial: Mean triangle area` and `QPCAT spatial: Max triangle area` are also written. These are the columns the legacy QuPath core Delaunay Clustering tool wrote as `Delaunay: ...`.
 
 Preference toggle: **Spatial Overlay: Write Node Measurements** (`qpcat.spatial.writeNodeMeasurements`), default on. Note that kNN and Radius graphs do not have triangle measurements because no triangulation exists for those graph types -- QP-CAT does not invent a fake value.
 
 <a name="per-component-aggregate-measurements"></a>
+
 ### Per-component aggregate measurements
 
 Opt-in. When **Spatial Overlay: Write Component Measurements** (`qpcat.spatial.writeComponentMeasurements`) is enabled (default off), QP-CAT writes `QPCAT component: size` (number of cells in the graph-connected component this cell belongs to) and `QPCAT component: mean: <existing measurement>` for every existing numeric measurement on the cell. This mirrors the legacy `Cluster mean: <X>` / `Cluster size` output, with the deliberate rename to "component" to avoid confusion with Leiden phenotype clusters.
@@ -282,13 +296,15 @@ Opt-in. When **Spatial Overlay: Write Component Measurements** (`qpcat.spatial.w
 This is a wide measurement-table expansion (`n_existing_measurements` new columns) -- that is why opt-in is the right default. See [Component vs cluster](#component-vs-cluster-naming) for the worked example.
 
 <a name="limit-edges-by-class"></a>
+
 ### Limit edges to same class
 
-After phenotyping, toggle **Spatial Overlay: Limit Edges to Same Class** (`qpcat.spatial.limitEdgesBySameClass`) to filter the rendered overlay to within-class edges only. Useful for visualising same-cell-type neighborhoods after a Leiden + Phenotyping pass. Mirrors the legacy plugin's `Limit by class` option but applies post-hoc -- you do not have to re-run the graph build.
+After phenotyping, toggle **Spatial Overlay: Limit Edges to Same Class** (`qpcat.spatial.limitEdgesBySameClass`) to filter the rendered overlay to within-class edges only. Useful for visualizing same-cell-type neighborhoods after a Leiden + Phenotyping pass. Mirrors the legacy plugin's `Limit by class` option but applies post-hoc -- you do not have to re-run the graph build.
 
 Toggling off restores the unfiltered graph without a rebuild; cells with no class (null pathClass) drop their edges entirely under the filter.
 
 <a name="component-vs-cluster"></a>
+
 ### Component vs Cluster -- the naming convention
 
 Two different things share the word "cluster" in spatial analysis: a Leiden cluster (a phenotype cluster from QP-CAT's clustering pipeline) and a graph-connected component (a maximal set of cells reachable through neighbor edges). QP-CAT uses **cluster** for the Leiden output and **component** for the graph-connected output, even though the legacy QuPath core plugin called the graph-connected set "Cluster" too. See [Component vs cluster](#component-vs-cluster-naming) for a worked example of why they differ.
@@ -296,13 +312,14 @@ Two different things share the word "cluster" in spatial analysis: a Leiden clus
 Short worked example: two CD8 T cells far apart in tissue can share the same Leiden cluster (same phenotype) but live in different graph-connected components (no neighbor path between them). Conversely, two cells in the same graph-connected component can have different Leiden cluster labels (one is CD8, one is CD4, but they touch).
 
 <a name="legacy-delaunay-clustering-migration"></a>
+
 ### Legacy Delaunay-clustering migration table
 
-If you arrived here from QuPath core's Delaunay Clustering plugin, this table maps every legacy output to its QP-CAT v0.3 equivalent. Same data, new column names, same place in the workflow.
+If you arrived here from QuPath core's Delaunay Clustering plugin, this table maps every legacy output to its QP-CAT equivalent. Same data, new column names, same place in the workflow.
 
-| Legacy QuPath core feature | QP-CAT v0.3 equivalent | Notes |
+| Legacy QuPath core feature | QP-CAT equivalent | Notes |
 |---|---|---|
-| Connecting-line overlay (View -> Show object connections) | Same menu item; QP-CAT populates `PathObjectConnections` after a Spatial Statistics run | Same QuPath core overlay code; same colors; same alpha-by-downsample behavior. |
+| Connecting-line overlay (View -> Show object connections) | Same menu item; QP-CAT populates `PathObjectConnections` after a clustering run with spatial statistics | Same QuPath core overlay code; same colors; same alpha-by-downsample behavior. |
 | `Delaunay: Num neighbors` | `QPCAT spatial: Num neighbors` | Default on. Written for kNN / Radius / Delaunay -- not just Delaunay. |
 | `Delaunay: Mean distance` | `QPCAT spatial: Mean distance` | Microns when calibration present, pixels otherwise. |
 | `Delaunay: Median distance` | `QPCAT spatial: Median distance` | Same unit policy. |
@@ -316,26 +333,28 @@ If you arrived here from QuPath core's Delaunay Clustering plugin, this table ma
 | `Distance threshold` (microns / pixels auto-switch) | `qpcat.spatial.delaunayMaxEdgeUm` (canonical) plus `qpcat.spatial.delaunayMaxEdge` fallback | Dialog shows the unit that matches the current image's calibration. |
 
 <a name="api-deprecation-note"></a>
+
 ### Note on the underlying QuPath API
 
-Honest disclosure: the QuPath core `PathObjectConnections` API that QP-CAT writes into is marked `@Deprecated` in QuPath 0.7. QuPath core plans to replace it with a new `DelaunayTools.Subdivision` API that is fundamentally a Delaunay-triangulation type and cannot represent kNN or Radius graphs. QP-CAT will need that gap closed (or its own custom overlay) before the legacy API is removed, so v0.3 is an explicit "uses today's API while it exists" deliverable. The `@Deprecated` JavaDoc on `PathObjectConnectionGroup` and `DefaultPathObjectConnectionGroup` says only "v0.6.0, to be replaced by `qupath.lib.analysis.DelaunayTools.Subdivision`" -- there is no public issue-tracker reference at the JavaDoc level; track the QuPath GitHub issue tracker for the eventual removal milestone.
+The QuPath core `PathObjectConnections` API that QP-CAT writes into is marked `@Deprecated` in QuPath 0.7. QuPath core plans to replace it with a new `DelaunayTools.Subdivision` API that is fundamentally a Delaunay-triangulation type and cannot represent kNN or Radius graphs. QP-CAT will need that gap closed (or its own custom overlay) before the legacy API is removed; until then it uses the existing API. The `@Deprecated` JavaDoc on `PathObjectConnectionGroup` and `DefaultPathObjectConnectionGroup` says only "v0.6.0, to be replaced by `qupath.lib.analysis.DelaunayTools.Subdivision`" -- there is no public issue-tracker reference at the JavaDoc level; track the QuPath GitHub issue tracker for the eventual removal milestone.
 
 <a name="scripting-push-connections-to-viewer"></a>
+
 ### Scripting -- pushConnectionsToViewer
 
-`SpatialConnectionsScripts.pushConnectionsToViewer(imageData, resultName)` reads a saved spatial-stats result by name and materializes its graph as `PathObjectConnections` on the given `ImageData`. Equivalent to clicking "Push to viewer now" in the dialog. Useful for batch operations or for restoring the overlay across all images in a project after a v0.2.x to v0.3 upgrade.
+`SpatialConnectionsScripts.pushConnectionsToViewer(imageData, resultName)` reads a saved spatial-stats result by name and materializes its graph as `PathObjectConnections` on the given `ImageData`. Equivalent to clicking "Push to viewer now" in the dialog. Useful for batch operations or for restoring the overlay across all images in a project. A name that is not a saved result throws `IllegalStateException`, so list the names first:
 
 ```groovy
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts
+import qupath.ext.qpcat.service.ClusteringResultManager
 
-// Push the saved spatial-stats result named "default" onto the current viewer
-SpatialConnectionsScripts.pushConnectionsToViewer(
-    getCurrentImageData(),
-    "default"
-)
+// Print the saved results in this project, then push the one you want
+ClusteringResultManager.listResults(getProject()).each { println it }
+SpatialConnectionsScripts.pushConnectionsToViewer(getCurrentImageData(), "<a name printed above>")
 ```
 
 <a name="troubleshooting"></a>
+
 ### Quick troubleshooting
 
 Four things to check when the overlay does not appear after a run:
@@ -343,15 +362,16 @@ Four things to check when the overlay does not appear after a run:
 1. Is **View -> Show object connections** checked? (Default off in fresh installs.)
 2. Was the 250k-edge prompt declined? (Lower or raise the threshold to taste; see above.)
 3. Is the result on disk? See [Reproducibility](reproducibility.md#the-audit-log) for the audit-log row.
-4. The project was created in v0.2.x and the saved spatial-stats result predates the edge-COO write path -- re-run clustering once on v0.3 to populate the overlay.
+4. The saved result predates QP-CAT 0.3, which did not store graph edges -- re-run clustering to populate the overlay.
 
 <a name="clear-connections"></a>
 <a name="clearing-the-overlay----utilities--clear-cell-connections-clear-connections"></a>
+
 ### Clearing the overlay -- `Setup & help > Clear cell connections...`
 
-`Extensions > QP-CAT > Setup & help > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or simply when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
+`Extensions > QP-CAT > Setup & help > Clear cell connections...` removes every `PathObjectConnectionGroup` attached to the current image -- QP-CAT's own overlay, a legacy QuPath core Delaunay Clustering run, or anything else that wrote to QuPath's `PathObjectConnections` slot. Use this when connections stack across runs (overlays from previous clustering passes that QP-CAT replaces, but other tools' overlays it leaves alone), when a stale overlay from a different result is hiding the one you want to see, or when you want to turn the viewer off without disabling the **View -> Show object connections** menu globally.
 
-The action is reversible: re-running clustering with **Viewer overlay** enabled, or clicking **Push to viewer now** on a saved result, repopulates the connection group. No data is lost; the overlay payload lives in `ImageData` properties only, not in the saved result on disk.
+The action is reversible: re-running clustering with **Push graph edges to viewer** ticked, or clicking **Push to viewer now** on a saved result, repopulates the connection group. No data is lost; the overlay payload lives in `ImageData` properties only, not in the saved result on disk.
 
 Equivalent script:
 
@@ -366,9 +386,10 @@ Returns a `ClearResult` with `getNGroupsRemoved()` and `getNEdgesRemoved()` for 
 ---
 ### When the overlay helps
 
-The spatial graph overlay is a sanity-check tool first, a presentation tool second, and a "leave it on all the time" tool never. This chapter covers when the overlay is informative versus noisy, when to enable per-class edge filtering, and how to read the per-cell and per-component measurements without confusing graph-connected components with Leiden phenotype clusters.
+The spatial graph overlay is a sanity-check tool first and a presentation tool second; it is not meant to stay on all the time. This chapter covers when the overlay is informative versus noisy, when to enable per-class edge filtering, and how to read the per-cell and per-component measurements without confusing graph-connected components with Leiden phenotype clusters.
 
 <a name="overlay-informative"></a>
+
 ### When the overlay is informative
 
 The overlay earns its keep on small-to-medium populations where you can actually see individual edges -- typically under ~50,000 cells per annotated region, or a single zoomed-in tissue niche on a larger slide. Use it to:
@@ -378,21 +399,24 @@ The overlay earns its keep on small-to-medium populations where you can actually
 - confirm a Radius graph is not under-connecting sparse regions (isolated cells should still have at least one or two neighbors).
 
 <a name="overlay-noisy"></a>
+
 ### When the overlay is noisy
 
 Above ~250,000 edges -- which is roughly a 50,000-cell Delaunay graph, or a 25,000-cell kNN(k=15) graph -- the overlay degrades from sanity-check to confetti. Edges blur into a uniform gray haze at whole-slide zoom; panning feels sluggish; nothing about the graph structure is visible. At 1,000,000+ edges QuPath's stock connections overlay was not designed for this density and pan/zoom interactions become jerky. Recommended: turn the overlay on once at a representative zoom level, sanity-check, turn it off, run the rest of the analysis without it.
 
 <a name="limit-edges-by-class-when"></a>
+
 ### When to enable `limitEdgesBySameClass`
 
-Enable when you want to *visualise* same-cell-type neighborhoods after a Leiden + Phenotyping pass -- e.g., showing CD8 T cell clusters touching each other, or fibroblast networks. Leave off when you want to see the full graph the spatial statistics actually ran on. The filter is purely a viewer affordance; it does not retroactively change any computed statistic.
+Enable when you want to *visualize* same-cell-type neighborhoods after a Leiden + Phenotyping pass -- e.g., showing CD8 T cell clusters touching each other, or fibroblast networks. Leave off when you want to see the full graph the spatial statistics actually ran on. The filter is purely a viewer affordance; it does not retroactively change any computed statistic.
 
 Edge cases: cells with no pathClass (null) drop their edges entirely under the filter. If you phenotyped only part of the cell population, expect to see large patches of empty overlay where unphenotyped cells live. The fix is to run phenotyping over the whole population, not to disable the filter.
 
 <a name="component-vs-cluster-naming"></a>
+
 ### Component vs Cluster naming
 
-QP-CAT v0.3 writes per-component aggregate measurements as `QPCAT component: ...` instead of `Cluster ...` -- a deliberate rename. The reason: a Leiden cluster (from QP-CAT's clustering pipeline) and a graph-connected component (from a kNN / Radius / Delaunay graph) are different things, and the legacy QuPath core plugin reusing "Cluster" for the graph-connected set has confused users on image.sc more than once.
+QP-CAT writes per-component aggregate measurements as `QPCAT component: ...` instead of `Cluster ...` -- a deliberate rename. The reason: a Leiden cluster (from QP-CAT's clustering pipeline) and a graph-connected component (from a kNN / Radius / Delaunay graph) are different things, and the legacy QuPath core plugin reusing "Cluster" for the graph-connected set has confused users on image.sc more than once.
 
 Worked example. Suppose you have two CD8 T cells, both Leiden cluster 3, sitting on opposite sides of a 5 mm tumor:
 
@@ -406,22 +430,25 @@ Rule of thumb: **Cluster** answers "what cell type is this?" **Component** answe
 A practical aside on the three-colon `QPCAT component: mean: <Marker>` header layout: at default Measurements-table column widths the prefix may truncate the marker name on narrow tables. Drag the column wider or use the column-visibility menu to filter to the columns you need.
 
 <a name="api-deprecation-log"></a>
+
 ### The deprecated-API warn-once log line
 
 On the first push of connections per session, QuPath 0.7 logs:
 
 `Legacy 'Delaunay cluster features 2D' connections are being shown in the viewer - this command is deprecated, and support will be removed in a future version`
 
-This is harmless. QuPath core's `PathObjectConnections` API is marked `@Deprecated` for replacement by `DelaunayTools.Subdivision` in a future major release, but the old API is fully functional in 0.7 and is the only API surface that can carry kNN and Radius graphs (the `Subdivision` replacement is Delaunay-only). The warning fires once per session, not per push -- subsequent pushes within the same session do not re-trigger it. Do not flag this as a bug; document it in user issue reports if it appears.
+This is harmless. QuPath core's `PathObjectConnections` API is marked `@Deprecated` for replacement by `DelaunayTools.Subdivision` in a future major release, but the old API is fully functional in 0.7 and is the only API surface that can carry kNN and Radius graphs (the `Subdivision` replacement is Delaunay-only). The warning fires once per session, not per push -- subsequent pushes within the same session do not re-trigger it. This warning is expected.
 
 <a name="clearing-the-overlay"></a>
+
 ### Clearing the overlay between runs
 
 QP-CAT's own clustering runs replace the previously-attached connection group with the new one -- they do not stack. Connections from other tools (the legacy QuPath core Delaunay Clustering plugin in particular) do stack alongside QP-CAT's overlay, because QuPath has no built-in clear-connections action and re-running cell detection is the only stock way to drop them. Use **Setup & help > Clear cell connections...** when an overlay from a previous tool or a previous saved-result push is in the way; the action is reversible -- the underlying spatial data is untouched on disk, so you can repopulate the overlay via **Push to viewer now** on any saved result.
 
 <a name="performance-and-threshold"></a>
+
 ### Performance and the 250k threshold
 
-The default `qpcat.spatial.connectionsPromptThreshold` value of 250000 edges is empirical. It is the count at which QuPath's stock connections overlay (which draws every edge with a single `Graphics2D.draw(Line2D)` call per edge) starts to feel sluggish at typical whole-slide zoom on commodity hardware. Below 250000, pan and zoom are smooth. Above 250000, frame time grows roughly linearly with edge count, viewport-culled. Above 1000000 the experience is noticeably degraded even with the cull.
+The default `qpcat.spatial.connectionsPromptThreshold` value of 250000 edges is empirical. It is the count at which QuPath's stock connections overlay, which draws every edge separately, starts to feel sluggish at typical whole-slide zoom on commodity hardware. Below 250000, pan and zoom are smooth. Above 250000, frame time grows roughly linearly with edge count, viewport-culled. Above 1000000 the experience is noticeably degraded even with the cull.
 
 Adjust the threshold to taste. Raise it on a fast workstation; lower it on a remote-desktop session or a slow machine. The threshold is per-machine, not per-project -- it lives in QuPath preferences, which are user-scoped.

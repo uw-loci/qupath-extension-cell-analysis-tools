@@ -905,8 +905,10 @@ cells unmatched; kNN graph, k = 15) the change moved z by 3.0 on average
 across the 36 pairs and by at most 8.9; no pair changed sign, and three crossed |z| = 2. The
 largest change in meaning was fibroblast-to-helper-T, from 0.3 (no association) to 7.3.
 
-An entry reads **n/a** when the null has no spread: every shuffle gives the same count, as
-happens when an image holds a single cluster.
+An entry reads **n/a** when the null has no spread: every shuffle gives the same edge count for
+that pair. With labels shuffled within each image, this happens when the two clusters never
+share an image (the count is always 0), or, on the diagonal, when every image that holds the
+cluster holds nothing else.
 
 **Save CSV...** under the table writes one row per ordered pair, with the columns
 `center_cluster`, `neighbor_cluster`, `z_score`, `edges` and `permutation_null` (the shuffling

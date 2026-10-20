@@ -9,7 +9,7 @@ Figures, tables, and the data itself.
 
 ## When to batch-export
 
-Batch figure export ([below](#figure-export)) writes every plot from one or more saved clustering results to a directory at one chosen format and DPI. It is intentionally a single dialog rather than a wizard because the option surface is small and the use cases are concentrated.
+Batch figure export ([below](#figure-export)) writes every plot from one or more saved clustering results to a directory at one chosen format and DPI.
 
 ### Batch-export vs save-individual-plot
 
@@ -26,9 +26,9 @@ A rule of thumb: **if you need more than two figures at a time, batch-export is 
 
 ### Picking a format
 
-- **PNG at 300 DPI** is the journal-default raster choice in v1. Most journals will accept this for supplementary; many accept it for main figures too. The matplotlib-side PNGs are copied verbatim so the Python savefig DPI is preserved.
+- **PNG at 300 DPI** is the journal-default raster choice. Most journals will accept this for supplementary; many accept it for main figures too. The matplotlib-side PNGs are copied verbatim so the Python savefig DPI is preserved.
 - **TIFF at 300 DPI** is the lossless raster choice. Slightly larger files than PNG, but some journals specifically request TIFF for figures.
-- **There is no vector export.** SVG, PDF and EPS are not implemented and are not scheduled. Render raster at the highest DPI your workflow tolerates -- 600+ for poster-grade, 300 for typical paper figures.
+- **There is no vector export.** SVG, PDF and EPS are not implemented and are not scheduled. Render raster at the highest DPI your workflow tolerates -- 300 for typical paper figures, 600 or more for a figure that will be enlarged, as on a poster.
 
 ### Integrating with a paper / poster workflow
 
@@ -45,10 +45,10 @@ For a **poster**, 300 DPI PNG at the rendered figure size is typically enough. I
 
 ### Filenames and cross-platform sharing
 
-The default filename pattern (`{image}_{plot}.{ext}`) is filesystem-safe across Windows / macOS / Linux. If you customise the pattern:
+The default filename pattern (`{image}_{plot}.{ext}`) is filesystem-safe across Windows / macOS / Linux. If you customize the pattern:
 
 - Avoid characters that one OS allows but another doesn't (`:` and `\` are notable Windows traps).
-- Avoid Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) -- the exporter prepends `_` if a sanitised filename collides with one, but it's clearer to avoid these in the pattern itself.
+- Avoid Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) -- the exporter prepends `_` if a sanitized filename collides with one, but it's clearer to avoid these in the pattern itself.
 - Use `{result_name}` if you have multiple saved clustering runs per image and want each in its own group; otherwise leave it out for shorter filenames.
 
 If you're sharing the exported folder with collaborators on different OSes, the default pattern is the safest choice.
@@ -58,7 +58,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export ac
 ---
 ## Figure export
 
-QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter, plus the spatial-stats charts (Ripley L, Geary's C, co-occurrence). The **Batch Figure Export** feature writes every one of those to disk in a single pass, with a per-project image subset and a deterministic filename pattern. Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action; QP-CAT adds the mandatory image-subset checklist and a Groovy scripting surface (consumed by the YAML batch feature) on top.
+QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter, plus the spatial-stats charts (Ripley L, Geary's C, co-occurrence). **Export figures (batch)...** writes every one of those to disk in a single pass, with a per-project image subset and a deterministic filename pattern. Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s batch-export action; QP-CAT adds the mandatory image-subset checklist and a Groovy scripting surface (consumed by the YAML batch feature) on top.
 
 ### When to use this feature
 
@@ -67,7 +67,7 @@ QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot,
 - **Reviewer-ready bundles** -- a single output directory you can zip and email.
 - **Comparing analyses side by side** -- run the export twice with different output directories, diff the figures.
 
-### Supported formats (v1)
+### Supported formats
 
 | Format | DPI applies? | Notes |
 |---|---|---|
@@ -80,9 +80,13 @@ QP-CAT renders a stack of plots when you run clustering -- dotplot, matrix plot,
 
 1. **Run clustering** on at least one image (and save the result if you haven't already)
 2. **Extensions > QP-CAT > Export > Export figures (batch)...**
-3. Pick **Output directory**, check the images and plots you want, pick a format and DPI
-4. Click **Export Figures**
-5. Watch the progress bar; when it finishes, browse the output folder to inspect the files
+3. Pick the **Output directory**
+4. Under **Images to export**, choose the images
+5. Under **Plots to export**, tick the plots you want
+6. Under **Output format and DPI**, pick the format and DPI
+7. Click **Export Figures**
+8. Watch the progress bar; when it finishes, browse the output folder. With the default pattern
+   the files are named like `Slide_07_dotplot.png` and `all-images_composition_pie_image.png`
 
 ### Image-subset selection
 
@@ -92,7 +96,7 @@ The dialog's **Images to export** section has three radio choices:
 - **All images in project** -- export figures from every image in the project.
 - **Subset (pick from list below)** -- check specific images in the list. Filter by name with the **Filter** field; **Select All** / **Deselect All** operate on the filtered view.
 
-The selector is intentionally mandatory in v1 -- batch export across a 50+ image project can produce 500+ files and your output directory deserves to be the size you intend. For each image in the list, the dialog reports which plot kinds are available (saved with the clustering result on disk). Rows showing "(no result)" do not have a saved clustering result -- run **Find cell populations (clustering)...** on that image first if you want it in the export.
+The selector is mandatory because batch export across a 50+ image project can produce 500+ files. For each image in the list, the dialog reports which plot kinds are available (saved with the clustering result on disk). Rows showing "(no result)" do not have a saved clustering result -- run **Find cell populations (clustering)...** on that image first if you want it in the export.
 
 ### Plot-availability explanation
 
@@ -100,10 +104,10 @@ Not every plot exists for every image / clustering result. The dialog shows this
 
 - **Saved matplotlib plots** (dotplot, matrix plot, PAGA, stacked violin, scanpy embedding, neighborhood enrichment, spatial scatter) -- written to disk when `Run Clustering` completes and persisted with the project. These export with or without the results dialog open.
 - **Spatial-stats plots** (Ripley L, Geary's C, co-occurrence pairwise / one-vs-rest / curves) -- saved with the result when the spatial statistics ran. If they weren't, the rows in the plot list show as missing for that image.
-- **Cluster composition** (composition pies by image / by annotation, and the matching CSV tables) -- **always available**, because QP-CAT draws them from the saved result itself rather than reading a PNG the run happened to write. They need no open image, no results dialog, and no plotting options ticked at run time. The two "by annotation" kinds need a result that was clustered on annotation input; they are off by default for that reason. See [Exporting the composition figures](#exporting-the-composition-figures) below.
-- **Live JavaFX plots** (heatmap canvas, embedding scatter canvas, autoencoder pie chart, histogram canvas) -- only exportable when the results dialog is open for that image. Default off in the checklist for v1; flip on if you have the right dialog open.
+- **Cluster composition** (pies and CSV tables by image, annotation, area and class) -- drawn from the saved result itself rather than from a PNG the run happened to write, so they need no open image, no results window, and no plotting options ticked at run time. By image works for any current result; by annotation needs a result clustered on annotation input, by area a run with two or more independent areas, by class two or more annotation classes. A pair the result cannot support is recorded as a failure that names the reason. See [Exporting the composition figures](#exporting-the-composition-figures) below.
+- **Interactive plots** (heatmap, interactive embedding scatter, autoencoder pie, histogram) -- this export cannot write them; ticking one records it as not exported, and the summary lists it as skipped. Open the result in the Results window and use [**Save plot...**](results.md#saving-a-plot) on its tab.
 
-For the **headless scripting API** (see [Scripting](scripting.md#figureexportscripts)), the saved matplotlib plots and the cluster-composition figures / tables are exportable -- the live JavaFX plots require an open results dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
+For the **headless scripting API** (see [Scripting](scripting.md#figureexportscripts)), the saved matplotlib plots and the cluster-composition figures / tables are exportable; the interactive plots are not. The audit log gets a `FIGURE EXPORT` row only when the export runs from the dialog. Script callers should ensure the underlying clustering run had all the plots enabled.
 
 ### Exporting the composition figures
 
@@ -118,7 +122,7 @@ other figure. Eight plot kinds -- a pie/table pair for each of the four grouping
 | `composition_table_annotation` | The per-annotation counts table | Always `.csv` |
 | `composition_pie_area` | One pie per independent area (TMA core, tissue section) | Off by default -- needs a run with area levels |
 | `composition_table_area` | The per-area counts table | Always `.csv` |
-| `composition_pie_class` | One pie per cell classification | Off by default |
+| `composition_pie_class` | One pie per annotation class | Off by default -- needs two or more annotation classes |
 | `composition_table_class` | The per-class counts table | Always `.csv` |
 
 Three things differ from the per-image plots, all of them deliberate:
@@ -129,7 +133,7 @@ Three things differ from the per-image plots, all of them deliberate:
 
 Cluster colors come from the live `Cluster N` classes, so recoloring clusters in the Results window changes the exported figure too.
 
-For a one-off export of just the tab you are looking at, the Composition tabs also have an **Export figure + table...** button. Pick a folder and it writes:
+For a one-off export of the tab you are looking at, the Composition tabs also have an **Export figure + table...** button. Pick a folder and it writes:
 
 ```
 composition_by_image.png            the combined figure (all pies + legend)
@@ -143,7 +147,7 @@ composition_by_image_panels/
 
 The combined PNG is what the batch exporter produces. The `_panels/` folder exists because QP-CAT deliberately offers few layout options: rather than adding knobs for grid size, ordering and legend placement, it gives you the pieces so you can lay the panel out in whatever figure editor you already use. One legend, not one per pie, since repeating the key under every chart is wasted space in a real figure.
 
-Single pies use the same geometry and colours as their tile in the combined figure, so the two are visually interchangeable. Everything is rendered by the same code as the batch path, so no output depends on the window's size, scroll position or theme.
+Single pies use the same geometry and colors as their tile in the combined figure, so the two are visually interchangeable. Everything is rendered by the same code as the batch path, so no output depends on the window's size, scroll position or theme.
 
 ### Filename patterns
 
@@ -153,9 +157,9 @@ Available substitution variables:
 
 | Token | Expands to | Example |
 |---|---|---|
-| `{image}` | QuPath image name (filesystem-sanitised) | `Slide_07` |
+| `{image}` | QuPath image name (filesystem-sanitized) | `Slide_07` |
 | `{plot}` | Plot kind (always filesystem-safe; one of: `dotplot`, `matrixplot`, `paga`, `violin`, `embedding_scanpy`, `neighborhood`, `spatial_scatter`, `ripley_l`, `geary_c`, `cooc_pairwise`, `cooc_one_vs_rest`, `cooc_curves`, `composition_pie_image`, `composition_table_image`, `composition_pie_annotation`, `composition_table_annotation`, `composition_pie_area`, `composition_table_area`, `composition_pie_class`, `composition_table_class`, `heatmap`, `embedding_interactive`, `autoencoder_pie`, `histogram`) | `dotplot` |
-| `{result_name}` | Saved-result name from `ClusteringResultManager`, sanitised | `Leiden_res1.0_2026-05-13` |
+| `{result_name}` | Saved-result name from `ClusteringResultManager`, sanitized | `Leiden_res1.0_2026-05-13` |
 | `{date}` | YYYY-MM-DD date of export | `2026-05-13` |
 | `{ext}` | File extension matching the format (`png` or `tif`) | `png` |
 
@@ -164,15 +168,15 @@ Validation rules:
 - Pattern must include at least `{image}`, `{plot}`, and `{ext}`. The Export Figures button stays disabled until all three are present.
 - Invalid filename characters (`< > : " / \ | ? *`) are stripped per `qupath.lib.common.GeneralTools.stripInvalidFilenameChars`.
 - Windows reserved names (`CON`, `PRN`, `AUX`, `NUL`, `COM1-9`, `LPT1-9`) are guarded by prepending `_` after substitution.
-- If a token expands to the empty string after sanitisation, the literal `figure` is substituted.
+- If a token expands to the empty string after sanitization, the literal `figure` is substituted.
 - The **Filename pattern (advanced)** section is collapsed by default -- 90% of users will not touch it.
 
 ### Large-batch tips
 
 Where to put the output directory:
 
-- **Not inside the QuPath project directory.** Output goes into a sibling directory or a paper / thesis folder. Mixing QuPath project metadata with export artifacts makes both harder to manage.
-- **A new subdirectory under a paper folder** is the canonical choice -- e.g. `~/paper-cd8-spatial/figures/2026-05-13_qpcat_run3/`. The **Project** button in the **Output directory** section creates `<project>/qpcat/figures/<date>/` as a starting point.
+- **A new subdirectory under a paper folder** is the easiest to share -- e.g. `~/paper-cd8-spatial/figures/2026-05-13_qpcat_run3/`.
+- The **Project** button in the **Output directory** section puts it under `<project>/qpcat/figures/<date>/` instead, beside the project's own files.
 
 Expected file counts for a typical project:
 
@@ -207,11 +211,12 @@ Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
 1. **Extensions > QP-CAT > Export > Export cells for Python / scanpy (AnnData)...**
 2. Choose a save location and filename
 3. The export includes:
-   - Expression matrix (all measurements)
-   - Cluster labels (if cells are classified as "Cluster N")
-   - Phenotype labels (if cells have other classifications)
-   - Embedding coordinates (QPCAT UMAP1/UMAP2, etc., if present)
-   - Spatial coordinates (cell centroids)
+   - Expression matrix (all measurements) as `adata.X`, with the measurement names as `adata.var_names`
+   - Cluster labels (if cells are classified as "Cluster N") as `adata.obs["cluster"]`
+   - Phenotype labels (if cells have other classifications) as `adata.obs["phenotype"]`
+   - Embedding coordinates (QPCAT UMAP1/UMAP2, etc., if present) as `adata.obsm["X_umap"]`; that
+     key is used whichever embedding method made them
+   - Spatial coordinates (cell centroids) as `adata.obsm["spatial"]`
 4. Open the file in Python:
 
 ```python
@@ -249,7 +254,7 @@ A self-contained folder with:
     with a per-class floor, drawn by seeded uniform-random sampling within each cluster.
   - *Representative sketch (geosketch)* -- a **density-aware** sketch that downsamples dense
     regions harder and keeps sparse/rare structure *within* clusters, preserving the shape
-    of the cloud (algorithm vendored from geosketch, Hie et al. 2019; see REFERENCES.md).
+    of the cloud (algorithm vendored from geosketch, Hie et al. 2019; see [References](references.md#subsampling-and-sketching-vest-3d-export)).
 - **Total cells (budget)** -- Low (~1,000, recommended) / Medium / High / Custom.
   Kept deliberately conservative: VEST draws one textured image per cell in WebGL, which is
   draw-call-limited, so very large exports get sluggish in the browser. A live estimate
@@ -270,7 +275,7 @@ Two ways, from the "export complete" dialog:
   the scanpy/squidpy stack. Only one VEST viewer runs at a time; stop it with
   **Extensions > QP-CAT > Export > Stop VEST viewer** (it is also stopped automatically when you quit
   QuPath).
-- **Open folder** -- just open the export folder; run VEST yourself with
+- **Open folder** -- open the export folder only; run VEST yourself with
   `pip install vision-embedding-space-travelling` then `vest embedding.csv --image-path ./images`.
 
 ### Notes

@@ -7,6 +7,10 @@ measurement in the table captures it. When a marker panel does capture it,
 
 ## When to use it
 
+Use it when you can label examples of each cell type. Measurement mode learns from the
+measurements table; tile mode learns from the pixels around each cell, for differences the
+measurements miss.
+
 - **Measurement mode**: When marker expression patterns distinguish cell types. Fast, works on CPU. Start here.
 - **Tile mode**: When morphology or spatial texture matters (e.g., differentiating activated vs resting T cells by size/shape). Slower, benefits from GPU.
 - **vs Clustering**: Use the autoencoder when you have labeled training data and want a supervised classifier. Use clustering when you have no labels and want to discover populations.
@@ -22,10 +26,10 @@ measurement in the table captures it. When a marker panel does capture it,
 ### Training Tips
 
 - Start with measurement mode (faster iteration)
-- Use the default hyperparameters initially -- they follow VAE best practices
-- Monitor validation accuracy in the log -- if it plateaus early, try more latent dimensions
+- Use the default hyperparameters initially
+- Monitor validation accuracy in the log (**Extensions > QP-CAT > Setup & help > Python Console**) -- if it plateaus early, try more latent dimensions
 - If accuracy is low, add more labeled cells before tuning hyperparameters
-- Use the Evaluate button to check performance before applying destructively
+- Use **Evaluate on Checked Images** to check performance before applying, which replaces classifications
 - Save the model before applying so you can reload if results are unsatisfactory
 
 ### Tile Mode Tips
@@ -51,27 +55,28 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
 > Python library -- the VAE, the semi-supervised classifier head, the KL
 > annealing schedule and the tile-mode masking were written for this extension.
 > And it is **unpublished and not peer reviewed**. The design draws on published
-> methods (see [REFERENCES.md](references.md#autoencoder-cell-classification)),
+> methods (see [References](references.md#autoencoder-cell-classification)),
 > but this particular combination has not been through review. Validate it on
 > your own data before relying on it, and describe it as software rather than
 > citing it as a method.
 
 
+<!-- TODO: Re-capture this screenshot; the dialog title, header and banners changed (no [TEST] title or TEST FEATURE banner; a red warning banner about replacing classifications near the bottom) -->
 ![Autoencoder Cell Classifier dialog showing object-type and label-source options, per-class training images, input data settings, and training parameters, with a pie chart of labeled-cell class balance](images/autoencoder-classifier-dialog.png)
 
 ### Training
 
 1. **Label cells** using any combination of these methods (100-200 per cell type recommended):
-   - **Locked annotations** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
-   - **Point annotations** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels. Precise for single-cell labeling.
-   - **Detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
+   - **Locked annotations (region-based labeling)** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
+   - **Point annotations (per-cell labeling)** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels (pixels, not microns). Precise for single-cell labeling.
+   - **Existing detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
 2. **Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...**
 3. **Select training images**: Choose one or more project images. Multi-image training produces more robust classifiers. The current image is pre-selected.
 4. **Choose input mode:**
-   - **Measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
+   - **Cell measurements** (default, recommended): Select measurements to use (typically "Mean" channel intensities). Fast, CPU-friendly.
    - **Tile images**: Uses pixel data around each cell. Captures morphology and texture. Choose tile size (32x32 recommended). Slower, benefits from GPU.
    - **Hybrid (Tile + Measurements)**: When tile mode is selected, you can also select measurements in the measurement panel. The model uses a Hybrid ConvVAE that concatenates convolutional tile features with the selected measurements (e.g., Solidity, Area, Circularity, or channel intensities) before the latent space. This combines spatial/morphological pixel information with quantitative cell-level features.
-5. **Cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
+5. **Include cell mask channel** (tile mode only, default ON): Appends a binary mask of the cell's outline as an extra channel. This tells the network which cell is the target while preserving neighbor context. Based on CellSighter (Amitay et al. 2023, Nature Communications).
 6. **Configure class weights:**
    - **Per-class weight spinners**: Individual weight spinners appear for each detected class. Adjust to emphasize or de-emphasize specific cell types during training.
    - **Auto-Balance Weights** button: Click to automatically compute inverse-frequency weights based on the number of labeled cells per class. This is recommended when class populations are imbalanced (e.g., 5000 tumor cells but only 200 rare immune cells).
@@ -84,13 +89,22 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
    - Validation split: 0.2 (20% holdout for early stopping and best model selection)
    - Early stop patience: 15 (epochs without val improvement before stopping; 0 = disabled)
    - Class weighting: ON (handles imbalanced cell populations via inverse-frequency weights)
-   - Data augmentation: expand the collapsible **Advanced -- Augmentation** section to configure augmentation options (Gaussian noise + per-channel scaling for measurement mode; flips, 90-degree rotation, optional elastic deformation and intensity changes for tile mode). The section is collapsed by default to reduce dialog clutter.
+   - Data augmentation (on by default): expand the collapsible **Advanced -- Augmentation** section to configure augmentation options (Gaussian noise, per-channel scaling and feature dropout of 0.1 for measurement mode; flips, 90-degree rotation, optional elastic deformation and intensity changes for tile mode). The section is collapsed by default to reduce dialog clutter.
 8. Click **Train on Selected Images**
-9. Review accuracy on labeled cells in the status bar
+9. Review accuracy on labeled cells in the status bar. **Evaluate on Checked Images** opens
+   **Evaluation Results**, headed "Accuracy: x% (n/m labeled cells)".
+
+Training is not fully seeded: only the train/validation split is (`random_state=42`), so two
+trainings on the same labels can give different models. Click **Save Model...** for any model
+whose results you will report.
 
 ### Applying to Project
 
-After training on the current image:
+After training:
+
+**Applying replaces the classification of every cell in the checked images**, including
+phenotypes or cluster labels you set before. Back up the project folder first, or work on a
+copy.
 
 1. Click **Apply to Checked Images**
 2. The trained model encodes each image's cells and assigns predicted labels
@@ -101,7 +115,9 @@ After training on the current image:
 
 Each detection receives:
 - `AE_0` through `AE_N` measurements: learned latent features (N = latent dimensions)
-- `AE_confidence`: prediction confidence (0.0-1.0, higher = more certain)
+- `AE_confidence`: the largest softmax probability of the classifier head (0.0-1.0). It is
+  not calibrated: with K classes it never falls below 1/K, and a high value is not the
+  probability of being right
 - PathClass label: predicted cell type (only if labeled cells were provided)
 
 The latent features (AE_*) can be used as input for clustering (select them as measurements in the clustering dialog) or visualized via UMAP.

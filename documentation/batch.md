@@ -57,7 +57,7 @@ Conventions that hold up across revisions:
 1. **One YAML per analysis run.** Don't reuse a YAML for two different runs; copy and version (`_revision1.yaml`, `_revision2.yaml`). Diffing two YAMLs is the cleanest way to see what changed.
 2. **Commit the audit log.** The audit log is the canonical record of what actually ran -- the YAML is the *intent*, the log is the *outcome*.
 3. **Pin the QP-CAT version.** Note the QP-CAT + Appose env versions in a sidecar `.md`. Future-you on a fresh workstation needs the same versions.
-4. **Don't put secrets in the YAML.** The Anthropic API key must come from `key_from_env`. The YAML is checked in; the key is not (the parser errors on inline keys via E018).
+4. **Don't put secrets in the YAML.** An Anthropic API key in a `phenotyping.llm_explainer` block must come from `key_from_env`; the parser errors on inline keys via E018. (The batch validates that block but does not run the explainer.) The YAML is checked in; the key is not.
 
 ### Reproducibility checklist
 
@@ -65,9 +65,9 @@ Before you ship a paper:
 
 - [ ] The YAML file is committed alongside the data + paper draft.
 - [ ] The audit log from the analysis run is committed.
-- [ ] The QP-CAT version is recorded.
-- [ ] Every model used (LLM model + `prompt_template_version`) is recorded.
-- [ ] `random_seed` is explicitly set (not just defaulted).
+- [ ] The QP-CAT version is recorded (every audit-log entry carries `QPCAT version:` and `QuPath version:` lines).
+- [ ] `random_seed` is explicitly set, not left at its default, and `embedding_execution_mode: reproducible` is set if any image has more than 200,000 cells.
+- [ ] Spatial permutations are seeded; the count used is in each statistic's audit row for Ripley's L, Geary's C and co-occurrence. Neighborhood enrichment always uses 1000.
 - [ ] The figure-export `output_dir` is named after the revision, not overwritten across revisions.
 
 ### CI integration
@@ -92,11 +92,15 @@ diff -u tests/fixtures/cohort_smoke/qpcat/logs/qpcat_$(date +%F).log \
         tests/fixtures/cohort_smoke/qpcat/logs/qpcat_baseline.log
 ```
 
+This script has not been run as written. The dated log carries timestamps, durations and the
+YAML's SHA-256 on its rows, so a plain `diff` reports those every night; filter them out first
+(for example `grep -v -E 'Duration|yaml_sha256|[0-9]{2}:[0-9]{2}:[0-9]{2}'` on both files).
+
 What works:
 
 1. **Set `on_error: stop`** so a CI failure is loud, not silent.
 2. **Use a small fixture project** (5-10 images, fast clustering parameters). A nightly run on a 50k-cell project is too slow.
-3. **Pin `random_seed`** so the audit-log diff is deterministic.
+3. **Pin `random_seed`**, and set `embedding_execution_mode: reproducible`, so the audit-log diff is deterministic (in `auto` mode UMAP runs unseeded above 200,000 cells).
 4. **Diff the audit log, not the figures.** Figures vary across matplotlib versions; audit logs don't.
 
 ### What NOT to put in the YAML
@@ -106,18 +110,18 @@ What works:
 - Comments that drift -- put rationale in a sidecar `.md`, not in YAML comments that will get stale.
 - One-off debug flags. The YAML is for *runnable analyses*; debugging happens in the GUI or via a Groovy script.
 
-Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` reproducibility pattern; QP-CAT's variant runs inside QuPath's existing extension surface so the YAML's actions are the GUI's, except the optional Validation checks, which are dialog-only.
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` reproducibility pattern; QP-CAT's variant runs inside QuPath's existing extension surface and uses the dialog's analysis code. Settings without a YAML key run at their defaults (see [YAML reference](yaml-reference.md)), and the optional Validation checks are dialog-only.
 
 ---
 ## Running one
 
-Run QP-CAT without opening the QuPath GUI by writing a YAML config file and invoking it via QuPath's `script` subcommand. Same analysis surface as the dialog; same Appose env; same audit log. The right call when you need to run the identical analysis across many projects, or when you want a reproducible record of "this is the analysis we ran for this paper." Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` command; QP-CAT's variant runs inside QuPath's extension class loader so the analysis is the GUI's (the optional Validation checks are dialog-only).
+Run QP-CAT without opening the QuPath GUI by writing a YAML config file and invoking it via QuPath's `script` subcommand. Same analysis surface as the dialog; same Appose env; same audit log. The right call when you need to run the identical analysis across many projects, or when you want a reproducible record of "this is the analysis we ran for this paper." Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow` command; QP-CAT's variant runs inside QuPath's extension class loader and uses the dialog's analysis code; settings without a YAML key run at their defaults, and the optional Validation checks are dialog-only.
 
 The full YAML field-by-field reference is in [YAML reference](yaml-reference.md). This chapter is the workflow narrative.
 
 ### Prerequisites
 
-1. Run **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** from the GUI at least once on this workstation. The headless path will NOT build the Appose env on its own.
+1. Run **Extensions > QP-CAT > Setup & help > Set up analysis environment (first run)...** from the GUI once on this workstation (recommended). If the environment is missing, the first headless run tries to build it before clustering (several minutes, needs internet); building it from the GUI first is easier to debug.
 2. Confirm the QuPath launcher's `script` subcommand is reachable:
 
    ```bash
@@ -159,7 +163,7 @@ Pass `--args=--dry-run` to validate the YAML without executing:
 QuPath script qpcat_batch.groovy --args config.yaml --args=--dry-run
 ```
 
-Exit codes (POSIX, per design Section 6):
+Exit codes (POSIX):
 
 | Code | Meaning |
 |---|---|
@@ -179,7 +183,7 @@ If the batch errors out or any image fails:
 
 ### Recovering from a partial failure
 
-With `on_error: continue` the run finishes the remaining images and exits 1. Re-run just the
+With `on_error: continue` the run finishes the remaining images and exits 1. Re-run only the
 failed ones by narrowing `scope.images` -- see
 [partial failure](#when-it-fails) for the worked example.
 
@@ -214,7 +218,7 @@ or
 
 **What it means:**
 
-The YAML file is malformed (mistyped key, wrong indentation, missing colon, tab instead of spaces) or has a key the schema does not recognise.
+The YAML file is malformed (mistyped key, wrong indentation, missing colon, tab instead of spaces) or has a key the schema does not recognize.
 
 **What to do:**
 
@@ -251,7 +255,7 @@ The YAML parses but doesn't match the schema -- a value is wrong-typed, an enum 
 
 1. The error message names the offending field path (e.g. `clustering.type`) and what was expected.
 2. Cross-reference [YAML reference](yaml-reference.md) for the field's valid values, type, and required-ness.
-3. **Watch case sensitivity.** The validator normalises algorithm names to lowercase, but error messages echo the value as-typed; a `Leiden` in your YAML becomes `leiden` internally.
+3. **Watch case sensitivity.** The validator normalizes algorithm names to lowercase, but error messages echo the value as-typed; a `Leiden` in your YAML becomes `leiden` internally.
 4. **Watch types.** `dpi: 300` is valid; `dpi: "300"` parses as a string. SnakeYAML interprets unquoted numbers as numeric; quoted numbers are strings.
 
 </details>
@@ -261,14 +265,14 @@ The YAML parses but doesn't match the schema -- a value is wrong-typed, an enum 
 
 **What you see:**
 
-```
-[qpcat-batch] 2026-05-13 14:23:05 ERROR Appose environment not found.
-                                       Run Extensions > QP-CAT > Setup & help > Set up analysis environment (first run) from the GUI once before headless runs.
-```
+The first headless run on a workstation with no environment spends several minutes building
+it before any clustering starts, or fails during that build.
 
 **What it means:**
 
-The headless batch will not build the Appose env on its own. The env build is a 5-15 minute operation that needs the GUI's progress dialog.
+If the environment is missing, the headless run tries to build it (5-15 minutes, needs
+internet). Whether that build succeeds without the GUI has not been checked; building it once
+from the GUI is the route to use when it fails.
 
 **What to do:**
 
@@ -293,7 +297,7 @@ For CI workstations, run the GUI setup once when provisioning, then never again.
 
 **What it means:**
 
-A name in `scope.images` doesn't match any image in the project. Image names are case-sensitive on Linux/macOS and case-insensitive on Windows.
+A name in `scope.images` doesn't match any image in the project. Image names must match exactly, including case, on every operating system.
 
 **What to do:**
 
@@ -317,8 +321,9 @@ A name in `scope.images` doesn't match any image in the project. Image names are
 
 ```
 [qpcat-batch] 2026-05-13 14:25:43 ERROR [2/12] image=Patient05_ROI1 step=clustering failed: AssertionError: empty measurement set
-[qpcat-batch] 2026-05-13 14:25:43 OK    Exit code: 3
 ```
+
+The process exits with code 3 (check `$?`); no "Exit code" line is printed.
 
 **What it means:**
 
@@ -331,8 +336,8 @@ One image failed; `on_error: stop` aborted the batch at that point. Already-proc
    - **Too few cells for clustering** -- below ~200 detections is unreliable.
    - **Measurement missing** -- a marker listed in `clustering.measurements` is absent on this image's detections.
    - **Appose worker died** -- check QuPath stderr for Python tracebacks.
-3. Fix the root cause and re-run with the same YAML. There is no resume-from-checkpoint in v1.
-4. To skip just the one problem image and continue, switch to `on_error: continue` or narrow `scope.images`.
+3. Fix the root cause and re-run with the same YAML. There is no resume-from-checkpoint.
+4. To skip the one problem image and continue, switch to `on_error: continue` or narrow `scope.images`.
 
 </details>
 
@@ -344,17 +349,17 @@ One image failed; `on_error: stop` aborted the batch at that point. Already-proc
 ```
 [qpcat-batch] 2026-05-13 14:25:43 ERROR [2/12] image=Patient05_ROI1 step=spatial_stats failed: <error>
 [qpcat-batch] 2026-05-13 14:30:11 WARN  Run complete: 11/12 images, 1 errors, 33 figures
-[qpcat-batch] 2026-05-13 14:30:11 OK    Exit code: 1
 ```
 
 **What it means:**
 
-One or more images failed; the batch skipped them and continued. Exit code 1 means partial failure.
+One or more images failed; the batch skipped them and continued. The process exits with code 1
+(partial failure; check `$?`).
 
 **What to do:**
 
 1. Read the audit log to enumerate which images failed at which step.
-2. To re-run just the failed images, narrow `scope.images`:
+2. To re-run only the failed images, narrow `scope.images`:
 
    ```yaml
    scope:
@@ -397,7 +402,7 @@ The QuPath launcher is not on `PATH`, or your QuPath build doesn't expose the `s
 2. **macOS / Windows:** invoke the installed app's launcher by absolute path:
    - macOS: `/Applications/QuPath.app/Contents/MacOS/QuPath`
    - Windows: `C:\Program Files\QuPath\QuPath.exe`
-3. If `QuPath script --help` itself errors with "Unknown subcommand", upgrade to QuPath 0.6.0+ (current QPSC dev builds atop 0.7.0-SNAPSHOT and expose it).
+3. If `QuPath script --help` itself errors with "Unknown subcommand", upgrade QuPath: QP-CAT needs QuPath 0.7, whose launcher has the `script` subcommand.
 
 </details>
 
@@ -478,7 +483,7 @@ kinds rather than substituting something else.
 Note the two fields default independently (both `1.0`), so this most often shows
 up when a marker is an `exclude_markers` entry in one rule and a
 `require_markers` entry in another, and only one of the two thresholds was
-customised.
+customized.
 
 **What to do:**
 
@@ -545,17 +550,38 @@ The check is *machine-dependent* -- the same config might pass on a 512 GB serve
 
 2. **For HDBSCAN:** this runs to completion but very slowly on large datasets. Switch to `leiden`, which is graph-based and scales roughly linearly. If you need density-based clustering, consider a smaller region or subset.
 
-3. **For co-occurrence or Ripley's L:** these are turned on by listing them in `spatial_stats.statistics` (e.g. `[ripley_l, co_occurrence_pairwise]`). Turn them off, or reduce `clustering.n_clusters` to shrink the working set.
+3. **For co-occurrence or Ripley's L:** these are turned on by listing them in `spatial_stats.statistics` (e.g. `[ripley_l, co_occurrence_pairwise]`). For co-occurrence: remove it from `spatial_stats.statistics`, or use fewer clusters (its memory grows with the square of the cluster count). For Ripley's L: remove it; more, smaller clusters lower its peak, and fewer raise it, because its cost is set by the largest cluster.
 
-4. **To estimate the cost:** the error message shows the predicted peak RAM and your machine's actual RAM. Use the remedy it suggests (e.g. "Use Leiden instead") to modify `clustering.yaml` and re-run.
+4. **To estimate the cost:** the error message shows the predicted peak RAM and your machine's actual RAM. Use the remedy it suggests (e.g. "Use Leiden instead") to modify `analysis.yaml` and re-run.
 
-5. **To run on a bigger machine:** if you have access to a server with more RAM, simply run the same YAML there. The check scales automatically.
+5. **To run on a bigger machine:** if you have access to a server with more RAM, run the same YAML there. The check scales automatically.
 
-Note the two different behaviours. Ripley's L and co-occurrence are checked only
+Note the two different behaviors. Ripley's L and co-occurrence are checked only
 once clustering has finished, because their cost depends on the cluster labels --
 so they are skipped with a warning and the rest of the run is kept, rather than a
 ten-minute clustering being thrown away. Every other refusal happens *before* any
 clustering starts, and fails the image.
+
+</details>
+
+<details>
+<summary><b>W004: per_image_overrides are not applied</b></summary>
+
+**What you see:**
+
+```
+[qpcat-batch] 2026-05-13 14:23:01 WARN  W004 scope.per_image_overrides: per_image_overrides are parsed and validated but NOT YET APPLIED by the batch runner; every image uses the top-level blocks. ...
+```
+
+**What it means:**
+
+The batch reads and checks `scope.per_image_overrides` but runs every image with the
+top-level settings, so an image you meant to treat differently is not.
+
+**What to do:**
+
+Remove the overrides, or run those images in a separate YAML with their own top-level
+settings.
 
 </details>
 

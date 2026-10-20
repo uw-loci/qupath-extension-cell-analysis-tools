@@ -1,10 +1,10 @@
 # QP-CAT -- YAML Schema Reference
 
-Field-by-field reference for the YAML config file consumed by `qpcat_batch.groovy`. v1 covers clustering, rule-based phenotyping, the LLM cluster explainer (optional), spatial statistics, and figure export. Schema version `1.0` (shorthand `1` accepted).
+Field-by-field reference for the YAML config file consumed by `qpcat_batch.groovy`. It covers clustering, rule-based phenotyping, spatial statistics, and figure export. Schema version `1.0` (shorthand `1` accepted).
 
 For the workflow narrative ("when to use, how to debug a failed run"), see [Batch](batch.md#running-one). For reproducibility / CI guidance, see [Batch: when to use a batch instead of the dialog](batch.md#when-to-use-a-batch-instead-of-the-dialog). For error-by-error remediation, see [Batch: when it fails](batch.md#when-it-fails).
 
-Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's `script` subcommand so the analysis surface is the dialog's, except the optional Validation checks (stability across seeds, agreement with known classes), which are dialog-only.
+Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s `openimc workflow <config.yaml>` command; QP-CAT's variant runs inside QuPath's `script` subcommand and uses the dialog's analysis code. Not every dialog setting has a YAML key: the Validation checks (stability across seeds, agreement with known classes), a classification subset, PAGA, **Generate analysis plots**, smoothing iterations, 3-D embeddings and the embedding name, Leiden's n_neighbors, HDBSCAN's min_samples and cluster selection, BANKSY's resolution, the co-occurrence matrix radius and the viewer-overlay controls run at their defaults.
 
 ## Top-level shape
 
@@ -26,7 +26,7 @@ workers: 1
 
 ## Stability promise
 
-The YAML schema is part of QP-CAT's public surface. Breaking changes are announced in release notes with at least one minor-version deprecation window. The `version` field gates future migrations: a config that declares `version: "1.0"` will continue to be parseable by all v1.x releases. Schema version `2` introduces breaking changes; `version: "2.0"` configs are rejected by v1 with E007.
+The YAML schema is part of QP-CAT's public surface; a breaking change will be listed in the changelog. The `version` field gates future migrations. A `version` of 2 or higher is rejected (E007).
 
 ## `version` (required, string)
 
@@ -37,7 +37,7 @@ The YAML schema is part of QP-CAT's public surface. Breaking changes are announc
 | Default | -- |
 | Valid values | `"1.0"`, `"1"` (shorthand) |
 
-Schema version. Must be present. v1 accepts `1.0` exactly; `1` is normalised internally to `1.0`. A future minor (`1.1`, `1.2`, ...) warns (W001) but parses; a future major (`2.0`+) hard-fails (E007). A non-semver-shaped string fails E017.
+Schema version. Must be present. `1.0` is accepted exactly; `1` is normalized internally to `1.0`. A future minor (`1.1`, `1.2`, ...) warns (W001) but parses; a future major (`2.0`+) hard-fails (E007). A non-semver-shaped string fails E017.
 
 ## `audit` (optional, object)
 
@@ -102,7 +102,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (logged as a warning). An unrecognised value is an error -- it is no longer silently run as Leiden. |
+| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (logged as a warning). An unrecognized value is an error. |
 | `mode` | string | `run` | `run` (run a new clustering) or `reuse_saved` (skip clustering; attach `saved_result_name`). |
 | `saved_result_name` | string | -- | Required when `mode: reuse_saved`. |
 | `resolution` | double | `1.0` | Leiden / Louvain only. Range `(0, 10]`. |
@@ -147,6 +147,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 > to each image; `joint` is ignored for `mode: reuse_saved`.
 
 <a name="independent-areas-clusteringarea_levels"></a>
+
 ### Independent areas (`clustering.area_levels`)
 
 An **area** is a piece of tissue physically separate from every other piece: a TMA core, one of several sections on a slide, an image. No spatial graph -- BANKSY, spatial smoothing, Ripley's L, co-occurrence, Moran's I -- is ever built across two areas, because the distance between a cell in one core and a cell in the next is not a distance through tissue.
@@ -192,14 +193,14 @@ clustering:
 
 > **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | (unassigned)`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
 >
-> `(unassigned)` is parenthesised because it is QP-CAT's word, not yours: it has to sit in the same column as your annotation class names, and a pixel classifier that emits a class called `Unclassified` would otherwise be told apart from it only by a capital letter. The Composition by class tab shows the same cells as `(none)`.
+> `(unassigned)` is parenthesized because it is QP-CAT's word, not yours: it has to sit in the same column as your annotation class names, and a pixel classifier that emits a class called `Unclassified` would otherwise be told apart from it only by a capital letter. The Composition by class tab shows the same cells as `(none)`.
 
 > **TMA cores flagged missing are skipped.** A dearrayed grid is rectangular, so a slide with a ragged edge carries cores that hold no tissue at all; the dearrayer flags those, and you can flag more by hand on a core that is folded, torn, or otherwise out of scope. Those cores are not areas, and produce no row in any per-area output -- one blank row per core, per statistic, is what turns a 55-core spreadsheet into one that has to be filtered before it can be read.
 >
-> Any detections that *do* sit inside a missing core are still analysed -- cluster labels map back to objects by position, so cells are never dropped -- but they fall into the image's `(unassigned)` area and are pooled there, so their own spatial statistics are not meaningful. That is the right outcome for cells you have already declared out of scope. The preview line and the run log both state how many cores were skipped: a large skip count next to a large unassigned count means the dearraying, not the analysis, is what needs attention.
+> Any detections that *do* sit inside a missing core are still analyzed -- cluster labels map back to objects by position, so cells are never dropped -- but they fall into the image's `(unassigned)` area and are pooled there, so their own spatial statistics are not meaningful. That is the right outcome for cells you have already declared out of scope. The preview line and the run log both state how many cores were skipped: a large skip count next to a large unassigned count means the dearraying, not the analysis, is what needs attention.
 
 
-> **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighbourhood term rather than borrowing neighbours from another specimen; cells are never dropped.
+> **Small areas.** `k` is capped per area, so one sparse core cannot drag `k` down for the rest. An area too small for any graph contributes no neighborhood term rather than borrowing neighbors from another specimen; cells are never dropped.
 
 ## `phenotyping` (optional, object)
 
@@ -215,6 +216,7 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
 | `rules[].require_min_zscore` | double | `1.0` | Minimum z-score for `require_markers`. |
 | `rules[].exclude_max_zscore` | double | `1.0` | Maximum z-score for `exclude_markers`. |
+| `llm_explainer` | object | -- | Validated but not run; see below. |
 
 > **One gate per marker.** These z-scores are written per rule, but the
 > phenotyping engine applies **one gate per marker across all rules**. A marker
@@ -228,9 +230,11 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 > together, so all resolved images are phenotyped in a single pass and each is
 > saved with its labels. `clustering.normalization` and
 > `clustering.measurements` supply the panel; `zscore` is used if absent.
-| `llm_explainer` | object | -- | Optional LLM cluster-explainer block. See below. |
 
 ### `phenotyping.llm_explainer` (optional, object)
+
+**Validated but not run.** The batch checks this block (including E018 for an inline key)
+and then ignores it; the Cluster Explainer runs only from the Results window.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -246,17 +250,19 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 
 ## `spatial_stats` (optional, object)
 
-Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, statistics cannot be re-run without re-clustering (v1 limitation).
+Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, statistics cannot be re-run without re-clustering. Spatial permutations are seeded and need no key.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Master switch. |
-| `graph` | object | `{type: knn, k: 15}` | Graph constructor for every statistic. |
+| `graph` | object | `{type: knn, k: 15}` | Graph constructor for neighborhood enrichment, Moran's I and Geary's C (Ripley's L and co-occurrence read coordinates). |
 | `statistics` | list[string] | `[]` | At least one entry. Valid slugs below. |
-| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. Does not apply to `neighborhood_enrichment`, which always runs 1000. |
-| `persist_plots` | boolean | `true` | Write per-stat PNGs to the saved-result's plot directory so `figure_export` can pick them up. |
+| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. Applies to Moran's I and Geary's C. Does not apply to `neighborhood_enrichment`, which always runs 1000; Ripley's L always draws its band from 99 simulations; co-occurrence has no test. |
+| `persist_plots` | boolean | `true` | **No effect.** PNGs follow the QuPath preference **Spatial Stats: Save Matplotlib PNGs** (default on) on the machine that runs the batch. |
 
 Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
+
+`moran_i` and `neighborhood_enrichment` switch on together: listing either runs both, as the dialog's **Neighborhood enrichment + Moran's I** box does.
 
 ### Graph constructor sub-table
 
@@ -264,10 +270,9 @@ Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ri
 |---|---|---|---|
 | `type` | string | `knn` | `knn`, `radius`, `delaunay`. |
 | `k` | int | `15` | kNN only. Range `[2, 200]`. |
-| `radius` | double | `-1` (auto) | Radius only (microns; pixels only if an image in the run has no pixel size). |
+| `radius` | double | `-1` (auto) | Radius only (microns; pixels only if an image in the run has no pixel size). `-1` = auto: median nearest-neighbor distance x 5. |
 | `max_edge` | double | `-1` (no pruning) | Delaunay only (microns; pixels only if an image in the run has no pixel size). |
 
-> **Note:** `spatial_stats.statistics` slugs mirror the `SpatialStatsScripts` keys 1:1. See [Scripting: `SpatialStatsScripts`](scripting.md#spatialstatsscripts).
 
 ## `figure_export` (optional, object)
 
@@ -325,7 +330,7 @@ Per-image error policy. `continue` skips failed images and proceeds (exits 1 at 
 |---|---|
 | Type | int |
 | Default | `1` |
-| Valid values | `1` in v1 |
+| Valid values | `1` |
 
 `workers` is clamped to 1; any other value warns (W002) and is coerced. Parallel workers are not implemented.
 
@@ -366,8 +371,6 @@ population in both, and labels are written back to each. Drop `joint` (or set it
 
 ```yaml
 version: "1.0"
-audit:
-  log_dir: ./qpcat/logs
 scope:
   projects:
     - /data/experiments/cohort_2025_q2/project.qpproj
@@ -406,7 +409,7 @@ figure_export:
 on_error: continue
 ```
 
-### Spatial-stats-only on saved results
+### Re-export spatial-statistics figures from saved results
 
 ```yaml
 version: "1.0"
@@ -416,19 +419,17 @@ scope:
 clustering:
   mode: reuse_saved
   saved_result_name: leiden_res0.8_final
-spatial_stats:
-  enabled: true
-  graph: { type: delaunay, max_edge: 80.0 }
-  statistics: [ripley_l, geary_c, cooccurrence_pairwise]
-  permutations: 1000
-  persist_plots: true
 figure_export:
   enabled: true
   output_dir: ./qpcat/figures/spatial_addendum
-  figures: [ripley, geary_c, cooc_pairwise]   # 'ripley' expands to k+l
+  figures: [ripley_l, geary_c, cooc_pairwise]
   formats: [png, tiff]
   dpi: 600
 ```
+
+To compute statistics a saved result does not have, run clustering again (`mode: run`) with a
+`spatial_stats` block, or use **Explore & spatial > Spatial statistics on existing clusters...**
+in the GUI.
 
 ### Figure-export-only (regenerate from saved results)
 
@@ -450,12 +451,13 @@ figure_export:
   overwrite_existing: true
 ```
 
-### With LLM cluster explainer
+### With an LLM explainer block (validated, not run)
+
+The batch validates this block, including E018 for an inline key, and does not run the
+explainer.
 
 ```yaml
 version: "1.0"
-audit:
-  capture_prompts: true
 scope:
   projects: [/data/experiments/cohort_2025_q2/project.qpproj]
   images: all
