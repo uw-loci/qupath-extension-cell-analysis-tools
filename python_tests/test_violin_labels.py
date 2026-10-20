@@ -97,3 +97,45 @@ def test_rows_are_twice_as_tall_with_no_blank_strip_and_labels_render():
     ticks = sv.ax_dict["mainplot_ax"].get_xticklabels()
     assert {t.get_rotation() for t in ticks} == {45.0}
     assert ticks[1].get_text() == r"Nucleus: $\mathbf{CD3}$ mean"
+
+
+@requires("scanpy")
+def test_the_colour_scale_sits_under_the_dendrogram_and_the_figure_narrows():
+    import anndata as ad
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import scanpy as sc
+
+    legend = load_script_symbol("run_clustering.py", "legend_under_dendrogram")
+    rng = np.random.default_rng(1)
+    names = ["Cell: M%d mean" % i for i in range(12)]
+    adata = ad.AnnData(rng.gamma(0.6, 2.0, size=(600, 12)).astype(np.float32))
+    adata.var_names = names
+    adata.obs["cluster"] = [str(v) for v in rng.integers(0, 5, 600)]
+    adata.obs["cluster"] = adata.obs["cluster"].astype("category")
+
+    def drawn(move):
+        sv = sc.pl.stacked_violin(
+            adata,
+            names,
+            groupby="cluster",
+            dendrogram=True,
+            show=False,
+            return_fig=True,
+            dodge=False,
+        )
+        sv.make_figure()
+        if move:
+            legend(sv)
+        renderer = sv.fig.canvas.get_renderer()
+        return sv, sv.fig.get_tightbbox(renderer).width
+
+    sv, moved_width = drawn(True)
+    _, default_width = drawn(False)
+    tree = sv.ax_dict["group_extra_ax"].get_position()
+    scale = sv.ax_dict["color_legend_ax"].get_position()
+    main = sv.ax_dict["mainplot_ax"].get_position()
+    assert scale.x0 == tree.x0
+    assert scale.y1 < main.y0
+    assert moved_width < default_width - 0.5  # inches

@@ -124,7 +124,8 @@ of a violin. On the synthetic demo data 54% to 93% of cells are exactly at the l
 for every marker except DAPI, and DAPI is the one marker drawn as full ovals.
 
 The marker part of each label is bold (**CD3** in "Nucleus: **CD3** mean"), the labels are
-angled at 45 degrees, and each cluster row is twice scanpy's default height.
+angled at 45 degrees, each cluster row is twice scanpy's default height, and the colour scale
+sits under the dendrogram rather than in a column of its own.
 
 <a name="heatmap-colours"></a>
 ### Choosing the colour map

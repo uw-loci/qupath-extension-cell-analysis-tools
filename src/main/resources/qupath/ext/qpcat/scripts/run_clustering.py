@@ -1891,6 +1891,40 @@ def angle_marker_labels(plot_obj, rotation=45):
     )
 
 
+def legend_under_dendrogram(plot_obj):
+    """Move the colour scale from its own column to below the dendrogram.
+
+    scanpy keeps a column right of the dendrogram for the colour scale; the space
+    under the dendrogram, beside the angled labels, is empty. The emptied column
+    is hidden so ``bbox_inches="tight"`` crops it. No dendrogram: left as is.
+    """
+    fig = plot_obj.fig
+    tree = plot_obj.ax_dict.get("group_extra_ax")
+    scale = plot_obj.ax_dict.get("color_legend_ax")
+    main = plot_obj.ax_dict.get("mainplot_ax")
+    if tree is None or scale is None or main is None:
+        return
+    t, c, m = tree.get_position(), scale.get_position(), main.get_position()
+    for ax in fig.axes:
+        p = ax.get_position()
+        if (
+            ax is not scale
+            and abs(p.x0 - c.x0) < 1e-6
+            and not ax.collections
+            and not ax.get_title()
+        ):
+            ax.set_visible(False)
+    # Leave room for the scale's two-line title between it and the plot.
+    top = m.y0 - 0.55 / fig.get_size_inches()[1]
+    scale.set_position([t.x0, top - c.height, c.width, c.height])
+
+
+def finish_stacked_violin(plot_obj):
+    """Layout applied to the drawn stacked violin before it is saved."""
+    angle_marker_labels(plot_obj)
+    legend_under_dendrogram(plot_obj)
+
+
 def dot_size_fractions(matrix, labels, cutoff=0.0):
     """What a scanpy dotplot's dot SIZE encodes, computed the same way.
 
@@ -3058,7 +3092,7 @@ if do_plots and plot_dir and can_analyze:
                 violin_path,
                 pref_plot_dpi,
                 plot_feature_caption,
-                after_render=angle_marker_labels,
+                after_render=finish_stacked_violin,
             )
             plt.close("all")
             plot_paths["stacked_violin"] = violin_path
