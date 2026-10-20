@@ -5,32 +5,27 @@ The results window opens after every run, even a bare one, and reopens later via
 one view of the same result.
 
 - [Saving and reopening](#saving-and-reopening)
-- [Reading expression: heatmap, matrix plot, dot plot](#reading-expression)
+- [Reading expression: heatmap, matrix plot, dotplot](#reading-expression)
 - [Embedding](#embedding)
 - [Composition tabs](#composition-tabs)
 - [Representative cells](#representative-cells)
 - [Cluster confidence](#cluster-confidence-tab)
 - [Marker rankings and fingerprints](#marker-rankings-and-fingerprints)
+- [Cluster Explainer (LLM) [Experimental]](#cluster-explainer-llm-tab)
 - [Spatial tabs](#spatial-tabs)
 - [Saving a plot](#saving-a-plot)
-- [Cluster colours](#cluster-colours)
+- [Cluster colors](#cluster-colours)
 - [3D view](#3d-view)
 
-**Marker names are bold.** Wherever QP-CAT lists measurement names -- the heatmap's
-column labels, the dotplot, matrix plot, stacked violin and Geary's C figures, the Marker
-Fingerprints cards, the measurement lists in the dialogs, the phenotyping column headers --
-the marker part of the name is bold and the compartment and statistic are not:
-"Nucleus: **CD3** std dev", "Cell: **PCNA**: Mean", "**CD3**: Nucleus: Mean". With no
-statistic, everything after the compartment is bold ("Cell: **Area**"). The heatmap's column
-labels and the phenotyping column headers drop the colons to save width ("Nucleus **CD3** mean").
-The monospaced text
-tables (Marker Rankings, Spatial Autocorrelation, Geary's C) and every CSV stay plain text, so
-what you copy out of them is the name itself.
+The sections follow the order you would read the results in, not the order of the tabs. The
+window opens on the composition and marker tabs; every tab's **Documentation** link opens its
+own section here.
 
 ## Saving and reopening
 
 Every successful run **auto-saves** to `<project>/qpcat/cluster_results/` under a
-timestamped, scope-tagged name (`auto_20260617_193235_leiden`). Nothing to click. The
+timestamped name tagged with the algorithm (`auto_20260617_193235_leiden`); the scope is
+stored with it and shown in the lists. Nothing to click. The
 footer shows where it went and its size on disk; the run is also recorded as a step in
 QuPath's Workflow tab and in `<project>/qpcat/logs/`.
 
@@ -51,7 +46,18 @@ Auto-saves are never deleted automatically.
 <a name="reading-expression"></a>
 ## Reading expression: heatmap, matrix plot, dotplot
 
-Three views of the same per-cluster-per-marker matrix, side by side deliberately.
+Three views of the same per-cluster-per-marker matrix.
+
+**Marker names are bold.** Wherever QP-CAT lists measurement names -- the heatmap's
+column labels, the dotplot, matrix plot, stacked violin and Geary's C figures, the Marker
+Fingerprints cards, the measurement lists in the dialogs, the phenotyping column headers --
+the marker part of the name is bold and the compartment and statistic are not:
+"Nucleus: **CD3** std dev", "Cell: **PCNA**: Mean", "**CD3**: Nucleus: Mean". With no
+statistic, everything after the compartment is bold ("Cell: **Area**"). The heatmap's column
+labels and the phenotyping column headers drop the colons to save width ("Nucleus **CD3** mean").
+The monospaced text
+tables (Marker Rankings, Spatial Autocorrelation, Geary's C) and every CSV stay plain text, so
+what you copy out of them is the name itself.
 
 | View | Shows | Use for |
 |---|---|---|
@@ -65,8 +71,12 @@ collapse to per-cluster means.
 
 ![The Heatmap tab for a seven-cluster KMeans run on the eight-image synthetic dataset. Rows are Cluster 0 to Cluster 6, columns are the 24 "mean" measurements (Nucleus, Cell and Cytoplasm compartments of DAPI, PanCK, Ki67, aSMA, CD3, CD8, CD20 and CD68), with each marker name in bold. Each cluster has a few saturated red columns, for example Cluster 4 in the three CD20 columns and Cluster 6 in PanCK and Ki67. Above the map are the Scale, Colours, Zoom and Rows/columns controls; the colour bar underneath runs from "- per marker" through 0 to "+ per marker" and is titled "cluster mean (z-score)"](images/cluster-marker-heatmap.png)
 
-In the Heatmap, red is high relative expression and blue is low, per marker across
-clusters. This is the tab that tells you which markers define each cluster, and the one
+In the Heatmap, the right end of the color bar is high relative expression and the left end
+low, per marker across clusters: red and blue on the default Blue-White-Red map (z-score),
+yellow and dark purple on Viridis (any other normalization). With any normalization other
+than z-score the bar runs from *low* to *high*, and the line under it reads, for example,
+`cluster mean (min-max 0-1), per marker -- no centre`: the map has no zero to diverge from.
+This is the tab that tells you which markers define each cluster, and the one
 to work from when annotating cell types. Hover over a square for the mean value and the number
 of cells in that cluster -- a mean over 40 cells and a mean over 4,000 look identical here and
 are not equally trustworthy. Zoom with the **-** / **+** / **Reset** buttons or Ctrl+scroll;
@@ -89,7 +99,8 @@ cells in group", which reads as "fraction expressing".
 
 | Normalization | A large dot means | Is that "fraction expressing"? |
 |---|---|---|
-| **Min-Max**, **None** | most of the cluster has **any signal above the marker's minimum** | Yes, when the marker has a zero floor (cells that lack it read exactly 0), which multiplex intensities usually do |
+| **Min-Max** | most of the cluster has **any signal above the marker's minimum** | Yes, when the marker has a zero floor (cells that lack it read exactly 0), which multiplex intensities usually do |
+| **None** | most of the cluster is **above 0 in raw units** | Yes, when the marker has a zero floor; no if the measurement has a background offset, because then every cell is above 0 |
 | **Percentile** | most of the cluster is **above the marker's 1st percentile** | Nearly: the faintest 1% of cells are clipped to the cutoff and count as "off" |
 | **Z-score** (the default) | most of the cluster is **above the marker's mean over every cell in this run** | **No.** The mean is taken over all cells in the run, every image pooled, so a marker in every cell can show a half-size dot |
 
@@ -98,9 +109,9 @@ z-score against the fraction carrying any signal: **DAPI 0.495 vs 1.000**, CD3 0
 0.352, CD8 0.138 vs 0.201. DAPI is in every cell, and under z-score half its dots vanish.
 
 **Dot colour** is the mean of the normalized value per cluster, then **rescaled per marker to
-0-1** (scanpy's `standard_scale="var"`). So within one column, dark is the cluster with the
-highest mean for that marker and pale the lowest; colours are **not** comparable across
-columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
+0-1** (scanpy's `standard_scale="var"`). So within one column, the brightest dot (yellow on
+the default Viridis map) is the cluster with the highest mean for that marker and the darkest
+the lowest; colors are **not** comparable across columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
 The colour scale is titled "Mean in cluster (each marker scaled 0-1)" to say so; scanpy's own
 title, "Mean expression in group", did not.
 
@@ -163,8 +174,7 @@ The **Colours** box offers the colour maps QuPath has installed, **including any
 you have added to QuPath's `colormaps` directory** -- so a lab palette shows up here too. The
 choice is remembered.
 
-**Only maps suited to the data are listed**, and that is the point of the control rather than a
-limitation of it:
+**Only maps suited to the data are listed:**
 
 | Your normalization | Family offered | Default | Why |
 |---|---|---|---|
@@ -201,6 +211,9 @@ pan, hover for details. The plot fills the window and redraws as you resize, and
 gate outlines are clipped to the plot frame when you zoom or pan. A scrollable
 legend lists each cluster with its live colour and cell count.
 
+A second tab, **Embedding Plot**, is the same layout drawn by scanpy as a fixed figure for
+papers. Export it with [**Save plot...**](#saving-a-plot).
+
 ![The UMAP 2D tab for the seven-cluster run: the guide text at the top, the title "UMAP 2D scatter (11421 cells)" with "7 clusters" under it, seven well-separated groups of points, and a legend on the right listing Cluster 0 to Cluster 6 with their cell counts (3299, 1934, 1385, 1553, 1089, 1371, 790). Below the plot are the Gate, Clear, Clear all, Select in open image and Assign class buttons and Save gates / Load gates](images/umap-scatter.png)
 
 **Click a point** to ring it, load a crop preview, open that cell's image (switching
@@ -209,7 +222,7 @@ the loop from an abstract point back to the cell on the slide -- the fastest way
 ground-truth a boundary point or an outlier.
 
 Above **150,000 cells the plot draws a subsample** and says so in its title
-("UMAP 2D scatter (1,240,000 cells, showing 150,000)"). The sample is stratified by
+("UMAP 2D scatter (1240000 cells, showing 150000)"). The sample is stratified by
 cluster with a floor of 500 points each, so a rare population is never proportioned away.
 Zooming restores every point once the visible subset fits. **Display only** -- clustering
 ran on all cells, and gating, hover and navigation all use the full dataset. A million
@@ -274,7 +287,8 @@ Everything else here describes. This one asks whether a cluster is **more or les
 abundant in one group of images than another**: control versus treated, responder versus
 non-responder, primary versus metastasis. It is the question most cohort studies end on.
 
-Pick the **image-metadata key** that says which group each image belongs to (set these in
+The tab appears only when the clustered images carry at least one metadata key. Pick the
+key that says which group each image belongs to in **Group images by:** (set keys in
 QuPath's project pane, or with the
 [Project Metadata Browser](https://github.com/uw-loci/qupath-extension-project-metadata-browser)
 extension). The grouping is read **live from the project**, not stored in the result, so a
@@ -299,7 +313,7 @@ proportion. `q` is the Benjamini-Hochberg adjusted p across the clusters in the 
 per group there are only C(6,3) = 20 ways to arrange the labels, so the most extreme
 possible split carries 1/20 in each tail: the smallest two-sided p a rank test can return
 is **0.1**. Nothing in that table can cross 0.05, and a tool that printed q-values without
-saying so would be inviting you to read noise. The tab states the bound for your design
+saying so would invite you to read noise. The tab states the bound for your design
 explicitly. Five per group is the first size that can reach 0.05 at all (2/252 = 0.008).
 
 **Cluster proportions are compositional.** They sum to 1, so one cluster rising forces the
@@ -319,8 +333,8 @@ metadata is not a condition, so they are never pooled into an extra group. The s
 for an image that contributed no clustered cell at all (all noise, or filtered out): a row
 of zero proportions would be a fabricated observation, not an empty one.
 
-**Group medians are the honest summary.** When the design cannot reach significance, read
-the median column and report the effect as a description.
+**Read the group medians.** When the design cannot reach significance, read the median
+column and report the effect as a description.
 
 <a name="composition-by-annotation-tab"></a>
 ### By annotation
@@ -361,11 +375,16 @@ of named regions still gives a handful of rows. And membership is geometric -- t
 centroid inside the annotation -- with the **innermost** classified annotation winning, so
 a cell in a Tumor annotation inside Tissue reads as Tumor.
 
+A **`(none)`** row is not one of your classes: it is cells inside no classified annotation,
+typically inside a TMA core but in a gap the region detection left unannotated. They are the
+same cells the By area tab shows as `(unassigned)`.
+
 <a name="representative-cells-tab"></a>
 ## Representative cells
 
 Per-cluster gallery of crops of the most typical cells, ranked by distance to the cluster
-centre, with the **medoid** outlined. Click a thumbnail to open its image and centre on
+center, with the **medoid** outlined (the member cell nearest the cluster mean, which QP-CAT
+calls the medoid; not the textbook medoid that minimizes total distance to the others). Click a thumbnail to open its image and centre on
 the cell. **Save montages** writes one PNG strip per cluster to
 `<project>/qpcat/cluster_results/<name>_plots/cluster_<c>_representatives.png`.
 
@@ -378,10 +397,12 @@ the cell. **Save montages** writes one PNG strip per cluster to
   top-ranked markers, plus one **Fixed channel** common to all (normally the nuclear
   stain, to keep an anatomical reference). A legend of the channels used is appended to
   each row.
-- **Channels** -- how many ranked markers per cluster (default 4). The fixed channel does
-  not count towards it.
 - **Fixed channel** -- defaults to the first channel whose name contains DAPI, Hoechst,
   SYTOX, DRAQ5, TO-PRO, PI, Nucleus, Nuclear or DNA. **(none)** adds no fixed channel.
+- **Channels** -- how many ranked markers per cluster (default 4). The fixed channel does
+  not count towards it.
+- **Update from viewer** -- draws the crops again after you change the viewer's channels or
+  contrast.
 
 Channels are matched by looking for a channel name inside each measurement name, which
 works across detection engines that name things differently ("CD8: Cell: Mean",
@@ -417,8 +438,8 @@ was. This tab reports it, and the run writes it to every cell as a measurement.
 | **KMeans / MiniBatch KMeans** | separation margin `(d2-d1)/d2` over the nearest two centroids | **No** -- a distance ratio with no calibration |
 | Leiden, Agglomerative, BANKSY | none exists | -- |
 
-**The tab does not appear for the bottom row.** That is the honest outcome: those methods
-produce no such quantity, and an empty column would imply every label was certain. Nothing
+**The tab does not appear for the bottom row.** Those methods produce no such quantity,
+and an empty column would imply every label was certain. Nothing
 is fabricated for them.
 
 **The three are not merged into one column**, and the measurement name says which you have
@@ -464,18 +485,23 @@ Two checks you ask for before the run, in the **Validation** section of the Clus
 (collapsed by default, under the analysis tick-boxes). Both are off by default. The tab appears only when at least one was
 computed, and both are saved with the result, so the tab comes back when you reopen it.
 
+| Check box | Set to |
+|---|---|
+| **Stability across seeds (re-runs the clustering)**, with **Extra runs:** beside it | ticked, Extra runs 5 (2 to 20) |
+| **Agreement with the classifications the cells already have** | ticked when the cells already carry a phenotyping, annotation or ground-truth class |
+
 ![The Validation tab for a KMeans run with k = 7 on the eight-image synthetic dataset, with both checks on. Under "Stability across seeds": "6 runs: seed 42 plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000", and a table of the seven clusters with their cells, a consistency of 1.00 and 100.0% kept together for each. Under "Agreement with known classes": "11,419 cells compared, 2 unclassified excluded. Adjusted Rand index 0.982, normalized mutual information 0.971", Cohen's kappa 0.989 after matching and purity 99.1%, followed by a cluster x class table in which each cluster is matched to one true cell type, for example Cluster 0 to fibroblast with 3294 cells](images/validation-tab.png)
 
 <a name="stability-across-seeds"></a>
 ### Stability across seeds
 
 **What it does.** After the run, QP-CAT clusters the same matrix again, **Extra runs** times
-(default 5), each with a different seed (your seed + 1, + 2, ...). Only the clustering step is
+(default 5, range 2 to 20), each with a different seed (your seed + 1, + 2, ...). Only the clustering step is
 repeated, on exactly the matrix the run clustered: the normalization, PCA precursor and batch
 correction are not redone, and the embedding is not recomputed. Leiden rebuilds its
 nearest-neighbour graph each time, because that graph is seeded too.
 
-**What it reports.**
+#### What it reports
 
 - **Adjusted Rand index (ARI)** between every pair of runs, the reported one included: its
   mean and its lowest value. 1 means the same partition; it does not care which number a
@@ -485,7 +511,9 @@ nearest-neighbour graph each time, because that graph is seeded too.
   counts the fewest clusters of the re-run that together hold 95% of that cluster's cells,
   then averages over the re-runs. 1 means the cluster came back intact every time; 2 means
   it was typically split in two. The overall score is the average over cells. This is the
-  *cluster consistency score* of Pixie (Liu et al. 2023), measured against the clusters you
+  *cluster consistency score* of Pixie
+  ([Liu et al. 2023](references.md#validation-stability-across-seeds-and-agreement-with-known-classes)),
+  measured against the clusters you
   are looking at rather than between every pair of re-runs, so it can be read per cluster.
 - **Kept together**: the share of a cluster's cells that one re-run cluster holds, averaged
   over the re-runs.
@@ -495,7 +523,7 @@ well above 1, or with a low kept-together share, splits or merges when nothing b
 changes; do not name it as a population until it holds up. A low ARI with every cluster near
 1 usually means one or two small clusters move while the rest stay put.
 
-**Limitations.**
+#### Limitations
 
 - It tests the **seed only**. Stable clusters can still be wrong: a batch effect is perfectly
   reproducible. It says nothing about stability to other cells or other measurements; Pixie
@@ -514,7 +542,7 @@ changes; do not name it as a population until it holds up. A low ARI with every 
 **before** the run: a phenotyping, a manual annotation, ground truth you imported. It is
 read from the cells as the run extracts them, before the run writes its own classes.
 
-**What it reports.**
+#### What it reports
 
 - **Adjusted Rand index** and **normalized mutual information** (NMI, arithmetic
   normalization as in scikit-learn): both 1 for the same partition and both blind to which
@@ -544,10 +572,12 @@ classifications* the option is off, because the classes are the labels there.
 
 ### What the numbers look like on data with a known answer
 
-Measured 2026-10-19 on the synthetic tumour-microenvironment dataset (v1.2, 8 images, 11,421
-detected cells), each cell classified with its true type matched by centroid, with tumour
-cells split by their Ki67 flag into seven classes (2 cells had no true cell within 10 px and
-were excluded). Clustered on the 24 "mean" measurements, z-score, seed 42, 5 extra runs:
+Measured 2026-10-19 with the harness scenario `harness/QpcatValidationScenario.java` (both
+columns, and the screenshot above) on the synthetic tumor-microenvironment dataset (v1.2, 8
+images, 11,421 detected cells), each cell classified with its true type matched by centroid
+within 10 px, with tumor cells split by their Ki67 flag into seven classes (2 cells had no
+true cell within 10 px and were excluded, so 11,419 were compared). Clustered on the 24
+"mean" measurements, z-score, seed 42, 5 extra runs:
 
 | | KMeans, k = 7 | Leiden, n_neighbors 50, resolution 1.0 |
 |---|---|---|
@@ -557,7 +587,7 @@ were excluded). Clustered on the 24 "mean" measurements, z-score, seed 42, 5 ext
 | ARI / NMI against the true types | 0.982 / 0.971 | 0.537 / 0.794 |
 | Kappa after matching / purity | 0.989 / 99.1% | 0.577 / 98.3% |
 
-The Leiden run is the instructive one. Its clusters are almost pure (98.3%), but it split the
+In the Leiden run the clusters are almost pure (98.3%), but it split the
 fibroblasts into seven clusters and the Ki67-negative tumour cells into three, so kappa and
 ARI are low. Five of the seven fibroblast clusters are also the ones that moved between seeds
 (consistency 1.6 to 2.2), against 1.00 for the B-cell and Ki67+ tumour clusters. Two clusters
@@ -591,13 +621,25 @@ T cells -- then validate against the heatmap.
 
 **Marker Fingerprints** draws the same information per cluster as a compact profile, for
 comparing clusters at a glance rather than reading a table. **Markers per cluster** goes up to
-the number the run ranked, 5 per cluster.
+the number the run ranked, 5 per cluster. Pick a view under **View:** *Measurements* (one card
+per cluster, its top markers as log2 fold-change bars), *Channels* (the image channels those
+markers come from) or *Channels -> clusters* (one card per channel, listing the clusters it
+defines). **Find marker:** highlights a marker on every card.
 
 > **These tabs may be missing.** The ranking compares each cluster against all others,
 > so a result with only one group has nothing to compare against and the tabs do not appear.
 > Other reasons include having too few cells to build a neighbor graph, or the ranking itself
 > failing. If the tabs are absent, check the **quality warnings** shown at the top of the
 > results window for why.
+
+<a name="cluster-explainer-llm-tab"></a>
+## Cluster Explainer (LLM) [Experimental]
+
+Appears whenever the result has marker rankings. It suggests a cell-type name per cluster
+from the cluster's top markers: from any chatbot you already use (copy the prompt, paste the
+reply; no key), the Anthropic API, a local Ollama server (never run), or an AI agent over the
+[MCP server](mcp-server.md). It is marked Experimental: check every suggestion against Marker
+Rankings and the Heatmap. Full guide: [LLM explainer](llm-explainer.md).
 
 <a name="paga-trajectory-tab"></a>
 ## PAGA Trajectory -- read this before using it
@@ -641,10 +683,8 @@ ladder -- force-directed graph, diffusion map, PAGA, diffusion pseudotime -- on 
 dataset, and is blunter about the risk than most tool documentation: you must know the
 biology *before* you look, and these methods "can pretty easily force branches to appear
 even if they are not biologically real." QP-CAT ships the PAGA rung of that ladder and
-nothing above it, deliberately; whether the rest belongs here is still open.
+nothing above it, deliberately.
 
-<a name="ripley-l-tab"></a>
-<a name="cluster-explainer-llm-tab"></a>
 ## Spatial tabs
 
 These appear when the corresponding statistic ran. What each one answers, and when to
@@ -656,9 +696,8 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 | **Geary's C** | Per measurement, ranked by C: C < 1 nearby cells similar, ~1 random, > 1 dissimilar, plus the same per-image count. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
 | **Neighborhood Enrichment** | Cluster x cluster permutation z-score, with the number of graph edges behind each one: z > 0 = neighbors more often than chance, z < 0 = less. The standard interaction matrix. The **(plot)** tab is the same matrix as a heatmap, whose colour scale is not centred on zero. [Full description below](#neighborhood-enrichment-tab). |
 | **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
-| **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. |
+| **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. [Full description below](#ripley-l-tab). |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
-| **Cluster Explainer (LLM)** | Per-cluster cell-type suggestions, from any chatbot you already use (copy the prompt, paste the reply; no key) or the Anthropic API. See [LLM explainer](llm-explainer.md). Always validate against Marker Rankings. |
 
 <a name="co-occurrence-tabs"></a>
 ### Co-occurrence: the value, the radius, and what each view aggregates
@@ -710,7 +749,7 @@ Radii are in **um** whenever every image in the run has a pixel size -- a cluste
 clustering run that includes an uncalibrated image stays in **px** throughout (the post-hoc
 path decides per image), and the line says so.
 
-**What each view aggregates -- the one that catches people out:**
+#### What each view aggregates
 
 | View | Rows / cells | Radius |
 |---|---|---|
@@ -832,7 +871,7 @@ against a null built by shuffling the cluster labels. z > 0 means more often tha
 z < 0 less, and the diagonal is a cluster's tendency to neighbour itself.
 
 This is the field's standard interaction matrix (squidpy's `nhood_enrichment`; imcRtools'
-`testInteractions` after Schapiro 2017), and it is the tab to read pairwise associations
+`testInteractions` after [Schapiro et al. 2017](references.md#neighborhood-enrichment)), and it is the tab to read pairwise associations
 off -- a square matrix with an established interpretation, which is what the co-occurrence
 matrix is not.
 
@@ -842,12 +881,17 @@ changes these numbers.
 **Two tabs show it.** **Neighborhood Enrichment** is the table: rows are the cell's cluster,
 columns its neighbor's, and each entry reads `z (edges)`, e.g. `7.3 (6061)`. *Edges* is how
 many graph edges from a row-cluster cell to a column-cluster neighbor the z rests on. A
-large z from a handful of edges is weak evidence, so read the two together. The matrix is not
-symmetric, because a k-nearest-neighbor graph is not: B can be among A's nearest neighbors
-without A being among B's. **Neighborhood Enrichment (plot)** is squidpy's heatmap of the z
-values alone: brighter (toward yellow) is more often than chance, darker (toward purple) is
-less. Its colour scale runs from the matrix's own minimum to its maximum rather than being
-centred on zero, so read the colour bar to find where zero falls.
+large z from a handful of edges is weak evidence, so read the two together. With the kNN
+graph the matrix is not symmetric, because a k-nearest-neighbor graph is not: B can be among
+A's nearest neighbors without A being among B's. With the Radius or Delaunay graph the edge
+counts are symmetric. **Neighborhood Enrichment (plot)** is squidpy's heatmap of the z values
+alone: brighter (toward yellow) is a higher z and darker (toward purple) a lower one. The color
+scale runs from the matrix's own minimum to its maximum, not centered on zero, so a dark cell
+can still be above chance: read the color bar to find where zero falls.
+
+The null comes from 1000 permutations with a fixed seed, so re-running gives the same z. A
+result saved by an earlier version of QP-CAT shows "z-score (edge counts were not recorded for
+this result)" and no edge counts; re-run the statistic to get them.
 
 ![The Neighborhood Enrichment tab for the seven-cluster run. The guide text explains the table; the table's header reads "z-score (edges)" and "1000 permutations; cluster labels shuffled within each of 8 areas". Rows and columns are Cluster 0 to Cluster 6; for example Cluster 4 next to itself reads 147.6 (9500) and Cluster 1 next to Cluster 6 reads 72.6 (5187). Copy text, Copy CSV and Save CSV buttons sit under the table](images/neighborhood-enrichment-table.png)
 
@@ -855,8 +899,9 @@ centred on zero, so read the colour bar to find where zero falls.
 images (or cores, or sections), labels are shuffled within each one, matching the neighbor
 graph, which never joins two of them. Earlier versions shuffled them across every cell in
 the run, so a difference in composition between images (one image with no B cells, say)
-counted as neighborhood structure. On the 8-image synthetic TME dataset (11,416 cells
-labelled by their ground-truth type, kNN graph, k = 15) the change moved z by 3.0 on average
+counted as neighborhood structure. In a separate live run on the 8-image synthetic TME
+dataset (11,416 cells labeled by their ground-truth type, matched by centroid within 6 px, 5
+cells unmatched; kNN graph, k = 15) the change moved z by 3.0 on average
 across the 36 pairs and by at most 8.9; no pair changed sign, and three crossed |z| = 2. The
 largest change in meaning was fibroblast-to-helper-T, from 0.3 (no association) to 7.3.
 
@@ -871,8 +916,8 @@ line), to `qpcat_neighborhood_enrichment.csv`.
 ### Spatial Scatter
 
 Every cell drawn at its **tissue coordinates**, coloured by cluster. This is the map, not
-the embedding: two clusters that overlap in the embedding but sit in different parts of
-the section are the thing this tab exists to show.
+the embedding: it shows when two clusters that overlap in the embedding sit in different
+parts of the section.
 
 **One plot per image, chosen from a dropdown.** Cells from different images share no
 coordinate frame, so there is no combined view -- overlaying them would draw a picture of
@@ -882,7 +927,7 @@ how the files happen to be numbered.
 
 The **Spatial Autocorrelation**, **Geary's C**, **Neighborhood Enrichment**, **Ripley L**, and **Co-occurrence** tabs display numeric tables optimized for on-screen reading (fixed-width layout). For re-analysis in a spreadsheet or stats package, each table can be exported as CSV in **long form** -- one row per observation, every column named explicitly.
 
-Buttons above each table:
+Buttons under each table:
 - **Copy text** -- copies the table exactly as shown, spacing preserved (not Ripley L, which is a chart).
 - **Copy CSV** -- copies comma-separated rows in long form, ready to paste into a spreadsheet or R/Python.
 - **Save CSV...** -- writes the long-form CSV to a file (default filename based on the statistic: `qpcat_moran_i.csv`, `qpcat_geary_c.csv`, `qpcat_ripley_l.csv`, `qpcat_cooccurrence_pairwise.csv`, `qpcat_cooccurrence_one_vs_rest.csv`, `qpcat_neighborhood_enrichment.csv`).
@@ -892,9 +937,10 @@ Buttons above each table:
 The Moran's I and Geary's C CSVs have one row per (measurement, area): the row with
 `area = all` is the pooled statistic and carries `p_value` (the corrected q shown on
 screen), `p_value_uncorrected`, the `areas_above_threshold` / `n_areas` count and the
-`threshold`; each area the run evaluated on its own gets a row with only its I or C, which
+`threshold`, and `p_value_method` says how `p_value` was corrected; each area the run evaluated on its own gets a row with only its I or C, which
 is the evidence behind the count.
 
+<a name="ripley-l-tab"></a>
 ### Ripley L: controlling cluster visibility
 
 The **Ripley L** chart opens showing the first cluster only, with **Recommend 1 at a time** under **Show clusters**. Each cluster draws three lines, not one: its curve, plus the two dashed edges of its own simulated-random band. Seven clusters is therefore twenty-one lines, and the question the chart exists to answer -- is this curve outside *its* band, and at which radii -- cannot be read off it. With one cluster shown the axes rescale onto that cluster and the answer is direct.
@@ -922,7 +968,8 @@ name.
 
 For many plots across many images, use [batch figure export](exporting.md).
 
-## Cluster colours
+<a name="cluster-colours"></a>
+## Cluster colors
 
 **Extensions > QP-CAT > Results & populations > Apply cluster color palette...** sets the
 palette. Colours update live in the embedding, the composition pies and the viewer.

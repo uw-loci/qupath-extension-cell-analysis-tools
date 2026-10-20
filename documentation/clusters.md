@@ -19,8 +19,11 @@ or push it onto another image's detections.
 
 - Each row is a cluster, each column is a marker
 - Look for **distinct expression patterns** -- good clusters have markers that are clearly high in some clusters and low in others
-- **Uniform rows** suggest the cluster may be splitting similar cells -- too many clusters
-- **Very similar rows** suggest two clusters could be merged -- too few clusters
+- **Very similar rows** (two clusters with the same profile) suggest they could be merged:
+  too many clusters
+- **A uniform row**, with no marker clearly high or low, is a cluster with no defining marker:
+  often a sliver split off a neighbor (too many clusters) or a mixture of cell types (too few).
+  Check its Marker Rankings before deciding
 
 ### Marker Rankings
 
@@ -39,17 +42,19 @@ or push it onto another image's detections.
 - Clusters should form visually distinct groups in UMAP/t-SNE space
 - **Fragmented clusters** (same color scattered across the plot) may indicate poor clustering
 - **Overlapping clusters** may indicate too many clusters specified
-- **Click a point** to preview its cell (a crop loads below the plot) and select it in the
-  hierarchy if its image is open; **double-click** to open that cell's image and center the
-  field of view on it. Use this to ground-truth surprising points -- a cell sitting on a
+- **Click a point** to ring it, open that cell's image if it is not already open, center the
+  viewer on it and select it; a crop of the cell loads below the plot. Use this to ground-truth surprising points -- a cell sitting on a
   cluster boundary, or an outlier far from its group -- by looking at the actual pixels.
 - Pan with a **middle-drag** (left-click is reserved for selection); scroll to zoom.
 
 ### Representative Cells
 
 The **Representative cells** tab shows image crops of the most typical cells in each cluster.
-For each cluster, cells are ranked by distance to the cluster center and the closest few are
-shown (the **medoid** -- the single closest real cell -- is outlined). Click any crop to open
+For each cluster, cells are ranked by distance to the cluster center and the 5 closest are
+shown (the **medoid** -- the single closest real cell -- is outlined; QP-CAT calls the member
+cell nearest the cluster mean the medoid, which is not the textbook medoid that minimizes the
+total distance to the other cells). [Representative cells](results.md#representative-cells-tab)
+describes the tab's controls. Click any crop to open
 its image and center on it; **Save montages** writes one PNG strip per cluster next to the
 other result plots.
 
@@ -73,7 +78,6 @@ Caveats:
 - The crop window is a multiple of each cell's bounding box (default 3x), so the cell fills a
   consistent fraction of every thumbnail regardless of objective magnification.
 
-<a name="reading-the-composition-tabs"></a>
 ### Iterate
 
 Clustering is rarely perfect on the first try. A typical workflow:
@@ -83,24 +87,15 @@ Clustering is rarely perfect on the first try. A typical workflow:
 4. Merge or rename clusters for biological interpretability
 
 ---
-
-
----
 <a name="renaming-and-merging"></a>
 ## Modifying clusters
 
 One dialog does four things to the populations a clustering run produced:
 **rename** them, **merge** several into one, **split** a merge back apart, and
-**sub-cluster** one into sub-types. All four apply across every image the run covered.
+**sub-cluster** one into sub-types. All four apply across every image the run covered, not
+just the open image.
 
-**Extensions > QP-CAT > Results & populations > Modify cell populations (rename, merge, split,
-sub-cluster)...**, or the **Modify clusters...** button in the Results window, which
-pre-selects the result you are viewing.
-
-
-Rename clusters to biological names (e.g. "Cluster 3" -> "CD8+ T Cells") or merge several
-clusters into one -- **across every image the clustering run covered**, not just the open
-image.
+<!-- TODO: Add screenshot of the Modify Clusters dialog with a merged row selected -->
 
 A rename or merge is a label edit, so it has to reach the same cells the run labelled. The
 dialog is therefore built around a **saved clustering result**: it reads the run's per-cell
@@ -131,7 +126,8 @@ You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Result
 8. Click **Apply**. You are asked to name the **new copy** (default `<result>_renamed`). QP-CAT
    then writes that copy and relabels the detections across all referenced images; a busy
    indicator runs while it works, and a summary reports how many cells were relabelled per
-   image. Labels appear live -- no manual "Reload data" needed.
+   image ("Relabelled N cells across M image(s)."). Labels appear live -- no manual "Reload
+   data" needed.
 
 The original saved result and its plots are left untouched, so you can always go back to the
 run's original labels.
@@ -187,8 +183,8 @@ five near-identical names read as five unrelated results rather than a history.
 re-applies the parent version's cluster names to the detections across the same images. It
 does **not** delete anything -- both versions stay saved.
 
-**Stepping forward is the same move.** **Put this version on the cells** re-applies whichever
-saved result is currently selected. Step back, look, step forward again; or jump straight
+**Put this version on the cells** re-applies whichever saved result is currently selected,
+which steps forward as easily as back. Step back, look, step forward again; or jump straight
 between any two versions. Neither button writes a copy, so switching versions does not grow
 the chain.
 
@@ -245,9 +241,14 @@ that the saved-result path takes over and this one disappears.
 
 ### Sub-clustering: cluster within a cluster
 
-Select **exactly one** cluster and click **Sub-cluster...** to re-cluster only that population.
-The clustering dialog reopens as **QPCAT - Sub-cluster '<class>'**, scoped to that class, and the result is written back as
-`<name>.0`, `<name>.1`, ... replacing the parent class on those cells.
+To re-cluster only one population:
+
+1. Select **exactly one** cluster.
+2. Click **Sub-cluster...**. The clustering dialog reopens as **QPCAT - Sub-cluster '<class>'**,
+   scoped to that class.
+
+The result is written back as `<name>.0`, `<name>.1`, ... replacing the parent class on those
+cells.
 
 This is the answer to having too few clusters when raising the resolution globally would over-split
 everything else: cluster on lineage markers first, then sub-cluster one lineage on its functional
@@ -288,8 +289,9 @@ sub-clustering on its own cannot -- how the sub-clusters differ from the parent'
 clusters, not just from each other.
 
 **It writes nothing.** No classification is created, changed or removed. It is the read-only
-counterpart to clustering, which matters because it deliberately reads classes QP-CAT did not
-create.
+counterpart to clustering, so you can run it on phenotyping output or imported classes without
+changing them. The result is auto-saved and listed in **View Past Results** as "analyzed
+current classifications", so you can reopen it later.
 
 Because it reads the **objects**, not a saved result, the cells have to be carrying the
 labelling you want to see. Straight after a sub-cluster run they are. To get back there from
@@ -375,7 +377,8 @@ for the population to be traceable back to the geometry that chose it.
 on both plots. **Save** writes every outline on the plot -- the labelled ones and
 the one you are drawing -- to a file you name. **Load** puts them back.
 
-The file is plain JSON you can read without QuPath:
+The file is plain JSON you can read without QuPath (abridged here; the file also records
+`qpcatVersion`, `created` and `scope`):
 
 ```json
 {
@@ -399,8 +402,6 @@ not depend on the zoom, the window size or the screen it was drawn on.
 
 #### A gate on an embedding is only replayable onto the same coordinates
 
-This is the one failure you cannot see, so QP-CAT checks it for you.
-
 A polygon will happily draw itself onto any plot. Whether the cells underneath are
 the cells it was drawn around is a question about the **axes**, and the two axis
 kinds are completely different:
@@ -417,8 +418,8 @@ kinds are completely different:
   arrangement is Kobak & Linderman's finding -- see
   [References](references.md#embedding-layout-is-not-stable).)
 
-**Measured, because the size of this matters.** 600 cells in three well-separated
-blobs; a gate drawn around one blob held about 200 cells. Re-lay the same cells --
+Measured in `GateSetTest` (`src/test/java/qupath/ext/qpcat/model/GateSetTest.java`): 600 cells
+in three well-separated blobs; a gate drawn around one blob held about 200 cells. Re-lay the same cells --
 reflect, rotate 37 degrees, rescale 1.1, which changes no neighbour and no cluster
 -- and drop the same polygon back on:
 
@@ -528,8 +529,8 @@ keep the cells.
 **One file per cell means the filesystem carries the export.** A 300,000-cell
 project is 300,000 PNGs. So the export takes a **total cell budget** (default
 2,000), spread across classifications in proportion to their size with a floor
-(default 30) so a rare population is not sampled away. The draw is seeded, so the
-same settings write the same file twice. It is a **sample**: counts read off the
+(default 30) so a rare population is not sampled away. The draw is seeded (seed 42,
+recorded in `README.txt`), so the same settings write the same file twice. It is a **sample**: counts read off the
 table are counts of the sample, and `README.txt` says so along with exactly what
 was left out and why.
 
@@ -541,8 +542,8 @@ was left out and why.
 - Scope can be the current image, the whole project or a chosen subset; crop
   filenames are globally unique across images.
 - The TSV is written as UTF-8 **without** a byte-order mark and the CSV **with**
-  one. That is not a detail: a BOM would rename TraitHorizon's required
-  `filename` column to something it does not recognise, and Excel without one
+  one. A BOM would rename TraitHorizon's required
+  `filename` column to something it does not recognize, and Excel without one
   mangles the non-ASCII characters ordinary QuPath measurement names carry.
 - TraitHorizon links each object out to an external viewer by URL. QP-CAT does not
   write that column, because [clicking a point](#embedding-scatter-plot) already
@@ -572,7 +573,7 @@ detections without colliding on a shared "Cluster N". The saved palette is resto
 onto those namespaced classes, and any applied embedding measurements are likewise
 prefixed with the result name.
 
-**Options.**
+#### Options
 
 - *Current image only* vs *All images referenced by the result*.
 - *Also write the saved embedding coordinates* (adds `<result>1`/`<result>2`).
