@@ -58,8 +58,7 @@ plots), so to cluster *on the embedding* you run it in two steps.
    for X cells.", and the cells take their cluster colors in the viewer, with noise left
    unclassified.
 
-**Then find out what the clusters ARE.**
-Clustering on two (or three) embedding columns means Marker Rankings, the heatmap and the fingerprints
+**Then find out what the clusters ARE.** Clustering on two (or three) embedding columns means Marker Rankings, the heatmap and the fingerprints
 can only rank those two or three columns -- they will tell you a cluster is high in `UMAP2`, which is
 not a phenotype. The markers are still on the cells; nothing has read them yet.
 
@@ -94,7 +93,7 @@ So the pair is: cluster in the embedding, characterize in marker space.
   records both), and pin `min_samples` to a fixed number if you need the two
   separated.
 - **HDBSCAN is the DBSCAN to use here.** QP-CAT ships **HDBSCAN** (Campello et al. 2013;
-  McInnes, Healy & Astels 2017), not plain DBSCAN. It is the usual choice over plain DBSCAN:
+  McInnes, Healy & Astels 2017) rather than plain DBSCAN, the usual choice because
   there is no global `eps` to guess, it handles clusters of different density, and it leaves
   low-density points as noise: they stay unclassified
   and are counted separately, never as a cluster ("5 clusters (+606 noise)"). See the HDBSCAN parameters

@@ -87,7 +87,7 @@ catalog matches theirs while reusing the squidpy backend it already ships.</sub>
 - **Internet connection** for initial environment setup (~1.5-2.5 GB download)
 - **Disk space** ~2.5 GB for the Python environment
 - **GPU** (optional) -- Clustering, UMAP, and spatial statistics run on CPU. Only the autoencoder uses a GPU when available. You can choose CPU-only (default, installs anywhere) or GPU/CUDA (requires an NVIDIA GPU) at setup time. See [GPU acceleration guide](documentation/setup.md#cpu-or-gpu) for details on what does and doesn't benefit.
-- **LLM provider account or local Ollama** (optional) -- for the *Cluster Explainer (LLM) [Experimental]* feature. Nothing is required if you use the "Any chatbot" provider (copy the prompt, paste it into claude.ai / ChatGPT / Gemini / Copilot / your own model, paste the reply back), or if you let an MCP-capable AI agent you already use (Claude Code, Codex, Cursor, Gemini CLI) do the round trip through QP-CAT's local [MCP server](documentation/mcp-server.md), which is off until you start it and has so far connected only to Claude Code and a Python test client, on Linux. Alternatively, choose: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab each session (held in memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported.
+- **LLM provider account or local Ollama** (optional) -- for the *Cluster Explainer (LLM) [Experimental]* feature. Nothing is required if you use the "Any chatbot" provider (copy the prompt, paste it into claude.ai / ChatGPT / Gemini / Copilot / your own model, paste the reply back), or if you let an MCP-capable AI agent you already use (Claude Code, Codex, Cursor, Gemini CLI) do the round trip through QP-CAT's local [MCP server](documentation/mcp-server.md), which is off until you start it and has so far connected only to Claude Code and a Python test client, on Linux. Alternatively, choose: (a) an Anthropic API key from [console.anthropic.com](https://console.anthropic.com/), entered in the Cluster Explainer tab of each results window (held in that window's memory only -- never written to disk); (b) a running [Ollama](https://ollama.com/) instance reachable from your machine (default `http://localhost:11434`). OpenAI is not supported.
 
 ---
 
@@ -358,7 +358,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 |---|---|---|---|
 | **Any chatbot (copy prompt, paste reply)** | No key, no installation, works with any LLM (claude.ai, ChatGPT, Gemini, Copilot, Ollama, local model) | Multi-step workflow (copy → paste into chatbot → paste back) | — (user types chatbot name for the record) |
 | **MCP server (AI agents)** (not in the Provider box; the agent starts it, see [MCP server](documentation/mcp-server.md)) | No key; the agent does the whole round trip from one sentence you type; explanations saved into the result | Needs an MCP-capable agent (Claude Code, Codex, Cursor, Gemini CLI); a local server you start and stop, with a [security model](documentation/mcp-server.md#security) to read; only Claude Code and a Python test client, on Linux, have connected so far | — (the agent supplies its own label for the record) |
-| **Anthropic (Claude API)** | Hosted; structured output via tool use | Costs money per call; key must be re-entered each session | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
+| **Anthropic (Claude API)** | Hosted; structured output via tool use | Costs money per call; key must be re-entered in each results window | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
 OpenAI is intentionally **not** supported.
@@ -379,7 +379,7 @@ Per cluster: the cluster id and its top-N markers (default 10) by Wilcoxon score
 
 ### BYO Key Handling
 
-The API key is entered in a TextField on the explainer tab. It is held in memory only for the lifetime of the QuPath session and is never written to disk, never logged, and never written into the saved result. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
+The API key is entered in a TextField on the explainer tab. It is held in that results window's memory only, and is discarded when the window closes; it is never written to disk, never logged, and never written into the saved result. For headless / power-user setups, the key can be supplied via the `QPCAT_ANTHROPIC_KEY` environment variable instead; if set, the TextField is pre-populated as masked text and can be left empty.
 
 See [LLM explainer documentation](documentation/llm-explainer.md) for the full workflow and [guidance on when to trust the output](documentation/llm-explainer.md#when-it-is-worth-using).
 

@@ -159,6 +159,7 @@ Z-score, 0.3-0.7 for Min-Max and Percentile, and raw intensity units for None.
 ## Choosing an algorithm
 
 <a name="cluster-labels-are-hypotheses"></a>
+
 ### A cluster label is a hypothesis, not a measured cell type
 
 The number of clusters depends on the parameters you choose, and **every method here
@@ -184,6 +185,7 @@ Either way:
   actually separate the clusters.
 
 <a name="checking-the-clusters-the-validation-section"></a>
+
 ### Checking the clusters: the Validation section
 
 1. **Expand Validation** (below the analysis tick-boxes; collapsed, both checks off by default).
@@ -208,6 +210,7 @@ Hungarian matching. Sources in
 [References](references.md#validation-stability-across-seeds-and-agreement-with-known-classes).
 
 <a name="marker-pvalues-are-circular"></a>
+
 ### The marker p-values are circular -- read the ranking, not the p
 
 The **Marker Rankings** and **Marker Fingerprints** tabs run scanpy's Wilcoxon rank-sum
@@ -251,6 +254,7 @@ This is the same family of problem as
 over-trusting a boundary the method was free to draw wherever it liked.
 
 <a name="choosing-k"></a>
+
 ### Choosing k
 
 KMeans, MiniBatch KMeans, Agglomerative and GMM all make you name the number of clusters.

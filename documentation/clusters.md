@@ -573,7 +573,7 @@ detections without colliding on a shared "Cluster N". The saved palette is resto
 onto those namespaced classes, and any applied embedding measurements are likewise
 prefixed with the result name.
 
-#### Options
+### Options
 
 - *Current image only* vs *All images referenced by the result*.
 - *Also write the saved embedding coordinates* (adds `<result>1`/`<result>2`).

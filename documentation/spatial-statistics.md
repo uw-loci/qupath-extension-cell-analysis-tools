@@ -333,7 +333,7 @@ key, so they are analyzed as the single population the merge made them.
 **Scope.** Current image / all project images / a chosen subset (via the standard
 scope control). Every image in the scope is analyzed independently.
 
-#### Analysis areas
+### Analysis areas
 
 The dialog uses the shared **Independent areas** control (the same one used by
 the clustering and neighborhood workflows) to partition cells into separately-analyzed
@@ -350,7 +350,7 @@ pieces. Two modes:
 Annotations define areas **only** -- detections are never reparented, so a cell can
 belong to several areas. Unclassified (null-class) cells are excluded.
 
-#### Independent areas
+### Independent areas
 
 By default, each image is analyzed as one piece. You can partition cells **below**
 the image level by configuring **Independent areas**. Each area gets its own spatial
@@ -394,7 +394,7 @@ per-area ROI identity) under `<project>/qpcat/spatial_stats/`. Neighborhood enri
 writes two rows per ordered cluster pair (`key` = `A > B`): `nhood_z` and `nhood_edges`. Nothing is written
 to the object hierarchy -- this is read-only.
 
-#### Interpretation caveats
+### Interpretation caveats
 - **Ripley L** compares each class with random points simulated inside the convex hull
   of the area's cells. On a concave area (a crescent, a ring, a section with a hole) the
   hull includes empty space, so every class reads as more clustered than it is. Trust L

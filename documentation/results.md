@@ -44,6 +44,7 @@ Auto-saves are never deleted automatically.
 <a name="matrix-plot-tab"></a>
 <a name="dotplot-tab"></a>
 <a name="reading-expression"></a>
+
 ## Reading expression: heatmap, matrix plot, dotplot
 
 Three views of the same per-cluster-per-marker matrix.
@@ -88,6 +89,7 @@ shape measurements appear alongside intensities if they were selected for the ru
 only `...: Mean` columns is a run in which only those were ticked.
 
 <a name="dot-size"></a>
+
 ### What the Dotplot's dot size and colour actually mean
 
 **Dot size** is the fraction of a cluster's cells above a cutoff. scanpy puts that cutoff at
@@ -128,6 +130,7 @@ exactly 0 for each lineage marker -- so the figure is normally drawn. Re-running
 different Normalization changes the clustering itself, not only this figure.
 
 <a name="stacked-violin-tab"></a>
+
 ### Stacked Violin
 
 One violin per cluster per marker: the **distribution** of each marker's values within a
@@ -168,6 +171,7 @@ sits under the dendrogram rather than in a column of its own.
 ![A stacked violin from the same seven-cluster run. One row per cluster, one violin per measurement, filled by the cluster's median on a white-to-dark-blue scale titled "Median in cluster (z-score)". Most violins are thin lines with a flat base; the DAPI violins are full ovals, and the defining markers stand out as wide dark violins, such as cluster 6 in Ki67 and cluster 4 in CD20. Labels are angled at 45 degrees with the marker in bold, and a dendrogram on the right groups the clusters](images/stacked-violin.png)
 
 <a name="heatmap-colours"></a>
+
 ### Choosing the colour map
 
 The **Colours** box offers the colour maps QuPath has installed, **including any `.tsv` maps
@@ -203,6 +207,7 @@ the colour is taken over what is shown, so colours do change when you filter. Th
 
 <a name="embedding-tab-interactive"></a>
 <a name="embedding-plot-tab"></a>
+
 ## Embedding
 
 Interactive 2D scatter of every cell, coloured by cluster, in a tab named after the embedding
@@ -260,6 +265,7 @@ the viewer.
 
 <a name="composition-by-image-tab"></a>
 <a name="composition-by-image"></a>
+
 ### By image
 
 The batch-effect check, and worth making a habit on any project-wide run. Biologically
@@ -281,6 +287,7 @@ conditions.
 > other images lack.
 
 <a name="composition-by-group-tab"></a>
+
 ### By group -- the only tab that tests
 
 Everything else here describes. This one asks whether a cluster is **more or less
@@ -337,6 +344,7 @@ of zero proportions would be a fabricated observation, not an empty one.
 column and report the effect as a description.
 
 <a name="composition-by-annotation-tab"></a>
+
 ### By annotation
 
 Grouped by each cell's **parent annotation** -- the named region it was inside when the
@@ -344,6 +352,7 @@ run happened. Appears **only for annotation-input runs** (you had annotations se
 when you launched). Cells outside any annotation group under `(none)`.
 
 <a name="composition-by-area-tab"></a>
+
 ### By area
 
 Grouped by [independent area](spatial-neighborhoods.md#independent-areas) -- one row per
@@ -360,6 +369,7 @@ is scoped to the deepest level that *did* match (`A-1 | (unassigned)`), so those
 never pooled across cores.
 
 <a name="composition-by-class-tab"></a>
+
 ### By class
 
 Grouped by the **annotation class** a cell sits in -- Tumor, Stroma -- pooled across
@@ -380,6 +390,7 @@ typically inside a TMA core but in a gap the region detection left unannotated. 
 same cells the By area tab shows as `(unassigned)`.
 
 <a name="representative-cells-tab"></a>
+
 ## Representative cells
 
 Per-cluster gallery of crops of the most typical cells, ranked by distance to the cluster
@@ -421,6 +432,7 @@ A medoid is a real observed cell, not a synthetic prototype, and "representative
 typical, not pure. Read these alongside the heatmap and marker rankings.
 
 <a name="cluster-confidence-tab"></a>
+
 ## Cluster confidence -- how marginal was each label?
 
 Every algorithm here assigns each cell to exactly **one** cluster, so a cell the method
@@ -479,6 +491,7 @@ those two cases.
   from "0.5 / 0.25 / 0.25".
 
 <a name="validation-tab"></a>
+
 ## Validation -- stability across seeds and agreement with known classes
 
 Two checks you ask for before the run, in the **Validation** section of the Clustering dialog
@@ -493,6 +506,7 @@ computed, and both are saved with the result, so the tab comes back when you reo
 ![The Validation tab for a KMeans run with k = 7 on the eight-image synthetic dataset, with both checks on. Under "Stability across seeds": "6 runs: seed 42 plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000", and a table of the seven clusters with their cells, a consistency of 1.00 and 100.0% kept together for each. Under "Agreement with known classes": "11,419 cells compared, 2 unclassified excluded. Adjusted Rand index 0.982, normalized mutual information 0.971", Cohen's kappa 0.989 after matching and purity 99.1%, followed by a cluster x class table in which each cluster is matched to one true cell type, for example Cluster 0 to fibroblast with 3294 cells](images/validation-tab.png)
 
 <a name="stability-across-seeds"></a>
+
 ### Stability across seeds
 
 **What it does.** After the run, QP-CAT clusters the same matrix again, **Extra runs** times
@@ -536,6 +550,7 @@ changes; do not name it as a population until it holds up. A low ARI with every 
   two hours (a million-cell Leiden run with many repeats, for example).
 
 <a name="agreement-with-known-classes"></a>
+
 ### Agreement with known classes
 
 **What it does.** Compares the new clusters with the classifications the cells carried
@@ -596,6 +611,7 @@ point the same way: this many clusters is more than the data supports.
 
 <a name="marker-rankings-tab"></a>
 <a name="marker-fingerprints-tab"></a>
+
 ## Marker rankings and fingerprints
 
 **Marker Rankings** ranks the markers that best separate each cluster from the rest, using
@@ -633,6 +649,7 @@ defines). **Find marker:** highlights a marker on every card.
 > results window for why.
 
 <a name="cluster-explainer-llm-tab"></a>
+
 ## Cluster Explainer (LLM) [Experimental]
 
 Appears whenever the result has marker rankings. It suggests a cell-type name per cluster
@@ -642,6 +659,7 @@ reply; no key), the Anthropic API, a local Ollama server (never run), or an AI a
 Rankings and the Heatmap. Full guide: [LLM explainer](llm-explainer.md).
 
 <a name="paga-trajectory-tab"></a>
+
 ## PAGA Trajectory -- read this before using it
 
 Partition-based graph abstraction. Each node is a cluster, sized by cell count; each
@@ -700,6 +718,7 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
 
 <a name="co-occurrence-tabs"></a>
+
 ### Co-occurrence: the value, the radius, and what each view aggregates
 
 Five tabs come from this one statistic -- a table and a figure, each pairwise and
@@ -818,6 +837,7 @@ reach for co-occurrence rather than neighbourhood enrichment or Ripley's L.
 
 <a name="spatial-autocorrelation-tab"></a>
 <a name="gearys-c-tab"></a>
+
 ### Moran's I and Geary's C: which markers are spatially structured
 
 Two tabs, one question, one squidpy call with a different mode. For each **measurement**
@@ -864,6 +884,7 @@ spatially structured", not as marker expression.
 > wrote to the log. Results saved by those versions cannot grow the tab retroactively.
 
 <a name="neighborhood-enrichment-tab"></a>
+
 ### Neighborhood Enrichment
 
 A cluster-by-cluster **permutation z-score**: how often two clusters are graph neighbours,
@@ -915,6 +936,7 @@ cluster holds nothing else.
 line), to `qpcat_neighborhood_enrichment.csv`.
 
 <a name="spatial-scatter-tab"></a>
+
 ### Spatial Scatter
 
 Every cell drawn at its **tissue coordinates**, coloured by cluster. This is the map, not
@@ -943,6 +965,7 @@ screen), `p_value_uncorrected`, the `areas_above_threshold` / `n_areas` count an
 is the evidence behind the count.
 
 <a name="ripley-l-tab"></a>
+
 ### Ripley L: controlling cluster visibility
 
 The **Ripley L** chart opens showing the first cluster only, with **Recommend 1 at a time** under **Show clusters**. Each cluster draws three lines, not one: its curve, plus the two dashed edges of its own simulated-random band. Seven clusters is therefore twenty-one lines, and the question the chart exists to answer -- is this curve outside *its* band, and at which radii -- cannot be read off it. With one cluster shown the axes rescale onto that cluster and the answer is direct.
@@ -971,6 +994,7 @@ name.
 For many plots across many images, use [batch figure export](exporting.md).
 
 <a name="cluster-colours"></a>
+
 ## Cluster colors
 
 **Extensions > QP-CAT > Results & populations > Apply cluster color palette...** sets the
@@ -981,6 +1005,7 @@ The static matplotlib PNGs are already on disk and do not recolour by themselves
 rewritten -- it costs a Python round-trip each time, which is why it is off by default.
 
 <a name="3d-view-tab"></a>
+
 ## 3D view
 
 Every result gets this tab. Like the others it has a guide line and a **Documentation** link at
