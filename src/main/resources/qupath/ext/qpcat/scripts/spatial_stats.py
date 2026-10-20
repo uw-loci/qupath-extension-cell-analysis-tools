@@ -1901,6 +1901,7 @@ def run_geary_c(
     area_ids=None,
     area_names=None,
     threshold=AUTOCORR_DEFAULT_THRESHOLD,
+    marker_ticks=None,
 ):
     """Compute Geary's C per marker.
 
@@ -1921,6 +1922,10 @@ def run_geary_c(
     what fixes the p-value: this used to prefer "pval_norm" and so discarded
     both the permutation p it paid for and squidpy's Benjamini-Hochberg column.
     "areas_above" counts areas with C <= 1 - threshold.
+
+    ``marker_ticks(ax)`` relabels the PNG's measurement axis (the task scripts
+    pass model_utils.bold_marker_ticks, which this module cannot see); None
+    leaves the names plain.
     """
     try:
         res = compute_autocorr(
@@ -2007,6 +2012,8 @@ def run_geary_c(
                 )
                 ax.set_xticks(xs)
                 ax.set_xticklabels(markers, rotation=45, ha="right", fontsize="small")
+                if marker_ticks is not None:
+                    marker_ticks(ax)
                 ax.set_ylabel("Geary's C")
                 _title = "Geary's C per marker (graph: %s, perms: %d)" % (
                     graph_type,

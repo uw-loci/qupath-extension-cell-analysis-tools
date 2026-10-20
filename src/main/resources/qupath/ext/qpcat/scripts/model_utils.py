@@ -1,8 +1,8 @@
 """
 Shared utilities for QP-CAT task scripts.
 
-Provides device detection, UMAP execution resolution, cancellation checks and
-the shared non-finite measurement guard. Loaded into every task script's global scope by
+Provides device detection, UMAP execution resolution, cancellation checks, the
+shared non-finite measurement guard and the bold-marker figure labels. Loaded into every task script's global scope by
 ApposeClusteringService at init, so task scripts use these without importing.
 
 Spatial feature smoothing approach inspired by LazySlide (MIT License).
@@ -207,3 +207,86 @@ def check_cancelled(task_obj):
         logger.info("Cancellation requested -- stopping before the next phase")
         task_obj.cancel()
         raise RuntimeError("QPCAT_CANCELLED: cancelled by the user")
+
+
+def split_measurement_name(name):
+    """Split a QuPath measurement name into (before, marker, after).
+
+    ``"Nucleus: CD3 std dev"`` -> ``("Nucleus: ", "CD3", " std dev")``,
+    ``"Cell: PCNA: Mean"`` -> ``("Cell: ", "PCNA", ": Mean")`` and the
+    channel-first form of the cell-detection extensions, ``"CD3: Nucleus: Mean"``,
+    -> ``("", "CD3", ": Nucleus: Mean")``. The parts always join back to ``name``;
+    a part that is not there is empty. Mirrored by ``MeasurementNames.split`` in
+    Java; both are tested against ``measurement_name_cases.json``.
+    """
+    stats = (
+        "std dev",
+        "std.dev.",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "sum",
+        "range",
+        "variance",
+    )
+    compartments = ("nucleus", "cytoplasm", "membrane", "cell")
+    parts = name.split(": ")
+    if len(parts) >= 3 and parts[-1].lower() in stats:
+        i = len(parts) - (3 if parts[-2].lower() in compartments else 2)
+        before = ": ".join(parts[:i]) + ": " if i else ""
+        return before, parts[i], name[len(before) + len(parts[i]) :]
+    before = ": ".join(parts[:-1]) + ": " if len(parts) > 1 else ""
+    rest = parts[-1]
+    for stat in stats:
+        if rest.lower().endswith(" " + stat) and len(rest) > len(stat) + 1:
+            cut = len(rest) - len(stat) - 1
+            return before, rest[:cut], rest[cut:]
+    return before, rest, ""
+
+
+def bold_marker_label(name):
+    """Figure label for ``name`` with the marker part in bold (matplotlib mathtext).
+
+    Characters mathtext would space out or reinterpret (a hyphen becomes a minus
+    sign, an apostrophe a prime) are swapped for ones that draw as written. A name
+    holding any other special character is returned unchanged, never mangled.
+    """
+    import re
+
+    before, marker, after = split_measurement_name(name)
+    if not marker or "$" in name or not re.match(r"^[A-Za-z0-9 .()/,'+_%-]+$", marker):
+        return name
+    safe = {
+        " ": r"\ ",
+        "-": "\u2010",
+        "+": "{+}",
+        ",": "{,}",
+        "'": "\u2019",
+        "_": r"\_",
+        "%": r"\%",
+    }
+    body = "".join(safe.get(c, c) for c in marker)
+    return before + r"$\mathbf{" + body + "}$" + after
+
+
+def bold_marker_ticks(ax, axis="x"):
+    """Re-label an axis's ticks with each marker in bold, keeping their layout."""
+    labels = ax.get_xticklabels() if axis == "x" else ax.get_yticklabels()
+    if not labels:
+        return
+    first = labels[0]
+    style = {
+        "rotation": first.get_rotation(),
+        "rotation_mode": first.get_rotation_mode(),
+        "ha": first.get_ha(),
+        "va": first.get_va(),
+        "fontsize": first.get_fontsize(),
+    }
+    text = [bold_marker_label(t.get_text()) for t in labels]
+    if axis == "x":
+        ax.set_xticks(ax.get_xticks())
+        ax.set_xticklabels(text, **style)
+    else:
+        ax.set_yticks(ax.get_yticks())
+        ax.set_yticklabels(text, **style)

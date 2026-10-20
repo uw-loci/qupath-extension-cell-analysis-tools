@@ -9,44 +9,12 @@ import numpy as np
 
 from conftest import load_script_symbol, requires
 
-split = load_script_symbol("run_clustering.py", "split_measurement_name")
+split = load_script_symbol("model_utils.py", "split_measurement_name")
 bold = load_script_symbol(
-    "run_clustering.py",
+    "model_utils.py",
     "bold_marker_label",
     {"split_measurement_name": split},
 )
-
-
-def test_splits_compartment_marker_and_statistic():
-    assert split("Nucleus: CD3 std dev") == ("Nucleus: ", "CD3", " std dev")
-    assert split("Cytoplasm: PanCK mean") == ("Cytoplasm: ", "PanCK", " mean")
-    assert split("Cell: Opal 570 Median") == ("Cell: ", "Opal 570", " Median")
-    assert split("Cell: Area") == ("Cell: ", "Area", "")
-    assert split("QPCAT spatial: Mean distance") == (
-        "QPCAT spatial: ",
-        "Mean distance",
-        "",
-    )
-    assert split("CD3") == ("", "CD3", "")
-
-
-def test_a_name_that_is_only_a_statistic_keeps_it_as_the_marker():
-    assert split("Cell: mean") == ("Cell: ", "mean", "")
-
-
-def test_bolds_only_the_marker():
-    assert bold("Nucleus: CD3 std dev") == r"Nucleus: $\mathbf{CD3}$ std dev"
-    assert bold("Cell: Opal 570 mean") == r"Cell: $\mathbf{Opal\ 570}$ mean"
-
-
-def test_leaves_names_mathtext_would_misread_alone():
-    for name in (
-        "Cell: CD3_x mean",
-        "Cell: 50% mean",
-        "Cell: $CD3 mean",
-        "Cell: a^b mean",
-    ):
-        assert bold(name) == name
 
 
 @requires("scanpy")

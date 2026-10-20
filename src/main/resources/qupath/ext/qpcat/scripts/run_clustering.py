@@ -1817,50 +1817,6 @@ def _wrap_caption(caption, width=95):
     )
 
 
-def split_measurement_name(name):
-    """Split a QuPath measurement name into compartment, marker and statistic.
-
-    ``"Nucleus: CD3 std dev"`` -> ``("Nucleus: ", "CD3", " std dev")``. A name with
-    no compartment or no known statistic leaves that part empty.
-    """
-    stats = (
-        "std dev",
-        "std.dev.",
-        "mean",
-        "median",
-        "min",
-        "max",
-        "sum",
-        "range",
-        "variance",
-    )
-    compartment, rest = "", name
-    if ": " in name:
-        head, rest = name.split(": ", 1)
-        compartment = head + ": "
-    statistic = ""
-    for stat in stats:
-        if rest.lower().endswith(" " + stat) and len(rest) > len(stat) + 1:
-            statistic = rest[-(len(stat) + 1) :]
-            rest = rest[: -(len(stat) + 1)]
-            break
-    return compartment, rest, statistic
-
-
-def bold_marker_label(name):
-    """Tick label with the marker part in bold (matplotlib mathtext).
-
-    Returns the name unchanged when the marker holds a character mathtext would
-    interpret, so an unusual name is never mangled.
-    """
-    import re
-
-    compartment, marker, statistic = split_measurement_name(name)
-    if not marker or "$" in name or not re.match(r"^[A-Za-z0-9 .+\-()/,']+$", marker):
-        return name
-    return compartment + r"$\mathbf{" + marker.replace(" ", r"\ ") + "}$" + statistic
-
-
 def size_stacked_violin(plot_obj, row_scale=2.0):
     """Make each cluster row ``row_scale`` times scanpy's height, with no blank strip.
 
@@ -1917,6 +1873,11 @@ def legend_under_dendrogram(plot_obj):
     # Leave room for the scale's two-line title between it and the plot.
     top = m.y0 - 0.55 / fig.get_size_inches()[1]
     scale.set_position([t.x0, top - c.height, c.width, c.height])
+
+
+def bold_marker_axis(plot_obj):
+    """Bold each marker name on a scanpy plot's measurement axis."""
+    bold_marker_ticks(plot_obj.ax_dict["mainplot_ax"])
 
 
 def finish_stacked_violin(plot_obj):
@@ -2779,6 +2740,7 @@ if has_spatial and n_clusters_found > 1:
             area_ids=area_ids_list,
             area_names=area_names_list,
             threshold=pref_spatial_autocorr_threshold,
+            marker_ticks=bold_marker_ticks,
         )
         if _spatial_persist:
             _geary_path = os.path.join(
@@ -3014,7 +2976,13 @@ if do_plots and plot_dir and can_analyze:
         _dot_caption = dot_size_caption(normalization, _dot_cutoff)
         if plot_feature_caption:
             _dot_caption = plot_feature_caption + "\n" + _dot_caption
-        save_scanpy_plot(dp, dotplot_path, pref_plot_dpi, _dot_caption)
+        save_scanpy_plot(
+            dp,
+            dotplot_path,
+            pref_plot_dpi,
+            _dot_caption,
+            after_render=bold_marker_axis,
+        )
         plt.close("all")
         plot_paths["dotplot"] = dotplot_path
         logger.info("Saved dotplot: %s", dotplot_path)
@@ -3034,7 +3002,13 @@ if do_plots and plot_dir and can_analyze:
             return_fig=True,
         )
         matrixplot_path = os.path.join(plot_dir, "cluster_matrixplot.png")
-        save_scanpy_plot(mp, matrixplot_path, pref_plot_dpi, plot_feature_caption)
+        save_scanpy_plot(
+            mp,
+            matrixplot_path,
+            pref_plot_dpi,
+            plot_feature_caption,
+            after_render=bold_marker_axis,
+        )
         plt.close("all")
         plot_paths["matrixplot"] = matrixplot_path
         logger.info("Saved matrixplot: %s", matrixplot_path)

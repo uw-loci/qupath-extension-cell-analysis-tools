@@ -1,0 +1,28 @@
+{
+  "_comment": "How a QuPath measurement name splits into [before, marker, after]; the marker is drawn bold. Read by MeasurementNamesTest (Java) and python_tests/test_measurement_name_labels.py, so the two splitters cannot drift apart.",
+  "cases": [
+    ["Nucleus: CD3 std dev", "Nucleus: ", "CD3", " std dev"],
+    ["Cytoplasm: PanCK mean", "Cytoplasm: ", "PanCK", " mean"],
+    ["Cell: Opal 570 Median", "Cell: ", "Opal 570", " Median"],
+    ["Cell: CD3 Std.Dev.", "Cell: ", "CD3", " Std.Dev."],
+    ["Cytoplasm: CD45 Variance", "Cytoplasm: ", "CD45", " Variance"],
+    ["Nucleus: DAPI range", "Nucleus: ", "DAPI", " range"],
+    ["Nucleus: Hematoxylin OD std dev", "Nucleus: ", "Hematoxylin OD", " std dev"],
+    ["Nucleus: Ki-67 max", "Nucleus: ", "Ki-67", " max"],
+    ["Membrane: 18_Ki-67 mean", "Membrane: ", "18_Ki-67", " mean"],
+    ["Cell: Area", "Cell: ", "Area", ""],
+    ["Nucleus: Max caliper", "Nucleus: ", "Max caliper", ""],
+    ["QPCAT spatial: Mean distance", "QPCAT spatial: ", "Mean distance", ""],
+    ["Cell: mean", "Cell: ", "mean", ""],
+    ["CD3", "", "CD3", ""],
+    ["Mean", "", "Mean", ""],
+    ["QPCAT UMAP1", "", "QPCAT UMAP1", ""],
+    ["", "", "", ""],
+    ["Cell: PCNA: Mean", "Cell: ", "PCNA", ": Mean"],
+    ["Cell: PCNA: Median", "Cell: ", "PCNA", ": Median"],
+    ["CD3: Nucleus: Mean", "", "CD3", ": Nucleus: Mean"],
+    ["CD8: Membrane: Std.Dev.", "", "CD8", ": Membrane: Std.Dev."],
+    ["Smoothed: 50 um: Nucleus: DAPI mean", "Smoothed: 50 um: Nucleus: ", "DAPI", " mean"],
+    ["ROI: 2.00 um per pixel: DAPI: Mean", "ROI: 2.00 um per pixel: ", "DAPI", ": Mean"]
+  ]
+}

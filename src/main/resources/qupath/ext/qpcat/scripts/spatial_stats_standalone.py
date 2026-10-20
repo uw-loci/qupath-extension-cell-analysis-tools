@@ -339,6 +339,7 @@ if want_geary:
             persist_plots=persist,
             area_ids=sa_area_ids,
             threshold=autocorr_threshold,
+            marker_ticks=bold_marker_ticks,
         )
         any_stat = True
         if persist:

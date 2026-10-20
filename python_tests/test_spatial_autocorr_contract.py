@@ -199,6 +199,40 @@ def _run_moran():
     return _base_globals()["run_moran_i"]
 
 
+def test_the_geary_png_bolds_its_markers_through_the_hook(tmp_path):
+    """spatial_stats is its own module and cannot see model_utils, so the task
+    scripts hand it bold_marker_ticks; the hook must reach the drawn axis."""
+    import os
+
+    g = _base_globals()
+    g.update(os=os, PLOT_FILE_GEARY=_const("PLOT_FILE_GEARY"))
+    for name in ("_should_persist", "run_geary_c"):
+        g[name] = load_script_symbol(SCRIPT, name, extra_globals=g)
+    split = load_script_symbol("model_utils.py", "split_measurement_name")
+    bold = load_script_symbol(
+        "model_utils.py", "bold_marker_label", {"split_measurement_name": split}
+    )
+    ticks = load_script_symbol(
+        "model_utils.py", "bold_marker_ticks", {"bold_marker_label": bold}
+    )
+    drawn = []
+
+    def hook(ax):
+        ticks(ax)
+        drawn.extend(t.get_text() for t in ax.get_xticklabels())
+
+    g["run_geary_c"](
+        _adata(),
+        _Task(),
+        measurements=MARKERS,
+        n_permutations=99,
+        plot_dir=str(tmp_path),
+        marker_ticks=hook,
+    )
+    assert (tmp_path / _const("PLOT_FILE_GEARY")).is_file()
+    assert sorted(drawn) == sorted(bold(m) for m in MARKERS)
+
+
 def test_run_moran_i_produces_a_payload_per_marker():
     _NOTES.clear()
     task = _Task()
