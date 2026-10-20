@@ -6853,7 +6853,9 @@ public class ClusteringDialog {
                     tabName = "Stacked Violin";
                     guide = "Distribution of expression values for each marker within each cluster. "
                             + "Wider regions indicate more cells at that expression level. Values "
-                            + "are in the run's normalized units and are NOT rescaled per marker.\n"
+                            + "are in the run's normalized units and are NOT rescaled per marker. "
+                            + "A flat base is not cut off: each violin stops at the lowest value a "
+                            + "cell has, and many cells sit exactly there.\n"
                             + "Bimodal (double-peaked) distributions within a single cluster suggest "
                             + "the cluster may contain two distinct subpopulations -- consider "
                             + "subclustering via the Cluster Management dialog.";

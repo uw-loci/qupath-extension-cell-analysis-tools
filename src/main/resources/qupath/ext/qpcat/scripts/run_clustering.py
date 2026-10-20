@@ -1759,7 +1759,7 @@ def select_plot_features(all_features, ranked_by_cluster, max_features):
     return selected, True
 
 
-def save_scanpy_plot(plot_obj, path, dpi, caption=""):
+def save_scanpy_plot(plot_obj, path, dpi, caption="", after_render=None):
     """Render a scanpy BasePlot, add an optional caption, and write the PNG.
 
     Not just ``plot_obj.savefig(path)``: that method calls ``make_figure()``
@@ -1778,6 +1778,8 @@ def save_scanpy_plot(plot_obj, path, dpi, caption=""):
     if fig is None:
         plot_obj.savefig(path, dpi=dpi, bbox_inches="tight")
         return
+    if after_render is not None:
+        after_render(plot_obj)
     if caption:
         # Bottom-centred: the dendrogram occupies the top. bbox_inches="tight"
         # keeps text drawn outside the axes, so the note survives into the PNG.
@@ -1812,6 +1814,80 @@ def _wrap_caption(caption, width=95):
     return "\n".join(
         "\n".join(textwrap.wrap(line, width=width)) if line else line
         for line in caption.split("\n")
+    )
+
+
+def split_measurement_name(name):
+    """Split a QuPath measurement name into compartment, marker and statistic.
+
+    ``"Nucleus: CD3 std dev"`` -> ``("Nucleus: ", "CD3", " std dev")``. A name with
+    no compartment or no known statistic leaves that part empty.
+    """
+    stats = (
+        "std dev",
+        "std.dev.",
+        "mean",
+        "median",
+        "min",
+        "max",
+        "sum",
+        "range",
+        "variance",
+    )
+    compartment, rest = "", name
+    if ": " in name:
+        head, rest = name.split(": ", 1)
+        compartment = head + ": "
+    statistic = ""
+    for stat in stats:
+        if rest.lower().endswith(" " + stat) and len(rest) > len(stat) + 1:
+            statistic = rest[-(len(stat) + 1) :]
+            rest = rest[: -(len(stat) + 1)]
+            break
+    return compartment, rest, statistic
+
+
+def bold_marker_label(name):
+    """Tick label with the marker part in bold (matplotlib mathtext).
+
+    Returns the name unchanged when the marker holds a character mathtext would
+    interpret, so an unusual name is never mangled.
+    """
+    import re
+
+    compartment, marker, statistic = split_measurement_name(name)
+    if not marker or "$" in name or not re.match(r"^[A-Za-z0-9 .+\-()/,']+$", marker):
+        return name
+    return compartment + r"$\mathbf{" + marker.replace(" ", r"\ ") + "}$" + statistic
+
+
+def size_stacked_violin(plot_obj, row_scale=2.0):
+    """Make each cluster row ``row_scale`` times scanpy's height, with no blank strip.
+
+    Left to itself scanpy adds an inch above the plot "for labels" that the labels
+    never use. Giving it an explicit size puts all of the height into the rows.
+    """
+    rows = len(plot_obj.categories)
+    plot_obj.width = (
+        len(plot_obj.var_names) * plot_obj.DEFAULT_CATEGORY_WIDTH
+        + plot_obj.group_extra_size
+        + plot_obj.legends_width
+    )
+    plot_obj.height = max(
+        rows * plot_obj.DEFAULT_CATEGORY_HEIGHT * row_scale, plot_obj.min_figure_height
+    )
+
+
+def angle_marker_labels(plot_obj, rotation=45):
+    """Angle the main axis's measurement labels and bold each marker name."""
+    ax = plot_obj.ax_dict["mainplot_ax"]
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    ax.set_xticks(ax.get_xticks())
+    ax.set_xticklabels(
+        [bold_marker_label(t) for t in labels],
+        rotation=rotation,
+        ha="right",
+        rotation_mode="anchor",
     )
 
 
@@ -2976,7 +3052,14 @@ if do_plots and plot_dir and can_analyze:
                 dodge=False,
             )
             violin_path = os.path.join(plot_dir, "stacked_violin.png")
-            save_scanpy_plot(sv, violin_path, pref_plot_dpi, plot_feature_caption)
+            size_stacked_violin(sv)
+            save_scanpy_plot(
+                sv,
+                violin_path,
+                pref_plot_dpi,
+                plot_feature_caption,
+                after_render=angle_marker_labels,
+            )
             plt.close("all")
             plot_paths["stacked_violin"] = violin_path
             logger.info("Saved stacked violin: %s", violin_path)

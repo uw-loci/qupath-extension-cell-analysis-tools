@@ -33,6 +33,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   flagged** under the histogram counts, and **Apply to All Markers** names the markers it
   flagged, so a poor suggestion shows up whichever method made it.
 
+- **Stacked violin: twice the row height, angled labels, the marker in bold.** At 34
+  measurements the rows were too flat to read a shape, an inch above the plot was empty, and
+  the marker was hard to find in vertical labels such as "Nucleus: CD3 std dev". Rows are now
+  twice scanpy's height with no empty strip, labels sit at 45 degrees, and the marker part of
+  each label is bold. The tab guide and results.md now explain the flat-based violins: each
+  violin stops at the lowest value a cell has, and most cells often sit exactly there.
+
 ### Fixed
 
 - **Reproducibility guide: fewer spatial permutations are not free.** The guide listed the

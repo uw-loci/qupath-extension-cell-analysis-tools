@@ -116,6 +116,16 @@ Dotplot the values are *not* rescaled per marker, so the value axis is directly 
 across clusters within a marker, and across markers only to the extent the normalization
 made them so.
 
+**A violin with a flat base is not cut off.** Each violin stops at the lowest value a cell in
+that cluster actually has (scanpy's `cut=0`), so it never draws density at values no cell
+has. When many cells sit exactly at the lowest value -- a marker read as 0 in most cells --
+the violin is widest right there and ends at its widest point, which looks like the top half
+of a violin. On the synthetic demo data 54% to 93% of cells are exactly at the lowest value
+for every marker except DAPI, and DAPI is the one marker drawn as full ovals.
+
+The marker part of each label is bold (**CD3** in "Nucleus: **CD3** mean"), the labels are
+angled at 45 degrees, and each cluster row is twice scanpy's default height.
+
 <a name="heatmap-colours"></a>
 ### Choosing the colour map
 
