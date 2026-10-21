@@ -21,8 +21,9 @@ statistics exactly as computed.
 **2. Re-run in the GUI with the same settings.**
 In the results window click **Open results folder**. Each run leaves three files there:
 `<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and
-`<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps; the config file
-beside it is the complete one, and the only one that holds the Validation settings).
+`<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps, with a
+*Validation* line naming the checks the run asked for; the config file beside it is the
+complete one).
 
 Both `RUN_INFO.txt` and the audit log record the QP-CAT and QuPath versions. The Python
 packages are fixed per QP-CAT release by its bundled lock file (one for the CPU environment,
@@ -127,6 +128,7 @@ is free.
 | **Ripley's L, co-occurrence, Geary's C, neighborhood enrichment** | Run Clustering > Spatial statistics (neighborhood enrichment and Moran's I: the *Neighborhood enrichment + Moran's I* tick-box above it) | Usually the single largest cost of a run, minutes to hours on large cohorts. Each is independent; turn on only the ones you will read. |
 | **Stability across seeds** | Run Clustering > Validation | Re-runs the clustering step **Extra runs** more times (5 by default), so that step takes about 6x as long; the line above the Run button says so. Off by default. Gives a **Validation** tab with the adjusted Rand index between runs and a consistency score per cluster. |
 | **Generate analysis plots** | Run Clustering, analysis options (the untitled block below Clustering Algorithm) | Skips the static matplotlib figures. The interactive tabs still work. |
+| **Compare Leiden resolutions** | Run Clustering > Validation | One more Leiden pass over the run's graph per listed resolution; nothing else is repeated. Off by default. Adds a Leiden resolutions table to the **Validation** tab. |
 
 ### Reusing the last run's graph and embedding
 

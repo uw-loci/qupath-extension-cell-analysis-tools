@@ -9,9 +9,9 @@ import java.util.Locale;
 import java.util.function.IntFunction;
 
 /**
- * The two optional checks of a clustering run, as {@code run_clustering.py}
- * reports them: stability across seeds and agreement with the classes the cells
- * already carried. Parsed from the result's validation JSON; FX-free so the text
+ * The optional checks of a clustering run, as {@code run_clustering.py}
+ * reports them: stability across seeds, agreement with the classes the cells
+ * already carried, and the run's graph partitioned at other Leiden resolutions. Parsed from the result's validation JSON; FX-free so the text
  * and the tables can be tested without a toolkit.
  */
 public final class ValidationReport {
@@ -20,6 +20,30 @@ public final class ValidationReport {
     public Stability stability;
     /** Agreement with known classes; null when not asked for or not computed. */
     public Agreement agreement;
+    /** Other Leiden resolutions on the run's graph; null when not asked for. */
+    public Resolutions resolutions;
+
+    /** One resolution's partition of the run's graph. */
+    public static final class ResolutionRow {
+        public double resolution;
+        public int n_clusters;
+        /** Cells in the smallest cluster. */
+        public int smallest;
+        /** Share of all cells in the largest cluster. */
+        public Double largest_share;
+        /** Adjusted Rand index with the run's own clusters. */
+        public Double ari_with_run;
+        /** Adjusted Rand index with the next resolution's; null for the last. */
+        public Double ari_with_next;
+    }
+
+    /** The run's graph partitioned at other resolutions, as run_clustering.py reports it. */
+    public static final class Resolutions {
+        public double run_resolution;
+        public Integer seed;
+        public int n_cells;
+        public List<ResolutionRow> rows = List.of();
+    }
 
     /** One reference cluster's stability. */
     public static final class ClusterStability {
@@ -81,7 +105,8 @@ public final class ValidationReport {
         if (json == null || json.isBlank()) return null;
         try {
             ValidationReport r = new Gson().fromJson(json, ValidationReport.class);
-            return r == null || (r.stability == null && r.agreement == null) ? null : r;
+            return r == null || (r.stability == null && r.agreement == null
+                    && r.resolutions == null) ? null : r;
         } catch (JsonSyntaxException e) {
             return null;
         }
@@ -117,6 +142,42 @@ public final class ValidationReport {
                 fmt(agreement.ari, 3), fmt(agreement.nmi, 3),
                 fmt(agreement.kappa_matched, 3), pct(agreement.matched_share),
                 pct(agreement.purity));
+    }
+
+    /** @return the one-paragraph resolution summary, or null when there is none */
+    public String resolutionSummary() {
+        if (resolutions == null) return null;
+        return String.format(Locale.US,
+                "The run's neighbor graph (%,d cells) partitioned by Leiden at %d resolutions "
+                + "with seed %s; this run used %s. Nothing was rebuilt but the partition, so "
+                + "rows differ only in the resolution.",
+                resolutions.n_cells, resolutions.rows.size(),
+                resolutions.seed == null ? "?" : resolutions.seed.toString(),
+                resolution(resolutions.run_resolution));
+    }
+
+    /**
+     * Resolution rows: resolution, clusters, smallest cluster, largest share,
+     * ARI with this run, ARI with the next resolution.
+     *
+     * @return one row per resolution, ascending; the run's own marked
+     */
+    public List<String[]> resolutionRows() {
+        List<String[]> rows = new ArrayList<>();
+        if (resolutions == null) return rows;
+        for (ResolutionRow r : resolutions.rows) {
+            boolean own = r.resolution == resolutions.run_resolution;
+            rows.add(new String[] {
+                resolution(r.resolution) + (own ? " (this run)" : ""),
+                String.valueOf(r.n_clusters), String.format(Locale.US, "%,d", r.smallest),
+                pct(r.largest_share), fmt(r.ari_with_run, 3), fmt(r.ari_with_next, 3)});
+        }
+        return rows;
+    }
+
+    /** A resolution as typed: no trailing zeros. */
+    public static String resolution(double r) {
+        return java.math.BigDecimal.valueOf(r).stripTrailingZeros().toPlainString();
     }
 
     /**
@@ -171,6 +232,12 @@ public final class ValidationReport {
             sb.append("Cluster\tCells\tConsistency\tKept together\n");
             for (String[] r : stabilityRows(names)) sb.append(String.join("\t", r)).append('\n');
         }
+        if (resolutions != null) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append("# Leiden resolutions\t").append(resolutionSummary()).append('\n');
+            sb.append(String.join("\t", RESOLUTION_HEADERS)).append('\n');
+            for (String[] r : resolutionRows()) sb.append(String.join("\t", r)).append('\n');
+        }
         if (agreement != null) {
             if (sb.length() > 0) sb.append('\n');
             sb.append("# Agreement with known classes\t").append(agreementSummary()).append('\n');
@@ -183,6 +250,10 @@ public final class ValidationReport {
         }
         return sb.toString();
     }
+
+    /** Column headings for {@link #resolutionRows()}. */
+    public static final List<String> RESOLUTION_HEADERS = List.of("Resolution", "Clusters",
+            "Smallest cluster", "Largest cluster", "ARI with this run", "ARI with next");
 
     static String fmt(Double v, int places) {
         return v == null || v.isNaN() ? "n/a" : String.format(Locale.US, "%." + places + "f", v);

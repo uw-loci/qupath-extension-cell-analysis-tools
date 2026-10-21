@@ -28,6 +28,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   and the Embedding Plot tab now says that distances between clusters in the layout are not
   interpretable, as the 2D tab did. The Matrix Plot and Stacked Violin guides say how values
   are scaled (Matrix Plot: each marker 0-1 across clusters; Stacked Violin: not rescaled).
+- **Compare Leiden resolutions.** A third option in the Clustering dialog's *Validation*
+  section, Leiden only: the run's neighbor graph is partitioned again at each resolution in a
+  list (default `0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2`), and the **Validation** tab gains a table
+  of cluster count, smallest and largest cluster, and adjusted Rand index with this run and
+  with the next resolution. The graph is built once, so each resolution costs one Leiden pass.
+  No resolution is suggested; ranges where the partition holds steady are what to look for
+  ([Zappia & Oshlack 2018; Lambiotte et al. 2014](documentation/references.md#comparing-leiden-resolutions)).
+  **Use selected resolution** sets it in the open Run Clustering dialog, and that run reuses
+  the graph and embedding. On the synthetic dataset (11,421 cells) the first run, comparing
+  eight resolutions, took 47-73 s and the re-run at the chosen one 7.5-8.4 s. Not in YAML batch runs.
 - **Changing only the Leiden resolution no longer rebuilds the neighbor graph or the
   embedding.** QP-CAT keeps the last run's graph and embedding in memory and reuses them
   when the next run has the same cells, in the same order, the same preprocessing and the
@@ -43,6 +53,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   flagged, so a poor suggestion shows up whichever method made it.
 
 ### Changed
+
+- **Leiden needs about half the memory.** QP-CAT now builds Leiden's igraph graph from the
+  neighbor graph's arrays instead of through scanpy, which made a Python tuple per edge; the
+  labels are identical (tested against `sc.tl.leiden` at several resolutions). On the same
+  300,000-cell, `n_neighbors` 50 graph, Leiden's peak memory was 2.34 GB against 5.05 GB through
+  scanpy, in about the same time (50-57 s against 47 s). The pre-run memory check was refitted
+  to new measurements (3.01 GB for the neighbor search plus Leiden at that size), so it no
+  longer warns about Leiden runs that fit.
+- **RUN_INFO.txt has a *Validation* line** naming the checks a run asked for (stability across
+  seeds and its runs, agreement with existing classes, compared Leiden resolutions).
 
 - **The Neighborhood Enrichment tab is now a table with the edge count behind every
   z-score**, e.g. `7.3 (6061)`, so a large z from a handful of edges reads as such, and the

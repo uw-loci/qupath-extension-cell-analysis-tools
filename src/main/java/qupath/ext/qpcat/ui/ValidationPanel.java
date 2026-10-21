@@ -15,11 +15,13 @@ import qupath.ext.qpcat.model.ValidationReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.DoublePredicate;
 import java.util.function.IntFunction;
 
 /**
- * The Validation results tab: stability across seeds and agreement with the
- * classes the cells already had, each shown only when the run computed it.
+ * The Validation results tab: stability across seeds, agreement with the
+ * classes the cells already had, and other Leiden resolutions on the run's
+ * graph, each shown only when the run computed it.
  */
 public class ValidationPanel extends ScrollPane {
 
@@ -29,8 +31,11 @@ public class ValidationPanel extends ScrollPane {
     /**
      * @param report        the run's validation report
      * @param clusterNameFn cluster label -> display name (noise is -1)
+     * @param useResolution sets a resolution in the open Run Clustering dialog;
+     *                      false when none is open
      */
-    public ValidationPanel(ValidationReport report, IntFunction<String> clusterNameFn) {
+    public ValidationPanel(ValidationReport report, IntFunction<String> clusterNameFn,
+                           DoublePredicate useResolution) {
         IntFunction<String> names = c -> c < 0 ? "Noise" : clusterNameFn.apply(c);
         VBox box = new VBox(8);
         box.setPadding(new Insets(10));
@@ -55,6 +60,41 @@ public class ValidationPanel extends ScrollPane {
                             + "found in one cluster of a re-run."),
                     table(List.of("Cluster", "Cells", "Consistency", "Kept together"),
                             report.stabilityRows(names)));
+        }
+        if (report.resolutions != null) {
+            TableView<String[]> table = table(ValidationReport.RESOLUTION_HEADERS,
+                    report.resolutionRows());
+            Label status = note("");
+            Button use = new Button("Use selected resolution");
+            use.setTooltip(Tooltips.of(
+                    "Set Resolution in the open Run Clustering dialog to the selected row.\n"
+                    + "Running it reuses this run's neighbor graph and embedding, so only\n"
+                    + "the clustering and what follows it are recomputed."));
+            use.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
+            use.setOnAction(e -> {
+                int i = table.getSelectionModel().getSelectedIndex();
+                if (i < 0) return;
+                double r = report.resolutions.rows.get(i).resolution;
+                String shown = ValidationReport.resolution(r);
+                status.setText(useResolution != null && useResolution.test(r)
+                        ? "Resolution set to " + shown + " in the Run Clustering dialog."
+                        : "No Run Clustering dialog is open. Open Find cell populations "
+                                + "(clustering)... and set Resolution to " + shown + ".");
+            });
+            HBox useRow = new HBox(8, use, status);
+            useRow.setAlignment(Pos.CENTER_LEFT);
+            box.getChildren().addAll(heading("Leiden resolutions"),
+                    note(report.resolutionSummary()),
+                    note("Clusters: how many Leiden found. Smallest cluster: its cells. Largest "
+                            + "cluster: its share of all cells. ARI with this run and ARI with "
+                            + "next: the adjusted Rand index (1 = the same partition) with this "
+                            + "run's clusters and with the next resolution down the table. No "
+                            + "number here picks a resolution. A range where the cluster count "
+                            + "and the partition hold steady (ARI with next close to 1) is "
+                            + "structure the graph keeps over a range of settings; a count that "
+                            + "changes at every step is not. Then judge the clusters by their "
+                            + "markers."),
+                    table, useRow);
         }
         if (report.agreement != null) {
             List<String> headers = new ArrayList<>(List.of("Cluster", "Matched class"));
@@ -97,7 +137,7 @@ public class ValidationPanel extends ScrollPane {
             final int col = i;
             TableColumn<String[], String> tc = new TableColumn<>(headers.get(i));
             tc.setSortable(false);
-            tc.setPrefWidth(i == 0 ? 160 : 110);
+            tc.setPrefWidth(i == 0 ? 160 : Math.max(110, 8 * headers.get(i).length() + 24));
             tc.setCellValueFactory(cd -> new javafx.beans.property.SimpleStringProperty(
                     col < cd.getValue().length ? cd.getValue()[col] : ""));
             t.getColumns().add(tc);

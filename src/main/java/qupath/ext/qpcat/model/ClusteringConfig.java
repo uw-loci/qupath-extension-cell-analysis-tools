@@ -155,6 +155,8 @@ public class ClusteringConfig {
     private int stabilityRepeats = 0;
     /** Compare the clusters with the classifications the cells carried before the run. */
     private boolean compareWithClasses = false;
+    /** Leiden only: other resolutions to partition the run's graph at; empty is off. */
+    private List<Double> compareResolutions = new ArrayList<>();
     private int topNMarkers = 5;
     private boolean enableSpatialAnalysis = false;
     private boolean enableBatchCorrection = false;
@@ -426,6 +428,61 @@ public class ClusteringConfig {
 
     public boolean isCompareWithClasses() { return compareWithClasses; }
     public void setCompareWithClasses(boolean v) { this.compareWithClasses = v; }
+
+    /** Most resolutions one run compares; each is a Leiden pass over the run's graph. */
+    public static final int MAX_COMPARE_RESOLUTIONS = 30;
+
+    /** The resolutions to compare, ascending; empty when the comparison is off. Never null. */
+    public List<Double> getCompareResolutions() {
+        return compareResolutions == null ? List.of() : List.copyOf(compareResolutions);
+    }
+
+    /** @param v resolutions to compare; sorted and de-duplicated, null or empty is off */
+    public void setCompareResolutions(List<Double> v) {
+        this.compareResolutions = v == null ? new ArrayList<>()
+                : new ArrayList<>(new java.util.TreeSet<>(v));
+    }
+
+    /**
+     * Read a typed list of resolutions such as "0.2, 0.5, 1, 2".
+     *
+     * @param text comma- or space-separated numbers
+     * @return the resolutions, ascending and distinct
+     * @throws IllegalArgumentException naming the entry that is not a positive number,
+     *         or when there are more than {@link #MAX_COMPARE_RESOLUTIONS}
+     */
+    public static List<Double> parseResolutions(String text) {
+        java.util.TreeSet<Double> out = new java.util.TreeSet<>();
+        for (String part : (text == null ? "" : text).split("[,;\\s]+")) {
+            if (part.isEmpty()) continue;
+            double r;
+            try {
+                r = Double.parseDouble(part);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("'" + part + "' is not a number.");
+            }
+            if (!(r > 0) || Double.isInfinite(r)) {
+                throw new IllegalArgumentException(
+                        "A resolution must be above 0; got " + part + ".");
+            }
+            out.add(r);
+        }
+        if (out.size() > MAX_COMPARE_RESOLUTIONS) {
+            throw new IllegalArgumentException("At most " + MAX_COMPARE_RESOLUTIONS
+                    + " resolutions; got " + out.size() + ".");
+        }
+        return new ArrayList<>(out);
+    }
+
+    /** The resolutions as a user types them: "0.2, 0.5, 1, 2". */
+    public static String formatResolutions(List<Double> resolutions) {
+        List<String> parts = new ArrayList<>();
+        for (double r : resolutions) {
+            parts.add(r == Math.rint(r) ? String.valueOf((long) r)
+                    : java.math.BigDecimal.valueOf(r).stripTrailingZeros().toPlainString());
+        }
+        return String.join(", ", parts);
+    }
 
     /**
      * Whether the stability check can mean anything for an algorithm: only the

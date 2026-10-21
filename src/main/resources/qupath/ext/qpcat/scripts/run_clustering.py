@@ -50,6 +50,8 @@ Optional inputs:
     ignored otherwise. Must be dense 0..k-1; see validate_supplied_labels.
   stability_repeats: int (default 0) -- re-run the clustering this many times with
     other seeds and report stability_across_seeds (seeded algorithms only)
+  compare_resolutions: list[float] (default none) -- Leiden only: also partition the
+    run's graph at each of these resolutions and report resolution_comparison
   reference_labels: NDArray (N_cells,) int32 -- class code per cell, -1 for none;
     with reference_names (list[str]) asks for agreement_with_classes
   reuse_budget_bytes: int (default 0) -- most the worker may keep between runs for
@@ -292,6 +294,11 @@ try:
 except NameError:
     reference_codes = None
     reference_class_names = None
+
+try:
+    pref_compare_resolutions = sorted({float(r) for r in compare_resolutions if r > 0})
+except NameError:
+    pref_compare_resolutions = []
 
 # Reuse between runs (knn_cache). 0 keeps nothing.
 try:
@@ -1064,6 +1071,8 @@ _progress(
 labels = None
 # Parameters fit_seeded ran with, for the stability check; None for other algorithms.
 seeded_params = None
+# Leiden partitions of the run's graph at other resolutions; None unless asked for.
+resolution_comparison = None
 
 # Clustering seed. The GUI exposes a single "Random seed" that drives both the
 # embedding and the (stochastic) clustering algorithm, so a run is fully
@@ -1313,27 +1322,90 @@ def knn_graph(matrix, n_neighbors, seed):
     return adata.obsp["connectivities"]
 
 
-def leiden_labels(connectivities, resolution, seed):
-    """Leiden on a graph from knn_graph; reads the graph, never writes it.
+def leiden_igraph(connectivities):
+    """The igraph graph ``sc.tl.leiden(flavor="igraph")`` would cluster.
 
-    :param connectivities: cells x cells CSR matrix
+    The same edges in the same order (both directions of each pair, as scanpy
+    passes them) and the same weights, so Leiden on it gives scanpy's labels.
+    What differs is how the edges reach igraph: scanpy builds a Python tuple
+    per edge, and that list was the whole of Leiden's memory peak. Streaming
+    them from the CSR arrays measured 2.34 GB against scanpy's 5.05 GB at
+    300,000 cells, k=50 (50-57 s against 47 s).
+
+    :param connectivities: cells x cells CSR matrix; read, never written
+    :return: (graph, weights as float64)
+    """
+    import igraph as ig
+
+    csr = connectivities.tocsr()
+    n = csr.shape[0]
+    src = np.repeat(np.arange(n, dtype=np.int32), np.diff(csr.indptr))
+    dst = csr.indices
+    weights = csr.data
+    keep = weights != 0  # scanpy reads the edges with nonzero(), which drops these
+    if not keep.all():
+        src, dst, weights = src[keep], dst[keep], weights[keep]
+    graph = ig.Graph(n=n, edges=zip(memoryview(src), memoryview(dst)), directed=False)
+    return graph, weights.astype(np.float64)
+
+
+def leiden_partition(graph, weights, resolution, seed):
+    """Leiden at one resolution on a graph from leiden_igraph, seeded as scanpy seeds it.
+
+    :return: integer label per cell
+    """
+    from scanpy._utils.random import set_igraph_random_state
+
+    with set_igraph_random_state(seed):
+        part = graph.community_leiden(
+            objective_function="modularity",
+            weights=weights,
+            resolution=resolution,
+            n_iterations=-1,
+        )
+    return np.asarray(part.membership)
+
+
+def leiden_labels(connectivities, resolution, seed):
+    """Leiden on a graph from knn_graph; the labels ``sc.tl.leiden(flavor="igraph")`` gives.
+
+    :param connectivities: cells x cells CSR matrix; read, never written
     :param resolution: Leiden resolution
     :param seed: random seed for Leiden
     :return: integer label per cell
     """
-    import scanpy as sc
-    import anndata as ad
+    graph, weights = leiden_igraph(connectivities)
+    return leiden_partition(graph, weights, resolution, seed)
 
-    adata = ad.AnnData(X=np.zeros((connectivities.shape[0], 0), dtype=np.float32))
-    sc.tl.leiden(
-        adata,
-        resolution=resolution,
-        adjacency=connectivities,
-        flavor="igraph",
-        n_iterations=-1,
-        random_state=seed,
-    )
-    return adata.obs["leiden"].astype(int).values
+
+def resolution_rows(resolutions, label_sets, run_labels):
+    """One row per resolution: what Leiden made of the graph there.
+
+    :param resolutions: ascending
+    :param label_sets: labels per resolution, in the same order
+    :param run_labels: the run's own labels
+    :return: list of dicts: resolution, n_clusters, smallest, largest_share,
+        ari_with_run, ari_with_next (None for the last)
+    """
+    from sklearn.metrics import adjusted_rand_score
+
+    rows = []
+    for i, (r, lab) in enumerate(zip(resolutions, label_sets)):
+        _, counts = np.unique(lab, return_counts=True)
+        nxt = label_sets[i + 1] if i + 1 < len(label_sets) else None
+        rows.append(
+            {
+                "resolution": float(r),
+                "n_clusters": int(counts.size),
+                "smallest": int(counts.min()),
+                "largest_share": float(counts.max() / lab.size),
+                "ari_with_run": float(adjusted_rand_score(run_labels, lab)),
+                "ari_with_next": (
+                    None if nxt is None else float(adjusted_rand_score(lab, nxt))
+                ),
+            }
+        )
+    return rows
 
 
 def fit_seeded(algorithm, params, matrix, seed):
@@ -1581,8 +1653,30 @@ if algorithm == "leiden":
         _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)
         if _graph_key is not None:
             knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
-    labels = leiden_labels(_graph, resolution, clustering_seed)
+    _ig, _ig_weights = leiden_igraph(_graph)
     del _graph
+    labels = leiden_partition(_ig, _ig_weights, resolution, clustering_seed)
+    if pref_compare_resolutions:
+        _label_sets = []
+        for _i, _r in enumerate(pref_compare_resolutions):
+            _progress(
+                0.5,
+                "Comparing resolutions: %g (%d of %d)..."
+                % (_r, _i + 1, len(pref_compare_resolutions)),
+            )
+            _label_sets.append(
+                labels
+                if _r == resolution
+                else leiden_partition(_ig, _ig_weights, _r, clustering_seed)
+            )
+        resolution_comparison = {
+            "run_resolution": float(resolution),
+            "seed": int(clustering_seed),
+            "n_cells": int(n_cells),
+            "rows": resolution_rows(pref_compare_resolutions, _label_sets, labels),
+        }
+        del _label_sets
+    del _ig, _ig_weights
 
 elif algorithm == "kmeans":
     n_clusters = algorithm_params.get("n_clusters", 10)
@@ -2401,6 +2495,8 @@ if reference_codes is not None and algorithm != "existing":
     except Exception as _e:
         logger.warning("Agreement with classes failed: %s", _e)
         _validation_notes.append("Agreement with known classes: failed (%s)." % _e)
+if resolution_comparison is not None:
+    validation["resolutions"] = resolution_comparison
 if validation:
     import json as _json_val
 

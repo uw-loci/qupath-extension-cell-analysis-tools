@@ -110,4 +110,29 @@ class ValidationReportTest {
         assertThat(RunCostSummary.describe(c)).noneSatisfy(
                 s -> assertThat(s).contains("re-runs the clustering"));
     }
+
+    // Shape of run_clustering.py's "resolutions" entry (resolution_rows).
+    static final String RESOLUTIONS = "{\"resolutions\":{\"run_resolution\":1.0,\"seed\":42,"
+            + "\"n_cells\":11421,\"rows\":["
+            + "{\"resolution\":0.5,\"n_clusters\":16,\"smallest\":40,\"largest_share\":0.21,"
+            + "\"ari_with_run\":0.71,\"ari_with_next\":0.71},"
+            + "{\"resolution\":1.0,\"n_clusters\":34,\"smallest\":12,\"largest_share\":0.12,"
+            + "\"ari_with_run\":1.0,\"ari_with_next\":null}]}}";
+
+    @Test
+    void resolutionsAloneAreEnoughForTheTabAndMarkTheRunsOwnRow() {
+        ValidationReport r = ValidationReport.parse(RESOLUTIONS);
+        assertThat(r).isNotNull();
+        assertThat(r.stability).isNull();
+        assertThat(r.resolutionSummary())
+                .contains("11,421 cells").contains("2 resolutions").contains("seed 42")
+                .contains("this run used 1.");
+        assertThat(r.resolutionRows()).containsExactly(
+                new String[] {"0.5", "16", "40", "21.0%", "0.710", "0.710"},
+                new String[] {"1 (this run)", "34", "12", "12.0%", "1.000", "n/a"});
+        assertThat(r.toTsv(c -> "C" + c))
+                .contains("# Leiden resolutions")
+                .contains("Resolution\tClusters\tSmallest cluster")
+                .contains("1 (this run)\t34\t12");
+    }
 }

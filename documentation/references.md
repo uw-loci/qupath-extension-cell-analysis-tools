@@ -33,7 +33,8 @@ The Leiden algorithm is an improvement over the Louvain method for community det
 > Levine JH, Simonds EF, Bendall SC, et al. "Data-Driven Phenotypic Dissection of AML Reveals Progenitor-like Cells that Correlate with Prognosis." *Cell* 162(1), 184-197 (2015).
 > https://doi.org/10.1016/j.cell.2015.05.047
 
-**Used in:** Clustering Dialog (Leiden algorithm), BANKSY final clustering step
+**Used in:** Clustering Dialog (Leiden algorithm), BANKSY final clustering step, the
+Validation section's Compare Leiden resolutions
 
 ---
 
@@ -291,6 +292,24 @@ Kuhn's paper is the origin of the problem's standard solution. SciPy's `linear_s
 > https://doi.org/10.1109/TAES.2016.140952
 
 Noise cells (HDBSCAN) are left out of the per-cluster consistency scores.
+
+<a name="comparing-leiden-resolutions"></a>
+
+#### Comparing Leiden resolutions
+
+**Following clusters across resolutions:**
+> Zappia L, Oshlack A. "Clustering trees: a visualization for evaluating clusterings at multiple resolutions." *GigaScience* 7(7), giy083 (2018).
+> https://doi.org/10.1093/gigascience/giy083
+
+**Partitions that persist over a range of scales:**
+> Lambiotte R, Delvenne J-C, Barahona M. "Random Walks, Markov Processes and the Multiscale Modular Organization of Complex Networks." *IEEE Transactions on Network Science and Engineering* 1(2), 76-90 (2014).
+> https://doi.org/10.1109/TNSE.2015.2391998
+
+Modularity with a resolution parameter, which QP-CAT's Leiden optimizes, is a linearized form
+of their Markov stability, where partitions that stay optimal over an extended range of the
+scale parameter are the ones read as significant. The [Leiden resolutions table](results.md#leiden-resolutions)
+gives cluster counts and adjusted Rand indices across a list of resolutions so such ranges
+can be seen; it does not pick one.
 
 Run stability across seeds before reporting any clustering. Run agreement with known classes
 when the cells already carry a classification, such as a ground-truthed synthetic dataset or a

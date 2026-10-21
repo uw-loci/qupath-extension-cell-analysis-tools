@@ -188,7 +188,7 @@ Either way:
 
 ### Checking the clusters: the Validation section
 
-1. **Expand Validation** (below the analysis tick-boxes; collapsed, both checks off by default).
+1. **Expand Validation** (below the analysis tick-boxes; collapsed, every check off by default).
 2. **Tick Stability across seeds (re-runs the clustering).** It re-runs the clustering
    **Extra runs** times (default 5, 2 to 20) with other seeds and reports how much the clusters
    move, which works for Leiden too.
@@ -196,13 +196,19 @@ Either way:
    carry a phenotyping, a manual annotation or ground truth. Use it after phenotyping with
    marker rules, to see which clusters a rule set merges or splits, or on the synthetic dataset
    with its ground-truth types.
-4. **Run Clustering.** A **Validation** tab appears in the results, for example "6 runs: seed 42
+4. Optional, Leiden only: **tick Compare Leiden resolutions** and edit the list beside it
+   (default `0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2`). The run's own graph is partitioned at each
+   one, so each costs one Leiden pass and nothing else.
+5. **Run Clustering.** A **Validation** tab appears in the results, for example "6 runs: seed 42
    plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000".
-   See [Validation](results.md#validation-tab).
+   See [Validation](results.md#validation-tab). With resolutions compared, select one in the
+   table and click **Use selected resolution** to put it in the open Run Clustering dialog;
+   with reuse between runs on (the default), the next run reuses the graph and embedding.
 
 Stability is grayed out for HDBSCAN, Agglomerative and BANKSY, and in *Analyze current
 classifications*; picking one of those algorithms also clears the tick. Agreement is grayed
-out in *Analyze current classifications*, where the classes are the labels.
+out in *Analyze current classifications*, where the classes are the labels. Compare Leiden
+resolutions is grayed out for every algorithm but Leiden.
 
 Stability reports the adjusted Rand index and Pixie's cluster consistency score (Liu et al.
 2023); agreement reports ARI, normalized mutual information, purity and Cohen's kappa after
@@ -344,8 +350,9 @@ Do you know how many clusters to expect?
 **Leiden** -- builds a neighbour graph and splits it into communities. Scales to millions
 of cells, does not need k. Hard labels, so no gradients. There is no single correct
 **resolution** -- sweep it, and note the graph's `n_neighbors` matters as much.
-Changing only the resolution reuses the previous run's neighbor graph and embedding, so a
-sweep costs little after the first run; see
+**Compare Leiden resolutions** in the [Validation section](#checking-the-clusters-the-validation-section)
+partitions one run's graph at a list of resolutions, and changing only the resolution reuses
+the previous run's neighbor graph and embedding; see
 [Reusing the last run's graph and embedding](reproducibility.md#reusing-the-last-runs-graph-and-embedding).
 (Traag et al. 2019.)
 

@@ -41,7 +41,8 @@ import java.util.OptionalDouble;
  * <p>Methods deliberately absent from the hazard list, because the same ladder
  * showed them flat to 250,000 cells: KMeans (2.3 s / 0.25 GB), MiniBatch KMeans
  * (1.4 s / 0.22 GB), GMM (1.9 s / 0.30 GB). Leiden is linear but not free
- * (140 s / 4.87 GB at 250,000), so it warns on memory only.
+ * (140 s at 250,000; 3.01 GB at 300,000 since QP-CAT builds Leiden's igraph
+ * graph itself), so it warns on memory only.
  *
  * <p>Pure and dependency-free by design: no JavaFX, no QuPath types, no I/O. The
  * GUI, the YAML batch validator and the tests all consult this one table, so a
@@ -143,6 +144,8 @@ public final class ScalingLimits {
         public int coOccurrenceIntervals = DEFAULT_COOC_INTERVALS;
         /** Extra clusterings the stability check runs; 0 when it is off. */
         public int stabilityRepeats = 0;
+        /** Leiden resolutions compared on the run's graph; 0 when it is off. */
+        public int compareResolutions = 0;
         /** Physical RAM budget in GB; <= 0 asks this machine. */
         public double availableRamGb = 0;
         /** What the Python worker keeps from earlier runs for reuse, in GB. */
@@ -269,15 +272,27 @@ public final class ScalingLimits {
     }
 
     /**
-     * Leiden peak RSS. Measured 2026-08-05 in the QP-CAT env, 20 features:
-     * 50k/k=15 0.87 GB, 50k/k=50 1.51, 100k/k=15 1.51, 100k/k=50 2.56,
-     * 200k/k=50 4.19. The peak is scanpy's conversion of the graph to igraph
-     * for Leiden, not the neighbour search: at 300k/k=50, measured 2026-10-20,
-     * RSS was 1.90 GB after the search and 5.74 GB after the conversion, while
-     * the graph itself is 182 MB.
+     * Leiden peak RSS: the neighbour search plus Leiden, in a fresh process.
+     * Measured 2026-10-21 in the QP-CAT env, 20 features, after QP-CAT began
+     * streaming the graph into igraph itself (run_clustering.leiden_igraph):
+     * 50k/k=15 0.84 GB, 50k/k=50 1.08, 100k/k=15 0.98, 100k/k=50 1.46,
+     * 200k/k=50 2.25, 300k/k=50 3.01; the line below is the least-squares fit
+     * (within 0.03 GB of every point). Through scanpy's own conversion, which
+     * builds a Python tuple per edge, the same ladder was 0.87 / 1.51 / 1.51 /
+     * 2.56 / 4.19 GB (2026-08-05). Leiden alone on one 300k/k=50 graph: 2.34 GB
+     * streamed, 5.05 GB through scanpy.
      */
     public static double leidenPeakGb(long nCells, int nNeighbors) {
-        return BASE_GB + (double) nCells * nNeighbors * 3.52e-7;
+        return 0.72 + (double) nCells * nNeighbors * 1.52e-7;
+    }
+
+    /**
+     * Seconds for one more Leiden partition of a graph already built, as the
+     * resolution comparison runs it. Measured 2026-10-20 in the QP-CAT env:
+     * 36.5-39.5 s at 300k cells, k=50 -- 2.6 microseconds per cell per neighbor.
+     */
+    public static double leidenPartitionSeconds(long nCells, int nNeighbors) {
+        return nCells * (double) nNeighbors * 2.6e-6;
     }
 
     /**
@@ -552,6 +567,15 @@ public final class ScalingLimits {
                             + " runs on " + fmt(r.nCells) + " cells",
                     "each repeat is a whole clustering with another seed",
                     "Use fewer repeats (Pixie used 5), or run the check on a subset of images.");
+        }
+
+        if (r.compareResolutions > 0 && r.algorithm == ClusteringConfig.Algorithm.LEIDEN) {
+            double sec = r.compareResolutions * leidenPartitionSeconds(r.nCells, r.nNeighbors);
+            addTime(out, sec,
+                    "Comparing " + r.compareResolutions + " Leiden resolutions on "
+                            + fmt(r.nCells) + " cells",
+                    "each resolution is another Leiden pass over the run's graph",
+                    "Compare fewer resolutions, or compare them on a subset of images first.");
         }
 
         if (r.coOccurrence) {

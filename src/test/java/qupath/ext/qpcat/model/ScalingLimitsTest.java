@@ -80,8 +80,11 @@ class ScalingLimitsTest {
 
     @Test
     void leidenMatchesMeasuredPeak() {
-        // 250,000 cells at n_neighbors=50 -> 4.87 GB measured.
-        assertThat(ScalingLimits.leidenPeakGb(250_000, 50)).isCloseTo(4.87, within(TOL));
+        // Measured 2026-10-21 (QP-CAT streams the graph into igraph): 50k/k=15
+        // 0.84 GB, 100k/k=50 1.46 GB, 300k/k=50 3.01 GB.
+        assertThat(ScalingLimits.leidenPeakGb(50_000, 15)).isCloseTo(0.84, within(0.05));
+        assertThat(ScalingLimits.leidenPeakGb(100_000, 50)).isCloseTo(1.46, within(0.05));
+        assertThat(ScalingLimits.leidenPeakGb(300_000, 50)).isCloseTo(3.01, within(0.05));
     }
 
     // ---- Policy: the right verdict on the machines people actually use ------
@@ -436,19 +439,19 @@ class ScalingLimitsTest {
         Request r = new Request(Algorithm.LEIDEN, 300_000, 20);
         r.availableRamGb = 16;
         double peak = ScalingLimits.leidenPeakGb(300_000, 50);
-        assertThat(ScalingLimits.check(r)).isEmpty(); // 5.5 GB < 8 GB warn line
+        assertThat(ScalingLimits.check(r)).isEmpty(); // 3.0 GB < 8 GB warn line
 
-        r.reuseHeldGb = 3.0;
+        r.reuseHeldGb = 6.0;
         List<Finding> f = ScalingLimits.check(r);
         assertThat(f).singleElement().satisfies(x -> {
             assertThat(x.severity()).isEqualTo(Severity.WARN);
-            assertThat(x.predictedPeakGb()).isCloseTo(peak + 3.0, within(1e-9));
+            assertThat(x.predictedPeakGb()).isCloseTo(peak + 6.0, within(1e-9));
             assertThat(x.remedy()).contains("Reuse the neighbor graph between runs");
         });
 
         // Held and about-to-be-kept never add up: a new graph frees the old first.
         r.reuseKeepGb = 2.0;
         assertThat(ScalingLimits.check(r).get(0).predictedPeakGb())
-                .isCloseTo(peak + 3.0, within(1e-9));
+                .isCloseTo(peak + 6.0, within(1e-9));
     }
 }

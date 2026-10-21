@@ -62,6 +62,12 @@ public final class RunCostSummary {
                     + " more times -- that step takes about " + (config.getStabilityRepeats() + 1)
                     + "x as long");
         }
+        int resolutions = config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN
+                ? config.getCompareResolutions().size() : 0;
+        if (resolutions > 0) {
+            costs.add("Comparing " + resolutions + " Leiden resolutions adds up to "
+                    + resolutions + " more Leiden passes over the same graph");
+        }
         if (config.getAlgorithm() == ClusteringConfig.Algorithm.MINIBATCHKMEANS) {
             costs.add("MiniBatch KMeans is approximate -- results differ from full KMeans");
         }

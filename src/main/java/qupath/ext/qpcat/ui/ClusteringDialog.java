@@ -229,6 +229,16 @@ public class ClusteringDialog {
     private CheckBox pagaCheck;
     private CheckBox stabilityCheck;
     private Spinner<Integer> stabilityRepeatsSpinner;
+    private CheckBox compareResolutionsCheck;
+    private TextField compareResolutionsField;
+
+    /** Default list for "Compare Leiden resolutions". */
+    static final String DEFAULT_COMPARE_RESOLUTIONS = "0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2";
+
+    // The Run Clustering dialog on screen, so a results window can set its
+    // resolution. Weak: a closed dialog must not be kept alive by it.
+    private static volatile java.lang.ref.WeakReference<ClusteringDialog> openRunDialog =
+            new java.lang.ref.WeakReference<>(null);
     private CheckBox compareClassesCheck;
     private CheckBox spatialAnalysisCheck;
     /** Why the spatial statistics are greyed out; shown only while subsetting. */
@@ -526,7 +536,13 @@ public class ClusteringDialog {
 
         // Closing the dialog ends the exploring that the kept neighbor graph and
         // embedding are for, so free them.
+        if (mode == RunMode.CLUSTER) {
+            openRunDialog = new java.lang.ref.WeakReference<>(this);
+        }
         dialog.addEventHandler(DialogEvent.DIALOG_HIDDEN, e -> {
+            if (openRunDialog.get() == this) {
+                openRunDialog = new java.lang.ref.WeakReference<>(null);
+            }
             if (!closingAfterRun) {
                 ApposeClusteringService.getInstance()
                         .releaseReuseCache("the Run Clustering dialog was closed");
@@ -1895,7 +1911,46 @@ public class ClusteringDialog {
                     + "classes ARE the labels here, so they would agree perfectly."));
         }
 
-        VBox body = new VBox(5, stabilityRow, compareClassesCheck);
+        compareResolutionsCheck = new CheckBox("Compare Leiden resolutions:");
+        compareResolutionsCheck.setSelected(false);
+        compareResolutionsCheck.setTooltip(Tooltips.of(
+                "Also partition this run's neighbor graph with Leiden at each listed\n"
+                + "resolution, and show per resolution how many clusters it gives, the\n"
+                + "smallest one, and how much the partition changes from one resolution\n"
+                + "to the next (adjusted Rand index). The graph is built once.\n\n"
+                + "COST: one more Leiden pass per resolution; nothing else is repeated.\n\n"
+                + "Leiden only."));
+        compareResolutionsField = new TextField(DEFAULT_COMPARE_RESOLUTIONS);
+        compareResolutionsField.setPrefColumnCount(22);
+        compareResolutionsField.setTooltip(Tooltips.of(
+                "Resolutions separated by commas, at most "
+                + ClusteringConfig.MAX_COMPARE_RESOLUTIONS + ". The run's own resolution\n"
+                + "is computed anyway; list it to see it in the table."));
+        compareResolutionsField.disableProperty().bind(compareResolutionsCheck.selectedProperty()
+                .not().or(compareResolutionsCheck.disableProperty()));
+        Runnable refreshResolutionsGate = () -> {
+            boolean leiden = effectiveAlgorithm() == Algorithm.LEIDEN;
+            compareResolutionsCheck.setDisable(!leiden);
+            if (!leiden) compareResolutionsCheck.setSelected(false);
+        };
+        algorithmCombo.valueProperty().addListener((o, ov, nv) -> refreshResolutionsGate.run());
+        refreshResolutionsGate.run();
+        compareResolutionsCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        compareResolutionsField.textProperty().addListener((o, ov, nv) -> {
+            boolean ok;
+            try {
+                ClusteringConfig.parseResolutions(nv);
+                ok = true;
+            } catch (IllegalArgumentException ex) {
+                ok = false;
+            }
+            compareResolutionsField.setStyle(ok ? "" : "-fx-border-color: #d9534f;");
+            refreshRunCostLabel();
+        });
+        HBox resolutionsRow = new HBox(8, compareResolutionsCheck, compareResolutionsField);
+        resolutionsRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox body = new VBox(5, stabilityRow, compareClassesCheck, resolutionsRow);
         TitledPane pane = new TitledPane("Validation", body);
         pane.setCollapsible(true);
         pane.setExpanded(false);
@@ -3233,6 +3288,24 @@ public class ClusteringDialog {
         return dims + " " + ResultApplier.legacyEmbeddingPrefix(method.getId(), null);
     }
 
+    /**
+     * Set Leiden and a resolution in the Run Clustering dialog on screen.
+     *
+     * @param resolution the resolution to set
+     * @return false when no Run Clustering dialog is open
+     */
+    static boolean useLeidenResolution(double resolution) {
+        ClusteringDialog d = openRunDialog.get();
+        if (d == null || d.settingsDialog == null || !d.settingsDialog.isShowing()) {
+            return false;
+        }
+        d.algorithmCombo.setValue(Algorithm.LEIDEN);
+        d.leidenResolutionSpinner.getValueFactory().setValue(resolution);
+        javafx.stage.Window w = d.settingsDialog.getDialogPane().getScene().getWindow();
+        if (w instanceof javafx.stage.Stage st) st.toFront();
+        return true;
+    }
+
     private ClusteringConfig buildConfig() {
         return buildConfig(true);
     }
@@ -3352,6 +3425,18 @@ public class ClusteringDialog {
                 ? stabilityRepeatsSpinner.getValue() : 0);
         config.setCompareWithClasses(compareClassesCheck.isSelected()
                 && !compareClassesCheck.isDisabled());
+        if (compareResolutionsCheck.isSelected() && !compareResolutionsCheck.isDisabled()) {
+            try {
+                config.setCompareResolutions(
+                        ClusteringConfig.parseResolutions(compareResolutionsField.getText()));
+            } catch (IllegalArgumentException e) {
+                if (notify) {
+                    Dialogs.showWarningNotification("QPCAT",
+                            "Compare Leiden resolutions: " + e.getMessage());
+                }
+                return null;
+            }
+        }
         config.setAreaLevels(areasSection.getAreaLevels());
         config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
                 ? ClusteringConfig.BATCH_KEY_AREAS : ClusteringConfig.BATCH_KEY_IMAGES);
@@ -3824,6 +3909,11 @@ public class ClusteringDialog {
         }
         compareClassesCheck.setSelected(config.isCompareWithClasses()
                 && !compareClassesCheck.isDisabled());
+        List<Double> resolutions = config.getCompareResolutions();
+        compareResolutionsCheck.setSelected(!resolutions.isEmpty()
+                && !compareResolutionsCheck.isDisabled());
+        compareResolutionsField.setText(resolutions.isEmpty() ? DEFAULT_COMPARE_RESOLUTIONS
+                : ClusteringConfig.formatResolutions(resolutions));
         areasSection.setAreaLevels(config.getAreaLevels());
         batchKeyCombo.setValue(
                 ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey())
@@ -5232,15 +5322,19 @@ public class ClusteringDialog {
         ValidationReport validation = ValidationReport.parse(result.getValidationJson());
         if (validation != null) {
             Tab valTab = new Tab("Validation", wrapWithGuide(
-                    new ValidationPanel(validation, result.clusterNameFn()),
-                    "Two checks you can ask for under Validation in the clustering dialog.\n"
+                    new ValidationPanel(validation, result.clusterNameFn(),
+                            ClusteringDialog::useLeidenResolution),
+                    "Checks you can ask for under Validation in the clustering dialog.\n"
                     + "STABILITY: the same clustering re-run with other seeds. An adjusted "
                     + "Rand index near 1 and consistency near 1 mean the clusters do not "
                     + "depend on the seed; a cluster whose consistency is well above 1 splits or merges "
                     + "between runs and should not be named as a population.\n"
                     + "AGREEMENT: the clusters against the classes the cells had before the "
                     + "run. High agreement says the clustering recovers those classes; it "
-                    + "says nothing about classes the cells did not carry.",
+                    + "says nothing about classes the cells did not carry.\n"
+                    + "LEIDEN RESOLUTIONS: the run's graph partitioned at other resolutions. "
+                    + "Select a row and Use selected resolution to run it; the graph and "
+                    + "embedding are reused.",
                     "validation-tab"));
             valTab.setClosable(false);
             tabPane.getTabs().add(valTab);

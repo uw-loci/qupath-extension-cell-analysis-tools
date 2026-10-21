@@ -494,14 +494,15 @@ those two cases.
 
 ## Validation -- stability across seeds and agreement with known classes
 
-Two checks you ask for before the run, in the **Validation** section of the Clustering dialog
-(collapsed by default, under the analysis tick-boxes). Both are off by default. The tab appears only when at least one was
-computed, and both are saved with the result, so the tab comes back when you reopen it.
+Checks you ask for before the run, in the **Validation** section of the Clustering dialog
+(collapsed by default, under the analysis tick-boxes). All are off by default. The tab appears only when at least one was
+computed, and they are saved with the result, so the tab comes back when you reopen it.
 
 | Check box | Set to |
 |---|---|
 | **Stability across seeds (re-runs the clustering)**, with **Extra runs:** beside it | ticked, Extra runs 5 (2 to 20) |
 | **Agreement with the classifications the cells already have** | ticked when the cells already carry a phenotyping, annotation or ground-truth class |
+| **Compare Leiden resolutions:**, with the list beside it | ticked for Leiden when you are choosing a resolution; the default list is `0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2` |
 
 ![The Validation tab for a KMeans run with k = 7 on the eight-image synthetic dataset, with both checks on. Under "Stability across seeds": "6 runs: seed 42 plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000", and a table of the seven clusters with their cells, a consistency of 1.00 and 100.0% kept together for each. Under "Agreement with known classes": "11,419 cells compared, 2 unclassified excluded. Adjusted Rand index 0.982, normalized mutual information 0.971", Cohen's kappa 0.989 after matching and purity 99.1%, followed by a cluster x class table in which each cluster is matched to one true cell type, for example Cluster 0 to fibroblast with 3294 cells](images/validation-tab.png)
 
@@ -583,7 +584,66 @@ coarser than the clusters, or defined by markers you did not cluster on.
 the two runs, which is a legitimate question but a different one. In *Analyze current
 classifications* the option is off, because the classes are the labels there.
 
-**Copy tables (TSV)** puts both tables on the clipboard.
+<a name="leiden-resolutions"></a>
+
+### Leiden resolutions
+
+**What it does.** After the run's own Leiden clustering, QP-CAT partitions the same
+neighbor graph again at each resolution in the list, with the run's seed. Nothing else is
+redone: not the graph, not the embedding, not the statistics. Each resolution therefore
+costs one Leiden pass; the pre-run cost line counts them, and the scale check warns when
+they would take more than ten minutes.
+
+#### What it reports
+
+One row per resolution, the run's own marked *(this run)*:
+
+- **Clusters**: how many Leiden found.
+- **Smallest cluster**: its number of cells. **Largest cluster**: its share of all cells.
+- **ARI with this run**: the adjusted Rand index with the clusters this run reported.
+- **ARI with next**: the adjusted Rand index with the next resolution down the table, so a
+  run of values near 1 marks resolutions that give nearly the same partition.
+
+Select a row and click **Use selected resolution** to set Leiden and that resolution in the
+open Run Clustering dialog. With reuse between runs on (the default), running it reuses this
+run's neighbor graph and embedding
+([reuse between runs](reproducibility.md#reusing-the-last-runs-graph-and-embedding)), so only
+the clustering and what follows it are recomputed. With no Run Clustering dialog open, the
+button says which resolution to set.
+
+![The Validation tab after a Leiden run at resolution 1 that compared eight resolutions on the eight-image synthetic dataset. The summary reads "The run's neighbor graph (11,421 cells) partitioned by Leiden at 8 resolutions with seed 42; this run used 1." Below it a table with columns Resolution, Clusters, Smallest cluster, Largest cluster, ARI with this run and ARI with next: 0.1 and 0.2 both give 7 clusters with ARI with next 1.000 between them, 0.4 gives 9, 0.6 11, 0.8 14, 1 (this run) 19, 1.5 29 and 2 35. The 0.4 row is selected, and a Use selected resolution button sits under the table](images/validation-resolutions.png)
+
+**An example.** The screenshot is a run on the synthetic tumor-microenvironment dataset (8
+images, 11,421 cells, the 24 "mean" measurements, z-score, `n_neighbors` 50, seed 42),
+measured 2026-10-21. The cluster count climbs from 7 to 35 across the list, and only once
+does it hold: 0.1 and 0.2 give the same 7 clusters (ARI with next 1.000). Everywhere else
+each step changes the partition (ARI with next 0.71 to 0.89). The dataset was built with
+seven cell classes (counting Ki67-positive tumor cells as their own class), but this table
+compares counts only; whether those 7 clusters are those classes is what **Agreement with
+known classes** answers. Re-running at 0.4 from this table gave the 9 clusters in its row
+and took 7.5 to 8.4 s, against 47 to 73 s for the first run, which built the graph and
+compared all eight resolutions (two sessions on one machine).
+
+**How to read it.** No number in the table picks a resolution, and none is suggested. A
+range where the cluster count and the partition hold steady is structure the graph keeps
+over a range of settings; a count that changes at every step is not. That is the reasoning
+behind clustering trees, which follow cells across resolutions (Zappia & Oshlack 2018), and
+behind Markov stability, of which modularity with a resolution parameter is a linearized
+form and where partitions that persist over a range of scales are the ones to trust (Lambiotte,
+Delvenne & Barahona 2014); see
+[References](references.md#comparing-leiden-resolutions). Then judge the clusters at that
+resolution by their markers.
+
+#### Limitations
+
+- **One seed.** Every row uses the run's seed. A plateau that a different seed would break
+  is still a plateau here; combine with **Stability across seeds** at the resolution you pick.
+- **One graph.** Every row uses this run's `n_neighbors`, which shapes the graph as much as
+  the resolution shapes the partition. Compare `n_neighbors` by running again.
+- **Leiden only.** BANKSY's Leiden step and the other algorithms are not covered.
+- **Not in YAML batch runs**, like the other Validation checks.
+
+**Copy tables (TSV)** puts every table on the clipboard.
 
 ### What the numbers look like on data with a known answer
 

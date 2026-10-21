@@ -1926,6 +1926,9 @@ public class ClusteringWorkflow {
         Object nn = params.get("n_neighbors");
         if (nn instanceof Number num && num.intValue() > 0) r.nNeighbors = num.intValue();
         r.stabilityRepeats = config.getStabilityRepeats();
+        if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN) {
+            r.compareResolutions = config.getCompareResolutions().size();
+        }
         r.ripley = config.isEnableRipley();
         r.coOccurrence = config.isEnableCoOccurrencePairwise()
                 || config.isEnableCoOccurrenceOneVsRest();
@@ -2162,6 +2165,10 @@ public class ClusteringWorkflow {
         // classes ARE the labels (analyze-existing), so it is not sent there.
         if (config.getStabilityRepeats() > 0) {
             inputs.put("stability_repeats", config.getStabilityRepeats());
+        }
+        if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN
+                && !config.getCompareResolutions().isEmpty()) {
+            inputs.put("compare_resolutions", config.getCompareResolutions());
         }
         NDArray referenceNd = null;
         if (config.isCompareWithClasses() && suppliedLabels == null) {

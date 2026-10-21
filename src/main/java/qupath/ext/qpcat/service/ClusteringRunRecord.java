@@ -306,6 +306,7 @@ public final class ClusteringRunRecord {
             sb.append("  (requested; did not engage -- too few features to reduce)");
         }
         sb.append('\n');
+        sb.append("Validation       : ").append(describeValidation(config)).append('\n');
         if (config.isEnableSpatialAnalysis() || config.isAnySpatialStatEnabled()) {
             sb.append("Spatial stats    : graph=").append(config.getSpatialGraphType())
                     .append(" k=").append(config.getSpatialGraphK())
@@ -488,6 +489,23 @@ public final class ClusteringRunRecord {
     private static int measurementCount(ClusteringConfig config) {
         List<String> m = config.getSelectedMeasurements();
         return m == null ? 0 : m.size();
+    }
+
+    /** The Validation section's settings, or "none". */
+    static String describeValidation(ClusteringConfig config) {
+        List<String> parts = new ArrayList<>();
+        if (config.getStabilityRepeats() > 0) {
+            parts.add("stability across seeds, " + config.getStabilityRepeats() + " extra runs");
+        }
+        if (config.isCompareWithClasses()) {
+            parts.add("agreement with the classes the cells already had");
+        }
+        if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN
+                && !config.getCompareResolutions().isEmpty()) {
+            parts.add("Leiden resolutions "
+                    + ClusteringConfig.formatResolutions(config.getCompareResolutions()));
+        }
+        return parts.isEmpty() ? "none" : String.join("; ", parts);
     }
 
     private static String mapToString(Map<String, Object> map) {

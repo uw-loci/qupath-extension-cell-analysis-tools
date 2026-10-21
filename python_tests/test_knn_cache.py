@@ -21,6 +21,17 @@ sys.path.remove(str(SCRIPTS_DIR))
 MB = 1024 * 1024
 
 
+def load_leiden():
+    """leiden_labels with the two helpers it calls."""
+    helpers = {
+        name: load_script_symbol("run_clustering.py", name, {"np": np})
+        for name in ("leiden_igraph", "leiden_partition")
+    }
+    return load_script_symbol(
+        "run_clustering.py", "leiden_labels", {"np": np, **helpers}
+    )
+
+
 @pytest.fixture(autouse=True)
 def empty_cache():
     knn_cache.release("test setup")
@@ -115,7 +126,7 @@ def test_releasing_returns_the_memory_to_the_system():
 @requires("igraph")
 def test_leiden_on_a_kept_graph_gives_the_labels_of_a_rebuilt_one():
     graph_of = load_script_symbol("run_clustering.py", "knn_graph", {"np": np})
-    leiden = load_script_symbol("run_clustering.py", "leiden_labels", {"np": np})
+    leiden = load_leiden()
     # Above 4,096 cells, where scanpy's search is approximate and seeded.
     x = blobs(n=5000, seed=3)
     built = graph_of(x, 15, 42)
@@ -138,7 +149,7 @@ def test_leiden_labels_match_the_previous_single_call_path():
     import scanpy as sc
 
     graph_of = load_script_symbol("run_clustering.py", "knn_graph", {"np": np})
-    leiden = load_script_symbol("run_clustering.py", "leiden_labels", {"np": np})
+    leiden = load_leiden()
     x = blobs(n=800, seed=5)
     adata = ad.AnnData(X=x)
     sc.pp.neighbors(adata, n_neighbors=15, use_rep="X", random_state=7)
@@ -147,3 +158,68 @@ def test_leiden_labels_match_the_previous_single_call_path():
     )
     before = adata.obs["leiden"].astype(int).values
     assert np.array_equal(leiden(graph_of(x, 15, 7), 0.8, 7), before)
+
+
+@requires("scanpy")
+@requires("igraph")
+def test_one_igraph_graph_gives_scanpys_labels_at_every_resolution():
+    """leiden_igraph + leiden_partition must stay exactly sc.tl.leiden(flavor="igraph").
+
+    Pins the contract with scanpy: QP-CAT builds the igraph graph itself (to avoid
+    scanpy's per-edge tuples) and seeds it with scanpy's own helper.
+    """
+    import anndata as ad
+    import scanpy as sc
+
+    graph_of = load_script_symbol("run_clustering.py", "knn_graph", {"np": np})
+    to_igraph = load_script_symbol("run_clustering.py", "leiden_igraph", {"np": np})
+    partition = load_script_symbol("run_clustering.py", "leiden_partition", {"np": np})
+    conn = graph_of(blobs(n=5000, seed=11), 20, 3)
+    g, w = to_igraph(conn)
+    for resolution in (0.1, 0.5, 1.0, 2.5):
+        adata = ad.AnnData(X=np.zeros((conn.shape[0], 0), dtype=np.float32))
+        sc.tl.leiden(
+            adata,
+            resolution=resolution,
+            adjacency=conn,
+            flavor="igraph",
+            n_iterations=-1,
+            random_state=3,
+        )
+        expected = adata.obs["leiden"].astype(int).values
+        assert np.array_equal(partition(g, w, resolution, 3), expected), resolution
+
+
+@requires("scanpy")
+@requires("igraph")
+def test_explicit_zeros_in_the_graph_are_dropped_as_scanpy_drops_them():
+    import anndata as ad
+    import scanpy as sc
+
+    graph_of = load_script_symbol("run_clustering.py", "knn_graph", {"np": np})
+    leiden = load_leiden()
+    conn = graph_of(blobs(n=900, seed=2), 15, 1).copy()
+    conn.data[::7] = 0.0  # stored, but zero
+    adata = ad.AnnData(X=np.zeros((conn.shape[0], 0), dtype=np.float32))
+    sc.tl.leiden(
+        adata,
+        resolution=1.0,
+        adjacency=conn,
+        flavor="igraph",
+        n_iterations=-1,
+        random_state=1,
+    )
+    assert np.array_equal(leiden(conn, 1.0, 1), adata.obs["leiden"].astype(int).values)
+
+
+def test_resolution_rows_count_clusters_and_compare_neighbours():
+    rows_of = load_script_symbol("run_clustering.py", "resolution_rows", {"np": np})
+    run = np.array([0, 0, 1, 1, 2, 2, 2, 2])
+    coarse = np.array([0, 0, 0, 0, 1, 1, 1, 1])
+    rows = rows_of([0.5, 1.0, 2.0], [coarse, run, run], run)
+    assert [r["n_clusters"] for r in rows] == [2, 3, 3]
+    assert [r["smallest"] for r in rows] == [4, 2, 2]
+    assert rows[0]["largest_share"] == 0.5 and rows[1]["largest_share"] == 0.5
+    assert rows[1]["ari_with_run"] == 1.0 and rows[0]["ari_with_run"] < 1.0
+    assert rows[1]["ari_with_next"] == 1.0  # 1.0 -> 2.0 changed nothing
+    assert rows[2]["ari_with_next"] is None
