@@ -67,7 +67,7 @@ caveats.
 - **[Click the plot, see the cells](documentation/results.md)** -- brush a region of the embedding and those cells highlight on the slide; click one to open its image and center on it. <sub>Interactive UMAP / PCA / t-SNE, plus a 3D view</sub>
 - **[Gate cells on a 2D plot](documentation/clusters.md#gating-cells-on-a-2d-plot)** -- draw a polygon on any biaxial marker plot and act on what falls inside. <sub>Lasso gating</sub>
 - **[Publication-ready follow-up](documentation/results.md)** -- the markers that define each cluster, plotted without leaving QuPath. <sub>Wilcoxon ranking; dotplot, matrix plot, violin, PAGA</sub>
-- **[Check that clusters hold up](documentation/results.md#validation-tab)** -- re-run with other seeds, or compare against classes the cells already carry. <sub>Adjusted Rand index, Pixie consistency, NMI, purity, Cohen's kappa; off by default</sub>
+- **[Check that clusters hold up](documentation/results.md#validation-tab)** -- re-run with other seeds, compare against classes the cells already carry, or compare Leiden resolutions. <sub>Adjusted Rand index, Pixie consistency, NMI, purity, Cohen's kappa; off by default</sub>
 
 ### Get results out
 
@@ -513,7 +513,7 @@ After clustering, QP-CAT can generate:
 | **PAGA graph** | Cluster connectivity/trajectory graph |
 | **Dotplot** | Percent of each cluster above 0 in the normalized units (dot size; not "fraction expressing" under z-score) and the mean with each marker scaled 0-1 (color) |
 | **Stacked violin** | Expression distributions per cluster, colored by the median in the run's normalized units |
-| **Validation** | Optional: stability across seeds (adjusted Rand index, per-cluster consistency) and agreement with the classes the cells already carry (ARI, NMI, purity, kappa) |
+| **Validation** | Optional: stability across seeds (adjusted Rand index, per-cluster consistency), agreement with the classes the cells already carry (ARI, NMI, purity, kappa), and, for Leiden, a table of cluster counts and ARI across a list of resolutions |
 | **Neighborhood enrichment** | Table of `z (edges)` per cluster pair, with Copy text / Copy CSV / Save CSV...; heatmap on the **Neighborhood Enrichment (plot)** tab |
 | **Spatial scatter** | Cell positions colored by cluster (when spatial analysis enabled) |
 | **Per-area composition** | `<name>_areas_summary.csv` -- wide table, one row per area with columns: area name, area type (Image / TMA Core / Annotation-<class>), cell count, cluster count, then cluster fraction and count per column (when independent areas are configured). Written next to the saved result. |
