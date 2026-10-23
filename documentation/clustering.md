@@ -264,10 +264,23 @@ over-trusting a boundary the method was free to draw wherever it liked.
 ### Choosing k
 
 KMeans, MiniBatch KMeans, Agglomerative and GMM all make you name the number of clusters.
-**"Choose k..."**, beside that spinner, fits the algorithm across a range of k and plots the
+**"Choose k..."**, beside that spinner, fits KMeans at each k across a range and plots the
 three statistics the literature recommends for the decision. It runs on **the matrix this
-configuration would cluster** -- same measurements, same normalization, same PCA precursor --
-because a k chosen on a different matrix is a k chosen for a different problem.
+configuration would cluster**, because a k chosen on a different matrix is a k chosen for a
+different problem:
+
+- **The same cells** a run on the open image would cluster, including any restriction to
+  chosen classifications. In sub-cluster mode, the cells of the class being sub-clustered.
+- **Prepared the same way.** The run's own code applies the normalization, spatial
+  smoothing, batch correction and PCA precursor, and the dialog lists which of them were
+  applied, for example *Prepared as the run prepares them: normalization: zscore.*
+- **The same seed** as the run.
+
+It reads only the open image. When the run clusters several images together, the dialog
+says so: batch correction then has a single image to correct, and a population that is not
+in this image is not in the sweep. The fitted model is KMeans whichever algorithm you
+chose, so for Agglomerative or GMM the curves describe KMeans partitions of the same
+matrix.
 
 #### The three, and what each is worth
 

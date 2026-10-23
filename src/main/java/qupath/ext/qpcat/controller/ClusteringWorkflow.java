@@ -307,42 +307,24 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Message for "nothing left to analyze", naming the subset when one is active
-     * so the user is not told to run cell detection on an image full of cells.
+     * The open image's cells a single-image run clusters: the selected
+     * detections, else every detection, cells only when the image has cells,
+     * then the class subset.
      *
-     * @param config      the run configuration
-     * @param cellsBefore how many cells existed before the subset was applied
-     * @return the message for the thrown IOException
+     * @param imageData the open image
+     * @param config    the run's configuration
+     * @param context   names the caller in log lines
+     * @return the cells, never empty
+     * @throws IOException when no cell is left
      */
-    private static String noCellsMessage(ClusteringConfig config, int cellsBefore) {
-        if (config != null && config.isClassSubsetActive() && cellsBefore > 0) {
-            return "None of the " + cellsBefore + " cell(s) carry a selected classification. "
-                    + "Chosen: " + config.describeClassSubset() + ".";
-        }
-        return "No detection objects found. Run cell detection first.";
-    }
-
-    public ClusteringResult runClustering(ClusteringConfig config,
-                                           Consumer<String> progressCallback) throws IOException {
-        enforceClassSubsetRules(config);
-        long startTime = System.currentTimeMillis();
-        reportPhase(progressCallback, "extract", "Extracting measurements...");
-
-        // Get detections from the current image
-        ImageData<BufferedImage> imageData = qupath.getImageData();
-        if (imageData == null) {
-            throw new IOException("No image is open");
-        }
-
+    private static List<PathObject> cellsToCluster(ImageData<BufferedImage> imageData,
+                                                   ClusteringConfig config, String context)
+            throws IOException {
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
         Collection<PathObject> selected = hierarchy.getSelectionModel().getSelectedObjects();
 
         // If no selection, use all detections
         Collection<PathObject> detections;
-        // True when the user had annotation(s) selected when launching the run,
-        // i.e. annotations were chosen as the clustering input. Drives whether the
-        // "Composition by annotation" tab is offered.
-        boolean annotationInput = selected.stream().anyMatch(PathObject::isAnnotation);
         if (selected.isEmpty() || selected.stream().noneMatch(p -> p.isDetection())) {
             detections = new ArrayList<>(hierarchy.getDetectionObjects());
             logger.info("No detections selected - using all {} detections", detections.size());
@@ -372,13 +354,69 @@ public class ClusteringWorkflow {
         // (spots nested inside cells) are not treated as cells. Nucleus-only
         // pipelines (no cell objects) keep every detection. See DetectionSelector.
         List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
-                detections, "clustering");
-        int cellsBeforeSubset = cells.size();
-        detections = applyClassSubset(config, cells, "clustering");
-
-        if (detections.isEmpty()) {
-            throw new IOException(noCellsMessage(config, cellsBeforeSubset));
+                detections, context);
+        List<PathObject> chosen = applyClassSubset(config, cells, context);
+        if (chosen.isEmpty()) {
+            throw new IOException(noCellsMessage(config, cells.size()));
         }
+        return chosen;
+    }
+
+    /**
+     * The open image's detections carrying one class, as a sub-cluster run reads them.
+     *
+     * @param imageData the open image
+     * @param className the class's full name
+     * @return the detections, never empty
+     * @throws IOException when none carries the class
+     */
+    private static List<PathObject> cellsOfClass(ImageData<BufferedImage> imageData,
+                                                 String className) throws IOException {
+        List<PathObject> cells = imageData.getHierarchy().getDetectionObjects().stream()
+                .filter(det -> det.getPathClass() != null
+                        && det.getPathClass().toString().equals(className))
+                .toList();
+        if (cells.isEmpty()) {
+            throw new IOException("No detections found with classification '"
+                    + className + "'");
+        }
+        return cells;
+    }
+
+    /**
+     * Message for "nothing left to analyze", naming the subset when one is active
+     * so the user is not told to run cell detection on an image full of cells.
+     *
+     * @param config      the run configuration
+     * @param cellsBefore how many cells existed before the subset was applied
+     * @return the message for the thrown IOException
+     */
+    private static String noCellsMessage(ClusteringConfig config, int cellsBefore) {
+        if (config != null && config.isClassSubsetActive() && cellsBefore > 0) {
+            return "None of the " + cellsBefore + " cell(s) carry a selected classification. "
+                    + "Chosen: " + config.describeClassSubset() + ".";
+        }
+        return "No detection objects found. Run cell detection first.";
+    }
+
+    public ClusteringResult runClustering(ClusteringConfig config,
+                                           Consumer<String> progressCallback) throws IOException {
+        enforceClassSubsetRules(config);
+        long startTime = System.currentTimeMillis();
+        reportPhase(progressCallback, "extract", "Extracting measurements...");
+
+        // Get detections from the current image
+        ImageData<BufferedImage> imageData = qupath.getImageData();
+        if (imageData == null) {
+            throw new IOException("No image is open");
+        }
+
+        // True when the user had annotation(s) selected when launching the run,
+        // i.e. annotations were chosen as the clustering input. Drives whether the
+        // "Composition by annotation" tab is offered.
+        boolean annotationInput = imageData.getHierarchy().getSelectionModel()
+                .getSelectedObjects().stream().anyMatch(PathObject::isAnnotation);
+        List<PathObject> detections = cellsToCluster(imageData, config, "clustering");
 
         // Extract measurements
         MeasurementExtractor extractor = new MeasurementExtractor();
@@ -1724,16 +1762,19 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Extract the current image's matrix and sweep k over it.
+     * Sweep k over the open image's cells and compute the three statistics people
+     * are told to choose it with.
      *
-     * <p>The convenience the "Choose k..." button needs: the sweep is only
-     * meaningful on the matrix the real run would cluster, so the extraction and
-     * the measurement list come from the same config rather than from the dialog's
-     * controls read a second time. Normalization is applied by the Python side
-     * exactly as it is for a run.
+     * <p>The cells are the ones a single-image run would cluster (or a
+     * sub-cluster run, when {@code subclusterParent} is set), and the matrix is
+     * prepared by run_clustering.py's own code, so the sweep sees what the run
+     * clusters. Must be called with the extension class loader set (Appose).
      *
-     * @param imageData        image whose detections to read
+     * @param imageData        the open image
      * @param config           the configuration a run would use
+     * @param subclusterParent the class a sub-cluster run re-clusters, or null
+     * @param imagesInRun      images the run would cluster together; above 1 the
+     *                         sweep says it read only the open image
      * @param kMin             smallest k; 1 is meaningful only for the gap
      * @param kMax             largest k
      * @param silhouetteCap    cell cap for the O(n^2) silhouette; 0 for no cap
@@ -1742,82 +1783,51 @@ public class ClusteringWorkflow {
      * @return the sweep, or null when the script produced nothing
      * @throws IOException when there are no cells, or the Appose task fails
      */
-    public ChooseKResult sweepKForImage(ImageData<BufferedImage> imageData,
-                                        ClusteringConfig config, int kMin, int kMax,
-                                        int silhouetteCap, int gapReferences,
-                                        Consumer<String> progressCallback)
-            throws IOException {
-        // Same selection chain as a real run, so the sweep sees the same cells.
-        List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
-                imageData.getHierarchy().getDetectionObjects(), "k sweep");
-        int before = cells.size();
-        List<PathObject> detections = applyClassSubset(config, cells, "k sweep");
-        if (detections.isEmpty()) {
-            throw new IOException(noCellsMessage(config, before));
-        }
-        report(progressCallback, "Reading " + detections.size() + " cells...");
-        MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor()
-                .extract(detections, config.getSelectedMeasurements());
-        // The run's own seed, so the sweep and the run that follows it agree.
-        Object seed = config.getAlgorithmParams().get("random_state");
-        int seedValue = seed instanceof Number n ? n.intValue() : 42;
-        return sweepK(extraction, kMin, kMax, seedValue, silhouetteCap,
-                gapReferences, 0, progressCallback);
-    }
-
-    /**
-     * Sweep k and compute the three statistics people are told to choose it with.
-     *
-     * <p>Runs on the SAME matrix a real run would cluster -- same measurements,
-     * same normalization, same PCA precursor -- because a k chosen on a different
-     * matrix is a k chosen for a different problem. Must be called with the
-     * extension class loader set (Appose).
-     *
-     * @param extraction       the extracted, normalized matrix
-     * @param kMin             smallest k to try; 1 is meaningful only for the gap
-     * @param kMax             largest k to try
-     * @param seed             KMeans seed and the seed for every subsample
-     * @param silhouetteCap    cell cap for the O(n^2) silhouette; 0 for no cap
-     * @param gapReferences    reference datasets per k; 0 skips the gap
-     * @param sweepCap         cell cap for the whole sweep; 0 for no cap
-     * @param progressCallback receives the per-k progress messages
-     * @return the parsed sweep, or null when the script produced nothing
-     * @throws IOException if the Appose task fails
-     */
-    public ChooseKResult sweepK(MeasurementExtractor.ExtractionResult extraction,
-                                int kMin, int kMax, int seed, int silhouetteCap,
-                                int gapReferences, int sweepCap,
+    public ChooseKResult sweepK(ImageData<BufferedImage> imageData, ClusteringConfig config,
+                                String subclusterParent, int imagesInRun,
+                                int kMin, int kMax, int silhouetteCap, int gapReferences,
                                 Consumer<String> progressCallback) throws IOException {
-        int nCells = extraction.getNCells();
-        int nMeasurements = extraction.getNMeasurements();
-        NDArray measurementsNd =
-                buildMeasurementNDArray(extraction.getData(), nCells, nMeasurements);
+        List<PathObject> cells = subclusterParent != null
+                ? cellsOfClass(imageData, subclusterParent)
+                : cellsToCluster(imageData, config, "k sweep");
+        report(progressCallback, "Reading " + cells.size() + " cells...");
+        MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor()
+                .extract(cells, config.getSelectedMeasurements());
 
-        Map<String, Object> inputs = new HashMap<>();
-        inputs.put("measurements", measurementsNd);
-        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        List<String> notes = new ArrayList<>();
+        if (imagesInRun > 1) {
+            notes.add("This configuration clusters " + imagesInRun + " images together, but "
+                    + "the sweep read only the open image. Its cells were prepared the way "
+                    + "the run prepares them, except that batch correction has only one "
+                    + "image to correct, and a population missing from this image is "
+                    + "missing from the sweep.");
+        }
+        List<NDArray> arrays = new ArrayList<>();
+        Map<String, Object> inputs = runInputs(extraction, config, null,
+                resolveAreas(extraction, config), resolveSpatialFrame(extraction), null, arrays);
         inputs.put("k_min", kMin);
         inputs.put("k_max", kMax);
-        inputs.put("random_seed", seed);
         inputs.put("silhouette_max_cells", silhouetteCap);
         inputs.put("gap_n_references", gapReferences);
-        inputs.put("sweep_max_cells", sweepCap);
-
+        inputs.put("sweep_max_cells", 0);
+        inputs.put("sweep_notes", notes);
         try {
             Task task = ApposeClusteringService.getInstance().runTaskWithListener(
                     "choose_k", inputs,
                     event -> {
                         if (event.responseType == ResponseType.UPDATE
                                 && event.message != null) {
-                            report(progressCallback, event.message);
+                            String m = event.message;
+                            int bar = m.indexOf('|');
+                            report(progressCallback, bar > 0 ? m.substring(bar + 1) : m);
                         }
                     },
                     t -> currentTask = t);
             return ChooseKResult.fromJson((String) task.outputs.get("sweep_json"));
         } finally {
-            // Shared-memory segment: unclosed it stays mapped for the JVM's
+            // Shared-memory segments: unclosed they stay mapped for the JVM's
             // lifetime, which at 1M cells x 40 markers is ~336 MB per sweep.
-            measurementsNd.close();
+            arrays.forEach(NDArray::close);
         }
     }
 
@@ -2002,7 +2012,6 @@ public class ClusteringWorkflow {
 
         int nCells = extraction.getNCells();
         int nMeasurements = extraction.getNMeasurements();
-        double[][] data = extraction.getData();
 
         // Independent areas: which cells may share a spatial graph at all.
         // Resolved BEFORE the scaling check, because Ripley and co-occurrence
@@ -2016,9 +2025,6 @@ public class ClusteringWorkflow {
         // project, and the headless YAML batch all arrive here.
         enforceScalingLimits(nCells, nMeasurements, config, areas);
 
-        // Create NDArray for measurement data (input -- closed after task completes)
-        NDArray measurementsNd = buildMeasurementNDArray(data, nCells, nMeasurements);
-
         // Create temp directory for plots if requested
         Path plotDir = null;
         if (config.isGeneratePlots()) {
@@ -2029,197 +2035,10 @@ public class ClusteringWorkflow {
             }
         }
 
-        // Create spatial coordinates NDArray if spatial analysis, smoothing,
-        // BANKSY, or any v1 spatial statistic is enabled.
-        NDArray spatialCoordsNd = null;
         SpatialFrame frame = resolveSpatialFrame(extraction);
-        boolean needsSpatialCoords = config.isEnableSpatialAnalysis()
-                || config.isEnableSpatialSmoothing()
-                || config.isAnySpatialStatEnabled()
-                || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY;
-        if (needsSpatialCoords) {
-            double[][] centroids = frame.centroids(extraction.getDetections());
-            NDArray.Shape spatialShape = new NDArray.Shape(
-                    NDArray.Shape.Order.C_ORDER, nCells, 2);
-            spatialCoordsNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
-            var spatialBuf = spatialCoordsNd.buffer().asDoubleBuffer();
-            for (int i = 0; i < nCells; i++) {
-                spatialBuf.put(centroids[i]);
-            }
-        }
-
-        // Compute batch labels for batch correction. Images is the default and
-        // the historical behaviour; areas lets a 55-core TMA in a single image
-        // be corrected core-by-core, which per-image labels cannot express.
-        List<Integer> batchLabels = null;
-        if (config.isEnableBatchCorrection()) {
-            if (ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey()) && areas != null) {
-                batchLabels = new ArrayList<>(nCells);
-                for (int id : areas.getAreaIds()) {
-                    batchLabels.add(id);
-                }
-            } else if (extraction.isMultiImage()) {
-                batchLabels = new ArrayList<>();
-                for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
-                    MeasurementExtractor.ImageSegment seg =
-                            extraction.getImageSegments().get(segIdx);
-                    for (int i = 0; i < seg.getCount(); i++) {
-                        batchLabels.add(segIdx);
-                    }
-                }
-            }
-        }
-
-        // Build inputs map
-        Map<String, Object> inputs = new HashMap<>();
-        inputs.put("measurements", measurementsNd);
-        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
-        inputs.put("algorithm", config.getAlgorithm().getId());
-        inputs.put("algorithm_params", config.getAlgorithmParams());
-        inputs.put("normalization", config.getNormalization().getId());
-        inputs.put("embedding_method", config.getEmbeddingMethod().getId());
-        inputs.put("embedding_params", config.getEmbeddingParams());
-        inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
-        inputs.put("reuse_budget_bytes", reuseBudgetBytes());
-        // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
-        // in embeddingParams as "n_components"; forwarded as the top-level input the
-        // Python task reads so a missing key cleanly defaults to 2.
-        inputs.put("embedding_n_components", embeddingNComponents(config));
-        inputs.put("top_n_markers", config.getTopNMarkers());
-        inputs.put("generate_plots", plotDir != null);
-        if (plotDir != null) {
-            inputs.put("output_dir", plotDir.toString());
-        }
-        if (spatialCoordsNd != null) {
-            inputs.put("spatial_coords", spatialCoordsNd);
-        }
-        if (config.isEnableSpatialSmoothing()) {
-            inputs.put("enable_spatial_smoothing", true);
-            inputs.put("spatial_smoothing_iterations", config.getSpatialSmoothingIterations());
-        }
-        if (batchLabels != null) {
-            inputs.put("enable_batch_correction", true);
-            inputs.put("batch_labels", batchLabels);
-        }
-
-        // For multi-image runs, always tell Python which image each cell belongs to (and
-        // the image names) so the "Spatial distribution" plot is split PER IMAGE instead
-        // of overlaying cells from different images that share no coordinate frame. This
-        // is independent of batch correction.
-        if (extraction.isMultiImage()) {
-            List<Integer> imageLabels = new ArrayList<>();
-            List<String> imageNames = new ArrayList<>();
-            for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
-                MeasurementExtractor.ImageSegment seg = extraction.getImageSegments().get(segIdx);
-                imageNames.add(segmentImageName(seg));
-                for (int i = 0; i < seg.getCount(); i++) imageLabels.add(segIdx);
-            }
-            inputs.put("image_labels", imageLabels);
-            inputs.put("image_names", imageNames);
-        }
-
-        // Independent-area ids. Every spatial consumer on the Python side
-        // partitions on these, so no neighbour edge crosses a boundary that
-        // tissue does not. Omitted when the levels cannot split anything,
-        // which keeps single-section runs on exactly the previous path.
-        if (areas != null) {
-            List<Integer> areaIdList = new ArrayList<>(nCells);
-            for (int id : areas.getAreaIds()) {
-                areaIdList.add(id);
-            }
-            inputs.put("area_ids", areaIdList);
-            inputs.put("area_names", areas.getAreaNames());
-            inputs.put("area_types", areas.getAreaTypes());
-        }
-
-        // Preference-backed defaults (overridable via QP-CAT preferences UI)
-        inputs.put("spatial_knn", QpcatPreferences.getClusterSpatialKnn());
-        inputs.put("tsne_perplexity_default", QpcatPreferences.getClusterTsnePerplexity());
-        inputs.put("hdbscan_min_samples_default", QpcatPreferences.getClusterHdbscanMinSamples());
-        inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
-        inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
-        inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
-        // Colour maps for the figures matplotlib renders. Only names matplotlib
-        // actually has cross over: a user's own QuPath .tsv map has no equivalent,
-        // so it is OMITTED rather than sent -- the script falls back to its own
-        // default on NameError. Omitting beats sending null: an absent input is a
-        // documented path in every one of these scripts, a null one is not.
-        String seqCmap = QpcatColorMaps.matplotlibName(
-                QpcatPreferences.getHeatmapColorMap(false));
-        if (seqCmap != null) {
-            inputs.put("sequential_cmap", seqCmap);
-        }
-        String divCmap = QpcatColorMaps.matplotlibName(
-                QpcatPreferences.getHeatmapColorMap(true));
-        if (divCmap != null) {
-            inputs.put("diverging_cmap", divCmap);
-        }
-        inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
-        inputs.put("paga_edge_threshold", QpcatPreferences.getPagaEdgeThreshold());
-        // Labels read off the objects, for the analyze-existing-classifications
-        // path. Python validates length, sign and density before using them.
-        if (suppliedLabels != null) {
-            inputs.put("supplied_labels", buildLabelNDArray(suppliedLabels));
-        }
-        // Validation. Comparing with the classes is meaningless when those
-        // classes ARE the labels (analyze-existing), so it is not sent there.
-        if (config.getStabilityRepeats() > 0) {
-            inputs.put("stability_repeats", config.getStabilityRepeats());
-        }
-        if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN
-                && !config.getCompareResolutions().isEmpty()) {
-            inputs.put("compare_resolutions", config.getCompareResolutions());
-        }
-        NDArray referenceNd = null;
-        if (config.isCompareWithClasses() && suppliedLabels == null) {
-            ExistingLabelReader.ClassCodes ref =
-                    ExistingLabelReader.classCodes(extraction.getDetections());
-            referenceNd = buildLabelNDArray(ref.codes());
-            inputs.put("reference_labels", referenceNd);
-            inputs.put("reference_names", ref.names());
-        }
-        // Absent from an older saved config -> isPcaPrecursor() is false, so the
-        // run reproduces on the full feature matrix as it originally did.
-        inputs.put("compute_paga", config.isComputePaga());
-        inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
-        inputs.put("pca_precursor_n_comps", QpcatPreferences.getClusterPcaPrecursorComponents());
-
-        // ---- Spatial stats expansion (v1) inputs ----
-        // Always pass; the Python side gates the heavy work on per-statistic flags.
-        inputs.put("spatial_graph_type", config.getSpatialGraphType());
-        inputs.put("spatial_graph_k", config.getSpatialGraphK());
-        inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
-        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdge(config, frame));
-        inputs.put("coord_unit", frame.unit());
-        inputs.put("spatial_permutations", config.getSpatialPermutations());
-        inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
-        inputs.put("use_squidpy_graph_for_smoothing",
-                QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
-        // Phase 5 enhancement: PNG output for spatial-stats plots so the
-        // Export figures (batch)... can pick them up.
-        inputs.put("spatial_persist_plots",
-                QpcatPreferences.isSpatialPersistPlots());
-        // Gate neighborhood-enrichment + Moran's I on the explicit spatial-
-        // analysis choice. Without this they run whenever spatial coordinates
-        // are present -- which is ALWAYS true for BANKSY -- so a BANKSY run would
-        // trigger them (and the nhood permutation test) uninvited.
-        inputs.put("enable_spatial_analysis", config.isEnableSpatialAnalysis());
-        inputs.put("enable_ripley", config.isEnableRipley());
-        inputs.put("enable_geary", config.isEnableGeary());
-        inputs.put("enable_co_occurrence_pairwise",
-                config.isEnableCoOccurrencePairwise());
-        inputs.put("enable_co_occurrence_one_vs_rest",
-                config.isEnableCoOccurrenceOneVsRest());
-        inputs.put("cooc_matrix_radius", config.getCoOccurrenceMatrixRadius());
-        // ---- Spatial graph overlay (v0.3) inputs ----
-        inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
-        inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
-        // F1: pass pixel size so the Python helper scales QPCAT spatial:
-        // distance + triangle-area outputs to microns when calibration is
-        // present. Falls back to 1.0 (pixels) when no calibration is
-        // available, matching the v0.2.7 spatial-stats unit treatment.
-        // Coordinates already in microns need no further scaling.
-        inputs.put("pixel_size_um", frame.inMicrons() ? 1.0 : resolveSpatialPixelSizeUm(extraction));
+        List<NDArray> inputArrays = new ArrayList<>();
+        Map<String, Object> inputs =
+                runInputs(extraction, config, suppliedLabels, areas, frame, plotDir, inputArrays);
 
         NDArray labelsNd = null;
         NDArray embNd = null;
@@ -2703,8 +2522,7 @@ public class ClusteringWorkflow {
             throw e;
         } finally {
             // Release all shared memory
-            measurementsNd.close();
-            if (spatialCoordsNd != null) spatialCoordsNd.close();
+            inputArrays.forEach(NDArray::close);
             if (labelsNd != null) labelsNd.close();
             if (embNd != null) embNd.close();
             if (statsNd != null) statsNd.close();
@@ -2713,7 +2531,6 @@ public class ClusteringWorkflow {
             if (ruNd != null) ruNd.close();
             if (ruvNd != null) ruvNd.close();
             if (entNd != null) entNd.close();
-            if (referenceNd != null) referenceNd.close();
         }
     }
 
@@ -2732,6 +2549,225 @@ public class ClusteringWorkflow {
      * that go through {@code impute_nonfinite} get that for free; the ones that read
      * {@code measurements.ndarray()} directly upcast explicitly.
      */
+    /**
+     * Everything run_clustering.py reads, for a run or for the Choose k sweep
+     * (which runs that script's preparation part).
+     *
+     * @param extraction     the cells and their measurements
+     * @param config         the run's configuration
+     * @param suppliedLabels labels read off the objects, or null
+     * @param areas          independent areas, or null for one
+     * @param frame          the coordinate frame of the cells
+     * @param plotDir        where figures go, or null for none
+     * @param arrays         receives every array allocated; the caller closes them
+     * @return the inputs
+     */
+    private Map<String, Object> runInputs(MeasurementExtractor.ExtractionResult extraction,
+                                          ClusteringConfig config, int[] suppliedLabels,
+                                          AreaResolver.AreaAssignment areas, SpatialFrame frame,
+                                          Path plotDir, List<NDArray> arrays) {
+        int nCells = extraction.getNCells();
+        // Create NDArray for measurement data (input -- closed after task completes)
+        NDArray measurementsNd = buildMeasurementNDArray(
+                extraction.getData(), nCells, extraction.getNMeasurements());
+        arrays.add(measurementsNd);
+
+        // Create spatial coordinates NDArray if spatial analysis, smoothing,
+        // BANKSY, or any v1 spatial statistic is enabled.
+        NDArray spatialCoordsNd = null;
+        boolean needsSpatialCoords = config.isEnableSpatialAnalysis()
+                || config.isEnableSpatialSmoothing()
+                || config.isAnySpatialStatEnabled()
+                || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY;
+        if (needsSpatialCoords) {
+            double[][] centroids = frame.centroids(extraction.getDetections());
+            NDArray.Shape spatialShape = new NDArray.Shape(
+                    NDArray.Shape.Order.C_ORDER, nCells, 2);
+            spatialCoordsNd = new NDArray(NDArray.DType.FLOAT64, spatialShape);
+            arrays.add(spatialCoordsNd);
+            var spatialBuf = spatialCoordsNd.buffer().asDoubleBuffer();
+            for (int i = 0; i < nCells; i++) {
+                spatialBuf.put(centroids[i]);
+            }
+        }
+
+        // Compute batch labels for batch correction. Images is the default and
+        // the historical behaviour; areas lets a 55-core TMA in a single image
+        // be corrected core-by-core, which per-image labels cannot express.
+        List<Integer> batchLabels = null;
+        if (config.isEnableBatchCorrection()) {
+            if (ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey()) && areas != null) {
+                batchLabels = new ArrayList<>(nCells);
+                for (int id : areas.getAreaIds()) {
+                    batchLabels.add(id);
+                }
+            } else if (extraction.isMultiImage()) {
+                batchLabels = new ArrayList<>();
+                for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
+                    MeasurementExtractor.ImageSegment seg =
+                            extraction.getImageSegments().get(segIdx);
+                    for (int i = 0; i < seg.getCount(); i++) {
+                        batchLabels.add(segIdx);
+                    }
+                }
+            }
+        }
+
+        // Build inputs map
+        Map<String, Object> inputs = new HashMap<>();
+        inputs.put("measurements", measurementsNd);
+        inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
+        inputs.put("algorithm", config.getAlgorithm().getId());
+        inputs.put("algorithm_params", config.getAlgorithmParams());
+        inputs.put("normalization", config.getNormalization().getId());
+        inputs.put("embedding_method", config.getEmbeddingMethod().getId());
+        inputs.put("embedding_params", config.getEmbeddingParams());
+        inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
+        inputs.put("reuse_budget_bytes", reuseBudgetBytes());
+        // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
+        // in embeddingParams as "n_components"; forwarded as the top-level input the
+        // Python task reads so a missing key cleanly defaults to 2.
+        inputs.put("embedding_n_components", embeddingNComponents(config));
+        inputs.put("top_n_markers", config.getTopNMarkers());
+        inputs.put("generate_plots", plotDir != null);
+        if (plotDir != null) {
+            inputs.put("output_dir", plotDir.toString());
+        }
+        if (spatialCoordsNd != null) {
+            inputs.put("spatial_coords", spatialCoordsNd);
+        }
+        if (config.isEnableSpatialSmoothing()) {
+            inputs.put("enable_spatial_smoothing", true);
+            inputs.put("spatial_smoothing_iterations", config.getSpatialSmoothingIterations());
+        }
+        if (batchLabels != null) {
+            inputs.put("enable_batch_correction", true);
+            inputs.put("batch_labels", batchLabels);
+        }
+
+        // For multi-image runs, always tell Python which image each cell belongs to (and
+        // the image names) so the "Spatial distribution" plot is split PER IMAGE instead
+        // of overlaying cells from different images that share no coordinate frame. This
+        // is independent of batch correction.
+        if (extraction.isMultiImage()) {
+            List<Integer> imageLabels = new ArrayList<>();
+            List<String> imageNames = new ArrayList<>();
+            for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
+                MeasurementExtractor.ImageSegment seg = extraction.getImageSegments().get(segIdx);
+                imageNames.add(segmentImageName(seg));
+                for (int i = 0; i < seg.getCount(); i++) imageLabels.add(segIdx);
+            }
+            inputs.put("image_labels", imageLabels);
+            inputs.put("image_names", imageNames);
+        }
+
+        // Independent-area ids. Every spatial consumer on the Python side
+        // partitions on these, so no neighbour edge crosses a boundary that
+        // tissue does not. Omitted when the levels cannot split anything,
+        // which keeps single-section runs on exactly the previous path.
+        if (areas != null) {
+            List<Integer> areaIdList = new ArrayList<>(nCells);
+            for (int id : areas.getAreaIds()) {
+                areaIdList.add(id);
+            }
+            inputs.put("area_ids", areaIdList);
+            inputs.put("area_names", areas.getAreaNames());
+            inputs.put("area_types", areas.getAreaTypes());
+        }
+
+        // Preference-backed defaults (overridable via QP-CAT preferences UI)
+        inputs.put("spatial_knn", QpcatPreferences.getClusterSpatialKnn());
+        inputs.put("tsne_perplexity_default", QpcatPreferences.getClusterTsnePerplexity());
+        inputs.put("hdbscan_min_samples_default", QpcatPreferences.getClusterHdbscanMinSamples());
+        inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
+        inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
+        inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
+        // Colour maps for the figures matplotlib renders. Only names matplotlib
+        // actually has cross over: a user's own QuPath .tsv map has no equivalent,
+        // so it is OMITTED rather than sent -- the script falls back to its own
+        // default on NameError. Omitting beats sending null: an absent input is a
+        // documented path in every one of these scripts, a null one is not.
+        String seqCmap = QpcatColorMaps.matplotlibName(
+                QpcatPreferences.getHeatmapColorMap(false));
+        if (seqCmap != null) {
+            inputs.put("sequential_cmap", seqCmap);
+        }
+        String divCmap = QpcatColorMaps.matplotlibName(
+                QpcatPreferences.getHeatmapColorMap(true));
+        if (divCmap != null) {
+            inputs.put("diverging_cmap", divCmap);
+        }
+        inputs.put("plot_max_features", QpcatPreferences.getClusterPlotMaxFeatures());
+        inputs.put("paga_edge_threshold", QpcatPreferences.getPagaEdgeThreshold());
+        // Labels read off the objects, for the analyze-existing-classifications
+        // path. Python validates length, sign and density before using them.
+        if (suppliedLabels != null) {
+            NDArray suppliedNd = buildLabelNDArray(suppliedLabels);
+            arrays.add(suppliedNd);
+            inputs.put("supplied_labels", suppliedNd);
+        }
+        // Validation. Comparing with the classes is meaningless when those
+        // classes ARE the labels (analyze-existing), so it is not sent there.
+        if (config.getStabilityRepeats() > 0) {
+            inputs.put("stability_repeats", config.getStabilityRepeats());
+        }
+        if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN
+                && !config.getCompareResolutions().isEmpty()) {
+            inputs.put("compare_resolutions", config.getCompareResolutions());
+        }
+        if (config.isCompareWithClasses() && suppliedLabels == null) {
+            ExistingLabelReader.ClassCodes ref =
+                    ExistingLabelReader.classCodes(extraction.getDetections());
+            NDArray referenceNd = buildLabelNDArray(ref.codes());
+            arrays.add(referenceNd);
+            inputs.put("reference_labels", referenceNd);
+            inputs.put("reference_names", ref.names());
+        }
+        // Absent from an older saved config -> isPcaPrecursor() is false, so the
+        // run reproduces on the full feature matrix as it originally did.
+        inputs.put("compute_paga", config.isComputePaga());
+        inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
+        inputs.put("pca_precursor_n_comps", QpcatPreferences.getClusterPcaPrecursorComponents());
+
+        // ---- Spatial stats expansion (v1) inputs ----
+        // Always pass; the Python side gates the heavy work on per-statistic flags.
+        inputs.put("spatial_graph_type", config.getSpatialGraphType());
+        inputs.put("spatial_graph_k", config.getSpatialGraphK());
+        inputs.put("spatial_graph_radius", config.getSpatialGraphRadius());
+        inputs.put("spatial_graph_delaunay_max_edge", resolveDelaunayMaxEdge(config, frame));
+        inputs.put("coord_unit", frame.unit());
+        inputs.put("spatial_permutations", config.getSpatialPermutations());
+        inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
+        inputs.put("use_squidpy_graph_for_smoothing",
+                QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
+        // Phase 5 enhancement: PNG output for spatial-stats plots so the
+        // Export figures (batch)... can pick them up.
+        inputs.put("spatial_persist_plots",
+                QpcatPreferences.isSpatialPersistPlots());
+        // Gate neighborhood-enrichment + Moran's I on the explicit spatial-
+        // analysis choice. Without this they run whenever spatial coordinates
+        // are present -- which is ALWAYS true for BANKSY -- so a BANKSY run would
+        // trigger them (and the nhood permutation test) uninvited.
+        inputs.put("enable_spatial_analysis", config.isEnableSpatialAnalysis());
+        inputs.put("enable_ripley", config.isEnableRipley());
+        inputs.put("enable_geary", config.isEnableGeary());
+        inputs.put("enable_co_occurrence_pairwise",
+                config.isEnableCoOccurrencePairwise());
+        inputs.put("enable_co_occurrence_one_vs_rest",
+                config.isEnableCoOccurrenceOneVsRest());
+        inputs.put("cooc_matrix_radius", config.getCoOccurrenceMatrixRadius());
+        // ---- Spatial graph overlay (v0.3) inputs ----
+        inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
+        inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
+        // F1: pass pixel size so the Python helper scales QPCAT spatial:
+        // distance + triangle-area outputs to microns when calibration is
+        // present. Falls back to 1.0 (pixels) when no calibration is
+        // available, matching the v0.2.7 spatial-stats unit treatment.
+        // Coordinates already in microns need no further scaling.
+        inputs.put("pixel_size_um", frame.inMicrons() ? 1.0 : resolveSpatialPixelSizeUm(extraction));
+        return inputs;
+    }
+
     /** Cluster labels as an int32 NDArray, for the analyze-existing path. */
     private static NDArray buildLabelNDArray(int[] labels) {
         return ApposeArrays.int32Vector(labels);
@@ -2795,19 +2831,7 @@ public class ClusteringWorkflow {
             throw new IOException("No image is open");
         }
 
-        // Filter detections by parent cluster classification
-        List<PathObject> parentDetections = imageData.getHierarchy().getDetectionObjects()
-                .stream()
-                .filter(det -> {
-                    var pc = det.getPathClass();
-                    return pc != null && pc.toString().equals(parentClusterName);
-                })
-                .collect(java.util.stream.Collectors.toList());
-
-        if (parentDetections.isEmpty()) {
-            throw new IOException("No detections found with classification '"
-                    + parentClusterName + "'");
-        }
+        List<PathObject> parentDetections = cellsOfClass(imageData, parentClusterName);
 
         logger.info("Sub-clustering {} detections from {}", parentDetections.size(), parentClusterName);
 

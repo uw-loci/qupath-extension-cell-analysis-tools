@@ -99,6 +99,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Choose k swept the raw measurements, not the matrix a run clusters.** Its docs said it
+  used the run's normalization and PCA precursor; it used neither, and it read every cell
+  of the image whatever the selection or sub-cluster target. It now selects cells the way
+  the run does and prepares them with the run's own code (normalization, spatial smoothing,
+  batch correction, PCA precursor), and the dialog lists what was applied. On a test set
+  where one loud noise marker sits beside two markers that separate three groups (five
+  seeds), the elbow now says 3 every time where it said 2 on the raw values, and the
+  silhouette says 3 every time where it said 2 in four runs of five. The sweep still reads
+  only the open image: for a run over several images it says so, since batch correction
+  then has one image to correct.
+
 - **Class names lost their underscores in check-box lists.** "b_cell" showed as "bcell" in the
   Clustering dialog's **Cells to cluster** list, and the same applied to the spatial-statistics
   class picker, the result picker and the figure-export plot list. They now show names as

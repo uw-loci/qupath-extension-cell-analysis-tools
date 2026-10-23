@@ -3,9 +3,15 @@ Sweep k and report the three statistics people are told to use for choosing it.
 
 QP-CAT's KMeans note recommended choosing k "with elbow/silhouette/gap methods"
 without providing any of them, which a user reasonably read as a claim the tool
-did. This computes all three on the SAME matrix the clustering would use -- same
-measurements, same normalization, same PCA precursor -- because a k chosen on a
-different matrix is a k chosen for a different problem.
+did. This computes all three on the SAME matrix the clustering would use,
+because a k chosen on a different matrix is a k chosen for a different problem.
+
+This file does not run alone. ApposeClusteringService sends the part of
+run_clustering.py above its "END OF MATRIX PREPARATION" line followed by this
+file, so the matrix comes from the run's own code (normalization, spatial
+smoothing, Harmony, PCA precursor) and is in scope here as ``cluster_matrix``,
+with ``prepared_steps`` naming what was done to it. KMeans is what is fitted at
+each k, whatever algorithm the run uses.
 
 What each statistic is, and what it is worth:
 
@@ -35,15 +41,13 @@ The three regularly disagree. That is the honest finding, not a bug, and the
 caller is expected to show all three rather than pick one. (Fu and Perry 2020
 survey why, and propose cross-validation instead.)
 
-Inputs (injected by Appose):
-  measurements: NDArray (N_cells x N_features, float64)
-  marker_names: list[str]
+Inputs (injected by Appose), besides everything run_clustering.py reads:
   k_min: int        -- smallest k to try (>= 1; 1 only matters for the gap)
   k_max: int        -- largest k to try
-  random_seed: int
   silhouette_max_cells: int   -- subsample cap for the silhouette (0 = no cap)
   gap_n_references: int       -- B reference datasets per k (0 = skip the gap)
   sweep_max_cells: int        -- subsample cap for the whole sweep (0 = no cap)
+  sweep_notes: list[str]      -- caveats from the Java side, shown first
 
 Outputs (via task.outputs):
   sweep_json: str (JSON) -- see build_sweep_result for the shape
@@ -351,12 +355,11 @@ def sweep_k(
 # ---------------------------------------------------------------------------
 
 try:
-    _measurements = measurements  # noqa: F821
-except NameError:  # pragma: no cover - only when run outside Appose
-    _measurements = None
+    _mat = np.asarray(cluster_matrix, dtype=np.float64)  # noqa: F821
+except NameError:  # pragma: no cover - loaded without run_clustering.py's head
+    _mat = None
 
-if _measurements is not None:
-    _mat = np.asarray(_measurements.ndarray(), dtype=np.float64)
+if _mat is not None:
 
     try:
         _k_min = int(k_min)  # noqa: F821
@@ -366,10 +369,8 @@ if _measurements is not None:
         _k_max = int(k_max)  # noqa: F821
     except NameError:
         _k_max = 20
-    try:
-        _seed = int(random_seed)  # noqa: F821
-    except NameError:
-        _seed = 42
+    # The run's clustering seed, so the sweep and the run that follows agree.
+    _seed = int(clustering_seed)  # noqa: F821
     try:
         _sil_cap = int(silhouette_max_cells)  # noqa: F821
     except NameError:
@@ -383,7 +384,10 @@ if _measurements is not None:
     except NameError:
         _sweep_cap = 0
 
-    _extra_warnings = []
+    try:
+        _extra_warnings = [str(n) for n in sweep_notes]  # noqa: F821
+    except NameError:
+        _extra_warnings = []
     _mat_used, _n_used, _was_sub = subsample_rows(_mat, _sweep_cap, _seed)
     if _was_sub:
         _extra_warnings.append(
@@ -411,10 +415,10 @@ if _measurements is not None:
         progress=_report,
     )
 
-    if _extra_warnings:
-        _parsed = json.loads(_result)
-        _parsed["warnings"] = _extra_warnings + _parsed.get("warnings", [])
-        _result = json.dumps(_parsed)
+    _parsed = json.loads(_result)
+    _parsed["warnings"] = _extra_warnings + _parsed.get("warnings", [])
+    _parsed["meta"]["prepared"] = list(prepared_steps)  # noqa: F821
+    _result = json.dumps(_parsed)
 
     task.outputs["sweep_json"] = _result  # noqa: F821
     logger.info("k sweep complete: k = %d..%d on %d cells", _k_min, _k_max, _n_used)

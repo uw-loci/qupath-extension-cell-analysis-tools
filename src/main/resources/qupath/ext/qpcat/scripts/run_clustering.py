@@ -477,6 +477,8 @@ else:
     df_norm = df.copy()
 
 logger.info("Normalization: %s", normalization)
+# What was done to the matrix, in order, for the Choose k sweep to report.
+prepared_steps = ["normalization: %s" % normalization]
 
 # 2a. Spatial feature smoothing (graph convolution on k-nearest neighbor graph)
 # Approach inspired by LazySlide (MIT License)
@@ -552,6 +554,7 @@ if do_spatial_smoothing and has_spatial_coords:
     df_norm = pd.DataFrame(smoothed, columns=df_norm.columns)
     require_finite(df_norm.values, "Spatial feature smoothing", list(df_norm.columns))
     logger.info("Spatial smoothing applied: iterations=%d", smoothing_iters)
+    prepared_steps.append("spatial smoothing: %d iteration(s)" % smoothing_iters)
 elif do_spatial_smoothing and not has_spatial_coords:
     logger.warning(
         "Spatial smoothing requested but no spatial coordinates available, skipping"
@@ -614,15 +617,11 @@ if do_batch and batch_labels_list is not None:
             df_norm.values, "Harmony batch correction", list(df_norm.columns)
         )
         logger.info("Harmony batch correction applied (%d batches)", n_batches)
+        prepared_steps.append("Harmony: %d batches" % n_batches)
     else:
         logger.info("Skipping batch correction (only 1 batch)")
 
 # 3. Dimensionality reduction
-_progress(
-    0.15,
-    "Computing %s embedding (%d cells) -- this can take a while..."
-    % (str(embedding_method).upper(), n_cells),
-)
 
 # Random seed for the embedding (exposed in the GUI "Advanced" panel; defaults
 # to 42 so prior runs reproduce). Shared by UMAP / t-SNE / PCA.
@@ -883,6 +882,10 @@ if resolve_pca_precursor(
             "selection": _pca_method,
         }
         task.outputs["pca_precursor"] = _json_prec.dumps(pca_precursor_info)
+        prepared_steps.append(
+            "PCA precursor: %d features -> %d components (%.1f%% variance)"
+            % (_n_features_pre, _n_comps, 100.0 * _prec_var)
+        )
         logger.info(
             "PCA precursor: %d features -> %d PCs (%.1f%% variance retained); "
             "feeds embedding + clustering",
@@ -896,6 +899,19 @@ if resolve_pca_precursor(
             "clustering on the full feature matrix",
             _n_comps,
         )
+
+# ==== END OF MATRIX PREPARATION ====
+# Everything above turns the measurements into cluster_matrix. The Choose k
+# sweep runs exactly that part (ApposeClusteringService cuts the script at this
+# line and appends choose_k.py), so it sweeps the matrix a run clusters. Every
+# step that changes cluster_matrix belongs above this line; anything the sweep
+# does not need belongs below it.
+
+_progress(
+    0.15,
+    "Computing %s embedding (%d cells) -- this can take a while..."
+    % (str(embedding_method).upper(), n_cells),
+)
 
 # 3a. What an earlier run in this session kept for reuse (knn_cache.py). Anything
 # built from a different matrix is freed here, before the embedding allocates.

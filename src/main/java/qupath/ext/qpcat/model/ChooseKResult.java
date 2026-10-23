@@ -62,6 +62,7 @@ public final class ChooseKResult {
         private int seed;
         @SerializedName("k_min") private int kMin;
         @SerializedName("k_max") private int kMax;
+        private List<String> prepared;
 
         public int getNCells() { return nCells; }
         public int getNFeatures() { return nFeatures; }
@@ -78,6 +79,9 @@ public final class ChooseKResult {
         public int getSeed() { return seed; }
         public int getKMin() { return kMin; }
         public int getKMax() { return kMax; }
+
+        /** What was done to the measurements before the sweep, in order. */
+        public List<String> getPrepared() { return prepared == null ? List.of() : prepared; }
     }
 
     private List<Integer> ks;

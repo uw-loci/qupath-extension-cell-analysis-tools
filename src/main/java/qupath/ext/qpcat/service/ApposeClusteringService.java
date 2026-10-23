@@ -170,6 +170,12 @@ public class ApposeClusteringService {
     private static final String RELEASE_REUSE_SCRIPT =
             "import knn_cache\ntask.outputs['freed'] = knn_cache.release(reason)\n";
 
+    /** Line in run_clustering.py below which nothing changes the clustered matrix. */
+    static final String END_OF_PREPARATION = "# ==== END OF MATRIX PREPARATION ====";
+
+    /** Tasks sent as run_clustering.py's preparation followed by their own script. */
+    private static final Set<String> RUN_ON_PREPARED_MATRIX = Set.of("choose_k");
+
     /** Bytes knn_cache.py holds, as the last clustering run reported. */
     private volatile long reuseHeldBytes;
 
@@ -661,6 +667,9 @@ public class ApposeClusteringService {
         String script;
         try {
             script = loadScript(scriptName + ".py");
+            if (RUN_ON_PREPARED_MATRIX.contains(scriptName)) {
+                script = preparationOf(loadScript("run_clustering.py")) + "\n" + script;
+            }
         } catch (IOException e) {
             throw new IOException("Failed to load task script: " + scriptName, e);
         }
@@ -927,6 +936,22 @@ public class ApposeClusteringService {
             throw new IOException("QPCAT service is not available"
                     + (initError != null ? ": " + initError : ""));
         }
+    }
+
+    /**
+     * The part of run_clustering.py that builds {@code cluster_matrix}.
+     *
+     * @param runScript the full run_clustering.py source
+     * @return the source above {@link #END_OF_PREPARATION}
+     * @throws IOException when the marker is missing or appears more than once
+     */
+    static String preparationOf(String runScript) throws IOException {
+        int at = runScript.indexOf(END_OF_PREPARATION);
+        if (at < 0 || runScript.indexOf(END_OF_PREPARATION, at + 1) >= 0) {
+            throw new IOException("run_clustering.py must contain exactly one line '"
+                    + END_OF_PREPARATION + "'");
+        }
+        return runScript.substring(0, at);
     }
 
     String loadScript(String scriptFileName) throws IOException {

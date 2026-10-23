@@ -1509,8 +1509,9 @@ public class ClusteringDialog {
     private Button chooseKButton(Spinner<Integer> target) {
         Button btn = new Button("Choose k...");
         btn.setTooltip(Tooltips.of(
-                "Fit this algorithm across a range of k on the SAME matrix this run "
-                + "would cluster, and plot the three statistics people are told to\n"
+                "Fit KMeans across a range of k on the SAME matrix this run would\n"
+                + "cluster (its cells, normalization, smoothing, batch correction and PCA\n"
+                + "precursor, on the open image), and plot the three statistics people are told to\n"
                 + "choose k with: the elbow (inertia), the mean silhouette, and the gap\n"
                 + "statistic.\n\n"
                 + "They regularly disagree. Measured on 400 cells of pure noise with no\n"
@@ -1543,6 +1544,8 @@ public class ClusteringDialog {
         final int kMax = Math.max(current + 5, 12);
 
         final ImageData<BufferedImage> imageData = qupath.getImageData();
+        final String parentClass = mode == RunMode.SUBCLUSTER ? subclusterParentClass : null;
+        final int imagesInRun = imagesInRun(config);
         final Stage owner = chooseKOwner();
         Dialogs.showInfoNotification("QPCAT - Choose k",
                 "Sweeping k = " + kMin + " to " + kMax + "; this runs "
@@ -1551,8 +1554,8 @@ public class ClusteringDialog {
             ClassLoader previous = Thread.currentThread().getContextClassLoader();
             try {
                 Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
-                ChooseKResult result = new ClusteringWorkflow(qupath).sweepKForImage(
-                        imageData, config, kMin, kMax,
+                ChooseKResult result = new ClusteringWorkflow(qupath).sweepK(
+                        imageData, config, parentClass, imagesInRun, kMin, kMax,
                         QpcatPreferences.getChooseKSilhouetteCap(),
                         QpcatPreferences.getChooseKGapReferences(),
                         msg -> logger.info("Choose k: {}", msg));
@@ -1577,6 +1580,16 @@ public class ClusteringDialog {
         }, "qpcat-choose-k");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** How many images a run with this configuration clusters together. */
+    private int imagesInRun(ClusteringConfig config) {
+        if (!config.isClusterEntireProject() || qupath.getProject() == null) {
+            return 1;
+        }
+        return scopeSection != null && scopeSection.isSpecificImages()
+                ? scopeSection.resolveEntries().size()
+                : qupath.getProject().getImageList().size();
     }
 
     /** The window the sweep dialog should be owned by, or null. */

@@ -125,12 +125,15 @@ public class ChooseKDialog {
 
         ChooseKResult.Meta m = result.getMeta();
         Label meta = new Label(String.format(
-                "k = %d to %d on %,d cells x %d measurements, seed %d. Silhouette on %,d cells%s. "
-                + "Gap: %s.",
+                "KMeans, k = %d to %d on %,d cells x %d features, seed %d. Silhouette on %,d "
+                + "cells%s. Gap: %s.%s",
                 m.getKMin(), m.getKMax(), m.getNCells(), m.getNFeatures(), m.getSeed(),
                 m.getSilhouetteCells(), m.isSilhouetteSubsampled() ? " (subsampled)" : "",
                 m.getGapNReferences() > 0
-                        ? m.getGapNReferences() + " reference datasets per k" : "not computed"));
+                        ? m.getGapNReferences() + " reference datasets per k" : "not computed",
+                m.getPrepared().isEmpty() ? ""
+                        : "\nPrepared as the run prepares them: "
+                          + String.join("; ", m.getPrepared()) + "."));
         meta.setWrapText(true);
         WrapHeight.bind(meta);
         meta.setStyle(NOTE_STYLE);
