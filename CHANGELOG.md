@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.23.0] -- 2026-10-24 -- check your clusters, and bring scanpy labels back
+
+**Upgrade if you export to AnnData or run neighborhood enrichment on several images.** The
+AnnData export has failed on save in every release since 0.3.5 (fixed below), and
+neighborhood enrichment on a multi-image run shuffled labels across images, so a difference
+in composition between images read as neighborhood structure. Also new: importing labels
+and measurements back from AnnData, stability and known-class validation, a Leiden
+resolution comparison, and Leiden runs that reuse the neighbor graph and need about half the
+memory.
+
+**Results that change from 0.22.0:** neighborhood enrichment z-scores on multi-image runs;
+Choose k's suggestions, which now come from the matrix the run clusters; and AnnData exports,
+which name each cell by its QuPath object id instead of 0, 1, 2...
+
 ### Added
 
 - **Import labels and measurements from AnnData (.h5ad)** (issue #20), under *Results &
