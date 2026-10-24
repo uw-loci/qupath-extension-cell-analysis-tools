@@ -71,7 +71,7 @@ caveats.
 
 ### Get results out
 
-- **[Hand off to Python / R](documentation/exporting.md#anndata-for-python)** -- keep going in your usual notebook. <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
+- **[Hand off to Python / R](documentation/exporting.md#anndata-for-python)** -- keep going in your usual notebook, then [bring the labels back](documentation/exporting.md#importing-from-anndata). <sub>Standard `.h5ad` AnnData; Scanpy, Seurat, cellxgene</sub>
 - **[Export every figure in one click](documentation/exporting.md#figure-export)** -- pick the images and the plots, write the lot to a directory. <sub>300 DPI PNG and TIFF (no vector formats); callable from Groovy</sub>
 - **[Run in batch from one YAML config](documentation/yaml-reference.md)** -- clustering, phenotyping, spatial stats and figures across a whole project, no GUI. <sub>QuPath's `script` subcommand, inside the extension class loader, so the surface is the dialog's, except the optional Validation checks</sub>
 - **[Reproducible audit trail](documentation/reproducibility.md#the-audit-log)** -- every run's parameters, cell counts and results, in plain text. <sub>Per-project log, diff-friendly</sub>
@@ -542,6 +542,10 @@ The exported file includes:
 - Phenotype labels (if present)
 - Embedding coordinates (UMAP/PCA/t-SNE if computed)
 - Spatial coordinates (cell centroids)
+- Each cell's QuPath object id (as the cell name) and its image, so labels and values
+  added in Python can be imported back:
+  **Extensions > QP-CAT > Results & populations > Import labels and measurements from AnnData (.h5ad)...**
+  ([Importing from AnnData](documentation/exporting.md#importing-from-anndata))
 
 Compatible with Scanpy, Seurat (via SeuratDisk), cellxgene, and other single-cell analysis tools.
 
@@ -671,6 +675,7 @@ All items are under **Extensions > QP-CAT**. Everything except **Setup & help** 
 | Results & populations > Modify cell populations (rename, merge, split, sub-cluster)... | Rename, merge, split and sub-cluster | A saved result |
 | Results & populations > Analyze current cell classifications... | Results window for classes the cells already carry | Classified detections |
 | Results & populations > Apply saved result to detections... / Apply cluster color palette... | Write a saved result back; set cluster colors | Project |
+| Results & populations > Import labels and measurements from AnnData (.h5ad)... | Classes, measurements and embeddings made in Python, back onto the cells they came from (matched by object id) | Image or project + a QP-CAT AnnData export |
 | Export > Export figures (batch)... | Export figures (batch): pick images + plot kinds + format + DPI + output directory; writes the saved matplotlib plots and the cluster-composition pies / tables in one pass. See [Exporting](documentation/exporting.md#figure-export) | Project + at least one saved clustering result |
 | Export > Export cells for Python / scanpy (AnnData)... | Export data for external analysis tools | Image + detections |
 | Export > Export cell crops + feature table (TraitHorizon / CSV)... | Cell crops plus a per-cell feature table | Project + detections |

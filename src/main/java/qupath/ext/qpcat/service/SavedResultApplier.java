@@ -365,7 +365,7 @@ public final class SavedResultApplier {
         return e != null ? e.getID() : null;
     }
 
-    private static ImageData<BufferedImage> readById(Project<BufferedImage> project, String eid) {
+    static ImageData<BufferedImage> readById(Project<BufferedImage> project, String eid) {
         for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
             if (eid.equals(entry.getID())) {
                 try {
@@ -379,7 +379,7 @@ public final class SavedResultApplier {
         return null;
     }
 
-    private static String shortName(Project<BufferedImage> project, String eid) {
+    static String shortName(Project<BufferedImage> project, String eid) {
         for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
             if (eid.equals(entry.getID())) return entry.getImageName();
         }

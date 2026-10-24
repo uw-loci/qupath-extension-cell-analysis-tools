@@ -5,6 +5,7 @@ Figures, tables, and the data itself.
 - [When to batch-export](#when-to-batch-export)
 - [Figure export](#figure-export)
 - [AnnData for Python](#anndata-for-python)
+- [Importing from AnnData](#importing-from-anndata)
 - [VEST 3D export](#vest-3d-export)
 
 ## When to batch-export
@@ -216,7 +217,10 @@ Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
    - Phenotype labels (if cells have other classifications) as `adata.obs["phenotype"]`
    - Embedding coordinates (QPCAT UMAP1/UMAP2, etc., if present) as `adata.obsm["X_umap"]`; that
      key is used whichever embedding method made them
-   - Spatial coordinates (cell centroids) as `adata.obsm["spatial"]`
+   - Spatial coordinates (cell centroids, in pixels) as `adata.obsm["spatial"]`
+   - Each cell's QuPath object id as its name, `adata.obs_names`, and the project image
+     as `adata.obs["qupath_image_id"]` and `adata.obs["qupath_image"]`. These are what
+     [Importing from AnnData](#importing-from-anndata) matches on, so keep them.
 4. Open the file in Python:
 
 ```python
@@ -224,6 +228,53 @@ import scanpy as sc
 adata = sc.read_h5ad("export.h5ad")
 print(adata)
 ```
+
+The export reads the open image. To work on several images in one notebook, export each
+and join them with `anndata.concat([...])`: the object ids are unique, so the joined file
+still says which cell is which.
+
+---
+## Importing from AnnData
+
+Bring labels and values made in Python back onto the cells in QuPath: a clustering or gate
+done in scanpy, a score from your own model, an embedding. QP-CAT's export names every cell
+with its QuPath object id, and the import finds the cells by that name.
+
+1. **Extensions > QP-CAT > Results & populations > Import labels and measurements from
+   AnnData (.h5ad)...** and choose the file.
+2. Choose what to bring back:
+   - **Classification from column** -- an `obs` column with a few hundred values at most
+     (categories, text, true/false or whole numbers). Each value becomes a QuPath class.
+     If the file holds scanpy's colors for that column (`adata.uns["<column>_colors"]`),
+     the classes take them.
+   - **Add as measurements** -- numeric `obs` columns, written as `AnnData: <column>`.
+   - **Add embeddings** -- `obsm` arrays such as `X_umap`, one measurement per axis:
+     `AnnData: X_umap 1`, `AnnData: X_umap 2`.
+3. **Check matches...** reads each image the file names and reports how many of its cells
+   were found and how many would change class, before anything is written.
+4. Confirm. Every changed image is saved, and the import is recorded in each image's
+   Workflow tab.
+
+What it does not do:
+
+- **Match by position.** A cell whose name is not the object id of a cell in this project
+  is reported as not found and skipped, so a file from another tool, or one whose
+  `obs_names` were reset, matches nothing. Re-segmenting an image creates new objects
+  with new ids, so an export made before re-segmenting no longer matches either.
+- **Touch cells that are not in the file.** Filter cells out in Python and the rest keep
+  their classes. A cell with no value in the chosen column also keeps its class, and a
+  missing number removes that cell's `AnnData: <column>` measurement.
+- **Look past the project.** Cells from images that are not in the open project are counted
+  and skipped. A file without `qupath_image_id` is matched against the open image.
+
+Measurements are stored as 32-bit numbers in QuPath, so a value comes back with about
+seven significant digits.
+
+**Saving the file from Python.** With pandas 3 and an anndata release that cannot write
+pandas 3 strings, `adata.write_h5ad()` fails with *No method registered for writing
+ArrowStringArray*. QP-CAT's own environment has that pair and works around it when it
+exports. In your own environment, setting `pandas.options.future.infer_string = False`
+before reading the file avoids it.
 
 ---
 ## VEST 3D export

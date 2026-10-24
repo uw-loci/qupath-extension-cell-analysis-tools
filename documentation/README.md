@@ -51,6 +51,7 @@ Results & populations >
     Modify cell populations (rename, merge, split, sub-cluster)...   Working with clusters
     Analyze current cell classifications...               Working with clusters
     Apply saved result to detections...                   Working with clusters
+    Import labels and measurements from AnnData (.h5ad)...   Exporting
     Apply cluster color palette...                        Results
 Export >
     Export figures (batch)...                             Exporting

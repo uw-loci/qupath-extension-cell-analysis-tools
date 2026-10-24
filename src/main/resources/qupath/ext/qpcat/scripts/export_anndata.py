@@ -5,6 +5,10 @@ Inputs (injected by Appose 0.10.0):
   measurements: NDArray (N_cells x N_markers, float64)
   marker_names: list[str]
   output_path: str -- path to write the .h5ad file
+  object_ids: list[str] -- QuPath object id per cell; becomes obs_names, which is
+                           how "Import from AnnData" finds the cells again
+  image_id: str -- project entry id of the image ("" outside a project)
+  image_name: str -- the image's name
 
 Optional inputs:
   cluster_labels: list[int] -- cluster label per cell
@@ -53,52 +57,63 @@ if n_nonfinite > 0:
         n_nonfinite,
     )
 
-adata = ad.AnnData(X=data)
-adata.var_names = pd.Index(list(marker_names))
+# pandas 3 infers its new string dtype for every list of str, and the anndata
+# this environment locks (0.12.6) cannot write it ("No method registered for
+# writing ArrowStringArray"), so every export failed on save. Scoped to this
+# block: the worker process is shared, and later tasks must keep pandas' default.
+with pd.option_context("future.infer_string", False):
+    adata = ad.AnnData(X=data)
+    adata.var_names = pd.Index(list(marker_names))
+    adata.obs_names = pd.Index([str(x) for x in object_ids])
+    adata.obs["qupath_image_id"] = pd.Categorical([str(image_id)] * n_cells)
+    adata.obs["qupath_image"] = pd.Categorical([str(image_name)] * n_cells)
 
-# Add cluster labels if provided
-try:
-    if cluster_labels is not None:
-        labels_list = list(cluster_labels)
-        adata.obs["cluster"] = pd.Categorical([str(x) for x in labels_list])
-        logger.info("Added cluster labels (%d unique)", len(set(labels_list)))
-except NameError:
-    pass
-
-# Add phenotype labels if provided
-try:
-    if phenotype_labels is not None:
-        pheno_list = list(phenotype_labels)
-        adata.obs["phenotype"] = pd.Categorical(pheno_list)
-        logger.info("Added phenotype labels (%d unique)", len(set(pheno_list)))
-except NameError:
-    pass
-
-# Add embedding if provided
-try:
-    emb_data = embedding.ndarray().copy()
+    # Add cluster labels if provided
     try:
-        emb_name = embedding_name
+        if cluster_labels is not None:
+            labels_list = list(cluster_labels)
+            adata.obs["cluster"] = pd.Categorical([str(x) for x in labels_list])
+            logger.info("Added cluster labels (%d unique)", len(set(labels_list)))
     except NameError:
-        emb_name = "X_umap"
-    adata.obsm[emb_name] = emb_data
-    logger.info(
-        "Added embedding '%s' (%d x %d)", emb_name, emb_data.shape[0], emb_data.shape[1]
-    )
-except NameError:
-    pass
+        pass
 
-# Add spatial coordinates if provided
-try:
-    spatial_data = spatial_coords.ndarray().copy()
-    adata.obsm["spatial"] = spatial_data
-    logger.info("Added spatial coordinates (%d cells)", spatial_data.shape[0])
-except NameError:
-    pass
+    # Add phenotype labels if provided
+    try:
+        if phenotype_labels is not None:
+            pheno_list = list(phenotype_labels)
+            adata.obs["phenotype"] = pd.Categorical(pheno_list)
+            logger.info("Added phenotype labels (%d unique)", len(set(pheno_list)))
+    except NameError:
+        pass
 
-# Write to file
-task.update("Writing .h5ad file...")
-adata.write_h5ad(output_path)
+    # Add embedding if provided
+    try:
+        emb_data = embedding.ndarray().copy()
+        try:
+            emb_name = embedding_name
+        except NameError:
+            emb_name = "X_umap"
+        adata.obsm[emb_name] = emb_data
+        logger.info(
+            "Added embedding '%s' (%d x %d)",
+            emb_name,
+            emb_data.shape[0],
+            emb_data.shape[1],
+        )
+    except NameError:
+        pass
+
+    # Add spatial coordinates if provided
+    try:
+        spatial_data = spatial_coords.ndarray().copy()
+        adata.obsm["spatial"] = spatial_data
+        logger.info("Added spatial coordinates (%d cells)", spatial_data.shape[0])
+    except NameError:
+        pass
+
+    # Write to file
+    task.update("Writing .h5ad file...")
+    adata.write_h5ad(output_path)
 logger.info("AnnData written to %s", output_path)
 
 # Package outputs

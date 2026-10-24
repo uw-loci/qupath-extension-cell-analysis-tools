@@ -27,6 +27,7 @@ import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ResultApplier;
+import qupath.ext.qpcat.service.SavedResultApplier;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -3421,6 +3422,11 @@ public class ClusteringWorkflow {
         inputs.put("measurements", measurementsNd);
         inputs.put("marker_names", List.of(extraction.getMeasurementNames()));
         inputs.put("output_path", outputPath);
+        // Names every cell by its object id, which is what an import matches on.
+        inputs.put("object_ids", extraction.getDetections().stream().map(CellRef::idOf).toList());
+        String imageId = SavedResultApplier.openImageId(qupath);
+        inputs.put("image_id", imageId != null ? imageId : "");
+        inputs.put("image_name", qupath.getImageData().getServer().getMetadata().getName());
 
         // Extract cluster labels from current PathClass
         List<Integer> clusterLabels = new ArrayList<>();

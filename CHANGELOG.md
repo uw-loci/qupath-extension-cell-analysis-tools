@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Import labels and measurements from AnnData (.h5ad)** (issue #20), under *Results &
+  populations*. Pick an `obs` column to become the classification, and numeric columns and
+  `obsm` embeddings to become `AnnData: ...` measurements; scanpy's colors for the column
+  come along. Cells are matched by QuPath object id, which the export now writes as the
+  cell names together with the image id, so labels made in Python after filtering or
+  joining images still find their cells. Before anything is written, the dialog reports
+  how many cells matched in each image; unmatched cells are left alone. Tested end to end:
+  two exported images, joined and clustered in scanpy, came back with every cell's
+  cluster and values matching the file.
+
 - **Validation: stability across seeds, and agreement with known classes.** Two optional
   checks in a new *Validation* section of the Clustering dialog, both off by default, shown
   in a new **Validation** results tab and saved with the result.
@@ -98,6 +108,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   into the caption, so they no longer overlap.
 
 ### Fixed
+
+- **AnnData export failed on save, in every release since 0.3.5.** The analysis
+  environment has locked pandas 3 with anndata 0.12.6 since then, which cannot write pandas 3's string
+  type, so writing any `.h5ad` raised *No method registered for writing ArrowStringArray*
+  (the 0.22.0 script fails the same way in that environment). The export now builds the
+  file with pandas' older string handling, scoped to that task.
 
 - **Choose k swept the raw measurements, not the matrix a run clusters.** Its docs said it
   used the run's normalization and PCA precursor; it used neither, and it read every cell

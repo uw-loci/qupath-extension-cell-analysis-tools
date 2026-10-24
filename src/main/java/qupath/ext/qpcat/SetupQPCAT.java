@@ -20,6 +20,7 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.SessionLogBuffer;
+import qupath.ext.qpcat.ui.AnnDataImportDialog;
 import qupath.ext.qpcat.ui.BackupWarningDialog;
 import qupath.ext.qpcat.ui.BugReportDialog;
 import qupath.ext.qpcat.ui.ApplySavedResultDialog;
@@ -488,6 +489,14 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                         () -> qupath.getProject() == null,
                         qupath.projectProperty()));
 
+        // Labels and measurements made in Python, back onto the cells they describe
+        MenuItem importAnnDataItem = new MenuItem(res.getString("menu.importAnnData"));
+        importAnnDataItem.setOnAction(e -> {
+            if (!BackupWarningDialog.acknowledgeOnce()) return;
+            AnnDataImportDialog.show(qupath);
+        });
+        importAnnDataItem.visibleProperty().bind(environmentReady);
+
         // Apply a saved result back onto detections (safety-checked write-back)
         MenuItem applySavedResultItem = new MenuItem(res.getString("menu.applySavedResult"));
         applySavedResultItem.setOnAction(e -> {
@@ -655,6 +664,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 manageClustersItem,
                 analyzeExistingItem,
                 applySavedResultItem,
+                importAnnDataItem,
                 applyPaletteItem);
 
         Menu exportMenu = new Menu(res.getString("menu.exportGroup"));
