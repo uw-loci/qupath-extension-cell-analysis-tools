@@ -572,6 +572,9 @@ is named in the status line ("Ticked, but on no cell in this scope: ...") and st
 ticked, so the run still covers only the classes you chose. Switching to **Specific
 images...** before you have picked any images does not reset the list either.
 
+On a project-wide run, the confirmation says how many images hold the chosen classes
+(*Cluster 1 of 8 project image(s)?*); the others hold none of them and are skipped.
+
 The restriction is off by default, and leaving it off runs exactly as it did before this
 option existed.
 
