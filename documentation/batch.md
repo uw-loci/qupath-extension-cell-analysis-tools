@@ -67,7 +67,7 @@ Before you ship a paper:
 - [ ] The audit log from the analysis run is committed.
 - [ ] The QP-CAT version is recorded (every audit-log entry carries `QPCAT version:` and `QuPath version:` lines).
 - [ ] `random_seed` is explicitly set, not left at its default, and `embedding_execution_mode: reproducible` is set if any image has more than 200,000 cells.
-- [ ] Spatial permutations are seeded; the count used is in each statistic's audit row for Ripley's L, Geary's C and co-occurrence. Neighborhood enrichment always uses 1000.
+- [ ] Spatial permutations are seeded; the count used is in each statistic's audit row for Ripley's L, Geary's C and co-occurrence. Neighborhood enrichment uses the same count (adaptive by default, or `permutations`).
 - [ ] The figure-export `output_dir` is named after the revision, not overwritten across revisions.
 
 ### CI integration
