@@ -56,6 +56,9 @@ public class ClusterExplanation {
     private String rationale;            // never null when the LLM responded
     private List<String> supportingMarkers;
 
+    /** Rationale run_llm_explainer.py gives a cluster the reply had no row for. */
+    public static final String NO_ROW_RATIONALE = "LLM did not return a row for this cluster.";
+
     public ClusterExplanation() {}
 
     public ClusterExplanation(int clusterId, String phenotype, Confidence confidence,
@@ -82,6 +85,11 @@ public class ClusterExplanation {
     public List<String> getSupportingMarkers() { return supportingMarkers; }
     public void setSupportingMarkers(List<String> supportingMarkers) {
         this.supportingMarkers = supportingMarkers;
+    }
+
+    /** False for a placeholder row: the reply held no row for this cluster. */
+    public boolean isAnswered() {
+        return !NO_ROW_RATIONALE.equals(rationale);
     }
 
     /**

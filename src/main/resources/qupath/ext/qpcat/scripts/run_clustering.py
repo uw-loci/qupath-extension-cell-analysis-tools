@@ -2868,11 +2868,25 @@ if has_spatial and n_clusters_found > 1:
     # Neighborhood enrichment + Moran's I, gated on the explicit spatial-analysis
     # choice so a BANKSY run (which always supplies coordinates) does not trigger
     # these uninvited.
+    # One permutation count for every statistic, from the preference or the
+    # adaptive default.
+    n_perms = _qpcat_spatial.adaptive_permutations(
+        n_cells, override=pref_spatial_permutations
+    )
+    _perm_note = _qpcat_spatial.permutation_count_warning(
+        n_perms, chosen=pref_spatial_permutations > 0
+    )
+    if _perm_note and (pref_enable_spatial_analysis or pref_enable_geary):
+        _analysis_notes.append(_perm_note)
+        logger.warning("Analysis: %s", _perm_note)
+
     if pref_enable_spatial_analysis:
         # Neighborhood enrichment (z-score + edge-count matrices). Shared with
         # spatial_stats_standalone.py; the null shuffles labels within each area.
         _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
-        _qpcat_spatial.run_nhood_enrichment(adata, task, area_ids=area_ids_list)
+        _qpcat_spatial.run_nhood_enrichment(
+            adata, task, n_perms, area_ids=area_ids_list
+        )
 
         # Spatial autocorrelation (Moran's I per marker). The call lives in
         # spatial_stats.run_moran_i, which the standalone post-hoc script uses
@@ -2884,9 +2898,7 @@ if has_spatial and n_clusters_found > 1:
             adata,
             task,
             measurements=list(marker_names),
-            n_permutations=_qpcat_spatial.adaptive_permutations(
-                n_cells, override=pref_spatial_permutations
-            ),
+            n_permutations=n_perms,
             area_ids=area_ids_list,
             area_names=area_names_list,
             threshold=pref_spatial_autocorr_threshold,
@@ -2896,10 +2908,6 @@ if has_spatial and n_clusters_found > 1:
     # Each new statistic wraps in its own try/except via the helper module
     # and never escapes to the parent task. Java side checks task.outputs
     # for each key independently (hasRipley / hasGeary / etc.).
-    n_perms = _qpcat_spatial.adaptive_permutations(
-        n_cells, override=pref_spatial_permutations
-    )
-
     # Phase 5: route PNG output for the new stats into the same directory
     # the existing matplotlib plots write to (output_dir, when set). If
     # the user disabled plots entirely (plot_dir is None) we skip the

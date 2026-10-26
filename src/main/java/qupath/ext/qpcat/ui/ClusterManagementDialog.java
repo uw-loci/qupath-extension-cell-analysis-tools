@@ -191,11 +191,7 @@ public class ClusterManagementDialog {
         resultChooser.setMaxWidth(Double.MAX_VALUE);
         resultChooser.setConverter(new StringConverter<>() {
             @Override public String toString(ClusteringResultManager.ResultEntry e) {
-                if (e == null) return "";
-                String scope = (e.scopeLabel != null && !e.scopeLabel.isBlank())
-                        ? "  -  " + e.scopeLabel : "";
-                String ts = (e.timestamp != null && !e.timestamp.isBlank()) ? e.timestamp + "  " : "";
-                return ts + e.name + scope;
+                return e == null ? "" : e.toString();
             }
             @Override public ClusteringResultManager.ResultEntry fromString(String s) { return null; }
         });
@@ -926,7 +922,7 @@ public class ClusterManagementDialog {
 
     private String promptName(String title, String header, String seed) {
         TextInputDialog d = new TextInputDialog(seed);
-        d.setTitle(title);
+        d.setTitle("QPCAT - " + title);
         d.setHeaderText(header);
         d.initOwner(owner);
         var res = d.showAndWait();
@@ -1298,7 +1294,7 @@ public class ClusterManagementDialog {
         if (report.cellsUnmatched > 0) sb.append("  Unmatched: ").append(report.cellsUnmatched);
         sb.append("\n\n");
         for (String line : report.perImage) sb.append("  ").append(line).append("\n");
-        showTextDialog("Modify Clusters - applied", sb.toString());
+        showTextDialog("QPCAT - Modify Clusters - applied", sb.toString());
         Dialogs.showInfoNotification("QPCAT",
                 "Relabelled " + report.cellsMatched + " cells across "
                 + report.imagesProcessed + " image(s).");
@@ -1317,7 +1313,7 @@ public class ClusterManagementDialog {
         }
         sb.append("\n");
         for (String line : report.lines) sb.append("  ").append(line).append("\n");
-        showTextDialog("Modify Clusters - applied", sb.toString());
+        showTextDialog("QPCAT - Modify Clusters - applied", sb.toString());
         Dialogs.showInfoNotification("QPCAT",
                 "Relabelled " + report.cellsChanged + " cells across " + report.images + " image(s).");
     }

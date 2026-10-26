@@ -39,7 +39,7 @@ A rule of thumb: **start with neighborhood enrichment** (cheap, headline answer)
 
 ### Permutation count tradeoffs at scale
 
-Permutation-based significance testing is exact in principle but expensive: each permutation re-shuffles the labels and re-evaluates the statistic. The adaptive default scales the count to the cell count (1000 / 100 / 50) for Geary's C and Moran's I. Neighborhood enrichment always runs 1000; Ripley's L band is always 99 simulations of complete spatial randomness; co-occurrence has no test. Override via `qpcat.spatial.permutations` if you need a fixed value (e.g. for a paper that needs every image analyzed at the same count). The audit log records the value used for Ripley L, Geary's C and co-occurrence; neighborhood enrichment's 1000 is printed above its table and in the CSV's `permutation_null` column. Permutations are seeded, so the same input gives the same z and p values run to run.
+Permutation-based significance testing is exact in principle but expensive: each permutation re-shuffles the labels and re-evaluates the statistic. The adaptive default scales the count to the cell count (1000 / 100 / 50), and one count serves neighborhood enrichment, Moran's I and Geary's C. Ripley L's band is always 99 simulations of complete spatial randomness; co-occurrence has no test. Override with **Preferences > QP-CAT: Spatial Stats Permutations** (`qpcat.spatial.permutations`) if you need a fixed value (e.g. for a paper that needs every image analyzed at the same count). A chosen value below 100 is flagged in the Run Clustering dialog and in the result's warnings: a permutation p-value cannot fall below 1 / (permutations + 1), so 19 or fewer can never reach 0.05, and every z-score divides by a spread estimated from that many shuffles. The audit log records the value used; neighborhood enrichment's count is also printed above its table and in the CSV's `permutation_null` column. Permutations are seeded, so the same input gives the same z and p values run to run.
 
 A common pattern: **explore with the adaptive default; lock to 1000 for the final figure-grade run, on a subset of images if cell counts make 1000 prohibitive**.
 
@@ -193,7 +193,7 @@ Beyond the default neighborhood enrichment + Moran's I, QP-CAT exposes the rest 
 
 ### When to use each statistic
 
-- **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" A permutation test with a fixed 1000 permutations, whatever the permutation preference says; with several images or areas, labels are shuffled within each one.
+- **Neighborhood enrichment** -- *cluster-to-cluster*: "do CD8 T cells and tumor cells tend to be neighbors, avoid each other, or scatter randomly?" A permutation test using the permutation count above; with several images or areas, labels are shuffled within each one.
 - **Ripley's L** -- *a cluster against itself at a range of distances*: "are CD8 cells within 50 microns of each other more often than chance would predict? What about within 200 microns?" It is the variance-stabilized transform of Ripley's K, which cumulates the neighbor count within radius r normalized by density. Curves **above** the null mean clustering at that radius; **below** means dispersion or inhibition.
 
   **The null is a simulated band, not a line.** QP-CAT computes L itself and draws, per cluster, the 2.5-97.5 percentile band of 99 complete-spatial-randomness realizations with that cluster's own cell count, inside the convex hull of the area's cells, through the same estimator. The band is always 99 simulations, whatever the permutation preference says. Read each curve against its band: above = clustering, below = inhibition, inside = indistinguishable from random at that radius.
@@ -230,7 +230,7 @@ Geary's C and Moran's I use permutation tests, with a count chosen automatically
 | 50k - 500k | 100 | Multi-image projects; minutes per stat at this count |
 | > 500k | 50 | Very large projects; effects must be strong to clear significance |
 
-Neighborhood enrichment always runs 1000 permutations; Ripley L's band is always 99 simulations of complete spatial randomness, whatever the permutation setting says; co-occurrence has no test.
+Neighborhood enrichment, Moran's I and Geary's C use the permutation count; Ripley L's band is always 99 simulations of complete spatial randomness, whatever the permutation setting says; co-occurrence has no test.
 
 Override via **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations** (positive integer to force, 0 to leave at adaptive). The audit-log rows for Ripley L, Geary's C and co-occurrence record this count; for Ripley L it is not the count that drew the band.
 
@@ -379,7 +379,7 @@ To configure:
 (e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.
 
 **Graph + statistics.** Pick the neighbor graph (kNN / radius / Delaunay) and its
-parameter, the permutation count (0 = adaptive; neighborhood enrichment always runs 1000), and which statistics to run:
+parameter, the permutation count (0 = adaptive), and which statistics to run:
 - **Ripley L**, **Co-occurrence** (pairwise / one-vs-rest), **Neighborhood
   enrichment** -- from the labels + positions.
 - **Geary's C**, **Moran's I** -- from the cells' marker measurements (coordinate /

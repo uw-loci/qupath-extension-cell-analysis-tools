@@ -1045,9 +1045,12 @@ public final class QpcatPreferences {
         items.add(new PropertyItemBuilder<>(spatialPermutations, Integer.class)
                 .name("Spatial Stats Permutations")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Number of random permutations for the new spatial statistics. "
+                .description(Tooltips.wrap("Number of random permutations for neighborhood "
+                        + "enrichment, Moran's I and Geary's C. "
                         + "0 = adaptive default (1000 for <= 50k cells, 100 for 50k-500k, "
-                        + "50 above). Positive values override the adaptive default."))
+                        + "50 above). Positive values override the adaptive default. Below 100 "
+                        + "the run warns: a permutation p-value cannot fall below "
+                        + "1 / (permutations + 1), so 19 or fewer can never reach 0.05."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialAutocorrThreshold, Double.class)

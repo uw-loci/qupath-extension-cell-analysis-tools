@@ -737,6 +737,7 @@ public final class YamlBatchOrchestrator {
                     || stats.contains("neighborhood_enrichment"));
             int perms = SpatialGraphScripts.readInt(ss.getPermutations(), -1);
             if (perms > 0) config.setSpatialPermutations(perms);
+            config.setSpatialPersistPlots(ss.getPersistPlots());
         }
         return config;
     }

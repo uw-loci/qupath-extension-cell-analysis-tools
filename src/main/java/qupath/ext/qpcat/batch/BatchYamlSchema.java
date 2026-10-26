@@ -410,7 +410,8 @@ public final class BatchYamlSchema {
         private List<String> statistics = new ArrayList<>();
         /** "auto" -> -1 (adaptive); integer accepted. */
         private Object permutations = "auto";
-        private boolean persistPlots = true;
+        /** Null when the YAML leaves it out, so the machine's preference decides. */
+        private Boolean persistPlots;
 
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -428,8 +429,8 @@ public final class BatchYamlSchema {
         public Object getPermutations() { return permutations; }
         public void setPermutations(Object permutations) { this.permutations = permutations; }
 
-        public boolean isPersistPlots() { return persistPlots; }
-        public void setPersistPlots(boolean persistPlots) { this.persistPlots = persistPlots; }
+        public Boolean getPersistPlots() { return persistPlots; }
+        public void setPersistPlots(Boolean persistPlots) { this.persistPlots = persistPlots; }
     }
 
     /** Graph constructor sub-table. */

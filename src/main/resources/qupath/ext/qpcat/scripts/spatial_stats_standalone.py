@@ -259,13 +259,18 @@ except Exception:
 
 
 n_perms = _spatial.adaptive_permutations(n_cells, override=perm_override)
+_perm_note = _spatial.permutation_count_warning(n_perms, chosen=perm_override > 0)
+if _perm_note:
+    _spatial.note_for_user(_perm_note)
 plot_paths = {}
 any_stat = False
 
 # 4. Neighborhood enrichment + Moran's I (shared with run_clustering)
 if want_nhood:
     _update("Computing neighborhood enrichment...")
-    any_stat |= _spatial.run_nhood_enrichment(adata, task, area_ids=sa_area_ids)
+    any_stat |= _spatial.run_nhood_enrichment(
+        adata, task, n_perms, area_ids=sa_area_ids
+    )
     # The heatmap is what the results window shows: without it the matrix was
     # computed, ticked by default, and never displayed anywhere.
     if out_dir and "cluster_nhood_enrichment" in adata.uns:

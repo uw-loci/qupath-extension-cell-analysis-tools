@@ -714,6 +714,14 @@ public class ClusteringResultManager {
         public String derivedOp;
         /** True when the result carries at least one LLM cluster explanation. */
         public boolean hasExplanations;
+
+        /** The picker's text: time stamp, name, scope. */
+        @Override
+        public String toString() {
+            String scope = (scopeLabel != null && !scopeLabel.isBlank()) ? "  -  " + scopeLabel : "";
+            String ts = (timestamp != null && !timestamp.isBlank()) ? timestamp + "  " : "";
+            return ts + name + scope;
+        }
     }
 
     /**

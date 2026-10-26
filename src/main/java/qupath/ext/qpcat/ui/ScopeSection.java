@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.ui;
 
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.WeakChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -12,6 +14,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.images.ImageData;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -45,6 +48,11 @@ public final class ScopeSection extends VBox {
     private boolean currentImageUnavailable;
     private boolean allImagesUnavailable;
     private boolean specificImagesUnavailable;
+    /** True while a run has every control disabled. */
+    private boolean controlsDisabled;
+    /** Held so the weak registration on QuPath's image property lives as long as this section. */
+    private final ChangeListener<ImageData<BufferedImage>> imageListener =
+            (obs, was, now) -> onOpenImageChanged(now != null);
     private final List<ProjectImageEntry<BufferedImage>> selectedSubset = new ArrayList<>();
     /**
      * Scope-change listeners, held so the subset picker can fire them too.
@@ -129,19 +137,7 @@ public final class ScopeSection extends VBox {
         // dialog's 550px content width, and JavaFX resolved that by ellipsizing
         // the labels to "..." -- so every option became unreadable in order to
         // explain one of them.
-        List<String> reasons = new ArrayList<>();
-        if (currentImageUnavailable) {
-            reasons.add("\"Current image\" needs an image open");
-        }
-        if (allImagesUnavailable || specificImagesUnavailable) {
-            reasons.add("a multi-image scope needs a project with two or more images");
-        }
-        if (reasons.isEmpty()) {
-            unavailableHint.setVisible(false);
-            unavailableHint.setManaged(false);
-        } else {
-            unavailableHint.setText("Unavailable here: " + String.join("; ", reasons) + ".");
-        }
+        updateUnavailableHint();
         unavailableHint.setWrapText(true);
         unavailableHint.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
@@ -161,6 +157,39 @@ public final class ScopeSection extends VBox {
         chooseRow.setAlignment(Pos.CENTER_LEFT);
         chooseRow.setPadding(new Insets(0, 0, 0, 55));
         getChildren().addAll(radios, chooseRow, unavailableHint);
+        qupath.imageDataProperty().addListener(new WeakChangeListener<>(imageListener));
+    }
+
+    /** Show why each unavailable option is unavailable, or hide the line. */
+    private void updateUnavailableHint() {
+        List<String> reasons = new ArrayList<>();
+        if (currentImageUnavailable) {
+            reasons.add("\"Current image\" needs an image open");
+        }
+        if (allImagesUnavailable || specificImagesUnavailable) {
+            reasons.add("a multi-image scope needs a project with two or more images");
+        }
+        unavailableHint.setText(reasons.isEmpty() ? ""
+                : "Unavailable here: " + String.join("; ", reasons) + ".");
+        unavailableHint.setVisible(!reasons.isEmpty());
+        unavailableHint.setManaged(!reasons.isEmpty());
+    }
+
+    /**
+     * Opening an image makes "Current image" available; closing it does not take
+     * the option away, so a selected scope never vanishes under the user.
+     * Under "Current image", a different image is a different scope.
+     */
+    private void onOpenImageChanged(boolean haveOpenImage) {
+        if (haveOpenImage && currentImageUnavailable) {
+            currentImageUnavailable = false;
+            scopeCurrentImage.setDisable(controlsDisabled);
+            scopeCurrentImage.setTooltip(null);
+            updateUnavailableHint();
+        }
+        if (haveOpenImage && isCurrentImage()) {
+            scopeListeners.forEach(Runnable::run);
+        }
     }
 
     private void openImageChooser() {
@@ -249,6 +278,7 @@ public final class ScopeSection extends VBox {
      * cannot hand the user an option that was never valid.
      */
     public void setControlsDisabled(boolean disabled) {
+        controlsDisabled = disabled;
         scopeCurrentImage.setDisable(disabled || currentImageUnavailable);
         scopeAllImages.setDisable(disabled || allImagesUnavailable);
         scopeSpecificImages.setDisable(disabled || specificImagesUnavailable);

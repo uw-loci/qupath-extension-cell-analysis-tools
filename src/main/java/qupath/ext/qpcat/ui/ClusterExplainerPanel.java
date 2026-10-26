@@ -925,6 +925,7 @@ public class ClusterExplainerPanel {
 
             if (cancelled.get()) {
                 logger.info("LLM explainer cancelled; not applying results.");
+                LlmExplainerService.writeAuditUnfinished(req, res, null, durationMs);
                 return;
             }
 
@@ -935,6 +936,7 @@ public class ClusterExplainerPanel {
                 progressBar.setVisible(false);
                 if (finalError != null) {
                     statusLabel.setText("Failed: " + finalError);
+                    LlmExplainerService.writeAuditUnfinished(req, null, finalError, durationMs);
                     return;
                 }
                 if (finalRes == null) {
@@ -958,7 +960,7 @@ public class ClusterExplainerPanel {
                     return;
                 }
                 mergeResults(req, finalRes);
-                statusLabel.setText("Done. " + finalRes.explanations.size()
+                statusLabel.setText("Done. " + finalRes.answeredCount() + " of " + finalRes.explanations.size()
                         + " clusters explained ("
                         + (durationMs / 1000L) + "s).");
                 LlmExplainerService.writeAuditLog(req, finalRes, durationMs);

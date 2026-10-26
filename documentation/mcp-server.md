@@ -108,10 +108,11 @@ box under [What this is](#what-this-is).
 Installing or updating QP-CAT never opens a port. You start the server from
 **Extensions > QP-CAT > Setup & help > MCP server for AI agents (off)** followed by the
 **Start server** button in the window that opens. Nothing in QP-CAT starts it: not QuPath
-launch, not opening a project, not running a clustering analysis. A Groovy script you run in
-QuPath can also start it, and can read the token, because the controller is a public class;
-that includes a script an agent runs through `qupath-mcp`, which can run any code anyway. The
-administrator switch below blocks script starts too. There is no preference that
+launch, not opening a project, not running a clustering analysis. A Groovy script cannot start it or
+read its token: both refuse any caller outside QP-CAT's own code, with *Only QP-CAT's own MCP
+server window can start the MCP server; scripts cannot.* This stops a script from doing it by
+accident or on an agent's say-so; code in the QuPath process that sets out to get around it
+can, by reflection, and a script an agent runs through `qupath-mcp` can run any code anyway. There is no preference that
 remembers "on", by design: the on/off state lives in memory only, so every QuPath restart
 begins with the server off. A "start with QuPath" option does not exist, by design. Starting it needs no administrator rights, and QuPath needs no
 internet connection for it; the agent is the online component. Whether a Windows or macOS
@@ -253,8 +254,8 @@ Each row answers one question a security review asks.
 3. Restart QuPath.
 
 **What you see:** neither MCP menu item is built; QuPath's log carries
-`MCP server disabled by policy (qpcat.mcp.disabled=true)` at startup; and a start attempt,
-including one from a script, refuses with
+`MCP server disabled by policy (qpcat.mcp.disabled=true)` at startup; and a start attempt
+from the window refuses with
 `The MCP server is disabled on this installation (qpcat.mcp.disabled=true).`
 
 </details>

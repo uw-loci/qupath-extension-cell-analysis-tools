@@ -57,6 +57,7 @@ public class MeasurementSelectionPane extends VBox {
         final BooleanProperty selected = new SimpleBooleanProperty(false);
         Item(String name) { this.name = name; }
         BooleanProperty selectedProperty() { return selected; }
+        @Override public String toString() { return (selected.get() ? "[x] " : "[ ] ") + name; }
     }
 
     /** A checkbox row whose measurement name shows its marker in bold. */

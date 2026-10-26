@@ -56,12 +56,23 @@ class McpServerControllerTest {
     @Test
     void startRefusesWithoutAProjectAndLeavesNothingRunning() {
         controller.bindToProjectProperty(new SimpleObjectProperty<Project<?>>(null));
-        assertThatThrownBy(controller::start)
+        assertThatThrownBy(() -> controller.start())
                 .isInstanceOf(IOException.class)
                 .hasMessage(McpServerController.NO_PROJECT_TEXT);
         assertThat(controller.isRunning()).isFalse();
         assertThat(controller.getToken()).isNull();
         assertThat(controller.getUrl()).isNull();
+    }
+
+    @Test
+    void codeOutsideQpcatCannotStartTheServerOrReadItsToken() {
+        assertThatThrownBy(qupath.ext.outsider.OutsideCaller::start)
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("scripts cannot");
+        assertThatThrownBy(qupath.ext.outsider.OutsideCaller::readToken)
+                .isInstanceOf(SecurityException.class)
+                .hasMessageContaining("read the MCP server's token");
+        assertThat(controller.isRunning()).isFalse();
     }
 
     /** True when nothing on this machine holds the loopback port. */

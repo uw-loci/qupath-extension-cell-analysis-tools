@@ -110,6 +110,12 @@ public class LlmExplainerService {
         }
 
         public boolean isSuccess() { return errorType == null; }
+
+        /** Rows the reply actually answered, leaving out placeholder rows. */
+        public int answeredCount() {
+            return explanations == null ? 0
+                    : (int) explanations.stream().filter(ClusterExplanation::isAnswered).count();
+        }
     }
 
     /**
@@ -369,7 +375,8 @@ public class LlmExplainerService {
 
         String summary;
         if (result.isSuccess()) {
-            summary = result.explanations.size() + " clusters explained";
+            summary = result.answeredCount() + " of " + result.explanations.size()
+                    + " clusters explained";
         } else {
             params.put("Error type", result.errorType);
             params.put("Error detail",
@@ -382,6 +389,59 @@ public class LlmExplainerService {
         }
         OperationLogger.getInstance().logLargeOperation(
                 "LLM EXPLAIN", params, blocks, summary, durationMs);
+    }
+
+    /**
+     * Write an {@code === LLM EXPLAIN [CANCELLED] ===} or {@code [FAILED]} block for a
+     * call that never reached the results: cancelled by the user, or thrown. A call
+     * cancelled because it hung is often a configuration problem (a wrong URL, a proxy),
+     * so the provider, model and duration are recorded either way.
+     *
+     * @param req        the request
+     * @param partial    whatever came back before the end; null when nothing did
+     * @param error      the exception's message when the call threw; null when cancelled
+     * @param durationMs wall-clock duration
+     */
+    public static void writeAuditUnfinished(ExplainRequest req, ExplainResult partial,
+                                            String error, long durationMs) {
+        Map<String, String> params = baseParams(req);
+        params.put("Cluster ids",
+                req.clusterIds == null || req.clusterIds.isEmpty() ? "all" : req.clusterIds.toString());
+        params.put("Top markers", String.valueOf(req.topN));
+        Map<String, String> blocks = null;
+        if (partial != null) {
+            params.put("Prompt template", partial.promptTemplate);
+            if (partial.promptHash != null && !partial.promptHash.isEmpty()) {
+                params.put("Prompt hash", partial.promptHash);
+            }
+            params.put("Input tokens",
+                    partial.inputTokens >= 0 ? String.valueOf(partial.inputTokens) : "unknown");
+            params.put("Output tokens",
+                    partial.outputTokens >= 0 ? String.valueOf(partial.outputTokens) : "unknown");
+            if (!partial.isSuccess()) {
+                params.put("Error type", partial.errorType);
+                params.put("Error detail", LlmAuditScrubber.scrub(
+                        partial.errorDetail != null ? partial.errorDetail : ""));
+            }
+            blocks = new LinkedHashMap<>();
+            blocks.put("Prompt", LlmAuditScrubber.scrub(partial.prompt != null ? partial.prompt : ""));
+            blocks.put("Response", LlmAuditScrubber.scrub(
+                    partial.responseRaw != null ? partial.responseRaw : ""));
+        }
+        String label;
+        String summary;
+        if (error == null) {
+            params.put("Cancelled", "true");
+            label = "LLM EXPLAIN [CANCELLED]";
+            summary = partial != null && partial.isSuccess()
+                    ? "CANCELLED, the reply was not applied"
+                    : "CANCELLED before a reply, nothing applied";
+        } else {
+            params.put("Error detail", LlmAuditScrubber.scrub(error));
+            label = "LLM EXPLAIN [FAILED]";
+            summary = "FAILED, nothing applied";
+        }
+        OperationLogger.getInstance().logLargeOperation(label, params, blocks, summary, durationMs);
     }
 
     /**

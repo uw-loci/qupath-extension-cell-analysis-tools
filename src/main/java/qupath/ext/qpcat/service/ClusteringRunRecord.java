@@ -311,7 +311,7 @@ public final class ClusteringRunRecord {
             sb.append("Spatial stats    : graph=").append(config.getSpatialGraphType())
                     .append(" k=").append(config.getSpatialGraphK())
                     .append(" radius=").append(config.getSpatialGraphRadius())
-                    .append(" perms=").append(config.getSpatialPermutations())
+                    .append(" perms=").append(describePermutations(config, result))
                     .append(" [nhood/moran=").append(config.isEnableSpatialAnalysis())
                     .append(", ripley=").append(config.isEnableRipley())
                     .append(", geary=").append(config.isEnableGeary())
@@ -518,5 +518,15 @@ public final class ClusteringRunRecord {
             first = false;
         }
         return sb.append('}').toString();
+    }
+
+    /** The permutation count the run used, and whether it was chosen or adaptive. */
+    static String describePermutations(ClusteringConfig config, ClusteringResult result) {
+        int setting = config.getSpatialPermutations();
+        if (result == null) {
+            return setting > 0 ? setting + " (set)" : "auto";
+        }
+        return config.resolvePermutations(result.getNCells())
+                + (setting > 0 ? " (set)" : " (auto)");
     }
 }

@@ -308,9 +308,9 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * The open image's cells a single-image run clusters: the selected
-     * detections, else every detection, cells only when the image has cells,
-     * then the class subset.
+     * The open image's cells a single-image run clusters: the detections inside
+     * the selected annotations, else the selected detections, else every
+     * detection; then cells only when the image has cells, then the class subset.
      *
      * @param imageData the open image
      * @param config    the run's configuration
@@ -324,31 +324,28 @@ public class ClusteringWorkflow {
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
         Collection<PathObject> selected = hierarchy.getSelectionModel().getSelectedObjects();
 
-        // If no selection, use all detections
+        List<PathObject> selectedAnnotations = selected.stream()
+                .filter(PathObject::isAnnotation)
+                .toList();
         Collection<PathObject> detections;
-        if (selected.isEmpty() || selected.stream().noneMatch(p -> p.isDetection())) {
-            detections = new ArrayList<>(hierarchy.getDetectionObjects());
-            logger.info("No detections selected - using all {} detections", detections.size());
-        } else {
-            // If annotations are selected, get detections within them
-            List<PathObject> selectedAnnotations = selected.stream()
-                    .filter(PathObject::isAnnotation)
-                    .toList();
-            if (!selectedAnnotations.isEmpty()) {
-                detections = new ArrayList<>();
-                for (PathObject annotation : selectedAnnotations) {
-                    detections.addAll(hierarchy.getAllDetectionsForROI(
-                            annotation.getROI()));
-                }
-                logger.info("Using {} detections from {} selected annotations",
-                        detections.size(), selectedAnnotations.size());
-            } else {
-                // Use selected detections directly
-                detections = selected.stream()
-                        .filter(PathObject::isDetection)
-                        .toList();
-                logger.info("Using {} selected detections", detections.size());
+        if (!selectedAnnotations.isEmpty()) {
+            // A cell inside two overlapping annotations is clustered once.
+            Set<PathObject> inside = new LinkedHashSet<>();
+            for (PathObject annotation : selectedAnnotations) {
+                inside.addAll(hierarchy.getAllDetectionsForROI(annotation.getROI()));
             }
+            detections = new ArrayList<>(inside);
+            logger.info("Using {} detections from {} selected annotations",
+                    detections.size(), selectedAnnotations.size());
+        } else if (selected.stream().anyMatch(PathObject::isDetection)) {
+            detections = selected.stream()
+                    .filter(PathObject::isDetection)
+                    .toList();
+            logger.info("Using {} selected detections", detections.size());
+        } else {
+            detections = new ArrayList<>(hierarchy.getDetectionObjects());
+            logger.info("No detections or annotations selected - using all {} detections",
+                    detections.size());
         }
 
         // If cells are present, analyze only cells so subcellular detections
@@ -2743,8 +2740,8 @@ public class ClusteringWorkflow {
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
         // Phase 5 enhancement: PNG output for spatial-stats plots so the
         // Export figures (batch)... can pick them up.
-        inputs.put("spatial_persist_plots",
-                QpcatPreferences.isSpatialPersistPlots());
+        inputs.put("spatial_persist_plots", config.getSpatialPersistPlots() != null
+                ? config.getSpatialPersistPlots() : QpcatPreferences.isSpatialPersistPlots());
         // Gate neighborhood-enrichment + Moran's I on the explicit spatial-
         // analysis choice. Without this they run whenever spatial coordinates
         // are present -- which is ALWAYS true for BANKSY -- so a BANKSY run would

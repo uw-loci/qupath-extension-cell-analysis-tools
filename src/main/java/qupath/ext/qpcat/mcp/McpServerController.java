@@ -119,8 +119,39 @@ public final class McpServerController {
     /** @return {@code http://127.0.0.1:<port>/mcp}, or null when stopped */
     public String getUrl() { return runningFlag ? "http://127.0.0.1:" + port + McpHttpEndpoint.PATH : null; }
 
-    /** @return the bearer token for this run, or null when stopped; never logged */
-    public String getToken() { return token; }
+    /**
+     * @return the bearer token for this run, or null when stopped; never logged
+     * @throws SecurityException when called from outside QP-CAT, e.g. a Groovy script
+     */
+    public String getToken() {
+        requireQpcatCaller("read the MCP server's token");
+        return token;
+    }
+
+    /** Package prefix of the code allowed to start the server and read its token. */
+    static final String QPCAT_PACKAGE = "qupath.ext.qpcat.";
+
+    static final String SCRIPT_REFUSED_TEXT = "Only QP-CAT's own MCP server window can %s; "
+            + "scripts cannot. Use Extensions > QP-CAT > Setup & help > MCP server for AI agents.";
+
+    private static final StackWalker WALKER =
+            StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+
+    /**
+     * Refuses a caller whose class is outside QP-CAT. Code in the same process can still
+     * get around this by reflection; it stops a script from doing it by accident.
+     */
+    private static void requireQpcatCaller(String what) {
+        Class<?> caller = WALKER.walk(frames -> frames
+                .map(StackWalker.StackFrame::getDeclaringClass)
+                .filter(c -> c != McpServerController.class)
+                .findFirst().orElse(null));
+        if (caller == null || !caller.getName().startsWith(QPCAT_PACKAGE)) {
+            logger.warn("MCP server: refused a request to {} from {}", what,
+                    caller == null ? "unknown code" : caller.getName());
+            throw new SecurityException(String.format(SCRIPT_REFUSED_TEXT, what));
+        }
+    }
 
     /** @return when the server started, or null when stopped */
     public Instant getStartedAt() { return startedAt; }
@@ -144,8 +175,10 @@ public final class McpServerController {
      * @throws IOException with a user-readable message when the installation disables the
      *                     server, no project is open, QuPath's interface thread does not
      *                     answer, or every port is taken; nothing is left running in that case
+     * @throws SecurityException when called from outside QP-CAT, e.g. a Groovy script
      */
     public synchronized void start() throws IOException {
+        requireQpcatCaller("start the MCP server");
         if (runningFlag) return;
         if (DISABLED_BY_POLICY) {
             logger.info("MCP server start refused: {}=true", DISABLED_PROPERTY);

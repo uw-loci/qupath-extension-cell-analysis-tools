@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.ui;
 
+import qupath.ext.qpcat.model.FoldChanges;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
@@ -390,7 +391,7 @@ public class MarkerFingerprintPanel extends BorderPane {
     private VBox measurementRow(Map<String, Object> marker, Color color, double globalMax) {
         String mName = String.valueOf(marker.get("name"));
         double val = barValue(marker);
-        double lfc = num(marker.get("logfoldchange"));
+        double lfc = FoldChanges.shown(num(marker.get("logfoldchange")));
         double score = num(marker.get("score"));
 
         // Full-width, wrapping name so long measurement names read without hovering.
@@ -517,7 +518,7 @@ public class MarkerFingerprintPanel extends BorderPane {
                 String ch = channelOf(String.valueOf(markers.get(i).get("name")));
                 if (ch == null) { other = true; continue; }
                 if (!bestPerChannel.containsKey(ch)) {
-                    double lfc = num(markers.get(i).get("logfoldchange"));
+                    double lfc = FoldChanges.shown(num(markers.get(i).get("logfoldchange")));
                     bestPerChannel.put(ch, new double[]{clusterId, lfc, i});
                 }
             }
@@ -709,7 +710,10 @@ public class MarkerFingerprintPanel extends BorderPane {
         double score = num(marker.get("score"));
         double padj = num(marker.get("pval_adj"));
         StringBuilder tip = new StringBuilder(mName);
-        if (!Double.isNaN(lfc)) tip.append(String.format("%nlog2FC: %+.2f", lfc));
+        if (!Double.isNaN(lfc)) {
+            tip.append("\nlog2FC: ").append(FoldChanges.format(lfc, "%+.2f"));
+            if (FoldChanges.atLimit(lfc)) tip.append(" (one side's mean is about zero)");
+        }
         if (!Double.isNaN(score)) tip.append(String.format("%nWilcoxon score: %.2f", score));
         // Labelled by where it came from, not by what it would mean if the clusters
         // had been defined independently of these measurements. They were not.
@@ -722,7 +726,7 @@ public class MarkerFingerprintPanel extends BorderPane {
 
     /** Bar magnitude for a marker: log2 fold-change if finite, else Wilcoxon score. */
     private static double barValue(Map<String, Object> marker) {
-        double lfc = num(marker.get("logfoldchange"));
+        double lfc = FoldChanges.shown(num(marker.get("logfoldchange")));
         if (!Double.isNaN(lfc)) return lfc;
         double score = num(marker.get("score"));
         return Double.isNaN(score) ? 0 : score;

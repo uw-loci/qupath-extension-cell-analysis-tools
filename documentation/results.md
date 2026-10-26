@@ -970,7 +970,7 @@ alone: brighter (toward yellow) is a higher z and darker (toward purple) a lower
 scale runs from the matrix's own minimum to its maximum, not centered on zero, so a dark cell
 can still be above chance: read the color bar to find where zero falls.
 
-The null comes from 1000 permutations with a fixed seed, so re-running gives the same z. A
+The null comes from the run's permutation count (1000 up to 50,000 cells by default; the line above the table says how many) with a fixed seed, so re-running gives the same z. A
 result saved by an earlier version of QP-CAT shows "z-score (edge counts were not recorded for
 this result)" and no edge counts; re-run the statistic to get them.
 

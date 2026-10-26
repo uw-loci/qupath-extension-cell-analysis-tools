@@ -39,7 +39,14 @@ def build_prompt():
     return load_script_symbol(
         SCRIPT,
         "build_prompt",
-        {"PROMPT_TEMPLATE": _module_constant("PROMPT_TEMPLATE")},
+        {
+            "PROMPT_TEMPLATE": _module_constant("PROMPT_TEMPLATE"),
+            "_format_log2fc": load_script_symbol(
+                SCRIPT,
+                "_format_log2fc",
+                {"LOG2FC_LIMIT": _module_constant("LOG2FC_LIMIT")},
+            ),
+        },
     )
 
 
@@ -116,3 +123,18 @@ def test_top_n_still_truncates(build_prompt):
     assert "CD3" in prompt
     assert "CD8" in prompt
     assert "CD68" not in prompt
+
+
+def test_a_fold_change_against_zero_reaches_the_prompt_as_a_bound(build_prompt):
+    table = {
+        "0": [
+            {"name": "CD3", "score": 9.9, "logfoldchange": 37.2, "pval_adj": 0.0},
+            {"name": "CD8", "score": 7.1, "logfoldchange": -33.0, "pval_adj": 0.0},
+            {"name": "CD20", "score": 1.0, "logfoldchange": 1.25, "pval_adj": 0.0},
+        ]
+    }
+    prompt = build_prompt(table, [0], 5)
+    assert "37.2" not in prompt and "33.0" not in prompt
+    assert "log2fc=>=10.00 (other side about zero)" in prompt
+    assert "log2fc=<=-10.00 (other side about zero)" in prompt
+    assert "log2fc=1.25" in prompt

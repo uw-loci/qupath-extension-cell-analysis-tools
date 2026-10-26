@@ -6,6 +6,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+**Results that change from 0.23.0:** a run on the current image with an annotation selected
+now clusters only the cells inside it; neighborhood enrichment follows the permutation
+setting, so above 50,000 cells it runs 100 (or 50) permutations by default instead of 1000.
+
+### Fixed
+
+- **Selecting an annotation now limits the run to the cells inside it.** With only an
+  annotation selected (what clicking one in QuPath does), every cell in the image was
+  clustered while the *Composition by annotation* tab was still offered. Measured on a
+  1,530-cell image: 1,530 clustered, 409 inside the annotation; now 409. Choose k uses the
+  same selection. Cells inside two overlapping annotations are counted once.
+- **Neighborhood enrichment ignored the permutation setting** and always ran 1000. It now
+  uses the same count as Moran's I and Geary's C. A count you set below 100 is flagged in
+  the Run Clustering dialog and in the result's warnings: a permutation p-value cannot fall
+  below 1 / (permutations + 1), so 19 or fewer can never reach 0.05. `RUN_INFO.txt` records
+  the count used (`perms=1000 (auto)`), not the setting `0`.
+- **Marker rankings:** log2 fold-changes such as +37 or -33, which came from dividing by a
+  zero guard when the other cells' mean was exactly zero, now read `>=10.000` /
+  `<=-10.000` in the table, the fingerprint bars and the LLM prompt, also for results saved
+  earlier.
+- **Cluster Explainer:** a cancelled call, and one that fails inside QP-CAT, is now written
+  to the project audit log (`LLM EXPLAIN [CANCELLED]` / `[FAILED]`) with the provider, model,
+  endpoint and how long it ran, so a call stopped because it hung leaves a record. The
+  status line counts only the clusters the reply answered (*Done. 5 of 7 clusters
+  explained*).
+- **Run Clustering dialog:** the class list refreshes after a run from the dialog; a run
+  restricted to classes only some images hold says how many images it covers (*Cluster 1 of
+  8 project image(s)?*); **Current image** becomes available when an image is opened while
+  the dialog is open; the run-cost line follows the spatial statistics and measurement
+  choices; and the "overwrite coordinates?" question is asked for multi-image runs too, not
+  only when the open image has the columns.
+- **3D View tab:** without a 3D embedding its guide said points were placed by one; it now
+  says they are placed by three measurements you choose.
+- YAML `spatial_stats.persist_plots` had no effect; it now decides whether the spatial
+  statistics save PNGs, overriding the preference for that run.
+- Dialog titles: the rename, merge and save prompts in Modify Clusters carry the `QPCAT - `
+  prefix, so the Dialog Position Manager does not confuse them with another extension's.
+
+### Changed
+
+- **The MCP server can no longer be started, or its token read, by a script.** Only its own
+  window can; a Groovy script gets *Only QP-CAT's own MCP server window can start the MCP
+  server; scripts cannot.* Code that sets out to get around this can, by reflection.
+
 ## [0.23.0] -- 2026-10-24 -- check your clusters, and bring scanpy labels back
 
 **Upgrade if you export to AnnData or run neighborhood enrichment on several images.** The

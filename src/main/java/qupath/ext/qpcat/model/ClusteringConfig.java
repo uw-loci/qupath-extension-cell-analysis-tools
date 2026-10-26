@@ -216,6 +216,9 @@ public class ClusteringConfig {
     // 0 = adaptive default (1000 / 100 / 50 by cell count); positive = fixed.
     private int spatialPermutations = 0;
 
+    // Whether spatial statistics also save PNGs; null follows the preference.
+    private Boolean spatialPersistPlots = null;
+
     /**
      * Radius the pairwise co-occurrence MATRIX is drawn at, in the image's
      * coordinate unit; -1 picks a default near five median nearest-neighbour
@@ -568,6 +571,11 @@ public class ClusteringConfig {
 
     public int getSpatialPermutations() { return spatialPermutations; }
     public void setSpatialPermutations(int v) { this.spatialPermutations = v; }
+
+    /** @see #spatialPersistPlots */
+    public Boolean getSpatialPersistPlots() { return spatialPersistPlots; }
+    /** @see #spatialPersistPlots */
+    public void setSpatialPersistPlots(Boolean v) { this.spatialPersistPlots = v; }
 
     // ---- Spatial graph overlay (v0.3) accessors ----
 

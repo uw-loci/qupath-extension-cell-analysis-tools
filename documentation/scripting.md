@@ -177,7 +177,7 @@ def coOcc = SpatialStatsScripts.coOccurrence(graph, [
 
 ### `neighborhoodEnrichment(graphHandle, Map opts) -> Map<String, Object>`
 
-Pass `[:]` as the options map; no option keys are read, and there is no one-argument form. Returns `[method: 'neighborhood_enrichment', graph: ...]`. When a run computes neighborhood enrichment it uses a fixed 1000 permutations, shuffling labels within each image or area (see [Spatial statistics](spatial-statistics.md#interpreting-neighborhood-enrichment)).
+Pass `[:]` as the options map; no option keys are read, and there is no one-argument form. Returns `[method: 'neighborhood_enrichment', graph: ...]`. When a run computes neighborhood enrichment it uses the permutation count from the preference (adaptive by default), shuffling labels within each image or area (see [Spatial statistics](spatial-statistics.md#interpreting-neighborhood-enrichment)).
 
 ## SpatialConnectionsScripts
 

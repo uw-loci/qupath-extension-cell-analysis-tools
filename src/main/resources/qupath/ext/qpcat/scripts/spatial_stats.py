@@ -242,6 +242,36 @@ def adaptive_permutations(n_cells, override=0):
     return 50
 
 
+# Fewer than this many permutations is reported to the user when they chose the
+# count: the p floor is 1/(n+1), and every z divides by a spread estimated from n draws.
+FEW_PERMUTATIONS = 100
+
+
+def permutation_count_warning(n_permutations, chosen):
+    """A note for a permutation count too small to report, or None.
+
+    :param n_permutations: the count the run uses
+    :param chosen: True when the user set it; the adaptive default is not flagged
+    """
+    n = int(n_permutations)
+    if not chosen or n <= 0 or n >= FEW_PERMUTATIONS:
+        return None
+    floor = 1.0 / (n + 1)
+    if floor >= 0.05:
+        return (
+            "Only %d permutations were run, so no permutation p-value can fall "
+            "below %.3f and none can reach 0.05. Set Preferences > QP-CAT: Spatial "
+            "Stats Permutations to at least %d, or to 0 for the default."
+            % (n, floor, FEW_PERMUTATIONS)
+        )
+    return (
+        "Only %d permutations were run: permutation p-values cannot fall below "
+        "%.3f, and the z-scores divide by a spread estimated from %d shuffles. Use "
+        "at least %d (Preferences > QP-CAT: Spatial Stats Permutations) for "
+        "results you report." % (n, floor, n, FEW_PERMUTATIONS)
+    )
+
+
 def area_slices(area_ids, n_cells=None):
     """Partition cell indices by independent area.
 
@@ -1755,7 +1785,7 @@ def describe_nhood_null(n_permutations, n_areas):
     return "%d permutations; cluster labels shuffled across all cells" % n_permutations
 
 
-def run_nhood_enrichment(adata, task, area_ids=None, n_permutations=1000):
+def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
     """Neighbourhood enrichment z-scores and edge counts into task.outputs.
 
     Writes nhood_enrichment (z), nhood_counts (edges from a row-cluster cell
@@ -1763,6 +1793,7 @@ def run_nhood_enrichment(adata, task, area_ids=None, n_permutations=1000):
     (describe_nhood_null). With several areas the permutation null shuffles
     labels within each area, matching the per-area graph.
 
+    :param n_permutations: label shuffles forming the null
     :param area_ids: per-cell independent-area id, or None
     :return: True when the outputs were written
     """

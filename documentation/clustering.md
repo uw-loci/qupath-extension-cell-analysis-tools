@@ -21,6 +21,8 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
    You do not need an image open: with a project open, pick the images first and
    QP-CAT reads their measurements directly, so the measurement list reflects what
    you picked rather than whatever was in the viewer.
+   For the current image, what you have selected decides the cells: the cells inside
+   the selected annotations, else the selected cells, else every cell in the image.
 2. **Cells to cluster (by classification)** -- off by default, so every cell in the
    scope is clustered. Tick **Restrict this run to chosen classifications** to cluster
    only some of them. See [Clustering a subset of cells](#clustering-a-subset-of-cells).

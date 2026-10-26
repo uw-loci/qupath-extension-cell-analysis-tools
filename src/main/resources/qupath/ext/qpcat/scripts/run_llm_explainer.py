@@ -239,12 +239,29 @@ def build_prompt(marker_table, cluster_ids, top_n):
             # language model invites exactly the significance language the prompt
             # forbids. The score carries the ranking; the p-value adds nothing to it.
             lines.append(
-                "  - {0}  score={1:.2f}  log2fc={2:.2f}".format(
-                    name, float(score), float(log2fc)
+                "  - {0}  score={1:.2f}  log2fc={2}".format(
+                    name, float(score), _format_log2fc(log2fc)
                 )
             )
         blocks.append("\n".join(lines))
     return PROMPT_TEMPLATE.format(cluster_blocks="\n\n".join(blocks))
+
+
+# Past +/-10 (1024-fold) one side's mean is essentially zero and the number
+# measures the zero guard, as FoldChanges.LIMIT says on the Java side.
+LOG2FC_LIMIT = 10.0
+
+
+def _format_log2fc(value):
+    """A log2 fold-change for the prompt, shown as at least the limit past it."""
+    v = float(value)
+    if v != v:
+        return "n/a"
+    if abs(v) >= LOG2FC_LIMIT:
+        return "{0}{1:.2f} (other side about zero)".format(
+            ">=" if v > 0 else "<=", LOG2FC_LIMIT if v > 0 else -LOG2FC_LIMIT
+        )
+    return "{0:.2f}".format(v)
 
 
 def _resolve_cluster_ids(marker_table, spec):

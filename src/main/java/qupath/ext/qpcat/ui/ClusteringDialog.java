@@ -23,6 +23,7 @@ import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.model.FoldChanges;
 import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
@@ -574,6 +575,7 @@ public class ClusteringDialog {
     private TitledPane createMeasurementSection() {
         measurementPane = new MeasurementSelectionPane();
         measurementPane.setOnSelectionChanged(this::updatePreflight);
+        measurementPane.addSelectionListener(this::refreshRunCostLabel);
         measurementStatusLabel = new Label();
         measurementStatusLabel.setWrapText(true);
         WrapHeight.bind(measurementStatusLabel);
@@ -886,6 +888,11 @@ public class ClusteringDialog {
             this.count = count;
             this.unclassified = unclassified;
         }
+
+        @Override
+        public String toString() {
+            return (included.get() ? "[x] " : "[ ] ") + name + " (" + count + " cells)";
+        }
     }
 
     /** One row of the "Cells to cluster" list: a checkbox carrying the class name and count. */
@@ -922,6 +929,13 @@ public class ClusteringDialog {
     private ListView<ClassRow> classificationsList;
     private final ObservableList<ClassRow> classRows = FXCollections.observableArrayList();
     private Label classificationsStatus;
+    /**
+     * Classes on each project image (entry id -> class names, null for
+     * unclassified) as of the last list read; null when the scope is the current image.
+     */
+    private Map<String, Set<String>> classesByEntry;
+    /** Measurement names found on the project images in scope at the last list read; null for the current image. */
+    private Set<String> scopeMeasurementNames;
     /**
      * Opt-in for restricting a clustering run to chosen classes. Null in
      * {@link RunMode#ANALYZE_EXISTING}, where choosing classes IS the mode rather
@@ -1155,6 +1169,8 @@ public class ClusteringDialog {
         final List<ProjectImageEntry<BufferedImage>> scope = entries;
         Thread t = new Thread(() -> {
             Map<String, Integer> counts = new LinkedHashMap<>();
+            Map<String, Set<String>> perEntry = scope == null ? null : new HashMap<>();
+            Set<String> measurementNames = scope == null ? null : new HashSet<>();
             int unclassified = 0;
             try {
                 if (scope == null) {
@@ -1175,6 +1191,12 @@ public class ClusteringDialog {
                             for (Map.Entry<String, Integer> e : one.entrySet()) {
                                 counts.merge(e.getKey(), e.getValue(), Integer::sum);
                             }
+                            perEntry.put(en.getID(), new HashSet<>(one.keySet()));
+                            var dets = data.getHierarchy().getDetectionObjects();
+                            if (!dets.isEmpty()) {
+                                measurementNames.addAll(
+                                        dets.iterator().next().getMeasurementList().getNames());
+                            }
                         } catch (Exception ex) {
                             logger.warn("Could not read classes from {}: {}",
                                     en.getImageName(), ex.getMessage());
@@ -1193,6 +1215,8 @@ public class ClusteringDialog {
             final Map<String, Integer> found = counts;
             final int unclassifiedCount = unclassified;
             Platform.runLater(() -> {
+                classesByEntry = perEntry;
+                scopeMeasurementNames = measurementNames;
                 boolean subsetMode = mode != RunMode.ANALYZE_EXISTING;
                 classRows.clear();
                 for (Map.Entry<String, Integer> e : found.entrySet()) {
@@ -2122,6 +2146,10 @@ public class ClusteringDialog {
                 + "want to flag one cluster's spatial behavior."));
         enableCoOccOneVsRestCheck.setAccessibleText(
                 "Enable one-vs-rest co-occurrence");
+        for (CheckBox stat : List.of(enableRipleyCheck, enableGearyCheck,
+                enableCoOccPairwiseCheck, enableCoOccOneVsRestCheck)) {
+            stat.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        }
 
         // The pairwise co-occurrence FIGURE has to be drawn at one radius: the
         // bins are cumulative discs, so averaging them is dominated by the large
@@ -2153,8 +2181,11 @@ public class ClusteringDialog {
 
         // ---- Adaptive-permutation indicator ----
         permutationLabel = new Label(formatPermutationsLabel(-1));
+        permutationLabel.setWrapText(true);
+        WrapHeight.bind(permutationLabel);
         permutationLabel.setTooltip(Tooltips.of(
-                "Number of random permutations for significance testing.\n"
+                "Number of random permutations for neighborhood enrichment, Moran's I\n"
+                + "and Geary's C.\n"
                 + "Higher = more accurate p-values, slower. Adaptive default\n"
                 + "uses 1000 for projects under 50,000 cells, 100 for 50k-500k,\n"
                 + "and 50 above. Override via Preferences > QP-CAT: Run Clustering."));
@@ -2512,6 +2543,9 @@ public class ClusteringDialog {
         t.start();
     }
 
+    /** Below this a chosen permutation count is flagged, as spatial_stats.FEW_PERMUTATIONS. */
+    static final int FEW_PERMUTATIONS = 100;
+
     /**
      * Render the permutation label using the adaptive default. Pass -1
      * for cell count when no clustering scope is selected yet.
@@ -2519,8 +2553,17 @@ public class ClusteringDialog {
     private String formatPermutationsLabel(int nCellsHint) {
         int override = QpcatPreferences.getSpatialPermutations();
         if (override > 0) {
-            return "Permutations: " + override + " (manual override; "
+            String text = "Permutations: " + override + " (manual override; "
                     + "edit in Preferences > QP-CAT: Run Clustering)";
+            if (override < FEW_PERMUTATIONS) {
+                double floor = 1.0 / (override + 1);
+                text += String.format(floor >= 0.05
+                        ? ". Too few: no p-value can fall below %.3f, so none can reach 0.05; "
+                                + "use at least %d."
+                        : ". Few: p-values cannot fall below %.3f; use at least %d for "
+                                + "results you report.", floor, FEW_PERMUTATIONS);
+            }
+            return text;
         }
         if (nCellsHint <= 0) {
             return "Permutations: auto (1000 for <= 50k cells, 100 for 50k-500k, 50 above)";
@@ -3982,8 +4025,15 @@ public class ClusteringDialog {
         updatePreflight();
     }
 
-    /** True if {@code prefix}1 already exists on the current image's detections. */
-    private boolean embeddingColumnsExistOnCurrentImage(String prefix) {
+    /**
+     * True if {@code prefix}1 already exists on the cells in scope: the open image's,
+     * or for a project scope, any image read for the class list.
+     */
+    private boolean embeddingColumnsExistInScope(String prefix) {
+        if (scopeSection != null && !scopeSection.isCurrentImage()) {
+            Set<String> known = scopeMeasurementNames;
+            return known != null && known.contains(prefix + "1");
+        }
         var imageData = qupath.getImageData();
         if (imageData == null) return false;
         var dets = imageData.getHierarchy().getDetectionObjects();
@@ -4003,6 +4053,27 @@ public class ClusteringDialog {
      * "1,203 of 45,000" reads very differently from "45,000 of 45,000".
      */
     /** True when a sub-cluster run needs scope-wide counts it does not yet hold. */
+    /**
+     * How many of {@code entries} hold a cell the class subset keeps, from the last
+     * class-list read; null when that read did not cover every entry.
+     */
+    private Integer imagesHoldingClasses(List<ProjectImageEntry<BufferedImage>> entries,
+                                         ClusteringConfig config) {
+        Map<String, Set<String>> known = classesByEntry;
+        if (known == null) return null;
+        Set<String> wanted = config.getIncludedClasses() == null
+                ? Set.of() : new HashSet<>(config.getIncludedClasses());
+        int holding = 0;
+        for (ProjectImageEntry<BufferedImage> entry : entries) {
+            Set<String> classes = known.get(entry.getID());
+            if (classes == null) return null;
+            boolean any = classes.stream().anyMatch(c -> c == null
+                    ? config.isIncludeUnclassified() : wanted.contains(c));
+            if (any) holding++;
+        }
+        return holding;
+    }
+
     private boolean needsSubclusterCount(List<ProjectImageEntry<BufferedImage>> subsetEntries) {
         if (mode != RunMode.SUBCLUSTER || pendingSubclusterCounts != null) {
             return false;
@@ -4145,8 +4216,16 @@ public class ClusteringDialog {
                     : "Cluster labels are written as each cell's classification, so any "
                             + "existing classification in these images will be REPLACED and "
                             + "the results saved back to each image. This cannot be undone.";
+            List<ProjectImageEntry<BufferedImage>> scoped = subsetEntries != null ? subsetEntries
+                    : (qupath.getProject() != null ? qupath.getProject().getImageList() : List.of());
+            Integer holding = config != null && config.isClassSubsetActive()
+                    ? imagesHoldingClasses(scoped, config) : null;
+            String question = holding == null || holding == n
+                    ? "Cluster " + n + " project image(s)?"
+                    : "Cluster " + holding + " of " + n + " project image(s)? The other "
+                            + (n - holding) + " hold none of the chosen classes and are skipped.";
             return Dialogs.showConfirmDialog("QPCAT - replace classifications?",
-                    "Cluster " + n + " project image(s)?\n\n" + what);
+                    question + "\n\n" + what);
         }
 
         var imageData = qupath.getImageData();
@@ -4257,7 +4336,7 @@ public class ClusteringDialog {
                     : (String) config.getEmbeddingParams().get("name");
             String prefix = ResultApplier.getEmbeddingPrefix(
                     config.getEmbeddingMethod().getId(), embName);
-            if (embeddingColumnsExistOnCurrentImage(prefix)) {
+            if (embeddingColumnsExistInScope(prefix)) {
                 boolean ok = Dialogs.showConfirmDialog("QPCAT - overwrite coordinates?",
                         prefix + "1 / " + prefix + "2 already exist on these cells and will be "
                         + "overwritten. Continue?\n\nTo keep both, cancel and set a different "
@@ -4410,6 +4489,8 @@ public class ClusteringDialog {
                     // stats) now opens, since the result was auto-saved and is
                     // reloadable via "View Past Results".
                     showResultsDialog(finalResult, clusteredScope);
+                    // The run rewrote classifications, so the class list is stale.
+                    refreshClassifications();
 
                     // Only on SUCCESS, and only after the results window exists:
                     // a cancelled or failed run leaves the dialog up, because the
@@ -4713,6 +4794,12 @@ public class ClusteringDialog {
                 + "A cluster can therefore appear in more than one place here, and that is "
                 + "not a fault in the run. Distances between groups are not meaningful; "
                 + "local neighborhoods are.";
+    }
+
+    /** True when the run made an embedding with at least three axes. */
+    static boolean hasThreeDimensionalEmbedding(ClusteringResult result) {
+        double[][] embedding = result == null ? null : result.getEmbedding();
+        return embedding != null && embedding.length > 0 && embedding[0].length >= 3;
     }
 
     private static String[] embeddingAxisNames(ClusteringResult result) {
@@ -5196,8 +5283,12 @@ public class ClusteringDialog {
                 qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d =
                         new qupath.ext.cluster3d.ui.Cluster3DNavigatorPane(qupath3d);
                 pane3dHolder[0] = pane3d;
+                String placedBy = hasThreeDimensionalEmbedding(result)
+                        ? "placed by the run's 3D embedding"
+                        : "placed by three measurements (this run made no 3D embedding; "
+                                + "choose them with Change axes...)";
                 VBox with3dGuide = wrapWithGuide(pane3d,
-                        "Each point is one cell, placed by the run's 3D embedding and colored by "
+                        "Each point is one cell, " + placedBy + " and colored by "
                         + "cluster; the mouse controls are listed under the view. Click a point "
                         + "to center the viewer on that cell and select it.\n"
                         + clusteringSpaceNote(result),
@@ -5362,7 +5453,9 @@ public class ClusteringDialog {
                     + "ranking is standard practice.\n"
                     + "  Score: the rank-sum statistic. Its SIGN matters -- positive means higher in "
                     + "this cluster, negative means lower.\n"
-                    + "  Log2FC: log2 fold change of mean raw intensity vs. all other clusters.\n"
+                    + "  Log2FC: log2 fold change of mean raw intensity vs. all other clusters;\n"
+                    + "    >=10.000 or <=-10.000 means one side's mean is about zero, so the\n"
+                    + "    exact ratio means nothing.\n"
                     + "  Adj. P-val: what scanpy returns, kept so you can cross-reference it. "
                     + "It is NOT evidence that the cluster is real, and it is not a significance "
                     + "test of anything you did -- see the note above the table.\n"
@@ -5707,7 +5800,7 @@ public class ClusteringDialog {
             }
         });
 
-        Button manageBtn = new Button("Manage saved results...");
+        Button manageBtn = new Button("Manage Saved Results...");
         manageBtn.setTooltip(Tooltips.of(
                 "View, select, and delete saved clustering results.\n"
                 + "Shows the results folder location and total size on disk."));
@@ -5797,7 +5890,7 @@ public class ClusteringDialog {
             Platform.runLater(() -> {
                 Dialogs.showWarningNotification("QPCAT",
                         scopeCount + " saved clustering results now exist for "
-                        + scopeLbl + ". Use 'Manage saved results...' to remove old ones.");
+                        + scopeLbl + ". Use 'Manage Saved Results...' to remove old ones.");
                 if (qpFinal != null && qpFinal.getProject() != null) {
                     OperationLogger.getInstance().logEvent("RESULTS OVER LIMIT",
                             scopeCount + " saved results for scope '" + scopeLbl + "'");
@@ -7907,7 +8000,7 @@ public class ClusteringDialog {
                             clusterNameForKey(result, cluster.getKey()),
                             name,
                             formatDouble(marker.get("score"), "%.2f"),
-                            formatDouble(marker.get("logfoldchange"), "%.3f"),
+                            formatFoldChange(marker.get("logfoldchange")),
                             formatDouble(marker.get("pval_adj"), "%.2e")));
                     rows++;
                 }
@@ -7931,6 +8024,12 @@ public class ClusteringDialog {
 
     /** Format a numeric JSON value defensively -- null, NaN, and non-Number
      *  inputs render as "n/a" instead of throwing. */
+    private static String formatFoldChange(Object value) {
+        if (!(value instanceof Number)) return formatDouble(value, "%.3f");
+        double d = ((Number) value).doubleValue();
+        return Double.isInfinite(d) ? "n/a" : FoldChanges.format(d, "%.3f");
+    }
+
     private static String formatDouble(Object value, String fmt) {
         if (value == null) return "n/a";
         if (!(value instanceof Number)) return String.valueOf(value);

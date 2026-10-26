@@ -257,8 +257,8 @@ Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, stat
 | `enabled` | boolean | `true` | Master switch. |
 | `graph` | object | `{type: knn, k: 15}` | Graph constructor for neighborhood enrichment, Moran's I and Geary's C (Ripley's L and co-occurrence read coordinates). |
 | `statistics` | list[string] | `[]` | At least one entry. Valid slugs below. |
-| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. Applies to Moran's I and Geary's C. Does not apply to `neighborhood_enrichment`, which always runs 1000; Ripley's L always draws its band from 99 simulations; co-occurrence has no test. |
-| `persist_plots` | boolean | `true` | **No effect.** PNGs follow the QuPath preference **Spatial Stats: Save Matplotlib PNGs** (default on) on the machine that runs the batch. |
+| `permutations` | string \| int | `auto` | `auto` = adaptive default (1000/100/50 by cell count); integer 1-10000 = fixed. Applies to Moran's I, Geary's C and `neighborhood_enrichment`; below 100 the result warns. Ripley's L always draws its band from 99 simulations; co-occurrence has no test. |
+| `persist_plots` | boolean | the preference | Whether Ripley L, Geary's C and co-occurrence also save their PNGs into the result's plot folder. Left out, the QuPath preference **Spatial Stats: Save Matplotlib PNGs** (default on) on the machine that runs the batch decides. |
 
 Valid statistic slugs: `moran_i`, `geary_c`, `ripley` (alias of `ripley_l`), `ripley_l`, `co_occurrence_pairwise`, `co_occurrence_one_vs_rest`, `cooccurrence_pairwise`, `cooccurrence_one_vs_rest`, `neighborhood_enrichment`.
 
