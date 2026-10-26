@@ -71,7 +71,7 @@ which name each cell by its QuPath object id instead of 0, 1, 2...
   it is freed when the Run Clustering dialog closes, another project opens or another kind
   of analysis starts, and the pre-run memory check counts it. `RUN_INFO.txt` and the audit
   log record what was reused. Preference: **Reuse the neighbor graph between runs** (on).
-  Suggested by an outside collaborator benchmarking QP-CAT.
+  Suggested by Clément Cazorla ([@koopa31](https://github.com/koopa31)).
 - **A suggested threshold that marks more than 95% or fewer than 5% of cells positive is
   flagged** under the histogram counts, and **Apply to All Markers** names the markers it
   flagged, so a poor suggestion shows up whichever method made it.

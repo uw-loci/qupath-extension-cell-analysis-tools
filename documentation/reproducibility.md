@@ -161,6 +161,9 @@ When a run reused something, its `RUN_INFO.txt` says so on a `reuse` line under
 *Embedding*, and the audit log has a **REUSED FROM EARLIER RUN** entry just before the run's
 own entry.
 
+Reusing the graph between runs was suggested by Clément Cazorla
+([@koopa31](https://github.com/koopa31)).
+
 QP-CAT estimates the spatial-statistics cost **before** committing to it: if the estimate is
 large, a prompt appears with the number and a one-minute countdown. Computation has already
 started when you see it, and continues if you do nothing, so an unattended run is never blocked
