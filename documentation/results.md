@@ -30,10 +30,10 @@ footer shows where it went and its size on disk; the run is also recorded as a s
 QuPath's Workflow tab and in `<project>/qpcat/logs/`.
 
 - **Save a named copy...** adds a human-named copy alongside the auto-save.
-- **Manage saved results...** lists every saved result with name, timestamp, summary,
+- **Manage Saved Results...** lists every saved result with name, timestamp, summary,
   scope, origin and size, for multi-select deletion.
 
-Past five results for one scope, QP-CAT warns and points at Manage saved results.
+Past five results for one scope, QP-CAT warns and points at Manage Saved Results.
 Auto-saves are never deleted automatically.
 
 > A run made before v0.3.6 persisted only its cluster labels, not the embedding or
@@ -679,7 +679,8 @@ scanpy's Wilcoxon rank-sum test:
 
 - **Score** -- the rank-sum statistic. **Its sign matters**: positive means the marker is
   higher in this cluster, negative means lower.
-- **Log2FC** -- log2 fold change of mean raw intensity vs all others.
+- **Log2FC** -- log2 fold change of mean raw intensity vs all others. A value of `>=10.000`
+  or `<=-10.000` means one side's mean is about zero, so the exact ratio means nothing.
 - **Adj. P-val** -- what scanpy returns, kept so you can cross-reference it.
   **It is not evidence that the cluster is real.**
 

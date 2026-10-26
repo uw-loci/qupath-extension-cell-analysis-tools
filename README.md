@@ -301,7 +301,7 @@ Ripley L, Geary's C and Moran's I use permutations, and QP-CAT picks the number 
 
 The chosen value shows next to the result and is recorded in the audit log. Override it in **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations** (`qpcat.spatial.permutations`; a positive integer forces that count, 0 keeps it adaptive).
 
-Neighborhood enrichment is also a permutation test, but it always runs 1000 permutations, whatever the cell count or the preference, shuffling cluster labels within each image or area; the line above its table says so.
+Neighborhood enrichment is also a permutation test. It uses the same count as Moran's I and Geary's C (adaptive by default, or the preference), shuffling cluster labels within each image or area; the line above its table says how many permutations were run.
 
 ### BANKSY Spatial Clustering
 
