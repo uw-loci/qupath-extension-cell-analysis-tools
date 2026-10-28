@@ -95,6 +95,11 @@ public class ClusteringResult {
     // full feature matrix. Recorded because the precursor changes cluster labels,
     // so the audit trail and RUN_INFO have to say whether it ran.
     private String pcaPrecursor;
+
+    // What Harmony did ("Harmony over 3 images"), or null when it did not run.
+    // The checkbox alone cannot say: a correction asked for on one batch does
+    // nothing, and the cluster means are corrected values only when it ran.
+    private String batchCorrection;
     private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
     // Auto-save bookkeeping (transient; set by ClusteringWorkflow after the
@@ -139,6 +144,12 @@ public class ClusteringResult {
 
     /** @see #pcaPrecursor */
     public void setPcaPrecursor(String note) { this.pcaPrecursor = note; }
+
+    /** @see #batchCorrection */
+    public String getBatchCorrection() { return batchCorrection; }
+
+    /** @see #batchCorrection */
+    public void setBatchCorrection(String note) { this.batchCorrection = note; }
 
     public int[] getClusterLabels() { return clusterLabels; }
     public int getNClusters() { return nClusters; }

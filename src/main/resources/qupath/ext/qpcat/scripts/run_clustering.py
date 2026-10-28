@@ -34,8 +34,9 @@ Optional inputs:
   top_n_markers: int (default 5)
   n_representatives: int (default 5) -- top-K representative cells per cluster
   spatial_coords: NDArray (N_cells x 2, float64) -- cell XY centroids for spatial analysis
-  enable_batch_correction: bool (default False)
-  batch_labels: list[int] -- image index per cell for batch correction
+  enable_batch_correction: bool (default False) -- what the user asked for
+  batch_labels: list[int] -- batch (image or area) index per cell; absent when
+      the run has nothing to group cells by
   spatial_knn: int (default 15) -- k neighbors for spatial feature smoothing
   tsne_perplexity_default: float (default 30.0) -- fallback t-SNE perplexity
   hdbscan_min_samples_default: int (default 5) -- fallback HDBSCAN min_samples
@@ -592,7 +593,27 @@ try:
 except NameError:
     batch_labels_list = None
 
-if do_batch and batch_labels_list is not None:
+
+def _batch_correction_skip_reason(requested, labels):
+    """Why requested batch correction cannot run, or None when it can (or was
+    not requested). One batch has nothing to correct between."""
+    if not requested:
+        return None
+    if labels is None or len(set(labels)) < 2:
+        return (
+            "Batch correction (Harmony) was requested but NOT applied: this run "
+            "has only one batch (one image and no independent areas), so there is "
+            "nothing to correct between. The clusters were computed on uncorrected "
+            "values."
+        )
+    return None
+
+
+_batch_skip_note = _batch_correction_skip_reason(do_batch, batch_labels_list)
+if _batch_skip_note is not None:
+    logger.warning(_batch_skip_note)
+    prepared_steps.append("Harmony: requested, not applied (one batch)")
+elif do_batch:
     task.update("Running batch correction (Harmony)...")
     try:
         import harmonypy as hm
@@ -608,18 +629,16 @@ if do_batch and batch_labels_list is not None:
         )
 
     n_batches = len(set(batch_labels_list))
-    if n_batches > 1:
-        meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
-        ho = hm.run_harmony(df_norm.values, meta_df, "batch")
-        corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
-        df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
-        require_finite(
-            df_norm.values, "Harmony batch correction", list(df_norm.columns)
-        )
-        logger.info("Harmony batch correction applied (%d batches)", n_batches)
-        prepared_steps.append("Harmony: %d batches" % n_batches)
-    else:
-        logger.info("Skipping batch correction (only 1 batch)")
+    meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
+    ho = hm.run_harmony(df_norm.values, meta_df, "batch")
+    corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
+    df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
+    require_finite(df_norm.values, "Harmony batch correction", list(df_norm.columns))
+    logger.info("Harmony batch correction applied (%d batches)", n_batches)
+    prepared_steps.append("Harmony: %d batches" % n_batches)
+    # The run record and the Workflow tab state how many batches were
+    # corrected over, read from here rather than from the checkbox.
+    task.outputs["batch_correction_batches"] = int(n_batches)
 
 # 3. Dimensionality reduction
 
@@ -2632,6 +2651,8 @@ _analysis_notes = []
 # the quality warnings: those say the RESULT is suspect, these say a figure or
 # tab is missing and the result stands. They render in different banners.
 _omitted_outputs = []
+if _batch_skip_note is not None:
+    _analysis_notes.append(_batch_skip_note)
 if not can_analyze:
     if n_clusters_found <= 1:
         _analysis_notes.append(

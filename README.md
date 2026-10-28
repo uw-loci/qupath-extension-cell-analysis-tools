@@ -202,7 +202,7 @@ QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python 
 **When the checkbox is grayed out:**
 
 - Fewer than two images are in scope and no independent areas are configured -> there is only one batch, so there is nothing to correct.
-- harmonypy failed to install in the Python environment -> the tooltip on the disabled checkbox links you here.
+- harmonypy failed to install in the Python environment -> the tooltip on the disabled checkbox links you here. This is known only once the Python environment has started; before that the checkbox follows the scope alone, and a run that then finds harmonypy missing stops with a message naming the fix.
 
 **Platform support matrix:**
 

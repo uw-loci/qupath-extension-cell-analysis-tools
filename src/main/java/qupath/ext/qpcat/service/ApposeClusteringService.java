@@ -815,13 +815,13 @@ public class ApposeClusteringService {
     public String getInitError() { return initError; }
 
     /**
-     * Whether the Python environment has the harmonypy package available.
+     * Whether the Python environment has been checked and lacks harmonypy.
      * Drives gray-out of the "Batch correction (Harmony)" UI in
-     * {@code ClusteringDialog}. Returns false until {@link #initialize}
-     * has completed successfully.
+     * {@code ClusteringDialog}. False until {@link #initialize} has completed,
+     * because an environment that has not started yet is not known to lack it.
      */
-    public boolean isHarmonypyAvailable() {
-        return initialized && harmonypyAvailable;
+    public boolean isHarmonypyMissing() {
+        return initialized && !harmonypyAvailable;
     }
 
     /**

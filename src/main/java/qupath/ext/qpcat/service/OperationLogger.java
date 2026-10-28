@@ -258,7 +258,7 @@ public class OperationLogger {
                                                         int nMeasurements,
                                                         int nCells,
                                                         boolean spatialAnalysis,
-                                                        boolean batchCorrection) {
+                                                        String batchCorrection) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("Algorithm", algorithm);
         if (algorithmParams != null && !algorithmParams.isEmpty()) {
@@ -269,7 +269,7 @@ public class OperationLogger {
         params.put("Measurements", nMeasurements + " markers");
         params.put("Input", nCells + " cells");
         if (spatialAnalysis) params.put("Spatial analysis", "enabled");
-        if (batchCorrection) params.put("Batch correction", "enabled");
+        if (batchCorrection != null) params.put("Batch correction", batchCorrection);
         return params;
     }
 
@@ -283,7 +283,7 @@ public class OperationLogger {
                                                                int nMeasurements,
                                                                int nCells,
                                                                int nImages,
-                                                               boolean batchCorrection) {
+                                                               String batchCorrection) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("Algorithm", algorithm);
         if (algorithmParams != null && !algorithmParams.isEmpty()) {
@@ -293,7 +293,7 @@ public class OperationLogger {
         params.put("Embedding", embedding);
         params.put("Measurements", nMeasurements + " markers");
         params.put("Input", nCells + " cells across " + nImages + " images");
-        if (batchCorrection) params.put("Batch correction", "enabled");
+        if (batchCorrection != null) params.put("Batch correction", batchCorrection);
         return params;
     }
 

@@ -22,8 +22,9 @@ statistics exactly as computed.
 In the results window click **Open results folder**. Each run leaves three files there:
 `<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and
 `<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps, with a
-*Validation* line naming the checks the run asked for; the config file beside it is the
-complete one).
+*Validation* line naming the checks the run asked for, and a *Batch correction* line saying
+what Harmony did: `Harmony over 3 images`, or `requested, NOT applied` when the run had a
+single batch; the config file beside it is the complete one).
 
 Both `RUN_INFO.txt` and the audit log record the QP-CAT and QuPath versions. The Python
 packages are fixed per QP-CAT release by its bundled lock file (one for the CPU environment,

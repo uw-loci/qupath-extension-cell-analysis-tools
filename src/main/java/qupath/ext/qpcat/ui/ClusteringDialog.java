@@ -1770,12 +1770,14 @@ public class ClusteringDialog {
         batchCorrectionCheck.setSelected(false);
         batchCorrectionCheck.setDisable(true);
 
-        // Probe the Python service for Harmony availability. The checkbox
-        // stays visible regardless so users can see the feature exists, but
-        // is grayed out (with an explanatory tooltip) when the runtime
-        // capability flag is false.
-        boolean harmonypyAvailable =
-                ApposeClusteringService.getInstance().isHarmonypyAvailable();
+        // Gray the checkbox out only when the Python environment has been
+        // checked and lacks harmonypy. Before the environment has started
+        // nothing is known yet; treating that as "missing" disabled Harmony
+        // for the whole life of a dialog opened early in a session, whatever
+        // the scope. A run that does reach a missing harmonypy fails with a
+        // message naming the fix.
+        boolean harmonypyMissing =
+                ApposeClusteringService.getInstance().isHarmonypyMissing();
 
         Tooltip activeTooltip = Tooltips.of(
                 "Apply Harmony batch correction to remove per-image\n"
@@ -1793,7 +1795,7 @@ public class ClusteringDialog {
                 + "Python environment. Use Setup & help > Rebuild analysis\n"
                 + "Environment to refresh, or see the QP-CAT README for\n"
                 + "the platform support matrix.");
-        batchCorrectionCheck.setTooltip(harmonypyAvailable ? activeTooltip : unavailableTooltip);
+        batchCorrectionCheck.setTooltip(harmonypyMissing ? unavailableTooltip : activeTooltip);
 
         // What Harmony corrects over. Images is the historical behaviour;
         // areas lets a TMA inside ONE image be corrected core-by-core, which
@@ -1840,7 +1842,7 @@ public class ClusteringDialog {
             boolean severalImages = scopeSection.scopeImageCount() > 1;
             boolean severalAreas = areasSection != null
                     && areasSection.hasSubImageLevels();
-            boolean usable = harmonypyAvailable && (severalImages || severalAreas);
+            boolean usable = !harmonypyMissing && (severalImages || severalAreas);
             batchCorrectionCheck.setDisable(!usable);
             if (!usable) {
                 batchCorrectionCheck.setSelected(false);
@@ -4536,7 +4538,7 @@ public class ClusteringDialog {
                                 config.getEmbeddingMethod().getId(),
                                 config.getSelectedMeasurements().size(),
                                 inputCells, config.isEnableSpatialAnalysis(),
-                                config.isEnableBatchCorrection()),
+                                ClusteringWorkflow.auditBatchCorrection(config, null)),
                         e.getMessage(), -1);
                 Platform.runLater(() -> {
                     progressBar.setProgress(0);

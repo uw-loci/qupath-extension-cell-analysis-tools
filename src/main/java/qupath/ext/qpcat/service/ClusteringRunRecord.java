@@ -266,11 +266,13 @@ public final class ClusteringRunRecord {
         if (result != null && result.getReuseNote() != null) {
             sb.append("      reuse      : ").append(result.getReuseNote()).append('\n');
         }
-        sb.append("Batch correction : ").append(config.isEnableBatchCorrection());
-        if (config.isEnableBatchCorrection()) {
-            sb.append("  (batch key: ").append(config.getBatchKey()).append(')');
+        sb.append("Batch correction : ").append(describeBatchCorrection(config, result))
+                .append('\n');
+        if (result != null && result.getBatchCorrection() != null) {
+            sb.append("      NOTE       : cluster means, the heatmap and marker rankings\n");
+            sb.append("                   are read from the CORRECTED matrix, not from\n");
+            sb.append("                   the raw measurements.\n");
         }
-        sb.append('\n');
         // Independent areas change the RESULT, not just the runtime: a graph
         // partitioned per TMA core produces different clusters from one built
         // across the whole slide. A record that omitted them would describe a
@@ -518,6 +520,26 @@ public final class ClusteringRunRecord {
             first = false;
         }
         return sb.append('}').toString();
+    }
+
+    /**
+     * What batch correction did: what ran, or why a requested correction did not.
+     *
+     * @param config the run's configuration
+     * @param result the result, or null when the run has none to read
+     * @return one line for the record, or "off"
+     */
+    public static String describeBatchCorrection(ClusteringConfig config, ClusteringResult result) {
+        if (!config.isEnableBatchCorrection()) {
+            return "off";
+        }
+        if (result != null && result.getBatchCorrection() != null) {
+            return result.getBatchCorrection() + "  (batch key: " + config.getBatchKey() + ")";
+        }
+        if (result == null) {
+            return "requested  (batch key: " + config.getBatchKey() + ")";
+        }
+        return "requested, NOT applied -- only one batch to correct over";
     }
 
     /** The permutation count the run used, and whether it was chosen or adaptive. */

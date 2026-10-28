@@ -4,7 +4,7 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [Unreleased]
+## [0.23.1] - 2026-10-28
 
 **Results that change from 0.23.0:** a run on the current image with an annotation selected
 now clusters only the cells inside it; neighborhood enrichment follows the permutation
@@ -12,6 +12,20 @@ setting, so above 50,000 cells it runs 100 (or 50) permutations by default inste
 
 ### Fixed
 
+- **Batch correction (Harmony) could stay grayed out for the life of the Run Clustering
+  dialog** when the dialog was opened before QP-CAT's Python environment had started, as on
+  the first run of a session. Its tooltip then said Harmony was not installed, whatever the
+  scope; reopening the dialog later enabled it. The checkbox is now grayed out only when the
+  environment has started and lacks harmonypy. Reported for **Specific images...**; it
+  affected every scope.
+- **Records of a batch-corrected run now say what Harmony did.** `RUN_INFO.txt`, the audit
+  log and each image's Workflow tab read `Harmony over 3 images` (or `areas`) instead of
+  `true` / `enabled`, and say that cluster means, the heatmap and marker rankings are
+  corrected values. A correction requested on a run with one batch (possible from a YAML
+  batch file) no longer skips silently: the result carries a warning and the record reads
+  `requested, NOT applied`.
+- **The Workflow tab of a multi-image run named no saved result.** Every image read
+  `View Past Results -> '(not saved - no project open)'`; it now names the result.
 - **Selecting an annotation now limits the run to the cells inside it.** With only an
   annotation selected (what clicking one in QuPath does), every cell in the image was
   clustered while the *Composition by annotation* tab was still offered. Measured on a

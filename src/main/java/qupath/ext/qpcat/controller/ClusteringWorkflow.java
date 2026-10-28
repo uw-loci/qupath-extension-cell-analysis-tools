@@ -545,7 +545,7 @@ public class ClusteringWorkflow {
                 extraction.getNMeasurements(),
                 extraction.getNCells(),
                 config.isEnableSpatialAnalysis(),
-                config.isEnableBatchCorrection());
+                auditBatchCorrection(config, result));
         // A parallel UMAP layout is not bit-reproducible, so the run must say so.
         if (result.getEmbeddingExecution() != null) {
             auditParams.put("Embedding execution", result.getEmbeddingExecution());
@@ -1022,6 +1022,19 @@ public class ClusteringWorkflow {
                     : Boolean.TRUE;
         }
 
+        String embeddingPrefix = result.hasEmbedding()
+                ? ResultApplier.getEmbeddingPrefix(
+                        config.getEmbeddingMethod().getId(), embeddingName(config))
+                : null;
+        if (embeddingPrefix != null) {
+            result.setEmbeddingPrefix(embeddingPrefix);
+        }
+        // Saved BEFORE the per-image loop: each image's Workflow record names
+        // the saved result, and a name assigned afterwards read
+        // "(not saved - no project open)" on every image of a project run.
+        String projectScopeLabel = nImages + " project image" + (nImages == 1 ? "" : "s");
+        autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, projectScopeLabel);
+
         for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
             int start = segment.getStartIndex();
             int end = segment.getEndIndex();
@@ -1037,15 +1050,12 @@ public class ClusteringWorkflow {
             applier.applyClusterLabels(segmentDetections, segmentLabels,
                     result.clusterNameDigits());
 
-            if (result.hasEmbedding()) {
-                String prefix = ResultApplier.getEmbeddingPrefix(
-                        config.getEmbeddingMethod().getId(), embeddingName(config));
+            if (embeddingPrefix != null) {
                 double[][] segmentEmbedding = new double[end - start][2];
                 for (int i = 0; i < end - start; i++) {
                     segmentEmbedding[i] = result.getEmbedding()[start + i];
                 }
-                result.setEmbeddingPrefix(prefix);
-                applier.applyEmbedding(segmentDetections, segmentEmbedding, prefix);
+                applier.applyEmbedding(segmentDetections, segmentEmbedding, embeddingPrefix);
             }
 
             // Offset into the whole run's arrays, so each image writes its own
@@ -1116,13 +1126,8 @@ public class ClusteringWorkflow {
                         extraction.getNMeasurements(),
                         extraction.getNCells(),
                         extraction.getImageSegments().size(),
-                        config.isEnableBatchCorrection()),
+                        auditBatchCorrection(config, result)),
                 completeMsg, elapsed);
-
-        // Auto-save (project scope). The per-image Workflow records were written in the
-        // save loop above; the open image, when in scope, was that loop's live instance.
-        String projectScopeLabel = nImages + " project image" + (nImages == 1 ? "" : "s");
-        autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY, projectScopeLabel);
 
         return result;
         } finally {
@@ -1282,6 +1287,13 @@ public class ClusteringWorkflow {
                 // Only recorded when it engaged, and for the same reason as the
                 // areas line above: re-running without it does NOT reproduce.
                 lines.add("// PCA precursor: " + result.getPcaPrecursor());
+            }
+            if (config.isEnableBatchCorrection()) {
+                lines.add("// Batch correction: "
+                        + ClusteringRunRecord.describeBatchCorrection(config, result));
+                if (result.getBatchCorrection() != null) {
+                    lines.add("//   Cluster means, heatmap and marker rankings use CORRECTED values.");
+                }
             }
             lines.add("// Result: " + result.clusterCountText() + ", "
                     + result.getNCells() + " cells"
@@ -2501,6 +2513,14 @@ public class ClusteringWorkflow {
                 }
             }
 
+            // How many batches Harmony actually corrected over. Absent when it did
+            // not run, including when it was asked for and the run had one batch.
+            Object batchCount = task.outputs.get("batch_correction_batches");
+            if (batchCount instanceof Number n) {
+                result.setBatchCorrection(String.format("Harmony over %d %ss",
+                        n.intValue(), batchesAreAreas(config, areas) ? "area" : "image"));
+            }
+
             // ---- Spatial graph overlay (v0.3) outputs ----
             ClusteringResult.SpatialGraphPayload payload = retrieveSpatialGraphPayload(
                     task, nCells);
@@ -2560,6 +2580,24 @@ public class ClusteringWorkflow {
      * @param arrays         receives every array allocated; the caller closes them
      * @return the inputs
      */
+    /**
+     * The audit-log entry for batch correction, or null when it was off.
+     *
+     * @param config the run's configuration
+     * @param result the result, or null for a run that failed
+     * @return what ran or why it did not, or null
+     */
+    public static String auditBatchCorrection(ClusteringConfig config, ClusteringResult result) {
+        return config.isEnableBatchCorrection()
+                ? ClusteringRunRecord.describeBatchCorrection(config, result) : null;
+    }
+
+    /** True when Harmony's batches are independent areas rather than images. */
+    private static boolean batchesAreAreas(ClusteringConfig config,
+                                           AreaResolver.AreaAssignment areas) {
+        return ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey()) && areas != null;
+    }
+
     private Map<String, Object> runInputs(MeasurementExtractor.ExtractionResult extraction,
                                           ClusteringConfig config, int[] suppliedLabels,
                                           AreaResolver.AreaAssignment areas, SpatialFrame frame,
@@ -2594,7 +2632,7 @@ public class ClusteringWorkflow {
         // be corrected core-by-core, which per-image labels cannot express.
         List<Integer> batchLabels = null;
         if (config.isEnableBatchCorrection()) {
-            if (ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey()) && areas != null) {
+            if (batchesAreAreas(config, areas)) {
                 batchLabels = new ArrayList<>(nCells);
                 for (int id : areas.getAreaIds()) {
                     batchLabels.add(id);
@@ -2638,8 +2676,13 @@ public class ClusteringWorkflow {
             inputs.put("enable_spatial_smoothing", true);
             inputs.put("spatial_smoothing_iterations", config.getSpatialSmoothingIterations());
         }
-        if (batchLabels != null) {
+        // Sent whenever it was asked for, labels or not: Python reports a
+        // requested correction that had one batch to work with, instead of the
+        // run quietly clustering uncorrected values.
+        if (config.isEnableBatchCorrection()) {
             inputs.put("enable_batch_correction", true);
+        }
+        if (batchLabels != null) {
             inputs.put("batch_labels", batchLabels);
         }
 
