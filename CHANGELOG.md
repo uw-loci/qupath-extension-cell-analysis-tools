@@ -4,7 +4,7 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.23.1] - 2026-10-28
+## [0.23.1] -- 2026-10-28 -- Harmony on every scope, and records that say what it did
 
 **Results that change from 0.23.0:** a run on the current image with an annotation selected
 now clusters only the cells inside it; neighborhood enrichment follows the permutation
