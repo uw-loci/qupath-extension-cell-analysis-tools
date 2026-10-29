@@ -2544,8 +2544,10 @@ public class ClusteringWorkflow {
             // not run, including when it was asked for and the run had one batch.
             Object batchCount = task.outputs.get("batch_correction_batches");
             if (batchCount instanceof Number n) {
-                result.setBatchCorrection(String.format("Harmony over %d %ss",
-                        n.intValue(), batchesAreAreas(config, areas) ? "area" : "image"));
+                Object device = task.outputs.get("batch_correction_device");
+                result.setBatchCorrection(String.format("Harmony over %d %ss%s",
+                        n.intValue(), batchesAreAreas(config, areas) ? "area" : "image",
+                        device == null ? "" : " on the " + device));
             }
 
             // ---- Spatial graph overlay (v0.3) outputs ----

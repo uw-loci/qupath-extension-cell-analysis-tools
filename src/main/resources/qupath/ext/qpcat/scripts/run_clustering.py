@@ -609,7 +609,50 @@ def _batch_correction_skip_reason(requested, labels):
     return None
 
 
+# Harmony's GPU memory, measured with harmonypy 0.2.0 at 10 markers and 17
+# batches: 1.30 GiB at 500,000 cells and 5.18 GiB at 2,000,000. Both fit about
+# seven float32 matrices of clusters x cells. A run that does not fit spills into
+# system memory on Windows drivers and runs far slower than the CPU.
+HARMONY_GPU_MATRICES = 7
+HARMONY_GPU_HEADROOM = 0.8
+
+
+def _harmony_device(n_cells, cuda_free_bytes):
+    """Pick where Harmony runs: ("cuda" | "cpu", note or None).
+
+    cuda_free_bytes is None when there is no usable CUDA device. The note is
+    set only when a GPU was available and the run did not fit on it.
+    """
+    if cuda_free_bytes is None:
+        return "cpu", None
+    nclust = int(min(round(n_cells / 30.0), 100))
+    need = n_cells * max(nclust, 1) * 4 * HARMONY_GPU_MATRICES
+    if need <= HARMONY_GPU_HEADROOM * cuda_free_bytes:
+        return "cuda", None
+    gib = 1024.0**3
+    return "cpu", (
+        "Harmony ran on the CPU: it needs about %.1f GiB of GPU memory for %d cells "
+        "and the GPU had %.1f GiB free. On the GPU it would have spilled into "
+        "system memory, which is slower than the CPU."
+        % (need / gib, n_cells, cuda_free_bytes / gib)
+    )
+
+
+def _cuda_free_bytes():
+    """Free memory on the current CUDA device, or None without one."""
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None
+        free, _total = torch.cuda.mem_get_info()
+        return int(free)
+    except Exception:
+        return None
+
+
 _batch_skip_note = _batch_correction_skip_reason(do_batch, batch_labels_list)
+_harmony_device_note = None
 if _batch_skip_note is not None:
     logger.warning(_batch_skip_note)
     prepared_steps.append("Harmony: requested, not applied (one batch)")
@@ -630,7 +673,18 @@ elif do_batch:
 
     n_batches = len(set(batch_labels_list))
     meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
-    ho = hm.run_harmony(df_norm.values, meta_df, "batch")
+    _cuda_free = _cuda_free_bytes()
+    _harmony_dev, _harmony_device_note = _harmony_device(len(df_norm), _cuda_free)
+    if _cuda_free is not None:
+        logger.info(
+            "Harmony on %s: %d cells, GPU free memory %.1f GiB",
+            _harmony_dev,
+            len(df_norm),
+            _cuda_free / 1024.0**3,
+        )
+    if _harmony_device_note is not None:
+        logger.warning(_harmony_device_note)
+    ho = hm.run_harmony(df_norm.values, meta_df, "batch", device=_harmony_dev)
     corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
     df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
     require_finite(df_norm.values, "Harmony batch correction", list(df_norm.columns))
@@ -639,6 +693,9 @@ elif do_batch:
     # The run record and the Workflow tab state how many batches were
     # corrected over, read from here rather than from the checkbox.
     task.outputs["batch_correction_batches"] = int(n_batches)
+    # GPU and CPU can converge after different iteration counts, so the
+    # device is part of what the run did.
+    task.outputs["batch_correction_device"] = "GPU" if _harmony_dev == "cuda" else "CPU"
 
 # 3. Dimensionality reduction
 
@@ -2653,6 +2710,8 @@ _analysis_notes = []
 _omitted_outputs = []
 if _batch_skip_note is not None:
     _analysis_notes.append(_batch_skip_note)
+if _harmony_device_note is not None:
+    _analysis_notes.append(_harmony_device_note)
 if not can_analyze:
     if n_clusters_found <= 1:
         _analysis_notes.append(

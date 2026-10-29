@@ -4,9 +4,18 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.23.3] -- 2026-10-29 -- the version in the window title
+## [0.23.3] -- 2026-10-29 -- the version in the window title, and Harmony that fits the GPU
 
 ### Changed
+
+- **Harmony runs on the CPU when it would not fit in GPU memory.** In the GPU environment,
+  Harmony needs about 2.6 KB of GPU memory per cell (measured on an RTX 3090: 1.3 GiB at
+  500,000 cells, 5.2 GiB at 2 million, 12.6 GiB at 4.9 million, where it took 49 s). A run
+  that did not fit spilled into system memory on Windows drivers and could take tens of
+  minutes. QP-CAT now compares the estimate with the GPU's free memory, uses the CPU when it
+  would not fit, and says so in the log and the result's warnings. The run record names the
+  device (`Harmony over 17 images on the GPU`), because the GPU and the CPU can converge after
+  a different number of iterations and give slightly different corrected values.
 
 - **The main QP-CAT windows show the running version in their title bar**, for example
   *QPCAT - Run Clustering  v. 0.23.3*: clustering, phenotyping, embedding, Plot & Gate,

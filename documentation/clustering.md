@@ -49,7 +49,7 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
    - *Batch correction (Harmony) - for multi-image clustering* -- enabled when the run spans several images **or**
      several independent areas within one image; the **Batch key** dropdown picks **Images**
      or **Independent areas** as the batch. `RUN_INFO.txt` and each image's Workflow tab
-     record what Harmony did (for example `Harmony over 3 images`), and note that cluster
+     record what Harmony did (for example `Harmony over 3 images on the CPU`), and note that cluster
      means, the heatmap and marker rankings are then read from corrected values
    - *Validation* (a collapsed section) -- optional checks that the clusters hold up across
      seeds and agree with classes the cells already carry; see
