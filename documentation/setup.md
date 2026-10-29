@@ -70,7 +70,7 @@ scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
 |---|---|
 | Autoencoder, tile mode | **GPU** -- the real case. 64x64 tiles at 10,000 cells take 1-3 hours on CPU. |
 | Autoencoder, measurement mode | GPU, marginally. The network is small. |
-| Harmony batch correction | **GPU** in the GPU variant, when the run's cells fit in the card's free memory. Otherwise CPU, and the log and the run record say so. The GPU and the CPU can converge after different iteration counts, so the run record names the device. |
+| Harmony batch correction | **GPU** in the GPU variant, when the run's cells fit in the card's free memory. Otherwise CPU, and the log and the run record say so. The GPU and the CPU can converge after different iteration counts, so the run record names the device. The opt-in harmonypy 2.1.0 (see [Harmony version](../README.md#batch-correction-harmony)) always runs on the CPU. |
 | Clustering (Leiden, KMeans, HDBSCAN, GMM, agglomerative) | CPU. No GPU code path exists. |
 | BANKSY, UMAP | CPU. pybanksy and umap-learn are CPU-only. |
 | Spatial statistics, cellular neighborhoods | CPU. Permutation tests are CPU-bound. |
