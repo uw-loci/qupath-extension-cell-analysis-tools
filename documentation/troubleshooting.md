@@ -100,7 +100,7 @@ minimal before clustering without it.
 | "Compute thresholds first before applying." | Phenotyping | **Apply to All Markers** before **Compute Thresholds** | click **Compute Thresholds** |
 | "Select an auto-threshold method (Triangle, GMM, or Gamma) in the Histogram & Auto-Thresholding panel, then Apply to All. 'Manual' has no computed value to apply." | Phenotyping | **Method** still on **Manual** | pick a method |
 | "Spatial statistics are off because this run is restricted to chosen classifications. ..." | Clustering dialog | a classification subset is ticked | see [Spatial statistics are unavailable while subsetting](clustering.md#spatial-statistics-are-unavailable-while-subsetting) |
-| "Could not install harmonypy 2.1.0 for Harmony (it needs internet access the first time). ... pip said: ..." | Clustering run (Harmony version 2.1.0) | the first run that asks for harmonypy 2.1.0 could not download it from PyPI | check the internet connection and run again, or choose **harmonypy 0.2.0** in **Harmony version** |
+| "Could not install harmonypy 2.1.0 for Harmony (it is downloaded from PyPI the first time). ... pip said: ..." | Clustering run (Harmony version 2.1.0) | the first run that asks for harmonypy 2.1.0 could not download it from PyPI | check the internet connection and run again, or choose **harmonypy 0.2.0** in **Harmony version**. Where the web is filtered, download the cp311 wheel for the machine from PyPI and run the `pip install --no-deps --target ...` command the message gives |
 
 ---
 ## The Python console

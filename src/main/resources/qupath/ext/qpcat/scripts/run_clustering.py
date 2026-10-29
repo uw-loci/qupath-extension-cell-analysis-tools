@@ -712,10 +712,19 @@ def _install_harmonypy_fast(target):
         if proc.returncode != 0:
             tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]
             raise RuntimeError(
-                "Could not install harmonypy %s for Harmony (it needs internet access the "
-                "first time). Choose harmonypy %s in the Batch correction settings to run "
-                "without it. pip said: %s"
-                % (HARMONYPY_FAST, HARMONYPY_PORTABLE, " | ".join(tail))
+                "Could not install harmonypy %s for Harmony (it is downloaded from PyPI "
+                "the first time). Choose harmonypy %s in the Batch correction settings to "
+                "run without it. Where the web is filtered, download the cp311 wheel for "
+                "this machine from https://pypi.org/project/harmonypy/%s/#files and run: "
+                "%s -m pip install --no-deps --target %s <the .whl file>. pip said: %s"
+                % (
+                    HARMONYPY_FAST,
+                    HARMONYPY_PORTABLE,
+                    HARMONYPY_FAST,
+                    sys.executable,
+                    target,
+                    " | ".join(tail),
+                )
             )
         # Moved into place only once complete, so an interrupted install is never used.
         os.replace(pkg_dir, target)
