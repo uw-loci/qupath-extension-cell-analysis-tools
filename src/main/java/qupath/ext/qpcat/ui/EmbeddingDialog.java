@@ -56,7 +56,7 @@ public class EmbeddingDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Compute Embedding");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Compute Embedding"));
         dialog.setHeaderText("Compute dimensionality reduction embedding (no clustering)");
         dialog.setResizable(true);
 

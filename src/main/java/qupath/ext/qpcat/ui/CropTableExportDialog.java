@@ -221,7 +221,7 @@ public final class CropTableExportDialog {
         scroll.setPrefHeight(760);
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Export Cell Crops + Feature Table");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Export Cell Crops + Feature Table"));
         dialog.setHeaderText("One image per cell plus a table of its measurements");
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         dialog.initModality(Modality.NONE);

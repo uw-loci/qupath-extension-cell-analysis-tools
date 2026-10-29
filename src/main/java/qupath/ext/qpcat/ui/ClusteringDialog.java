@@ -376,11 +376,11 @@ public class ClusteringDialog {
         this.settingsDialog = dialog;
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle(subcluster
+        dialog.setTitle(VersionedTitle.of(subcluster
                 ? "QPCAT - Sub-cluster '" + subclusterParentClass + "'"
                 : analyzeExisting
                     ? "QPCAT - Analyze current classifications"
-                    : "QPCAT - Run Clustering");
+                    : "QPCAT - Run Clustering"));
         dialog.setHeaderText(subcluster
                 ? "Re-cluster cells classified as '" + subclusterParentClass
                         + "' into sub-labels -- choose the scope below"
@@ -6079,7 +6079,7 @@ public class ClusteringDialog {
 
             Dialog<ButtonType> dialog = new Dialog<>();
             dialog.initOwner(qupath.getStage());
-            dialog.setTitle("QPCAT - Manage Saved Results");
+            dialog.setTitle(VersionedTitle.of("QPCAT - Manage Saved Results"));
             dialog.setHeaderText("Check results to remove, then click Delete selected.\n"
                     + "Folder: " + dir + "\n"
                     + "Total size: " + ClusteringResultManager.formatBytes(totalSize)

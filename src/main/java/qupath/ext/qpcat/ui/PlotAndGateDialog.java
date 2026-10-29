@@ -75,7 +75,7 @@ public class PlotAndGateDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Plot & Gate Cells (2D)");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Plot & Gate Cells (2D)"));
         dialog.setHeaderText("Plot cells in 2D, then lasso-gate to select or classify them");
         dialog.setResizable(true);
 

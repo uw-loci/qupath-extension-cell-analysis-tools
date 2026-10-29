@@ -111,7 +111,7 @@ public final class ClusterColorPaletteDialog {
         content.setPrefWidth(480);
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Apply cluster color palette");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Apply cluster color palette"));
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         ButtonType applyType = new ButtonType("Apply palette", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(applyType, ButtonType.CANCEL);

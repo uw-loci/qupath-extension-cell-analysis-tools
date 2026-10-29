@@ -174,7 +174,7 @@ public class ClusterManagementDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Modify Clusters");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Modify Clusters"));
         dialog.setHeaderText("Rename, merge, sub-cluster or split the populations from a clustering "
                 + "run, across every image that run covered");
         dialog.setResizable(true);

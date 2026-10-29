@@ -280,7 +280,7 @@ public class SpatialStatsDialog {
         content.setPrefWidth(480);
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Spatial statistics on existing clusters");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Spatial statistics on existing clusters"));
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         dialog.initModality(javafx.stage.Modality.NONE);
         dialog.setResizable(true);

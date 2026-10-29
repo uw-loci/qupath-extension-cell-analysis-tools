@@ -107,7 +107,7 @@ public class BatchFigureExportDialog {
         this.qupath = qupath;
         this.project = qupath == null ? null : qupath.getProject();
 
-        dialog.setTitle("Export Figures");
+        dialog.setTitle(VersionedTitle.of("Export Figures"));
         dialog.initModality(Modality.NONE);
         if (qupath != null && qupath.getStage() != null) {
             dialog.initOwner(qupath.getStage());

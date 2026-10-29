@@ -4,6 +4,20 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.23.3] -- 2026-10-29 -- the version in the window title
+
+### Changed
+
+- **The main QP-CAT windows show the running version in their title bar**, for example
+  *QPCAT - Run Clustering  v. 0.23.3*: clustering, phenotyping, embedding, Plot & Gate,
+  neighborhoods, spatial statistics, Modify Clusters, Manage Saved Results, the import and
+  export dialogs, environment setup, the Python console, the MCP server window and System
+  Info. A screenshot or a bug report then says which release it came from, and a second,
+  older copy of QP-CAT that QuPath loaded instead of the new one shows at a glance. Dialog
+  Position Manager 0.4.3 and later ignore the version, so saved window positions survive an
+  upgrade; with an older Position Manager each upgrade starts these windows at their default
+  position once.
+
 ## [0.23.2] -- 2026-10-29 -- records that name every image and annotation
 
 ### Changed

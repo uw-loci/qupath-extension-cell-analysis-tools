@@ -130,7 +130,7 @@ public final class McpServerWindow {
 
     McpServerWindow(Window owner) {
         stage = new Stage();
-        stage.setTitle(TITLE);
+        stage.setTitle(VersionedTitle.of(TITLE));
         if (owner != null) {
             stage.initOwner(owner);
         }

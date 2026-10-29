@@ -134,7 +134,7 @@ public final class ApplySavedResultDialog {
         VBox.setVgrow(info, Priority.ALWAYS);
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Apply Saved Result");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Apply Saved Result"));
         dialog.setHeaderText("Write a saved clustering result's labels back onto detections.");
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         ButtonType applyType = new ButtonType("Apply", ButtonBar.ButtonData.OK_DONE);

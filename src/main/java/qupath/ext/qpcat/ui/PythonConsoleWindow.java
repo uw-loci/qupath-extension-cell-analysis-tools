@@ -98,7 +98,7 @@ public class PythonConsoleWindow {
 
     private void createWindow() {
         stage = new Stage();
-        stage.setTitle("QPCAT - Python Console");
+        stage.setTitle(VersionedTitle.of("QPCAT - Python Console"));
 
         textArea = new TextArea();
         textArea.setEditable(false);

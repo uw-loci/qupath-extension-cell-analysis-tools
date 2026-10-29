@@ -93,7 +93,7 @@ public class CellularNeighborhoodDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Find Cellular Neighborhoods");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Find Cellular Neighborhoods"));
         dialog.setHeaderText("Group cells by the cell-type mixture around them");
         dialog.setResizable(true);
 

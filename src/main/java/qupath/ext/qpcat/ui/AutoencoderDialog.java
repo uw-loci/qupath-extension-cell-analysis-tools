@@ -152,7 +152,7 @@ public class AutoencoderDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QP-CAT - Autoencoder Cell Classifier");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Autoencoder Cell Classifier"));
         dialog.setHeaderText(
                 "Train a VAE classifier on labeled cells,\n"
                 + "then apply across the project.\n"

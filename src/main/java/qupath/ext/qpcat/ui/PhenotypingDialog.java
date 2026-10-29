@@ -112,7 +112,7 @@ public class PhenotypingDialog {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Run Phenotyping");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Run Phenotyping"));
         dialog.setHeaderText("Define cell phenotype rules based on marker expression");
         dialog.setResizable(true);
 

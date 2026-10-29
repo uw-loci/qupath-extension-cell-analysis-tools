@@ -1,5 +1,6 @@
 package qupath.ext.qpcat;
 
+import qupath.ext.qpcat.ui.VersionedTitle;
 import qupath.ext.qpcat.ui.Tooltips;
 
 import javafx.application.Platform;
@@ -852,7 +853,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
      *  current image's calibration -- microns when present, pixels otherwise. */
     private static QuickDelaunayCustomOptions promptQuickDelaunayCustom(boolean hasMicrons) {
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Quick Delaunay (custom)");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Quick Delaunay (custom)"));
         dialog.setHeaderText("One-shot overrides for this Quick Delaunay run.\n"
                 + "To persist, use Edit > Preferences > QP-CAT: Run Clustering.");
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -1056,7 +1057,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         textArea.setPrefHeight(400);
 
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle(EXTENSION_NAME + " - System Info");
+        dialog.setTitle(VersionedTitle.of(EXTENSION_NAME + " - System Info"));
         dialog.getDialogPane().setContent(textArea);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.setResizable(true);

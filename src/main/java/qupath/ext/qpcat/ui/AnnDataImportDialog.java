@@ -183,7 +183,7 @@ public final class AnnDataImportDialog {
                 + embeddingBoxes.size())));
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle(TITLE);
+        dialog.setTitle(VersionedTitle.of(TITLE));
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         ButtonType check = new ButtonType("Check matches...", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(check, ButtonType.CANCEL);

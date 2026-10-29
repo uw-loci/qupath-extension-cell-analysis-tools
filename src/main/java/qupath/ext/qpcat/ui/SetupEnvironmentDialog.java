@@ -47,7 +47,7 @@ public class SetupEnvironmentDialog {
         dialog = new Stage();
         dialog.initOwner(owner);
         dialog.initModality(Modality.NONE);
-        dialog.setTitle("QPCAT - Environment Setup");
+        dialog.setTitle(VersionedTitle.of("QPCAT - Environment Setup"));
 
         statusLabel = new Label("Click 'Setup' to download and configure the Python environment.\n"
                 + "This requires an internet connection and approximately 1.5-2.5 GB of disk space.");

@@ -228,7 +228,7 @@ public final class VestExportDialog {
         content.setPrefWidth(560);
 
         Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("QP-CAT - Export for VEST 3D viewer");
+        dialog.setTitle(VersionedTitle.of("QP-CAT - Export for VEST 3D viewer"));
         if (qupath.getStage() != null) dialog.initOwner(qupath.getStage());
         ButtonType exportType = new ButtonType("Export", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(exportType, ButtonType.CANCEL);
