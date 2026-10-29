@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.InputSelection;
 import qupath.lib.common.GeneralTools;
 
 import qupath.ext.qpcat.model.ClusterNaming;
@@ -193,7 +194,7 @@ public final class ClusteringRunRecord {
         return "'" + s + "'";
     }
 
-    private static String buildRunInfo(String savedName, ClusteringConfig config,
+    static String buildRunInfo(String savedName, ClusteringConfig config,
                                        ClusteringResult result, String scopeLabel) {
         String ext = GeneralTools.getPackageVersion(ClusteringRunRecord.class);
         StringBuilder sb = new StringBuilder();
@@ -201,6 +202,23 @@ public final class ClusteringRunRecord {
         sb.append("=====================\n\n");
         sb.append("Result name : ").append(savedName).append('\n');
         sb.append("Scope       : ").append(scopeLabel != null ? scopeLabel : "(unknown)").append('\n');
+        // Every image and every selected annotation, in full: this is the record a
+        // run is reproduced from, and a partial list cannot reproduce it.
+        if (result != null) {
+            Map<String, Integer> perImage = result.cellsPerImage();
+            if (perImage.size() > 1) {
+                sb.append("Images (").append(perImage.size()).append("):\n");
+                perImage.forEach((name, n) -> sb.append("  - ").append(name)
+                        .append("  (").append(n).append(" cells)\n"));
+            }
+            InputSelection sel = result.getInputSelection();
+            if (sel != null) {
+                sb.append("Input       : ").append(sel.summary()).append('\n');
+                for (String line : sel.detailLines()) {
+                    sb.append("  - ").append(line).append('\n');
+                }
+            }
+        }
         // A class subset changes WHICH CELLS were clustered, so it belongs beside
         // the scope rather than buried in the parameters: a reader comparing two
         // results has to see immediately that they covered different cells.

@@ -100,6 +100,9 @@ public class ClusteringResult {
     // The checkbox alone cannot say: a correction asked for on one batch does
     // nothing, and the cluster means are corrected values only when it ran.
     private String batchCorrection;
+
+    // The selection a single-image run was narrowed to, or null for none.
+    private InputSelection inputSelection;
     private transient Map<String, Map<String, java.util.List<Double>>> representativesParsed;
 
     // Auto-save bookkeeping (transient; set by ClusteringWorkflow after the
@@ -150,6 +153,30 @@ public class ClusteringResult {
 
     /** @see #batchCorrection */
     public void setBatchCorrection(String note) { this.batchCorrection = note; }
+
+    /** @see #inputSelection */
+    public InputSelection getInputSelection() { return inputSelection; }
+
+    /** @see #inputSelection */
+    public void setInputSelection(InputSelection selection) { this.inputSelection = selection; }
+
+    /**
+     * Each clustered image's name and cell count, in run order, read from the
+     * cell references.
+     *
+     * @return image name -&gt; cells; empty when the result has no references
+     */
+    public java.util.Map<String, Integer> cellsPerImage() {
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        if (cellRefs != null) {
+            for (CellRef ref : cellRefs) {
+                String name = ref.getImageName() != null ? ref.getImageName()
+                        : (ref.getImageId() != null ? "id " + ref.getImageId() : "(current image)");
+                counts.merge(name, 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
 
     public int[] getClusterLabels() { return clusterLabels; }
     public int getNClusters() { return nClusters; }

@@ -11,6 +11,7 @@ import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.InputSelection;
 import qupath.ext.qpcat.model.MembershipConfidence;
 import qupath.ext.qpcat.service.QpcatColorMaps;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -315,11 +316,11 @@ public class ClusteringWorkflow {
      * @param imageData the open image
      * @param config    the run's configuration
      * @param context   names the caller in log lines
-     * @return the cells, never empty
+     * @return the cells, never empty, and the selection that narrowed them
      * @throws IOException when no cell is left
      */
-    private static List<PathObject> cellsToCluster(ImageData<BufferedImage> imageData,
-                                                   ClusteringConfig config, String context)
+    private static CellInput cellsToCluster(ImageData<BufferedImage> imageData,
+                                            ClusteringConfig config, String context)
             throws IOException {
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
         Collection<PathObject> selected = hierarchy.getSelectionModel().getSelectedObjects();
@@ -328,19 +329,29 @@ public class ClusteringWorkflow {
                 .filter(PathObject::isAnnotation)
                 .toList();
         Collection<PathObject> detections;
+        InputSelection selection = null;
         if (!selectedAnnotations.isEmpty()) {
             // A cell inside two overlapping annotations is clustered once.
             Set<PathObject> inside = new LinkedHashSet<>();
+            List<InputSelection.Annotation> described = new ArrayList<>();
             for (PathObject annotation : selectedAnnotations) {
-                inside.addAll(hierarchy.getAllDetectionsForROI(annotation.getROI()));
+                Collection<PathObject> within =
+                        hierarchy.getAllDetectionsForROI(annotation.getROI());
+                inside.addAll(within);
+                described.add(new InputSelection.Annotation(annotation.getName(),
+                        annotation.getPathClass() == null
+                                ? null : annotation.getPathClass().toString(),
+                        String.valueOf(annotation.getID()), within.size()));
             }
             detections = new ArrayList<>(inside);
+            selection = InputSelection.ofAnnotations(described);
             logger.info("Using {} detections from {} selected annotations",
                     detections.size(), selectedAnnotations.size());
         } else if (selected.stream().anyMatch(PathObject::isDetection)) {
             detections = selected.stream()
                     .filter(PathObject::isDetection)
                     .toList();
+            selection = InputSelection.ofDetections(detections.size());
             logger.info("Using {} selected detections", detections.size());
         } else {
             detections = new ArrayList<>(hierarchy.getDetectionObjects());
@@ -357,8 +368,11 @@ public class ClusteringWorkflow {
         if (chosen.isEmpty()) {
             throw new IOException(noCellsMessage(config, cells.size()));
         }
-        return chosen;
+        return new CellInput(chosen, selection);
     }
+
+    /** A single-image run's cells and the selection they came from (null: none). */
+    private record CellInput(List<PathObject> cells, InputSelection selection) {}
 
     /**
      * The open image's detections carrying one class, as a sub-cluster run reads them.
@@ -414,7 +428,8 @@ public class ClusteringWorkflow {
         // "Composition by annotation" tab is offered.
         boolean annotationInput = imageData.getHierarchy().getSelectionModel()
                 .getSelectedObjects().stream().anyMatch(PathObject::isAnnotation);
-        List<PathObject> detections = cellsToCluster(imageData, config, "clustering");
+        CellInput input = cellsToCluster(imageData, config, "clustering");
+        List<PathObject> detections = input.cells();
 
         // Extract measurements
         MeasurementExtractor extractor = new MeasurementExtractor();
@@ -482,6 +497,7 @@ public class ClusteringWorkflow {
         // inside a TMA core, pooled across every area.
         result.setCellParentClasses(buildParentClassNames(extraction));
         result.setAnnotationInput(annotationInput);
+        result.setInputSelection(input.selection());
 
         // Apply results back to QuPath
         reportPhase(progressCallback, "apply", "Applying results to QuPath...");
@@ -554,6 +570,7 @@ public class ClusteringWorkflow {
         if (result.getPcaPrecursor() != null) {
             auditParams.put("PCA precursor", result.getPcaPrecursor());
         }
+        OperationLogger.addRunInput(auditParams, result);
         OperationLogger.getInstance().logOperation(opType, auditParams, completeMsg, elapsed);
 
         // Auto-save so the result is always reloadable via "View Past Results",
@@ -1117,17 +1134,18 @@ public class ClusteringWorkflow {
 
         // Audit trail
         long elapsed = System.currentTimeMillis() - startTime;
+        Map<String, String> projectParams = OperationLogger.projectClusteringParams(
+                config.getAlgorithm().getDisplayName(),
+                config.getAlgorithmParams(),
+                config.getNormalization().getId(),
+                config.getEmbeddingMethod().getId(),
+                extraction.getNMeasurements(),
+                extraction.getNCells(),
+                extraction.getImageSegments().size(),
+                auditBatchCorrection(config, result));
+        OperationLogger.addRunInput(projectParams, result);
         OperationLogger.getInstance().logOperation("PROJECT CLUSTERING",
-                OperationLogger.projectClusteringParams(
-                        config.getAlgorithm().getDisplayName(),
-                        config.getAlgorithmParams(),
-                        config.getNormalization().getId(),
-                        config.getEmbeddingMethod().getId(),
-                        extraction.getNMeasurements(),
-                        extraction.getNCells(),
-                        extraction.getImageSegments().size(),
-                        auditBatchCorrection(config, result)),
-                completeMsg, elapsed);
+                projectParams, completeMsg, elapsed);
 
         return result;
         } finally {
@@ -1267,6 +1285,11 @@ public class ClusteringWorkflow {
                         + " cells total). Re-clustering this image on its own will produce");
                 lines.add("//   DIFFERENT labels -- to reproduce, run across the same image set.");
             }
+            if (result.getInputSelection() != null) {
+                // Counts and classes only; the saved result's RUN_INFO lists each one.
+                lines.add("// Input: " + result.getInputSelection().summary() + ", "
+                        + result.getNCells() + " cells clustered");
+            }
             lines.add("// Algorithm: " + algo + "  params: " + paramsStr);
             lines.add("// Normalization: " + config.getNormalization().getId()
                     + "  Embedding: " + config.getEmbeddingMethod().getId());
@@ -1301,6 +1324,10 @@ public class ClusteringWorkflow {
             lines.add("// Reproduce: Extensions > QPCAT > View Past Results -> '" + saved + "',");
             lines.add("//   or Load Config from file -> '" + saved + "_config.json' (then set the");
             lines.add("//   SAME scope), or the headless YAML batch (see documentation/batch.md).");
+            if (result.getSavedName() != null) {
+                lines.add("// Every image and annotation used: '" + result.getSavedName()
+                        + "_RUN_INFO.txt' in qpcat/cluster_results.");
+            }
 
             String stepName = "QP-CAT: clustering (" + algo + ", "
                     + result.clusterCountText()
@@ -1799,7 +1826,7 @@ public class ClusteringWorkflow {
                                 Consumer<String> progressCallback) throws IOException {
         List<PathObject> cells = subclusterParent != null
                 ? cellsOfClass(imageData, subclusterParent)
-                : cellsToCluster(imageData, config, "k sweep");
+                : cellsToCluster(imageData, config, "k sweep").cells();
         report(progressCallback, "Reading " + cells.size() + " cells...");
         MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor()
                 .extract(cells, config.getSelectedMeasurements());

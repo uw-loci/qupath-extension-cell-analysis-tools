@@ -2,6 +2,8 @@ package qupath.ext.qpcat.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.ClusteringResult;
+import qupath.ext.qpcat.model.InputSelection;
 import qupath.lib.projects.Project;
 
 import qupath.lib.common.GeneralTools;
@@ -14,6 +16,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -271,6 +274,31 @@ public class OperationLogger {
         if (spatialAnalysis) params.put("Spatial analysis", "enabled");
         if (batchCorrection != null) params.put("Batch correction", batchCorrection);
         return params;
+    }
+
+    /**
+     * Add the run's images and input selection, in full, to an audit parameter map.
+     * The audit log outlives a deleted result and its RUN_INFO, so it keeps the
+     * whole list.
+     *
+     * @param params the map to add to
+     * @param result the finished run
+     */
+    public static void addRunInput(Map<String, String> params, ClusteringResult result) {
+        if (result == null) return;
+        Map<String, Integer> perImage = result.cellsPerImage();
+        if (perImage.size() > 1) {
+            List<String> parts = new ArrayList<>();
+            perImage.forEach((name, n) -> parts.add(name + " (" + n + ")"));
+            params.put("Images", String.join("; ", parts));
+        }
+        InputSelection sel = result.getInputSelection();
+        if (sel != null) {
+            List<String> parts = new ArrayList<>();
+            parts.add(sel.summary());
+            parts.addAll(sel.detailLines());
+            params.put("Input", String.join("; ", parts));
+        }
     }
 
     /**

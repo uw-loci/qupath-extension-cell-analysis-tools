@@ -24,7 +24,12 @@ In the results window click **Open results folder**. Each run leaves three files
 `<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps, with a
 *Validation* line naming the checks the run asked for, and a *Batch correction* line saying
 what Harmony did: `Harmony over 3 images`, or `requested, NOT applied` when the run had a
-single batch; the config file beside it is the complete one).
+single batch; the config file beside it is the complete one). It lists every image in a
+multi-image run with its cell count, and for a run narrowed by a selection, an *Input* line
+with each selected annotation's class, name, QuPath object ID and the detections inside it.
+The project audit log keeps the same lists, so they survive deleting the result. Each
+image's Workflow tab entry gives only the counts and classes and names the `RUN_INFO.txt`
+that holds the lists.
 
 Both `RUN_INFO.txt` and the audit log record the QP-CAT and QuPath versions. The Python
 packages are fixed per QP-CAT release by its bundled lock file (one for the CPU environment,

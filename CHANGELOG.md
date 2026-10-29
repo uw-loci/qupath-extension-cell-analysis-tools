@@ -4,6 +4,18 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.23.2] -- 2026-10-29 -- records that name every image and annotation
+
+### Changed
+
+- **Run records name what a run used.** `RUN_INFO.txt` and the project audit log list every
+  image of a multi-image run with its cell count, and every selected annotation of a run
+  narrowed by a selection: class, name (or `(unnamed)`), QuPath object ID and the detections
+  inside it. Before, they gave only a count, and an annotation-restricted run recorded no
+  more than the fact that one was selected. Each image's Workflow tab entry reads like
+  `Input: 2 annotations (Tumor x1, Stroma x1), 775 cells clustered` and names the
+  `RUN_INFO.txt` that holds the full lists.
+
 ## [0.23.1] -- 2026-10-28 -- Harmony on every scope, and records that say what it did
 
 **Results that change from 0.23.0:** a run on the current image with an annotation selected
