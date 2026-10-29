@@ -28,16 +28,17 @@ After setup: **Edit > Preferences > QP-CAT: Python environment > Environment loc
 
 ## CPU or GPU
 
-**Only the autoencoder uses a GPU.** Clustering, embedding, phenotyping, spatial
-statistics and cellular neighborhoods run on the CPU whatever hardware you have.
+**Only the autoencoder and Harmony batch correction use a GPU.** Clustering, embedding,
+phenotyping, spatial statistics and cellular neighborhoods run on the CPU whatever hardware
+you have.
 
 | Variant | Installs on | GPU used for |
 |---|---|---|
 | **CPU** (default) | any machine | nothing |
-| **GPU / CUDA** | **only** machines with an NVIDIA GPU | the autoencoder |
+| **GPU / CUDA** | **only** machines with an NVIDIA GPU | the autoencoder, and Harmony when the run fits in GPU memory |
 
-If your work is clustering and spatial statistics, stay on CPU. The GPU variant costs a
-several-GB download and buys nothing.
+If your work is clustering and spatial statistics without batch correction, stay on CPU. The
+GPU variant costs a several-GB download and speeds up only the autoencoder and Harmony.
 
 These cannot be one environment that uses a GPU when it finds one. A pixi lockfile pins
 exact package builds, a CPU build of PyTorch cannot use a GPU, and pixi validates the
@@ -69,6 +70,7 @@ scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
 |---|---|
 | Autoencoder, tile mode | **GPU** -- the real case. 64x64 tiles at 10,000 cells take 1-3 hours on CPU. |
 | Autoencoder, measurement mode | GPU, marginally. The network is small. |
+| Harmony batch correction | **GPU** in the GPU variant, when the run's cells fit in the card's free memory. Otherwise CPU, and the log and the run record say so. The GPU and the CPU can converge after different iteration counts, so the run record names the device. |
 | Clustering (Leiden, KMeans, HDBSCAN, GMM, agglomerative) | CPU. No GPU code path exists. |
 | BANKSY, UMAP | CPU. pybanksy and umap-learn are CPU-only. |
 | Spatial statistics, cellular neighborhoods | CPU. Permutation tests are CPU-bound. |
@@ -87,6 +89,9 @@ falls back to CPU -- the fixes are completely different:
   variant preference and let the GPU environment build.
 - **a CUDA build that cannot see a usable GPU** -- the environment is right; the driver
   or the device is the problem.
+- **Harmony ran on the CPU** -- the run's cells would not fit in the GPU's free memory, so
+  it was not moved to the GPU (the log warns, and `RUN_INFO.txt` says `on the CPU`). A
+  smaller run, or a card with more free memory, moves it.
 
 ## When setup fails
 

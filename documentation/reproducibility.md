@@ -242,8 +242,8 @@ part-way.
 
 ### GPU
 
-Only the autoencoder is GPU-accelerated today. Clustering and spatial statistics do not use a
-GPU, so the GPU environment variant costs a several-GB download and buys nothing for those
-workflows. See [Setup](setup.md#cpu-or-gpu).
+The autoencoder, and Harmony batch correction when its cells fit in GPU memory, use the GPU
+today. Clustering and spatial statistics do not use a GPU, so the GPU environment variant
+costs a several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
 
 ---
