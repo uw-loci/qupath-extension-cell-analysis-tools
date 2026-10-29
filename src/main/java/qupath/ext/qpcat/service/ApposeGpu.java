@@ -9,8 +9,11 @@
  */
 package qupath.ext.qpcat.service;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -20,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.prefs.Preferences;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -58,13 +62,17 @@ import org.slf4j.LoggerFactory;
  *       memory is read once, when this extension first starts a worker, so
  *       its workers stay on one card for the session (another extension,
  *       reading later, may pick a different card, which spreads the load).</li>
- *   <li>Pins the worker to it: {@link #pinned(Environment)} wraps an Appose
+ *   <li>Pins the worker to it: {@link #forWorker(Environment)} wraps an Appose
  *       environment so the worker starts with
  *       {@code CUDA_DEVICE_ORDER=PCI_BUS_ID} and {@code CUDA_VISIBLE_DEVICES}
  *       set to the card's UUID. Inside Python the card is then
  *       {@code cuda:0}, whatever its position, so no script needs changing.
  *       A UUID is used rather than an index because CUDA's default device
  *       order (fastest first) differs from {@code nvidia-smi}'s (PCI bus).</li>
+ *   <li>Isolates every worker, CPU or GPU, from Python and native libraries
+ *       QuPath's own environment points at ({@code ~/.local} site-packages,
+ *       {@code PYTHONPATH}, {@code LD_LIBRARY_PATH}); see
+ *       {@link #isolationVariables}.</li>
  *   <li>Respects a scheduler: when QuPath was started with
  *       {@code CUDA_VISIBLE_DEVICES} already set (SLURM and most cluster
  *       schedulers do this) and the preference is {@code auto}, nothing is
@@ -373,16 +381,94 @@ public final class ApposeGpu {
     }
 
     /**
-     * {@code env} with the worker pinned to the selected card, or {@code env}
-     * itself when there is nothing to pin. Call {@code python()} on the result.
+     * {@code env} for a worker: isolated from QuPath's own Python and library
+     * paths (see {@link #isolationVariables}), and pinned to the selected card
+     * when there is one. Every worker, CPU or GPU, starts from this. Call
+     * {@code python()} on the result.
      */
-    public static Environment pinned(Environment env) {
+    public static Environment forWorker(Environment env) {
         if (env == null) {
             return null;
         }
         Optional<Gpu> gpu = selected();
         logDecisionOnce(gpu);
-        return gpu.isPresent() ? new PinnedEnvironment(env, pinVariables(gpu.get())) : env;
+        Map<String, String> vars = new LinkedHashMap<>(isolationVariables(
+                System.getenv(), envPrefix(env), isLinux(),
+                dir -> Files.isRegularFile(Path.of(dir, "libcuda.so.1"))));
+        gpu.ifPresent(g -> vars.putAll(pinVariables(g)));
+        return new PinnedEnvironment(env, vars);
+    }
+
+    /**
+     * The variables that keep a worker on what its environment's lock installed.
+     * <ul>
+     *   <li>{@code PYTHONNOUSERSITE=1}: otherwise Python puts
+     *       {@code ~/.local/lib/pythonX.Y/site-packages} ahead of the environment's
+     *       own, and a {@code pip install --user} of numpy, torch or opencv replaces
+     *       the locked version inside the worker.</li>
+     *   <li>{@code PYTHONPATH} and {@code PYTHONHOME} emptied (Python treats empty as
+     *       unset) when QuPath was started with them.</li>
+     *   <li>Linux, with a known prefix: {@code LD_LIBRARY_PATH} becomes the
+     *       environment's {@code lib} folder, then only the inherited folders that
+     *       hold the NVIDIA driver ({@code libcuda.so.1}; {@code /.singularity.d/libs}
+     *       under Apptainer {@code --nv}). QuPath launch scripts add another
+     *       environment's {@code torch/lib} and cuDNN for DJL; and inside an older
+     *       container the system libstdc++ lacks the {@code CXXABI} versions
+     *       conda-forge packages need, so the environment's own must load first.</li>
+     * </ul>
+     *
+     * @param inherited   the variables QuPath runs with
+     * @param envPrefix   the environment's prefix, or null when unknown
+     * @param linux       whether {@code LD_LIBRARY_PATH} applies
+     * @param isDriverDir true for a folder holding the NVIDIA driver
+     * @return the variables to set on the worker
+     */
+    static Map<String, String> isolationVariables(Map<String, String> inherited, Path envPrefix,
+                                                  boolean linux, Predicate<String> isDriverDir) {
+        Map<String, String> vars = new LinkedHashMap<>();
+        vars.put("PYTHONNOUSERSITE", "1");
+        for (String name : List.of("PYTHONPATH", "PYTHONHOME")) {
+            String value = inherited.get(name);
+            if (value != null && !value.isBlank()) {
+                logger.info("Not passing {}={} to the Python worker", name, value);
+                vars.put(name, "");
+            }
+        }
+        if (linux && envPrefix != null) {
+            List<String> kept = new ArrayList<>();
+            kept.add(envPrefix.resolve("lib").toString());
+            List<String> dropped = new ArrayList<>();
+            for (String dir : inherited.getOrDefault("LD_LIBRARY_PATH", "").split(File.pathSeparator)) {
+                if (dir.isBlank() || kept.contains(dir)) {
+                    continue;
+                }
+                if (isDriverDir.test(dir)) {
+                    kept.add(dir);
+                } else {
+                    dropped.add(dir);
+                }
+            }
+            if (!dropped.isEmpty()) {
+                logger.info("Not passing these LD_LIBRARY_PATH folders to the Python worker "
+                        + "(no NVIDIA driver in them): {}", dropped);
+            }
+            vars.put("LD_LIBRARY_PATH", String.join(File.pathSeparator, kept));
+        }
+        return vars;
+    }
+
+    /** The environment's prefix: the parent of its {@code bin} folder, or null. */
+    static Path envPrefix(Environment env) {
+        List<String> bins = env.binPaths();
+        if (bins == null || bins.isEmpty()) {
+            return null;
+        }
+        Path bin = Path.of(bins.get(0));
+        return "bin".equals(String.valueOf(bin.getFileName())) ? bin.getParent() : bin;
+    }
+
+    private static boolean isLinux() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("linux");
     }
 
     private static void logDecisionOnce(Optional<Gpu> gpu) {

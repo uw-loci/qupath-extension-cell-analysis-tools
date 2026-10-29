@@ -137,4 +137,65 @@ class ApposeGpuTest {
         assertEquals("1", pinned.envVars().get("PIXI_X"));
         assertEquals("GPU-bbbb", pinned.envVars().get("CUDA_VISIBLE_DEVICES"));
     }
+
+    private static final java.nio.file.Path PREFIX =
+            java.nio.file.Path.of("appose", "env", ".pixi", "envs", "default");
+
+    /** QuPath launched inside Apptainer by a script that sets up DJL from another PyTorch env. */
+    @Test
+    void anotherEnvironmentsLibrariesAreDroppedAndTheDriverIsKept() {
+        String inherited = String.join(":",
+                "/home/u/miniconda3/envs/qupath-pytorch/lib/python3.13/site-packages/nvidia/cudnn/lib",
+                "/home/u/miniconda3/envs/qupath-pytorch/lib/python3.13/site-packages/torch/lib",
+                "/.singularity.d/libs");
+        Map<String, String> vars = ApposeGpu.isolationVariables(
+                Map.of("LD_LIBRARY_PATH", inherited, "PYTHONPATH", "/home/u/other"), PREFIX, true,
+                dir -> dir.equals("/.singularity.d/libs"));
+        assertEquals(PREFIX.resolve("lib") + ":/.singularity.d/libs", vars.get("LD_LIBRARY_PATH"));
+        assertEquals("", vars.get("PYTHONPATH"));
+        assertEquals("1", vars.get("PYTHONNOUSERSITE"));
+        assertTrue(!vars.containsKey("PYTHONHOME"), "only emptied when QuPath had it");
+    }
+
+    @Test
+    void withNothingInheritedTheEnvironmentsLibComesFirst() {
+        Map<String, String> vars = ApposeGpu.isolationVariables(Map.of(), PREFIX, true, dir -> false);
+        assertEquals(PREFIX.resolve("lib").toString(), vars.get("LD_LIBRARY_PATH"));
+    }
+
+    @Test
+    void libraryPathIsLeftAloneOffLinuxOrWithoutAPrefix() {
+        Map<String, String> vars = ApposeGpu.isolationVariables(
+                Map.of("LD_LIBRARY_PATH", "/x"), PREFIX, false, dir -> false);
+        assertTrue(!vars.containsKey("LD_LIBRARY_PATH"));
+        assertEquals("1", vars.get("PYTHONNOUSERSITE"));
+        assertTrue(!ApposeGpu.isolationVariables(Map.of("LD_LIBRARY_PATH", "/x"), null, true, dir -> false)
+                .containsKey("LD_LIBRARY_PATH"));
+    }
+
+    @Test
+    void thePrefixIsTheParentOfTheBinFolder() {
+        Environment env = new Environment() {
+            public String base() {
+                return "/env";
+            }
+
+            public List<String> binPaths() {
+                return List.of(PREFIX.resolve("bin").toString());
+            }
+
+            public List<String> launchArgs() {
+                return List.of();
+            }
+
+            public Map<String, String> envVars() {
+                return Map.of();
+            }
+
+            public Builder<?> builder() {
+                return null;
+            }
+        };
+        assertEquals(PREFIX, ApposeGpu.envPrefix(env));
+    }
 }

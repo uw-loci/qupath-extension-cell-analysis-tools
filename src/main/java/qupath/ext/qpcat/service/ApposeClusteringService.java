@@ -512,7 +512,7 @@ public class ApposeClusteringService {
      * init string to avoid a Windows deadlock (numpy/numpy#24290).
      */
     private void spawnWorker() throws IOException {
-        Service fresh = ApposeGpu.pinned(environment).python();
+        Service fresh = ApposeGpu.forWorker(environment).python();
 
         fresh.debug(msg -> {
             // Filter out Appose protocol messages (EXECUTE requests contain

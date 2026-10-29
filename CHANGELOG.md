@@ -21,6 +21,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **QP-CAT's Python worker no longer picks up packages and libraries from outside its
+  environment.** A `pip install --user` package in `~/.local`, a `PYTHONPATH` or `PYTHONHOME`
+  QuPath was started with, and `LD_LIBRARY_PATH` folders a QuPath launch script added (for
+  example another environment's PyTorch and cuDNN for DJL) all reached the worker ahead of the
+  locked packages. On a GPU cluster this brought back a crash the lock had fixed. The worker now
+  starts with user site-packages off, `PYTHONPATH`/`PYTHONHOME` empty, and on Linux
+  `LD_LIBRARY_PATH` set to the environment's own `lib` folder plus any folder holding the NVIDIA
+  driver. Whatever was not passed on is named in the QuPath log.
 - **Harmony runs on the CPU when it would not fit in GPU memory.** In the GPU environment,
   Harmony needs about 2.6 KB of GPU memory per cell (measured on an RTX 3090: 1.3 GiB at
   500,000 cells, 5.2 GiB at 2 million, 12.6 GiB at 4.9 million, where it took 49 s). A run
