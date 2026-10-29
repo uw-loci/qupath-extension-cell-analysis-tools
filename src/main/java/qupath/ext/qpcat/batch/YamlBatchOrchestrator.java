@@ -577,7 +577,9 @@ public final class YamlBatchOrchestrator {
                             // result, so a dry run has to show it.
                             "area_levels", describeAreaLevels(c),
                             "batch_key", c.getBatchKey() == null
-                                    ? "images" : c.getBatchKey()),
+                                    ? "images" : c.getBatchKey(),
+                            "harmony_version", c.getHarmonyVersion() == null
+                                    ? ClusteringConfig.HARMONYPY_PORTABLE : c.getHarmonyVersion()),
                     null);
         }
         if (schema.getPhenotyping() != null && schema.getPhenotyping().isEnabled()) {
@@ -708,6 +710,9 @@ public final class YamlBatchOrchestrator {
             levels.add(new AreaLevelSpec(AreaLevel.IMAGES));
             levels.addAll(cc.getAreaLevels());
             config.setAreaLevels(levels);
+        }
+        if (cc.getHarmonyVersion() != null && !cc.getHarmonyVersion().isBlank()) {
+            config.setHarmonyVersion(cc.getHarmonyVersion());
         }
         if (cc.getBatchKey() != null && !cc.getBatchKey().isBlank()) {
             config.setBatchKey(cc.getBatchKey());

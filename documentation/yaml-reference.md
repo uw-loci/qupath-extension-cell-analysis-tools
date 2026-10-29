@@ -131,6 +131,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `pca_precursor` | boolean | `false` | Reduce features to principal components before embedding + clustering (the scanpy flow). Only engages when the feature count exceeds the component count (`PCA Precursor Components` preference, default 50); BANKSY is always exempt. Omitted means off, so a YAML written before this option existed keeps producing the clusters it always did. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. With only one batch in scope nothing is corrected: the run warns and its record reads `requested, NOT applied`. |
 | `batch_key` | `images` \| `areas` | `images` | What Harmony treats as a batch. `areas` requires `area_levels`. See *Independent areas* below. |
+| `harmony_version` | `"0.2.0"` \| `"2.1.0"` | `"0.2.0"` | Which harmonypy runs Harmony. `0.2.0` is the same on every platform. `2.1.0` is far faster but has no Windows build (an error there), is downloaded from PyPI on first use, and gives different corrected values for the same data. Quote it, or YAML reads `2.1` as a number. |
 | `area_levels` | list[object] | -- (one area per image) | Hierarchy levels that split cells into physically separate areas, so no spatial graph crosses a boundary. See *Independent areas* below. |
 | `joint` | boolean | `false` | Cluster all of a project's resolved images **jointly** in one run (globally consistent cluster IDs across images), like the GUI "All / Specific images" scope. `false` = cluster each image **independently**. |
 
@@ -519,6 +520,7 @@ Warnings (non-fatal):
 - W003 Image scope filter matched zero images for a project
 - W004 `per_image_overrides` parsed but not applied
 - W005 `batch_key` ignored when `batch_correction` is off
+- W005 `harmony_version` ignored when `batch_correction` is off
 - W006 Repeated unfiltered `annotations` area level
 - W007 `audit.log_dir` has no effect
 - W008 `audit.log_level` has no effect

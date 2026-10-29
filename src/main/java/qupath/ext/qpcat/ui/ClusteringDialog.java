@@ -254,6 +254,7 @@ public class ClusteringDialog {
     private Label runCostLabel;
     private CheckBox batchCorrectionCheck;
     private ComboBox<String> batchKeyCombo;
+    private ComboBox<String> harmonyVersionCombo;
 
     // Independent areas: which cells may share a spatial graph at all.
     private IndependentAreasSection areasSection;
@@ -268,6 +269,10 @@ public class ClusteringDialog {
 
     private static final String BATCH_KEY_IMAGES_LABEL = "Images";
     private static final String BATCH_KEY_AREAS_LABEL = "Independent areas";
+    static final String HARMONY_PORTABLE_LABEL =
+            "harmonypy " + ClusteringConfig.HARMONYPY_PORTABLE + " - same on every platform";
+    static final String HARMONY_FAST_LABEL =
+            "harmonypy " + ClusteringConfig.HARMONYPY_FAST + " - faster, Linux and macOS only";
 
     // Spatial Statistics Expansion (v1) controls
     private ComboBox<String> spatialGraphTypeCombo;
@@ -1818,6 +1823,50 @@ public class ClusteringDialog {
         batchKeyRow.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
         batchKeyRow.managedProperty().bind(batchCorrectionCheck.selectedProperty());
 
+        // Which harmonypy. The default is the same everywhere; the fast one has no
+        // Windows build, so it is not offered there.
+        harmonyVersionCombo = new ComboBox<>();
+        harmonyVersionCombo.getItems().add(HARMONY_PORTABLE_LABEL);
+        if (!GeneralTools.isWindows()) {
+            harmonyVersionCombo.getItems().add(HARMONY_FAST_LABEL);
+        }
+        harmonyVersionCombo.setValue(HARMONY_PORTABLE_LABEL);
+        harmonyVersionCombo.setTooltip(Tooltips.of(
+                "harmonypy " + ClusteringConfig.HARMONYPY_PORTABLE + " (default): the same on "
+                + "Windows, Linux and macOS. Can take tens of minutes on millions of cells "
+                + "without a GPU.\n\n"
+                + "harmonypy " + ClusteringConfig.HARMONYPY_FAST + ": a C++ rewrite, about 24x "
+                + "faster on the CPU, with no Windows build. Downloaded from PyPI the first "
+                + "time it is used (pinned and hash-checked). Both run with the same settings, "
+                + "but the corrected values differ."
+                + (GeneralTools.isWindows()
+                        ? "\n\nNot offered here: harmonypy " + ClusteringConfig.HARMONYPY_FAST
+                                + " has no Windows build."
+                        : "")));
+        HBox harmonyVersionRow = new HBox(8,
+                tipLabel("Harmony version:", harmonyVersionCombo), harmonyVersionCombo);
+        harmonyVersionRow.setAlignment(Pos.CENTER_LEFT);
+        harmonyVersionRow.setPadding(new Insets(0, 0, 0, 20));
+        harmonyVersionRow.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
+        harmonyVersionRow.managedProperty().bind(batchCorrectionCheck.selectedProperty());
+
+        // Shown on every platform: a project corrected on one may be reproduced on another.
+        Label harmonyVersionWarning = new Label(
+                "The two harmonypy versions give different corrected values, and so different "
+                + "clusters, for the same data. " + ClusteringConfig.HARMONYPY_PORTABLE
+                + " is the only one that runs on Windows, so a run made with "
+                + ClusteringConfig.HARMONYPY_FAST + " on Linux or macOS cannot be reproduced "
+                + "exactly on Windows. The run record names the version used.");
+        harmonyVersionWarning.setWrapText(true);
+        WrapHeight.bind(harmonyVersionWarning);
+        harmonyVersionWarning.setMaxWidth(520);
+        harmonyVersionWarning.setStyle("-fx-font-size: 11px; -fx-text-fill: #6b4e00; "
+                + "-fx-background-color: #fff8e1; -fx-padding: 8; "
+                + "-fx-border-color: #e0c060; -fx-border-width: 1;");
+        VBox.setMargin(harmonyVersionWarning, new Insets(0, 0, 0, 20));
+        harmonyVersionWarning.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
+        harmonyVersionWarning.managedProperty().bind(batchCorrectionCheck.selectedProperty());
+
         // ---- Independent areas + spatial statistics expansion (v1) ----
         // Areas get their OWN top-level pane rather than living inside Spatial
         // statistics. They decide which cells may share a graph at all, which
@@ -1878,6 +1927,7 @@ public class ClusteringDialog {
         VBox box = new VBox(5, generatePlotsCheck, pagaCheck, spatialStatsSubsetNote,
                 spatialAnalysisCheck,
                 smoothingRow, pcaPrecursorCheck, batchCorrectionCheck, batchKeyRow,
+                harmonyVersionRow, harmonyVersionWarning,
                 createValidationPane(), areasPane, spatialStatsPane);
         // The class picker is built before this section, so its listener could not
         // reach these controls yet; settle the gate now that they exist.
@@ -3498,6 +3548,8 @@ public class ClusteringDialog {
         config.setAreaLevels(areasSection.getAreaLevels());
         config.setBatchKey(BATCH_KEY_AREAS_LABEL.equals(batchKeyCombo.getValue())
                 ? ClusteringConfig.BATCH_KEY_AREAS : ClusteringConfig.BATCH_KEY_IMAGES);
+        config.setHarmonyVersion(HARMONY_FAST_LABEL.equals(harmonyVersionCombo.getValue())
+                ? ClusteringConfig.HARMONYPY_FAST : ClusteringConfig.HARMONYPY_PORTABLE);
 
         // Spatial statistics expansion (v1)
         String graphTypeLabel = spatialGraphTypeCombo.getValue();
@@ -3976,6 +4028,12 @@ public class ClusteringDialog {
         batchKeyCombo.setValue(
                 ClusteringConfig.BATCH_KEY_AREAS.equals(config.getBatchKey())
                         ? BATCH_KEY_AREAS_LABEL : BATCH_KEY_IMAGES_LABEL);
+        // A config saved on Linux or macOS with the fast version falls back to the
+        // portable one on Windows, where the fast one is not offered.
+        harmonyVersionCombo.setValue(
+                ClusteringConfig.HARMONYPY_FAST.equals(config.getHarmonyVersion())
+                        && harmonyVersionCombo.getItems().contains(HARMONY_FAST_LABEL)
+                        ? HARMONY_FAST_LABEL : HARMONY_PORTABLE_LABEL);
 
         // Spatial statistics expansion (v1) -- the saved-config schema may
         // pre-date these fields; the ClusteringConfig defaults cover that case.

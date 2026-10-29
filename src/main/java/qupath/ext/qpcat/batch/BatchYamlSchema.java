@@ -182,6 +182,12 @@ public final class BatchYamlSchema {
         public String getBatchKey() { return batchKey; }
         public void setBatchKey(String batchKey) { this.batchKey = batchKey; }
 
+        // "0.2.0" (default, every platform) or "2.1.0" (faster, no Windows build).
+        private String harmonyVersion;
+
+        public String getHarmonyVersion() { return harmonyVersion; }
+        public void setHarmonyVersion(String harmonyVersion) { this.harmonyVersion = harmonyVersion; }
+
         public String getType() { return type; }
         public void setType(String type) { this.type = type; }
 

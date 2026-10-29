@@ -62,7 +62,7 @@ public final class BatchYamlParser {
             "measurements", "spatial_smoothing", "pca_precursor", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
             "banksy_lambda", "banksy_k_geom", "joint",
-            "area_levels", "batch_key"));
+            "area_levels", "batch_key", "harmony_version"));
 
     private static final Set<String> KNOWN_AREA_LEVEL = new HashSet<>(Arrays.asList(
             "level", "annotation_classes"));
@@ -284,6 +284,7 @@ public final class BatchYamlParser {
                 case "banksy_k_geom" -> c.setBanksyKGeom(asIntObj(value));
                 case "joint" -> c.setJoint(asBool(value, false));
                 case "batch_key" -> c.setBatchKey(asString(value));
+                case "harmony_version" -> c.setHarmonyVersion(asString(value));
                 case "area_levels" -> {
                     if (value instanceof List<?> list) {
                         List<AreaLevelSpec> levels = new ArrayList<>();

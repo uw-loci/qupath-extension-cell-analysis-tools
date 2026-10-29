@@ -23,7 +23,8 @@ In the results window click **Open results folder**. Each run leaves three files
 `<name>.json` (the result itself), `<name>_config.json` (the exact configuration) and
 `<name>_RUN_INFO.txt` (a readable record of the settings, plus these steps, with a
 *Validation* line naming the checks the run asked for, and a *Batch correction* line saying
-what Harmony did and where it ran: `Harmony over 3 images on the GPU`, or `requested, NOT applied` when the run had a
+what Harmony did, where it ran and which harmonypy ran it:
+`Harmony over 3 images on the GPU, harmonypy 0.2.0`, or `requested, NOT applied` when the run had a
 single batch; the config file beside it is the complete one). It lists every image in a
 multi-image run with its cell count, and for a run narrowed by a selection, an *Input* line
 with each selected annotation's class, name, QuPath object ID and the detections inside it.

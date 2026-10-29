@@ -4,7 +4,20 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.23.3] -- 2026-10-29 -- the version in the window title, and Harmony that fits the GPU
+## [0.23.3] -- 2026-10-29 -- the version in the window title, a faster Harmony to opt into, and Harmony that fits the GPU
+
+### Added
+
+- **Harmony version** (Run Clustering > Batch correction, and `harmony_version` in a YAML
+  batch). **harmonypy 0.2.0** stays the default and is the same on every platform.
+  **harmonypy 2.1.0**, a C++ rewrite, is offered on Linux and macOS: about 24 times faster on
+  the CPU (7 s against 170 s for 500,000 cells, with 0.2.0's convergence settings). It has no
+  Windows build. harmonypy is GPL-3.0, so QP-CAT does not ship it: the first run that asks
+  for it downloads it from PyPI, checked against pinned file hashes, into a folder inside the
+  analysis environment. The two versions give different corrected values for the same data
+  (KMeans clusters on 4,226 cells agreed at an adjusted Rand index of 0.72), so a note under
+  the dropdown says so on every platform, every Harmony run logs which version ran, and
+  `RUN_INFO.txt`, the audit log and the Workflow tab name it (`harmonypy 2.1.0`).
 
 ### Changed
 

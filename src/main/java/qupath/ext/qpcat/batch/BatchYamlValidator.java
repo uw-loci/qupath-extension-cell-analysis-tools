@@ -2,6 +2,8 @@ package qupath.ext.qpcat.batch;
 
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.model.ClusteringConfig;
+import qupath.lib.common.GeneralTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.PlotKind;
@@ -270,6 +272,24 @@ public final class BatchYamlValidator {
      */
     private static void validateAreaLevels(BatchYamlSchema.ClusteringBlock c,
                                            ValidationResult r) {
+        String harmonyVersion = c.getHarmonyVersion();
+        if (harmonyVersion != null && !harmonyVersion.isBlank()) {
+            if (!ClusteringConfig.HARMONYPY_PORTABLE.equals(harmonyVersion)
+                    && !ClusteringConfig.HARMONYPY_FAST.equals(harmonyVersion)) {
+                r.add(ValidationIssue.error("E005", "clustering.harmony_version",
+                        "expected one of [" + ClusteringConfig.HARMONYPY_PORTABLE + ", "
+                        + ClusteringConfig.HARMONYPY_FAST + "], got '" + harmonyVersion + "'"));
+            } else if (ClusteringConfig.HARMONYPY_FAST.equals(harmonyVersion)
+                    && GeneralTools.isWindows()) {
+                r.add(ValidationIssue.error("E005", "clustering.harmony_version",
+                        "harmonypy " + ClusteringConfig.HARMONYPY_FAST + " has no Windows build; use "
+                        + ClusteringConfig.HARMONYPY_PORTABLE));
+            }
+            if (!Boolean.TRUE.equals(c.getBatchCorrection())) {
+                r.add(ValidationIssue.warning("W005", "clustering.harmony_version",
+                        "ignored because batch_correction is not enabled"));
+            }
+        }
         String batchKey = c.getBatchKey();
         boolean hasLevels = c.getAreaLevels() != null && !c.getAreaLevels().isEmpty();
 

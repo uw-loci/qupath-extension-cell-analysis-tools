@@ -198,6 +198,7 @@ QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python 
 - Two or more images are in scope (**All project images**, or **Specific images...** with two or more chosen), OR independent areas are configured (Independent areas > Add level), AND
 - The harmonypy package was successfully imported when the QP-CAT Python environment started.
 - A **"Batch key" dropdown** appears below the checkbox to choose the grouping level.
+- A **"Harmony version" dropdown** and a note on how the two versions differ appear below it.
 
 **When the checkbox is grayed out:**
 
@@ -212,7 +213,9 @@ QP-CAT integrates [harmonypy](https://github.com/slowkow/harmonypy) (the Python 
 | macOS (Intel + Apple Silicon) | harmonypy 0.2.0 (pure Python) | Supported |
 | Windows x86_64 | harmonypy 0.2.0 (pure Python) | Supported |
 
-QP-CAT pins `harmonypy >= 0.2.0, < 2`. Version 2.0.0+ is a pybind11/CMake build with no Windows wheel, which would force users to install MSVC Build Tools to use this feature. The 0.2.x series is the latest pure-Python release with the same `run_harmony()` API.
+QP-CAT's environment pins `harmonypy >= 0.2.0, < 2` and installs 0.2.0, the latest release that runs on every platform. harmonypy 2.x is a C++ rewrite with no Windows wheel.
+
+**Harmony version** (shown under the checkbox, and `harmony_version` in a YAML batch): **harmonypy 0.2.0** is the default. **harmonypy 2.1.0** is offered on Linux and macOS: it is about 24 times faster on the CPU (7 s against 170 s for 500,000 cells with 0.2.0's settings, measured on Linux), and QP-CAT downloads it from PyPI the first time it is used, checking the file against pinned hashes, into a folder inside the environment. The two give different corrected values for the same data: on 4,226 cells in 3 images, KMeans with k = 4 agreed between them at an adjusted Rand index of 0.72. A run made with 2.1.0 therefore cannot be reproduced exactly on Windows; the dialog says so, and `RUN_INFO.txt` names the version used.
 
 **If the checkbox is unexpectedly grayed out:**
 

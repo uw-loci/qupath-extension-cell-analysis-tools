@@ -651,6 +651,128 @@ def _cuda_free_bytes():
         return None
 
 
+# harmonypy 2.x, opt-in per run. It is GPL-3.0, so QP-CAT does not ship it: the
+# first run that asks for it installs it from PyPI into a folder inside this
+# environment, checked against these hashes (the cp311 wheels; there is no
+# Windows build). The environment's own lock keeps 0.2.0, the default.
+HARMONYPY_PORTABLE = "0.2.0"
+HARMONYPY_FAST = "2.1.0"
+HARMONYPY_FAST_SHA256 = (
+    "55fe3599b500c275949b7e5098bc5fd4b26cf19c034716f8461fbe41209b52b4",  # macOS arm64
+    "281a9c4b6ff5c9ef451d6f58e445186e72b741c1115824ebbe785efe6b964b3a",  # macOS x86_64
+    "fbe0aea51149f2e0f7edf6c1a942bc67a919cf7242da8eb77bd1a225a7febe09",  # Linux aarch64
+    "b9eab5eb201468fcfd4429061e0560dfc770becd51122314bf85356054cb26ce",  # Linux x86_64
+)
+
+
+def _harmonypy_fast_dir():
+    """Where the opt-in harmonypy lives: inside the environment, so a rebuild removes it."""
+    return os.path.join(sys.prefix, "qpcat-extras", "harmonypy-" + HARMONYPY_FAST)
+
+
+def _install_harmonypy_fast(target):
+    """Install the pinned harmonypy wheel into target, or raise with pip's reason."""
+    import subprocess
+    import tempfile
+
+    parent = os.path.dirname(target)
+    os.makedirs(parent, exist_ok=True)
+    staging = tempfile.mkdtemp(prefix="harmonypy-", dir=parent)
+    req = os.path.join(staging, "requirements.txt")
+    with open(req, "w", encoding="ascii") as f:
+        f.write(
+            "harmonypy==%s %s\n"
+            % (
+                HARMONYPY_FAST,
+                " ".join("--hash=sha256:" + h for h in HARMONYPY_FAST_SHA256),
+            )
+        )
+    try:
+        pkg_dir = os.path.join(staging, "pkg")
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-deps",
+                "--only-binary=:all:",
+                "--require-hashes",
+                "--no-input",
+                "--disable-pip-version-check",
+                "--target",
+                pkg_dir,
+                "-r",
+                req,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if proc.returncode != 0:
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]
+            raise RuntimeError(
+                "Could not install harmonypy %s for Harmony (it needs internet access the "
+                "first time). Choose harmonypy %s in the Batch correction settings to run "
+                "without it. pip said: %s"
+                % (HARMONYPY_FAST, HARMONYPY_PORTABLE, " | ".join(tail))
+            )
+        # Moved into place only once complete, so an interrupted install is never used.
+        os.replace(pkg_dir, target)
+    finally:
+        import shutil
+
+        shutil.rmtree(staging, ignore_errors=True)
+    logger.info("Installed harmonypy %s into %s", HARMONYPY_FAST, target)
+
+
+@contextlib.contextmanager
+def _harmonypy(version):
+    """The harmonypy module for this run. The fast one is imported from its own
+    folder under the name harmonypy (its modules import themselves by that name)
+    and removed again afterwards, so the environment's 0.2.0 is untouched."""
+    if version != HARMONYPY_FAST:
+        import harmonypy
+
+        yield harmonypy
+        return
+    if sys.platform == "win32":
+        raise RuntimeError(
+            "harmonypy %s has no Windows build. Choose harmonypy %s in the Batch "
+            "correction settings." % (HARMONYPY_FAST, HARMONYPY_PORTABLE)
+        )
+    target = _harmonypy_fast_dir()
+    if not os.path.isdir(target):
+        task.update("Installing harmonypy %s (first use)..." % HARMONYPY_FAST)
+        _install_harmonypy_fast(target)
+    import importlib
+
+    def _ours(name):
+        return name == "harmonypy" or name.startswith("harmonypy.")
+
+    saved = {k: sys.modules.pop(k) for k in [m for m in sys.modules if _ours(m)]}
+    sys.path.insert(0, target)
+    try:
+        module = importlib.import_module("harmonypy")
+        if getattr(module, "__version__", None) != HARMONYPY_FAST:
+            raise RuntimeError(
+                "Expected harmonypy %s from %s, got %s. Delete that folder and run "
+                "again to reinstall it."
+                % (HARMONYPY_FAST, target, getattr(module, "__version__", "unknown"))
+            )
+        yield module
+    finally:
+        sys.path.remove(target)
+        for k in [m for m in sys.modules if _ours(m)]:
+            del sys.modules[k]
+        sys.modules.update(saved)
+
+
+try:
+    harmony_version_choice = harmony_version
+except NameError:
+    harmony_version_choice = HARMONYPY_PORTABLE
+
 _batch_skip_note = _batch_correction_skip_reason(do_batch, batch_labels_list)
 _harmony_device_note = None
 if _batch_skip_note is not None:
@@ -658,8 +780,53 @@ if _batch_skip_note is not None:
     prepared_steps.append("Harmony: requested, not applied (one batch)")
 elif do_batch:
     task.update("Running batch correction (Harmony)...")
+    n_batches = len(set(batch_labels_list))
+    meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
     try:
-        import harmonypy as hm
+        with _harmonypy(harmony_version_choice) as hm:
+            _hp_version = str(getattr(hm, "__version__", harmony_version_choice))
+            _other = (
+                HARMONYPY_FAST
+                if _hp_version == HARMONYPY_PORTABLE
+                else HARMONYPY_PORTABLE
+            )
+            logger.warning(
+                "Harmony uses harmonypy %s. harmonypy %s gives different corrected values for "
+                "the same data; %s is the only one that runs on Windows.",
+                _hp_version,
+                _other,
+                HARMONYPY_PORTABLE,
+            )
+            if _hp_version == HARMONYPY_FAST:
+                # The C++ rewrite runs on the CPU. 0.2.0's convergence settings, so
+                # the implementation is the only thing that differs between the two.
+                _harmony_dev = "cpu"
+                ho = hm.run_harmony(
+                    df_norm.values,
+                    meta_df,
+                    "batch",
+                    max_iter_kmeans=20,
+                    epsilon_cluster=1e-5,
+                    epsilon_harmony=1e-4,
+                )
+            else:
+                _cuda_free = _cuda_free_bytes()
+                _harmony_dev, _harmony_device_note = _harmony_device(
+                    len(df_norm), _cuda_free
+                )
+                if _cuda_free is not None:
+                    logger.info(
+                        "Harmony on %s: %d cells, GPU free memory %.1f GiB",
+                        _harmony_dev,
+                        len(df_norm),
+                        _cuda_free / 1024.0**3,
+                    )
+                if _harmony_device_note is not None:
+                    logger.warning(_harmony_device_note)
+                ho = hm.run_harmony(
+                    df_norm.values, meta_df, "batch", device=_harmony_dev
+                )
+            corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
     except ImportError as _hp_err:
         # The Java UI grays out the checkbox when the init-time probe reports
         # harmonypy missing, so reaching this branch means the probe and the
@@ -670,32 +837,23 @@ elif do_batch:
             "to refresh, or uncheck 'Batch correction (Harmony)' to run "
             "without it. Underlying error: %s" % _hp_err
         )
-
-    n_batches = len(set(batch_labels_list))
-    meta_df = pd.DataFrame({"batch": [str(b) for b in batch_labels_list]})
-    _cuda_free = _cuda_free_bytes()
-    _harmony_dev, _harmony_device_note = _harmony_device(len(df_norm), _cuda_free)
-    if _cuda_free is not None:
-        logger.info(
-            "Harmony on %s: %d cells, GPU free memory %.1f GiB",
-            _harmony_dev,
-            len(df_norm),
-            _cuda_free / 1024.0**3,
-        )
-    if _harmony_device_note is not None:
-        logger.warning(_harmony_device_note)
-    ho = hm.run_harmony(df_norm.values, meta_df, "batch", device=_harmony_dev)
-    corrected = _orient_batch_corrected(ho.Z_corr, df_norm.shape)
     df_norm = pd.DataFrame(corrected, columns=df_norm.columns, index=df_norm.index)
     require_finite(df_norm.values, "Harmony batch correction", list(df_norm.columns))
-    logger.info("Harmony batch correction applied (%d batches)", n_batches)
-    prepared_steps.append("Harmony: %d batches" % n_batches)
+    logger.info(
+        "Harmony batch correction applied (%d batches, harmonypy %s)",
+        n_batches,
+        _hp_version,
+    )
+    prepared_steps.append(
+        "Harmony: %d batches (harmonypy %s)" % (n_batches, _hp_version)
+    )
     # The run record and the Workflow tab state how many batches were
     # corrected over, read from here rather than from the checkbox.
     task.outputs["batch_correction_batches"] = int(n_batches)
-    # GPU and CPU can converge after different iteration counts, so the
-    # device is part of what the run did.
+    # GPU and CPU can converge after different iteration counts, and the two
+    # harmonypy versions differ, so both are part of what the run did.
     task.outputs["batch_correction_device"] = "GPU" if _harmony_dev == "cuda" else "CPU"
+    task.outputs["batch_correction_version"] = _hp_version
 
 # 3. Dimensionality reduction
 

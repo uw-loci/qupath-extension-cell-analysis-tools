@@ -2545,9 +2545,11 @@ public class ClusteringWorkflow {
             Object batchCount = task.outputs.get("batch_correction_batches");
             if (batchCount instanceof Number n) {
                 Object device = task.outputs.get("batch_correction_device");
-                result.setBatchCorrection(String.format("Harmony over %d %ss%s",
+                Object version = task.outputs.get("batch_correction_version");
+                result.setBatchCorrection(String.format("Harmony over %d %ss%s%s",
                         n.intValue(), batchesAreAreas(config, areas) ? "area" : "image",
-                        device == null ? "" : " on the " + device));
+                        device == null ? "" : " on the " + device,
+                        version == null ? "" : ", harmonypy " + version));
             }
 
             // ---- Spatial graph overlay (v0.3) outputs ----
@@ -2710,6 +2712,7 @@ public class ClusteringWorkflow {
         // run quietly clustering uncorrected values.
         if (config.isEnableBatchCorrection()) {
             inputs.put("enable_batch_correction", true);
+            inputs.put("harmony_version", config.getHarmonyVersion());
         }
         if (batchLabels != null) {
             inputs.put("batch_labels", batchLabels);

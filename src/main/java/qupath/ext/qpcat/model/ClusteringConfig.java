@@ -275,6 +275,18 @@ public class ClusteringConfig {
     public static final String BATCH_KEY_IMAGES = "images";
     public static final String BATCH_KEY_AREAS = "areas";
 
+    /**
+     * Which harmonypy runs Harmony. {@link #HARMONYPY_PORTABLE} is the default and
+     * the same on every platform; {@link #HARMONYPY_FAST} is a C++ rewrite, far
+     * faster, with no Windows build. The two give different corrected values for
+     * the same data, so the choice is part of the run. Null (a config written
+     * before the choice existed) means the portable one.
+     */
+    private String harmonyVersion;
+
+    public static final String HARMONYPY_PORTABLE = "0.2.0";
+    public static final String HARMONYPY_FAST = "2.1.0";
+
     public ClusteringConfig() {
         // Set sensible defaults
         algorithmParams.put("n_neighbors", 50);
@@ -351,6 +363,16 @@ public class ClusteringConfig {
     public void setBatchKey(String key) {
         this.batchKey = BATCH_KEY_AREAS.equalsIgnoreCase(key)
                 ? BATCH_KEY_AREAS : BATCH_KEY_IMAGES;
+    }
+
+    /** @see #harmonyVersion */
+    public String getHarmonyVersion() {
+        return HARMONYPY_FAST.equals(harmonyVersion) ? HARMONYPY_FAST : HARMONYPY_PORTABLE;
+    }
+
+    /** @see #harmonyVersion */
+    public void setHarmonyVersion(String version) {
+        this.harmonyVersion = HARMONYPY_FAST.equals(version) ? HARMONYPY_FAST : HARMONYPY_PORTABLE;
     }
 
     public List<String> getSelectedMeasurements() { return selectedMeasurements; }
