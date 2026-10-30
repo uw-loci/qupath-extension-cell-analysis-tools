@@ -565,7 +565,7 @@ public class AutoencoderDialog {
                 "Size of the square tile around each cell centroid (pixels).\n"
                 + "Auto-computed from 95th percentile cell size + context."));
 
-        Label tileInfo = new Label("Channels: " + nChannels + tileSizeHint);
+        Label tileInfo = UiLabels.wrapped(new Label("Channels: " + nChannels + tileSizeHint));
         tileInfo.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         includeMaskCheck = new CheckBox("Include cell mask channel");
@@ -601,9 +601,10 @@ public class AutoencoderDialog {
         downsampleCombo.setOnAction(e -> updateDownsampleWarning());
         updateDownsampleWarning();
 
-        HBox tileRow = new HBox(10, tipLabel("Tile size (px):", tileSizeSpinner), tileSizeSpinner,
-                tipLabel("Downsample:", downsampleCombo), downsampleCombo, tileInfo);
-        tileRow.setAlignment(Pos.CENTER_LEFT);
+        HBox tileControls = new HBox(10, tipLabel("Tile size (px):", tileSizeSpinner), tileSizeSpinner,
+                tipLabel("Downsample:", downsampleCombo), downsampleCombo);
+        tileControls.setAlignment(Pos.CENTER_LEFT);
+        VBox tileRow = new VBox(4, tileControls, tileInfo);
         tileRow.setDisable(true);
 
         measurementModeRadio.selectedProperty().addListener((obs, oldVal, newVal) -> {

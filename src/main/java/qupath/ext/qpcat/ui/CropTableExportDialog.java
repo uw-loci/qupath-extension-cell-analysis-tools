@@ -122,7 +122,7 @@ public final class CropTableExportDialog {
         dirField.setPrefColumnCount(32);
         File seeded = ExportLocation.qpcatDir(qupath, QpcatPaths.CROP_TABLES);
         if (seeded != null) dirField.setText(seeded.getAbsolutePath());
-        Button browse = new Button("Browse...");
+        Button browse = UiLabels.whole(new Button("Browse..."));
         browse.setOnAction(e -> {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("QP-CAT - Choose the export folder");
@@ -135,11 +135,11 @@ public final class CropTableExportDialog {
         grid.setHgap(10);
         grid.setVgap(8);
         int row = 0;
-        grid.addRow(row++, new Label("Total cells (budget):"), capSpinner);
-        grid.addRow(row++, new Label("Min cells / classification:"), floorSpinner);
-        grid.addRow(row++, new Label("Crop scale (x bounding box):"), cropScaleSpinner);
-        grid.addRow(row++, new Label("Sampling seed:"), seedSpinner);
-        grid.addRow(row++, new Label("Output folder:"), dirField, browse);
+        grid.addRow(row++, UiLabels.whole(new Label("Total cells (budget):")), capSpinner);
+        grid.addRow(row++, UiLabels.whole(new Label("Min cells / classification:")), floorSpinner);
+        grid.addRow(row++, UiLabels.whole(new Label("Crop scale (x bounding box):")), cropScaleSpinner);
+        grid.addRow(row++, UiLabels.whole(new Label("Sampling seed:")), seedSpinner);
+        grid.addRow(row++, UiLabels.whole(new Label("Output folder:")), dirField, browse);
 
         Label coverage = new Label();
         coverage.setWrapText(true);

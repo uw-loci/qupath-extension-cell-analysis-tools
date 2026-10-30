@@ -720,7 +720,6 @@ public class ClusteringDialog {
         embeddingModeCombo = new ComboBox<>(FXCollections.observableArrayList(
                 EMBEDDING_MODE_AUTO, EMBEDDING_MODE_REPRODUCIBLE, EMBEDDING_MODE_FAST));
         embeddingModeCombo.setValue(EMBEDDING_MODE_AUTO);
-        embeddingModeCombo.setPrefWidth(230);
         embeddingModeCombo.setTooltip(Tooltips.of(
                 "How UMAP trades reproducibility against speed.\n\n"
                 + "Automatic (default): use the random seed below 200,000 cells, and\n"
@@ -765,10 +764,9 @@ public class ClusteringDialog {
                 + "       so a downstream 3D viewer can read a real third coordinate.\n"
                 + "Applies to UMAP / t-SNE / PCA."));
 
-        HBox embRow = new HBox(10, tipLabel("Method:", embeddingCombo), embeddingCombo,
+        FlowPane embRow = UiLabels.flowRow(10, tipLabel("Method:", embeddingCombo), embeddingCombo,
                 tipLabel("Dimensions:", embeddingDimCombo), embeddingDimCombo,
                 tipLabel("Name:", embeddingNameField), embeddingNameField);
-        embRow.setAlignment(Pos.CENTER_LEFT);
 
         // Basic per-method rows (one shown at a time).
         HBox umapRow = new HBox(10,
@@ -787,9 +785,8 @@ public class ClusteringDialog {
                 tipLabel("iterations:", tsneIterationsSpinner), tsneIterationsSpinner,
                 tipLabel("early_exag:", tsneEarlyExaggerationSpinner), tsneEarlyExaggerationSpinner);
         tsneAdvRow.setAlignment(Pos.CENTER_LEFT);
-        HBox embModeRow = new HBox(10,
+        FlowPane embModeRow = UiLabels.flowRow(10,
                 tipLabel("UMAP speed vs reproducibility:", embeddingModeCombo), embeddingModeCombo);
-        embModeRow.setAlignment(Pos.CENTER_LEFT);
         Label advNote = new Label("These match the t-SNE / UMAP inputs the backend "
                 + "accepts; they apply to GUI and headless (YAML) runs alike.");
         advNote.setWrapText(true);
@@ -1455,10 +1452,9 @@ public class ClusteringDialog {
         // Shown always and DISABLED when it has no effect, rather than hidden: a
         // visible control that does nothing is a far smaller problem than a hidden
         // one that does, and the disabled tooltip says which case you are in.
-        HBox seedRow = new HBox(10,
+        FlowPane seedRow = UiLabels.flowRow(10,
                 tipLabel("Random seed (clustering + embedding):", embeddingSeedSpinner),
                 embeddingSeedSpinner);
-        seedRow.setAlignment(Pos.CENTER_LEFT);
         Label seedNote = new Label();
         seedNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); "
                 + "-fx-font-size: 10.5px;");
@@ -1643,8 +1639,8 @@ public class ClusteringDialog {
     }
 
     private VBox createAnalysisSection() {
-        generatePlotsCheck = new CheckBox(
-                "Generate analysis plots (dotplot, matrix plot, violin, embedding)");
+        generatePlotsCheck = UiLabels.wrapped(new CheckBox(
+                "Generate analysis plots (dotplot, matrix plot, violin, embedding)"));
         generatePlotsCheck.setSelected(true);
         generatePlotsCheck.setTooltip(Tooltips.of(
                 "Write the static PNG plots: dotplot, matrix plot, stacked violin\n"
@@ -1694,8 +1690,8 @@ public class ClusteringDialog {
                 + "Powered by squidpy (Palla et al. 2022, Nature Methods).\n"
                 + "See documentation/references.md for citations."));
 
-        spatialSmoothingCheck = new CheckBox(
-                "Spatial feature smoothing (slower; not comparable to runs without it)");
+        spatialSmoothingCheck = UiLabels.wrapped(new CheckBox(
+                "Spatial feature smoothing (slower; not comparable to runs without it)"));
         spatialSmoothingCheck.setSelected(false);
         spatialSmoothingCheck.setTooltip(Tooltips.of(
                 "Smooth features using spatial neighbors before clustering.\n"
@@ -1739,9 +1735,11 @@ public class ClusteringDialog {
             updatePreflight();
         });
 
-        HBox smoothingRow = new HBox(8, spatialSmoothingCheck,
+        HBox smoothingIterations = new HBox(8,
                 tipLabel("Iterations:", smoothingIterationsSpinner), smoothingIterationsSpinner);
-        smoothingRow.setAlignment(Pos.CENTER_LEFT);
+        smoothingIterations.setAlignment(Pos.CENTER_LEFT);
+        smoothingIterations.setPadding(new Insets(0, 0, 0, 20));
+        VBox smoothingRow = new VBox(3, spatialSmoothingCheck, smoothingIterations);
 
         // OFF by default. It is a real speed-up on wide panels, but it changes
         // cluster labels, so it has to be a decision the user makes before a run
@@ -1750,8 +1748,8 @@ public class ClusteringDialog {
         // mode combo already uses. It says "not comparable to runs without it",
         // NOT "layout varies": the precursor is seeded and fully repeatable. The
         // two costs are different and must not be worded as if they were the same.
-        pcaPrecursorCheck = new CheckBox(
-                "Reduce features with PCA before clustering (faster; not comparable to runs without it)");
+        pcaPrecursorCheck = UiLabels.wrapped(new CheckBox(
+                "Reduce features with PCA before clustering (faster; not comparable to runs without it)"));
         pcaPrecursorCheck.setSelected(false);
         pcaPrecursorCheck.setTooltip(Tooltips.of(
                 "OFF by default -- tick it before running if you want it.\n\n"
@@ -1771,7 +1769,8 @@ public class ClusteringDialog {
                 + "original measurements, so cluster identities stay interpretable.\n"
                 + "Component count: QP-CAT preferences, 'PCA Precursor Components'."));
 
-        batchCorrectionCheck = new CheckBox("Batch correction (Harmony) - for multi-image clustering");
+        batchCorrectionCheck = UiLabels.wrapped(
+                new CheckBox("Batch correction (Harmony) - for multi-image clustering"));
         batchCorrectionCheck.setSelected(false);
         batchCorrectionCheck.setDisable(true);
 
@@ -1843,9 +1842,8 @@ public class ClusteringDialog {
                         ? "\n\nNot offered here: harmonypy " + ClusteringConfig.HARMONYPY_FAST
                                 + " has no Windows build."
                         : "")));
-        HBox harmonyVersionRow = new HBox(8,
+        FlowPane harmonyVersionRow = UiLabels.flowRow(8,
                 tipLabel("Harmony version:", harmonyVersionCombo), harmonyVersionCombo);
-        harmonyVersionRow.setAlignment(Pos.CENTER_LEFT);
         harmonyVersionRow.setPadding(new Insets(0, 0, 0, 20));
         harmonyVersionRow.visibleProperty().bind(batchCorrectionCheck.selectedProperty());
         harmonyVersionRow.managedProperty().bind(batchCorrectionCheck.selectedProperty());
@@ -1978,12 +1976,11 @@ public class ClusteringDialog {
             refreshRunCostLabel();
             updatePreflight();
         });
-        HBox stabilityRow = new HBox(8, stabilityCheck,
+        FlowPane stabilityRow = UiLabels.flowRow(8, UiLabels.whole(stabilityCheck),
                 tipLabel("Extra runs:", stabilityRepeatsSpinner), stabilityRepeatsSpinner);
-        stabilityRow.setAlignment(Pos.CENTER_LEFT);
 
-        compareClassesCheck = new CheckBox(
-                "Agreement with the classifications the cells already have");
+        compareClassesCheck = UiLabels.wrapped(new CheckBox(
+                "Agreement with the classifications the cells already have"));
         compareClassesCheck.setSelected(false);
         compareClassesCheck.setTooltip(Tooltips.of(
                 "Compare the new clusters with the classes the cells carry BEFORE this\n"
@@ -2000,7 +1997,7 @@ public class ClusteringDialog {
                     + "classes ARE the labels here, so they would agree perfectly."));
         }
 
-        compareResolutionsCheck = new CheckBox("Compare Leiden resolutions:");
+        compareResolutionsCheck = UiLabels.whole(new CheckBox("Compare Leiden resolutions:"));
         compareResolutionsCheck.setSelected(false);
         compareResolutionsCheck.setTooltip(Tooltips.of(
                 "Also partition this run's neighbor graph with Leiden at each listed\n"
@@ -2036,8 +2033,7 @@ public class ClusteringDialog {
             compareResolutionsField.setStyle(ok ? "" : "-fx-border-color: #d9534f;");
             refreshRunCostLabel();
         });
-        HBox resolutionsRow = new HBox(8, compareResolutionsCheck, compareResolutionsField);
-        resolutionsRow.setAlignment(Pos.CENTER_LEFT);
+        FlowPane resolutionsRow = UiLabels.flowRow(8, compareResolutionsCheck, compareResolutionsField);
 
         VBox body = new VBox(5, stabilityRow, compareClassesCheck, resolutionsRow);
         TitledPane pane = new TitledPane("Validation", body);
@@ -3678,17 +3674,17 @@ public class ClusteringDialog {
      * the last thing you do.
      */
     private VBox createLoadConfigColumn() {
-        Label heading = new Label("Start from a saved configuration:");
+        Label heading = UiLabels.whole(new Label("Start from a saved configuration:"));
         heading.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
-        Button loadBtn = new Button("Load Config...");
+        Button loadBtn = UiLabels.whole(new Button("Load Config..."));
         loadBtn.setOnAction(e -> loadConfig());
         loadBtn.setMaxWidth(Double.MAX_VALUE);
         loadBtn.setTooltip(Tooltips.of(
                 "Load a previously saved clustering configuration\n"
                 + "and restore all settings in this dialog."));
 
-        Button loadFileBtn = new Button("Load Config from file...");
+        Button loadFileBtn = UiLabels.whole(new Button("Load Config from file..."));
         loadFileBtn.setOnAction(e -> loadConfigFromFile());
         loadFileBtn.setMaxWidth(Double.MAX_VALUE);
         loadFileBtn.setTooltip(Tooltips.of(
@@ -3697,7 +3693,7 @@ public class ClusteringDialog {
                 + "('<name>.json') is not a config; open that with View Past Results.\n"
                 + "Restores all settings here; then pick the Scope and click Run Clustering."));
 
-        VBox box = new VBox(4, heading, loadBtn, loadFileBtn);
+        VBox box = UiLabels.whole(new VBox(4, heading, loadBtn, loadFileBtn));
         box.setAlignment(Pos.TOP_LEFT);
         return box;
     }
@@ -6160,7 +6156,7 @@ public class ClusteringDialog {
                             ? "   <- " + (entry.derivedOp != null ? entry.derivedOp : "edit")
                               + " of '" + entry.derivedFrom + "'"
                             : "");
-                CheckBox cb = DataCheckBoxes.of(label);
+                CheckBox cb = UiLabels.wrapped(DataCheckBoxes.of(label));
                 cb.setUserData(entry.name);
                 checks.add(cb);
                 rows.getChildren().add(cb);

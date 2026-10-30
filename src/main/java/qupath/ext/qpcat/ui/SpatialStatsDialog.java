@@ -160,7 +160,7 @@ public class SpatialStatsDialog {
         // areas control has nothing configured. Areas take precedence in
         // buildWindows, so leaving this reading "Analysis regions" implied a
         // choice that a configured area path silently overrode.
-        Label regionLabel = new Label("If no areas are configured:");
+        Label regionLabel = UiLabels.whole(new Label("If no areas are configured:"));
         Tooltip regionTip = Tooltips.of(
                 "How to split cells when the Independent areas control below has no "
                 + "levels added.\n\n"
@@ -194,9 +194,9 @@ public class SpatialStatsDialog {
                 QpcatPreferences.getSpatialGraphDelaunayMaxEdge(), 5);
         Spinner<Integer> permSpin = intSpinner(0, 100000, Math.max(0, QpcatPreferences.getSpatialPermutations()));
 
-        Label kLbl = new Label("kNN neighbors (k):");
-        Label rLbl = new Label("Radius (um, -1 = auto):");
-        Label dLbl = new Label("Delaunay max edge (um, -1 = keep all):");
+        Label kLbl = UiLabels.whole(new Label("kNN neighbors (k):"));
+        Label rLbl = UiLabels.whole(new Label("Radius (um, -1 = auto):"));
+        Label dLbl = UiLabels.whole(new Label("Delaunay max edge (um, -1 = keep all):"));
         Runnable syncGraph = () -> {
             String g = graphType.getValue();
             boolean knn = "knn".equals(g);
@@ -255,10 +255,10 @@ public class SpatialStatsDialog {
         Button runBtn = new Button("Run spatial statistics");
 
         VBox content = new VBox(10,
-                new Label("Runs over each cell's existing classification -- no clustering is "
-                        + "recomputed and the object hierarchy is not changed.\nEach image (and "
-                        + "each annotation, if chosen) is analyzed independently with its own "
-                        + "spatial graph."),
+                UiLabels.wrapped(new Label("Runs over each cell's existing classification -- no "
+                        + "clustering is recomputed and the object hierarchy is not changed.\nEach "
+                        + "image (and each annotation, if chosen) is analyzed independently with "
+                        + "its own spatial graph.")),
                 labelSourceRow,
                 labelSourceInfo,
                 scope,

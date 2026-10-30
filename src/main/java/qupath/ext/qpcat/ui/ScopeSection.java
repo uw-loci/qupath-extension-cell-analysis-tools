@@ -81,9 +81,9 @@ public final class ScopeSection extends VBox {
         scopeSpecificImages = new RadioButton("Specific images...");
         scopeSpecificImages.setToggleGroup(group);
 
-        chooseImagesButton = new Button("Choose images...");
+        chooseImagesButton = UiLabels.whole(new Button("Choose images..."));
         chooseImagesButton.setOnAction(e -> openImageChooser());
-        specificImagesLabel = new Label("(none chosen)");
+        specificImagesLabel = UiLabels.whole(new Label("(none chosen)"));
         specificImagesLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
 
         Project<BufferedImage> project = qupath.getProject();

@@ -13,8 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   side of the gate it falls on, and the colors and the count follow the red line as you drag it.
   Nothing is written to the cells. Cells are judged exactly as the run judges them: the positive
   count equaled a real run's for all four normalizations, on one image and on a pooled scope. At
-  2 million cells a redraw took 50-70 ms. With **GMM (Gaussian)** selected, the histogram also draws
-  the two fitted components.
+  2 million cells a redraw took 50-70 ms. QuPath's detections are hidden while the preview is on,
+  because QuPath draws them over it, and come back when you untick it or close the dialog. With
+  **GMM (Gaussian)** selected, the histogram also draws the two fitted components.
 - **Harmony version** (Run Clustering > Batch correction, and `harmony_version` in a YAML
   batch). **harmonypy 0.2.0** stays the default and is the same on every platform.
   **harmonypy 2.1.0**, a C++ rewrite, is offered on Linux and macOS: about 24 times faster on
@@ -32,6 +33,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   another image under **Current image**, kept the old histogram and suggestions, which came from
   other cells than the run would normalize. They now clear, and **Compute Thresholds** recomputes
   them.
+- **Text no longer gets cut off in the dialogs.** Row labels, buttons and long checkboxes read "..."
+  or lost their last line at the default window size, for example **Load Config from file...**,
+  **Browse...**, the two help links in Phenotyping, and every row of **Manage Saved Results**.
+  Labels now keep their full width, long text wraps, and crowded rows continue on a second line.
 
 ### Changed
 
@@ -45,12 +50,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   driver. Whatever was not passed on is named in the QuPath log.
 - **Harmony runs on the CPU when it would not fit in GPU memory.** In the GPU environment,
   Harmony needs about 2.6 KB of GPU memory per cell (measured on an RTX 3090: 1.3 GiB at
-  500,000 cells, 5.2 GiB at 2 million, 12.6 GiB at 4.9 million, where it took 49 s). A run
-  that did not fit spilled into system memory on Windows drivers and could take tens of
-  minutes. QP-CAT now compares the estimate with the GPU's free memory, uses the CPU when it
-  would not fit, and says so in the log and the result's warnings. The run record names the
-  device (`Harmony over 17 images on the GPU`), because the GPU and the CPU can converge after
-  a different number of iterations and give slightly different corrected values.
+  500,000 cells, 5.2 GiB at 2 million, 12.6 GiB at 4.9 million, where it took 49 s). QP-CAT now
+  compares that estimate with the GPU's free memory, uses the CPU when the run would not fit,
+  and says so in the log and the result's warnings. The run record names the device
+  (`Harmony over 17 images on the GPU, harmonypy 0.2.0`), because the GPU and the CPU can
+  converge after a different number of iterations and give slightly different corrected values.
 
 - **The main QP-CAT windows show the running version in their title bar**, for example
   *QPCAT - Run Clustering  v. 0.23.3*: clustering, phenotyping, embedding, Plot & Gate,
@@ -3633,7 +3637,7 @@ Fixes [issue #11](https://github.com/uw-loci/qupath-extension-cell-analysis-tool
 multiplex dataset that never completed even on a 512 GB machine. Memory was never
 the constraint -- the run was single-threaded, could not be cancelled, and would
 have frozen the UI on arrival anyway. Full analysis with measurements in
-`claude-reports/2026-07-31_qpcat-million-cell-scaling-audit.md`.
+`claude-reports/archive/2026-07/2026-07-31_qpcat-million-cell-scaling-audit.md`.
 
 ### Fixed
 
@@ -3992,7 +3996,7 @@ have frozen the UI on arrival anyway. Full analysis with measurements in
 ## [0.9.2] -- 2026-07-04 -- native 3D View tab + 3-component embedding
 
 > Part of the `cluster-3d-navigator` + `cluster3d-core` effort (see
-> `claude-reports/2026-07-04_cluster-3d-navigator-and-shared-core.md`). Distinct from the
+> `claude-reports/archive/2026-07/2026-07-04_cluster-3d-navigator-and-shared-core.md`). Distinct from the
 > 0.9.1 VEST *export* / "Open in VEST" work below. Build order: `cluster3d-core`
 > publishToMavenLocal before this repo's shadowJar (see THIRD_PARTY_NOTICES.md / CLAUDE.md).
 
@@ -4091,7 +4095,7 @@ have frozen the UI on arrival anyway. Full analysis with measurements in
   real two-Gaussian crossing; co-occurrence interval derived from median NN distance;
   Appose init tears down a partially-started worker before the env wipe; several
   FX-thread / batch-YAML / hover-perf hardening fixes. See
-  `claude-reports/2026-07-02_qpcat-code-audit-and-fixes.md`.
+  `claude-reports/archive/2026-07/2026-07-02_qpcat-code-audit-and-fixes.md`.
 
 ## [0.8.2] -- 2026-07-02
 

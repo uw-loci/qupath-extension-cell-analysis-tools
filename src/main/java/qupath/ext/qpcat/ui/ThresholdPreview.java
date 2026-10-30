@@ -6,12 +6,10 @@ import java.util.Map;
 import java.util.function.BooleanSupplier;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
-import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +34,7 @@ final class ThresholdPreview {
 
     private final QuPathGUI qupath;
     private final BooleanSupplier openImageInScope;
-    private final CheckBox enable = new CheckBox("Show on the open image");
+    private final CheckBox enable = UiLabels.whole(new CheckBox("Show on the open image"));
     private final ComboBox<ThresholdPreviewOverlay.Show> show = new ComboBox<>();
     private final Label status = new Label(NO_THRESHOLDS);
     private final VBox node;
@@ -49,6 +47,9 @@ final class ThresholdPreview {
     private QuPathViewer viewer;
     private ThresholdPreviewOverlay overlay;
     private ThresholdPreviewOverlay.Cells shown;
+    // The viewer whose detections this preview hid, and whether they were showing.
+    private QuPathViewer hiddenOn;
+    private boolean detectionsWereShown;
     // Bumped by every load, so a slow load for an earlier marker or image is ignored.
     private int loadId;
 
@@ -61,7 +62,9 @@ final class ThresholdPreview {
                 "Color the open image's cells by which side of this marker's gate they fall on,\n"
                 + "using the histogram's colors, and follow the red line as it moves. Cells are\n"
                 + "judged exactly as the run will judge them. Nothing is written to any cell.\n"
-                + "Dots when zoomed out, cell outlines once few enough cells are in view."));
+                + "Dots when zoomed out, cell outlines once few enough cells are in view.\n"
+                + "QuPath's detection display is hidden while this is on, because it would\n"
+                + "cover the preview, and comes back when you untick this or close the dialog."));
         enable.selectedProperty().addListener((obs, was, on) -> {
             if (on) {
                 reload();
@@ -82,9 +85,7 @@ final class ThresholdPreview {
         WrapHeight.bind(status);
         status.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
-        HBox row = new HBox(8, enable, show);
-        row.setAlignment(Pos.CENTER_LEFT);
-        node = new VBox(4, row, status);
+        node = new VBox(4, UiLabels.flowRow(8, enable, show), status);
         qupath.imageDataProperty().addListener(imageListener);
     }
 
@@ -130,6 +131,13 @@ final class ThresholdPreview {
     }
 
     private void hide() {
+        detach();
+        restoreDetections();
+        status.setText(scalings == null ? NO_THRESHOLDS : "");
+    }
+
+    /** Take the overlay off, leaving the detection display as it is for a reload. */
+    private void detach() {
         loadId++;
         shown = null;
         if (overlay != null) {
@@ -138,7 +146,26 @@ final class ThresholdPreview {
         }
         overlay = null;
         viewer = null;
-        status.setText(scalings == null ? NO_THRESHOLDS : "");
+    }
+
+    /**
+     * QuPath paints extension overlays under its detections, which would cover the
+     * preview cell for cell, so they are hidden for as long as it shows.
+     */
+    private void hideDetections(QuPathViewer target) {
+        if (hiddenOn != target) {
+            restoreDetections();
+            hiddenOn = target;
+            detectionsWereShown = target.getOverlayOptions().getShowDetections();
+            target.getOverlayOptions().setShowDetections(false);
+        }
+    }
+
+    private void restoreDetections() {
+        if (hiddenOn != null) {
+            hiddenOn.getOverlayOptions().setShowDetections(detectionsWereShown);
+            hiddenOn = null;
+        }
     }
 
     /** Read the open image's cells for the current marker off the FX thread. */
@@ -149,12 +176,14 @@ final class ThresholdPreview {
         QuPathViewer active = qupath.getViewer();
         ImageData<BufferedImage> imageData = active == null ? null : active.getImageData();
         MarkerScaling scaling = marker == null ? null : scalings.get(marker);
-        hide();
+        detach();
         if (imageData == null) {
+            restoreDetections();
             status.setText("Open an image to preview this gate.");
             return;
         }
         if (scaling == null) {
+            restoreDetections();
             status.setText("Click a marker column header to preview its gate.");
             return;
         }
@@ -174,6 +203,7 @@ final class ThresholdPreview {
     }
 
     private void attach(QuPathViewer target, ThresholdPreviewOverlay.Cells cells) {
+        hideDetections(target);
         viewer = target;
         overlay = new ThresholdPreviewOverlay(target);
         overlay.setShow(show.getValue());

@@ -120,7 +120,7 @@ public final class ApplySavedResultDialog {
         grid.setHgap(8);
         grid.setVgap(8);
         grid.setPadding(new Insets(12));
-        grid.add(new Label("Saved result:"), 0, 0);
+        grid.add(UiLabels.whole(new Label("Saved result:")), 0, 0);
         grid.add(chooser, 1, 0);
         GridPane.setHgrow(chooser, Priority.ALWAYS);
 

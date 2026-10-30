@@ -181,9 +181,9 @@ public class PhenotypingDialog {
         info.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(info, Priority.ALWAYS);
 
-        VBox links = new VBox(2,
-                QpcatDocLinks.page("Documentation", "phenotyping.md", "running-phenotyping"),
-                QpcatDocLinks.page("Auto-thresholding", "phenotyping.md", "auto-thresholding"));
+        VBox links = UiLabels.whole(new VBox(2,
+                UiLabels.whole(QpcatDocLinks.page("Documentation", "phenotyping.md", "running-phenotyping")),
+                UiLabels.whole(QpcatDocLinks.page("Auto-thresholding", "phenotyping.md", "auto-thresholding"))));
         links.setAlignment(Pos.TOP_RIGHT);
 
         HBox bar = new HBox(8, info, links);
@@ -340,30 +340,30 @@ public class PhenotypingDialog {
         rulesTable.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
 
         // Button bar
-        Button addBtn = new Button("Add Rule");
+        Button addBtn = UiLabels.whole(new Button("Add Rule"));
         addBtn.setOnAction(e -> addRule());
         addBtn.setTooltip(Tooltips.of("Add a new phenotype rule row to the table."));
-        Button removeBtn = new Button("Remove");
+        Button removeBtn = UiLabels.whole(new Button("Remove"));
         removeBtn.setOnAction(e -> removeSelectedRule());
         removeBtn.setTooltip(Tooltips.of("Remove the selected phenotype rule."));
-        Button upBtn = new Button("Move Up");
+        Button upBtn = UiLabels.whole(new Button("Move Up"));
         upBtn.setOnAction(e -> moveRuleUp());
         upBtn.setTooltip(Tooltips.of(
                 "Move the selected rule up (higher priority).\n"
                 + "Rules are matched top-to-bottom (first match wins)."));
-        Button downBtn = new Button("Move Down");
+        Button downBtn = UiLabels.whole(new Button("Move Down"));
         downBtn.setOnAction(e -> moveRuleDown());
         downBtn.setTooltip(Tooltips.of("Move the selected rule down (lower priority)."));
 
         Region spacer1 = new Region();
         HBox.setHgrow(spacer1, Priority.SOMETIMES);
 
-        Button saveBtn = new Button("Save Rules...");
+        Button saveBtn = UiLabels.whole(new Button("Save Rules..."));
         saveBtn.setOnAction(e -> saveRuleSet());
         saveBtn.setTooltip(Tooltips.of(
                 "Save the current rules, markers, gates, and\n"
                 + "normalization settings to the project for reuse."));
-        Button loadBtn = new Button("Load Rules...");
+        Button loadBtn = UiLabels.whole(new Button("Load Rules..."));
         loadBtn.setOnAction(e -> loadRuleSet());
         loadBtn.setTooltip(Tooltips.of(
                 "Load a previously saved phenotype rule set.\n"

@@ -98,9 +98,9 @@ public final class ClusterColorPaletteDialog {
         renderPreview.run();
 
         VBox content = new VBox(10,
-                new Label("Recolor the cluster classes in bulk from a palette. Colors are "
-                        + "QuPath-wide, so this applies to every image the clusters were "
-                        + "created from. Detections are not modified."),
+                UiLabels.wrapped(new Label("Recolor the cluster classes in bulk from a palette. "
+                        + "Colors are QuPath-wide, so this applies to every image the clusters "
+                        + "were created from. Detections are not modified.")),
                 row("Target:", targetBox),
                 row("Palette:", paletteBox),
                 new Separator(),
@@ -125,7 +125,7 @@ public final class ClusterColorPaletteDialog {
     }
 
     private static HBox row(String label, javafx.scene.Node control) {
-        HBox h = new HBox(8, new Label(label), control);
+        HBox h = new HBox(8, UiLabels.whole(new Label(label)), control);
         h.setAlignment(Pos.CENTER_LEFT);
         return h;
     }

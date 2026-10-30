@@ -293,8 +293,8 @@ public class BatchFigureExportDialog {
         matHeader.setStyle("-fx-font-weight: bold;");
         matBox.getChildren().add(matHeader);
         VBox compBox = new VBox(4);
-        Label compHeader = new Label(
-                "Cluster composition (rendered from the saved result -- always available):");
+        Label compHeader = UiLabels.wrapped(new Label(
+                "Cluster composition (rendered from the saved result -- always available):"));
         compHeader.setStyle("-fx-font-weight: bold;");
         compBox.getChildren().add(compHeader);
         Label compNote = new Label(
@@ -306,8 +306,8 @@ public class BatchFigureExportDialog {
         compNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         compBox.getChildren().add(compNote);
         VBox fxBox = new VBox(4);
-        Label fxHeader = new Label(
-                "Interactive plots (drawn in the Results window; this export cannot write them):");
+        Label fxHeader = UiLabels.wrapped(new Label(
+                "Interactive plots (drawn in the Results window; this export cannot write them):"));
         fxHeader.setStyle("-fx-font-weight: bold;");
         fxBox.getChildren().add(fxHeader);
         Label fxNote = new Label(

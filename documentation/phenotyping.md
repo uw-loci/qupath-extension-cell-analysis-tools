@@ -211,6 +211,9 @@ high misses most of the stained ones.*
 
 - **Nothing is written to the cells.** Classifications stay as they are until you click
   **Run Phenotyping**.
+- **QuPath's detections are hidden while the preview is on.** QuPath draws them over anything
+  an extension draws, so they would cover it. They come back as they were when you untick the
+  box or close the dialog. Annotations stay visible.
 - **The preview matches the run.** It reads the same cells and applies the same normalization,
   using the numbers from **Compute Thresholds**. Checked against real runs: the positive count
   was identical for all four normalizations, on one image and on a pooled scope.

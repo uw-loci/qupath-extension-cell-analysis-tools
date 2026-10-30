@@ -611,8 +611,7 @@ def _batch_correction_skip_reason(requested, labels):
 
 # Harmony's GPU memory, measured with harmonypy 0.2.0 at 10 markers and 17
 # batches: 1.30 GiB at 500,000 cells and 5.18 GiB at 2,000,000. Both fit about
-# seven float32 matrices of clusters x cells. A run that does not fit spills into
-# system memory on Windows drivers and runs far slower than the CPU.
+# seven float32 matrices of clusters x cells, measured up to 4.9 million cells.
 HARMONY_GPU_MATRICES = 7
 HARMONY_GPU_HEADROOM = 0.8
 
@@ -632,9 +631,7 @@ def _harmony_device(n_cells, cuda_free_bytes):
     gib = 1024.0**3
     return "cpu", (
         "Harmony ran on the CPU: it needs about %.1f GiB of GPU memory for %d cells "
-        "and the GPU had %.1f GiB free. On the GPU it would have spilled into "
-        "system memory, which is slower than the CPU."
-        % (need / gib, n_cells, cuda_free_bytes / gib)
+        "and the GPU had %.1f GiB free." % (need / gib, n_cells, cuda_free_bytes / gib)
     )
 
 

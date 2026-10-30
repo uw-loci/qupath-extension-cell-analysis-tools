@@ -239,10 +239,10 @@ public class CellularNeighborhoodDialog {
                 "For joint runs, also report neighborhood proportions per group of images,\n"
                 + "grouped by this image-metadata key (e.g. treatment or condition) -- so you\n"
                 + "can compare how neighborhood composition shifts with the biology."));
-        HBox groupRow = new HBox(8, new Label("Group images by:"), groupByCombo);
+        HBox groupRow = new HBox(8, UiLabels.whole(new Label("Group images by:")), groupByCombo);
         groupRow.setAlignment(Pos.CENTER_LEFT);
         if (metaKeys.isEmpty()) {
-            Label none = new Label("(no image metadata keys in this project)");
+            Label none = UiLabels.wrapped(new Label("(no image metadata keys in this project)"));
             none.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%);");
             groupRow.getChildren().add(none);
         }

@@ -33,6 +33,7 @@ public class HistogramPanel extends VBox {
     private static final double MARGIN_TOP = 10;
     private static final double MARGIN_BOTTOM = 25;
     private static final double FIT_HEADROOM = 1.3;
+    private static final double THRESHOLD_LABEL_WIDTH = 45;
 
     private final Canvas canvas;
     private final ComboBox<String> methodCombo;
@@ -385,7 +386,12 @@ public class HistogramPanel extends VBox {
 
         // Threshold value label
         gc.setFill(Color.RED);
-        gc.fillText(String.format("%.3f", currentThreshold), threshX + 3, MARGIN_TOP + 12);
+        // Beside the line, on whichever side the value stays on the canvas.
+        boolean labelLeft = threshX > CANVAS_WIDTH - MARGIN_RIGHT - THRESHOLD_LABEL_WIDTH;
+        gc.setTextAlign(labelLeft ? TextAlignment.RIGHT : TextAlignment.LEFT);
+        gc.fillText(String.format("%.3f", currentThreshold),
+                labelLeft ? threshX - 3 : threshX + 3, MARGIN_TOP + 12);
+        gc.setTextAlign(TextAlignment.LEFT);
 
         // Update stats
         updateStats();
