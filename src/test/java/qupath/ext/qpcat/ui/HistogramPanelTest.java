@@ -1,13 +1,18 @@
 package qupath.ext.qpcat.ui;
 
+import javafx.scene.canvas.Canvas;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,7 +63,7 @@ class HistogramPanelTest {
         return FxHarness.onFxGet(() -> {
             HistogramPanel p = new HistogramPanel();
             FxHarness.layOutOffscreen(p);
-            p.setMarkerData("Cell: CD3 mean", counts, edges, quantiles(v), auto, 0.5);
+            p.setMarkerData("Cell: CD3 mean", counts, edges, quantiles(v), auto, null, 0.5);
             return p;
         });
     }
@@ -94,6 +99,28 @@ class HistogramPanelTest {
         // And the threshold box showed "0" for it.
         Spinner<Double> spinner = field(p, "thresholdSpinner");
         assertThat(FxHarness.onFxGet(() -> spinner.getEditor().getText())).isEqualTo("0.0045");
+    }
+
+    private static MouseEvent mouse(javafx.event.EventType<MouseEvent> type, double x) {
+        return new MouseEvent(type, x, 50, x, 50, MouseButton.PRIMARY, 1,
+                false, false, false, false, true, false, false, true, false, true, null);
+    }
+
+    @Test
+    void theDisplayCallbackFollowsADragBeforeTheMouseIsReleased() {
+        HistogramPanel p = panelWith(new LinkedHashMap<>());
+        Canvas canvas = field(p, "canvas");
+        List<Double> seen = new ArrayList<>();
+        FxHarness.onFx(() -> {
+            p.setOnDisplayChanged(() -> seen.add(p.getCurrentThreshold()));
+            // The plot spans x = 40..390 for 0..1, so the gate at 0.5 sits near 215.
+            canvas.fireEvent(mouse(MouseEvent.MOUSE_PRESSED, 215));
+            canvas.fireEvent(mouse(MouseEvent.MOUSE_DRAGGED, 250));
+            canvas.fireEvent(mouse(MouseEvent.MOUSE_DRAGGED, 285));
+        });
+        assertThat(seen).hasSize(2);
+        assertThat(seen.get(0)).isGreaterThan(0.5);
+        assertThat(seen.get(1)).isGreaterThan(seen.get(0));
     }
 
     @Test

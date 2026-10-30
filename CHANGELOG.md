@@ -4,10 +4,17 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [0.23.3] -- 2026-10-29 -- the version in the window title, a faster Harmony to opt into, and Harmony that fits the GPU
+## [0.23.3] -- 2026-10-30 -- see a gate on the cells, a faster Harmony to opt into, and Harmony that fits the GPU
 
 ### Added
 
+- **See a marker's gate on the cells while you set it (#22).** In the Phenotyping dialog, tick
+  **Show on the open image** under the histogram: each cell of the open image is colored by which
+  side of the gate it falls on, and the colors and the count follow the red line as you drag it.
+  Nothing is written to the cells. Cells are judged exactly as the run judges them: the positive
+  count equaled a real run's for all four normalizations, on one image and on a pooled scope. At
+  2 million cells a redraw took 50-70 ms. With **GMM (Gaussian)** selected, the histogram also draws
+  the two fitted components.
 - **Harmony version** (Run Clustering > Batch correction, and `harmony_version` in a YAML
   batch). **harmonypy 0.2.0** stays the default and is the same on every platform.
   **harmonypy 2.1.0**, a C++ rewrite, is offered on Linux and macOS: about 24 times faster on
@@ -18,6 +25,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   (KMeans clusters on 4,226 cells agreed at an adjusted Rand index of 0.72), so a note under
   the dropdown says so on every platform, every Harmony run logs which version ran, and
   `RUN_INFO.txt`, the audit log and the Workflow tab name it (`harmonypy 2.1.0`).
+
+### Fixed
+
+- **Phenotyping thresholds could outlive what they described.** Changing the scope, or opening
+  another image under **Current image**, kept the old histogram and suggestions, which came from
+  other cells than the run would normalize. They now clear, and **Compute Thresholds** recomputes
+  them.
 
 ### Changed
 

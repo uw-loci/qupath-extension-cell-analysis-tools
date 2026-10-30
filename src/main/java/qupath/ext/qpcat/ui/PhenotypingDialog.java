@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
 import qupath.ext.qpcat.model.GateCoverage;
+import qupath.ext.qpcat.model.GmmFit;
+import qupath.ext.qpcat.model.MarkerScaling;
 import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.model.PhenotypeRuleSet;
 import qupath.ext.qpcat.service.ChannelValidator;
@@ -75,6 +77,7 @@ public class PhenotypingDialog {
 
     // Histogram panel (Phase 5)
     private HistogramPanel histogramPanel;
+    private ThresholdPreview thresholdPreview;
     private TitledPane histogramPane;
     private Map<String, Map<String, Object>> cachedHistogramData;
     private String cachedHistogramNorm;
@@ -154,6 +157,8 @@ public class PhenotypingDialog {
         // Populate measurements from current image
         populateMeasurements();
 
+        dialog.getDialogPane().getScene().getWindow().addEventHandler(
+                javafx.stage.WindowEvent.WINDOW_HIDDEN, e -> thresholdPreview.dispose());
         dialog.show();
     }
 
@@ -383,6 +388,9 @@ public class PhenotypingDialog {
                 markerGateSpinners.get(marker).getValueFactory().setValue(newThreshold);
             }
         });
+        thresholdPreview = new ThresholdPreview(qupath, this::openImageInScope);
+        histogramPanel.setOnDisplayChanged(() -> thresholdPreview.update(
+                histogramPanel.getCurrentMarker(), histogramPanel.getCurrentThreshold()));
 
         computeBtn = new Button("Compute Thresholds");
         computeBtn.setOnAction(e -> computeThresholds());
@@ -400,7 +408,7 @@ public class PhenotypingDialog {
         HBox buttonBar = new HBox(8, computeBtn, applyAllBtn);
         buttonBar.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(5, histogramPanel, buttonBar);
+        VBox box = new VBox(5, histogramPanel, buttonBar, thresholdPreview.node());
         histogramPane = new TitledPane("Histogram & Auto-Thresholding", box);
         histogramPane.setExpanded(false);
         histogramPane.setCollapsible(true);
@@ -696,6 +704,9 @@ public class PhenotypingDialog {
                 "Apply these rules across multiple images. Cells from all chosen images are\n"
                 + "normalized together (global gating) and results are saved back to each image.\n"
                 + "Markers and gates come from the current image -- panels must be consistent.");
+        // Thresholds describe the cells they were computed on, and a scope change
+        // includes another image opening under "Current image".
+        scopeSection.addScopeChangeListener(this::invalidateHistogramCache);
         return scopeSection;
     }
 
@@ -1132,7 +1143,17 @@ public class PhenotypingDialog {
         cachedHistogramNorm = null;
         if (histogramPanel != null) {
             histogramPanel.clearDisplay();
+            thresholdPreview.setScalings(null);
         }
+    }
+
+    /** True when the run's scope covers the image open in the viewer. */
+    private boolean openImageInScope() {
+        List<ProjectImageEntry<BufferedImage>> entries = currentScopeEntries();
+        var project = qupath.getProject();
+        var open = qupath.getImageData();
+        return entries == null
+                || (project != null && open != null && entries.contains(project.getEntry(open)));
     }
 
     /**
@@ -1202,6 +1223,14 @@ public class PhenotypingDialog {
                 Platform.runLater(() -> {
                     cachedHistogramData = histData;
                     cachedHistogramNorm = normId;
+                    Map<String, MarkerScaling> scalings = new LinkedHashMap<>();
+                    histData.forEach((marker, data) -> {
+                        MarkerScaling scaling = MarkerScaling.fromMap((Map<?, ?>) data.get("scaling"));
+                        if (scaling != null) {
+                            scalings.put(marker, scaling);
+                        }
+                    });
+                    thresholdPreview.setScalings(scalings);
                     progressBar.setProgress(1.0);
                     progressBar.setVisible(false);
                     statusLabel.setText("Thresholds computed for " + histData.size() + " markers. "
@@ -1291,7 +1320,8 @@ public class PhenotypingDialog {
             currentGate = markerSpinner.getValue();
         }
 
-        histogramPanel.setMarkerData(marker, counts, binEdges, quantiles, autoThresholds, currentGate);
+        histogramPanel.setMarkerData(marker, counts, binEdges, quantiles, autoThresholds,
+                GmmFit.fromMap((Map<?, ?>) markerData.get("gmm")), currentGate);
         histogramPane.setExpanded(true);
     }
 

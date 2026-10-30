@@ -184,7 +184,11 @@ Automatically compute marker gate thresholds instead of setting them manually.
      threshold falls inside a bar
 6. Change the **Method** dropdown from **Manual** (the default) to apply an auto-threshold:
    - **Triangle** -- geometric method, good for skewed distributions
-   - **GMM (Gaussian)** -- 2-component mixture model, good for bimodal data
+   - **GMM (Gaussian)** -- 2-component mixture model, good for bimodal data. The two fitted
+     components are drawn on the histogram, in the same cells-per-bar units as the bars. A
+     spike of identical values at the end of the range is left out of the fit; when it would
+     flatten the curves, the axis zooms to them and the plot says *axis zoomed*, so the spike's
+     bar is cut off at the top
    - **Gamma** -- gamma distribution fit, good for strictly positive markers
 7. You can drag the red threshold line with the mouse for fine-tuning (it moves in steps of
    0.001), or type a value into the **Threshold** box (up to four decimals, the precision the
@@ -192,6 +196,38 @@ Automatically compute marker gate thresholds instead of setting them manually.
 8. Click **Apply to All Markers** to set all gates using the selected method. A notification
    confirms it, e.g. "Applied 'gmm' thresholds to 6 markers."; with **Manual** selected there is
    nothing to apply, and the dialog asks you to pick a method first
+
+### Preview a gate on the image
+
+Tick **Show on the open image** under the histogram to see the gate on the cells themselves,
+before running anything. Each cell of the open image is colored by which side of the gate it
+falls on, in the histogram's colors, red at or above the gate and blue below it, and the colors
+follow the red line while you drag it. The line under the checkbox gives the count for that image.
+
+![Three panels of the same tissue with the marker PanCK at a gate of 0.04, 0.32 and 0.80. At 0.04 unstained cells are outlined red, at 0.32 the red outlines match the bright cells, and at 0.80 most bright cells are outlined blue. Each panel has its histogram with two fitted curves and the positive and negative counts below.](images/threshold-preview.png)
+
+*The same synthetic image at three gates for PanCK. Too low calls unstained cells positive; too
+high misses most of the stained ones.*
+
+- **Nothing is written to the cells.** Classifications stay as they are until you click
+  **Run Phenotyping**.
+- **The preview matches the run.** It reads the same cells and applies the same normalization,
+  using the numbers from **Compute Thresholds**. Checked against real runs: the positive count
+  was identical for all four normalizations, on one image and on a pooled scope.
+- **It shows the marker and the line in the histogram,** one marker at a time, and not the
+  whole rule. With a **Method** selected, that can be a suggestion you have not applied yet.
+- **Dots or outlines.** With more than 5,000 cells in view, each cell is a dot; zoom in and they
+  become cell outlines, so you can compare them with the staining. Choose **Positive only** or
+  **Negative only** to see one side. Cells with no value for the marker are gray, and are counted
+  as *No value*.
+- **Change the scope or the normalization, and the thresholds clear.** So does opening another
+  image under **Current image**. The preview then asks you to click **Compute Thresholds** again,
+  because the gate would no longer mean what the run will do with it. Under **All project images**
+  or **Specific images...** you can open any image to check the shared gate on it; an image the
+  run does not cover says so.
+
+The histogram's count is for all the cells in the scope. The preview's count is for the open image
+only, and it is exact, so on a single image the two can differ by up to 0.1% of the cells.
 
 | Method | What it fits | Where the threshold goes | Source |
 |---|---|---|---|

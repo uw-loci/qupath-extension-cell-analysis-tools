@@ -24,7 +24,9 @@ Outputs (via task.outputs):
   histograms_json: str (JSON) -- per-marker histogram, threshold data and
     "quantiles" (QUANTILE_COUNT values at evenly spaced probabilities 0..1)
     from which the dialog computes the fraction of cells a threshold calls
-    positive
+    positive; "scaling" ({offset, scale, low, high}, the normalization as
+    numbers, so the dialog can judge a cell as the run will); "gmm" (the two
+    fitted components, lower mean first, when the fit succeeded)
 """
 
 import importlib.util
@@ -96,8 +98,33 @@ def gmm_crossing(m1, s1, w1, m2, s2, w2):
     return (m1 + m2) / 2.0
 
 
-def gmm_threshold(values, max_iter=200):
-    """2-component GMM threshold, fitted to interior_values(values)."""
+def normalization_params(df, normalization):
+    """Per-column (offset, scale, low, high) for the chosen normalization.
+
+    A value becomes (clip(value, low, high) - offset) / scale. low and high are
+    None unless the method clips. Same statistics as run_phenotyping.py.
+    """
+    if normalization == "zscore":
+        std = df.std()
+        std[std == 0] = 1
+        return df.mean(), std, None, None
+    if normalization == "minmax":
+        dmin = df.min()
+        drange = df.max() - dmin
+        drange[drange == 0] = 1
+        return dmin, drange, None, None
+    if normalization == "percentile":
+        p1 = df.quantile(0.01)
+        p99 = df.quantile(0.99)
+        drange = p99 - p1
+        drange[drange == 0] = 1
+        return p1, drange, p1, p99
+    zeros = pd.Series(0.0, index=df.columns)
+    return zeros, zeros + 1.0, None, None
+
+
+def gmm_fit(values, max_iter=200):
+    """2-component GMM fitted to interior_values(values), lower mean first."""
     from sklearn.mixture import GaussianMixture
 
     fit_values = interior_values(values)
@@ -107,9 +134,19 @@ def gmm_threshold(values, max_iter=200):
     stds = np.sqrt(gmm.covariances_.flatten())
     weights = gmm.weights_.flatten()
     order = np.argsort(means)
-    m1, m2 = means[order]
-    s1, s2 = stds[order]
-    w1, w2 = weights[order]
+    return {
+        "means": [float(m) for m in means[order]],
+        "stds": [float(s) for s in stds[order]],
+        "weights": [float(w) for w in weights[order]],
+        "n_fit": int(len(fit_values)),
+    }
+
+
+def gmm_threshold(fit):
+    """Where the two components of a gmm_fit() result cross."""
+    m1, m2 = fit["means"]
+    s1, s2 = fit["stds"]
+    w1, w2 = fit["weights"]
     return float(gmm_crossing(m1, s1, w1, m2, s2, w2))
 
 
@@ -138,25 +175,11 @@ df = pd.DataFrame(data, columns=marker_names)
 # 2. Normalize (same logic as run_phenotyping.py)
 task.update("Normalizing measurements...")
 
-if normalization == "zscore":
-    std = df.std()
-    std[std == 0] = 1
-    df_norm = (df - df.mean()) / std
-elif normalization == "minmax":
-    dmin = df.min()
-    dmax = df.max()
-    drange = dmax - dmin
-    drange[drange == 0] = 1
-    df_norm = (df - dmin) / drange
-elif normalization == "percentile":
-    p1 = df.quantile(0.01)
-    p99 = df.quantile(0.99)
-    drange = p99 - p1
-    drange[drange == 0] = 1
-    df_norm = df.clip(lower=p1, upper=p99, axis=1)
-    df_norm = (df_norm - p1) / drange
-else:
-    df_norm = df.copy()
+norm_offset, norm_scale, clip_low, clip_high = normalization_params(df, normalization)
+df_clipped = (
+    df if clip_low is None else df.clip(lower=clip_low, upper=clip_high, axis=1)
+)
+df_norm = (df_clipped - norm_offset) / norm_scale
 
 # 3. Compute per-marker histograms and thresholds
 task.update("Computing histograms and thresholds...")
@@ -226,9 +249,11 @@ for i, marker in enumerate(list(marker_names)):
 
     # GMM (2-component Gaussian mixture); the threshold is the posterior-equal
     # crossing between the two means, not the mean midpoint.
+    fit = None
     if has_gmm:
         try:
-            t = gmm_threshold(valid, max_iter=GMM_MAX_ITER)
+            fit = gmm_fit(valid, max_iter=GMM_MAX_ITER)
+            t = gmm_threshold(fit)
             t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
             thresholds["gmm"] = round(t, 4)
         except Exception as e:
@@ -262,7 +287,15 @@ for i, marker in enumerate(list(marker_names)):
         "quantiles": [
             float(q) for q in np.quantile(valid, np.linspace(0.0, 1.0, QUANTILE_COUNT))
         ],
+        "scaling": {
+            "offset": float(norm_offset.iloc[i]),
+            "scale": float(norm_scale.iloc[i]),
+            "low": None if clip_low is None else float(clip_low.iloc[i]),
+            "high": None if clip_high is None else float(clip_high.iloc[i]),
+        },
     }
+    if fit is not None:
+        result[marker]["gmm"] = fit
 
     if (i + 1) % 5 == 0:
         task.update("Computing thresholds... (%d/%d markers)" % (i + 1, n_markers))

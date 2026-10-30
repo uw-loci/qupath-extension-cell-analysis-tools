@@ -8,8 +8,10 @@ import javafx.scene.control.*;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.text.TextAlignment;
 import javafx.scene.text.TextFlow;
 import qupath.ext.qpcat.model.GateCoverage;
+import qupath.ext.qpcat.model.GmmFit;
 import qupath.ext.qpcat.model.MeasurementNames;
 
 import java.util.Map;
@@ -18,8 +20,9 @@ import java.util.function.Consumer;
 /**
  * JavaFX component displaying a histogram with an interactive threshold line.
  * Shows histogram bars split-colored at the threshold, with auto-thresholding
- * method selection and pos/neg cell count statistics. A suggested threshold that
- * calls more than 95% or fewer than 5% of cells positive is flagged.
+ * method selection and pos/neg cell count statistics; the fitted components are
+ * drawn while GMM is selected. A suggested threshold that calls more than 95% or
+ * fewer than 5% of cells positive is flagged.
  */
 public class HistogramPanel extends VBox {
 
@@ -29,6 +32,7 @@ public class HistogramPanel extends VBox {
     private static final double MARGIN_RIGHT = 10;
     private static final double MARGIN_TOP = 10;
     private static final double MARGIN_BOTTOM = 25;
+    private static final double FIT_HEADROOM = 1.3;
 
     private final Canvas canvas;
     private final ComboBox<String> methodCombo;
@@ -38,6 +42,7 @@ public class HistogramPanel extends VBox {
     private final TextFlow markerTitle = new TextFlow();
 
     private Consumer<Double> onThresholdChanged;
+    private Runnable onDisplayChanged;
 
     // Current data
     private String currentMarker;
@@ -45,6 +50,7 @@ public class HistogramPanel extends VBox {
     private double[] binEdges;
     private double[] quantiles;
     private Map<String, Double> autoThresholds;
+    private GmmFit gmmFit;
     private double currentThreshold = 0.5;
     private boolean dragging = false;
     // True while we are programmatically loading a marker's data, so the
@@ -132,9 +138,10 @@ public class HistogramPanel extends VBox {
      *
      * @param quantiles the marker's values at evenly spaced probabilities 0..1,
      *                  used for the positive/negative counts; null shows none
+     * @param gmmFit    the marker's fitted mixture, or null when there is none
      */
     public void setMarkerData(String marker, int[] counts, double[] binEdges, double[] quantiles,
-                              Map<String, Double> autoThresholds, double currentGate) {
+                              Map<String, Double> autoThresholds, GmmFit gmmFit, double currentGate) {
         updating = true;
         try {
             this.currentMarker = marker;
@@ -142,6 +149,7 @@ public class HistogramPanel extends VBox {
             this.binEdges = binEdges;
             this.quantiles = quantiles;
             this.autoThresholds = autoThresholds;
+            this.gmmFit = gmmFit;
 
             // Keep the user's chosen method when stepping between markers. If a
             // non-Manual method is selected and this marker has that auto value,
@@ -228,6 +236,7 @@ public class HistogramPanel extends VBox {
         binEdges = null;
         quantiles = null;
         autoThresholds = null;
+        gmmFit = null;
         showTitle(message("Click a marker column header to view histogram"));
         statsLabel.setText("Pos: - | Neg: -");
         showSuggestionWarning(null);
@@ -240,6 +249,11 @@ public class HistogramPanel extends VBox {
 
     public void setOnThresholdChanged(Consumer<Double> callback) {
         this.onThresholdChanged = callback;
+    }
+
+    /** @param callback run whenever the marker or the red line changes, also during a drag */
+    public void setOnDisplayChanged(Runnable callback) {
+        this.onDisplayChanged = callback;
     }
 
     public double getCurrentThreshold() {
@@ -274,7 +288,7 @@ public class HistogramPanel extends VBox {
             redraw();
             fireThresholdChanged();
         } else {
-            updateStats();
+            redraw();
         }
     }
 
@@ -288,11 +302,6 @@ public class HistogramPanel extends VBox {
         double plotW = CANVAS_WIDTH - MARGIN_LEFT - MARGIN_RIGHT;
         double plotH = CANVAS_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM;
 
-        int maxCount = 1;
-        for (int c : counts) {
-            if (c > maxCount) maxCount = c;
-        }
-
         double dataMin = binEdges[0];
         double dataMax = binEdges[binEdges.length - 1];
         double dataRange = dataMax - dataMin;
@@ -300,10 +309,32 @@ public class HistogramPanel extends VBox {
 
         int nBins = counts.length;
         double barWidth = plotW / nBins;
+        double dataBinWidth = dataRange / nBins;
+        boolean showFit = gmmFit != null && "gmm".equals(methodKey(methodCombo.getValue()));
+
+        double maxCount = 1;
+        for (int c : counts) {
+            if (c > maxCount) maxCount = c;
+        }
+        // A floor of zero-signal cells, left out of the fit, can dwarf the fitted
+        // curves. With the curves on, the axis follows them and the spike is cut.
+        boolean axisZoomed = false;
+        if (showFit) {
+            double curveTop = 0;
+            for (int component = 0; component < 2; component++) {
+                double mean = Math.max(dataMin, Math.min(dataMax, gmmFit.means()[component]));
+                curveTop = Math.max(curveTop, gmmFit.cellsPerBin(component, mean, dataBinWidth));
+            }
+            curveTop *= FIT_HEADROOM;
+            axisZoomed = curveTop > 0 && curveTop < maxCount;
+            if (axisZoomed) {
+                maxCount = curveTop;
+            }
+        }
 
         // Draw bars
         for (int i = 0; i < nBins; i++) {
-            double barH = (counts[i] / (double) maxCount) * plotH;
+            double barH = Math.min(plotH, (counts[i] / maxCount) * plotH);
             double x = MARGIN_LEFT + i * barWidth;
             double y = MARGIN_TOP + plotH - barH;
 
@@ -314,6 +345,16 @@ public class HistogramPanel extends VBox {
                 gc.setFill(Color.rgb(220, 80, 60, 0.8)); // red for pos
             }
             gc.fillRect(x, y, Math.max(barWidth - 1, 1), barH);
+        }
+
+        if (showFit) {
+            drawGmmCurve(gc, 0, Color.rgb(30, 70, 160), plotW, plotH, dataMin, dataRange, dataBinWidth, maxCount);
+            drawGmmCurve(gc, 1, Color.rgb(150, 30, 20), plotW, plotH, dataMin, dataRange, dataBinWidth, maxCount);
+            gc.setFill(Color.gray(0.25));
+            gc.setTextAlign(TextAlignment.RIGHT);
+            gc.fillText(axisZoomed ? "GMM components (axis zoomed)" : "GMM components",
+                    CANVAS_WIDTH - MARGIN_RIGHT, MARGIN_TOP + 28);
+            gc.setTextAlign(TextAlignment.LEFT);
         }
 
         // Draw axes
@@ -330,7 +371,7 @@ public class HistogramPanel extends VBox {
                 CANVAS_WIDTH - MARGIN_RIGHT - 30, CANVAS_HEIGHT - 3);
 
         // Y-axis label
-        gc.fillText(String.valueOf(maxCount), 2, MARGIN_TOP + 10);
+        gc.fillText(String.valueOf(Math.round(maxCount)), 2, MARGIN_TOP + 10);
 
         // Threshold line
         double threshX = MARGIN_LEFT + ((currentThreshold - dataMin) / dataRange) * plotW;
@@ -348,6 +389,30 @@ public class HistogramPanel extends VBox {
 
         // Update stats
         updateStats();
+        if (onDisplayChanged != null) {
+            onDisplayChanged.run();
+        }
+    }
+
+    /** One fitted component, in the same cells-per-bin units as the bars. */
+    private void drawGmmCurve(GraphicsContext gc, int component, Color color, double plotW, double plotH,
+                              double dataMin, double dataRange, double dataBinWidth, double maxCount) {
+        gc.setStroke(color);
+        gc.setLineWidth(1.5);
+        gc.beginPath();
+        int steps = (int) plotW;
+        for (int i = 0; i <= steps; i++) {
+            double x = dataMin + dataRange * i / steps;
+            double y = gmmFit.cellsPerBin(component, x, dataBinWidth) / maxCount * plotH;
+            double px = MARGIN_LEFT + plotW * i / steps;
+            double py = MARGIN_TOP + plotH - y;
+            if (i == 0) {
+                gc.moveTo(px, py);
+            } else {
+                gc.lineTo(px, py);
+            }
+        }
+        gc.stroke();
     }
 
     private void updateStats() {
