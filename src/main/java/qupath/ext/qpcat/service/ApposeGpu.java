@@ -9,7 +9,6 @@
  */
 package qupath.ext.qpcat.service;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -438,7 +437,7 @@ public final class ApposeGpu {
             List<String> kept = new ArrayList<>();
             kept.add(envPrefix.resolve("lib").toString());
             List<String> dropped = new ArrayList<>();
-            for (String dir : inherited.getOrDefault("LD_LIBRARY_PATH", "").split(File.pathSeparator)) {
+            for (String dir : inherited.getOrDefault("LD_LIBRARY_PATH", "").split(":")) {
                 if (dir.isBlank() || kept.contains(dir)) {
                     continue;
                 }
@@ -452,7 +451,8 @@ public final class ApposeGpu {
                 logger.info("Not passing these LD_LIBRARY_PATH folders to the Python worker "
                         + "(no NVIDIA driver in them): {}", dropped);
             }
-            vars.put("LD_LIBRARY_PATH", String.join(File.pathSeparator, kept));
+            // ":" whatever the host: LD_LIBRARY_PATH is a Linux variable.
+            vars.put("LD_LIBRARY_PATH", String.join(":", kept));
         }
         return vars;
     }
