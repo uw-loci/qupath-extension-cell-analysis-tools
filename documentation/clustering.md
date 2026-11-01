@@ -54,7 +54,9 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
      version** picks **harmonypy 0.2.0 - same on every platform** (the default) or, on Linux
      and macOS, **harmonypy 2.1.0 - faster, Linux and macOS only**. The two give different
      corrected values for the same data, and a note under the dropdown says so on every
-     platform; see [Harmony version](../README.md#batch-correction-harmony)
+     platform; see [Harmony version](../README.md#batch-correction-harmony). A saved config
+     that asks for 2.1.0 on Windows, where it is not offered, runs 0.2.0 instead, and a
+     notification and the log say so
    - *Validation* (a collapsed section) -- optional checks that the clusters hold up across
      seeds and agree with classes the cells already carry; see
      [Checking the clusters](#checking-the-clusters-the-validation-section)
