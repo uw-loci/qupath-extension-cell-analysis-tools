@@ -2,6 +2,7 @@ package qupath.ext.qpcat.service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import qupath.ext.qpcat.model.CnWindow;
 
 /**
  * Every project-relative path QP-CAT writes to, in one place.
@@ -69,7 +70,8 @@ public final class QpcatPaths {
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
     /**
-     * Folder name for one cellular-neighborhood run, e.g. {@code cn_20260628_173500_k20_n10}.
+     * Folder name for one cellular-neighborhood run, e.g. {@code cn_20260628_173500_k20_n10}
+     * or {@code cn_20260628_173500_r50um_n10}.
      * <p>
      * Runs used to be named by the first eight characters of a UUID, which said nothing
      * about when the run happened, over what, or with which settings. This mirrors the
@@ -78,11 +80,11 @@ public final class QpcatPaths {
      * operation log.
      *
      * @param when           when the run started
-     * @param kNeighbors     window size
+     * @param window         how the run defined each cell's window
      * @param nNeighborhoods requested neighborhood count
      * @return the folder name
      */
-    public static String cnRunFolderName(LocalDateTime when, int kNeighbors, int nNeighborhoods) {
-        return "cn_" + STAMP.format(when) + "_k" + kNeighbors + "_n" + nNeighborhoods;
+    public static String cnRunFolderName(LocalDateTime when, CnWindow window, int nNeighborhoods) {
+        return "cn_" + STAMP.format(when) + "_" + window.folderTag() + "_n" + nNeighborhoods;
     }
 }

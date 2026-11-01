@@ -1,5 +1,6 @@
 package qupath.ext.qpcat.service;
 
+import qupath.ext.qpcat.model.CnWindow;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDateTime;
@@ -35,14 +36,21 @@ class QpcatPathsTest {
 
     @Test
     void aRunFolderSaysWhenAndWithWhatSettings() {
-        assertThat(QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 35, 0), 20, 10))
+        assertThat(QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 35, 0), new CnWindow(20, false, 0), 10))
                 .isEqualTo("cn_20260628_173500_k20_n10");
     }
 
     @Test
+    void cnRunFolderNamesTheRadiusWhenThatWasTheWindow() {
+        assertThat(QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 35, 0),
+                new CnWindow(20, true, 50.0), 10))
+                .isEqualTo("cn_20260628_173500_r50um_n10");
+    }
+
+    @Test
     void runFoldersSortChronologicallyByName() {
-        String earlier = QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 35, 0), 20, 10);
-        String later = QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 36, 0), 20, 10);
+        String earlier = QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 35, 0), new CnWindow(20, false, 0), 10);
+        String later = QpcatPaths.cnRunFolderName(LocalDateTime.of(2026, 6, 28, 17, 36, 0), new CnWindow(20, false, 0), 10);
         assertThat(earlier).isLessThan(later);
     }
 

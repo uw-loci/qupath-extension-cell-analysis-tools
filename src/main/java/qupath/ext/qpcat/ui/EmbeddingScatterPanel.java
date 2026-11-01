@@ -4,6 +4,8 @@ import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.CheckBox;
@@ -513,7 +515,49 @@ public class EmbeddingScatterPanel extends VBox {
         // repaints once the panel is shown again.
         if (canvas.getScene() == null || !canvas.isVisible()) return;
 
-        GraphicsContext gc = canvas.getGraphicsContext2D();
+        paint(canvas.getGraphicsContext2D(), cw, ch);
+    }
+
+    /**
+     * The plot beside its whole legend, for saving as a figure. The plot is redrawn at
+     * the export scale instead of enlarging the screen's pixels, and the legend lists
+     * every cluster, including rows the on-screen list has scrolled out of view.
+     *
+     * @param scale export pixels per screen pixel
+     * @return a node in a scene of its own, to snapshot at that scale
+     */
+    Node exportView(double scale) {
+        double cw = canvas.getWidth();
+        double ch = canvas.getHeight();
+        Canvas sharp = new Canvas(Math.ceil(cw * scale), Math.ceil(ch * scale));
+        GraphicsContext gc = sharp.getGraphicsContext2D();
+        gc.scale(scale, scale);
+        paint(gc, cw, ch);
+        ImageView plot = new ImageView(sharp.snapshot(null, null));
+        plot.setFitWidth(cw);
+        plot.setFitHeight(ch);
+
+        Label title = new Label(legendTitle.getText());
+        title.setStyle("-fx-font-weight: bold; -fx-font-size: 11px;");
+        VBox legend = new VBox(2, title);
+        legend.getChildren().addAll(legendRows());
+        legend.setMinWidth(150);
+
+        // A saved figure stays dark on white whatever theme QuPath is using.
+        for (Node label : legend.lookupAll(".label")) {
+            label.setStyle(label.getStyle() + " -fx-text-fill: black;");
+        }
+        HBox view = new HBox(10, plot, legend);
+        view.setPadding(new Insets(8));
+        view.setStyle("-fx-background-color: white;");
+        // Controls paint nothing until a scene has given them a skin.
+        new Scene(view);
+        view.applyCss();
+        view.layout();
+        return view;
+    }
+
+    private void paint(GraphicsContext gc, double cw, double ch) {
         gc.setFill(Color.WHITE);
         gc.fillRect(0, 0, cw, ch);
 
@@ -677,10 +721,16 @@ public class EmbeddingScatterPanel extends VBox {
      * nothing is cut off regardless of cluster count.
      */
     private void rebuildLegend() {
-        legendBox.getChildren().clear();
+        legendBox.getChildren().setAll(legendRows());
+        legendTitle.setText(labels == null || nClusters <= 0
+                ? "Clusters" : "Clusters (" + nClusters + ")");
+    }
+
+    /** One new legend row per cluster, plus noise if present. */
+    private List<HBox> legendRows() {
+        List<HBox> rows = new ArrayList<>();
         if (labels == null || nClusters <= 0) {
-            legendTitle.setText("Clusters");
-            return;
+            return rows;
         }
         // Per-cluster counts (index = cluster id; noise counted separately).
         int[] counts = new int[nClusters];
@@ -689,13 +739,13 @@ public class EmbeddingScatterPanel extends VBox {
             if (lab >= 0 && lab < nClusters) counts[lab]++;
             else noise++;
         }
-        legendTitle.setText("Clusters (" + nClusters + ")");
         for (int i = 0; i < nClusters; i++) {
-            legendBox.getChildren().add(legendRow(clusterColor(i), displayName(i), counts[i]));
+            rows.add(legendRow(clusterColor(i), displayName(i), counts[i]));
         }
         if (noise > 0) {
-            legendBox.getChildren().add(legendRow(Color.LIGHTGRAY, "Noise", noise));
+            rows.add(legendRow(Color.LIGHTGRAY, "Noise", noise));
         }
+        return rows;
     }
 
     private HBox legendRow(Color color, String name, int count) {

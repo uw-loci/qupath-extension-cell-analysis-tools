@@ -3876,6 +3876,25 @@ public class ClusteringDialog {
         ClusteringConfigManager.saveLastRun(qupath.getProject(), mode.settingsKey(), config);
     }
 
+    /**
+     * What to tell the user when a config asked for a Harmony version this platform
+     * does not offer.
+     *
+     * @param config      the config being applied
+     * @param fastOffered whether the dialog lists the fast version
+     * @return the note, or null when the requested version will run
+     */
+    static String harmonyFallbackNote(ClusteringConfig config, boolean fastOffered) {
+        if (fastOffered || !config.isEnableBatchCorrection()
+                || !ClusteringConfig.HARMONYPY_FAST.equals(config.getHarmonyVersion())) {
+            return null;
+        }
+        return "These settings used harmonypy " + ClusteringConfig.HARMONYPY_FAST
+                + ", which has no Windows build. Using harmonypy "
+                + ClusteringConfig.HARMONYPY_PORTABLE
+                + " instead, so the corrected values and clusters can differ.";
+    }
+
     private void applyConfig(ClusteringConfig config) {
         // Algorithm. Not in "analyze current classifications": the algorithm
         // there is always EXISTING, the combo is built but never shown, and
@@ -4026,10 +4045,15 @@ public class ClusteringDialog {
                         ? BATCH_KEY_AREAS_LABEL : BATCH_KEY_IMAGES_LABEL);
         // A config saved on Linux or macOS with the fast version falls back to the
         // portable one on Windows, where the fast one is not offered.
+        boolean fastOffered = harmonyVersionCombo.getItems().contains(HARMONY_FAST_LABEL);
         harmonyVersionCombo.setValue(
-                ClusteringConfig.HARMONYPY_FAST.equals(config.getHarmonyVersion())
-                        && harmonyVersionCombo.getItems().contains(HARMONY_FAST_LABEL)
+                ClusteringConfig.HARMONYPY_FAST.equals(config.getHarmonyVersion()) && fastOffered
                         ? HARMONY_FAST_LABEL : HARMONY_PORTABLE_LABEL);
+        String harmonyFallback = harmonyFallbackNote(config, fastOffered);
+        if (harmonyFallback != null) {
+            logger.warn(harmonyFallback);
+            Dialogs.showWarningNotification("QPCAT", harmonyFallback);
+        }
 
         // Spatial statistics expansion (v1) -- the saved-config schema may
         // pre-date these fields; the ClusteringConfig defaults cover that case.
@@ -6283,20 +6307,29 @@ public class ClusteringDialog {
      * <p>
      * If a {@code ScrollPane} sits in that content, its {@code getContent()} is
      * returned instead: snapshotting the ScrollPane captures only the current
-     * viewport, silently cropping anything scrolled out of view.
+     * viewport, silently cropping anything scrolled out of view. An embedding
+     * scatter returns the panel itself, because its only scroll pane is the legend, and
+     * the 3D view stays whole, because its only scroll pane is a side panel.
      */
-    private static Node plotContentOf(Tab tab) {
+    static Node plotContentOf(Tab tab) {
         Node content = tab.getContent();
         if (content instanceof VBox vbox && vbox.getChildren().size() >= 2
                 && vbox.getChildren().get(0) instanceof BorderPane) {
             content = vbox.getChildren().get(1);
         }
-        ScrollPane scroll = findScrollPane(content);
+        EmbeddingScatterPanel scatter = findFirst(content, EmbeddingScatterPanel.class);
+        if (scatter != null) {
+            return scatter;
+        }
+        if (findFirst(content, qupath.ext.cluster3d.ui.Cluster3DNavigatorPane.class) != null) {
+            return content;
+        }
+        ScrollPane scroll = findFirst(content, ScrollPane.class);
         return (scroll != null && scroll.getContent() != null) ? scroll.getContent() : content;
     }
 
     /**
-     * First {@code ScrollPane} in this subtree (depth-first), or null.
+     * First node of this type in this subtree (depth-first), or null.
      * <p>
      * Does NOT descend into other {@link Control}s. A {@code TableView} or
      * {@code ListView} builds its own scrolling machinery inside its skin, and
@@ -6304,16 +6337,16 @@ public class ClusteringDialog {
      * a table missing every row the user had not scrolled to. Stopping at the
      * control keeps the whole control in frame instead.
      */
-    private static ScrollPane findScrollPane(Node node) {
-        if (node instanceof ScrollPane sp) {
-            return sp;
+    private static <T extends Node> T findFirst(Node node, Class<T> type) {
+        if (type.isInstance(node)) {
+            return type.cast(node);
         }
         if (node instanceof Control) {
             return null;
         }
         if (node instanceof Parent parent) {
             for (Node child : parent.getChildrenUnmodifiable()) {
-                ScrollPane found = findScrollPane(child);
+                T found = findFirst(child, type);
                 if (found != null) {
                     return found;
                 }
@@ -6359,7 +6392,9 @@ public class ClusteringDialog {
             double scale = QpcatPreferences.getSavedPlotSnapshotScale();
             SnapshotParameters params = new SnapshotParameters();
             params.setTransform(Transform.scale(scale, scale));
-            WritableImage image = target.snapshot(params, null);
+            Node figure = target instanceof EmbeddingScatterPanel scatter
+                    ? scatter.exportView(scale) : target;
+            WritableImage image = figure.snapshot(params, null);
             BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
             ImageIO.write(buffered, "png", file);
             // Same export convention as every other QP-CAT export: say where it

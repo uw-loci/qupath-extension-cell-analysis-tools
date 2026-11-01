@@ -6,6 +6,7 @@ import org.apposed.appose.Service.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.model.CnWindow;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellClasses;
@@ -184,7 +185,7 @@ public class CellularNeighborhoodWorkflow {
     /**
      * Run cellular-neighborhood analysis on the current image's detections.
      *
-     * @param kNeighbors      window size (number of nearest neighbors, includes self)
+     * @param window          how each cell's window is defined
      * @param nNeighborhoods  number of neighborhoods for k-means
      * @param seed            random seed for k-means reproducibility
      * @param generateHeatmap render the CN x cell-type enrichment heatmap PNG
@@ -192,8 +193,8 @@ public class CellularNeighborhoodWorkflow {
      * @return summary of the run; {@link CnResult#isApplied()} is false if cancelled
      * @throws IOException on extraction / Python failure
      */
-    public CnResult run(int kNeighbors, int nNeighborhoods, int seed,
-                        boolean generateHeatmap, boolean radiusMode, double radiusMicrons,
+    public CnResult run(CnWindow window, int nNeighborhoods, int seed,
+                        boolean generateHeatmap,
                         List<AreaLevelSpec> areaLevels,
                         Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
@@ -231,8 +232,8 @@ public class CellularNeighborhoodWorkflow {
         // Provenance.
         String runId = UUID.randomUUID().toString();
         String paramsHash = Integer.toHexString(
-                java.util.Objects.hash(kNeighbors, nNeighborhoods, seed, classNames,
-                        radiusMode, radiusMicrons));
+                java.util.Objects.hash(window.kNeighbors(), nNeighborhoods, seed, classNames,
+                        window.radiusMode(), window.radiusMicrons()));
 
         if (cancelled) {
             return new CnResult(false, 0, nCells, "{}", "", runId, paramsHash);
@@ -253,9 +254,9 @@ public class CellularNeighborhoodWorkflow {
         Map<String, Object> resultMap;
         try {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
-                    executeTask(detections, typeLabels, classNames, kNeighbors,
+                    executeTask(detections, typeLabels, classNames, window.kNeighbors(),
                             nNeighborhoods, seed, generateHeatmap, heatmapDirFinal,
-                            radiusMode, radiusMicrons, new double[]{pxUm},
+                            window.radiusMode(), window.radiusMicrons(), new double[]{pxUm},
                             areaLevels, imageNameOf(imageData), imageData.getHierarchy(),
                             progress));
         } catch (IOException e) {
@@ -289,7 +290,7 @@ public class CellularNeighborhoodWorkflow {
             }
         });
 
-        recordWorkflowStep(imageData, kNeighbors, nNeighborhoods, actualCn, nCells,
+        recordWorkflowStep(imageData, window, nNeighborhoods, actualCn, nCells,
                 classNames.size(), runId, paramsHash);
 
         long elapsed = System.currentTimeMillis() - startTime;
@@ -297,7 +298,7 @@ public class CellularNeighborhoodWorkflow {
                 + " neighborhoods over " + nCells + " cells.";
         report(progress, completeMsg);
         OperationLogger.getInstance().logOperation("CELLULAR NEIGHBORHOODS",
-                Map.of("k_neighbors", String.valueOf(kNeighbors),
+                Map.of("window", window.detail(),
                        "n_neighborhoods", String.valueOf(nNeighborhoods),
                        "cell_type_classes", String.valueOf(classNames.size()),
                        "cells", String.valueOf(nCells),
@@ -359,7 +360,7 @@ public class CellularNeighborhoodWorkflow {
      * set so the dialog can flag the inconsistent panel.</p>
      *
      * @param imageEntries     project images to include
-     * @param kNeighbors       window size (nearest neighbors, includes self)
+     * @param window           how each cell's window is defined
      * @param nNeighborhoods   number of neighborhoods for the joint k-means
      * @param seed             random seed for k-means reproducibility
      * @param generateHeatmap  render the enrichment + proportion heatmaps
@@ -367,9 +368,8 @@ public class CellularNeighborhoodWorkflow {
      * @param progress         optional progress callback
      */
     public CnProjectResult runProject(List<ProjectImageEntry<BufferedImage>> imageEntries,
-                                      int kNeighbors, int nNeighborhoods, int seed,
+                                      CnWindow window, int nNeighborhoods, int seed,
                                       boolean generateHeatmap, String groupMetadataKey,
-                                      boolean radiusMode, double radiusMicrons,
                                       List<AreaLevelSpec> areaLevels,
                                       Consumer<String> progress) throws IOException {
         long startTime = System.currentTimeMillis();
@@ -487,8 +487,8 @@ public class CellularNeighborhoodWorkflow {
 
         String runId = UUID.randomUUID().toString();
         String paramsHash = Integer.toHexString(java.util.Objects.hash(
-                kNeighbors, nNeighborhoods, seed, classNames, imageNames, groupMetadataKey,
-                radiusMode, radiusMicrons));
+                window.kNeighbors(), nNeighborhoods, seed, classNames, imageNames,
+                groupMetadataKey, window.radiusMode(), window.radiusMicrons()));
 
         if (cancelled) {
             return new CnProjectResult(false, 0, totalCells, loaded.size(), null,
@@ -496,7 +496,7 @@ public class CellularNeighborhoodWorkflow {
         }
 
         // 5. Results folder under the project (heatmaps + tables land here).
-        Path resultsDir = createResultsDir(runId, kNeighbors, nNeighborhoods);
+        Path resultsDir = createResultsDir(runId, window, nNeighborhoods);
 
         // 6. Run the joint Python task.
         report(progress, "Sending " + totalCells + " cells from " + loaded.size()
@@ -526,9 +526,10 @@ public class CellularNeighborhoodWorkflow {
         Map<String, Object> resultMap;
         try {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
-                    runCnTask(coords, typeLabels, classNames, kNeighbors, nNeighborhoods,
+                    runCnTask(coords, typeLabels, classNames, window.kNeighbors(), nNeighborhoods,
                             seed, generateHeatmap, resultsDir, imageIds, imageNames,
-                            groupLabelsF, groupNamesF, radiusMode, radiusMicrons, pixelSizes,
+                            groupLabelsF, groupNamesF, window.radiusMode(),
+                            window.radiusMicrons(), pixelSizes,
                             areaIdsF, areaNamesF, progress));
         } catch (IOException e) {
             throw e;
@@ -564,7 +565,7 @@ public class CellularNeighborhoodWorkflow {
             System.arraycopy(cnLabels, start, segLabels, 0, end - start);
             applier.applyNeighborhoodMeasurement(li.detections, segLabels,
                     ResultApplier.NEIGHBORHOOD_MEASUREMENT);
-            recordProjectWorkflowStep(li.imageData, kNeighbors, nNeighborhoods, actualCn,
+            recordProjectWorkflowStep(li.imageData, window, nNeighborhoods, actualCn,
                     li.detections.size(), totalCells, loaded.size(), classNames.size(),
                     runId, paramsHash);
             try {
@@ -588,8 +589,12 @@ public class CellularNeighborhoodWorkflow {
         });
 
         // 8. Write the cohort tables + a run-info file next to the heatmaps.
+        List<String> radiusInPixels = loaded.stream()
+                .filter(li -> radiusReadAsPixels(window, li.imageData))
+                .map(li -> li.entry.getImageName())
+                .toList();
         writeCohortTables(resultsDir, perSampleJson, groupJson, adjacencyJson, runId, paramsHash,
-                kNeighbors, nNeighborhoods, actualCn, totalCells, loaded.size(),
+                window, radiusInPixels, nNeighborhoods, actualCn, totalCells, loaded.size(),
                 classNames, groupMetadataKey, divergenceWarning);
 
         long elapsed = System.currentTimeMillis() - startTime;
@@ -598,7 +603,7 @@ public class CellularNeighborhoodWorkflow {
                 + " images.";
         report(progress, completeMsg);
         OperationLogger.getInstance().logOperation("CELLULAR NEIGHBORHOODS (project)",
-                Map.of("k_neighbors", String.valueOf(kNeighbors),
+                Map.of("window", window.detail(),
                        "n_neighborhoods", String.valueOf(nNeighborhoods),
                        "cell_type_classes", String.valueOf(classNames.size()),
                        "images", String.valueOf(loaded.size()),
@@ -654,16 +659,16 @@ public class CellularNeighborhoodWorkflow {
      * {@code cn_RUN_INFO.txt} as the join key to the operation log.
      *
      * @param runId          the run's UUID, used only to break a same-second collision
-     * @param kNeighbors     window size, part of the folder name
+     * @param window         the window definition, part of the folder name
      * @param nNeighborhoods requested neighborhood count, part of the folder name
      * @return the created directory, or a temp directory if the project has no path
      */
-    private Path createResultsDir(String runId, int kNeighbors, int nNeighborhoods) {
+    private Path createResultsDir(String runId, CnWindow window, int nNeighborhoods) {
         try {
             if (qupath != null && qupath.getProject() != null
                     && qupath.getProject().getPath() != null) {
                 String folder = QpcatPaths.cnRunFolderName(
-                        java.time.LocalDateTime.now(), kNeighbors, nNeighborhoods);
+                        java.time.LocalDateTime.now(), window, nNeighborhoods);
                 Path parent = qupath.getProject().getPath().getParent()
                         .resolve(QpcatPaths.CELLULAR_NEIGHBORHOODS);
                 Path base = parent.resolve(folder);
@@ -766,6 +771,24 @@ public class CellularNeighborhoodWorkflow {
     }
 
     /** Averaged pixel size in microns, or 1.0 if the image is uncalibrated. */
+    /** Whether a radius window was read as pixels because the image has no pixel size. */
+    private static boolean radiusReadAsPixels(CnWindow window, ImageData<BufferedImage> imageData) {
+        if (!window.radiusMode()) {
+            return false;
+        }
+        try {
+            return !imageData.getServer().getPixelCalibration().hasPixelSizeMicrons();
+        } catch (Exception e) {
+            return true;  // pixelSizeMicrons falls back to 1 here too
+        }
+    }
+
+    /** The extra Workflow line for {@link #radiusReadAsPixels}, or an empty string. */
+    private static String pixelRadiusLine(CnWindow window, ImageData<BufferedImage> imageData) {
+        return radiusReadAsPixels(window, imageData)
+                ? "\n// No pixel size on this image: the radius was read as pixels." : "";
+    }
+
     private static double pixelSizeMicrons(ImageData<BufferedImage> imageData) {
         try {
             double um = imageData.getServer().getPixelCalibration().getAveragedPixelSizeMicrons();
@@ -893,21 +916,22 @@ public class CellularNeighborhoodWorkflow {
         }
     }
 
-    private void recordWorkflowStep(ImageData<BufferedImage> imageData, int kNeighbors,
+    private void recordWorkflowStep(ImageData<BufferedImage> imageData, CnWindow window,
                                     int nNeighborhoods, int actualCn, int nCells,
                                     int nClasses, String runId, String paramsHash) {
         if (imageData == null) return;
         try {
             String script = String.join("\n",
                     "// QP-CAT cellular neighborhoods",
-                    "// Window k=" + kNeighbors + " nearest neighbors; k-means into "
+                    "// Window: " + window.detail() + "; k-means into "
                             + nNeighborhoods + " neighborhoods (" + actualCn + " produced)",
                     "// Cell-type classes used: " + nClasses,
                     "// Result: " + actualCn + " neighborhoods over " + nCells + " cells",
                     "// Neighborhood id written as measurement 'QPCAT CN'",
-                    "// run_id: " + runId + "  params_hash: " + paramsHash);
+                    "// run_id: " + runId + "  params_hash: " + paramsHash)
+                    + pixelRadiusLine(window, imageData);
             String stepName = "QP-CAT: cellular neighborhoods (" + actualCn
-                    + " neighborhoods, k=" + kNeighbors + ")";
+                    + " neighborhoods, " + window.summary() + ")";
             imageData.getHistoryWorkflow().addStep(
                     new DefaultScriptableWorkflowStep(stepName, script));
         } catch (Exception e) {
@@ -921,7 +945,7 @@ public class CellularNeighborhoodWorkflow {
      * came from a cross-image run. Informational by design (not runnable): a
      * naive single-image re-run would recompute different neighborhoods.
      */
-    private void recordProjectWorkflowStep(ImageData<BufferedImage> imageData, int kNeighbors,
+    private void recordProjectWorkflowStep(ImageData<BufferedImage> imageData, CnWindow window,
                                            int nNeighborhoods, int actualCn, int imageCells,
                                            int totalCells, int nImages, int nClasses,
                                            String runId, String paramsHash) {
@@ -929,7 +953,7 @@ public class CellularNeighborhoodWorkflow {
         try {
             String script = String.join("\n",
                     "// QP-CAT cellular neighborhoods (JOINT, " + nImages + " images)",
-                    "// Window k=" + kNeighbors + " nearest neighbors WITHIN each image; one",
+                    "// Window: " + window.detail() + ", WITHIN each image; one",
                     "//   k-means over the pooled composition vectors into " + nNeighborhoods
                             + " neighborhoods (" + actualCn + " produced).",
                     "// Cell-type classes (union across images): " + nClasses,
@@ -940,9 +964,10 @@ public class CellularNeighborhoodWorkflow {
                             + " images; re-running cellular neighborhoods on this image",
                     "//   alone would produce DIFFERENT labels (a CN id would no longer mean",
                     "//   the same mixture across the cohort). To reproduce, re-run with the",
-                    "//   same image scope. run_id: " + runId + "  params_hash: " + paramsHash);
+                    "//   same image scope. run_id: " + runId + "  params_hash: " + paramsHash)
+                    + pixelRadiusLine(window, imageData);
             String stepName = "QP-CAT: cellular neighborhoods (joint, " + nImages
-                    + " images, " + actualCn + " neighborhoods, k=" + kNeighbors + ")";
+                    + " images, " + actualCn + " neighborhoods, " + window.summary() + ")";
             imageData.getHistoryWorkflow().addStep(
                     new DefaultScriptableWorkflowStep(stepName, script));
         } catch (Exception e) {
@@ -958,7 +983,8 @@ public class CellularNeighborhoodWorkflow {
      */
     private void writeCohortTables(Path resultsDir, String perSampleJson, String groupJson,
                                    String adjacencyJson, String runId, String paramsHash,
-                                   int kNeighbors, int nNeighborhoods, int actualCn,
+                                   CnWindow window, List<String> radiusInPixels,
+                                   int nNeighborhoods, int actualCn,
                                    int totalCells, int nImages, List<String> classNames,
                                    String groupMetadataKey, String divergenceWarning) {
         if (resultsDir == null) return;
@@ -986,7 +1012,11 @@ public class CellularNeighborhoodWorkflow {
             info.append("QP-CAT joint cellular-neighborhood run\n");
             info.append("run_id: ").append(runId).append('\n');
             info.append("params_hash: ").append(paramsHash).append('\n');
-            info.append("k_neighbors (window): ").append(kNeighbors).append('\n');
+            info.append("window: ").append(window.detail()).append('\n');
+            if (!radiusInPixels.isEmpty()) {
+                info.append("  read as pixels on images with no pixel size: ")
+                        .append(String.join(", ", radiusInPixels)).append('\n');
+            }
             info.append("n_neighborhoods requested: ").append(nNeighborhoods)
                     .append(" (produced ").append(actualCn).append(")\n");
             info.append("images: ").append(nImages).append('\n');

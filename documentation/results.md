@@ -1045,7 +1045,9 @@ arranged rather than anything inside any of them.
 
 **Save plot...** exports whichever tab is on top as a PNG, exactly as displayed. The
 Heatmap, Marker Fingerprints, Embedding and 3D View tabs are drawn live and have no other
-export, so this is the only way to get them out.
+export, so this is the only way to get them out. On a 2D embedding tab such as **UMAP 2D** the
+PNG is the plot beside every row of its legend, dark on white in any theme. On a composition tab
+it is the pies only; **Export figure + table...** on that tab also writes the legend and table.
 
 The chooser opens in this result's own folder. The PNG includes content scrolled out of
 view, and resolution follows the **Plot resolution (DPI)** preference, so it matches the figures

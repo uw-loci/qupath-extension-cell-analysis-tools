@@ -26,6 +26,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.CellularNeighborhoodWorkflow;
+import qupath.ext.qpcat.model.CnWindow;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.fx.dialogs.Dialogs;
@@ -415,11 +416,10 @@ public class CellularNeighborhoodDialog {
     }
 
     private void runAnalysis() {
-        int k = kSpinner.getValue();
+        CnWindow window = new CnWindow(kSpinner.getValue(), windowRadius.isSelected(),
+                radiusSpinner.getValue());
         int nCn = nNeighborhoodsSpinner.getValue();
         boolean heatmap = heatmapCheck.isSelected();
-        boolean radiusMode = windowRadius.isSelected();
-        double radiusMicrons = radiusSpinner.getValue();
 
         List<ProjectImageEntry<BufferedImage>> scopeEntries = resolveScopeEntries();
         if (scopeEntries != null) {
@@ -431,8 +431,7 @@ public class CellularNeighborhoodDialog {
             }
             String groupKey = groupByCombo == null ? null : groupByCombo.getValue();
             if (NO_GROUPING.equals(groupKey)) groupKey = null;
-            runProjectAnalysis(scopeEntries, k, nCn, heatmap, groupKey,
-                    radiusMode, radiusMicrons);
+            runProjectAnalysis(scopeEntries, window, nCn, heatmap, groupKey);
             return;
         }
 
@@ -449,7 +448,7 @@ public class CellularNeighborhoodDialog {
                 Consumer<String> progress = msg ->
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnResult result =
-                        workflow.run(k, nCn, 0, heatmap, radiusMode, radiusMicrons,
+                        workflow.run(window, nCn, 0, heatmap,
                                 areasSection.getAreaLevels(),
                                 progress);
 
@@ -471,7 +470,7 @@ public class CellularNeighborhoodDialog {
             } catch (Exception e) {
                 logger.error("Cellular-neighborhood analysis failed", e);
                 OperationLogger.getInstance().logFailure("CELLULAR NEIGHBORHOODS",
-                        java.util.Map.of("k_neighbors", String.valueOf(k),
+                        java.util.Map.of("window", window.detail(),
                                 "n_neighborhoods", String.valueOf(nCn)),
                         e.getMessage(), -1);
                 Platform.runLater(() -> {
@@ -488,8 +487,8 @@ public class CellularNeighborhoodDialog {
 
     /** Run the JOINT multi-image path and surface the cohort results. */
     private void runProjectAnalysis(List<ProjectImageEntry<BufferedImage>> entries,
-                                    int k, int nCn, boolean heatmap, String groupKey,
-                                    boolean radiusMode, double radiusMicrons) {
+                                    CnWindow window, int nCn, boolean heatmap,
+                                    String groupKey) {
         setRunActive(true);
         final CellularNeighborhoodWorkflow workflow = new CellularNeighborhoodWorkflow(qupath);
         activeWorkflow = workflow;
@@ -498,8 +497,7 @@ public class CellularNeighborhoodDialog {
                 Consumer<String> progress = msg ->
                         Platform.runLater(() -> statusLabel.setText(msg));
                 CellularNeighborhoodWorkflow.CnProjectResult result =
-                        workflow.runProject(entries, k, nCn, 0, heatmap, groupKey,
-                                radiusMode, radiusMicrons,
+                        workflow.runProject(entries, window, nCn, 0, heatmap, groupKey,
                                 areasSection.getAreaLevels(), progress);
 
                 Platform.runLater(() -> {
@@ -519,7 +517,7 @@ public class CellularNeighborhoodDialog {
             } catch (Exception e) {
                 logger.error("Joint cellular-neighborhood analysis failed", e);
                 OperationLogger.getInstance().logFailure("CELLULAR NEIGHBORHOODS (project)",
-                        java.util.Map.of("k_neighbors", String.valueOf(k),
+                        java.util.Map.of("window", window.detail(),
                                 "n_neighborhoods", String.valueOf(nCn)),
                         e.getMessage(), -1);
                 Platform.runLater(() -> {

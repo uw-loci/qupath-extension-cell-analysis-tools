@@ -118,7 +118,8 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
    - **Radius (um)**: every cell within a fixed physical radius (the CytoMAP-style
      neighborhood -- more interpretable and density-aware). 50 um is a common
      start. Needs image pixel calibration; an uncalibrated image treats the radius
-     as pixels (converted per image, so differing pixel sizes are handled).
+     as pixels (converted per image, so differing pixel sizes are handled), and
+     `cn_RUN_INFO.txt` and that image's Workflow step name it when that happens.
 6. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
 7. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).
@@ -147,7 +148,8 @@ same neighborhood labels.
 - For **joint** runs, labels are written back and **saved to every selected
   image**, and the cohort tables + heatmaps are written to a results folder under
   the project, one folder per run named by time and settings
-  (`qpcat/cellular_neighborhoods/cn_20260628_173500_k20_n10/`). The run's UUID is
+  (`qpcat/cellular_neighborhoods/cn_20260628_173500_k20_n10/`, or `..._r50um_n10` for a
+  50 um window radius). The run's UUID is
   recorded inside `cn_RUN_INFO.txt`, which also notes that the cell-type classes were
   read from whatever the objects carried at the time -- a clustering result, phenotyping,
   an imported classifier or hand edits -- so the run records no parent result.

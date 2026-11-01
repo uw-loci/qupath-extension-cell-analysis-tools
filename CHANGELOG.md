@@ -4,6 +4,25 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.23.4] -- 2026-11-01 -- UMAP figures save whole, neighborhood runs name their radius
+
+### Fixed
+
+- **Save plot... on the UMAP tab wrote only the cluster legend (#21).** It saved the first
+  scroll pane it found in the tab, which there is the legend. It now saves the plot beside the
+  whole legend, redrawn at the **Plot resolution (DPI)** preference rather than enlarged from the
+  screen, and dark on white in any theme. The **3D View** tab had the same fault, and saved a
+  side panel instead of the view.
+- **A cellular-neighborhood run with a window radius was recorded as k = 20 (#19).** The radius
+  was always applied, so results were right, but the folder name, `cn_RUN_INFO.txt`, the Workflow
+  step and the audit log gave only the k setting, which that run did not use, and never the
+  radius. They now say what ran: `cn_..._r50um_n10`, and `window: every cell within 50 um`. Runs
+  already made keep their old records. Where an image has no pixel size the radius is read as
+  pixels, and `cn_RUN_INFO.txt` and that image's Workflow step now say so.
+- **Opening harmonypy 2.1.0 settings on Windows changed version silently.** A saved config, or a
+  project last run on Linux or macOS with 2.1.0, switches to 0.2.0 on Windows, which has no 2.1.0
+  build. QP-CAT now says so in a notification and the log.
+
 ## [0.23.3] -- 2026-10-30 -- see a gate on the cells, a faster Harmony to opt into, and Harmony that fits the GPU
 
 ### Added

@@ -132,7 +132,7 @@ tests had missed it, because every one of them passed measurements that existed.
 `service/ApposeEnvLocation.java`, `service/ApposeSupport.java`, `service/ApposeTaskRunner.java`,
 `service/ApposeArrays.java` (every image/table to `NDArray` conversion; use it rather than
 building arrays by hand), `service/ApposeGpu.java` (which NVIDIA card a worker runs on: wrap the
-environment with `ApposeGpu.pinned(env)` before `python()`), their tests and `src/test/resources/.../fake_appose_worker.py` are
+environment with `ApposeGpu.forWorker(env)` before `python()`), their tests and `src/test/resources/.../fake_appose_worker.py` are
 **identical copies** of the
 same files in the other four Appose extensions (QP-CAT, DL classifier, cellAPpose, PPM,
 fiber-analysis), differing only in the package line and a `TITLE`. There is no shared library on
