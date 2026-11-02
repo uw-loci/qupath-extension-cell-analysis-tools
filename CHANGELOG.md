@@ -20,6 +20,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   tab's controls, on white unless you chose a background color. On it and on **UMAP 2D** a long
   legend wraps into columns no taller than the plot. Classes you hid are left out, and the title
   says so (`Classes (30 of 40)`).
+- **3D View no longer mixes axes from two embeddings.** With both a 2D and a 3D UMAP on the
+  cells and no 3D embedding in the run, the view could pick X and Y from the 2D UMAP and Z from
+  the 3D one, and still label it "(auto-detected: UMAP)". Every axis now comes from one embedding,
+  a 3D one for the 3D view and a 2D one for the 2D view. The warning about plotting two axes of a
+  3D embedding no longer fires for a real 2D UMAP stored beside a 3D one.
 - **The bug report dialog asks for a way to reach you first.** Without a GitHub username a
   report cannot be answered, because it is filed by the reporting service, not your account. The
   contact fields now come first, say so, and keep their hint visible; if you submit without a
