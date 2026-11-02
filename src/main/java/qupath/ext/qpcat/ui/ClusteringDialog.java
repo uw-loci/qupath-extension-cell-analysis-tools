@@ -6308,8 +6308,8 @@ public class ClusteringDialog {
      * If a {@code ScrollPane} sits in that content, its {@code getContent()} is
      * returned instead: snapshotting the ScrollPane captures only the current
      * viewport, silently cropping anything scrolled out of view. An embedding
-     * scatter returns the panel itself, because its only scroll pane is the legend, and
-     * the 3D view stays whole, because its only scroll pane is a side panel.
+     * scatter or 3D view returns the panel itself: their scroll panes hold the legend
+     * or a side panel, and each builds its own figure.
      */
     static Node plotContentOf(Tab tab) {
         Node content = tab.getContent();
@@ -6321,8 +6321,9 @@ public class ClusteringDialog {
         if (scatter != null) {
             return scatter;
         }
-        if (findFirst(content, qupath.ext.cluster3d.ui.Cluster3DNavigatorPane.class) != null) {
-            return content;
+        var pane3d = findFirst(content, qupath.ext.cluster3d.ui.Cluster3DNavigatorPane.class);
+        if (pane3d != null) {
+            return pane3d;
         }
         ScrollPane scroll = findFirst(content, ScrollPane.class);
         return (scroll != null && scroll.getContent() != null) ? scroll.getContent() : content;
@@ -6393,7 +6394,9 @@ public class ClusteringDialog {
             SnapshotParameters params = new SnapshotParameters();
             params.setTransform(Transform.scale(scale, scale));
             Node figure = target instanceof EmbeddingScatterPanel scatter
-                    ? scatter.exportView(scale) : target;
+                    ? scatter.exportView(scale)
+                    : target instanceof qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d
+                            ? pane3d.exportView(scale) : target;
             WritableImage image = figure.snapshot(params, null);
             BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
             ImageIO.write(buffered, "png", file);

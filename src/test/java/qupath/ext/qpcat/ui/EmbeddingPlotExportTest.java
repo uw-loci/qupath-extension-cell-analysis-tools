@@ -72,25 +72,25 @@ class EmbeddingPlotExportTest {
     }
 
     @Test
-    void theFigureHasThePlotAtExportResolutionAndEveryLegendRow() {
+    void theFigureHasThePlotAtExportResolutionAndEveryCluster() {
         double[] plotSize = new double[2];
-        int[] legendRows = new int[1];
+        int[] rowsShown = new int[1];
         WritableImage image = FxHarness.onFxGet(() -> {
             HBox figure = (HBox) panel.exportView(SCALE);
             ImageView plot = (ImageView) figure.getChildren().get(0);
             plotSize[0] = plot.getImage().getWidth();
             plotSize[1] = FxHarness.canvasOf(panel).getWidth();
-            legendRows[0] = ((VBox) figure.getChildren().get(1)).getChildren().size() - 1;
+            rowsShown[0] = (int) figure.lookupAll(".label").stream()
+                    .filter(n -> ((Label) n).getText().startsWith("Cluster "))
+                    .count();
             SnapshotParameters params = new SnapshotParameters();
             params.setTransform(Transform.scale(SCALE, SCALE));
             return figure.snapshot(params, null);
         });
 
         assertThat(plotSize[0]).isEqualTo(Math.ceil(plotSize[1] * SCALE));
-        assertThat(legendRows[0]).isEqualTo(CLUSTERS);
-        // Plot and a legend taller than the plot, not a thin column of legend alone.
+        assertThat(rowsShown[0]).isEqualTo(CLUSTERS);
         assertThat(image.getWidth()).isGreaterThan(plotSize[1] * SCALE);
-        assertThat(image.getHeight()).isGreaterThan(CLUSTERS * 11 * SCALE);
         assertThat(colorfulPixels(image)).isGreaterThan(CLUSTERS);
     }
 

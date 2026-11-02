@@ -6,7 +6,7 @@ notes; see `README.md` for the full feature set and `THIRD_PARTY_NOTICES.md` for
 ## Build order (cluster3d-core publishToMavenLocal FIRST)
 
 QP-CAT depends on the Apache-2.0 shared 3D-viewer library `cluster3d-core`
-(`io.github.uw-loci:cluster3d-core:0.1.11`) for its **"3D View"** results tab. Publish that
+(`io.github.uw-loci:cluster3d-core:0.1.14`) for its **"3D View"** results tab. Publish that
 library to Maven Local before building QP-CAT:
 
 ```bash
@@ -22,7 +22,7 @@ cd ../qupath-extension-cell-analysis-tools
 9.2.1 wrapper, and `tools/pre-push-checks.sh` accepts any JDK 17-25.
 
 - The dependency is a **non-transitive `implementation`**:
-  `implementation("io.github.uw-loci:cluster3d-core:0.1.11") { isTransitive = false }`. It gets
+  `implementation("io.github.uw-loci:cluster3d-core:0.1.14") { isTransitive = false }`. It gets
   SHADED into the `-all.jar` (its own code); QuPath + JavaFX are host-provided, so `isTransitive
   = false` keeps them out of the bundle (core's published POM lists them because qupath-conventions
   injects them). Confirm the shaded classes with:

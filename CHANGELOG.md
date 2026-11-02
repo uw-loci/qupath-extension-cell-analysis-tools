@@ -4,6 +4,23 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [0.23.5] -- 2026-11-01 -- a 3D View that copes with many classes
+
+### Changed
+
+- **The 3D View class list gets the side column.** **Cell preview** used to reserve most of the
+  column before any cell was clicked, which left room for two classes. It now stays folded until
+  you first click a cell, its crop shrinks to fit, and its contents scroll, so it no longer runs
+  under the bar below the view. Click its header to fold it again.
+- **Find a class among many.** Above 12 classes a **Filter classes...** box appears over the list;
+  **All** and **None** then act on the classes listed. Classes are now listed by name, with numbers
+  in order.
+- **Saved figures carry the whole legend.** **Save plot...** on **3D View** now saves the cloud
+  redrawn at the **Plot resolution (DPI)** preference beside the classes it shows, without the
+  tab's controls, on white unless you chose a background color. On it and on **UMAP 2D** a long
+  legend wraps into columns no taller than the plot. Classes you hid are left out, and the title
+  says so (`Classes (30 of 40)`).
+
 ## [0.23.4] -- 2026-11-01 -- UMAP figures save whole, neighborhood runs name their radius
 
 ### Fixed
