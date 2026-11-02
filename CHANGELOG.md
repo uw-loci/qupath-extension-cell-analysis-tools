@@ -20,6 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   tab's controls, on white unless you chose a background color. On it and on **UMAP 2D** a long
   legend wraps into columns no taller than the plot. Classes you hid are left out, and the title
   says so (`Classes (30 of 40)`).
+- **The bug report dialog asks for a way to reach you first.** Without a GitHub username a
+  report cannot be answered, because it is filed by the reporting service, not your account. The
+  contact fields now come first, say so, and keep their hint visible; if you submit without a
+  username, the confirmation says how to follow the issue on GitHub.
 
 ## [0.23.4] -- 2026-11-01 -- UMAP figures save whole, neighborhood runs name their radius
 
