@@ -1084,5 +1084,9 @@ after the results window opens; this avoids dead time waiting for a click.
 principal components), not in the 3D coordinates shown here. A cluster can appear in
 multiple separated regions of this view.
 
+The class list beside the view ticks each class on or off. Above 12 classes a **Filter classes...**
+box appears over the list, and **All** and **None** then act only on the classes it shows. **Cell
+preview** stays folded until you first click a cell; click its header to fold it again.
+
 For the standalone viewer and the export path, see
 [Exporting](exporting.md#vest-3d-export).
