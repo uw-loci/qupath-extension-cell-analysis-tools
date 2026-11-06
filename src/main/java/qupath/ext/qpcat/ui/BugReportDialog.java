@@ -76,6 +76,9 @@ public class BugReportDialog {
     private final Label statusLabel = new Label("");
     private final Button submitButton = new Button("Submit");
 
+    /** Preferred width of the dialog's content; the notes wrap to it. */
+    private static final double CONTENT_WIDTH = 600;
+
     private volatile boolean submitting = false;
 
     // The one dialog window currently on screen, or null. Only touched on the FX thread.
@@ -119,9 +122,22 @@ public class BugReportDialog {
         }
     }
 
+    /**
+     * Wraps a note and keeps the layout from squeezing it below the height its wrapped
+     * text needs. A wrapped Label's minimum height is one line, so a VBox short of room
+     * cuts it to a single line ending in "...".
+     */
+    private static void wrapped(Label label) {
+        label.setWrapText(true);
+        label.setMinHeight(Region.USE_PREF_SIZE);
+    }
+
     private Region buildContent() {
         VBox root = new VBox(10);
         root.setPadding(new Insets(16));
+        // Without a width, the window opens as wide as the longest note on one line,
+        // and its height is worked out for that single line.
+        root.setPrefWidth(CONTENT_WIDTH);
 
         // The single most surprising thing about this reporter: the issue is not
         // filed under the reporter's name, so GitHub has nobody to notify. Say
@@ -129,8 +145,7 @@ public class BugReportDialog {
         Label anonymityNote = new Label("Leave a GitHub username below if you want to hear back. Reports are "
                 + "filed by the reporting service, not from your GitHub account, so without a username nobody "
                 + "can reach you about this report.");
-        anonymityNote.setWrapText(true);
-        WrapHeight.bind(anonymityNote);
+        wrapped(anonymityNote);
         anonymityNote.setStyle("-fx-text-fill: -fx-accent;");
 
         Label summaryHeading = new Label("Summary (used as the issue title):");
@@ -164,7 +179,7 @@ public class BugReportDialog {
         }
 
         chkScreenshot.setSelected(false);
-        screenshotWarning.setWrapText(true);
+        wrapped(screenshotWarning);
         screenshotWarning.setStyle("-fx-text-fill: -fx-accent;");
         screenshotWarning.setVisible(false);
         screenshotWarning.setManaged(false);
@@ -187,14 +202,13 @@ public class BugReportDialog {
         imageScUserField.setPromptText("image.sc forum username (e.g. alice)");
         Label contactNote = new Label("Both are shown publicly in the issue. A GitHub username notifies you of replies; "
                 + "an image.sc username lets us message you on the forum.");
-        contactNote.setWrapText(true);
-        WrapHeight.bind(contactNote);
+        wrapped(contactNote);
         VBox contactBox =
                 new VBox(6, contactHeading, githubUserField, imageScUserField, contactNote);
 
         chkOpenIssue.setSelected(true);
 
-        statusLabel.setWrapText(true);
+        wrapped(statusLabel);
 
         submitButton.setDefaultButton(true);
         submitButton.setOnAction(e -> onSubmit());
@@ -208,8 +222,7 @@ public class BugReportDialog {
 
         if (!BugReportService.isConfigured()) {
             Label notConfigured = new Label("Bug reporting is not set up yet: the Worker URL has not been configured.");
-            notConfigured.setWrapText(true);
-            WrapHeight.bind(notConfigured);
+            wrapped(notConfigured);
             notConfigured.setStyle("-fx-text-fill: -fx-accent;");
             submitButton.setDisable(true);
             root.getChildren().add(notConfigured);
@@ -349,16 +362,15 @@ public class BugReportDialog {
         Label message = new Label(number.isEmpty()
                 ? "Your bug report was submitted. Thank you!"
                 : "Your bug report was submitted as issue " + number + ". Thank you!");
-        message.setWrapText(true);
-        WrapHeight.bind(message);
+        wrapped(message);
 
         VBox content = new VBox(10, message);
         content.setPadding(new Insets(4));
+        content.setPrefWidth(460);
 
         if (url != null && !url.isEmpty()) {
             Label hint = new Label("View it or add more detail here:");
-            hint.setWrapText(true);
-            WrapHeight.bind(hint);
+            wrapped(hint);
             Hyperlink link = new Hyperlink(url);
             link.setTooltip(Tooltips.of("Open the issue in your browser"));
             link.setOnAction(e -> QuPathGUI.openInBrowser(url));
@@ -368,8 +380,7 @@ public class BugReportDialog {
         if (!mentioned) {
             Label follow = new Label("You did not leave a GitHub username, so you will not be told about replies. "
                     + "To follow this report, open the issue and click Subscribe (needs a GitHub account).");
-            follow.setWrapText(true);
-            WrapHeight.bind(follow);
+            wrapped(follow);
             follow.setStyle("-fx-text-fill: -fx-accent;");
             content.getChildren().add(follow);
         }
@@ -410,8 +421,7 @@ public class BugReportDialog {
         }
         Label note = new Label("This is exactly what will be attached to the bug report. "
                 + "Anything visible here is uploaded. OK to include it?");
-        note.setWrapText(true);
-        WrapHeight.bind(note);
+        wrapped(note);
         note.setMaxWidth(720);
         ImageView view = new ImageView(image);
         view.setPreserveRatio(true);
