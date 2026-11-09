@@ -4,6 +4,27 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **Review Uncertain Cells (experimental, in the autoencoder classifier).** It lists the cells the
+  classifier was least sure about (lowest `AE_confidence`), opens each one in the viewer, and
+  saves your answer as a classified point on the cell. **Train again with these answers** trains
+  with those points as labels. Not yet tried on real data.
+
+### Changed
+
+- **Autoencoder training labels: a point on a cell now wins.** When sources disagree, a classified
+  point beats a locked region, which beats the detection's own class. Previously the detection's
+  class won, so a correction placed as a point was overwritten by the cell's cluster label.
+  Points classed "Cluster N" now count as labels, so a clustering run can be corrected in its own
+  class names. Locked regions classed "Cluster N" are still ignored. Training, evaluation and the
+  dialog's label count now share one implementation. The label count used to count every point,
+  including points that matched no cell, and could count a cell twice.
+- **Autoencoder dialog text.** The **Existing detection classifications** tooltip and the
+  documentation said "Cluster N" labels were ignored; they have been used since 0.2.10.
+
 ## [0.23.5] -- 2026-11-01 -- a 3D View that copes with many classes
 
 ### Changed

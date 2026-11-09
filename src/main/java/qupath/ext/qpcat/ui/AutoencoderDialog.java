@@ -18,6 +18,7 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.ImageDataResources;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
@@ -130,6 +131,9 @@ public class AutoencoderDialog {
 
     // Project image entries (parallel to imageListView items)
     private List<ProjectImageEntry<BufferedImage>> projectEntries = List.of();
+    private UncertainCellReviewWindow reviewWindow;
+    // Run once after the next label-summary scan finishes (FX thread), then cleared.
+    private Runnable afterLabelScan;
 
     // Trained model state
     private String trainedModelState;
@@ -354,15 +358,18 @@ public class AutoencoderDialog {
         labelPointsCheck.setSelected(QpcatPreferences.isAeLabelFromPoints());
         labelPointsCheck.setTooltip(Tooltips.of(
                 "Label individual cells via classified point annotations.\n"
-                + "Each point labels the nearest detection within 50 pixels.\n\n"
-                + "Workflow: select Points tool -> assign class -> click on cells."));
+                + "Each point labels the nearest detection within the match distance\n"
+                + "(Preferences, default 50 pixels), and overrides every other source.\n\n"
+                + "Workflow: select Points tool -> assign class -> click on cells.\n"
+                + "Review Uncertain Cells writes its answers as points too."));
 
         labelDetectionsCheck = new CheckBox("Existing detection classifications");
         labelDetectionsCheck.setSelected(QpcatPreferences.isAeLabelFromDetections());
         labelDetectionsCheck.setTooltip(Tooltips.of(
-                "Use existing PathClass labels already assigned to detections.\n"
-                + "Ignores 'Cluster *' labels from prior clustering runs.\n\n"
-                + "Off by default to avoid inheriting old cluster labels."));
+                "Use the class each detection already has, including 'Cluster N'\n"
+                + "labels from a clustering run and classes written by this classifier.\n"
+                + "Cells with no class count as 'Unclassified'.\n\n"
+                + "A point on a cell, or a locked region around it, takes priority."));
 
         // Refresh chart when label sources change
         labelLockedCheck.selectedProperty().addListener((obs, o, n) -> refreshClassDistribution());
@@ -886,6 +893,37 @@ public class AutoencoderDialog {
         return new VBox(5, progressBar, statusLabel);
     }
 
+    /** The project images ticked in the image list, in list order. */
+    private List<ProjectImageEntry<BufferedImage>> checkedEntries() {
+        List<ProjectImageEntry<BufferedImage>> out = new ArrayList<>();
+        for (int i = 0; i < projectEntries.size(); i++) {
+            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
+                out.add(projectEntries.get(i));
+            }
+        }
+        return out;
+    }
+
+    /** Opens the uncertain-cell review window, sharing this dialog's images and settings. */
+    private void showReviewWindow() {
+        if (reviewWindow == null) {
+            reviewWindow = new UncertainCellReviewWindow(qupath, this::checkedEntries,
+                    () -> cellsOnlyRadio != null && cellsOnlyRadio.isSelected(),
+                    () -> trainedClassNames,
+                    () -> {
+                        if (labelPointsCheck.isSelected()) {
+                            runTraining();
+                        } else {
+                            // Train once the label summary has counted the points: the
+                            // pre-flight check reads that summary.
+                            afterLabelScan = this::runTraining;
+                            labelPointsCheck.setSelected(true);
+                        }
+                    });
+        }
+        reviewWindow.show();
+    }
+
     private VBox createButtonSection() {
         trainButton = new Button("Train on Selected Images");
         trainButton.setOnAction(e -> runTraining());
@@ -928,7 +966,13 @@ public class AutoencoderDialog {
         HBox trainRow = new HBox(10, trainButton, saveModelButton, loadModelButton);
         trainRow.setAlignment(Pos.CENTER_RIGHT);
 
-        HBox applyRow = new HBox(10, evaluateButton, applyProjectButton);
+        Button reviewButton = new Button("Review Uncertain Cells...");
+        reviewButton.setOnAction(e -> showReviewWindow());
+        reviewButton.setTooltip(Tooltips.of(
+                "Experimental. Lists the cells the classifier was least sure about and saves your\n"
+                + "answer for each as a classified point, which the next training run uses as a label."));
+
+        HBox applyRow = new HBox(10, reviewButton, evaluateButton, applyProjectButton);
         applyRow.setAlignment(Pos.CENTER_RIGHT);
 
         Label evalHint = new Label(
@@ -977,13 +1021,7 @@ public class AutoencoderDialog {
         boolean usePoints = labelPointsCheck != null && labelPointsCheck.isSelected();
         boolean useDetections = labelDetectionsCheck != null && labelDetectionsCheck.isSelected();
 
-        // Build list of checked entries
-        List<ProjectImageEntry<BufferedImage>> checkedEntries = new ArrayList<>();
-        for (int i = 0; i < projectEntries.size(); i++) {
-            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
-                checkedEntries.add(projectEntries.get(i));
-            }
-        }
+        List<ProjectImageEntry<BufferedImage>> checkedEntries = checkedEntries();
 
         if (checkedEntries.isEmpty() && qupath.getImageData() == null) {
             labelSummaryLabel.setText("No images selected.");
@@ -1035,69 +1073,13 @@ public class AutoencoderDialog {
                 totalCells += dets.size();
                 nImages++;
 
-                // Per-detection label assignment (same priority as extractClassLabels)
-                Map<PathObject, String> assigned = new HashMap<>();
-                Map<PathObject, Integer> assignedColorMap = new HashMap<>();
-
-                if (useLocked) {
-                    for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                        if (!annotation.isLocked()) continue;
-                        PathClass pc = annotation.getPathClass();
-                        if (pc == null || pc == PathClass.getNullClass()) continue;
-                        String className = pc.toString();
-                        if (className.startsWith("Cluster ")) continue;
-                        for (PathObject det : hierarchy.getAllDetectionsForROI(annotation.getROI())) {
-                            if (cellsOnly && !det.isCell()) continue;
-                            if (!assigned.containsKey(det)) {
-                                assigned.put(det, className);
-                                assignedColorMap.put(det, pc.getColor());
-                            }
-                        }
-                    }
-                }
-
-                if (usePoints) {
-                    for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                        if (annotation.getROI() == null || !annotation.getROI().isPoint()) continue;
-                        PathClass pc = annotation.getPathClass();
-                        if (pc == null || pc == PathClass.getNullClass()) continue;
-                        String className = pc.toString();
-                        if (className.startsWith("Cluster ")) continue;
-                        int nPoints = annotation.getROI().getNumPoints();
-                        classCounts.merge(className, nPoints, Integer::sum);
-                        classColors.putIfAbsent(className, pc.getColor());
-                        totalLabeled += nPoints;
-                    }
-                }
-
-                if (useDetections) {
-                    // The user opted in to "Existing detection classifications" --
-                    // honour whatever class each detection currently carries, including
-                    // "Cluster N" labels from a prior QP-CAT run. The "Cluster" skip
-                    // is kept in the Locked / Points paths above (where it prevents
-                    // cluster *annotations* from being misread as ground truth) but
-                    // dropped here, where the user is asking explicitly to train on
-                    // existing detection classes.
-                    for (PathObject det : dets) {
-                        PathClass pc = det.getPathClass();
-                        String name;
-                        Integer color;
-                        if (pc == null || pc == PathClass.getNullClass()) {
-                            name = "Unclassified";
-                            color = 0x404040;
-                        } else {
-                            name = pc.toString();
-                            color = pc.getColor();
-                        }
-                        assigned.put(det, name);
-                        assignedColorMap.put(det, color);
-                    }
-                }
-
-                for (var e : assigned.entrySet()) {
-                    if (!dets.contains(e.getKey())) continue;
-                    classCounts.merge(e.getValue(), 1, Integer::sum);
-                    classColors.putIfAbsent(e.getValue(), assignedColorMap.get(e.getKey()));
+                // Same rules as training: TrainingLabels.assign.
+                TrainingLabels.Label[] labels = TrainingLabels.assign(hierarchy, dets,
+                        useLocked, usePoints, useDetections, QpcatPreferences.getAePointMatchDistance());
+                for (TrainingLabels.Label label : labels) {
+                    if (label == null) continue;
+                    classCounts.merge(label.name(), 1, Integer::sum);
+                    classColors.putIfAbsent(label.name(), label.color());
                     totalLabeled++;
                 }
             }
@@ -1176,6 +1158,12 @@ public class AutoencoderDialog {
 
         // Update class weights grid
         updateClassWeightsGrid(classCounts);
+
+        if (afterLabelScan != null) {
+            Runnable next = afterLabelScan;
+            afterLabelScan = null;
+            next.run();
+        }
     }
 
     /** Populate the class weights grid with one spinner per class. */
@@ -1421,13 +1409,7 @@ public class AutoencoderDialog {
         boolean labelDetections = labelDetectionsCheck.isSelected();
         boolean cellsOnly = cellsOnlyRadio.isSelected();
 
-        // Build list of checked project images
-        List<ProjectImageEntry<BufferedImage>> selectedImageEntries = new ArrayList<>();
-        for (int i = 0; i < projectEntries.size(); i++) {
-            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
-                selectedImageEntries.add(projectEntries.get(i));
-            }
-        }
+        List<ProjectImageEntry<BufferedImage>> selectedImageEntries = checkedEntries();
 
         // Now committed to running -- lock parameter controls.
         trainingInProgress.set(true);
@@ -1543,13 +1525,7 @@ public class AutoencoderDialog {
             return;
         }
 
-        // Get checked images
-        List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
-        for (int i = 0; i < projectEntries.size(); i++) {
-            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
-                entries.add(projectEntries.get(i));
-            }
-        }
+        List<ProjectImageEntry<BufferedImage>> entries = checkedEntries();
         if (entries.isEmpty()) {
             Dialogs.showWarningNotification("QP-CAT", "Check at least one image to apply to.");
             return;
@@ -1647,12 +1623,7 @@ public class AutoencoderDialog {
             return;
         }
 
-        List<ProjectImageEntry<BufferedImage>> entries = new ArrayList<>();
-        for (int i = 0; i < projectEntries.size(); i++) {
-            if (i < imageCheckProps.size() && imageCheckProps.get(i).get()) {
-                entries.add(projectEntries.get(i));
-            }
-        }
+        List<ProjectImageEntry<BufferedImage>> entries = checkedEntries();
         if (entries.isEmpty()) {
             Dialogs.showWarningNotification("QP-CAT", "Check at least one image to evaluate on.");
             return;

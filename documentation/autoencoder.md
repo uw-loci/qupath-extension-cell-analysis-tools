@@ -68,8 +68,12 @@ Train a VAE-based classifier on labeled cells, then apply across the project.
 
 1. **Label cells** using any combination of these methods (100-200 per cell type recommended):
    - **Locked annotations (region-based labeling)** (default ON): Draw an annotation around a group of cells, assign a class (e.g., "Tumor"), then lock it (right-click > Lock). All detections inside inherit the class. Efficient for labeling many cells at once.
-   - **Point annotations (per-cell labeling)** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within 50 pixels (pixels, not microns). Precise for single-cell labeling.
-   - **Existing detection classifications** (default OFF): If detections already have PathClass labels from another tool. Cluster labels ("Cluster 0", etc.) are always ignored.
+   - **Point annotations (per-cell labeling)** (default ON): Select the Points tool, choose a class, click on individual cells. Each point labels the nearest detection within the **Point Annotation Match Distance (px)** preference (default 50 pixels, not microns). Precise for single-cell labeling. A point counts whatever its class, including "Cluster N", so you can correct a clustering run in its own class names.
+   - **Existing detection classifications** (default OFF): The class each detection already has, including "Cluster N" labels from a clustering run and classes written by an earlier run of this classifier. Cells with no class are labeled "Unclassified".
+
+   When sources disagree about a cell, the most specific wins: a point on the cell, then a locked
+   region around it, then the detection's own class. Of two points on one cell, the later one
+   wins. Locked regions classed "Cluster N" are ignored.
 2. **Extensions > QP-CAT > Classify cells > Classify cells by appearance (deep learning)...**
 3. **Select training images**: Choose one or more project images. Multi-image training produces more robust classifiers. The current image is pre-selected.
 4. **Choose input mode:**
@@ -110,6 +114,37 @@ copy.
 2. The trained model encodes each image's cells and assigns predicted labels
 3. For tile mode, tiles are read from each image's server automatically
 4. Results (labels + latent features + confidence) are saved per image
+
+### Review uncertain cells (experimental)
+
+After training or applying, every cell carries `AE_confidence`. **Review Uncertain Cells...**
+lists the cells with the lowest confidence and lets you answer for each one; each answer
+becomes a label for the next training run. Labeling the cells the classifier is least sure
+about is called active learning, or uncertainty sampling (Settles 2009, *Active Learning
+Literature Survey*, Computer Sciences Technical Report 1648, University of Wisconsin-Madison).
+This tool has not been tested on real data yet.
+
+1. Click **Review Uncertain Cells...** and then **Rank cells**. It reads the checked images,
+   or the open image when none are checked. **Take turns between predicted classes** takes the
+   least confident cell of each predicted class in turn, so that one large uncertain class cannot
+   fill the list.
+2. Selecting a row opens that cell's image and centers the viewer on the cell.
+3. Click the right class, press its number, or press **Confirm (Enter)** to accept the
+   prediction. The answer is saved to the image at once, as a classified point named
+   `QP-CAT review label` on the cell, and the next cell is selected. **Undo** removes the last
+   answer's point. **Use this class** takes a class name the list does not offer.
+4. **Train again with these answers** ticks **Point annotations** and starts training with the
+   dialog's current settings. Click **Rank cells** again when it finishes.
+
+Cells that already have a classified point within the match distance are not listed, because
+they have been answered. The same holds for points you did not place through this window: if the
+images hold imported ground-truth points, every cell they cover counts as answered, and those
+points are also training labels whenever **Point annotations** is ticked.
+
+To refine a clustering run, tick only **Existing detection classifications** for the first
+training run, then review and retrain. After the first run, the detection classes are the
+classifier's own predictions, not the clustering run's labels, so each later run learns partly
+from its own earlier output. Your answers always take priority.
 
 ### Outputs
 

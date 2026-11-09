@@ -879,6 +879,11 @@ Graph convolution on spatial neighbor graphs is a standard technique in graph ne
 
 **Used in:** Autoencoder Classifier tile mode -- cell ROI mask appended as extra channel, preserving neighbor context
 
+**Uncertainty sampling (active learning):**
+> Settles B. "Active Learning Literature Survey." Computer Sciences Technical Report 1648, University of Wisconsin-Madison (2009). http://digital.library.wisc.edu/1793/60660
+
+**Used in:** Review Uncertain Cells (experimental) -- the least confident cells, by the largest class probability, are offered for labeling first ("least confident" sampling, section 3.1 of the survey)
+
 ---
 
 ## Subsampling and Sketching (VEST 3D export)

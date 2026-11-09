@@ -2,6 +2,7 @@ package qupath.ext.qpcat.controller;
 
 import javafx.application.Platform;
 import org.apposed.appose.NDArray;
+import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.ApposeArrays;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
@@ -3795,27 +3796,12 @@ public class ClusteringWorkflow {
     // ==================== Autoencoder Training & Inference ====================
 
     /**
-     * Extracts class labels for detections from multiple sources.
-     * <p>
-     * Label sources (any combination):
-     * <ul>
-     *   <li><b>Locked annotations:</b> detections inside a locked, classified annotation
-     *       inherit the annotation's class. Most detections in the region get labeled.</li>
-     *   <li><b>Point annotations:</b> each point in a classified points annotation
-     *       labels the nearest detection within 50 pixels.</li>
-     *   <li><b>Detection classifications:</b> existing PathClass on detections
-     *       (excluding "Cluster *" from prior clustering runs).</li>
-     * </ul>
-     * Priority: detection class > locked annotation > point annotation (if multiple
-     * sources label the same cell, detection class wins).
+     * Class index per detection for autoencoder training and evaluation (-1 = unlabeled),
+     * from the sources ticked in the dialog. Priority and matching rules are
+     * {@link TrainingLabels#assign}'s: a classified point beats a locked region, which beats
+     * the detection's own class.
      *
-     * @param hierarchy      the object hierarchy for spatial queries
-     * @param detections     ordered detection list
-     * @param classNames     output: populated with discovered class names in order
-     * @param useLocked      include labels from locked annotations
-     * @param usePoints      include labels from point annotations
-     * @param useDetections  include labels from existing detection classifications
-     * @return int array with class index per detection (-1 = unlabeled)
+     * @param classNames output: the label names in first-seen order, indexed by the result
      */
     private static int[] extractClassLabels(PathObjectHierarchy hierarchy,
                                              List<PathObject> detections,
@@ -3823,114 +3809,17 @@ public class ClusteringWorkflow {
                                              boolean useLocked,
                                              boolean usePoints,
                                              boolean useDetections) {
-        int n = detections.size();
-        String[] assignedClass = new String[n];
-
-        // Build detection index for spatial lookup
-        Map<PathObject, Integer> detectionIndex = new HashMap<>();
-        for (int i = 0; i < n; i++) {
-            detectionIndex.put(detections.get(i), i);
+        TrainingLabels.Label[] assigned = TrainingLabels.assign(hierarchy, detections,
+                useLocked, usePoints, useDetections, QpcatPreferences.getAePointMatchDistance());
+        Map<String, Integer> index = new LinkedHashMap<>();
+        int[] labels = new int[assigned.length];
+        for (int i = 0; i < assigned.length; i++) {
+            labels[i] = assigned[i] == null ? -1
+                    : index.computeIfAbsent(assigned[i].name(), k -> index.size());
         }
-
-        // Source 1: Locked annotations -> label all detections inside
-        if (useLocked) {
-            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                if (!annotation.isLocked()) continue;
-                PathClass pc = annotation.getPathClass();
-                if (pc == null || pc == PathClass.getNullClass()) continue;
-                String className = pc.toString();
-                if (className.startsWith("Cluster ")) continue;
-
-                // Find detections inside this annotation
-                Collection<PathObject> inside =
-                        hierarchy.getAllDetectionsForROI(annotation.getROI());
-                for (PathObject det : inside) {
-                    Integer idx = detectionIndex.get(det);
-                    if (idx != null && assignedClass[idx] == null) {
-                        assignedClass[idx] = className;
-                    }
-                }
-            }
-            int lockedCount = 0;
-            for (String s : assignedClass) if (s != null) lockedCount++;
-            if (lockedCount > 0)
-                logger.info("Labels from locked annotations: {} cells", lockedCount);
-        }
-
-        // Source 2: Point annotations -> label nearest detection to each point
-        if (usePoints) {
-            int pointLabeled = 0;
-            for (PathObject annotation : hierarchy.getAnnotationObjects()) {
-                if (annotation.getROI() == null || !annotation.getROI().isPoint()) continue;
-                PathClass pc = annotation.getPathClass();
-                if (pc == null || pc == PathClass.getNullClass()) continue;
-                String className = pc.toString();
-                if (className.startsWith("Cluster ")) continue;
-
-                for (var point : annotation.getROI().getAllPoints()) {
-                    double px = point.getX();
-                    double py = point.getY();
-
-                    // Find nearest detection within 50 pixels
-                    double matchDist = QpcatPreferences.getAePointMatchDistance();
-                    double bestDist = matchDist * matchDist;
-                    int bestIdx = -1;
-                    for (int i = 0; i < n; i++) {
-                        double cx = detections.get(i).getROI().getCentroidX();
-                        double cy = detections.get(i).getROI().getCentroidY();
-                        double dist = (cx - px) * (cx - px) + (cy - py) * (cy - py);
-                        if (dist < bestDist) {
-                            bestDist = dist;
-                            bestIdx = i;
-                        }
-                    }
-                    if (bestIdx >= 0 && assignedClass[bestIdx] == null) {
-                        assignedClass[bestIdx] = className;
-                        pointLabeled++;
-                    }
-                }
-            }
-            if (pointLabeled > 0)
-                logger.info("Labels from point annotations: {} cells", pointLabeled);
-        }
-
-        // Source 3: Detection classifications (overrides other sources)
-        // Unclassified (null PathClass or NULL_CLASS) is treated as a valid
-        // "Unclassified" class -- the classifier needs to learn what "not any
-        // specific type" looks like. The user explicitly opted in to existing
-        // detection classifications by checking the option, so honour ALL
-        // classes including Cluster N from a prior QP-CAT run. Parity with
-        // the same fix in AutoencoderDialog.refreshClassDistribution in v0.2.10.
-        if (useDetections) {
-            int detLabeled = 0;
-            for (int i = 0; i < n; i++) {
-                PathClass pc = detections.get(i).getPathClass();
-                String name;
-                if (pc == null || pc == PathClass.getNullClass()) {
-                    name = "Unclassified";
-                } else {
-                    name = pc.toString();
-                }
-                assignedClass[i] = name;
-                detLabeled++;
-            }
-            if (detLabeled > 0)
-                logger.info("Labels from detection classes: {} cells", detLabeled);
-        }
-
-        // Discover unique class names
-        LinkedHashSet<String> uniqueClasses = new LinkedHashSet<>();
-        for (String s : assignedClass) {
-            if (s != null) uniqueClasses.add(s);
-        }
-        classNames.addAll(uniqueClasses);
-
-        // Map to integer indices
-        List<String> nameList = new ArrayList<>(classNames);
-        int[] labels = new int[n];
-        for (int i = 0; i < n; i++) {
-            labels[i] = assignedClass[i] != null ? nameList.indexOf(assignedClass[i]) : -1;
-        }
+        classNames.addAll(index.keySet());
+        logger.info("Training labels: {} of {} cells labeled, {} classes",
+                java.util.Arrays.stream(labels).filter(l -> l >= 0).count(), labels.length, index.size());
         return labels;
     }
 
