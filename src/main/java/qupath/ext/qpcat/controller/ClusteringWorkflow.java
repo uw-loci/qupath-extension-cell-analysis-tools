@@ -310,8 +310,20 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * @param selected the selected objects
+     * @return the selected annotations that enclose an area; a selected point or
+     *         line annotation (a ground-truth point, say) contains no cell
+     */
+    static List<PathObject> regionAnnotations(Collection<PathObject> selected) {
+        return selected.stream()
+                .filter(PathObject::isAnnotation)
+                .filter(a -> a.getROI() != null && a.getROI().isArea())
+                .toList();
+    }
+
+    /**
      * The open image's cells a single-image run clusters: the detections inside
-     * the selected annotations, else the selected detections, else every
+     * the selected area annotations, else the selected detections, else every
      * detection; then cells only when the image has cells, then the class subset.
      *
      * @param imageData the open image
@@ -326,9 +338,7 @@ public class ClusteringWorkflow {
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
         Collection<PathObject> selected = hierarchy.getSelectionModel().getSelectedObjects();
 
-        List<PathObject> selectedAnnotations = selected.stream()
-                .filter(PathObject::isAnnotation)
-                .toList();
+        List<PathObject> selectedAnnotations = regionAnnotations(selected);
         Collection<PathObject> detections;
         InputSelection selection = null;
         if (!selectedAnnotations.isEmpty()) {

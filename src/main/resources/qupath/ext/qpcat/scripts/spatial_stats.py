@@ -247,11 +247,18 @@ def adaptive_permutations(n_cells, override=0):
 FEW_PERMUTATIONS = 100
 
 
-def permutation_count_warning(n_permutations, chosen):
+# Where the clustering run's count is set; the spatial statistics dialog passes its own field.
+PERMUTATION_PREFERENCE = (
+    "Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations"
+)
+
+
+def permutation_count_warning(n_permutations, chosen, setting=PERMUTATION_PREFERENCE):
     """A note for a permutation count too small to report, or None.
 
     :param n_permutations: the count the run uses
     :param chosen: True when the user set it; the adaptive default is not flagged
+    :param setting: where the user set it, named in the note
     """
     n = int(n_permutations)
     if not chosen or n <= 0 or n >= FEW_PERMUTATIONS:
@@ -260,15 +267,14 @@ def permutation_count_warning(n_permutations, chosen):
     if floor >= 0.05:
         return (
             "Only %d permutations were run, so no permutation p-value can fall "
-            "below %.3f and none can reach 0.05. Set Preferences > QP-CAT: Spatial "
-            "Stats Permutations to at least %d, or to 0 for the default."
-            % (n, floor, FEW_PERMUTATIONS)
+            "below %.3f and none can reach 0.05. Set %s to at least %d, or to 0 "
+            "for the default." % (n, floor, setting, FEW_PERMUTATIONS)
         )
     return (
         "Only %d permutations were run: permutation p-values cannot fall below "
-        "%.3f, and the z-scores divide by a spread estimated from %d shuffles. Use "
-        "at least %d (Preferences > QP-CAT: Spatial Stats Permutations) for "
-        "results you report." % (n, floor, n, FEW_PERMUTATIONS)
+        "%.3f, and the z-scores divide by a spread estimated from %d shuffles. Set "
+        "%s to at least %d for results you report."
+        % (n, floor, n, setting, FEW_PERMUTATIONS)
     )
 
 

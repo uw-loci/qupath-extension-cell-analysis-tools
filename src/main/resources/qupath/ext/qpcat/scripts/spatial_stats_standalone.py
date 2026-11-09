@@ -259,7 +259,11 @@ except Exception:
 
 
 n_perms = _spatial.adaptive_permutations(n_cells, override=perm_override)
-_perm_note = _spatial.permutation_count_warning(n_perms, chosen=perm_override > 0)
+_perm_note = _spatial.permutation_count_warning(
+    n_perms,
+    chosen=perm_override > 0,
+    setting="Permutations (0 = adaptive) in the dialog or permutations: in the batch file",
+)
 if _perm_note:
     _spatial.note_for_user(_perm_note)
 plot_paths = {}

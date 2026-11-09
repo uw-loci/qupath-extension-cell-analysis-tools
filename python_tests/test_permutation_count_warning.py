@@ -3,7 +3,12 @@
 from conftest import load_script_symbol
 
 warn = load_script_symbol(
-    "spatial_stats.py", "permutation_count_warning", {"FEW_PERMUTATIONS": 100}
+    "spatial_stats.py",
+    "permutation_count_warning",
+    {
+        "FEW_PERMUTATIONS": 100,
+        "PERMUTATION_PREFERENCE": "Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations",
+    },
 )
 
 
@@ -28,3 +33,17 @@ def test_a_small_but_usable_count_names_its_floor():
 def test_enough_permutations_pass():
     assert warn(100, chosen=True) is None
     assert warn(1000, chosen=True) is None
+
+
+def test_the_note_names_the_preference_by_default():
+    assert (
+        "Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations"
+        in warn(50, chosen=True)
+    )
+
+
+def test_the_note_names_the_setting_the_count_came_from():
+    for n in (10, 50):
+        note = warn(n, chosen=True, setting="Permutations (0 = adaptive) in the dialog")
+        assert "Permutations (0 = adaptive) in the dialog" in note
+        assert "Preferences" not in note

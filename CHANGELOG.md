@@ -13,6 +13,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   saves your answer as a classified point on the cell. **Train again with these answers** trains
   with those points as labels. Not yet tried on real data.
 
+### Fixed
+
+- **The few-permutations warning named the wrong setting.** A spatial statistics run on saved
+  clusters takes its count from the dialog's **Permutations (0 = adaptive)** field (or
+  `permutations:` in a batch file), but the warning told you to change the preference. It now
+  names the setting the count came from, and the preference's path is given in full: **Edit >
+  Preferences > QP-CAT: Run Clustering > Spatial Stats Permutations**.
+- **A selected point or line annotation emptied a Current image run.** With an annotation
+  selected, a Current image run clusters only the cells inside it. A selected point (a
+  ground-truth point, say) or line contains no cell, so the run stopped with no cells left. Only
+  annotations that enclose an area narrow the run now.
+
 ### Changed
 
 - **Autoencoder training labels: a point on a cell now wins.** When sources disagree, a classified
