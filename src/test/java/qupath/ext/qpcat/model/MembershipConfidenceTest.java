@@ -2,6 +2,7 @@ package qupath.ext.qpcat.model;
 
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,7 +50,7 @@ class MembershipConfidenceTest {
     void kindIdsRoundTripFromThePythonSide() {
         for (MembershipConfidence.Kind k : MembershipConfidence.Kind.values()) {
             assertThat(MembershipConfidence.Kind.fromId(k.getId())).isEqualTo(k);
-            assertThat(MembershipConfidence.Kind.fromId(k.getId().toUpperCase())).isEqualTo(k);
+            assertThat(MembershipConfidence.Kind.fromId(k.getId().toUpperCase(Locale.ROOT))).isEqualTo(k);
             assertThat(MembershipConfidence.Kind.fromId("  " + k.getId() + " ")).isEqualTo(k);
         }
         // An unknown kind must read as absent, so the caller skips it rather than

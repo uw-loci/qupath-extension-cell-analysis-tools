@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -205,7 +206,7 @@ public final class BatchYamlValidator {
             if (type == null || type.isEmpty()) {
                 r.add(ValidationIssue.error("E001", "clustering.type",
                         "required field missing (when block is present)"));
-            } else if (!CLUSTERING_TYPES.contains(type.toLowerCase())) {
+            } else if (!CLUSTERING_TYPES.contains(type.toLowerCase(Locale.ROOT))) {
                 r.add(ValidationIssue.error("E005", "clustering.type",
                         "'" + asciiSafe(type) + "' is not one of "
                                 + CLUSTERING_TYPES));
@@ -232,18 +233,18 @@ public final class BatchYamlValidator {
             }
         }
         if (c.getNormalization() != null
-                && !NORMALIZATIONS.contains(c.getNormalization().toLowerCase())) {
+                && !NORMALIZATIONS.contains(c.getNormalization().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.normalization",
                     "'" + asciiSafe(c.getNormalization()) + "' is not one of " + NORMALIZATIONS));
         }
         if (c.getEmbedding() != null
-                && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase())) {
+                && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.embedding",
                     "'" + asciiSafe(c.getEmbedding()) + "' is not one of " + EMBEDDINGS));
         }
         if (c.getEmbeddingExecutionMode() != null
                 && !EMBEDDING_EXECUTION_MODES.contains(
-                        c.getEmbeddingExecutionMode().toLowerCase())) {
+                        c.getEmbeddingExecutionMode().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.embedding_execution_mode",
                     "'" + asciiSafe(c.getEmbeddingExecutionMode()) + "' is not one of "
                     + EMBEDDING_EXECUTION_MODES));
@@ -421,7 +422,7 @@ public final class BatchYamlValidator {
                 r.add(ValidationIssue.error("E001",
                         "phenotyping.llm_explainer.provider",
                         "required when llm_explainer.enabled is true"));
-            } else if (!LLM_PROVIDERS.contains(llm.getProvider().toLowerCase())) {
+            } else if (!LLM_PROVIDERS.contains(llm.getProvider().toLowerCase(Locale.ROOT))) {
                 r.add(ValidationIssue.error("E005",
                         "phenotyping.llm_explainer.provider",
                         "'" + asciiSafe(llm.getProvider()) + "' is not one of " + LLM_PROVIDERS));
@@ -467,7 +468,7 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E001", "spatial_stats.graph",
                     "required when spatial_stats.enabled is true"));
         } else {
-            if (g.getType() == null || !GRAPH_TYPES.contains(g.getType().toLowerCase())) {
+            if (g.getType() == null || !GRAPH_TYPES.contains(g.getType().toLowerCase(Locale.ROOT))) {
                 r.add(ValidationIssue.error("E005", "spatial_stats.graph.type",
                         "'" + asciiSafe(g.getType()) + "' is not one of " + GRAPH_TYPES));
             }
@@ -486,7 +487,7 @@ public final class BatchYamlValidator {
         } else {
             for (int i = 0; i < stats.size(); i++) {
                 String slug = stats.get(i);
-                if (slug == null || !STATISTIC_SLUGS.contains(slug.toLowerCase())) {
+                if (slug == null || !STATISTIC_SLUGS.contains(slug.toLowerCase(Locale.ROOT))) {
                     r.add(ValidationIssue.error("E009",
                             "spatial_stats.statistics[" + i + "]",
                             "'" + asciiSafe(slug) + "' is not a recognized statistic. Valid: "
@@ -536,7 +537,7 @@ public final class BatchYamlValidator {
         if (fe.getFormats() != null) {
             for (int i = 0; i < fe.getFormats().size(); i++) {
                 String f = fe.getFormats().get(i);
-                if (f == null || !OUTPUT_FORMATS.contains(f.toLowerCase())) {
+                if (f == null || !OUTPUT_FORMATS.contains(f.toLowerCase(Locale.ROOT))) {
                     r.add(ValidationIssue.error("E005",
                             "figure_export.formats[" + i + "]",
                             "'" + asciiSafe(f) + "' is not one of " + OUTPUT_FORMATS));
@@ -570,7 +571,7 @@ public final class BatchYamlValidator {
             Set<String> seenSlugs = new LinkedHashSet<>();
             for (Object o : rawList) {
                 if (o == null) continue;
-                String slug = o.toString().toLowerCase();
+                String slug = o.toString().toLowerCase(Locale.ROOT);
                 if (slug.equals("ripley")) {
                     // Cross-feature shorthand for the one Ripley figure there is.
                     seenSlugs.add("ripley_l");
@@ -593,7 +594,7 @@ public final class BatchYamlValidator {
             }
             fe.setFigures(expanded);
         } else if (figs instanceof String str) {
-            String norm = str.toLowerCase();
+            String norm = str.toLowerCase(Locale.ROOT);
             if (!norm.equals("all_matplotlib") && !norm.equals("none") && !norm.equals("all")) {
                 r.add(ValidationIssue.error("E005", "figure_export.figures",
                         "string value '" + asciiSafe(str)
@@ -609,7 +610,7 @@ public final class BatchYamlValidator {
     private static void validateOnError(BatchYamlSchema s, ValidationResult r) {
         String oe = s.getOnError();
         if (oe == null || oe.isEmpty()) return;  // default "continue"
-        String v = oe.toLowerCase();
+        String v = oe.toLowerCase(Locale.ROOT);
         if (v.equals("continue") || v.equals("stop")) return;
         if (v.startsWith("retry:")) {
             try {
@@ -647,7 +648,7 @@ public final class BatchYamlValidator {
     private static void validateAudit(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.AuditBlock a = s.getAudit();
         if (a == null) return;
-        if (a.getLogLevel() != null && !LOG_LEVELS.contains(a.getLogLevel().toUpperCase())) {
+        if (a.getLogLevel() != null && !LOG_LEVELS.contains(a.getLogLevel().toUpperCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "audit.log_level",
                     "'" + asciiSafe(a.getLogLevel()) + "' is not one of " + LOG_LEVELS));
         }

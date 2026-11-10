@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -255,7 +256,7 @@ public class BugReportService {
         return scrubPaths(
                 text,
                 System.getProperty("user.home"),
-                System.getProperty("os.name", "").toLowerCase().contains("win"));
+                System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win"));
     }
 
     /**

@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.IntFunction;
 import org.slf4j.Logger;
@@ -209,7 +210,7 @@ public class ClusterCompositionPanel extends BorderPane {
         table.setPrefHeight(headerH + rowH * visibleRows + 2);
         table.setMinHeight(headerH + rowH * Math.min(dataRows, 4) + 2);
 
-        Label tableCaption = new Label("Per-" + groupDimensionLabel.toLowerCase()
+        Label tableCaption = new Label("Per-" + groupDimensionLabel.toLowerCase(Locale.ROOT)
                 + " cluster counts (Cn = cluster n):");
         tableCaption.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
@@ -222,7 +223,7 @@ public class ClusterCompositionPanel extends BorderPane {
         piesScroll.setFitToWidth(true);
 
         VBox body = new VBox(6, tableCaption, table, new Label("Per-"
-                + groupDimensionLabel.toLowerCase() + " cluster proportions:"), piesScroll);
+                + groupDimensionLabel.toLowerCase(Locale.ROOT) + " cluster proportions:"), piesScroll);
         VBox.setVgrow(piesScroll, javafx.scene.layout.Priority.ALWAYS);
         return body;
     }
@@ -371,7 +372,7 @@ public class ClusterCompositionPanel extends BorderPane {
         File dir = chooser.showDialog(getScene() != null ? getScene().getWindow() : null);
         if (dir == null) return;
 
-        String base = "composition_by_" + figure.getDimension().toLowerCase();
+        String base = "composition_by_" + figure.getDimension().toLowerCase(Locale.ROOT);
         // Cluster colors come from the live "Cluster N" (or renamed) classes, so
         // an edit in the Results window is already reflected in every file here.
         java.util.function.IntUnaryOperator colors = figure::defaultColorRgb;

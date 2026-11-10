@@ -375,7 +375,7 @@ public class ClusteringResultManager {
                                         String embeddingMethod,
                                         String scopeKey, String scopeLabel) throws IOException {
         String algoTag = algorithm == null ? "result"
-                : algorithm.toLowerCase().replaceAll("[^a-z0-9]+", "");
+                : algorithm.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
         if (algoTag.isEmpty()) algoTag = "result";
         String name = "auto_" + LocalDateTime.now().format(AUTO_NAME_FMT) + "_" + algoTag;
         return saveResult(project, name, result, algorithm, normalization, embeddingMethod,

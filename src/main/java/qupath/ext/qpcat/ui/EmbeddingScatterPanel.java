@@ -41,6 +41,7 @@ import qupath.lib.objects.classes.PathClass;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
 
@@ -413,7 +414,7 @@ public class EmbeddingScatterPanel extends VBox {
     static String prettyEmbeddingName(String name) {
         if (name == null || name.isBlank()) return "Embedding";
         String n = name.trim();
-        switch (n.toLowerCase()) {
+        switch (n.toLowerCase(Locale.ROOT)) {
             case "umap": return "UMAP";
             case "pca": return "PCA";
             case "tsne":

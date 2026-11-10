@@ -3,6 +3,7 @@ package qupath.ext.qpcat.service;
 import qupath.lib.common.GeneralTools;
 
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,7 +57,7 @@ public final class FilenameSanitizer {
         if (basename == null || basename.isEmpty()) return EMPTY_FALLBACK;
         int dot = basename.lastIndexOf('.');
         String stem = dot > 0 ? basename.substring(0, dot) : basename;
-        if (WINDOWS_RESERVED.contains(stem.toUpperCase())) {
+        if (WINDOWS_RESERVED.contains(stem.toUpperCase(Locale.ROOT))) {
             return "_" + basename;
         }
         return basename;

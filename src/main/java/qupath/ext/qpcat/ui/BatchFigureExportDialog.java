@@ -52,6 +52,7 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -501,14 +502,14 @@ public class BatchFigureExportDialog {
 
     private void wireFilterListener() {
         imageFilterField.textProperty().addListener((obs, oldV, newV) -> {
-            String needle = newV == null ? "" : newV.trim().toLowerCase();
+            String needle = newV == null ? "" : newV.trim().toLowerCase(Locale.ROOT);
             if (needle.isEmpty()) {
                 imageListView.setItems(imageEntryItems);
                 return;
             }
             ObservableList<ImageEntryItem> filtered = FXCollections.observableArrayList();
             for (ImageEntryItem item : imageEntryItems) {
-                if (item.imageName.toLowerCase().contains(needle)) filtered.add(item);
+                if (item.imageName.toLowerCase(Locale.ROOT).contains(needle)) filtered.add(item);
             }
             imageListView.setItems(filtered);
         });

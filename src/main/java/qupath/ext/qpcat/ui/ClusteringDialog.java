@@ -2745,7 +2745,7 @@ public class ClusteringDialog {
             if (parts.length >= 2) {
                 String marker = parts[1].trim();
                 markers.add(marker);
-                String ml = marker.toLowerCase();
+                String ml = marker.toLowerCase(Locale.ROOT);
                 if (ml.startsWith("af_") || ml.equals("af") || ml.endsWith("_af")
                         || ml.contains("autofluor") || ml.contains("background")
                         || ml.startsWith("blank") || ml.startsWith("empty")) {
@@ -5857,7 +5857,7 @@ public class ClusteringDialog {
                 return;
             }
             TextInputDialog nameDialog = new TextInputDialog(
-                    algo != null ? algo.toLowerCase() + "-result" : "result");
+                    algo != null ? algo.toLowerCase(Locale.ROOT) + "-result" : "result");
             nameDialog.setTitle("Save Clustering Results");
             nameDialog.setHeaderText("Enter a name for this copy:");
             nameDialog.initOwner(saveBtn.getScene().getWindow());

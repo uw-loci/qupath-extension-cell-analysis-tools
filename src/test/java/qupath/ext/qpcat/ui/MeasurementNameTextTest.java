@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.model.MeasurementNames;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +36,7 @@ class MeasurementNameTextTest {
     }
 
     private static boolean isBold(Text t) {
-        return t.getFont().getStyle().toLowerCase().contains("bold");
+        return t.getFont().getStyle().toLowerCase(Locale.ROOT).contains("bold");
     }
 
     @Test

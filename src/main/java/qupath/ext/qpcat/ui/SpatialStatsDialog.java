@@ -19,6 +19,7 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 
 import java.awt.image.BufferedImage;
+import java.util.Locale;
 
 /**
  * Dialog for running post-hoc spatial statistics over cells using their existing
@@ -437,7 +438,7 @@ public class SpatialStatsDialog {
         for (String cn : classNames) {
             CheckBox cb = DataCheckBoxes.of(cn);
             // Pre-check the usual "ignore these" classes as a convenience.
-            String low = cn.toLowerCase();
+            String low = cn.toLowerCase(Locale.ROOT);
             if (low.contains("ignore") || low.contains("necros") || low.contains("exclude")) {
                 cb.setSelected(true);
             }

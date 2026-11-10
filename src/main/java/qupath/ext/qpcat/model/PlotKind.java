@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.model;
 
+import java.util.Locale;
+
 /**
  * Catalog of every plot QP-CAT can export from a saved clustering result.
  * <p>
@@ -115,7 +117,7 @@ public enum PlotKind {
      */
     public static PlotKind fromSlug(String slug) {
         if (slug == null) return null;
-        String s = slug.trim().toLowerCase();
+        String s = slug.trim().toLowerCase(Locale.ROOT);
         for (PlotKind k : values()) {
             if (k.slug.equals(s)) return k;
         }

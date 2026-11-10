@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -578,7 +579,7 @@ public final class BatchYamlParser {
     static boolean asBool(Object o, boolean dflt) {
         if (o == null) return dflt;
         if (o instanceof Boolean b) return b;
-        String s = o.toString().trim().toLowerCase();
+        String s = o.toString().trim().toLowerCase(Locale.ROOT);
         return switch (s) {
             case "true", "yes", "y", "on", "1" -> true;
             case "false", "no", "n", "off", "0" -> false;
@@ -628,7 +629,7 @@ public final class BatchYamlParser {
 
     static String safeTypeName(Object o) {
         if (o == null) return "null";
-        return o.getClass().getSimpleName().toLowerCase();
+        return o.getClass().getSimpleName().toLowerCase(Locale.ROOT);
     }
 
     static String asciiSafe(String s) {

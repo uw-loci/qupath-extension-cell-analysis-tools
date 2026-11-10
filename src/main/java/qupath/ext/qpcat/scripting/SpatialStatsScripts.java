@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -214,7 +215,7 @@ public final class SpatialStatsScripts {
 
     private static String normaliseMode(Object raw) {
         if (raw == null) return "pairwise";
-        String s = raw.toString().trim().toLowerCase();
+        String s = raw.toString().trim().toLowerCase(Locale.ROOT);
         // Accept both Java camelCase and Python snake_case for ergonomics
         return switch (s) {
             case "pairwise" -> "pairwise";
@@ -231,7 +232,7 @@ public final class SpatialStatsScripts {
         if (raw == null) return defaultValue;
         if (raw instanceof Boolean b) return b;
         if (raw instanceof Number n) return n.doubleValue() != 0.0;
-        String s = raw.toString().trim().toLowerCase();
+        String s = raw.toString().trim().toLowerCase(Locale.ROOT);
         return switch (s) {
             case "true", "yes", "y", "1", "on" -> true;
             case "false", "no", "n", "0", "off" -> false;

@@ -3,6 +3,7 @@ package qupath.ext.qpcat.batch;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -290,5 +291,38 @@ class BatchYamlValidatorTest {
                 .filter(i -> i.getSeverity() == ValidationIssue.Severity.ERROR)
                 .count();
         assertThat(errorCount).isGreaterThanOrEqualTo(2);
+    }
+
+    // ---- Locale independence ---------------------------------------------
+    //
+    // Under a Turkish default locale "info".toUpperCase() has a dotted capital I and
+    // "LEIDEN".toLowerCase() a dotless i, so a valid batch was refused with
+    // E005. The validator now case-maps with Locale.ROOT.
+
+    @Test
+    void lowerCaseLogLevelIsAcceptedUnderTurkish() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            List<ValidationIssue> issues = validate(BASE + "audit:\n  log_level: info\n");
+            assertThat(issues).noneMatch(i -> "E005".equals(i.getCode()));
+            assertThat(hasCode(issues, "W008")).isTrue();
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    void upperCaseClusteringTypeIsAcceptedUnderTurkish() {
+        Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            List<ValidationIssue> issues = validate(
+                    "version: '1.0'\nscope: { projects: [/tmp/p] }\n"
+                            + "clustering: { type: LEIDEN }\n");
+            assertThat(issues).noneMatch(i -> "clustering.type".equals(i.getFieldPath()));
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 }

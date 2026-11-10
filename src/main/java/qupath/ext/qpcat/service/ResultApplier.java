@@ -1,4 +1,5 @@
 package qupath.ext.qpcat.service;
+import java.util.Locale;
 import java.util.function.BiFunction;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.CellRef;
@@ -361,7 +362,7 @@ public class ResultApplier {
         }
         if (hasRunnerUpValue) {
             written.add(CONFIDENCE_PREFIX + "Runner-up "
-                    + confidence.getKind().getColumnName().toLowerCase());
+                    + confidence.getKind().getColumnName().toLowerCase(Locale.ROOT));
         }
         if (hasEntropy) {
             written.add(CONFIDENCE_PREFIX + "Entropy");
@@ -391,7 +392,7 @@ public class ResultApplier {
             if (hasRunnerUpValue && src < runnerUpValues.length
                     && Double.isFinite(runnerUpValues[src])) {
                 ml.put(CONFIDENCE_PREFIX + "Runner-up "
-                        + confidence.getKind().getColumnName().toLowerCase(),
+                        + confidence.getKind().getColumnName().toLowerCase(Locale.ROOT),
                         runnerUpValues[src]);
             }
             if (hasEntropy && src < entropy.length && Double.isFinite(entropy[src])) {
@@ -522,7 +523,7 @@ public class ResultApplier {
             case "umap" -> "UMAP";
             case "pca" -> "PCA";
             case "tsne" -> "tSNE";
-            default -> embeddingMethod.toUpperCase();
+            default -> embeddingMethod.toUpperCase(Locale.ROOT);
         };
     }
 

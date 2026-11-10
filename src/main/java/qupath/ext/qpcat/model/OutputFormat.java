@@ -1,5 +1,7 @@
 package qupath.ext.qpcat.model;
 
+import java.util.Locale;
+
 /**
  * Raster output formats supported by the v1 figure exporter.
  * <p>
@@ -44,7 +46,7 @@ public enum OutputFormat {
      */
     public static OutputFormat fromExtension(String ext) {
         if (ext == null) return null;
-        String e = ext.trim().toLowerCase();
+        String e = ext.trim().toLowerCase(Locale.ROOT);
         if (e.startsWith(".")) e = e.substring(1);
         for (OutputFormat f : values()) {
             if (f.extension.equals(e)) return f;

@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.model;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * One LLM-generated explanation row for a single cluster.
@@ -31,7 +32,7 @@ public class ClusterExplanation {
          */
         public static Confidence fromRaw(String raw) {
             if (raw == null) return null;
-            String norm = raw.trim().toLowerCase();
+            String norm = raw.trim().toLowerCase(Locale.ROOT);
             return switch (norm) {
                 case "high" -> HIGH;
                 case "medium", "med", "moderate" -> MEDIUM;

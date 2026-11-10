@@ -40,6 +40,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -675,7 +676,7 @@ public class PostHocSpatialWorkflow {
         List<String> keep = new ArrayList<>();
         for (String name : all) {
             if (name == null) continue;
-            String n = name.toLowerCase();
+            String n = name.toLowerCase(Locale.ROOT);
             boolean drop = n.contains("centroid")
                     || n.equals("x") || n.equals("y")
                     || n.startsWith("qpcat")

@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -167,7 +168,7 @@ public class ProjectImageSelector extends VBox {
         String valueText = safeLower(metadataValueField.getText());
 
         filteredItems.setPredicate(item -> {
-            if (!name.isEmpty() && !item.name.toLowerCase().contains(name)) {
+            if (!name.isEmpty() && !item.name.toLowerCase(Locale.ROOT).contains(name)) {
                 return false;
             }
             if (keyConstrained) {
@@ -175,7 +176,7 @@ public class ProjectImageSelector extends VBox {
                 if (v == null) {
                     return false;
                 }
-                if (!valueText.isEmpty() && !v.toLowerCase().contains(valueText)) {
+                if (!valueText.isEmpty() && !v.toLowerCase(Locale.ROOT).contains(valueText)) {
                     return false;
                 }
             }
@@ -206,7 +207,7 @@ public class ProjectImageSelector extends VBox {
     }
 
     private static String safeLower(String s) {
-        return s == null ? "" : s.toLowerCase().trim();
+        return s == null ? "" : s.toLowerCase(Locale.ROOT).trim();
     }
 
     /** The currently checked image entries, in project order. */

@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
@@ -166,7 +167,7 @@ public final class CompositionFigure {
     public boolean isEmpty() { return groups.isEmpty() || grandTotal == 0 || nClusters == 0; }
 
     /** The trailing summary row's label, e.g. "All images". */
-    public String allGroupsLabel() { return "All " + dimension.toLowerCase() + "s"; }
+    public String allGroupsLabel() { return "All " + dimension.toLowerCase(Locale.ROOT) + "s"; }
 
     // ---- CSV ----
 
@@ -375,7 +376,7 @@ public final class CompositionFigure {
         long noise = noiseColumn >= 0 ? clusterTotals[noiseColumn] : 0;
         int real = noiseColumn >= 0 ? nClusters - 1 : nClusters;
         return String.format("%d cells across %d %s%s, %s",
-                grandTotal, groups.size(), dimension.toLowerCase(),
+                grandTotal, groups.size(), dimension.toLowerCase(Locale.ROOT),
                 groups.size() == 1 ? "" : "s", ClusterNaming.countText(real, noise));
     }
 

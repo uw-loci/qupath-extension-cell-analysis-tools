@@ -19,6 +19,7 @@ import qupath.ext.qpcat.service.ResultApplier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.IntFunction;
 
 /**
@@ -132,7 +133,7 @@ public class ClusterConfidencePanel extends BorderPane {
         List<String> h = new ArrayList<>();
         h.add("Cluster");
         h.add("Cells");
-        h.add("Median " + confidence.getKind().getColumnName().toLowerCase());
+        h.add("Median " + confidence.getKind().getColumnName().toLowerCase(Locale.ROOT));
         h.add(String.format("%% below %.2f", MembershipConfidence.AMBIGUOUS_BELOW));
         if (confidence.getRunnerUp() != null) {
             h.add("Most likely alternative");

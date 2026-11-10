@@ -18,6 +18,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import java.util.Locale;
 
 /**
  * Interactive JavaFX heatmap of per-cluster marker means.
@@ -833,9 +834,9 @@ public class ClusterHeatmapPanel extends VBox {
         search.setPromptText("Filter this list...");
         search.setStyle("-fx-font-size: 11px;");
         search.textProperty().addListener((o, a, b) -> {
-            String q = b == null ? "" : b.trim().toLowerCase();
+            String q = b == null ? "" : b.trim().toLowerCase(Locale.ROOT);
             for (javafx.scene.control.CheckBox cb : boxes) {
-                boolean show = q.isEmpty() || cb.getText().toLowerCase().contains(q);
+                boolean show = q.isEmpty() || cb.getText().toLowerCase(Locale.ROOT).contains(q);
                 cb.setVisible(show);
                 cb.setManaged(show);
             }

@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -134,10 +135,10 @@ public class MeasurementSelectionPane extends VBox {
 
         filterField.setPromptText("Filter measurements...");
         filterField.textProperty().addListener((obs, oldV, newV) -> {
-            String q = (newV == null) ? "" : newV.trim().toLowerCase();
+            String q = (newV == null) ? "" : newV.trim().toLowerCase(Locale.ROOT);
             filtered.setPredicate(q.isEmpty()
                     ? m -> true
-                    : m -> m.name.toLowerCase().contains(q));
+                    : m -> m.name.toLowerCase(Locale.ROOT).contains(q));
         });
         filterField.setTooltip(Tooltips.of(
                 "Type to show only matching measurements. The buttons below act on the\n"

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -138,7 +139,7 @@ public final class SpatialGraphScripts {
             if (levelRaw == null) {
                 throw new IllegalArgumentException(path + " is missing the required 'level' key");
             }
-            String level = levelRaw.toString().trim().toLowerCase().replace(' ', '_');
+            String level = levelRaw.toString().trim().toLowerCase(Locale.ROOT).replace(' ', '_');
             if ("images".equals(level)) {
                 throw new IllegalArgumentException(
                         path + ": 'images' is always the outermost level and is implicit; "
@@ -169,7 +170,7 @@ public final class SpatialGraphScripts {
     /** Visible for testing. Normalise the graph-type token. */
     public static String normaliseType(Object raw) {
         if (raw == null) return "knn";
-        String s = raw.toString().trim().toLowerCase();
+        String s = raw.toString().trim().toLowerCase(Locale.ROOT);
         return switch (s) {
             case "knn", "radius", "delaunay" -> s;
             default -> {

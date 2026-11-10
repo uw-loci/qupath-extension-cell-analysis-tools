@@ -13,6 +13,7 @@ import qupath.ext.qpcat.batch.YamlBatchOrchestrator;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -146,7 +147,7 @@ public final class YamlBatchScripts {
     private static boolean readBool(Object raw, boolean dflt) {
         if (raw == null) return dflt;
         if (raw instanceof Boolean b) return b;
-        String s = raw.toString().trim().toLowerCase();
+        String s = raw.toString().trim().toLowerCase(Locale.ROOT);
         return switch (s) {
             case "true", "yes", "1", "on" -> true;
             case "false", "no", "0", "off" -> false;

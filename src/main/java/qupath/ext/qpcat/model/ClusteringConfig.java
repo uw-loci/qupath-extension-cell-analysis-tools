@@ -3,6 +3,7 @@ package qupath.ext.qpcat.model;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -558,7 +559,7 @@ public class ClusteringConfig {
     public String getSpatialGraphType() { return spatialGraphType; }
     public void setSpatialGraphType(String v) {
         if (v == null) { this.spatialGraphType = "knn"; return; }
-        String norm = v.trim().toLowerCase();
+        String norm = v.trim().toLowerCase(Locale.ROOT);
         switch (norm) {
             case "knn":
             case "radius":
