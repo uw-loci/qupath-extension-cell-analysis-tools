@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.IntFunction;
@@ -754,8 +755,8 @@ public class MarkerFingerprintPanel extends BorderPane {
         return c != null ? c : Color.GRAY;
     }
 
-    private static String toRgba(Color c, double alpha) {
-        return String.format("rgba(%d,%d,%d,%.2f)",
+    static String toRgba(Color c, double alpha) {
+        return String.format(Locale.ROOT, "rgba(%d,%d,%d,%.2f)",
                 (int) Math.round(c.getRed() * 255),
                 (int) Math.round(c.getGreen() * 255),
                 (int) Math.round(c.getBlue() * 255), alpha);

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.awt.image.BufferedImage;
 import java.util.List;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -236,5 +237,30 @@ class CompositionFigureTest {
 
     private static org.assertj.core.data.Offset<Double> within(double v) {
         return org.assertj.core.data.Offset.offset(v);
+    }
+
+    @Test
+    void csvIsTheSameUnderTurkishAndGermanLocales() {
+        // The percent columns were written with the default locale, so a
+        // decimal-comma locale split "33,33" into two CSV columns, and Turkish
+        // lowered "Image" with a dotless i in the all-groups label.
+        String expected = sample().toCsv();
+        assertThat(expected).contains("a,2,33.33,3,50.00,1,16.67,6");
+        Locale previous = Locale.getDefault();
+        try {
+            for (Locale l : List.of(Locale.forLanguageTag("tr-TR"), Locale.GERMANY)) {
+                Locale.setDefault(l);
+                String csv = sample().toCsv();
+                assertThat(csv).as("CSV under " + l).isEqualTo(
+                        "Image,Cluster 0 (n),Cluster 0 (%),Cluster 1 (n),Cluster 1 (%),"
+                                + "Cluster 2 (n),Cluster 2 (%),Total\n"
+                                + "a,2,33.33,3,50.00,1,16.67,6\n"
+                                + "b,1,33.33,0,0.00,2,66.67,3\n"
+                                + "c,0,0.00,1,100.00,0,0.00,1\n"
+                                + "All images,3,30.00,4,40.00,3,30.00,10\n");
+            }
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 }

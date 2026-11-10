@@ -222,7 +222,7 @@ public final class VestExporter {
                 double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
                 CellRef ref = new CellRef(imageId, imageName, CellRef.idOf(det),
                         roi.getCentroidX(), roi.getCentroidY(), half);
-                String fname = String.format("cell_%05d.png", i);
+                String fname = String.format(Locale.ROOT, "cell_%05d.png", i);
                 try {
                     BufferedImage crop = crops.readCrop(ref, opts.cropScale);
                     if (crop != null) {

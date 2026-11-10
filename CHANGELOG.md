@@ -16,6 +16,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   batch files take `class_is` and `class_is_not`. Classes are read just before phenotyping
   replaces them.
 
+### Fixed
+
+- **Works when QuPath's language or number format is Turkish, German, French or another
+  non-English locale.** The post-hoc spatial statistics CSV and the composition CSV no longer
+  write the local decimal comma (`12,5000` split one value across two columns), the marker
+  fingerprint cards keep their tint (the CSS color was written `0,07`), and crop file names never
+  use local digits. With QuPath's language set to Turkish, a YAML batch with `log_level: info`
+  or `type: LEIDEN` is no longer refused with E005, and the composition figure is no longer
+  saved as `composition_by_<dotless i>mage.png`. Every case conversion now uses `Locale.ROOT`.
+
 ## [0.23.6] -- 2026-11-10 -- Compute Thresholds no longer hangs on Windows
 
 ### Added

@@ -196,7 +196,7 @@ public final class CompositionFigure {
         sb.append(csvCell(label));
         for (int c = 0; c < nClusters; c++) {
             sb.append(',').append(row[c]);
-            sb.append(',').append(String.format("%.2f", percent(row[c], total)));
+            sb.append(',').append(String.format(Locale.ROOT, "%.2f", percent(row[c], total)));
         }
         sb.append(',').append(total).append('\n');
     }

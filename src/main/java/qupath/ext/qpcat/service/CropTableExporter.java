@@ -514,7 +514,7 @@ public final class CropTableExporter {
                     break;
                 }
                 Candidate c = selected.get(i);
-                String fname = String.format("cell_%06d.png", i);
+                String fname = String.format(Locale.ROOT, "cell_%06d.png", i);
                 if (opts.writeCrops) {
                     try {
                         BufferedImage crop = cropService.readCrop(c.ref, opts.cropScale);

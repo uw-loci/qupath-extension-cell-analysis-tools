@@ -660,7 +660,7 @@ public class AutoencoderDialog {
         var lrFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(
                 0.00001, 0.1, QpcatPreferences.getAeLearningRate(), 0.0001);
         lrFactory.setConverter(new javafx.util.StringConverter<>() {
-            @Override public String toString(Double v) { return v == null ? "0.001" : String.format("%.5f", v); }
+            @Override public String toString(Double v) { return v == null ? "0.001" : String.format(Locale.ROOT, "%.5f", v); }
             @Override public Double fromString(String s) {
                 try { return Double.parseDouble(s.trim()); } catch (NumberFormatException e) { return 0.001; }
             }

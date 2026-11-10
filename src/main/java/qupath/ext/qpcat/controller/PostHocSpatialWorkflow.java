@@ -386,7 +386,7 @@ public class PostHocSpatialWorkflow {
     }
 
     private static String fmt(double v) {
-        return Double.isFinite(v) ? String.format("%.6g", v) : "";
+        return Double.isFinite(v) ? String.format(Locale.ROOT, "%.6g", v) : "";
     }
 
     private static String csv(String s) {

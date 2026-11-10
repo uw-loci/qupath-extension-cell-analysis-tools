@@ -3,6 +3,7 @@ package qupath.ext.qpcat.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
+import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import qupath.ext.qpcat.model.ClusteringResult;
 
@@ -37,5 +38,20 @@ class PostHocNhoodCsvTest {
         assertThat(csv).contains("nhood_z,Stroma > Tumor,-1.25000,\n");
         assertThat(csv).contains("nhood_edges,Tumor > Stroma,410,\n");
         assertThat(csv.lines().filter(l -> l.contains(",nhood_z,")).count()).isEqualTo(4);
+    }
+
+    @Test
+    void numbersUseADecimalPointUnderTurkishAndGermanLocales() {
+        // "%.6g" was formatted with the default locale, so de-DE and tr-TR wrote
+        // "12,5000" and split the value across two CSV columns.
+        Locale previous = Locale.getDefault();
+        try {
+            for (Locale l : List.of(Locale.forLanguageTag("tr-TR"), Locale.GERMANY)) {
+                Locale.setDefault(l);
+                everyOrderedPairAndItsEdgeCountIsWritten();
+            }
+        } finally {
+            Locale.setDefault(previous);
+        }
     }
 }
