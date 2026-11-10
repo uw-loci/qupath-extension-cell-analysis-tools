@@ -775,7 +775,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         String extVersion = GeneralTools.getPackageVersion(SetupQPCAT.class);
         sb.append("Extension: ").append(EXTENSION_NAME)
                 .append(extVersion != null ? " v" + extVersion : "").append("\n");
-        sb.append("Backend mode: Appose (embedded Python, CPU only)\n");
+        qupath.ext.qpcat.model.ComputeVariant variant =
+                qupath.ext.qpcat.model.ComputeVariant.fromId(QpcatPreferences.getEnvVariant());
+        sb.append("Backend: Appose (embedded Python), variant ").append(variant.displayLabel()).append("\n");
 
         ApposeClusteringService service = ApposeClusteringService.getInstance();
         if (service.isAvailable()) {
@@ -786,7 +788,10 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             if (err != null) sb.append(" (").append(err).append(")");
             sb.append("\n");
         }
-        sb.append("Environment path: ").append(ApposeClusteringService.getEnvironmentPath()).append("\n\n");
+        sb.append("Environment path: ").append(ApposeClusteringService.getEnvironmentPath()).append("\n");
+        qupath.ext.qpcat.service.ApposeGpu.WorkerGpu gpu = service.getWorkerGpu();
+        sb.append("PyTorch / GPU: ").append(gpu == null ? "not checked (worker not started)" : gpu.describe())
+                .append("\n\n");
 
         sb.append("=== Java / OS ===\n");
         sb.append("OS: ").append(System.getProperty("os.name")).append(" ")

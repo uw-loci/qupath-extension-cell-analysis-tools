@@ -12,7 +12,7 @@ import json
 import numpy as np
 import pytest
 
-from conftest import SCRIPTS_DIR, load_script_symbol, requires
+from conftest import SCRIPTS_DIR, load_script_symbol, requires, worker_globals
 
 SCRIPT = SCRIPTS_DIR / "compute_thresholds.py"
 
@@ -52,6 +52,7 @@ def run_script(values, normalization):
         "measurements": _Nd(values.reshape(-1, 1)),
         "marker_names": names,
         "normalization": normalization,
+        **worker_globals(),
     }
     exec(compile(SCRIPT.read_text(encoding="utf-8"), str(SCRIPT), "exec"), namespace)
     result = json.loads(task.outputs["histograms_json"])[names[0]]

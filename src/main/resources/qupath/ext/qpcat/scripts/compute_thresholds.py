@@ -224,81 +224,87 @@ except NameError:
 
 result = {}
 
-for i, marker in enumerate(list(marker_names)):
-    values = df_norm.iloc[:, i].values
-    valid = values[np.isfinite(values)]
+# One thread for the fits: numba/BLAS fan-out in the worker has deadlocked on
+# Windows (issue #24); the limit is lifted again when the loop ends.
+with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
+    for i, marker in enumerate(list(marker_names)):
+        values = df_norm.iloc[:, i].values
+        valid = values[np.isfinite(values)]
 
-    if len(valid) < MIN_VALID:
-        logger.warning(
-            "Marker '%s' has too few valid values (%d), skipping", marker, len(valid)
-        )
-        continue
+        if len(valid) < MIN_VALID:
+            logger.warning(
+                "Marker '%s' has too few valid values (%d), skipping",
+                marker,
+                len(valid),
+            )
+            continue
 
-    # Histogram
-    counts, bin_edges = np.histogram(valid, bins=N_BINS)
-    thresholds = {}
+        # Histogram
+        counts, bin_edges = np.histogram(valid, bins=N_BINS)
+        thresholds = {}
 
-    # Triangle method (skimage)
-    if has_triangle:
-        try:
-            t = triangle_threshold(valid)
-            t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
-            thresholds["triangle"] = round(t, 4)
-        except Exception as e:
-            logger.warning("Triangle threshold failed for '%s': %s", marker, str(e))
+        # Triangle method (skimage)
+        if has_triangle:
+            try:
+                t = triangle_threshold(valid)
+                t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
+                thresholds["triangle"] = round(t, 4)
+            except Exception as e:
+                logger.warning("Triangle threshold failed for '%s': %s", marker, str(e))
 
-    # GMM (2-component Gaussian mixture); the threshold is the posterior-equal
-    # crossing between the two means, not the mean midpoint.
-    fit = None
-    if has_gmm:
-        try:
-            fit = gmm_fit(valid, max_iter=GMM_MAX_ITER)
-            t = gmm_threshold(fit)
-            t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
-            thresholds["gmm"] = round(t, 4)
-        except Exception as e:
-            logger.warning("GMM threshold failed for '%s': %s", marker, str(e))
+        # GMM (2-component Gaussian mixture); the threshold is the posterior-equal
+        # crossing between the two means, not the mean midpoint.
+        fit = None
+        if has_gmm:
+            try:
+                fit = gmm_fit(valid, max_iter=GMM_MAX_ITER)
+                t = gmm_threshold(fit)
+                t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
+                thresholds["gmm"] = round(t, 4)
+            except Exception as e:
+                logger.warning("GMM threshold failed for '%s': %s", marker, str(e))
 
-    # Gamma mixture (GammaGateR-inspired)
-    if has_gamma:
-        try:
-            # Shift values to be strictly positive for gamma fitting
-            shift = 0.0
-            if valid.min() <= 0:
-                shift = abs(valid.min()) + 0.001
-            pos_values = valid + shift
+        # Gamma mixture (GammaGateR-inspired)
+        if has_gamma:
+            try:
+                # Shift values to be strictly positive for gamma fitting
+                shift = 0.0
+                if valid.min() <= 0:
+                    shift = abs(valid.min()) + 0.001
+                pos_values = valid + shift
 
-            # Fit gamma distribution
-            alpha, loc, scale = gamma_dist.fit(pos_values, floc=0)
-            mode = max(0, (alpha - 1) * scale) if alpha > 1 else 0
-            std_val = np.sqrt(alpha) * scale
+                # Fit gamma distribution
+                alpha, loc, scale = gamma_dist.fit(pos_values, floc=0)
+                mode = max(0, (alpha - 1) * scale) if alpha > 1 else 0
+                std_val = np.sqrt(alpha) * scale
 
-            # Threshold at mode + GAMMA_STD_MULT*std (separates background from positive)
-            t = float(mode + GAMMA_STD_MULT * std_val - shift)
-            t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
-            thresholds["gamma"] = round(t, 4)
-        except Exception as e:
-            logger.warning("Gamma threshold failed for '%s': %s", marker, str(e))
+                # Threshold at mode + GAMMA_STD_MULT*std (separates background from positive)
+                t = float(mode + GAMMA_STD_MULT * std_val - shift)
+                t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
+                thresholds["gamma"] = round(t, 4)
+            except Exception as e:
+                logger.warning("Gamma threshold failed for '%s': %s", marker, str(e))
 
-    result[marker] = {
-        "counts": [int(c) for c in counts],
-        "bin_edges": [round(float(e), 6) for e in bin_edges],
-        "thresholds": thresholds,
-        "quantiles": [
-            float(q) for q in np.quantile(valid, np.linspace(0.0, 1.0, QUANTILE_COUNT))
-        ],
-        "scaling": {
-            "offset": float(norm_offset.iloc[i]),
-            "scale": float(norm_scale.iloc[i]),
-            "low": None if clip_low is None else float(clip_low.iloc[i]),
-            "high": None if clip_high is None else float(clip_high.iloc[i]),
-        },
-    }
-    if fit is not None:
-        result[marker]["gmm"] = fit
+        result[marker] = {
+            "counts": [int(c) for c in counts],
+            "bin_edges": [round(float(e), 6) for e in bin_edges],
+            "thresholds": thresholds,
+            "quantiles": [
+                float(q)
+                for q in np.quantile(valid, np.linspace(0.0, 1.0, QUANTILE_COUNT))
+            ],
+            "scaling": {
+                "offset": float(norm_offset.iloc[i]),
+                "scale": float(norm_scale.iloc[i]),
+                "low": None if clip_low is None else float(clip_low.iloc[i]),
+                "high": None if clip_high is None else float(clip_high.iloc[i]),
+            },
+        }
+        if fit is not None:
+            result[marker]["gmm"] = fit
 
-    if (i + 1) % 5 == 0:
-        task.update("Computing thresholds... (%d/%d markers)" % (i + 1, n_markers))
+        if (i + 1) % 5 == 0:
+            task.update("Computing thresholds... (%d/%d markers)" % (i + 1, n_markers))
 
 # 4. Package outputs
 task.update("Packaging threshold results...")

@@ -10,6 +10,7 @@ Spatial feature smoothing approach inspired by LazySlide (MIT License).
 Zheng, Y. et al. Nature Methods (2026). https://doi.org/10.1038/s41592-026-03044-7
 """
 
+import contextlib
 import logging
 import warnings
 
@@ -65,6 +66,23 @@ def impute_nonfinite(data, context="measurements"):
         context,
     )
     return arr, n_nonfinite
+
+
+def single_threaded():
+    """A context that runs its body with every BLAS and OpenMP pool at one thread.
+
+    numba and BLAS fan-out inside the Appose worker has deadlocked on Windows:
+    the spatial permutation statistics (0.4.1), Choose k, and Compute Thresholds
+    (issue #24). The guarded sections are small-data work, so one thread costs
+    nothing measurable. The limit is restored on exit, so the next clustering
+    run in this worker keeps its threads; a bare threadpool_limits() call would
+    leave the worker single-threaded until QuPath restarts.
+    """
+    try:
+        from threadpoolctl import threadpool_limits
+    except ImportError:  # pragma: no cover - optional dependency
+        return contextlib.nullcontext()
+    return threadpool_limits(limits=1)
 
 
 def detect_device():

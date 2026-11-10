@@ -15,6 +15,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Compute Thresholds could hang forever on Windows (#24).** The per-marker fits now run
+  with every BLAS and OpenMP pool at one thread, the guard the spatial permutation statistics
+  (0.4.1) and Choose k already use; the work takes a fraction of a second, so nothing is lost.
+  The limit is lifted when the fits finish.
+- **Choose k left the worker single-threaded.** Its guard was a bare `threadpool_limits(1)`
+  at script level, which threadpoolctl never restores, so every clustering run after a Choose k
+  sweep ran BLAS and OpenMP on one thread until QuPath restarted. The guard is now scoped to
+  the sweep.
+- **System Info said "CPU only" whatever the variant.** It now names the selected variant
+  (CPU or GPU / CUDA), what the worker's PyTorch found, each loaded BLAS and OpenMP library
+  with its thread count, and the `*_NUM_THREADS` variables, which is what a hang report needs.
 - **The few-permutations warning named the wrong setting.** A spatial statistics run on saved
   clusters takes its count from the dialog's **Permutations (0 = adaptive)** field (or
   `permutations:` in a batch file), but the warning told you to change the preference. It now

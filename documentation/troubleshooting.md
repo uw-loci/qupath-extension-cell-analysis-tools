@@ -90,6 +90,18 @@ options (it needs several images or independent areas in scope), or check the
 [Composition by image](results.md#composition-by-image) tab to confirm technical variation is
 minimal before clustering without it.
 
+### 9. Compute Thresholds or Choose k never finishes on Windows
+
+**Problem:** The log stops at "Computing histograms and thresholds..." (or the Choose k sweep
+never returns) and anything queued behind it waits forever.
+**Cause:** Thread pools inside the Python worker (BLAS, OpenMP, numba) can deadlock on Windows;
+issue #24 is one case. Since the release after 0.23.5 these steps run on one thread, which
+they can afford.
+**Solution:** Update QP-CAT. On an older version, set the user environment variable
+`OMP_NUM_THREADS=1` before starting QuPath. If it still hangs, open **Extensions > QP-CAT >
+Setup & help > System Info...** and paste the "Thread pools" and "Thread environment" sections
+into a bug report: they list which libraries the worker loaded and how many threads each has.
+
 ## Messages you may see
 
 | Message | Where | Cause | Fix |

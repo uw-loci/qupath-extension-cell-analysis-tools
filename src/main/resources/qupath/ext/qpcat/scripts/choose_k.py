@@ -60,16 +60,6 @@ logger = logging.getLogger("qpcat.choose_k")
 
 import numpy as np
 
-# Match run_clustering: numba/BLAS fan-out inside the Appose worker has
-# deadlocked on Windows, and a diagnostic must not be the thing that hangs a
-# session.
-try:
-    import threadpoolctl as _tpc
-
-    _tpc_limits = _tpc.threadpool_limits(limits=1)
-except Exception:  # pragma: no cover - optional dependency
-    _tpc_limits = None
-
 
 def subsample_rows(matrix, max_rows, seed):
     """Take at most max_rows rows, chosen without replacement.
@@ -360,65 +350,69 @@ except NameError:  # pragma: no cover - loaded without run_clustering.py's head
     _mat = None
 
 if _mat is not None:
+    # numba/BLAS fan-out in the worker has deadlocked on Windows, and a
+    # diagnostic must not be the thing that hangs a session. Scoped, so the
+    # next clustering run in this worker keeps its threads.
+    with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
 
-    try:
-        _k_min = int(k_min)  # noqa: F821
-    except NameError:
-        _k_min = 2
-    try:
-        _k_max = int(k_max)  # noqa: F821
-    except NameError:
-        _k_max = 20
-    # The run's clustering seed, so the sweep and the run that follows agree.
-    _seed = int(clustering_seed)  # noqa: F821
-    try:
-        _sil_cap = int(silhouette_max_cells)  # noqa: F821
-    except NameError:
-        _sil_cap = 10000
-    try:
-        _gap_b = int(gap_n_references)  # noqa: F821
-    except NameError:
-        _gap_b = 10
-    try:
-        _sweep_cap = int(sweep_max_cells)  # noqa: F821
-    except NameError:
-        _sweep_cap = 0
+        try:
+            _k_min = int(k_min)  # noqa: F821
+        except NameError:
+            _k_min = 2
+        try:
+            _k_max = int(k_max)  # noqa: F821
+        except NameError:
+            _k_max = 20
+        # The run's clustering seed, so the sweep and the run that follows agree.
+        _seed = int(clustering_seed)  # noqa: F821
+        try:
+            _sil_cap = int(silhouette_max_cells)  # noqa: F821
+        except NameError:
+            _sil_cap = 10000
+        try:
+            _gap_b = int(gap_n_references)  # noqa: F821
+        except NameError:
+            _gap_b = 10
+        try:
+            _sweep_cap = int(sweep_max_cells)  # noqa: F821
+        except NameError:
+            _sweep_cap = 0
 
-    try:
-        _extra_warnings = [str(n) for n in sweep_notes]  # noqa: F821
-    except NameError:
-        _extra_warnings = []
-    _mat_used, _n_used, _was_sub = subsample_rows(_mat, _sweep_cap, _seed)
-    if _was_sub:
-        _extra_warnings.append(
-            "The whole sweep ran on a random %d-cell subsample of %d. k chosen on "
-            "a subsample transfers to the full set only if the subsample kept every "
-            "population; a rare cell type may simply not be in it."
-            % (_n_used, _mat.shape[0])
+        try:
+            _extra_warnings = [str(n) for n in sweep_notes]  # noqa: F821
+        except NameError:
+            _extra_warnings = []
+        _mat_used, _n_used, _was_sub = subsample_rows(_mat, _sweep_cap, _seed)
+        if _was_sub:
+            _extra_warnings.append(
+                "The whole sweep ran on a random %d-cell subsample of %d. k chosen on "
+                "a subsample transfers to the full set only if the subsample kept every "
+                "population; a rare cell type may simply not be in it."
+                % (_n_used, _mat.shape[0])
+            )
+
+        def _report(frac, message):
+            try:
+                task.update(
+                    message=message, current=int(frac * 100), maximum=100
+                )  # noqa: F821
+            except Exception:
+                pass
+
+        _result = sweep_k(
+            _mat_used,
+            _k_min,
+            _k_max,
+            seed=_seed,
+            silhouette_max_cells=_sil_cap,
+            gap_n_references=_gap_b,
+            progress=_report,
         )
 
-    def _report(frac, message):
-        try:
-            task.update(
-                message=message, current=int(frac * 100), maximum=100
-            )  # noqa: F821
-        except Exception:
-            pass
+        _parsed = json.loads(_result)
+        _parsed["warnings"] = _extra_warnings + _parsed.get("warnings", [])
+        _parsed["meta"]["prepared"] = list(prepared_steps)  # noqa: F821
+        _result = json.dumps(_parsed)
 
-    _result = sweep_k(
-        _mat_used,
-        _k_min,
-        _k_max,
-        seed=_seed,
-        silhouette_max_cells=_sil_cap,
-        gap_n_references=_gap_b,
-        progress=_report,
-    )
-
-    _parsed = json.loads(_result)
-    _parsed["warnings"] = _extra_warnings + _parsed.get("warnings", [])
-    _parsed["meta"]["prepared"] = list(prepared_steps)  # noqa: F821
-    _result = json.dumps(_parsed)
-
-    task.outputs["sweep_json"] = _result  # noqa: F821
-    logger.info("k sweep complete: k = %d..%d on %d cells", _k_min, _k_max, _n_used)
+        task.outputs["sweep_json"] = _result  # noqa: F821
+        logger.info("k sweep complete: k = %d..%d on %d cells", _k_min, _k_max, _n_used)

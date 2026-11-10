@@ -57,6 +57,19 @@ def load_script_symbol(script_name, symbol, extra_globals=None):
     raise LookupError("No top-level function %r in %s" % (symbol, path.name))
 
 
+def worker_globals():
+    """What ApposeClusteringService's init puts in every task's global scope from
+    model_utils.py, for tests that exec a whole script the way the worker does.
+    Grows as scripts come to rely on more of model_utils."""
+    import contextlib
+
+    return {
+        "single_threaded": load_script_symbol(
+            "model_utils.py", "single_threaded", {"contextlib": contextlib}
+        ),
+    }
+
+
 def requires(module_name):
     """Skip marker for tests that need an optional runtime dependency."""
     return pytest.mark.skipif(

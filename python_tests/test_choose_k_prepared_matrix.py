@@ -13,7 +13,7 @@ import types
 
 import numpy as np
 
-from conftest import SCRIPTS_DIR, load_script_symbol, requires
+from conftest import SCRIPTS_DIR, load_script_symbol, requires, worker_globals
 
 MARKER = "# ==== END OF MATRIX PREPARATION ===="
 
@@ -68,6 +68,7 @@ def run_sweep(data, **inputs):
         "sweep_max_cells": 0,
     }
     namespace.update(inputs)
+    namespace.update(worker_globals())
     exec(compile(sweep_script(), "<string>", "exec"), namespace)
     return json.loads(task.outputs["sweep_json"]), namespace
 

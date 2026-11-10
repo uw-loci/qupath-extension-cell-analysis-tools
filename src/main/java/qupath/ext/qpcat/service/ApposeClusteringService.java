@@ -180,6 +180,8 @@ public class ApposeClusteringService {
     private volatile long reuseHeldBytes;
 
     private Environment environment;
+    /** What the last worker start learned about its PyTorch and GPU; null until then. */
+    private volatile ApposeGpu.WorkerGpu workerGpu;
     // Read outside the synchronized methods by the task path; a restart swaps
     // the reference, so readers must not see a stale one.
     private volatile Service pythonService;
@@ -558,7 +560,7 @@ public class ApposeClusteringService {
         // its neighbour graph and embedding for the next.
         registerModule(fresh, "knn_cache", "nothing is reused between clustering runs");
         reuseHeldBytes = 0;
-        ApposeGpu.checkWorker(fresh, "QPCAT", logger);
+        workerGpu = ApposeGpu.checkWorker(fresh, "QPCAT", logger);
     }
 
     /**
@@ -813,6 +815,9 @@ public class ApposeClusteringService {
     }
 
     public String getInitError() { return initError; }
+
+    /** @return what the last worker start learned about its PyTorch and GPU, or null before one */
+    public ApposeGpu.WorkerGpu getWorkerGpu() { return workerGpu; }
 
     /**
      * Whether the Python environment has been checked and lacks harmonypy.
