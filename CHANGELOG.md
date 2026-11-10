@@ -4,6 +4,18 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- **Phenotyping rules can require a class (#27).** Select a rule and click **+ Add class
+  condition...** to require that the cell's current class, from a QuPath object classifier, the
+  QP-CAT classifier or an earlier run, *is* or *is not* one of the classes you name. The
+  condition ANDs with the marker gates, so a rule can read "class is Tumor and Ki67 positive".
+  A **Class** column appears only while a rule has one. Saved rule sets keep the conditions;
+  batch files take `class_is` and `class_is_not`. Classes are read just before phenotyping
+  replaces them.
+
 ## [0.23.6] -- 2026-11-10 -- Compute Thresholds no longer hangs on Windows
 
 ### Added

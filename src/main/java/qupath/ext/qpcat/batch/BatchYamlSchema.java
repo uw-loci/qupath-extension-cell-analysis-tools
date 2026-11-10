@@ -332,6 +332,10 @@ public final class BatchYamlSchema {
         private List<String> anyMarkers = new ArrayList<>();
         private double requireMinZscore = 1.0;
         private double excludeMaxZscore = 1.0;
+        /** Class names the cell's current class must be among ({@code class_is}). */
+        private List<String> classIs = new ArrayList<>();
+        /** Class names the cell's current class must not be among ({@code class_is_not}). */
+        private List<String> classIsNot = new ArrayList<>();
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
@@ -362,6 +366,16 @@ public final class BatchYamlSchema {
         public double getExcludeMaxZscore() { return excludeMaxZscore; }
         public void setExcludeMaxZscore(double excludeMaxZscore) {
             this.excludeMaxZscore = excludeMaxZscore;
+        }
+
+        public List<String> getClassIs() { return classIs; }
+        public void setClassIs(List<String> classIs) {
+            this.classIs = classIs == null ? new ArrayList<>() : new ArrayList<>(classIs);
+        }
+
+        public List<String> getClassIsNot() { return classIsNot; }
+        public void setClassIsNot(List<String> classIsNot) {
+            this.classIsNot = classIsNot == null ? new ArrayList<>() : new ArrayList<>(classIsNot);
         }
     }
 

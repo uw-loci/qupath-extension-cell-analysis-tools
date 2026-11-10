@@ -29,9 +29,20 @@ import numpy as np
 import pandas as pd
 from appose import NDArray as PyNDArray
 
+CLASS_IS = "classIs"
+CLASS_IS_NOT = "classIsNot"
+RULE_META_KEYS = ("cellType", CLASS_IS, CLASS_IS_NOT)
 
-def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate):
+
+def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes=None):
     """Boolean mask of cells satisfying ONE rule, plus whether it had criteria.
+
+    Besides the marker conditions, a rule may carry ``classIs`` and
+    ``classIsNot``: lists of class names the cell's CURRENT class (the one a
+    classifier or an earlier run gave it, passed in ``cell_classes``, one name
+    per cell, "" for none) must be in, or must not be in. Both AND with the
+    rest of the row. A class condition with no classes supplied matches
+    nothing, for the same reason an any-group on absent markers does.
 
     A rule is an AND over four kinds of condition:
 
@@ -61,9 +72,25 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate):
     has_anypos = False
     has_anyneg = False
     has_criteria = False
+    class_is = list(rule.get(CLASS_IS) or [])
+    class_is_not = list(rule.get(CLASS_IS_NOT) or [])
+    if class_is or class_is_not:
+        has_criteria = True
+        if cell_classes is None:
+            logger.warning(
+                "Rule '%s' has a class condition but no cell classes were supplied; "
+                "it matches nothing",
+                rule.get("cellType", "?"),
+            )
+            matches &= False
+        else:
+            if class_is:
+                matches &= np.isin(cell_classes, class_is)
+            if class_is_not:
+                matches &= ~np.isin(cell_classes, class_is_not)
 
     for marker, condition in rule.items():
-        if marker == "cellType" or not condition:
+        if marker in RULE_META_KEYS or not condition:
             continue
         if condition not in ("pos", "neg", "anypos", "anyneg"):
             logger.warning(
@@ -203,6 +230,33 @@ else:
 marker_idx = {name: i for i, name in enumerate(list(marker_names))}
 norm_data = df_norm.values
 
+# The class each cell already carries, for rules with classIs / classIsNot
+# (injected by Appose as JSON, one name per cell, "" for none; absent when the
+# caller predates it).
+try:
+    cell_classes = np.array(json.loads(cell_classes_json), dtype=object)
+    if cell_classes.shape[0] != n_cells:
+        logger.warning(
+            "cell_classes_json has %d entries for %d cells; class conditions disabled",
+            cell_classes.shape[0],
+            n_cells,
+        )
+        cell_classes = None
+except NameError:
+    cell_classes = None
+if cell_classes is not None and any(
+    r.get(CLASS_IS) or r.get(CLASS_IS_NOT) for r in rules
+):
+    n_classed = int(np.sum(cell_classes != ""))
+    logger.info(
+        "Class conditions in use: %d of %d cells carry a class", n_classed, n_cells
+    )
+    if n_classed == 0:
+        logger.warning(
+            "Rules use class conditions but no cell in scope has a class; "
+            "apply a classifier first"
+        )
+
 # 4. Evaluate rules (first-match-wins priority)
 labels = np.full(n_cells, -1, dtype=np.int32)
 
@@ -215,7 +269,7 @@ for rule_idx, rule in enumerate(rules):
         break
 
     rule_matches, has_criteria = evaluate_rule(
-        rule, norm_data, marker_idx, gates, default_gate
+        rule, norm_data, marker_idx, gates, default_gate, cell_classes
     )
     # First match wins, so only cells no earlier rule claimed are eligible.
     matches = unassigned & rule_matches
@@ -239,7 +293,7 @@ rule_markers = sorted(
         m
         for r in rules
         for m, c in r.items()
-        if m != "cellType" and c and m in marker_idx
+        if m not in RULE_META_KEYS and c and m in marker_idx
     }
 )
 unknown_breakdown = {}

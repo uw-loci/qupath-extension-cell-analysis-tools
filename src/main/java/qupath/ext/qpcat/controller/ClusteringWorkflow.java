@@ -20,6 +20,7 @@ import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.DetectionSelector;
@@ -1769,6 +1770,14 @@ public class ClusteringWorkflow {
         inputs.put("phenotype_rules", phenotypeRulesJson);
         inputs.put("gates_json", gatesJson);
         inputs.put("pheno_gate_max", QpcatPreferences.getPhenoGateMax());
+        // The class each cell carries now, read before phenotyping replaces it,
+        // for rules with a class condition (one name per row, "" for none).
+        List<String> cellClasses = new ArrayList<>(nCells);
+        for (PathObject cell : extraction.getDetections()) {
+            String name = CellClasses.nameOf(cell);
+            cellClasses.add(name == null ? "" : name);
+        }
+        inputs.put("cell_classes_json", new Gson().toJson(cellClasses));
 
         NDArray labelsNd = null;
 

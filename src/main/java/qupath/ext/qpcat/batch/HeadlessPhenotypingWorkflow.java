@@ -118,15 +118,17 @@ public final class HeadlessPhenotypingWorkflow {
 
     /**
      * YAML rules to the {@code phenotype_rules} payload:
-     * {@code [{"cellType": "T_cell", "<marker>": "pos"|"neg", ...}, ...]}.
+     * {@code [{"cellType": "T_cell", "<marker>": "pos"|"neg", ..., "classIs": [...], "classIsNot": [...]}, ...]}.
      * Order is preserved because {@code run_phenotyping.py} evaluates
      * first-match-wins.
      */
     static String buildRulesJson(List<BatchYamlSchema.PhenotypeRuleEntry> rules) {
-        List<Map<String, String>> out = new ArrayList<>();
+        List<Map<String, Object>> out = new ArrayList<>();
         for (BatchYamlSchema.PhenotypeRuleEntry r : rules) {
-            Map<String, String> m = new LinkedHashMap<>();
+            Map<String, Object> m = new LinkedHashMap<>();
             m.put("cellType", r.getName());
+            if (!r.getClassIs().isEmpty()) m.put("classIs", new ArrayList<>(r.getClassIs()));
+            if (!r.getClassIsNot().isEmpty()) m.put("classIsNot", new ArrayList<>(r.getClassIsNot()));
             if (r.getRequireMarkers() != null) {
                 for (String marker : r.getRequireMarkers()) m.put(marker, "pos");
             }

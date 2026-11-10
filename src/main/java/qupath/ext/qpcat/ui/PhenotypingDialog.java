@@ -32,6 +32,9 @@ import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.PhenotypeRuleSetManager;
 import qupath.fx.dialogs.Dialogs;
+import javafx.scene.layout.VBox;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.classes.PathClass;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
@@ -104,6 +107,23 @@ public class PhenotypingDialog {
         }
 
         public Map<String, String> getConditions() { return conditions; }
+
+        /** Class names the cell's current class must be among (empty: no condition). */
+        private final List<String> classIs = new ArrayList<>();
+        /** Class names the cell's current class must not be among. */
+        private final List<String> classIsNot = new ArrayList<>();
+
+        public List<String> getClassIs() { return classIs; }
+        public List<String> getClassIsNot() { return classIsNot; }
+        public boolean hasClassConditions() { return !classIs.isEmpty() || !classIsNot.isEmpty(); }
+
+        /** One line for the table: "is Tumor; is not Stroma, Immune". */
+        public String classSummary() {
+            List<String> parts = new ArrayList<>();
+            if (!classIs.isEmpty()) parts.add("is " + String.join(", ", classIs));
+            if (!classIsNot.isEmpty()) parts.add("is not " + String.join(", ", classIsNot));
+            return String.join("; ", parts);
+        }
     }
 
     public PhenotypingDialog(QuPathGUI qupath) {
@@ -346,6 +366,14 @@ public class PhenotypingDialog {
         Button removeBtn = UiLabels.whole(new Button("Remove"));
         removeBtn.setOnAction(e -> removeSelectedRule());
         removeBtn.setTooltip(Tooltips.of("Remove the selected phenotype rule."));
+        Button classBtn = UiLabels.whole(new Button("+ Add class condition..."));
+        classBtn.setOnAction(e -> editClassConditions());
+        classBtn.setTooltip(Tooltips.of(
+                "Make the selected rule also require the class a cell already has\n"
+                + "(from a QuPath object classifier, the QP-CAT classifier, or an earlier\n"
+                + "run): the class is X, or is not X. ANDed with the marker conditions.\n"
+                + "Apply the classifier before running phenotyping; the classes are read\n"
+                + "just before phenotyping replaces them."));
         Button upBtn = UiLabels.whole(new Button("Move Up"));
         upBtn.setOnAction(e -> moveRuleUp());
         upBtn.setTooltip(Tooltips.of(
@@ -369,7 +397,7 @@ public class PhenotypingDialog {
                 "Load a previously saved phenotype rule set.\n"
                 + "Missing markers will be flagged with a warning."));
 
-        HBox buttonBar = new HBox(5, addBtn, removeBtn, spacer1, upBtn, downBtn,
+        HBox buttonBar = new HBox(5, addBtn, removeBtn, classBtn, spacer1, upBtn, downBtn,
                 new Separator(Orientation.VERTICAL), saveBtn, loadBtn);
         buttonBar.setAlignment(Pos.CENTER_LEFT);
 
@@ -454,6 +482,19 @@ public class PhenotypingDialog {
         cellTypeCol.setSortable(false);
 
         rulesTable.getColumns().addAll(priorityCol, cellTypeCol);
+
+        // The class column exists only while some rule has a class condition, so
+        // a marker-only rule table looks as it always did.
+        if (rulesList.stream().anyMatch(PhenotypeRule::hasClassConditions)) {
+            TableColumn<PhenotypeRule, String> classCol = new TableColumn<>("Class");
+            classCol.setCellValueFactory(data ->
+                    new ReadOnlyStringWrapper(data.getValue().classSummary()));
+            classCol.setPrefWidth(150);
+            classCol.setMinWidth(90);
+            classCol.setSortable(false);
+            classCol.setEditable(false);
+            rulesTable.getColumns().add(classCol);
+        }
 
         double[] bounds = gateBounds(normalizationCombo.getValue());
         // Clamp the configured default into the valid range for this mode.
@@ -602,6 +643,84 @@ public class PhenotypingDialog {
         }
     }
 
+    /**
+     * The classes a rule can name: the project's class list plus every class the
+     * open image's detections carry (a classifier run writes classes that are not
+     * necessarily in the project list), sorted, without "Unclassified".
+     */
+    private List<String> knownClassNames() {
+        Set<String> names = new TreeSet<>();
+        for (PathClass pc : qupath.getAvailablePathClasses()) {
+            if (pc != null && !CellClasses.isUnclassified(pc)) names.add(pc.toString());
+        }
+        var imageData = qupath.getImageData();
+        if (imageData != null) {
+            for (PathObject d : imageData.getHierarchy().getDetectionObjects()) {
+                String n = CellClasses.nameOf(d);
+                if (n != null) names.add(n);
+            }
+        }
+        return new ArrayList<>(names);
+    }
+
+    /** Edit the selected rule's class conditions in a small dialog. */
+    private void editClassConditions() {
+        PhenotypeRule rule = rulesTable.getSelectionModel().getSelectedItem();
+        if (rule == null) {
+            Dialogs.showWarningNotification("QPCAT", "Select a rule first.");
+            return;
+        }
+        List<String> known = knownClassNames();
+        ComboBox<String> classCombo = new ComboBox<>(FXCollections.observableArrayList(known));
+        classCombo.setEditable(true);
+        classCombo.setPromptText(known.isEmpty() ? "type a class name" : "choose or type a class name");
+        classCombo.setPrefWidth(240);
+        ChoiceBox<String> modeBox = new ChoiceBox<>(FXCollections.observableArrayList("is", "is not"));
+        modeBox.setValue("is");
+        ListView<String> current = new ListView<>();
+        Runnable refreshList = () -> {
+            List<String> lines = new ArrayList<>();
+            for (String c : rule.getClassIs()) lines.add("is " + c);
+            for (String c : rule.getClassIsNot()) lines.add("is not " + c);
+            current.setItems(FXCollections.observableArrayList(lines));
+        };
+        refreshList.run();
+        current.setPrefHeight(110);
+        Button add = new Button("Add");
+        add.setOnAction(e -> {
+            String name = classCombo.getEditor().getText();
+            if (name == null || name.isBlank()) return;
+            name = name.trim();
+            List<String> target = "is".equals(modeBox.getValue()) ? rule.getClassIs() : rule.getClassIsNot();
+            if (!target.contains(name)) target.add(name);
+            refreshList.run();
+        });
+        Button remove = new Button("Remove");
+        remove.setOnAction(e -> {
+            String line = current.getSelectionModel().getSelectedItem();
+            if (line == null) return;
+            if (line.startsWith("is not ")) rule.getClassIsNot().remove(line.substring(7));
+            else if (line.startsWith("is ")) rule.getClassIs().remove(line.substring(3));
+            refreshList.run();
+        });
+        HBox addRow = new HBox(6, new Label("Class"), modeBox, classCombo, add);
+        addRow.setAlignment(Pos.CENTER_LEFT);
+        VBox box = new VBox(8,
+                new Label("Rule \"" + rule.getCellType() + "\" also requires the cell's current class to be:"),
+                addRow, current, remove,
+                new Label("Apply the classifier before running phenotyping; the classes are read\n"
+                        + "just before phenotyping replaces them. All conditions AND together."));
+        box.setPadding(new Insets(10));
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.initOwner(owner);
+        dialog.setTitle("QPCAT - Class conditions for " + rule.getCellType());
+        dialog.getDialogPane().setContent(box);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
+        rebuildTableColumns();
+        rulesTable.refresh();
+    }
+
     private void addRule() {
         if (currentMarkers.isEmpty()) {
             Dialogs.showWarningNotification("QPCAT",
@@ -674,10 +793,12 @@ public class PhenotypingDialog {
     }
 
     private String buildRulesJson() {
-        List<Map<String, String>> rules = new ArrayList<>();
+        List<Map<String, Object>> rules = new ArrayList<>();
         for (PhenotypeRule rule : rulesList) {
-            Map<String, String> ruleMap = new LinkedHashMap<>();
+            Map<String, Object> ruleMap = new LinkedHashMap<>();
             ruleMap.put("cellType", rule.getCellType());
+            if (!rule.getClassIs().isEmpty()) ruleMap.put("classIs", new ArrayList<>(rule.getClassIs()));
+            if (!rule.getClassIsNot().isEmpty()) ruleMap.put("classIsNot", new ArrayList<>(rule.getClassIsNot()));
             for (String marker : currentMarkers) {
                 String cond = rule.getCondition(marker);
                 // Only pos/neg are gating conditions; "" (unselected) and
@@ -926,7 +1047,10 @@ public class PhenotypingDialog {
                     conditions.put(marker, cond);
                 }
             }
-            entries.add(new PhenotypeRuleSet.RuleEntry(rule.getCellType(), conditions));
+            PhenotypeRuleSet.RuleEntry entry = new PhenotypeRuleSet.RuleEntry(rule.getCellType(), conditions);
+            entry.setClassIs(rule.getClassIs());
+            entry.setClassIsNot(rule.getClassIsNot());
+            entries.add(entry);
         }
         ruleSet.setRules(entries);
 
@@ -1032,6 +1156,8 @@ public class PhenotypingDialog {
         if (ruleSet.getRules() != null) {
             for (PhenotypeRuleSet.RuleEntry entry : ruleSet.getRules()) {
                 PhenotypeRule rule = new PhenotypeRule(entry.getCellType());
+                rule.getClassIs().addAll(entry.getClassIs());
+                rule.getClassIsNot().addAll(entry.getClassIsNot());
                 if (entry.getConditions() != null) {
                     for (Map.Entry<String, String> cond : entry.getConditions().entrySet()) {
                         // Only set conditions for markers that are present
@@ -1043,6 +1169,7 @@ public class PhenotypingDialog {
                 rulesList.add(rule);
             }
         }
+        rebuildTableColumns();
         rulesTable.refresh();
 
         Dialogs.showInfoNotification("QPCAT",

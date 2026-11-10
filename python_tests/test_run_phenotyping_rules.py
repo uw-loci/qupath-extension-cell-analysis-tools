@@ -20,7 +20,13 @@ from conftest import load_script_symbol
 evaluate_rule = load_script_symbol(
     "run_phenotyping.py",
     "evaluate_rule",
-    extra_globals={"np": np, "logger": logging.getLogger("test.phenotyping")},
+    extra_globals={
+        "np": np,
+        "logger": logging.getLogger("test.phenotyping"),
+        "CLASS_IS": "classIs",
+        "CLASS_IS_NOT": "classIsNot",
+        "RULE_META_KEYS": ("cellType", "classIs", "classIsNot"),
+    },
 )
 
 # cells x markers, values already normalized to [0, 1]; gate is 0.5 throughout.
@@ -103,3 +109,42 @@ def test_unknown_condition_words_are_skipped(junk):
 def test_a_rule_with_no_conditions_reports_no_criteria():
     _, has = run({"cellType": "Empty"})
     assert has is False
+
+
+# --- class conditions (issue #27): the class a cell already carries, ANDed in ---
+
+CLASSES = np.array(["Tumor", "Tumor", "Immune", "Immune", "", "Stroma"], dtype=object)
+
+
+def run_with_classes(rule, classes=CLASSES):
+    m, has = evaluate_rule(rule, DATA, IDX, {}, 0.5, classes)
+    return set(np.flatnonzero(m).tolist()), has
+
+
+def test_class_is_ands_with_the_markers():
+    # CD3+ cells are 0 and 1; only those the classifier called Tumor pass.
+    got, has = run_with_classes({"cellType": "X", "CD3": "pos", "classIs": ["Tumor"]})
+    assert got == {0, 1} and has is True
+    got, _ = run_with_classes({"cellType": "X", "CD68": "pos", "classIs": ["Tumor"]})
+    assert got == set(), "CD68+ cells are not Tumor, so nothing matches"
+
+
+def test_class_is_not_excludes_and_keeps_unclassified():
+    got, _ = run_with_classes({"cellType": "X", "classIsNot": ["Tumor", "Immune"]})
+    assert got == {4, 5}, 'the unclassified cell ("") and the Stroma cell remain'
+
+
+def test_class_only_rule_counts_as_criteria():
+    got, has = run_with_classes({"cellType": "X", "classIs": ["Immune"]})
+    assert got == {2, 3} and has is True
+
+
+def test_class_condition_without_classes_matches_nothing():
+    m, has = evaluate_rule(
+        {"cellType": "X", "CD3": "pos", "classIs": ["Tumor"]}, DATA, IDX, {}, 0.5, None
+    )
+    assert not m.any() and has is True
+
+
+def test_rules_without_class_conditions_ignore_the_classes():
+    assert run_with_classes({"cellType": "T", "CD3": "pos"}) == ({0, 1}, True)

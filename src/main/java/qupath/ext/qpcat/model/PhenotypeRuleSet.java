@@ -40,6 +40,10 @@ public class PhenotypeRuleSet {
     public static class RuleEntry {
         private String cellType;
         private Map<String, String> conditions;
+        /** Class names the cell's current class must be among; empty means no such condition. */
+        private List<String> classIs;
+        /** Class names the cell's current class must not be among. */
+        private List<String> classIsNot;
 
         public RuleEntry() {
             this.conditions = new LinkedHashMap<>();
@@ -54,6 +58,15 @@ public class PhenotypeRuleSet {
         public void setCellType(String cellType) { this.cellType = cellType; }
         public Map<String, String> getConditions() { return conditions; }
         public void setConditions(Map<String, String> conditions) { this.conditions = conditions; }
+        /** @return never null; a file written before class conditions existed reads as empty */
+        public List<String> getClassIs() { return classIs == null ? List.of() : classIs; }
+        public void setClassIs(List<String> classIs) {
+            this.classIs = classIs == null || classIs.isEmpty() ? null : new ArrayList<>(classIs);
+        }
+        public List<String> getClassIsNot() { return classIsNot == null ? List.of() : classIsNot; }
+        public void setClassIsNot(List<String> classIsNot) {
+            this.classIsNot = classIsNot == null || classIsNot.isEmpty() ? null : new ArrayList<>(classIsNot);
+        }
     }
 
     // Getters and setters

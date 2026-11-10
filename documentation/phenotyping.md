@@ -138,6 +138,10 @@ your gates, because the audit log records how many rules ran, not what they were
   CD163) positive". A row with no `anypos` markers imposes no such condition; a row whose
   only `anypos` markers are absent from the data matches nothing (rather than matching
   everything).
+- **A rule may also require the class a cell already has.** Select the rule, click
+  **+ Add class condition...** and choose a class and *is* or *is not*. The condition ANDs
+  with the marker conditions, so `class is Tumor, Ki67: pos` is "the cells the classifier
+  called Tumor that are Ki67 positive". See [Using a class as a condition](#using-a-class-as-a-condition).
 - **"neg" on the other markers makes a rule exclusive.** This is the most common
   surprise. If `markerA+` is defined as `A: pos, B: neg, C: neg`, then a cell that is
   positive for **both** A and B matches **neither** `markerA+` (B is not neg) **nor**
@@ -163,6 +167,28 @@ your gates, because the audit log records how many rules ran, not what they were
 
 Here the `neg` columns are deliberate: a CD8+ T cell is required to be CD20-negative and
 PanCK-negative. If instead you just want "any CD3+CD8+ cell," drop those `neg`s to `--`.
+
+### Using a class as a condition
+
+Markers alone cannot say "a Ki67-high cell among the ones the morphology classifier called
+tumor". A rule can therefore also require the class a cell carries at the moment phenotyping
+runs: the class a QuPath object classifier, the [QP-CAT classifier](autoencoder.md) or an
+earlier run gave it.
+
+1. Apply the classifier first, so the cells carry its classes.
+2. In the rule table, select the rule and click **+ Add class condition...**. Choose a
+   class (the list holds the project's classes and every class on the open image's cells;
+   you can also type one), choose **is** or **is not**, and click **Add**. A rule can hold
+   several: *is* names are an OR among themselves, *is not* names all exclude, and both AND
+   with the marker conditions. A **Class** column appears in the table while any rule has
+   one.
+3. Run. The classes are read just before phenotyping replaces them, so the classifier's
+   output is used and then overwritten by the phenotypes, as for any run.
+
+Class names match in full: a condition on `Tumor` does not match `Tumor: Ki67+`. A rule with a
+class condition on cells that carry no class matches nothing, and the log says so ("Rules use
+class conditions but no cell in scope has a class"). Saved rule sets keep the conditions; a
+batch file writes them as `class_is` and `class_is_not` ([YAML reference](yaml-reference.md)).
 
 ---
 ## Auto-thresholding
