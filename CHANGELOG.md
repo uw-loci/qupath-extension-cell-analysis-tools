@@ -4,7 +4,7 @@ All notable changes to QP-CAT (Cell Analysis Tools for QuPath) are recorded here
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-CAT is in pre-release so no formal semver compatibility commitment is made yet. Breaking changes within `0.x` are called out explicitly.
 
-## [Unreleased]
+## [0.23.6] -- 2026-11-10 -- Compute Thresholds no longer hangs on Windows
 
 ### Added
 
