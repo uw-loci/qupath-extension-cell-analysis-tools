@@ -52,7 +52,7 @@ dependencies {
     // the -all.jar. isTransitive=false: core's published POM lists QuPath/JavaFX (injected
     // by qupath-conventions) but the QuPath host provides those at runtime -- bundling them
     // would balloon the jar. Build cluster3d-core with publishToMavenLocal first (mavenLocal).
-    implementation("io.github.uw-loci:cluster3d-core:0.1.15") { isTransitive = false }
+    implementation("io.github.uw-loci:cluster3d-core:0.1.16") { isTransitive = false }
 
     // SnakeYAML for the v1 YAML headless-batch parser. Already present on
     // QuPath's runtime classpath transitively (via commonmark-ext-yaml-front-matter)
@@ -125,9 +125,14 @@ tasks.test {
 // a __pycache__ beside them, and Gradle was packaging it: 19 .pyc files rode
 // into every jar, including bytecode for scripts that had since been deleted.
 // The directory is gitignored, so this never showed up in a diff -- only in
-// the jar.
+// the jar. The gitignored codeReadMe.md code maps are local navigation files and
+// stay out of every jar for the same reason.
 tasks.named<ProcessResources>("processResources") {
     exclude("**/__pycache__/**")
+    exclude("**/codeReadMe.md")
+}
+tasks.withType<Jar>().configureEach {
+    exclude("**/codeReadMe.md")
 }
 
 spotbugs {
