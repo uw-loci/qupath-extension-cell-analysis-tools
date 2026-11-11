@@ -553,7 +553,7 @@ public class ResultApplier {
      * Embedding columns used to be bare ("UMAP1"), which made them indistinguishable
      * from a user's own measurements in the picker -- so a later run could cluster ON A
      * PREVIOUS RUN'S EMBEDDING without anything saying so. One run came back with UMAP1
-     * as a cluster's defining feature. The prefix is what makes "Deselect QPCAT" able to
+     * as a cluster's defining feature. The prefix is what makes "Hide QP-CAT's own measurements" able to
      * clear every column QP-CAT produced in one click.
      */
     public static final String QPCAT_PREFIX = "QPCAT ";

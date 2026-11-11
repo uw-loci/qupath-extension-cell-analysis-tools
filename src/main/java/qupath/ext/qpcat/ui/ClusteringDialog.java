@@ -3591,6 +3591,9 @@ public class ClusteringDialog {
             }
             return null;
         }
+        if (notify) {
+            MeasurementSelectionPane.notifyIfQpcatSelected(selected);
+        }
         config.setSelectedMeasurements(selected);
 
         // Normalization

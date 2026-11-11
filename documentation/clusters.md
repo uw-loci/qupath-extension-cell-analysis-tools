@@ -307,7 +307,8 @@ Two things to know before running it:
 - **Untick the run's own outputs.** After a clustering run the measurement list includes that
   run's `QPCAT UMAP1/2/3` and `QPCAT spatial:` columns. Analysing those is circular -- you would be
   grouping cells on coordinates derived from their own clusters. Select the marker measurements.
-  The **Deselect QPCAT** button in the measurement picker clears all of QP-CAT's output in one click.
+  The measurement picker hides QP-CAT's output by default (**Hide QP-CAT's own measurements**);
+  untick that box only when a pass on the embedding coordinates is what you want.
 - **Unclassified cells are excluded**, and the count is shown. An unclassified bucket is a
   mixture rather than a population; including it would pull every marker mean toward the
   unlabelled remainder and give the ranking a comparison group that means nothing.

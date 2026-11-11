@@ -242,6 +242,7 @@ public class EmbeddingDialog {
             Dialogs.showWarningNotification("QPCAT", "No measurements selected.");
             return;
         }
+        MeasurementSelectionPane.notifyIfQpcatSelected(selected);
 
         ClusteringConfig config = new ClusteringConfig();
         config.setAlgorithm(Algorithm.NONE);

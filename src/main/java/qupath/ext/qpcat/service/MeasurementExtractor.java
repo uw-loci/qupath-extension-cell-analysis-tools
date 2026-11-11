@@ -115,6 +115,7 @@ public class MeasurementExtractor {
         if (detections == null || detections.isEmpty()) {
             throw new IllegalArgumentException("No detection objects provided");
         }
+        warnQpcatInputs(measurements);
 
         List<PathObject> detectionList = detections.stream()
                 .filter(p -> p instanceof PathDetectionObject)
@@ -153,6 +154,7 @@ public class MeasurementExtractor {
         if (imageDetections == null || imageDetections.isEmpty()) {
             throw new IllegalArgumentException("No image detection groups provided");
         }
+        warnQpcatInputs(measurements);
 
         // Combine all detections into a single list, tracking segments
         List<PathObject> allDetections = new ArrayList<>();
@@ -350,6 +352,44 @@ public class MeasurementExtractor {
      */
     public static boolean isQpcatMeasurement(String name) {
         return name != null && name.toUpperCase(java.util.Locale.ROOT).contains("QPCAT");
+    }
+
+    /**
+     * The names among {@code measurements} that QP-CAT wrote itself (embedding
+     * coordinates, {@code QPCAT spatial:}, {@code QPCAT component:}, {@code QPCAT CN}).
+     * Empty for null.
+     */
+    public static List<String> qpcatMeasurementsIn(List<String> measurements) {
+        if (measurements == null) return List.of();
+        return measurements.stream().filter(MeasurementExtractor::isQpcatMeasurement).toList();
+    }
+
+    /**
+     * The measurements the Quick presets run on: every "mean" measurement that
+     * QP-CAT did not write itself. A previous run's {@code QPCAT spatial: Mean
+     * distance} matches "mean" but is that run's output, and a one-click preset
+     * must not cluster on it.
+     */
+    public static List<String> presetMeasurements(List<String> all) {
+        return all.stream()
+                .filter(MeasurementExtractor::isMeanMeasurement)
+                .filter(n -> !isQpcatMeasurement(n))
+                .toList();
+    }
+
+    /**
+     * Logs a warning when the run's inputs include QP-CAT's own output. Not an
+     * error: clustering on embedding coordinates is sometimes the intent (a
+     * second pass on a UMAP). Every extraction path, GUI or batch, passes here.
+     */
+    static void warnQpcatInputs(List<String> measurements) {
+        List<String> own = qpcatMeasurementsIn(measurements);
+        if (!own.isEmpty()) {
+            logger.warn("{} of the {} selected measurements are QP-CAT's own output from an "
+                    + "earlier run: {}. Clustering on them clusters on that run's answer; "
+                    + "untick them unless that is the intent.",
+                    own.size(), measurements.size(), own);
+        }
     }
 
     /**

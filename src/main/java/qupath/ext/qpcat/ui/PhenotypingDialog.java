@@ -947,6 +947,7 @@ public class PhenotypingDialog {
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
 
+        MeasurementSelectionPane.notifyIfQpcatSelected(currentMarkers);
         Thread phenoThread = new Thread(() -> {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);

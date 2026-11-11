@@ -113,7 +113,7 @@ worker loaded, how many threads each has, and which step never returned.
 |---|---|---|---|
 | "The open image has no detections. Run cell detection first." | Clustering dialog | no cells on the open image | run cell detection |
 | "No image is open." | Quick clustering presets | the presets use the open image only | open an image, or use the full dialog with a project scope |
-| "No mean-intensity measurements found on these detections (...)" | Quick clustering presets | the presets select only "Mean" measurements | use **Find cell populations (clustering)...** and pick measurements |
+| "No mean-intensity measurements found on these detections (...)" | Quick clustering presets | the presets select only "Mean" measurements that QP-CAT did not write itself | use **Find cell populations (clustering)...** and pick measurements |
 | "Compute thresholds first before applying." | Phenotyping | **Apply to All Markers** before **Compute Thresholds** | click **Compute Thresholds** |
 | "Select an auto-threshold method (Triangle, GMM, or Gamma) in the Histogram & Auto-Thresholding panel, then Apply to All. 'Manual' has no computed value to apply." | Phenotyping | **Method** still on **Manual** | pick a method |
 | "Spatial statistics are off because this run is restricted to chosen classifications. ..." | Clustering dialog | a classification subset is ticked | see [Spatial statistics are unavailable while subsetting](clustering.md#spatial-statistics-are-unavailable-while-subsetting) |

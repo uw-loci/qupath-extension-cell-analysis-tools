@@ -118,7 +118,7 @@ is comparable across cells of different sizes, and is the standard single-cell i
 **Select 'Mean' only** does this. If your measurements are medians rather than means,
 **Select 'Median' only** is the same shortcut for those; prefer mean when you have both.
 
-All buttons (**Select All**, **Select None**, **Select 'Mean' only**, **Select 'Median' only**, and **Deselect QPCAT**)
+All four buttons (**Select All**, **Select None**, **Select 'Mean' only**, **Select 'Median' only**)
 act on the rows currently shown. Filter the list first and they apply only to what you can see;
 hidden rows keep their ticks.
 
@@ -133,10 +133,15 @@ not shown, and comes back ticked if you return to a scope that has it. **Select 
 **Select 'Mean' only** and **Select 'Median' only** also forget ticks on measurements the
 current scope does not have. A change of scope clears the filter box.
 
-**Deselect QPCAT** unmarks every measurement QP-CAT wrote itself — embedding coordinates, spatial
-and component columns, cellular-neighborhood labels. These are *output*, not input; feeding them
-back into a later run clusters on a previous run's answer, which is how one run came back with a
-cluster whose defining feature was its own embedding coordinate.
+**Hide QP-CAT's own measurements** (ticked by default) keeps every measurement QP-CAT wrote
+itself out of the list: embedding coordinates, spatial and component columns,
+cellular-neighborhood labels. These are *output*, not input; feeding them back into a later run
+clusters on a previous run's answer, which is how one run came back with a cluster whose defining
+feature was its own embedding coordinate, and it is why **Select 'Mean' only** would otherwise
+pick up `QPCAT spatial: Mean distance`. Untick the box to see and select them when that is the
+intent, for example a second clustering pass on the UMAP coordinates. Hidden rows keep their
+ticks, and the box unticks itself when a restored selection includes one of them. A run whose
+selection includes QP-CAT output goes ahead with a warning notification and a line in the log.
 
 Leave out measurements that carry no biological signal -- DAPI/Hoechst (nuclear stain,
 not a marker), autofluorescence channels, and morphology unless it is your question.
@@ -553,8 +558,8 @@ those runs still reproduce exactly.
 ## Quick presets
 
 **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**. Each selects all
-"Mean" measurements, Z-score normalization and a UMAP embedding, then runs immediately --
-no dialog. Good for a first look. They run on the image open in the viewer only; for
+"Mean" measurements except QP-CAT's own output from earlier runs (skipped names go to the
+log), Z-score normalization and a UMAP embedding, then runs immediately -- no dialog. Good for a first look. They run on the image open in the viewer only; for
 several images use the full dialog.
 
 | Preset | Runs |

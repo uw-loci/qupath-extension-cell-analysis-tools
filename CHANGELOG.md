@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Changed
+
+- **The measurement picker hides QP-CAT's own output by default.** A new checkbox, **Hide
+  QP-CAT's own measurements** (ticked by default), replaces the **Deselect QPCAT** button in the
+  Clustering, Phenotyping, Embedding and crop-export dialogs. Embedding coordinates, `QPCAT
+  spatial:`, `QPCAT component:` and `QPCAT CN` columns stay out of the list, so **Select 'Mean'
+  only** no longer picks up `QPCAT spatial: Mean distance` from an earlier run. Untick the box to
+  select them deliberately (a second pass on the UMAP coordinates, say); hidden rows keep their
+  ticks, and the box unticks itself when a restored selection includes one of them.
+- **The Quick clustering presets skip QP-CAT's own output.** Their "mean" selection no longer
+  includes a previous run's `QPCAT spatial: Mean distance`; skipped names are logged.
+- **A run on QP-CAT's own output warns instead of staying silent.** Clustering, Phenotyping and
+  Embedding show one notification naming the measurements and the log gets a warning (batch runs
+  too); the run goes ahead.
+
 ## [0.24.1] - 2026-11-11
 
 ### Fixed

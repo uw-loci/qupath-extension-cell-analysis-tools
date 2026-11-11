@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 
 /**
  * Reusable measurement picker: a text filter + a checkbox list + Select All / Select None /
- * Select 'Mean' / Select 'Median' / Deselect QPCAT buttons. The quick-select buttons operate ONLY on the
+ * Select 'Mean' / Select 'Median' buttons and a Hide QP-CAT's own measurements box. The quick-select buttons operate ONLY on the
  * currently VISIBLE (filtered) rows and leave filtered-out rows' checks untouched -- so
  * filtering to "nucleus" then "Select None" clears just the nucleus measurements, not
  * everything. Checks survive filtering (narrow, tick, clear filter, repeat).
@@ -100,6 +100,7 @@ public class MeasurementSelectionPane extends VBox {
     private final ObservableList<Item> items = FXCollections.observableArrayList();
     private final FilteredList<Item> filtered = new FilteredList<>(items, m -> true);
     private final TextField filterField = new TextField();
+    private final CheckBox hideQpcat = new CheckBox("Hide QP-CAT's own measurements");
     private final ListView<Item> list = new ListView<>();
     private Runnable onSelectionChanged;
     /**
@@ -134,12 +135,19 @@ public class MeasurementSelectionPane extends VBox {
                 + "checked items stay checked even when filtered out."));
 
         filterField.setPromptText("Filter measurements...");
-        filterField.textProperty().addListener((obs, oldV, newV) -> {
-            String q = (newV == null) ? "" : newV.trim().toLowerCase(Locale.ROOT);
-            filtered.setPredicate(q.isEmpty()
-                    ? m -> true
-                    : m -> m.name.toLowerCase(Locale.ROOT).contains(q));
-        });
+        filterField.textProperty().addListener((obs, oldV, newV) -> applyFilter());
+        hideQpcat.setSelected(true);
+        hideQpcat.selectedProperty().addListener((obs, oldV, newV) -> applyFilter());
+        hideQpcat.setTooltip(Tooltips.of(
+                "Hide every measurement QP-CAT wrote itself -- embedding coordinates,\n"
+                + "'QPCAT spatial:', 'QPCAT component:', 'QPCAT CN'. These are OUTPUT:\n"
+                + "clustering on them clusters on a previous run's answer, and\n"
+                + "'Select 'Mean' only' would otherwise pick up 'QPCAT spatial: Mean\n"
+                + "distance'.\n\n"
+                + "Untick to see and select them, for example to run a second pass on\n"
+                + "the UMAP coordinates. Hidden rows keep their ticks, and the box\n"
+                + "unticks itself when a restored selection includes one of them."));
+        applyFilter();
         filterField.setTooltip(Tooltips.of(
                 "Type to show only matching measurements. The buttons below act on the\n"
                 + "shown rows only; hidden rows keep their checks."));
@@ -163,21 +171,13 @@ public class MeasurementSelectionPane extends VBox {
                 + "'median' (any capitalisation -- detection engines differ) and uncheck\n"
                 + "the rest. Hidden rows keep their checks."));
 
-        Button deselectQpcat = new Button("Deselect QPCAT");
-        deselectQpcat.setOnAction(e -> deselectVisibleMatching(MeasurementExtractor::isQpcatMeasurement));
-        deselectQpcat.setTooltip(Tooltips.of(
-                "Uncheck every shown measurement QP-CAT wrote itself -- embedding\n"
-                + "coordinates, 'QPCAT spatial:', 'QPCAT component:', 'QPCAT CN'.\n"
-                + "These are OUTPUT: clustering on them clusters on a previous run's\n"
-                + "answer. Other checks are left alone."));
-
         // The buttons act on the rows CURRENTLY SHOWN, not on the whole panel --
         // filter to "mean", press Select All, and only those are ticked. That is
         // the point of them, and it is the one thing here that surprises people,
         // so it gets the theme's own text colour at full strength rather than
         // the #666 it used to have, which was grey on grey in dark mode.
         Label scopeHint = new Label(
-                "These five buttons act only on the rows shown above, after filtering.");
+                "These four buttons act only on the rows shown above, after filtering.");
         scopeHint.setWrapText(true);
         WrapHeight.bind(scopeHint);
         scopeHint.setStyle(
@@ -208,9 +208,57 @@ public class MeasurementSelectionPane extends VBox {
         // one line in a 550px dialog, and an HBox squeezes them until the labels
         // ellipsize instead of wrapping to a second line.
         FlowPane buttons = new FlowPane(
-                5, 4, selectAll, selectNone, selectMean, selectMedian, deselectQpcat);
+                5, 4, selectAll, selectNone, selectMean, selectMedian, hideQpcat);
         buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         getChildren().addAll(topRow, list, buttons, scopeHint);
+    }
+
+    /** Text filter and the hide-QP-CAT box together decide which rows show. */
+    private void applyFilter() {
+        String q = filterField.getText() == null ? "" : filterField.getText().trim().toLowerCase(Locale.ROOT);
+        boolean hide = hideQpcat.isSelected();
+        filtered.setPredicate(m -> (q.isEmpty() || m.name.toLowerCase(Locale.ROOT).contains(q))
+                && !(hide && MeasurementExtractor.isQpcatMeasurement(m.name)));
+    }
+
+    /**
+     * Shows QP-CAT's own measurements when the checked set includes one, so a
+     * restored or carried selection is never ticked out of sight.
+     */
+    private void revealQpcatIfSelected() {
+        if (hideQpcat.isSelected() && getSelected().stream().anyMatch(MeasurementExtractor::isQpcatMeasurement)) {
+            hideQpcat.setSelected(false);
+        }
+    }
+
+    /** Whether QP-CAT's own measurements are hidden from the list. */
+    public boolean isHidingQpcat() {
+        return hideQpcat.isSelected();
+    }
+
+    /** Hide or show QP-CAT's own measurements; their ticks are unchanged either way. */
+    public void setHideQpcat(boolean hide) {
+        hideQpcat.setSelected(hide);
+    }
+
+    /** Number of rows the list currently shows. */
+    int visibleCount() {
+        return filtered.size();
+    }
+
+    /**
+     * Warns, once per run, when the selection includes QP-CAT's own output: a
+     * notification plus the log. The run goes ahead, since a second pass on the
+     * embedding coordinates is a legitimate use.
+     */
+    public static void notifyIfQpcatSelected(List<String> selected) {
+        List<String> own = MeasurementExtractor.qpcatMeasurementsIn(selected);
+        if (own.isEmpty()) return;
+        String names = own.size() <= 3 ? String.join(", ", own)
+                : String.join(", ", own.subList(0, 3)) + " and " + (own.size() - 3) + " more";
+        qupath.fx.dialogs.Dialogs.showWarningNotification("QPCAT",
+                own.size() + " selected measurement(s) are QP-CAT's own output from an earlier run ("
+                + names + "). Running anyway; untick them unless that is the intent.");
     }
 
     /**
@@ -312,17 +360,6 @@ public class MeasurementSelectionPane extends VBox {
         parent.getChildren().add(at, node);
     }
 
-    /** Unchecks the visible rows matching {@code predicate}, leaving the others as they are. */
-    private void deselectVisibleMatching(java.util.function.Predicate<String> predicate) {
-        inBulk(() -> {
-            for (Item m : filtered) {
-                if (predicate.test(m.name)) {
-                    m.selected.set(false);
-                }
-            }
-        });
-    }
-
     /** Checks the visible rows matching {@code predicate}, unchecking the other visible rows. */
     private void selectVisibleOnly(java.util.function.Predicate<String> predicate) {
         pendingSelection.clear();
@@ -387,6 +424,7 @@ public class MeasurementSelectionPane extends VBox {
             }
             filterField.clear();
         });
+        revealQpcatIfSelected();
     }
 
     /**
@@ -405,6 +443,7 @@ public class MeasurementSelectionPane extends VBox {
                 m.selected.set(want.contains(m.name));
             }
         });
+        revealQpcatIfSelected();
     }
 
     /** Names of all checked measurements (including any currently filtered out). */

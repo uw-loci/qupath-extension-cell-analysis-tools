@@ -926,11 +926,17 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         // Quick Cluster overwrites detection classifications; warn once first.
         if (!BackupWarningDialog.acknowledgeOnce()) return;
 
-        // Auto-select "Mean" measurements
+        // Auto-select "Mean" measurements, leaving out what QP-CAT wrote itself
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
-        List<String> meanMeasurements = allMeasurements.stream()
+        List<String> meanMeasurements = MeasurementExtractor.presetMeasurements(allMeasurements);
+        List<String> skipped = allMeasurements.stream()
                 .filter(MeasurementExtractor::isMeanMeasurement)
+                .filter(MeasurementExtractor::isQpcatMeasurement)
                 .toList();
+        if (!skipped.isEmpty()) {
+            logger.info("{}: skipping {} QP-CAT output measurement(s) that match 'mean': {}",
+                    algorithm, skipped.size(), skipped);
+        }
 
         if (meanMeasurements.isEmpty()) {
             Dialogs.showWarningNotification(EXTENSION_NAME,
