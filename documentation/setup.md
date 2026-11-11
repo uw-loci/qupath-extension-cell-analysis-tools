@@ -58,8 +58,8 @@ After setup: **Edit > Preferences > QP-CAT: Python environment > Compute variant
 On Windows the worker starts with `OMP_NUM_THREADS=1`
 ([issue #24](https://github.com/uw-loci/qupath-extension-cell-analysis-tools/issues/24):
 Compute Thresholds hung there until the variable was set, and a limit applied inside the task
-did not help). scikit-learn, MKL and CPU PyTorch then run on one thread; UMAP and HDBSCAN use
-numba's own pool and are not affected. The switch is **Edit > Preferences > QP-CAT: Python
+did not help). scikit-learn (including its HDBSCAN), MKL and CPU PyTorch then run on one
+thread; UMAP runs on numba's own pool and is not affected. The switch is **Edit > Preferences > QP-CAT: Python
 environment > Limit the Python worker to one OpenMP thread**, on by default for Windows and off
 elsewhere; it applies the next time the worker starts, and a value you set yourself in the
 system environment is left alone. **System Info...** shows what the worker was started with.

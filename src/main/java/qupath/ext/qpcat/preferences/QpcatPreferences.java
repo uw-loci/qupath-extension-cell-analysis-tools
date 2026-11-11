@@ -1028,8 +1028,8 @@ public final class QpcatPreferences {
                         + "off elsewhere.\n\n"
                         + "On Windows the worker loads two OpenMP runtimes (MSVC's for scikit-learn, "
                         + "LLVM's for MKL and PyTorch) and Compute Thresholds hung until this variable "
-                        + "was set (issue #24). With it, scikit-learn, MKL and CPU PyTorch run on "
-                        + "one thread; UMAP and HDBSCAN use numba's own pool and are not affected.\n\n"
+                        + "was set (issue #24). With it, scikit-learn (including its HDBSCAN), MKL and "
+                        + "CPU PyTorch run on one thread; UMAP runs on numba's own pool and is not affected.\n\n"
                         + "Takes effect the next time the worker starts (restart QuPath). A value "
                         + "you set yourself in the system environment is left alone."))
                 .build());

@@ -17,8 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   two of them: MSVC's (`vcomp140.dll`, scikit-learn) and LLVM's (`libomp.dll`, which MKL and
   PyTorch depend on; conda-forge's `llvm-openmp` also ships `libiomp5md.dll`, a forwarder to
   it, which is why System Info lists it as a third entry). The cost is that
-  scikit-learn, MKL and CPU PyTorch run on one thread there; UMAP and HDBSCAN use numba's own
-  pool and are unaffected. New preference **Edit > Preferences > QP-CAT: Python environment >
+  scikit-learn (including its HDBSCAN), MKL and CPU PyTorch run on one thread there; UMAP runs
+  on numba's own pool and is unaffected. New preference **Edit > Preferences > QP-CAT: Python environment >
   Limit the Python worker to one OpenMP thread**, default on for Windows and off elsewhere; a
   value you set yourself in the system environment is left alone. **System Info...** reports
   what the worker was started with ("Worker thread limit").
