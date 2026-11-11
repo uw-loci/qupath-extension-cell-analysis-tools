@@ -97,16 +97,21 @@ class WorkerSerializationTest {
     @Test
     void theLockIsReleasedOnEveryPathThatTakesIt() throws Exception {
         String src = source();
+        // The lock is unlocked in one place, releaseWorker(), which also clears
+        // the busy-script name; every acquireWorker() call pairs with a call to it.
         assertThat(count(src, Pattern.compile("TASK_LOCK\\.unlock\\(\\)")))
-                .as("every acquireWorker() needs a matching unlock in a finally")
+                .as("TASK_LOCK is unlocked only inside releaseWorker()")
+                .isEqualTo(1);
+        assertThat(count(src, Pattern.compile("releaseWorker\\(\\);")))
+                .as("every acquireWorker() needs a matching releaseWorker() in a finally")
                 .isEqualTo(count(src, Pattern.compile("acquireWorker\\([^)]*\\);")));
-        // The unlocks must be in finally blocks, not on the success path.
+        // The releases must be in finally blocks, not on the success path.
         assertThat(src).contains("} finally {");
-        for (int i = src.indexOf("TASK_LOCK.unlock()"); i >= 0;
-                i = src.indexOf("TASK_LOCK.unlock()", i + 1)) {
+        for (int i = src.indexOf("releaseWorker();"); i >= 0;
+                i = src.indexOf("releaseWorker();", i + 1)) {
             String before = src.substring(Math.max(0, i - 200), i);
             assertThat(before)
-                    .as("an unlock at offset %d is not inside a finally block", i)
+                    .as("a release at offset %d is not inside a finally block", i)
                     .contains("finally");
         }
     }
