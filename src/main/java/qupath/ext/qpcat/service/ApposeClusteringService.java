@@ -150,12 +150,29 @@ public class ApposeClusteringService {
      * "Running..." with nothing to explain why.
      */
     private static void acquireWorker(String scriptName) {
-        if (TASK_LOCK.tryLock()) return;
-        logger.info("Task '{}' is waiting for the Python worker -- another QP-CAT "
-                + "analysis is running. Tasks run one at a time because they share "
-                + "a single Python interpreter.", scriptName);
-        TASK_LOCK.lock();
+        if (!TASK_LOCK.tryLock()) {
+            logger.info("Task '{}' is waiting for the Python worker -- another QP-CAT "
+                    + "analysis is running ({}). Tasks run one at a time because they "
+                    + "share a single Python interpreter.", scriptName, busyScript);
+            TASK_LOCK.lock();
+        }
+        busyScript = scriptName;
     }
+
+    /** Releases {@link #TASK_LOCK}; the caller must hold it. */
+    private static void releaseWorker() {
+        busyScript = null;
+        TASK_LOCK.unlock();
+    }
+
+    /** The script holding the worker, for the log and System Info; null when none. */
+    private static volatile String busyScript;
+
+    /**
+     * What {@link WorkerThreads} added to the worker's environment at the last
+     * start; empty until a worker has started or when nothing was added.
+     */
+    private volatile Map<String, String> workerThreadVariables = Map.of();
 
     /**
      * Tasks that leave the reuse cache ({@code knn_cache.py}) in place: the
@@ -514,7 +531,17 @@ public class ApposeClusteringService {
      * init string to avoid a Windows deadlock (numpy/numpy#24290).
      */
     private void spawnWorker() throws IOException {
-        Service fresh = ApposeGpu.forWorker(environment).python();
+        Environment pinned = ApposeGpu.forWorker(environment);
+        // OMP_NUM_THREADS=1 before the runtimes load; see WorkerThreads (issue #24).
+        Map<String, String> threadVars = WorkerThreads.variables(
+                qupath.ext.qpcat.preferences.QpcatPreferences.isWorkerSingleOpenMpThread(), System.getenv());
+        if (!threadVars.isEmpty()) {
+            pinned = new ApposeGpu.PinnedEnvironment(pinned, threadVars);
+            logger.info("Python worker starts with {} (preference 'Limit the Python worker "
+                    + "to one OpenMP thread')", threadVars);
+        }
+        workerThreadVariables = threadVars;
+        Service fresh = pinned.python();
 
         fresh.debug(msg -> {
             // Filter out Appose protocol messages (EXECUTE requests contain
@@ -702,7 +729,7 @@ public class ApposeClusteringService {
             reuseHeldBytes = held instanceof Number n ? n.longValue() : 0;
             return task;
         } finally {
-            TASK_LOCK.unlock();
+            releaseWorker();
         }
     }
 
@@ -728,7 +755,7 @@ public class ApposeClusteringService {
             try {
                 releaseReuseCacheLocked(reason, false);
             } finally {
-                TASK_LOCK.unlock();
+                releaseWorker();
             }
         }, "QPCAT-ReuseRelease");
         t.setDaemon(true);
@@ -812,6 +839,16 @@ public class ApposeClusteringService {
     /** True while another task holds the Python worker (see {@code TASK_LOCK}). */
     public boolean isBusy() {
         return TASK_LOCK.isLocked();
+    }
+
+    /** The script holding the worker, or null when it is free. */
+    public String getBusyScript() {
+        return busyScript;
+    }
+
+    /** What {@link WorkerThreads} added to the worker's environment at its last start. */
+    public Map<String, String> getWorkerThreadVariables() {
+        return workerThreadVariables;
     }
 
     public String getInitError() { return initError; }

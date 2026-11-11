@@ -8,6 +8,7 @@ import qupath.ext.qpcat.service.QpcatColorMaps;
 import qupath.ext.qpcat.ui.Tooltips;
 import qupath.fx.prefs.controlsfx.PropertyItemBuilder;
 import qupath.lib.gui.QuPathGUI;
+import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.prefs.PathPrefs;
 
 /**
@@ -55,6 +56,14 @@ public final class QpcatPreferences {
      */
     private static final BooleanProperty closeDialogAfterRun = PathPrefs.createPersistentPreference(
             "qpcat.cluster.closeDialogAfterRun", false);
+
+    /**
+     * Start the Python worker with {@code OMP_NUM_THREADS=1}. Default on for Windows,
+     * where Compute Thresholds hung until the variable was set (issue #24), and off
+     * elsewhere. Read at worker start; see {@link qupath.ext.qpcat.service.WorkerThreads}.
+     */
+    private static final BooleanProperty workerSingleOpenMpThread = PathPrefs.createPersistentPreference(
+            "qpcat.env.workerSingleOpenMpThread", GeneralTools.isWindows());
 
     /**
      * Default for the PAGA cluster-connectivity graph.
@@ -547,6 +556,11 @@ public final class QpcatPreferences {
     public static boolean isCloseDialogAfterRun() { return closeDialogAfterRun.get(); }
     public static void setCloseDialogAfterRun(boolean v) { closeDialogAfterRun.set(v); }
 
+    /** @see #workerSingleOpenMpThread */
+    public static boolean isWorkerSingleOpenMpThread() { return workerSingleOpenMpThread.get(); }
+    /** @see #workerSingleOpenMpThread */
+    public static void setWorkerSingleOpenMpThread(boolean v) { workerSingleOpenMpThread.set(v); }
+
     public static int getAeLatentDim() { return aeLatentDim.get(); }
     public static void setAeLatentDim(int v) { aeLatentDim.set(v); }
 
@@ -1004,6 +1018,20 @@ public final class QpcatPreferences {
                 .name(ApposeGpu.PREFERENCE_NAME)
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(ApposeGpu.preferenceDescription()))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(workerSingleOpenMpThread, Boolean.class)
+                .name("Limit the Python worker to one OpenMP thread")
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(
+                        "Start the Python worker with OMP_NUM_THREADS=1. Default on for Windows, "
+                        + "off elsewhere.\n\n"
+                        + "On Windows the worker loads three OpenMP runtimes (scikit-learn's, "
+                        + "PyTorch's and MKL's) and Compute Thresholds hung until this variable "
+                        + "was set (issue #24). With it, scikit-learn, MKL and CPU PyTorch run on "
+                        + "one thread; UMAP and HDBSCAN use numba's own pool and are not affected.\n\n"
+                        + "Takes effect the next time the worker starts (restart QuPath). A value "
+                        + "you set yourself in the system environment is left alone."))
                 .build());
 
         // --- Spatial Statistics Expansion (v1) ---

@@ -94,13 +94,18 @@ minimal before clustering without it.
 
 **Problem:** The log stops at "Computing histograms and thresholds..." (or the Choose k sweep
 never returns) and anything queued behind it waits forever.
-**Cause:** Thread pools inside the Python worker (BLAS, OpenMP, numba) can deadlock on Windows;
-issue #24 is one case. Since the release after 0.23.5 these steps run on one thread, which
-they can afford.
-**Solution:** Update QP-CAT. On an older version, set the user environment variable
-`OMP_NUM_THREADS=1` before starting QuPath. If it still hangs, open **Extensions > QP-CAT >
-Setup & help > System Info...** and paste the "Thread pools" and "Thread environment" sections
-into a bug report: they list which libraries the worker loaded and how many threads each has.
+**Cause:** Thread pools inside the Python worker can deadlock on Windows; issue #24 is one
+case. The Windows worker loads three OpenMP runtimes (scikit-learn's, PyTorch's and MKL's),
+and setting `OMP_NUM_THREADS=1` before they load is what stopped the hang. A limit applied
+inside the task (0.23.6) did not.
+**Solution:** Update QP-CAT. Since 0.24.1 the worker starts with `OMP_NUM_THREADS=1` on
+Windows (**Edit > Preferences > QP-CAT: Python environment > Limit the Python worker to one
+OpenMP thread**, on by default there). On an older version, set the user environment variable
+`OMP_NUM_THREADS=1` yourself before starting QuPath. If it still hangs, restart QuPath, open
+**Extensions > QP-CAT > Setup & help > System Info...** before running anything, and paste the
+"Worker thread limit" line and the "Thread pools" and "Thread environment" sections into a bug
+report, with the last "Marker i/n" line from the log: together they say which libraries the
+worker loaded, how many threads each has, and which step never returned.
 
 ## Messages you may see
 

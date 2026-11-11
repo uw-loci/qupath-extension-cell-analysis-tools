@@ -791,6 +791,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         sb.append("Environment path: ").append(ApposeClusteringService.getEnvironmentPath()).append("\n");
         qupath.ext.qpcat.service.ApposeGpu.WorkerGpu gpu = service.getWorkerGpu();
         sb.append("PyTorch / GPU: ").append(gpu == null ? "not checked (worker not started)" : gpu.describe())
+                .append("\n");
+        sb.append("Worker thread limit: ").append(qupath.ext.qpcat.service.WorkerThreads.describe(
+                QpcatPreferences.isWorkerSingleOpenMpThread(), System.getenv(), gpu != null))
                 .append("\n\n");
 
         sb.append("=== Java / OS ===\n");
@@ -812,7 +815,12 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         String javaInfo = sb.toString();
 
-        if (service.isAvailable()) {
+        if (service.isAvailable() && service.isBusy()) {
+            // A task that never returns would hold this dialog forever (issue #24).
+            showInfoDialog(javaInfo + "=== Python ===\nSkipped: the Python worker is busy with '"
+                    + service.getBusyScript() + "'. Open System Info again when it finishes; "
+                    + "if it never does, restart QuPath and open System Info before running anything.\n");
+        } else if (service.isAvailable()) {
             Dialogs.showInfoNotification(EXTENSION_NAME, "Collecting system information...");
             Thread infoThread = new Thread(() -> {
                 String pythonInfo;

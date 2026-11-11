@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Fixed
+
+- **Windows: the Python worker starts with `OMP_NUM_THREADS=1` (#24).** Compute Thresholds
+  still hung on Windows in 0.23.6, with the one-thread limit applied inside the task. The
+  reporter's workaround, the variable set before QuPath starts, is what works, so QP-CAT now sets
+  it on the worker process itself, before any OpenMP runtime loads. On Windows the worker loads
+  three of them: MSVC's for scikit-learn, and two copies of LLVM's (`libomp.dll` for PyTorch,
+  `libiomp5md.dll` for MKL, both from conda-forge's `llvm-openmp`). The cost is that
+  scikit-learn, MKL and CPU PyTorch run on one thread there; UMAP and HDBSCAN use numba's own
+  pool and are unaffected. New preference **Edit > Preferences > QP-CAT: Python environment >
+  Limit the Python worker to one OpenMP thread**, default on for Windows and off elsewhere; a
+  value you set yourself in the system environment is left alone. **System Info...** reports
+  what the worker was started with ("Worker thread limit").
+- **System Info... no longer waits behind a running (or hung) task.** When the worker is busy
+  it shows the QuPath-side information at once and says which task holds the worker.
+- **Compute Thresholds logs each step** (the three library loads, then triangle, Gaussian
+  mixture and gamma per marker), so a hang names the step that never returned.
+
 ## [0.24.0] - 2026-11-11
 
 ### Added

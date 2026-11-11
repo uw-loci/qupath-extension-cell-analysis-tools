@@ -184,15 +184,24 @@ df_norm = (df_clipped - norm_offset) / norm_scale
 # 3. Compute per-marker histograms and thresholds
 task.update("Computing histograms and thresholds...")
 
-# Import optional dependencies (available in the pixi env)
+# Import optional dependencies (available in the pixi env). Each load is
+# logged on its own line: a Windows worker hung somewhere after the line
+# above (issue #24) and the log has to say which step never returned.
+logger.info("Loading scikit-image (triangle threshold)")
 has_triangle = importlib.util.find_spec("skimage") is not None
-if not has_triangle:
+if has_triangle:
+    import skimage.filters  # noqa: F401 - loaded here so the log shows it; used in triangle_threshold
+else:
     logger.warning("scikit-image not available, triangle thresholding disabled")
 
+logger.info("Loading scikit-learn (Gaussian mixture)")
 has_gmm = importlib.util.find_spec("sklearn") is not None
-if not has_gmm:
+if has_gmm:
+    import sklearn.mixture  # noqa: F401 - same, used in gmm_fit
+else:
     logger.warning("scikit-learn not available, GMM thresholding disabled")
 
+logger.info("Loading scipy.stats (gamma fit)")
 try:
     from scipy.stats import gamma as gamma_dist
 
@@ -245,6 +254,7 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
 
         # Triangle method (skimage)
         if has_triangle:
+            logger.info("Marker %d/%d '%s': triangle", i + 1, n_markers, marker)
             try:
                 t = triangle_threshold(valid)
                 t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
@@ -256,6 +266,7 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
         # crossing between the two means, not the mean midpoint.
         fit = None
         if has_gmm:
+            logger.info("Marker %d/%d '%s': Gaussian mixture", i + 1, n_markers, marker)
             try:
                 fit = gmm_fit(valid, max_iter=GMM_MAX_ITER)
                 t = gmm_threshold(fit)
@@ -266,6 +277,7 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
 
         # Gamma mixture (GammaGateR-inspired)
         if has_gamma:
+            logger.info("Marker %d/%d '%s': gamma", i + 1, n_markers, marker)
             try:
                 # Shift values to be strictly positive for gamma fitting
                 shift = 0.0
