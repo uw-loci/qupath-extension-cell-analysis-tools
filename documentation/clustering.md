@@ -559,8 +559,9 @@ those runs still reproduce exactly.
 
 **Extensions > QP-CAT > Explore & spatial > Quick clustering presets**. Each selects all
 "Mean" measurements except QP-CAT's own output from earlier runs (skipped names go to the
-log), Z-score normalization and a UMAP embedding, then runs immediately -- no dialog. Good for a first look. They run on the image open in the viewer only; for
-several images use the full dialog.
+log), Z-score normalization and a UMAP embedding, then runs immediately -- no dialog. Good for
+a first look. They run on the image open in the viewer only; for several images use the full
+dialog.
 
 | Preset | Runs |
 |---|---|
