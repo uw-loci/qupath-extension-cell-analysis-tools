@@ -95,8 +95,8 @@ minimal before clustering without it.
 **Problem:** The log stops at "Computing histograms and thresholds..." (or the Choose k sweep
 never returns) and anything queued behind it waits forever.
 **Cause:** Thread pools inside the Python worker can deadlock on Windows; issue #24 is one
-case. The Windows worker loads three OpenMP runtimes (scikit-learn's, PyTorch's and MKL's),
-and setting `OMP_NUM_THREADS=1` before they load is what stopped the hang. A limit applied
+case. The Windows worker loads two OpenMP runtimes (MSVC's for scikit-learn, LLVM's for MKL
+and PyTorch), and setting `OMP_NUM_THREADS=1` before they load is what stopped the hang. A limit applied
 inside the task (0.23.6) did not.
 **Solution:** Update QP-CAT. Since 0.24.1 the worker starts with `OMP_NUM_THREADS=1` on
 Windows (**Edit > Preferences > QP-CAT: Python environment > Limit the Python worker to one

@@ -1026,8 +1026,8 @@ public final class QpcatPreferences {
                 .description(Tooltips.wrap(
                         "Start the Python worker with OMP_NUM_THREADS=1. Default on for Windows, "
                         + "off elsewhere.\n\n"
-                        + "On Windows the worker loads three OpenMP runtimes (scikit-learn's, "
-                        + "PyTorch's and MKL's) and Compute Thresholds hung until this variable "
+                        + "On Windows the worker loads two OpenMP runtimes (MSVC's for scikit-learn, "
+                        + "LLVM's for MKL and PyTorch) and Compute Thresholds hung until this variable "
                         + "was set (issue #24). With it, scikit-learn, MKL and CPU PyTorch run on "
                         + "one thread; UMAP and HDBSCAN use numba's own pool and are not affected.\n\n"
                         + "Takes effect the next time the worker starts (restart QuPath). A value "

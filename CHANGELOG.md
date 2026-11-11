@@ -12,8 +12,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   still hung on Windows in 0.23.6, with the one-thread limit applied inside the task. The
   reporter's workaround, the variable set before QuPath starts, is what works, so QP-CAT now sets
   it on the worker process itself, before any OpenMP runtime loads. On Windows the worker loads
-  three of them: MSVC's for scikit-learn, and two copies of LLVM's (`libomp.dll` for PyTorch,
-  `libiomp5md.dll` for MKL, both from conda-forge's `llvm-openmp`). The cost is that
+  two of them: MSVC's (`vcomp140.dll`, scikit-learn) and LLVM's (`libomp.dll`, which MKL and
+  PyTorch depend on; conda-forge's `llvm-openmp` also ships `libiomp5md.dll`, a forwarder to
+  it, which is why System Info lists it as a third entry). The cost is that
   scikit-learn, MKL and CPU PyTorch run on one thread there; UMAP and HDBSCAN use numba's own
   pool and are unaffected. New preference **Edit > Preferences > QP-CAT: Python environment >
   Limit the Python worker to one OpenMP thread**, default on for Windows and off elsewhere; a

@@ -6,10 +6,10 @@ import java.util.Map;
 /**
  * The thread-count variable QP-CAT sets on its Python worker.
  *
- * <p>On Windows the worker loads three OpenMP runtimes at once (MSVC's for
- * scikit-learn, and two copies of LLVM's: {@code libomp.dll} for PyTorch and
- * {@code libiomp5md.dll} for MKL, both shipped by conda-forge's
- * {@code llvm-openmp}). Compute Thresholds hung in that worker until
+ * <p>On Windows the worker loads two OpenMP runtimes: MSVC's ({@code vcomp140.dll},
+ * scikit-learn) and LLVM's ({@code libomp.dll}, which MKL and PyTorch depend on;
+ * conda-forge's {@code llvm-openmp} also ships {@code libiomp5md.dll}, a forwarder
+ * to it, so threadpoolctl lists it twice). Compute Thresholds hung in that worker until
  * {@code OMP_NUM_THREADS=1} was set before QuPath started (issue #24); a
  * threadpoolctl limit applied inside the task did not help, so the variable
  * has to be in the process environment when the runtimes load.
