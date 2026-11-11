@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
@@ -94,8 +95,11 @@ public final class McpServerController {
     private volatile Project<?> servedProject;
     private McpHttpEndpoint endpoint;
     private McpJsonRpc rpc;
-    /** Bumped at every start and stop; a tool call from an older run is not shown. */
-    private volatile long generation;
+    /**
+     * Bumped at every start and stop; a tool call from an older run is not shown.
+     * Written under this object's lock, read lock-free by tool-call threads.
+     */
+    private final AtomicLong generation = new AtomicLong();
     private ScheduledExecutorService idleTimer;
     private volatile Supplier<Project<?>> projectSupplier = () -> {
         QuPathGUI gui = QuPathGUI.getInstance();
@@ -197,7 +201,7 @@ public final class McpServerController {
         String version = GeneralTools.getPackageVersion(McpServerController.class);
         if (version == null || version.isBlank()) version = "dev";
         McpExplainerTools tools = new McpExplainerTools(this::currentProject);
-        final long run = generation + 1;
+        final long run = generation.get() + 1;
         McpJsonRpc jsonRpc = new McpJsonRpc(version, INSTRUCTIONS, tools.tools(),
                 MAX_TOOL_CALLS_PER_MINUTE, (name, outcome) -> onToolCall(run, name, outcome));
 
@@ -218,7 +222,7 @@ public final class McpServerController {
             throw new IOException(PORTS_EXHAUSTED_TEXT);
         }
 
-        this.generation = run;
+        generation.set(run);
         this.endpoint = bound;
         this.rpc = jsonRpc;
         this.servedProject = project;
@@ -265,7 +269,7 @@ public final class McpServerController {
         token = null;
         startedAt = null;
         runningFlag = false;
-        generation++;
+        generation.incrementAndGet();
         logger.info("MCP endpoint stopped (reason: {})", why);
         auditEvent(servedProject, "stopped (reason: " + why + ")");
         servedProject = null;
@@ -331,10 +335,10 @@ public final class McpServerController {
      * @param outcome  its short outcome text
      */
     void onToolCall(long run, String toolName, String outcome) {
-        if (run != generation) return;
+        if (run != generation.get()) return;
         touch();
         fx(() -> {
-            if (run != generation) return;
+            if (run != generation.get()) return;
             toolCallCount.set(toolCallCount.get() + 1);
             lastEvent.set("tool call: " + toolName + " -> " + outcome);
         });
@@ -342,7 +346,7 @@ public final class McpServerController {
 
     /** @return the current run's generation, for tests */
     long generation() {
-        return generation;
+        return generation.get();
     }
 
     private void touch() {

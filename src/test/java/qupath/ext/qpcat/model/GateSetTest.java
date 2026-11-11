@@ -52,7 +52,11 @@ class GateSetTest {
     // ---- fingerprint ----
 
     private static double[][] blobs(long seed) {
-        Random rng = new Random(seed);
+        return blobs(new Random(seed));
+    }
+
+    /** Three Gaussian blobs of 200 cells each, drawn from {@code rng}. */
+    private static double[][] blobs(Random rng) {
         double[][] centres = {{0, 0}, {10, 0}, {5, 9}};
         double[][] out = new double[600][2];
         for (int i = 0; i < out.length; i++) {
