@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-11
+
 ### Added
 
 - **Phenotyping rules can require a class (#27).** Select a rule and click **+ Add class
