@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-11-11
+
 ### Changed
 
 - **The measurement picker hides QP-CAT's own output by default.** A new checkbox, **Hide
@@ -20,6 +22,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - **A run on QP-CAT's own output warns instead of staying silent.** Clustering, Phenotyping and
   Embedding show one notification naming the measurements and the log gets a warning (batch runs
   too); the run goes ahead.
+
+### Fixed
+
+- The preference tooltip, setup.md and the 0.24.1 changelog said HDBSCAN was unaffected by the
+  Windows one-thread limit. QP-CAT's HDBSCAN is scikit-learn's, so it is affected; only UMAP runs
+  on numba's own pool.
 
 ## [0.24.1] - 2026-11-11
 
