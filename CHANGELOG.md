@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Changed
+
+- **The Cluster Explainer's default Anthropic model is now `claude-sonnet-5-5`**, the current
+  Sonnet, at the same per-token price as `claude-sonnet-5`. The Model box suggests
+  `claude-sonnet-5-5`, `claude-opus-5-5` and `claude-haiku-5-5`. A model you typed or chose
+  earlier is kept; only the untouched default changes. The request sends no thinking, sampling
+  or tool settings, so it runs unchanged on the 5.5 models.
+
+### Documentation
+
+- The README said the Anthropic provider returns structured output via tool use. It does not:
+  the prompt asks for a JSON array and the reply text is parsed.
+
 ## [0.24.2] - 2026-11-11
 
 ### Changed

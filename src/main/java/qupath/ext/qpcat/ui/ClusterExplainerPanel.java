@@ -1329,7 +1329,7 @@ public class ClusterExplainerPanel {
             // the provider accepts will be sent as typed. Listed newest first;
             // a model released after this build simply will not appear here.
             modelCombo.setItems(FXCollections.observableArrayList(
-                    "claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"));
+                    "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"));
             modelCombo.setValue(QpcatPreferences.getLlmAnthropicModel());
             modelCombo.setDisable(false);
         } else if (p == Provider.OLLAMA) {

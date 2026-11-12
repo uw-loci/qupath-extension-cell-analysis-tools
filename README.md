@@ -361,7 +361,7 @@ Inspired by [OpenIMC](https://github.com/dean-tessone/OpenIMC)'s LLM phenotyping
 |---|---|---|---|
 | **Any chatbot (copy prompt, paste reply)** | No key, no installation, works with any LLM (claude.ai, ChatGPT, Gemini, Copilot, Ollama, local model) | Multi-step workflow (copy → paste into chatbot → paste back) | — (user types chatbot name for the record) |
 | **MCP server (AI agents)** (not in the Provider box; the agent starts it, see [MCP server](documentation/mcp-server.md)) | No key; the agent does the whole round trip from one sentence you type; explanations saved into the result | Needs an MCP-capable agent (Claude Code, Codex, Cursor, Gemini CLI); a local server you start and stop, with a [security model](documentation/mcp-server.md#security) to read; only Claude Code and a Python test client, on Linux, have connected so far | — (the agent supplies its own label for the record) |
-| **Anthropic (Claude API)** | Hosted; structured output via tool use | Costs money per call; key must be re-entered in each results window | `claude-sonnet-5` (the Model box is editable -- type any id the provider accepts) |
+| **Anthropic (Claude API)** | Hosted; the prompt asks for a JSON array and the reply text is parsed | Costs money per call; key must be re-entered in each results window | `claude-sonnet-5-5` (the Model box is editable -- type any id the provider accepts) |
 | **Ollama (local)** | Free, offline, no key needed, no data leaves your machine | Quality varies with chosen model; must run an Ollama server | `llama3.1:8b` (or any model you have pulled) |
 
 OpenAI is intentionally **not** supported.

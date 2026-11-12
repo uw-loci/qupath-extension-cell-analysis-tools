@@ -455,7 +455,7 @@ public final class QpcatPreferences {
             "qpcat.llm.provider", "NONE");
 
     private static final StringProperty llmAnthropicModel = PathPrefs.createPersistentPreference(
-            "qpcat.llm.anthropicModel", "claude-sonnet-5");
+            "qpcat.llm.anthropicModel", "claude-sonnet-5-5");
 
     private static final StringProperty llmOllamaModel = PathPrefs.createPersistentPreference(
             "qpcat.llm.ollamaModel", "llama3.1:8b");
@@ -1341,7 +1341,7 @@ public final class QpcatPreferences {
                 .name("Anthropic Model")
                 .category(CATEGORY_LLM)
                 .description(Tooltips.wrap("Anthropic model id used when Provider is ANTHROPIC "
-                        + "(default: claude-sonnet-5). The Model box in the tab is editable, so any id the provider accepts can be typed there."))
+                        + "(default: claude-sonnet-5-5). The Model box in the tab is editable, so any id the provider accepts can be typed there."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(llmOllamaModel, String.class)

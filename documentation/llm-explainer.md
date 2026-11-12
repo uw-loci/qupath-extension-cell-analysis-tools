@@ -249,7 +249,7 @@ The tab writes the first five back to QuPath's preferences when you change them,
 | Preference | Default | What it does |
 |---|---|---|
 | Provider | None | The provider the tab opens on |
-| Anthropic Model | `claude-sonnet-5` | Model id for Anthropic |
+| Anthropic Model | `claude-sonnet-5-5` | Model id for Anthropic |
 | Ollama Model | `llama3.1:8b` | Model tag for Ollama |
 | Ollama Endpoint | `http://localhost:11434` | Ollama server URL |
 | Top Markers Per Cluster | 10 | Markers sent per cluster |
@@ -315,7 +315,7 @@ three times and compare; a label that changes between runs is not one to report.
 
 The audit log captures the full prompt and response for every call. For a paper-grade trail:
 
-1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5`). For an MCP run no row records the model; take it from the agent's own session and report the `Agent:` row as the agent's self-description beside it
+1. Record the **exact provider and model string** from the audit log entry (e.g. `claude-sonnet-5-5`). For an MCP run no row records the model; take it from the agent's own session and report the `Agent:` row as the agent's self-description beside it
 2. Record the **prompt template version** (e.g. `cluster_phenotype_v2`), the number of top markers sent per cluster (`Top markers:` row) and the `Prompt hash:` row, a SHA-256 of the exact prompt text
 3. Archive the **`Response:` block** verbatim -- this is the actual text the LLM returned, including any cluster suggestions you accepted into your final analysis
 
@@ -398,7 +398,7 @@ morphology-level reasoning.
 
 With a project open, every LLM call is logged to `<project>/qpcat/logs/qpcat_YYYY-MM-DD.log` under the `=== LLM EXPLAIN ===` entry tag with provider, model, the images the result covers (`Image:` names the image for a one-image result run from the tab and reads `8 images` for an eight-image one; over MCP it is the coarse scope, `1 image`, `8 images` or `unknown scope`, never a name; a result saved without per-cell image references records the image that was open), prompt-template version, prompt text, response text, and token counts (`unknown` for the chatbot and MCP paths). Both the Java side (`LlmAuditScrubber`) and the Python side (`scrub_secrets`) strip `Authorization:` headers and `sk-ant-*` keys from any payload before it reaches the log, so the audit trail does not contain the API key. It is append-only plain text, not tamper-evident, and the scrubber removes credential shapes only -- it does not de-identify anything else, such as a result name you typed. For any paper that uses LLM-derived phenotype labels (even just as initial hypotheses), include in your methods section:
 
-- **Provider and exact model string** (e.g. `claude-sonnet-5`, not just "Claude")
+- **Provider and exact model string** (e.g. `claude-sonnet-5-5`, not just "Claude")
 - **For an MCP run: QP-CAT does not know which model answered.** The `Agent:` row is a label the agent wrote about itself (cut at 60 characters) and the `Client:` row is the client program's `User-Agent`, not a model. Take the model from the agent's own session (the model shown in the client, or its transcript) and report the `Agent:` label as the agent's self-description beside it. The recorded prompt is the text QP-CAT handed the agent; the model saw it inside the agent's conversation, with a system prompt and tool descriptions QP-CAT does not record, and with sampling settings QP-CAT neither sets nor sees. The `Agent:` and `Client:` rows are not passed through the key scrubber
 - **Prompt template version** as logged (currently `cluster_phenotype_v2`)
 - **The fact that the call was made** -- LLM involvement, even at the exploratory stage, should be disclosed
