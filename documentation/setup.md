@@ -28,9 +28,11 @@ After setup: **Edit > Preferences > QP-CAT: Python environment > Environment loc
 
 ## CPU or GPU
 
-**Only the autoencoder and Harmony batch correction use a GPU.** Clustering, embedding,
-phenotyping, spatial statistics and cellular neighborhoods run on the CPU whatever hardware
-you have.
+**Only the autoencoder and Harmony batch correction use a GPU through this variant.** Clustering,
+embedding, phenotyping, spatial statistics and cellular neighborhoods run on the CPU whatever
+hardware you have. The one optional exception is Leiden's neighbor graph and partition, which
+can run on the GPU in a separate RAPIDS environment you install yourself; see
+[Neighbor graph and Leiden on the GPU](#neighbor-graph-and-leiden-on-the-gpu).
 
 | Variant | Installs on | GPU used for |
 |---|---|---|
@@ -139,9 +141,9 @@ and the labels come back the same way (about a second each way at 1 million cell
 | Spatial statistics, cellular neighborhoods | CPU. Permutation tests are CPU-bound. |
 | Phenotyping | CPU. Threshold arithmetic. |
 
-UMAP, neighbour-graph construction and permutation statistics all have GPU
-implementations elsewhere (RAPIDS `cuml`, `cugraph`). Adopting any of them is tracked
-internally; nothing is promised here beyond the table.
+UMAP and permutation statistics have GPU implementations elsewhere (RAPIDS `cuml`, `cugraph`).
+The neighbor graph is the exception, covered by the Leiden row above. Adopting any of the
+others is tracked internally; nothing is promised here beyond the table.
 
 ### "I have a GPU but it is not being used"
 

@@ -1769,26 +1769,39 @@ def gpu_bridge_run(
         linux_job, job = lines[-2], lines[-1]
     else:
         job = os.path.join(scratch_dir or gpu_scratch_default(python_cmd), job_name)
-        os.makedirs(job, exist_ok=True)
+        try:
+            os.makedirs(job, exist_ok=True)
+        except OSError as e:
+            raise GpuBridgeError(
+                "cannot create the scratch folder %s (%s); set 'GPU graph and Leiden: "
+                "scratch folder' to a writable place" % (job, e)
+            )
         linux_job = job
     t0 = time.monotonic()
-    np.save(
-        os.path.join(job, "matrix.npy"), np.ascontiguousarray(matrix, dtype=np.float32)
-    )
-    with open(os.path.join(job, "params.json"), "w") as f:
-        json.dump(
-            {
-                "n_neighbors": int(n_neighbors),
-                "seed": int(seed),
-                "resolutions": [float(r) for r in resolutions],
-                "brute_force_cells": GPU_BRUTE_FORCE_CELLS,
-            },
-            f,
+    try:
+        np.save(
+            os.path.join(job, "matrix.npy"),
+            np.ascontiguousarray(matrix, dtype=np.float32),
         )
-    with open(
-        os.path.join(job, "gpu_graph_leiden.py"), "w", encoding="utf-8", newline="\n"
-    ) as f:
-        f.write(script_source)
+        with open(os.path.join(job, "params.json"), "w") as f:
+            json.dump(
+                {
+                    "n_neighbors": int(n_neighbors),
+                    "seed": int(seed),
+                    "resolutions": [float(r) for r in resolutions],
+                    "brute_force_cells": GPU_BRUTE_FORCE_CELLS,
+                },
+                f,
+            )
+        with open(
+            os.path.join(job, "gpu_graph_leiden.py"),
+            "w",
+            encoding="utf-8",
+            newline="\n",
+        ) as f:
+            f.write(script_source)
+    except OSError as e:
+        raise GpuBridgeError("cannot write the hand-over files to %s (%s)" % (job, e))
     seconds = {"write": round(time.monotonic() - t0, 3)}
     logger.info(
         "GPU graph: %d cells x %d features written to %s in %.1f s",
@@ -2282,6 +2295,15 @@ if algorithm == "leiden":
             _graph = None
             logger.warning(
                 "GPU graph failed (%s); running Leiden on the CPU", _backend_reason
+            )
+        except Exception as e:  # anything else is still no reason to lose the run
+            _backend_reason = "%s: %s" % (type(e).__name__, e)
+            _backend = "cpu"
+            _graph = None
+            logger.warning(
+                "GPU graph failed unexpectedly (%s); running Leiden on the CPU",
+                _backend_reason,
+                exc_info=True,
             )
     if _graph is None:
         _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)

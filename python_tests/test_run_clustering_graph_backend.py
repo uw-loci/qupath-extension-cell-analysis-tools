@@ -168,3 +168,13 @@ def test_degenerate_resolution_is_left_to_the_worker(tmp_path):
         and "every cell as its own cluster at resolution 0.5" in note
     )
     assert s["CpuLeidenEngine"](conn).partition(0.5, 42).shape == (conn.shape[0],)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_an_unwritable_scratch_folder_is_a_bridge_error_not_a_crash():
+    s = _symbols()
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["gpu_bridge_run"](
+            _blobs(), 10, 42, [1.0], sys.executable, "/nonexistent/qpcat", STUB
+        )
+    assert "scratch folder" in str(e.value)
