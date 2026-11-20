@@ -131,6 +131,7 @@ public final class BatchYamlSchema {
         private Double resolution;
         private Integer k;
         private String normalization;
+        private String missingValues;
         private String embedding;
         private Integer pcaNComponents;
         private Integer umapNNeighbors;
@@ -207,6 +208,9 @@ public final class BatchYamlSchema {
 
         public String getNormalization() { return normalization; }
         public void setNormalization(String normalization) { this.normalization = normalization; }
+        /** {@code missing_values}: exclude_objects (default), exclude_measurements or impute (issue #29). */
+        public String getMissingValues() { return missingValues; }
+        public void setMissingValues(String v) { this.missingValues = v; }
 
         public String getEmbedding() { return embedding; }
         public void setEmbedding(String embedding) { this.embedding = embedding; }
@@ -302,6 +306,7 @@ public final class BatchYamlSchema {
     /** {@code phenotyping} block. */
     public static final class PhenotypingBlock {
         private boolean enabled = true;
+        private String missingValues;
         private List<PhenotypeRuleEntry> rules = new ArrayList<>();
         private LlmExplainerBlock llmExplainer;
 
@@ -309,6 +314,9 @@ public final class BatchYamlSchema {
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
         public List<PhenotypeRuleEntry> getRules() { return rules; }
+        /** {@code missing_values}: exclude_objects (default), exclude_measurements or impute (issue #29). */
+        public String getMissingValues() { return missingValues; }
+        public void setMissingValues(String v) { this.missingValues = v; }
         public void setRules(List<PhenotypeRuleEntry> rules) {
             this.rules = rules == null ? new ArrayList<>() : new ArrayList<>(rules);
         }

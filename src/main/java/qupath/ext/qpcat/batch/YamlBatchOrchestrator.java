@@ -492,8 +492,11 @@ public final class YamlBatchOrchestrator {
                     ? schema.getClustering().getMeasurements() : null;
 
             HeadlessPhenotypingWorkflow hw = new HeadlessPhenotypingWorkflow();
+            qupath.ext.qpcat.model.MissingPolicy missingPolicy = pb.getMissingValues() == null
+                    ? qupath.ext.qpcat.model.MissingPolicy.EXCLUDE_OBJECTS
+                    : qupath.ext.qpcat.model.MissingPolicy.fromId(pb.getMissingValues());
             HeadlessPhenotypingWorkflow.Outcome res = hw.runPhenotyping(
-                    rp.getImages(), pb.getRules(), normalization, measurements, null);
+                    rp.getImages(), pb.getRules(), normalization, measurements, missingPolicy, null);
 
             for (String w : res.getWarnings()) {
                 emitter.emit(ProgressEmitter.Level.WARN, "phenotyping: " + w);
@@ -663,6 +666,9 @@ public final class YamlBatchOrchestrator {
         // Normalization
         if (cc.getNormalization() != null) {
             config.setNormalization(parseNormalization(cc.getNormalization()));
+            if (cc.getMissingValues() != null) {
+                config.setMissingPolicy(qupath.ext.qpcat.model.MissingPolicy.fromId(cc.getMissingValues()));
+            }
         }
         // Embedding
         if (cc.getEmbedding() != null) {

@@ -225,6 +225,9 @@ public class EmbeddingDialog {
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
         // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
         measurementPane.setMeasurements(allMeasurements, null);
+        final var dets = detections;
+        measurementPane.setMissingValues(MeasurementExtractor.missingValues(dets, allMeasurements),
+                sel -> MeasurementExtractor.missingValues(dets, sel), null);
     }
 
     /** True if {@code prefix}1 already exists on the current image's detections. */
@@ -248,6 +251,7 @@ public class EmbeddingDialog {
         config.setAlgorithm(Algorithm.NONE);
         config.setSelectedMeasurements(selected);
         config.setNormalization(normalizationCombo.getValue());
+        config.setMissingPolicy(measurementPane.getMissingPolicy());
         config.setEmbeddingMethod(embeddingCombo.getValue());
         config.setGeneratePlots(false);
 

@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ChooseKResult;
 import qupath.ext.qpcat.model.ClusteringConfig;
+import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.InputSelection;
 import qupath.ext.qpcat.model.MembershipConfidence;
@@ -444,7 +445,7 @@ public class ClusteringWorkflow {
         List<PathObject> detections = input.cells();
 
         // Extract measurements
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor extractor = new MeasurementExtractor(config.getMissingPolicy());
         MeasurementExtractor.ExtractionResult extraction = extractor.extract(
                 detections, config.getSelectedMeasurements());
 
@@ -559,6 +560,9 @@ public class ClusteringWorkflow {
                 ? "Embedding computed for " + result.getNCells() + " cells."
                 : "Clustering complete: " + result.clusterCountText()
                     + " found for " + result.getNCells() + " cells.";
+        if (result.getMissingNote() != null) {
+            completeMsg += " " + result.getMissingNote() + ".";
+        }
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -964,7 +968,7 @@ public class ClusteringWorkflow {
 
         // Extract measurements across all images
         reportPhase(progressCallback, "extract", "Extracting measurements...");
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor extractor = new MeasurementExtractor(config.getMissingPolicy());
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extractMultiImage(groups, config.getSelectedMeasurements());
 
@@ -1369,6 +1373,7 @@ public class ClusteringWorkflow {
             String normalization,
             String phenotypeRulesJson,
             String gatesJson,
+            MissingPolicy missingPolicy,
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
@@ -1386,7 +1391,7 @@ public class ClusteringWorkflow {
             throw new IOException("No detection objects found. Run cell detection first.");
         }
 
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor extractor = new MeasurementExtractor(missingPolicy);
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extract(detections, selectedMeasurements);
 
@@ -1471,6 +1476,7 @@ public class ClusteringWorkflow {
             String normalization,
             String phenotypeRulesJson,
             String gatesJson,
+            MissingPolicy missingPolicy,
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
@@ -1484,7 +1490,7 @@ public class ClusteringWorkflow {
         try {
 
         report(progressCallback, "Extracting measurements...");
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor extractor = new MeasurementExtractor(missingPolicy);
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extractMultiImage(groups, selectedMeasurements);
 
@@ -1848,7 +1854,7 @@ public class ClusteringWorkflow {
                 ? cellsOfClass(imageData, subclusterParent)
                 : cellsToCluster(imageData, config, "k sweep").cells();
         report(progressCallback, "Reading " + cells.size() + " cells...");
-        MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor()
+        MeasurementExtractor.ExtractionResult extraction = new MeasurementExtractor(config.getMissingPolicy())
                 .extract(cells, config.getSelectedMeasurements());
 
         List<String> notes = new ArrayList<>();
@@ -2175,6 +2181,10 @@ public class ClusteringWorkflow {
             // numbers; only Z-scored values have a centre to diverge about.
             if (config.getNormalization() != null) {
                 result.setNormalization(config.getNormalization().getId());
+            }
+            if (!extraction.missingSummary().isEmpty()) {
+                result.setMissingNote(extraction.missingSummary());
+                result.setExcludedObjects(extraction.getExcludedObjects());
             }
 
             // Noise is a row of clusterStats but not a cluster -- carry the index
@@ -2929,7 +2939,7 @@ public class ClusteringWorkflow {
         logger.info("Sub-clustering {} detections from {}", parentDetections.size(), parentClusterName);
 
         // Extract measurements
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        MeasurementExtractor extractor = new MeasurementExtractor(config.getMissingPolicy());
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extract(parentDetections, config.getSelectedMeasurements());
 
@@ -3201,7 +3211,7 @@ public class ClusteringWorkflow {
             }
 
             reportPhase(progressCallback, "extract", "Extracting measurements...");
-            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor extractor = new MeasurementExtractor(config.getMissingPolicy());
             MeasurementExtractor.ExtractionResult extraction = multiImage
                     ? extractor.extractMultiImage(analysedGroups, config.getSelectedMeasurements())
                     : extractor.extract(analysedGroups.get(0).detections,
@@ -3329,7 +3339,7 @@ public class ClusteringWorkflow {
             }
 
             reportPhase(progressCallback, "extract", "Extracting measurements...");
-            MeasurementExtractor extractor = new MeasurementExtractor();
+            MeasurementExtractor extractor = new MeasurementExtractor(config.getMissingPolicy());
             MeasurementExtractor.ExtractionResult extraction =
                     extractor.extractMultiImage(groups, config.getSelectedMeasurements());
 

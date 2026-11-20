@@ -15,6 +15,16 @@ import javafx.beans.property.SimpleBooleanProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
+import javafx.scene.control.Hyperlink;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ToggleGroup;
+import qupath.ext.qpcat.model.MissingPolicy;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.function.Function;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -56,6 +66,8 @@ public class MeasurementSelectionPane extends VBox {
     private static final class Item {
         final String name;
         final BooleanProperty selected = new SimpleBooleanProperty(false);
+        /** Objects lacking a value for this measurement, 0 when none (issue #29). */
+        int missing;
         Item(String name) { this.name = name; }
         BooleanProperty selectedProperty() { return selected; }
         @Override public String toString() { return (selected.get() ? "[x] " : "[ ] ") + name; }
@@ -65,10 +77,19 @@ public class MeasurementSelectionPane extends VBox {
     private static final class NameCell extends ListCell<Item> {
         private final CheckBox box = new CheckBox();
         private final TextFlow name = new TextFlow();
-        private final HBox row = new HBox(4, box, name);
+        private final Region spacer = new Region();
+        private final Label badge = new Label();
+        private final HBox row = new HBox(4, box, name, spacer, badge);
         private BooleanProperty bound;
+        private final int totalObjects;
 
-        NameCell() {
+        NameCell(int totalObjects) {
+            this.totalObjects = totalObjects;
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            badge.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #7a4a00; "
+                    + "-fx-background-color: #fff4d6; -fx-border-color: #d69e2e; -fx-border-radius: 3; "
+                    + "-fx-background-radius: 3; -fx-padding: 0 5 0 5;");
+            badge.setMinWidth(Region.USE_PREF_SIZE);
             row.setAlignment(Pos.CENTER_LEFT);
             // Never wrap: a long name runs on to the right like the plain text did.
             name.setMinWidth(Region.USE_PREF_SIZE);
@@ -90,8 +111,19 @@ public class MeasurementSelectionPane extends VBox {
             bound = item.selectedProperty();
             box.selectedProperty().bindBidirectional(bound);
             name.getChildren().setAll(MeasurementNameText.texts(MeasurementNames.split(item.name)));
+            if (item.missing > 0) {
+                badge.setText(missingBadgeText(item.missing, totalObjects));
+                badge.setVisible(true);
+                badge.setManaged(true);
+                setStyle("-fx-background-color: #fff9e8;");
+            } else {
+                badge.setVisible(false);
+                badge.setManaged(false);
+                setStyle("");
+            }
             setGraphic(row);
-            setAccessibleText(item.name);
+            setAccessibleText(item.missing > 0
+                    ? item.name + ", " + missingBadgeText(item.missing, totalObjects) : item.name);
         }
     }
 
@@ -99,7 +131,23 @@ public class MeasurementSelectionPane extends VBox {
     private final SelectionListeners extraListeners = new SelectionListeners();
     private final ObservableList<Item> items = FXCollections.observableArrayList();
     private final FilteredList<Item> filtered = new FilteredList<>(items, m -> true);
+    private final SortedList<Item> sorted = new SortedList<>(filtered);
     private final TextField filterField = new TextField();
+    // Issue #29: objects lacking a value, per measurement, over the objects in scope.
+    private Map<String, Integer> missingPerMeasurement = Map.of();
+    private int missingTotalObjects;
+    private Function<List<String>, MeasurementExtractor.MissingReport> missingForSelection;
+    private String missingSource;
+    private final HBox missingHeader = new HBox(6);
+    private final Hyperlink missingSort = new Hyperlink("Missing values");
+    private final VBox missingBox = new VBox(4);
+    private final Label missingHeadline = new Label();
+    private final Label missingWhy = new Label();
+    private final ToggleGroup policyGroup = new ToggleGroup();
+    private final Map<MissingPolicy, RadioButton> policyButtons = new java.util.EnumMap<>(MissingPolicy.class);
+    private final Map<MissingPolicy, Label> policyNotes = new java.util.EnumMap<>(MissingPolicy.class);
+    private final ObjectProperty<MissingPolicy> missingPolicy =
+            new SimpleObjectProperty<>(MissingPolicy.EXCLUDE_OBJECTS);
     private final CheckBox hideQpcat = new CheckBox("Hide QP-CAT's own measurements");
     private final ListView<Item> list = new ListView<>();
     private Runnable onSelectionChanged;
@@ -120,7 +168,7 @@ public class MeasurementSelectionPane extends VBox {
     public MeasurementSelectionPane() {
         super(5);
 
-        list.setItems(filtered);
+        list.setItems(sorted);
         // prefHeight alone pinned the list to about six rows however tall the
         // section grew, because nothing told the VBox this was the child that
         // should absorb the extra space. Pref stays as the collapsed size; Vgrow
@@ -129,7 +177,7 @@ public class MeasurementSelectionPane extends VBox {
         list.setPrefHeight(150);
         list.setMaxHeight(Double.MAX_VALUE);
         VBox.setVgrow(list, Priority.ALWAYS);
-        list.setCellFactory(lv -> new NameCell());
+        list.setCellFactory(lv -> new NameCell(missingTotalObjects));
         list.setTooltip(Tooltips.of(
                 "Tick the measurements to use. Use the filter above to narrow the list;\n"
                 + "checked items stay checked even when filtered out."));
@@ -204,13 +252,190 @@ public class MeasurementSelectionPane extends VBox {
         HBox topRow = new HBox(5, filterField, popOutButton);
         topRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
+        // Issue #29: a header row that only exists while some object lacks a value.
+        // "Missing values" sorts the list by that count; clicking again restores
+        // the measurement order.
+        Label measurementHead = new Label("Measurement");
+        measurementHead.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+        Region headSpacer = new Region();
+        HBox.setHgrow(headSpacer, Priority.ALWAYS);
+        missingSort.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0;");
+        missingSort.setTooltip(Tooltips.of(
+                "Sort the list by how many objects lack a value for each measurement,\n"
+                + "most first. Click again for the usual order."));
+        missingSort.setOnAction(e -> setSortByMissing(sorted.getComparator() == null));
+        missingHeader.getChildren().addAll(measurementHead, headSpacer, missingSort);
+        missingHeader.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        missingHeader.setPadding(new Insets(2, 6, 0, 24));
+        missingHeader.setVisible(false);
+        missingHeader.setManaged(false);
+
+        // The choice box under the buttons, also only while something is missing.
+        missingHeadline.setWrapText(true);
+        missingHeadline.setStyle("-fx-font-weight: bold; -fx-text-fill: #7a4a00;");
+        WrapHeight.bind(missingHeadline);
+        missingWhy.setWrapText(true);
+        missingWhy.setStyle("-fx-text-fill: #7a4a00;");
+        WrapHeight.bind(missingWhy);
+        missingBox.getChildren().addAll(missingHeadline, missingWhy);
+        for (MissingPolicy policy : MissingPolicy.values()) {
+            RadioButton rb = new RadioButton(policy.getLabel());
+            rb.setToggleGroup(policyGroup);
+            rb.setUserData(policy);
+            rb.setSelected(policy == missingPolicy.get());
+            rb.setWrapText(true);
+            Label note = new Label();
+            note.setWrapText(true);
+            note.setStyle("-fx-font-size: 11px; -fx-text-fill: -fx-text-base-color; -fx-opacity: 0.75;");
+            note.setPadding(new Insets(0, 0, 2, 22));
+            WrapHeight.bind(note);
+            policyButtons.put(policy, rb);
+            policyNotes.put(policy, note);
+            missingBox.getChildren().addAll(rb, note);
+        }
+        policyGroup.selectedToggleProperty().addListener((obs, oldV, newV) -> {
+            if (newV != null) {
+                missingPolicy.set((MissingPolicy) newV.getUserData());
+            }
+        });
+        missingPolicy.addListener((obs, oldV, newV) -> {
+            RadioButton rb = policyButtons.get(newV);
+            if (rb != null && !rb.isSelected()) rb.setSelected(true);
+        });
+        missingBox.setPadding(new Insets(6, 8, 6, 8));
+        missingBox.setStyle("-fx-background-color: #fff4d6; -fx-border-color: #d69e2e; "
+                + "-fx-border-radius: 4; -fx-background-radius: 4;");
+        missingBox.setVisible(false);
+        missingBox.setManaged(false);
+
         // FlowPane, not HBox: six controls plus a sentence of hint text do not fit
         // one line in a 550px dialog, and an HBox squeezes them until the labels
         // ellipsize instead of wrapping to a second line.
         FlowPane buttons = new FlowPane(
                 5, 4, selectAll, selectNone, selectMean, selectMedian, hideQpcat);
         buttons.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
-        getChildren().addAll(topRow, list, buttons, scopeHint);
+        getChildren().addAll(topRow, missingHeader, list, buttons, scopeHint, missingBox);
+    }
+
+    // ==================== Missing values (issue #29) ====================
+
+    static String missingBadgeText(int missing, int total) {
+        if (total <= 0) return "missing " + missing;
+        return String.format(Locale.ROOT, "missing %d (%.1f%%)", missing, 100.0 * missing / total);
+    }
+
+    /**
+     * Tells the pane which measurements lack a value on how many of the objects in
+     * scope. Rows with a count get a badge and a tint, the "Missing values" sort
+     * appears, and the choice box shows while a ticked measurement has a count.
+     * Nothing shows when the report is empty.
+     *
+     * @param report       counts over the objects in scope (every measurement listed here)
+     * @param forSelection recounts over a subset of measurements, for the headline's
+     *                     object count; null when only the per-measurement counts are
+     *                     known (a project scope read from one image), in which case the
+     *                     headline says "at least"
+     * @param source       where the counts come from when not the whole scope, for the
+     *                     headline ("tme_00.tif"); null for the whole scope
+     */
+    public void setMissingValues(MeasurementExtractor.MissingReport report,
+                                 Function<List<String>, MeasurementExtractor.MissingReport> forSelection,
+                                 String source) {
+        missingPerMeasurement = report == null ? Map.of() : report.perMeasurement();
+        missingTotalObjects = report == null ? 0 : report.totalObjects();
+        missingForSelection = forSelection;
+        missingSource = source;
+        for (Item m : items) {
+            m.missing = missingPerMeasurement.getOrDefault(m.name, 0);
+        }
+        boolean any = !missingPerMeasurement.isEmpty();
+        missingHeader.setVisible(any);
+        missingHeader.setManaged(any);
+        if (!any) setSortByMissing(false);
+        list.setCellFactory(lv -> new NameCell(missingTotalObjects));
+        list.refresh();
+        refreshMissingBox();
+    }
+
+    /** Forgets the counts; the badges, the sort and the box disappear. */
+    public void clearMissingValues() {
+        setMissingValues(null, null, null);
+    }
+
+    /** Sorts the list by missing count, most first, or restores the measurement order. */
+    public void setSortByMissing(boolean byMissing) {
+        sorted.setComparator(byMissing
+                ? Comparator.<Item>comparingInt(m -> -m.missing)
+                : null);
+        missingSort.setText(byMissing ? "Missing values \u25bc" : "Missing values \u2195");
+    }
+
+    /** True while the list is sorted by missing count. */
+    public boolean isSortedByMissing() {
+        return sorted.getComparator() != null;
+    }
+
+    /** The policy the user chose for objects lacking a value; EXCLUDE_OBJECTS unless changed. */
+    public MissingPolicy getMissingPolicy() {
+        return missingPolicy.get();
+    }
+
+    public void setMissingPolicy(MissingPolicy policy) {
+        missingPolicy.set(policy == null ? MissingPolicy.EXCLUDE_OBJECTS : policy);
+    }
+
+    public ObjectProperty<MissingPolicy> missingPolicyProperty() {
+        return missingPolicy;
+    }
+
+    /** True while the choice box is shown, i.e. a ticked measurement has a missing value. */
+    public boolean isMissingBoxShown() {
+        return missingBox.isVisible();
+    }
+
+    /** Rewrites the box for the current ticks; hides it when no ticked measurement has a count. */
+    private void refreshMissingBox() {
+        List<String> selected = getSelected();
+        List<String> affected = new ArrayList<>();
+        for (String name : selected) {
+            if (missingPerMeasurement.getOrDefault(name, 0) > 0) affected.add(name);
+        }
+        boolean show = !affected.isEmpty();
+        missingBox.setVisible(show);
+        missingBox.setManaged(show);
+        if (!show) return;
+
+        int objects;
+        String atLeast = "";
+        if (missingForSelection != null) {
+            objects = missingForSelection.apply(selected).objectsWithMissing();
+        } else {
+            objects = affected.stream().mapToInt(n -> missingPerMeasurement.get(n)).max().orElse(0);
+            atLeast = "at least ";
+        }
+        String pct = missingTotalObjects > 0
+                ? String.format(Locale.ROOT, " (%.1f%%)", 100.0 * objects / missingTotalObjects) : "";
+        missingHeadline.setText(atLeast + String.format(Locale.ROOT, "%,d", objects) + " of "
+                + String.format(Locale.ROOT, "%,d", missingTotalObjects) + " objects" + pct
+                + " lack a value for " + affected.size() + " of the " + selected.size()
+                + " selected measurements" + (missingSource != null ? ", counted on " + missingSource
+                + "; the run counts every image" : "") + ".");
+        missingWhy.setText("An object without a nucleus (a sectioned cell, or a detection that is "
+                + "not a cell) has no value there. For this run:");
+        policyNotes.get(MissingPolicy.EXCLUDE_OBJECTS).setText(
+                (atLeast.isEmpty() ? String.format(Locale.ROOT, "%,d", objects) : "those") + " objects get "
+                + "no label; the count goes into the results");
+        int complete = selected.size() - affected.size();
+        policyNotes.get(MissingPolicy.EXCLUDE_MEASUREMENTS).setText(complete == 0
+                ? "not possible here: every selected measurement has a missing value"
+                : "runs on the " + complete + " complete measurement" + (complete == 1 ? "" : "s")
+                + "; the " + affected.size() + " with gaps " + (affected.size() == 1 ? "is" : "are") + " left out");
+        policyButtons.get(MissingPolicy.EXCLUDE_MEASUREMENTS).setDisable(complete == 0);
+        if (complete == 0 && missingPolicy.get() == MissingPolicy.EXCLUDE_MEASUREMENTS) {
+            setMissingPolicy(MissingPolicy.EXCLUDE_OBJECTS);
+        }
+        policyNotes.get(MissingPolicy.IMPUTE).setText(
+                "invents a typical value; such objects can cluster together");
     }
 
     /** Text filter and the hide-QP-CAT box together decide which rows show. */
@@ -244,6 +469,11 @@ public class MeasurementSelectionPane extends VBox {
     /** Number of rows the list currently shows. */
     int visibleCount() {
         return filtered.size();
+    }
+
+    /** The names the list currently shows, in display order. */
+    List<String> visibleNames() {
+        return sorted.stream().map(m -> m.name).collect(Collectors.toList());
     }
 
     /**
@@ -424,6 +654,7 @@ public class MeasurementSelectionPane extends VBox {
             }
             filterField.clear();
         });
+        clearMissingValues();
         revealQpcatIfSelected();
     }
 
@@ -498,6 +729,7 @@ public class MeasurementSelectionPane extends VBox {
         if (bulkDepth > 0) {
             return;     // one event at the end of the bulk change, not one per row
         }
+        refreshMissingBox();
         if (onSelectionChanged != null) {
             try { onSelectionChanged.run(); } catch (Exception ignore) { /* UI sink */ }
         }

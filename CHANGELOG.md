@@ -6,8 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-19
+
 ### Changed
 
+- **Objects with missing measurements are left out of a run instead of being given the
+  median (#29).** Until now a cell lacking a value for a selected measurement (InstanSeg
+  leaves cells without a nucleus, so every `Nucleus:` measurement is absent on them) got the
+  measurement's median, silently. Now the measurement picker shows, as soon as any object
+  lacks any value, a **missing 37 (2.4%)** badge on each affected measurement, a **Missing
+  values** sort, and a box with the choice for the run: **Exclude objects with missing
+  measurements (leave unclassified)**, the default; **Exclude measurements containing missing
+  values (keep all objects)**; or **Replace missing values with the median**, the old
+  behavior. Nothing appears when nothing is missing. The completion message and the saved
+  result say what was left out. Batch files: `missing_values` on the `clustering` and
+  `phenotyping` blocks. Asked for by the working group; design and mockups in the issue.
 - **The Cluster Explainer's default Anthropic model is now `claude-sonnet-5-5`**, the current
   Sonnet, at the same per-token price as `claude-sonnet-5`. The Model box suggests
   `claude-sonnet-5-5`, `claude-opus-5-5` and `claude-haiku-5-5`. A model you typed or chose

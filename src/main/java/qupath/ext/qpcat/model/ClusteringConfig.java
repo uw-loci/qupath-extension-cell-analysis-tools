@@ -109,6 +109,7 @@ public class ClusteringConfig {
     private Algorithm algorithm = Algorithm.LEIDEN;
     private Map<String, Object> algorithmParams = new HashMap<>();
     private Normalization normalization = Normalization.ZSCORE;
+    private MissingPolicy missingPolicy = MissingPolicy.EXCLUDE_OBJECTS;
     private EmbeddingMethod embeddingMethod = EmbeddingMethod.UMAP;
     private Map<String, Object> embeddingParams = new HashMap<>();
     private List<String> selectedMeasurements;
@@ -305,6 +306,12 @@ public class ClusteringConfig {
 
     public Normalization getNormalization() { return normalization; }
     public void setNormalization(Normalization normalization) { this.normalization = normalization; }
+
+    /** What the run does with an object lacking a value for a selected measurement (issue #29). */
+    public MissingPolicy getMissingPolicy() { return missingPolicy; }
+    public void setMissingPolicy(MissingPolicy policy) {
+        this.missingPolicy = policy == null ? MissingPolicy.EXCLUDE_OBJECTS : policy;
+    }
 
     public EmbeddingMethod getEmbeddingMethod() { return embeddingMethod; }
     public void setEmbeddingMethod(EmbeddingMethod method) { this.embeddingMethod = method; }

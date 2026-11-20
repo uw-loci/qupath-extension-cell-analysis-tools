@@ -52,6 +52,8 @@ public final class BatchYamlValidator {
 
     private static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
             "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"));
+    private static final Set<String> MISSING_VALUES = Set.of(
+            "exclude_objects", "exclude_measurements", "impute");
 
     private static final Set<String> EMBEDDINGS = new HashSet<>(Arrays.asList(
             "umap", "pca", "tsne", "none"));
@@ -236,6 +238,11 @@ public final class BatchYamlValidator {
                 && !NORMALIZATIONS.contains(c.getNormalization().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.normalization",
                     "'" + asciiSafe(c.getNormalization()) + "' is not one of " + NORMALIZATIONS));
+        }
+        if (c.getMissingValues() != null
+                && !MISSING_VALUES.contains(c.getMissingValues().toLowerCase(Locale.ROOT))) {
+            r.add(ValidationIssue.error("E005", "clustering.missing_values",
+                    "'" + asciiSafe(c.getMissingValues()) + "' is not one of " + MISSING_VALUES));
         }
         if (c.getEmbedding() != null
                 && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase(Locale.ROOT))) {

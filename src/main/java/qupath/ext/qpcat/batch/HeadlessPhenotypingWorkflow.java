@@ -75,6 +75,7 @@ public final class HeadlessPhenotypingWorkflow {
             List<BatchYamlSchema.PhenotypeRuleEntry> rules,
             String normalization,
             List<String> measurements,
+            qupath.ext.qpcat.model.MissingPolicy missingPolicy,
             Consumer<String> progress) throws IOException {
 
         if (imageEntries == null || imageEntries.isEmpty()) {
@@ -105,7 +106,7 @@ public final class HeadlessPhenotypingWorkflow {
                 ? null : measurements;
 
         Map<String, Object> result = inner.runPhenotypingProject(
-                imageEntries, selected, normalization, rulesJson, gatesJson, progress);
+                imageEntries, selected, normalization, rulesJson, gatesJson, missingPolicy, progress);
 
         int nPhenotypes = asInt(result.get("n_phenotypes"));
         int[] labels = (int[]) result.get("labels");

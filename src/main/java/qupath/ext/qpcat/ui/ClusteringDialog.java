@@ -3268,8 +3268,15 @@ public class ClusteringDialog {
                 setMeasurementStatus("The open image has no detections. Run cell detection first.");
                 return;
             }
-            measurementPane.setMeasurements(
-                    MeasurementExtractor.getAllMeasurements(detections), null);
+            List<String> names = MeasurementExtractor.getAllMeasurements(detections);
+            measurementPane.setMeasurements(names, null);
+            // Issue #29: which measurements lack a value on which objects. The
+            // recount over the ticked subset is what the headline's object count
+            // needs; one pass over the open image's cells is cheap enough to redo
+            // per selection change.
+            final var dets = detections;
+            measurementPane.setMissingValues(MeasurementExtractor.missingValues(dets, names),
+                    sel -> MeasurementExtractor.missingValues(dets, sel), null);
             setMeasurementStatus(null);
             updatePreflight();
             return;
@@ -3298,6 +3305,7 @@ public class ClusteringDialog {
             List<String> found = List.of();
             String scanned = null;
             long cells = 0;
+            MeasurementExtractor.MissingReport missing = null;
             for (ProjectImageEntry<BufferedImage> entry : entries) {
                 ImageData<BufferedImage> data = null;
                 try {
@@ -3307,6 +3315,8 @@ public class ClusteringDialog {
                     found = MeasurementExtractor.getAllMeasurements(dets);
                     cells = dets.size();
                     scanned = entry.getImageName();
+                    // Issue #29: counted on this one image; the run counts every image.
+                    missing = MeasurementExtractor.missingValues(dets, found);
                     break;   // measurement names are a property of the panel, not the slide
                 } catch (Exception e) {
                     logger.debug("Could not read {} for measurements: {}",
@@ -3318,6 +3328,7 @@ public class ClusteringDialog {
             final List<String> result = found;
             final String from = scanned;
             final long perImage = cells;
+            final MeasurementExtractor.MissingReport missingReport = missing;
             Platform.runLater(() -> {
                 // A newer scope change has superseded this read.
                 if (token != measurementLoadToken) return;
@@ -3329,6 +3340,7 @@ public class ClusteringDialog {
                     measurementPane.setMeasurements(List.of(), null);
                 } else {
                     measurementPane.setMeasurements(result, null);
+                    measurementPane.setMissingValues(missingReport, null, from);
                     setMeasurementStatus(from == null ? null
                             : "Measurements read from " + from + ".");
                 }
@@ -3598,6 +3610,7 @@ public class ClusteringDialog {
 
         // Normalization
         config.setNormalization(normalizationCombo.getValue());
+        config.setMissingPolicy(measurementPane.getMissingPolicy());
 
         // Embedding
         EmbeddingMethod embMethod = embeddingCombo.getValue();

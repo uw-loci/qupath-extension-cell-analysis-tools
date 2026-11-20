@@ -771,6 +771,9 @@ public class PhenotypingDialog {
         List<String> allMeasurements = MeasurementExtractor.getAllMeasurements(detections);
         // Start with nothing checked; the user picks (e.g. filter + "Select 'Mean' only").
         measurementPane.setMeasurements(allMeasurements, null);
+        final var dets = detections;
+        measurementPane.setMissingValues(MeasurementExtractor.missingValues(dets, allMeasurements),
+                sel -> MeasurementExtractor.missingValues(dets, sel), null);
     }
 
     /**
@@ -948,6 +951,7 @@ public class PhenotypingDialog {
         progressBar.setProgress(-1);
 
         MeasurementSelectionPane.notifyIfQpcatSelected(currentMarkers);
+        final qupath.ext.qpcat.model.MissingPolicy missingPolicy = measurementPane.getMissingPolicy();
         Thread phenoThread = new Thread(() -> {
             try {
                 ClusteringWorkflow workflow = new ClusteringWorkflow(qupath);
@@ -961,6 +965,7 @@ public class PhenotypingDialog {
                             normalizationCombo.getValue().getId(),
                             rulesJson,
                             gatesJson,
+                            missingPolicy,
                             progress);
                 } else {
                     result = workflow.runPhenotyping(
@@ -968,6 +973,7 @@ public class PhenotypingDialog {
                             normalizationCombo.getValue().getId(),
                             rulesJson,
                             gatesJson,
+                            missingPolicy,
                             progress);
                 }
 

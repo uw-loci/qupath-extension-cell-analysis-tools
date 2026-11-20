@@ -168,6 +168,13 @@ your gates, because the audit log records how many rules ran, not what they were
 Here the `neg` columns are deliberate: a CD8+ T cell is required to be CD20-negative and
 PanCK-negative. If instead you just want "any CD3+CD8+ cell," drop those `neg`s to `--`.
 
+### Cells lacking a marker value
+
+A cell without a value for one of the rule markers (a cell segmented without a nucleus has no
+`Nucleus:` measurement) is left out by default and gets no phenotype; the picker shows the
+affected measurements and the count, and offers the alternatives described in
+[clustering.md](clustering.md#objects-with-missing-measurements).
+
 ### Using a class as a condition
 
 Markers alone cannot say "a Ki67-high cell among the ones the morphology classifier called

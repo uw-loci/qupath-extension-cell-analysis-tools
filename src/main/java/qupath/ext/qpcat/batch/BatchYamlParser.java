@@ -54,7 +54,7 @@ public final class BatchYamlParser {
 
     private static final Set<String> KNOWN_CLUSTERING = new HashSet<>(Arrays.asList(
             "type", "algorithm", "mode", "saved_result_name",
-            "resolution", "k", "normalization", "embedding",
+            "resolution", "k", "normalization", "missing_values", "embedding",
             "pca_n_components", "umap_n_neighbors", "umap_min_dist",
             "umap_metric", "tsne_perplexity", "tsne_learning_rate",
             "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
@@ -69,7 +69,7 @@ public final class BatchYamlParser {
             "level", "annotation_classes"));
 
     private static final Set<String> KNOWN_PHENOTYPING = new HashSet<>(Arrays.asList(
-            "enabled", "rules", "llm_explainer"));
+            "enabled", "rules", "llm_explainer", "missing_values"));
 
     private static final Set<String> KNOWN_PHENO_RULE = new HashSet<>(Arrays.asList(
             "name", "require_markers", "exclude_markers", "any_markers",
@@ -261,6 +261,7 @@ public final class BatchYamlParser {
                 case "resolution" -> c.setResolution(asDoubleObj(value));
                 case "k" -> c.setK(asIntObj(value));
                 case "normalization" -> c.setNormalization(asString(value));
+                case "missing_values" -> c.setMissingValues(asString(value));
                 case "embedding" -> c.setEmbedding(asString(value));
                 case "pca_n_components" -> c.setPcaNComponents(asIntObj(value));
                 case "umap_n_neighbors" -> c.setUmapNNeighbors(asIntObj(value));
@@ -327,6 +328,7 @@ public final class BatchYamlParser {
             }
             switch (key) {
                 case "enabled" -> p.setEnabled(asBool(value, true));
+                case "missing_values" -> p.setMissingValues(asString(value));
                 case "rules" -> {
                     if (value instanceof List<?> list) {
                         List<BatchYamlSchema.PhenotypeRuleEntry> rules = new ArrayList<>();

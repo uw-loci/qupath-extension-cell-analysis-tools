@@ -2,14 +2,17 @@ package qupath.ext.qpcat.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.lib.objects.PathDetectionObject;
 import qupath.lib.objects.PathObject;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -20,6 +23,21 @@ import java.util.stream.Collectors;
 public class MeasurementExtractor {
 
     private static final Logger logger = LoggerFactory.getLogger(MeasurementExtractor.class);
+
+    private final MissingPolicy missingPolicy;
+
+    /** An extractor that excludes objects lacking a value (the default policy). */
+    public MeasurementExtractor() {
+        this(MissingPolicy.EXCLUDE_OBJECTS);
+    }
+
+    /** @param missingPolicy what to do with an object lacking a value for a selected measurement */
+    public MeasurementExtractor(MissingPolicy missingPolicy) {
+        this.missingPolicy = missingPolicy == null ? MissingPolicy.EXCLUDE_OBJECTS : missingPolicy;
+    }
+
+    /** The policy this extractor applies. */
+    public MissingPolicy getMissingPolicy() { return missingPolicy; }
 
     /**
      * Result of measurement extraction containing the data matrix,
@@ -32,6 +50,11 @@ public class MeasurementExtractor {
         private final List<PathObject> detections;
         private final List<ImageSegment> imageSegments;
         private List<String> droppedMeasurements;  // absent on >=1 whole image; excluded
+        private MissingPolicy missingPolicy = MissingPolicy.EXCLUDE_OBJECTS;
+        private int excludedObjects;
+        private int[] excludedPerSegment = new int[0];
+        private List<String> excludedMeasurements = List.of();
+        private Map<String, Integer> missingPerMeasurement = Map.of();
 
         ExtractionResult(double[][] data, String[] measurementNames,
                          List<PathObject> detections, List<ImageSegment> imageSegments) {
@@ -39,6 +62,41 @@ public class MeasurementExtractor {
             this.measurementNames = measurementNames;
             this.detections = detections;
             this.imageSegments = imageSegments;
+        }
+
+        /** The policy the run used for missing values. */
+        public MissingPolicy getMissingPolicy() { return missingPolicy; }
+
+        /** Objects left out because a selected measurement was missing (policy EXCLUDE_OBJECTS). */
+        public int getExcludedObjects() { return excludedObjects; }
+
+        /** The same count per image segment, aligned with {@link #getImageSegments()}. */
+        public int[] getExcludedPerSegment() { return excludedPerSegment; }
+
+        /** Measurements left out because a value was missing (policy EXCLUDE_MEASUREMENTS). */
+        public List<String> getExcludedMeasurements() { return excludedMeasurements; }
+
+        /**
+         * Objects lacking a value, per selected measurement, before the policy was
+         * applied; only measurements with at least one missing value are listed.
+         */
+        public Map<String, Integer> getMissingPerMeasurement() { return missingPerMeasurement; }
+
+        /** One sentence for a log line or a results note; empty when nothing was missing. */
+        public String missingSummary() {
+            if (missingPerMeasurement.isEmpty()) return "";
+            int affected = missingPerMeasurement.size();
+            switch (missingPolicy) {
+                case EXCLUDE_OBJECTS:
+                    return excludedObjects + " object(s) excluded for a missing value in "
+                            + affected + " selected measurement(s): " + missingPerMeasurement.keySet();
+                case EXCLUDE_MEASUREMENTS:
+                    return excludedMeasurements.size() + " measurement(s) with missing values left out, "
+                            + "every object kept: " + excludedMeasurements;
+                default:
+                    return "missing values in " + affected + " selected measurement(s) replaced by the "
+                            + "column median: " + missingPerMeasurement;
+            }
         }
 
         public double[][] getData() { return data; }
@@ -125,18 +183,21 @@ public class MeasurementExtractor {
             throw new IllegalArgumentException("No detection objects found in selection");
         }
 
-        String[] measurementNames = resolveMeasurementNames(detectionList, measurements);
-
-        logger.info("Extracting {} measurements from {} detections",
-                measurementNames.length, detectionList.size());
-
-        double[][] data = extractDataMatrix(detectionList, measurementNames);
+        String[] requestedNames = resolveMeasurementNames(detectionList, measurements);
 
         // Single-image: one segment covering all detections
-        List<ImageSegment> segments = List.of(
-                new ImageSegment(null, null, 0, detectionList.size()));
+        Applied applied = applyMissingPolicy(detectionList, requestedNames,
+                List.of(new ImageSegment(null, null, 0, detectionList.size())));
 
-        return new ExtractionResult(data, measurementNames, detectionList, segments);
+        logger.info("Extracting {} measurements from {} detections",
+                applied.names().length, applied.detections().size());
+
+        double[][] data = extractDataMatrix(applied.detections(), applied.names());
+
+        ExtractionResult result = new ExtractionResult(data, applied.names(), applied.detections(),
+                applied.segments());
+        record(result, missingPolicy, applied);
+        return result;
     }
 
     /**
@@ -234,19 +295,151 @@ public class MeasurementExtractor {
             }
         }
 
+        Applied applied = applyMissingPolicy(allDetections, measurementNames, segments);
+
         logger.info("Extracting {} measurements from {} detections across {} images",
-                measurementNames.length, allDetections.size(), segments.size());
+                applied.names().length, applied.detections().size(), applied.segments().size());
 
-        double[][] data = extractDataMatrix(allDetections, measurementNames);
+        double[][] data = extractDataMatrix(applied.detections(), applied.names());
 
-        ExtractionResult result = new ExtractionResult(data, measurementNames, allDetections, segments);
+        ExtractionResult result = new ExtractionResult(data, applied.names(), applied.detections(),
+                applied.segments());
         result.setDroppedMeasurements(droppedForReport);
+        record(result, missingPolicy, applied);
         return result;
     }
 
     /**
      * Groups detections with their parent image entry and data for multi-image extraction.
      */
+    /** Objects lacking a value for a selected measurement, as the dialog shows it before a run. */
+    public record MissingReport(int totalObjects, int objectsWithMissing,
+                                Map<String, Integer> perMeasurement) {
+        /** True when at least one object lacks at least one value. */
+        public boolean any() { return objectsWithMissing > 0; }
+    }
+
+    /**
+     * Counts, per measurement, the objects that lack a value (absent or NaN), and
+     * the objects lacking at least one. Only measurements with a missing value
+     * appear in the map, in the order given.
+     *
+     * @param detections   the objects in scope
+     * @param measurements the measurements to check
+     */
+    public static MissingReport missingValues(Collection<? extends PathObject> detections,
+                                              List<String> measurements) {
+        Map<String, Integer> per = new LinkedHashMap<>();
+        int withMissing = 0;
+        int total = 0;
+        for (PathObject det : detections) {
+            if (!(det instanceof PathDetectionObject)) continue;
+            total++;
+            var ml = det.getMeasurements();
+            boolean any = false;
+            for (String m : measurements) {
+                Number v = ml.get(m);
+                if (v == null || Double.isNaN(v.doubleValue())) {
+                    per.merge(m, 1, Integer::sum);
+                    any = true;
+                }
+            }
+            if (any) withMissing++;
+        }
+        return new MissingReport(total, withMissing, per);
+    }
+
+    /** What {@link #applyMissingPolicy} decided. */
+    private record Applied(List<PathObject> detections, String[] names, List<ImageSegment> segments,
+                           int excludedObjects, int[] excludedPerSegment,
+                           List<String> excludedMeasurements, Map<String, Integer> missingPerMeasurement) {}
+
+    /**
+     * Applies the missing-values policy to the objects and measurements of a run.
+     * EXCLUDE_OBJECTS drops every object lacking a value and rebuilds the segments;
+     * EXCLUDE_MEASUREMENTS drops every measurement with a missing value; IMPUTE
+     * leaves both for the worker's median imputation.
+     *
+     * @throws IllegalArgumentException when the policy would leave no object or no measurement
+     */
+    private Applied applyMissingPolicy(List<PathObject> detections, String[] names,
+                                       List<ImageSegment> segments) {
+        MissingReport report = missingValues(detections, List.of(names));
+        if (!report.any()) {
+            return new Applied(detections, names, segments, 0, new int[segments.size()],
+                    List.of(), Map.of());
+        }
+        logger.warn("{} of {} object(s) lack a value for {} of the {} selected measurement(s): {}",
+                report.objectsWithMissing(), report.totalObjects(), report.perMeasurement().size(),
+                names.length, report.perMeasurement());
+        switch (missingPolicy) {
+            case EXCLUDE_MEASUREMENTS: {
+                List<String> kept = new ArrayList<>();
+                List<String> dropped = new ArrayList<>();
+                for (String n : names) {
+                    (report.perMeasurement().containsKey(n) ? dropped : kept).add(n);
+                }
+                if (kept.isEmpty()) {
+                    throw new IllegalArgumentException("Every selected measurement has a missing value "
+                            + "on some object, so excluding those measurements leaves nothing to run on. "
+                            + "Exclude the objects instead, or replace the missing values.");
+                }
+                logger.warn("Policy {}: leaving out {} measurement(s): {}", missingPolicy, dropped.size(), dropped);
+                return new Applied(detections, kept.toArray(new String[0]), segments, 0,
+                        new int[segments.size()], dropped, report.perMeasurement());
+            }
+            case EXCLUDE_OBJECTS: {
+                List<PathObject> kept = new ArrayList<>(detections.size() - report.objectsWithMissing());
+                List<ImageSegment> newSegments = new ArrayList<>(segments.size());
+                int[] perSegment = new int[segments.size()];
+                for (int s = 0; s < segments.size(); s++) {
+                    ImageSegment seg = segments.get(s);
+                    int start = kept.size();
+                    for (int i = seg.getStartIndex(); i < seg.getEndIndex(); i++) {
+                        PathObject det = detections.get(i);
+                        if (lacksAny(det, names)) {
+                            perSegment[s]++;
+                        } else {
+                            kept.add(det);
+                        }
+                    }
+                    newSegments.add(new ImageSegment(seg.getImageEntry(), seg.getImageData(), start, kept.size()));
+                }
+                if (kept.isEmpty()) {
+                    throw new IllegalArgumentException("Every object lacks a value for a selected "
+                            + "measurement, so excluding them leaves nothing to run on. Deselect the "
+                            + "measurements with missing values, or replace the missing values.");
+                }
+                logger.warn("Policy {}: leaving out {} object(s); {} remain", missingPolicy,
+                        report.objectsWithMissing(), kept.size());
+                return new Applied(kept, names, newSegments, report.objectsWithMissing(), perSegment,
+                        List.of(), report.perMeasurement());
+            }
+            default:
+                logger.warn("Policy {}: the worker replaces each missing value with the column median",
+                        missingPolicy);
+                return new Applied(detections, names, segments, 0, new int[segments.size()],
+                        List.of(), report.perMeasurement());
+        }
+    }
+
+    private static boolean lacksAny(PathObject det, String[] names) {
+        var ml = det.getMeasurements();
+        for (String n : names) {
+            Number v = ml.get(n);
+            if (v == null || Double.isNaN(v.doubleValue())) return true;
+        }
+        return false;
+    }
+
+    private static void record(ExtractionResult result, MissingPolicy policy, Applied applied) {
+        result.missingPolicy = policy;
+        result.excludedObjects = applied.excludedObjects();
+        result.excludedPerSegment = applied.excludedPerSegment();
+        result.excludedMeasurements = applied.excludedMeasurements();
+        result.missingPerMeasurement = applied.missingPerMeasurement();
+    }
+
     public static class ImageDetectionGroup {
         public final Object imageEntry;
         public final Object imageData;

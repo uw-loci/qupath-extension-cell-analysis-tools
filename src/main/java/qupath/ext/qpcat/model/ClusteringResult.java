@@ -84,6 +84,12 @@ public class ClusteringResult {
     // neighbor graph, the embedding), or null when it built everything itself.
     private String reuseNote;
 
+    // How objects lacking a value for a selected measurement were handled
+    // (MeasurementExtractor.ExtractionResult.missingSummary()), or null when
+    // nothing was missing (issue #29).
+    private String missingNote;
+    private int excludedObjects;
+
     // Measurement-name prefix the embedding columns were written under ("UMAP",
     // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
     // from names. A custom name is not recognisable by pattern, which is how the 3D view
@@ -132,6 +138,14 @@ public class ClusteringResult {
 
     /** @see #reuseNote */
     public String getReuseNote() { return reuseNote; }
+
+    /** The missing-values sentence for this run, or null when nothing was missing. */
+    public String getMissingNote() { return missingNote; }
+    public void setMissingNote(String note) { this.missingNote = note; }
+
+    /** Objects left out of the run because a selected measurement was missing. */
+    public int getExcludedObjects() { return excludedObjects; }
+    public void setExcludedObjects(int n) { this.excludedObjects = n; }
 
     /** @see #reuseNote */
     public void setReuseNote(String note) { this.reuseNote = note; }

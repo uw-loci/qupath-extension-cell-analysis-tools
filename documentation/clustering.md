@@ -156,6 +156,36 @@ Two more things worth checking:
 Mixing surface markers, functional markers and transcription factors is fine and often
 helps separate cell states.
 
+### Objects with missing measurements
+
+A cell can lack a value for a measurement you ticked. InstanSeg leaves cells without a
+nucleus (a sectioned cell has no nuclear compartment, so every `Nucleus:` and `Cytoplasm:`
+measurement is absent on it), and a project can mix objects that are not cells at all. When
+every ticked measurement has a value on every object in scope, nothing of this section
+appears. When any object lacks any value:
+
+- each measurement with a gap shows a badge, **missing 37 (2.4%)**, and a tinted row; the
+  **Missing values** header sorts the list by that count, most first, and again for the usual
+  order;
+- a box under the buttons says how many objects lack a value for how many of the ticked
+  measurements, and holds the choice for this run:
+
+| Choice | What happens |
+|---|---|
+| **Exclude objects with missing measurements (leave unclassified)**, the default | the objects are left out of the run, keep whatever class they had, and are counted in the run's summary |
+| **Exclude measurements containing missing values (keep all objects)** | the run uses the ticked measurements that are complete and leaves the others out; not offered when every ticked measurement has a gap |
+| **Replace missing values with the median** | each gap takes the median of that measurement's finite values, which is what every version before 0.25.0 did silently; such objects land in the middle of the cloud and can cluster together |
+
+Excluding is the default because an invented value is still a value: a cell with its whole
+nuclear compartment missing is otherwise placed at a "typical" nucleus and clustered on it.
+Excluding the measurements instead is often the better choice when the gap is systematic,
+for example sectioned cells where the `Cell:` measurements carry the same markers. For a
+project scope the box is counted on the image the measurements were read from; the run
+itself counts every image, and the completion message says what it left out.
+
+Batch files set the same choice with `missing_values` (see the YAML reference); an
+unlabelled object in a batch run is one the policy excluded.
+
 ## Choosing a normalization
 
 | Method | Use when | Avoid when |

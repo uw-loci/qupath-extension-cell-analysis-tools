@@ -90,7 +90,20 @@ options (it needs several images or independent areas in scope), or check the
 [Composition by image](results.md#composition-by-image) tab to confirm technical variation is
 minimal before clustering without it.
 
-### 9. Compute Thresholds or Choose k never finishes on Windows
+### 9. Some cells came back unclassified after a run
+
+**Problem:** After clustering or phenotyping, some cells have no cluster or phenotype, and the
+completion message says "N object(s) excluded for a missing value in ...".
+**Cause:** Those cells lack a value for a measurement you ticked, most often every `Nucleus:`
+measurement on a cell segmented without a nucleus. Since 0.25.0 such objects are left out of
+the run by default instead of being given the measurement's median.
+**Solution:** The measurement picker shows which measurements have gaps (badge and tint) and
+how many objects they affect. Either keep the default and treat those cells as unscorable,
+choose **Exclude measurements containing missing values** to run on the complete measurements
+only, or **Replace missing values with the median** for the old behavior. See
+[clustering.md](clustering.md#objects-with-missing-measurements).
+
+### 10. Compute Thresholds or Choose k never finishes on Windows
 
 **Problem:** The log stops at "Computing histograms and thresholds..." (or the Choose k sweep
 never returns) and anything queued behind it waits forever.

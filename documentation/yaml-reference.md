@@ -112,6 +112,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `linkage` | string | `ward` | Agglomerative only. `ward`, `complete`, `average`, `single`. |
 | `banksy_lambda` | double | `0.2` | BANKSY only. |
 | `banksy_k_geom` | int | `15` | BANKSY only. |
+| `missing_values` | string | `exclude_objects` | What to do with an object lacking a value for a selected measurement: `exclude_objects` (left out, stays unclassified, counted), `exclude_measurements` (the measurements with a gap are left out, every object stays) or `impute` (the column median, the pre-0.25.0 behavior). See [clustering.md](clustering.md#objects-with-missing-measurements). |
 | `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99`. `log1p` is accepted but **not implemented** -- it runs z-score and logs a warning; there is no log transform. |
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
@@ -210,6 +211,7 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Master switch. |
+| `missing_values` | string | `exclude_objects` | As for `clustering.missing_values`: an object lacking a value for a rule's marker is left out (`exclude_objects`, no phenotype), the gapped measurements are left out (`exclude_measurements`) or the gap takes the median (`impute`). |
 | `rules` | list[object] | `[]` | Rule list; each rule has the fields below. |
 | `rules[].name` | string | required | Phenotype label (e.g. `T_cell`). |
 | `rules[].require_markers` | list[string] | `[]` (required >=1) | Markers required positive. |
