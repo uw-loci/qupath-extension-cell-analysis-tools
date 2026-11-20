@@ -63,6 +63,7 @@ def _symbols():
         "GpuBridgeError",
         "gpu_bridge_available",
         "gpu_scratch_default",
+        "gpu_cuda_path",
         "_gpu_child_env",
         "_wsl_run",
         "_tail",
