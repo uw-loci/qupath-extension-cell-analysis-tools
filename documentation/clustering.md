@@ -184,7 +184,7 @@ project scope the box is counted on the image the measurements were read from; t
 itself counts every image, and the completion message says what it left out.
 
 Batch files set the same choice with `missing_values` (see the YAML reference); an
-unlabelled object in a batch run is one the policy excluded.
+unlabeled object in a batch run is one the policy excluded.
 
 ## Choosing a normalization
 
