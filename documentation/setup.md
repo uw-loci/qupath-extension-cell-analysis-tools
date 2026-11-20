@@ -102,7 +102,8 @@ and the labels come back the same way (about a second each way at 1 million cell
 3. **Edit > Preferences > QP-CAT: Python environment > GPU graph and Leiden: Python**: the
    environment's Python, `<folder>/.pixi/envs/default/bin/python`. On Windows this is the path
    inside WSL2. **GPU graph and Leiden: scratch folder** is where the three hand-over files go;
-   blank means `$TMPDIR` when set, else a folder beside the environment.
+   blank means `$TMPDIR` when set, else a folder beside the environment on Linux, and
+   `~/.cache/qpcat-gpu` inside WSL2 on Windows.
 4. In **Find cell populations (clustering)...** with Leiden selected, tick **Neighbor graph and
    Leiden on the GPU (RAPIDS)**. The tick is remembered. The option only appears once the
    Python preference is set.

@@ -1065,9 +1065,10 @@ public final class QpcatPreferences {
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(
                         "Where the hand-over files go (the matrix in, the graph and labels out; "
-                        + "three files, removed after the run). Blank: $TMPDIR when the scheduler "
-                        + "sets one, else a folder beside the RAPIDS environment. On a networked "
-                        + "home directory, point this at scratch. On Windows this is a path inside WSL2."))
+                        + "three files, removed after the run). Blank: on Linux, $TMPDIR when the "
+                        + "scheduler sets one, else a folder beside the RAPIDS environment; on Windows, "
+                        + "~/.cache/qpcat-gpu inside WSL2. On a networked home directory, point this at "
+                        + "scratch. On Windows this is a path inside WSL2."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(workerSingleOpenMpThread, Boolean.class)
