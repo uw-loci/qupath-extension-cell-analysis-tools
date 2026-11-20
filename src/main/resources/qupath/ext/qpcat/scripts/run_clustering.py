@@ -14,10 +14,16 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
     2 keeps the historical NAME1/NAME2 scatter; 3 adds a genuine third axis
     (NAME1/NAME2/NAME3) for downstream 3D viewers.
   graph_backend: str ("cpu" | "gpu", default "cpu")
-    Where Leiden's neighbor graph and partition run. "gpu" uses cuML for the
-    neighbor search and cuGraph for Leiden when both import, and falls back to
-    "cpu" with a logged reason when they do not. The UMAP connectivities on top
-    of the neighbors are computed the same way in both cases (see knn_graph_gpu).
+    Where Leiden's neighbor graph and partition run. "gpu" starts a separate
+    process in a user-installed RAPIDS environment (gpu_graph_leiden.py: cuML
+    for the neighbor search, cuGraph for Leiden, the same fuzzy connectivities
+    on top) and hands the matrix over as a file; on Windows the process runs
+    inside WSL2 through wsl.exe. Falls back to "cpu" with a logged reason when
+    the process cannot run.
+  gpu_python: str -- the RAPIDS environment's python (a WSL path on Windows); "" = none
+  gpu_scratch_dir: str -- folder for the hand-over files; "" = $TMPDIR, else beside the
+    environment (never the home directory or the project; see gpu_bridge_run)
+  gpu_script_source: str -- the text of gpu_graph_leiden.py, written into the job folder
   embedding_execution_mode: str ("auto" | "reproducible" | "fast", default "auto")
     Reproducibility-vs-speed policy for UMAP. umap-learn forces single-threaded
     execution whenever random_state is set, so a pinned seed costs every core.
@@ -96,6 +102,7 @@ logger = logging.getLogger("qpcat.clustering")
 import contextlib
 import warnings
 
+import time
 import numpy as np
 import pandas as pd
 from appose import NDArray as PyNDArray
@@ -325,6 +332,18 @@ if pref_graph_backend not in ("cpu", "gpu"):
         "graph_backend %r is not 'cpu' or 'gpu'; using cpu", pref_graph_backend
     )
     pref_graph_backend = "cpu"
+try:
+    pref_gpu_python = str(gpu_python).strip()
+except NameError:
+    pref_gpu_python = ""
+try:
+    pref_gpu_scratch_dir = str(gpu_scratch_dir).strip()
+except NameError:
+    pref_gpu_scratch_dir = ""
+try:
+    pref_gpu_script_source = str(gpu_script_source)
+except NameError:
+    pref_gpu_script_source = ""
 
 # Spatial stats expansion (v1) inputs
 try:
@@ -1578,39 +1597,17 @@ def validate_supplied_labels(labels, n_cells):
 SEEDED_ALGORITHMS = ("leiden", "kmeans", "minibatchkmeans", "gmm")
 
 
-def graph_backend_available(backend):
-    """The backend that can run here, and why it is not the one asked for.
-
-    :param backend: "cpu" or "gpu"
-    :return: ("cpu", None) or ("gpu", None), or ("cpu", reason) when "gpu" was
-        asked for and cuML or cuGraph does not import
-    """
-    if backend != "gpu":
-        return "cpu", None
-    try:
-        import cuml  # noqa: F401
-        import cugraph  # noqa: F401
-    except Exception as e:  # ImportError, or a CUDA library failing to load
-        return "cpu", "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:160])
-    return "gpu", None
-
-
-def knn_graph(matrix, n_neighbors, seed, backend="cpu"):
-    """The neighbour graph Leiden reads over ``matrix``, as scanpy builds it.
+def knn_graph(matrix, n_neighbors, seed):
+    """scanpy's neighbour graph over ``matrix``, the input Leiden reads.
 
     Above 4,096 cells scanpy's search is approximate and the seed changes the
-    graph, so ``seed`` is part of what identifies it. With ``backend="gpu"``
-    the neighbour search runs on the GPU (knn_graph_gpu); the caller has
-    already checked graph_backend_available.
+    graph, so ``seed`` is part of what identifies it.
 
     :param matrix: cells x features
     :param n_neighbors: neighbours per cell
     :param seed: random seed for the neighbour search
-    :param backend: "cpu" or "gpu"
     :return: connectivities, a cells x cells CSR matrix
     """
-    if backend == "gpu":
-        return knn_graph_gpu(matrix, n_neighbors, seed)
     import scanpy as sc
     import anndata as ad
 
@@ -1619,54 +1616,289 @@ def knn_graph(matrix, n_neighbors, seed, backend="cpu"):
     return adata.obsp["connectivities"]
 
 
-def knn_graph_gpu(matrix, n_neighbors, seed):
-    """The same graph as knn_graph, with the neighbour search on the GPU.
+class GpuBridgeError(Exception):
+    """The RAPIDS process could not run or did not deliver; the message says why."""
 
-    cuML finds the ``n_neighbors`` nearest cells (exact brute force up to
-    GPU_BRUTE_FORCE_CELLS cells, IVF-flat above), then umap-learn turns the
-    neighbours into the fuzzy connectivities scanpy would have made from its
-    own search. Only the search differs from the CPU path, and the search is
-    approximate on both paths above 4,096 cells.
 
-    :param matrix: cells x features
-    :param n_neighbors: neighbours per cell, including the cell itself as scanpy counts it
-    :param seed: random seed for the neighbour search and the fuzzy set
-    :return: connectivities, a cells x cells CSR matrix
+def gpu_bridge_available(backend, python_cmd):
+    """Whether the GPU path can be tried, and why not.
+
+    :param backend: "cpu" or "gpu"
+    :param python_cmd: the RAPIDS environment's python, "" when none is configured
+    :return: ("cpu", None), ("gpu", None), or ("cpu", reason)
     """
-    import cupy as cp
-    from cuml.neighbors import NearestNeighbors
-    from scipy import sparse as sp
-    from umap.umap_ import fuzzy_simplicial_set
+    if backend != "gpu":
+        return "cpu", None
+    if not python_cmd:
+        return "cpu", (
+            "no RAPIDS Python configured (Edit > Preferences > QP-CAT: Python "
+            "environment > GPU graph and Leiden: Python)"
+        )
+    return "gpu", None
 
-    x = cp.asarray(np.ascontiguousarray(matrix, dtype=np.float32))
-    n_cells = x.shape[0]
-    # cuML 26.10 offers brute, ivfflat and ivfpq here (no nn_descent).
-    algorithm = "brute" if n_cells <= GPU_BRUTE_FORCE_CELLS else "ivfflat"
-    nn = NearestNeighbors(
-        n_neighbors=n_neighbors, metric="euclidean", algorithm=algorithm
+
+def gpu_scratch_default(python_cmd):
+    """Where the hand-over files go when no folder is configured: $TMPDIR when the
+    scheduler sets one, else a folder beside the RAPIDS environment (its pixi
+    root), else the system temp folder. Never the home directory or the project:
+    on a networked home every file costs."""
+    tmpdir = os.environ.get("TMPDIR")
+    if tmpdir:
+        return os.path.join(tmpdir, "qpcat-gpu")
+    parts = python_cmd.replace("\\", "/").split("/")
+    if ".pixi" in parts:
+        root = "/".join(parts[: parts.index(".pixi")])
+        if root:
+            return root + "/qpcat-gpu-scratch"
+    import tempfile
+
+    return os.path.join(tempfile.gettempdir(), "qpcat-gpu")
+
+
+def _gpu_child_env(python_cmd):
+    """The isolated environment the RAPIDS process gets (not os.environ as is):
+    no user site-packages, no PYTHONPATH, and LD_LIBRARY_PATH rebuilt as the
+    environment's lib plus only inherited folders that hold libcuda.so.1."""
+    env = {}
+    for k in (
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "CUDA_VISIBLE_DEVICES",
+        "SystemRoot",
+        "TEMP",
+        "TMP",
+    ):
+        if k in os.environ:
+            env[k] = os.environ[k]
+    env["PYTHONNOUSERSITE"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+    prefix = os.path.dirname(os.path.dirname(python_cmd))
+    # What `pixi run` would activate, minus the shell: the environment's bin first,
+    # and CUDA_PATH for cupy's kernel compiler (pixi sets neither CUDA_PATH nor
+    # CUDA_HOME; without it cupy stops with "Failed to find CUDA headers").
+    env["CONDA_PREFIX"] = prefix
+    env["PATH"] = os.path.join(prefix, "bin") + os.pathsep + env.get("PATH", "")
+    env["CUDA_PATH"] = gpu_cuda_path(prefix)
+    env_lib = os.path.join(prefix, "lib")
+    keep = [env_lib] if os.path.isdir(env_lib) else []
+    for d in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+        if d and os.path.exists(os.path.join(d, "libcuda.so.1")) and d not in keep:
+            keep.append(d)
+    if keep:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(keep)
+    return env
+
+
+def gpu_cuda_path(prefix):
+    """CUDA_PATH for a conda-forge CUDA environment: its targets folder when present."""
+    targets = os.path.join(prefix, "targets", "x86_64-linux")
+    return targets if os.path.isdir(targets) else prefix
+
+
+def _wsl_run(args, timeout=60):
+    """Run a command inside WSL from Windows; returns its stdout text."""
+    import subprocess
+
+    r = subprocess.run(
+        ["wsl.exe", "--"] + args, capture_output=True, text=True, timeout=timeout
     )
-    nn.fit(x)
-    dists, idx = nn.kneighbors(x)
-    knn_dists = cp.asnumpy(dists).astype(np.float32)
-    knn_indices = cp.asnumpy(idx).astype(np.int64)
-    del x, dists, idx
+    if r.returncode != 0:
+        msg = (r.stdout + r.stderr).replace("\x00", "").strip()
+        if "elevation" in msg.lower():
+            msg += (
+                " (Windows refuses to start WSL from an unelevated program; a "
+                "'Run as administrator' compatibility flag on wsl.exe does this. "
+                "Check Properties > Compatibility of C:\\Program Files\\WSL\\wsl.exe.)"
+            )
+        raise GpuBridgeError("wsl.exe failed: " + msg[:400])
+    return r.stdout.replace("\x00", "")
+
+
+def gpu_bridge_run(
+    matrix,
+    n_neighbors,
+    seed,
+    resolutions,
+    python_cmd,
+    scratch_dir,
+    script_source,
+    progress=None,
+):
+    """Build the graph and partition it on the GPU in a separate process.
+
+    Writes matrix.npy, params.json and gpu_graph_leiden.py into a job folder,
+    runs the RAPIDS environment's python on it (through wsl.exe on Windows, so
+    the folder lives inside WSL), and reads graph.npz and the labels back. The
+    child's output goes to run.log in the job folder, never to this process's
+    stdout (the Appose channel). Every duration is logged.
+
+    :param resolutions: Leiden resolutions to partition at, the run's first
+    :return: (connectivities CSR, {resolution: labels}, note, seconds dict)
+    :raises GpuBridgeError: with the reason, when anything fails; the caller
+        falls back to the CPU
+    """
+    import json
+    import shutil
+    import subprocess
+    from scipy import sparse as sp
+
+    if not script_source:
+        raise GpuBridgeError("gpu_graph_leiden.py was not handed to the worker")
+    windows = sys.platform == "win32"
+    t_all = time.monotonic()
+    job_name = "job_%d_%d" % (os.getpid(), int(time.time()))
+    if windows:
+        linux_scratch = scratch_dir or "~/.cache/qpcat-gpu"
+        out = _wsl_run(
+            [
+                "bash",
+                "-lc",
+                'mkdir -p "%s/%s" && cd "%s/%s" && pwd && wslpath -w "$PWD"'
+                % (linux_scratch, job_name, linux_scratch, job_name),
+            ]
+        )
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        if len(lines) < 2:
+            raise GpuBridgeError(
+                "could not create the job folder inside WSL: " + out[:200]
+            )
+        linux_job, job = lines[-2], lines[-1]
+    else:
+        job = os.path.join(scratch_dir or gpu_scratch_default(python_cmd), job_name)
+        os.makedirs(job, exist_ok=True)
+        linux_job = job
+    t0 = time.monotonic()
+    np.save(
+        os.path.join(job, "matrix.npy"), np.ascontiguousarray(matrix, dtype=np.float32)
+    )
+    with open(os.path.join(job, "params.json"), "w") as f:
+        json.dump(
+            {
+                "n_neighbors": int(n_neighbors),
+                "seed": int(seed),
+                "resolutions": [float(r) for r in resolutions],
+                "brute_force_cells": GPU_BRUTE_FORCE_CELLS,
+            },
+            f,
+        )
+    with open(
+        os.path.join(job, "gpu_graph_leiden.py"), "w", encoding="utf-8", newline="\n"
+    ) as f:
+        f.write(script_source)
+    seconds = {"write": round(time.monotonic() - t0, 3)}
     logger.info(
-        "GPU neighbour search: cuML %s, %d cells, k=%d", algorithm, n_cells, n_neighbors
+        "GPU graph: %d cells x %d features written to %s in %.1f s",
+        matrix.shape[0],
+        matrix.shape[1],
+        job,
+        seconds["write"],
     )
-    # scanpy: _connectivity.umap(knn_indices, knn_dists, n_obs, n_neighbors) with
-    # umap's defaults (set_op_mix_ratio=1.0, local_connectivity=1.0).
-    placeholder = sp.coo_matrix(([], ([], [])), shape=(n_cells, 1))
-    connectivities, _sigmas, _rhos = fuzzy_simplicial_set(
-        placeholder,
-        n_neighbors,
-        np.random.RandomState(seed),
-        "euclidean",
-        knn_indices=knn_indices,
-        knn_dists=knn_dists,
-        set_op_mix_ratio=1.0,
-        local_connectivity=1.0,
+    if progress:
+        progress("Neighbor graph and Leiden on the GPU...")
+    t0 = time.monotonic()
+    try:
+        if windows:
+            cmd = [
+                "wsl.exe",
+                "--",
+                "bash",
+                "-lc",
+                'cd "%s" && P="%s" && PREFIX="$(dirname "$(dirname "$P")")" && '
+                'CUDA_PATH="$PREFIX/targets/x86_64-linux" && [ -d "$CUDA_PATH" ] || CUDA_PATH="$PREFIX"; '
+                'PATH="$PREFIX/bin:$PATH" CONDA_PREFIX="$PREFIX" CUDA_PATH="$CUDA_PATH" '
+                'PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 env -u PYTHONPATH "$P" '
+                'gpu_graph_leiden.py "%s" > run.log 2>&1'
+                % (linux_job, python_cmd, linux_job),
+            ]
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            tail = r.stdout.replace("\x00", "")
+        else:
+            with open(os.path.join(job, "run.log"), "w") as log:
+                r = subprocess.run(
+                    [python_cmd, os.path.join(job, "gpu_graph_leiden.py"), job],
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=_gpu_child_env(python_cmd),
+                    cwd=job,
+                )
+            tail = ""
+    except FileNotFoundError as e:
+        raise GpuBridgeError("could not start the GPU process: %s" % e)
+    seconds["process"] = round(time.monotonic() - t0, 3)
+    result_path = os.path.join(job, "result.json")
+    if not os.path.exists(result_path):
+        log_tail = _tail(os.path.join(job, "run.log")) or tail
+        raise GpuBridgeError(
+            "the GPU process wrote no result (exit %s); its log %s ends with: %s"
+            % (r.returncode, os.path.join(job, "run.log"), log_tail[-600:])
+        )
+    with open(result_path) as f:
+        result = json.load(f)
+    if not result.get("ok"):
+        err = str(result.get("error", ""))[-800:]
+        versions = result.get("versions", {})
+        raise GpuBridgeError(
+            "the GPU process failed (%s; CUDA driver %s, runtime %s): %s"
+            % (
+                ", ".join(
+                    "%s %s" % (k, v)
+                    for k, v in versions.items()
+                    if k in ("gpu", "cuml", "cugraph")
+                ),
+                versions.get("cuda_driver", "?"),
+                versions.get("cuda_runtime", "?"),
+                err,
+            )
+        )
+    t0 = time.monotonic()
+    conn = sp.load_npz(os.path.join(job, "graph.npz")).tocsr()
+    labels_by_res = {}
+    degenerate = []
+    for row in result["resolutions"]:
+        lab = np.load(os.path.join(job, row["file"])).astype(np.int64)
+        if row.get("degenerate"):
+            degenerate.append(row["resolution"])
+        else:
+            labels_by_res[float(row["resolution"])] = lab
+    seconds["read"] = round(time.monotonic() - t0, 3)
+    seconds.update({"gpu_" + k: v for k, v in result.get("seconds", {}).items()})
+    seconds["total"] = round(time.monotonic() - t_all, 3)
+    versions = result.get("versions", {})
+    note = "gpu (%s on %s; cuML %s, cuGraph %s; %s search)" % (
+        versions.get("gpu", "GPU"),
+        "WSL2" if windows else "Linux",
+        versions.get("cuml", "?"),
+        versions.get("cugraph", "?"),
+        result.get("algorithm", "?"),
     )
-    return sp.csr_matrix(connectivities)
+    if degenerate:
+        note += (
+            "; cuGraph returned every cell as its own cluster at resolution %s, partitioned with igraph instead"
+            % (", ".join("%g" % r for r in degenerate))
+        )
+    logger.info(
+        "GPU graph: nnz=%d, %s; seconds %s",
+        conn.nnz,
+        note,
+        json.dumps(seconds, sort_keys=True),
+    )
+    shutil.rmtree(job, ignore_errors=True)
+    return conn, labels_by_res, note, seconds
+
+
+def _tail(path, n=600):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - n))
+            return f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
 
 
 # Above this many cells the GPU neighbour search is approximate (IVF-flat),
@@ -1733,88 +1965,11 @@ def leiden_labels(connectivities, resolution, seed):
 class CpuLeidenEngine:
     """One graph in igraph, partitioned at any number of resolutions."""
 
-    name = "cpu"
-    note = None
-
     def __init__(self, connectivities):
         self.graph, self.weights = leiden_igraph(connectivities)
 
     def partition(self, resolution, seed):
         return leiden_partition(self.graph, self.weights, resolution, seed)
-
-
-class GpuLeidenEngine:
-    """One graph in cuGraph, partitioned at any number of resolutions.
-
-    cuGraph's Leiden takes a seed; across seeds its partitions spread about as
-    igraph's do (measured on 11,306 synthetic cells, ARI 0.92 against igraph's
-    0.95 seed to seed). It is called directly: rapids-singlecell's wrapper
-    returned every cell as its own cluster at resolution 1.0 on the same graph.
-    """
-
-    name = "gpu"
-
-    def __init__(self, connectivities):
-        import cudf
-        import cugraph
-        from scipy import sparse as sp
-
-        self.connectivities = connectivities
-        self.note = None
-        self._cpu = None
-        coo = sp.triu(connectivities.tocsr(), k=1).tocoo()
-        edges = cudf.DataFrame(
-            {
-                "src": coo.row.astype(np.int32),
-                "dst": coo.col.astype(np.int32),
-                "w": coo.data.astype(np.float32),
-            }
-        )
-        self.n = connectivities.shape[0]
-        self.graph = cugraph.Graph(directed=False)
-        self.graph.from_cudf_edgelist(
-            edges, source="src", destination="dst", edge_attr="w", renumber=False
-        )
-        self._leiden = cugraph.leiden
-
-    def partition(self, resolution, seed):
-        if self._cpu is not None:
-            return self._cpu.partition(resolution, seed)
-        parts, modularity = self._leiden(
-            self.graph, max_iter=100, resolution=resolution, random_state=int(seed)
-        )
-        parts = parts.to_pandas()
-        labels = np.zeros(self.n, dtype=np.int64)
-        labels[parts["vertex"].to_numpy()] = parts["partition"].to_numpy()
-        n_clusters = int(np.unique(labels).size)
-        if n_clusters >= self.n or modularity < 0:
-            # cuGraph 26.10 returns every cell as its own cluster, with negative
-            # modularity, on graphs with hub nodes (measured: 11,306 synthetic
-            # cells with 2,847 exact duplicates, k=50, 50 nodes of degree > 200).
-            # igraph partitions the same graph normally, so finish on the CPU.
-            self.note = (
-                "cuGraph Leiden returned %d clusters for %d cells (modularity %.3f); "
-                "finished with igraph on the same graph"
-                % (n_clusters, self.n, modularity)
-            )
-            logger.warning("%s", self.note)
-            self._cpu = CpuLeidenEngine(self.connectivities)
-            return self._cpu.partition(resolution, seed)
-        return labels
-
-
-def leiden_engine(connectivities, backend):
-    """The engine that partitions ``connectivities`` on the given backend.
-
-    :param connectivities: cells x cells CSR matrix from knn_graph; read, never written
-    :param backend: "cpu" or "gpu", already checked with graph_backend_available
-    :return: a CpuLeidenEngine or GpuLeidenEngine
-    """
-    return (
-        GpuLeidenEngine(connectivities)
-        if backend == "gpu"
-        else CpuLeidenEngine(connectivities)
-    )
 
 
 def resolution_rows(resolutions, label_sets, run_labels):
@@ -2067,16 +2222,14 @@ if algorithm == "leiden":
     # range [1, inf) or None. Got 0 instead" -- names neither the control nor
     # the dialog, and arrives after the whole extraction has been paid for.
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
-    _backend, _backend_reason = graph_backend_available(pref_graph_backend)
+    _backend, _backend_reason = gpu_bridge_available(
+        pref_graph_backend, pref_gpu_python
+    )
     if _backend_reason is not None:
         logger.warning(
-            "graph_backend gpu was asked for but is not available here (%s); "
-            "running Leiden on the CPU",
+            "graph_backend gpu was asked for but cannot run (%s); running Leiden on the CPU",
             _backend_reason,
         )
-        task.outputs["graph_backend"] = "cpu (gpu requested; %s)" % _backend_reason
-    else:
-        task.outputs["graph_backend"] = _backend
     logger.info(
         "Leiden: n_neighbors=%d, resolution=%.2f, backend=%s",
         n_neighbors,
@@ -2084,10 +2237,15 @@ if algorithm == "leiden":
         _backend,
     )
     seeded_params = {"n_neighbors": n_neighbors, "resolution": resolution}
+    _wanted_resolutions = [float(resolution)] + [
+        float(r) for r in pref_compare_resolutions if float(r) != float(resolution)
+    ]
     # The graph depends on the matrix, n_neighbors and the seed, never on the
     # resolution, so a resolution change reuses the last one (knn_cache.py).
     _graph = None
     _graph_key = None
+    _gpu_labels = {}
+    _gpu_note = None
     if _reuse_on:
         _graph_key = knn_cache.make_key(
             _matrix_digest,
@@ -2106,15 +2264,46 @@ if algorithm == "leiden":
             )
         else:
             knn_cache.drop("graph", "n_neighbors or seed changed")
+    if _graph is None and _backend == "gpu":
+        try:
+            _graph, _gpu_labels, _gpu_note, _gpu_seconds = gpu_bridge_run(
+                cluster_matrix,
+                n_neighbors,
+                clustering_seed,
+                _wanted_resolutions,
+                pref_gpu_python,
+                pref_gpu_scratch_dir,
+                pref_gpu_script_source,
+                progress=lambda m: _progress(0.4, m),
+            )
+        except GpuBridgeError as e:
+            _backend_reason = str(e)
+            _backend = "cpu"
+            _graph = None
+            logger.warning(
+                "GPU graph failed (%s); running Leiden on the CPU", _backend_reason
+            )
     if _graph is None:
-        _graph = knn_graph(
-            cluster_matrix, n_neighbors, clustering_seed, backend=_backend
-        )
+        _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)
         if _graph_key is not None:
             knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
-    _engine = leiden_engine(_graph, _backend)
+    elif _graph_key is not None and _gpu_note is not None:
+        knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
+    task.outputs["graph_backend"] = (
+        _gpu_note
+        if _gpu_note
+        else ("cpu (gpu requested; %s)" % _backend_reason if _backend_reason else "cpu")
+    )
+    _engine = (
+        CpuLeidenEngine(_graph) if len(_gpu_labels) < len(_wanted_resolutions) else None
+    )
     del _graph
-    labels = _engine.partition(resolution, clustering_seed)
+
+    def _partition_at(_r):
+        _lab = _gpu_labels.get(float(_r))
+        return _lab if _lab is not None else _engine.partition(_r, clustering_seed)
+
+    labels = _partition_at(resolution)
     if pref_compare_resolutions:
         _label_sets = []
         for _i, _r in enumerate(pref_compare_resolutions):
@@ -2123,9 +2312,7 @@ if algorithm == "leiden":
                 "Comparing resolutions: %g (%d of %d)..."
                 % (_r, _i + 1, len(pref_compare_resolutions)),
             )
-            _label_sets.append(
-                labels if _r == resolution else _engine.partition(_r, clustering_seed)
-            )
+            _label_sets.append(labels if _r == resolution else _partition_at(_r))
         resolution_comparison = {
             "run_resolution": float(resolution),
             "seed": int(clustering_seed),
@@ -2133,12 +2320,7 @@ if algorithm == "leiden":
             "rows": resolution_rows(pref_compare_resolutions, _label_sets, labels),
         }
         del _label_sets
-    if _engine.note:
-        task.outputs["graph_backend"] = "%s (%s)" % (
-            task.outputs["graph_backend"],
-            _engine.note,
-        )
-    del _engine
+    del _engine, _gpu_labels
 
 elif algorithm == "kmeans":
     n_clusters = algorithm_params.get("n_clusters", 10)
