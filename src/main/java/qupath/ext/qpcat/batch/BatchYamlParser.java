@@ -54,7 +54,7 @@ public final class BatchYamlParser {
 
     private static final Set<String> KNOWN_CLUSTERING = new HashSet<>(Arrays.asList(
             "type", "algorithm", "mode", "saved_result_name",
-            "resolution", "k", "normalization", "missing_values", "embedding",
+            "resolution", "k", "normalization", "missing_values", "graph_backend", "embedding",
             "pca_n_components", "umap_n_neighbors", "umap_min_dist",
             "umap_metric", "tsne_perplexity", "tsne_learning_rate",
             "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
@@ -262,6 +262,7 @@ public final class BatchYamlParser {
                 case "k" -> c.setK(asIntObj(value));
                 case "normalization" -> c.setNormalization(asString(value));
                 case "missing_values" -> c.setMissingValues(asString(value));
+                case "graph_backend" -> c.setGraphBackend(asString(value));
                 case "embedding" -> c.setEmbedding(asString(value));
                 case "pca_n_components" -> c.setPcaNComponents(asIntObj(value));
                 case "umap_n_neighbors" -> c.setUmapNNeighbors(asIntObj(value));

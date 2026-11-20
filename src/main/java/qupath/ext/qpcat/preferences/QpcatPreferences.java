@@ -66,6 +66,22 @@ public final class QpcatPreferences {
             "qpcat.env.workerSingleOpenMpThread", GeneralTools.isWindows());
 
     /**
+     * The RAPIDS environment's Python for the GPU neighbor graph and Leiden; "" = none.
+     * On Windows a path inside WSL2 ("/home/you/rapids/.pixi/envs/default/bin/python").
+     * Read by the worker at run time (gpu_bridge_run in run_clustering.py).
+     */
+    private static final StringProperty gpuGraphPython = PathPrefs.createPersistentPreference(
+            "qpcat.env.gpuGraphPython", "");
+
+    /** Folder for the GPU hand-over files; "" = $TMPDIR, else beside the RAPIDS environment. */
+    private static final StringProperty gpuGraphScratchDir = PathPrefs.createPersistentPreference(
+            "qpcat.env.gpuGraphScratchDir", "");
+
+    /** The Clustering dialog's "on the GPU" tick for Leiden; off until the user turns it on. */
+    private static final BooleanProperty gpuGraph = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.gpuGraph", false);
+
+    /**
      * Default for the PAGA cluster-connectivity graph.
      * <p>
      * On, to match the behaviour every earlier version had. It is worth knowing
@@ -556,6 +572,16 @@ public final class QpcatPreferences {
     public static boolean isCloseDialogAfterRun() { return closeDialogAfterRun.get(); }
     public static void setCloseDialogAfterRun(boolean v) { closeDialogAfterRun.set(v); }
 
+    /** @see #gpuGraphPython */
+    public static String getGpuGraphPython() { return gpuGraphPython.get() == null ? "" : gpuGraphPython.get().trim(); }
+    public static void setGpuGraphPython(String v) { gpuGraphPython.set(v == null ? "" : v); }
+    /** @see #gpuGraphScratchDir */
+    public static String getGpuGraphScratchDir() { return gpuGraphScratchDir.get() == null ? "" : gpuGraphScratchDir.get().trim(); }
+    public static void setGpuGraphScratchDir(String v) { gpuGraphScratchDir.set(v == null ? "" : v); }
+    /** @see #gpuGraph */
+    public static boolean isGpuGraph() { return gpuGraph.get(); }
+    public static void setGpuGraph(boolean v) { gpuGraph.set(v); }
+
     /** @see #workerSingleOpenMpThread */
     public static boolean isWorkerSingleOpenMpThread() { return workerSingleOpenMpThread.get(); }
     /** @see #workerSingleOpenMpThread */
@@ -1018,6 +1044,30 @@ public final class QpcatPreferences {
                 .name(ApposeGpu.PREFERENCE_NAME)
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(ApposeGpu.preferenceDescription()))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(gpuGraphPython, String.class)
+                .name("GPU graph and Leiden: Python")
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(
+                        "The Python of a RAPIDS environment you installed yourself (cuML, cuGraph, "
+                        + "cupy, umap-learn, scipy, numpy; the manifest ships in the documentation). "
+                        + "With it set, the Clustering dialog offers 'Neighbor graph and Leiden on the "
+                        + "GPU' for Leiden runs.\n\n"
+                        + "On Windows this is a path inside WSL2, for example "
+                        + "/home/you/rapids/.pixi/envs/default/bin/python; QP-CAT starts it through "
+                        + "wsl.exe and hands the matrix over as a file. On Linux it is a local path. "
+                        + "Leave blank for the CPU path. QP-CAT never installs or changes this environment."))
+                .build());
+
+        items.add(new PropertyItemBuilder<>(gpuGraphScratchDir, String.class)
+                .name("GPU graph and Leiden: scratch folder")
+                .category(CATEGORY_ENV)
+                .description(Tooltips.wrap(
+                        "Where the hand-over files go (the matrix in, the graph and labels out; "
+                        + "three files, removed after the run). Blank: $TMPDIR when the scheduler "
+                        + "sets one, else a folder beside the RAPIDS environment. On a networked "
+                        + "home directory, point this at scratch. On Windows this is a path inside WSL2."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(workerSingleOpenMpThread, Boolean.class)

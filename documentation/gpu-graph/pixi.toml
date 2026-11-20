@@ -1,0 +1,35 @@
+# QP-CAT's optional RAPIDS environment for the GPU neighbor graph and Leiden (Linux and WSL2 only).
+# Install once:  pixi install --frozen   (in this folder; about 6 GB)
+# Then set Edit > Preferences > QP-CAT: Python environment > GPU graph and Leiden: Python to
+#   <this folder>/.pixi/envs/default/bin/python
+# QP-CAT never installs, changes or removes this environment.
+[workspace]
+name = "qpcat-rapids-cuda13"
+channels = ["rapidsai", "conda-forge", "nvidia"]
+platforms = ["linux-64"]
+
+[system-requirements]
+cuda = "13"
+
+[dependencies]
+python = "3.12.*"
+cuda-version = "13.*"
+cuml = "*"
+cugraph = "*"
+cuvs = "*"
+cupy = "*"
+numpy = "*"
+pandas = "*"
+scipy = "*"
+scikit-learn = "*"
+igraph = "*"
+leidenalg = "*"
+umap-learn = "*"
+numba = "*"
+h5py = "*"
+
+[pypi-dependencies]
+scanpy = ">=1.10"
+anndata = ">=0.10"
+rapids-singlecell = "*"
+harmonypy = ">=2.1,<3"

@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ## [Unreleased]
 
+### Added
+
+- **Neighbor graph and Leiden on the GPU (RAPIDS), optional.** A Leiden run can build its
+  neighbor graph with cuML and partition it with cuGraph in a separate RAPIDS environment you
+  install from the shipped manifest (`documentation/gpu-graph/`), on Linux or inside WSL2 from a
+  Windows QuPath; the matrix, the graph and the labels cross as files. Two new preferences under
+  QP-CAT: Python environment (the environment's Python and a scratch folder), a tick in the
+  Clustering dialog that appears once the Python is set, `graph_backend: gpu` in batch files, a
+  card-memory estimate in the pre-run check, and a CPU fallback with the reason in a
+  notification and the run summary. Measured: 1 million cells x 25 markers in 43 s end to end
+  from a Windows QuPath on a 16 GB card. Details and limits in Setup.
+
+### Fixed
+
+- A batch file's `missing_values` was ignored unless `normalization` was also set.
+
 ## [0.25.0] - 2026-11-19
 
 ### Changed

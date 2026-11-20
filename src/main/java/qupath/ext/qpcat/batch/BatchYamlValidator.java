@@ -54,6 +54,7 @@ public final class BatchYamlValidator {
             "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"));
     private static final Set<String> MISSING_VALUES = Set.of(
             "exclude_objects", "exclude_measurements", "impute");
+    private static final Set<String> GRAPH_BACKENDS = Set.of("cpu", "gpu");
 
     private static final Set<String> EMBEDDINGS = new HashSet<>(Arrays.asList(
             "umap", "pca", "tsne", "none"));
@@ -243,6 +244,11 @@ public final class BatchYamlValidator {
                 && !MISSING_VALUES.contains(c.getMissingValues().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.missing_values",
                     "'" + asciiSafe(c.getMissingValues()) + "' is not one of " + MISSING_VALUES));
+        }
+        if (c.getGraphBackend() != null
+                && !GRAPH_BACKENDS.contains(c.getGraphBackend().toLowerCase(Locale.ROOT))) {
+            r.add(ValidationIssue.error("E005", "clustering.graph_backend",
+                    "'" + asciiSafe(c.getGraphBackend()) + "' is not one of " + GRAPH_BACKENDS));
         }
         if (c.getEmbedding() != null
                 && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase(Locale.ROOT))) {

@@ -35,6 +35,18 @@ class BatchYamlMissingValuesTest {
     }
 
     @Test
+    void graphBackendKeyParsesAndValidates() {
+        BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(HEAD
+                + "clustering: { type: LEIDEN, graph_backend: gpu }\n");
+        assertThat(po.getSchema().getClustering().getGraphBackend()).isEqualTo("gpu");
+        assertThat(validate(HEAD + "clustering: { type: LEIDEN, graph_backend: cpu }\n")
+                .stream().noneMatch(i -> i.getSeverity() == ValidationIssue.Severity.ERROR)).isTrue();
+        assertThat(validate(HEAD + "clustering: { type: LEIDEN, graph_backend: cuda }\n")
+                .stream().anyMatch(i -> "E005".equals(i.getCode())
+                        && "clustering.graph_backend".equals(i.getFieldPath()))).isTrue();
+    }
+
+    @Test
     void phenotypingKeyParses() {
         BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(HEAD
                 + "phenotyping:\n  missing_values: impute\n  rules:\n    - name: T\n      require_markers: [CD3]\n");

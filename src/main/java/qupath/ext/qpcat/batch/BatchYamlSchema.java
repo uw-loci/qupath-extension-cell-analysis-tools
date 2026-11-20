@@ -132,6 +132,7 @@ public final class BatchYamlSchema {
         private Integer k;
         private String normalization;
         private String missingValues;
+        private String graphBackend;
         private String embedding;
         private Integer pcaNComponents;
         private Integer umapNNeighbors;
@@ -211,6 +212,9 @@ public final class BatchYamlSchema {
         /** {@code missing_values}: exclude_objects (default), exclude_measurements or impute (issue #29). */
         public String getMissingValues() { return missingValues; }
         public void setMissingValues(String v) { this.missingValues = v; }
+        /** {@code graph_backend}: cpu (default) or gpu (Leiden's graph in a RAPIDS process). */
+        public String getGraphBackend() { return graphBackend; }
+        public void setGraphBackend(String v) { this.graphBackend = v; }
 
         public String getEmbedding() { return embedding; }
         public void setEmbedding(String embedding) { this.embedding = embedding; }

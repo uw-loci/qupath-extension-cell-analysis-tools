@@ -228,6 +228,7 @@ public class ClusteringDialog {
     private VBox algorithmParamsBox;
     private CheckBox generatePlotsCheck;
     private CheckBox pagaCheck;
+    private CheckBox gpuGraphCheck;
     private CheckBox stabilityCheck;
     private Spinner<Integer> stabilityRepeatsSpinner;
     private CheckBox compareResolutionsCheck;
@@ -3129,6 +3130,28 @@ public class ClusteringDialog {
                         tipLabel("resolution:", leidenResolutionSpinner), leidenResolutionSpinner);
                 row.setAlignment(Pos.CENTER_LEFT);
                 algorithmParamsBox.getChildren().add(row);
+                // Only offered once a RAPIDS Python is configured; otherwise the
+                // option would always fall back and only confuse.
+                if (!QpcatPreferences.getGpuGraphPython().isEmpty()) {
+                    if (gpuGraphCheck == null) {
+                        gpuGraphCheck = new CheckBox("Neighbor graph and Leiden on the GPU (RAPIDS)");
+                        gpuGraphCheck.setSelected(QpcatPreferences.isGpuGraph());
+                        gpuGraphCheck.setTooltip(Tooltips.of(
+                                "Build the neighbor graph and run Leiden in the RAPIDS environment set "
+                                + "under Edit > Preferences > QP-CAT: Python environment > GPU graph and "
+                                + "Leiden: Python (on Windows inside WSL2, through wsl.exe). The matrix "
+                                + "crosses as a file; the graph and labels come back the same way.\n\n"
+                                + "Seeded runs differ from the CPU's in the same way two seeds differ: the "
+                                + "graph is built by an exact or IVF search on the GPU instead of scanpy's "
+                                + "approximate one. If the process cannot run, Leiden runs on the CPU and a "
+                                + "notification says why. The run summary records which ran."));
+                        gpuGraphCheck.selectedProperty().addListener((o, a, b) -> {
+                            QpcatPreferences.setGpuGraph(b);
+                            updatePreflight();
+                        });
+                    }
+                    algorithmParamsBox.getChildren().add(gpuGraphCheck);
+                }
                 addMethodInfo(
                         "Joins each cell to its n_neighbors nearest neighbors, then finds groups "
                         + "that are more densely connected inside than out. It settles on the "
@@ -3611,6 +3634,9 @@ public class ClusteringDialog {
         // Normalization
         config.setNormalization(normalizationCombo.getValue());
         config.setMissingPolicy(measurementPane.getMissingPolicy());
+        config.setGraphBackend(algorithmCombo.getValue() == Algorithm.LEIDEN
+                && gpuGraphCheck != null && gpuGraphCheck.isSelected()
+                && !QpcatPreferences.getGpuGraphPython().isEmpty() ? "gpu" : "cpu");
 
         // Embedding
         EmbeddingMethod embMethod = embeddingCombo.getValue();

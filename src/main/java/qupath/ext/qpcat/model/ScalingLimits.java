@@ -146,6 +146,7 @@ public final class ScalingLimits {
         public int stabilityRepeats = 0;
         /** Leiden resolutions compared on the run's graph; 0 when it is off. */
         public int compareResolutions = 0;
+        public boolean gpuGraph = false;
         /** Physical RAM budget in GB; <= 0 asks this machine. */
         public double availableRamGb = 0;
         /** What the Python worker keeps from earlier runs for reuse, in GB. */
@@ -282,6 +283,20 @@ public final class ScalingLimits {
      * 2.56 / 4.19 GB (2026-08-05). Leiden alone on one 300k/k=50 graph: 2.34 GB
      * streamed, 5.05 GB through scanpy.
      */
+    /**
+     * GPU memory the RAPIDS graph-and-Leiden process needs, from two measured runs
+     * (6M and 9M cells, k=50, 16 GiB card): about 60 bytes per CSR nonzero, with
+     * nonzeros about 1.44 x cells x k after symmetrization. A 16 GiB card holds about
+     * 280M nonzeros before the Windows driver spills into host RAM and the run slows
+     * several-fold instead of failing.
+     */
+    public static double gpuGraphGb(long nCells, int nNeighbors) {
+        return nCells * 1.44 * nNeighbors * 60.0 / GB;
+    }
+
+    /** GPU memory above which the GPU graph is flagged: most cards in use have 16 GB or less. */
+    public static final double GPU_GRAPH_WARN_GB = 14.0;
+
     public static double leidenPeakGb(long nCells, int nNeighbors) {
         return 0.72 + (double) nCells * nNeighbors * 1.52e-7;
     }
@@ -523,6 +538,19 @@ public final class ScalingLimits {
         // The larger of the two, not the sum: a run that builds a new graph
         // frees the old one first.
         double reserve = Math.max(r.reuseHeldGb, r.reuseKeepGb);
+        if (r.gpuGraph && r.algorithm == ClusteringConfig.Algorithm.LEIDEN) {
+            double gpuGb = gpuGraphGb(r.nCells, r.nNeighbors);
+            out.add(new Finding(gpuGb > GPU_GRAPH_WARN_GB ? Severity.WARN : Severity.OK,
+                    "GPU graph and Leiden",
+                    gpuGb > GPU_GRAPH_WARN_GB
+                            ? "needs more GPU memory than a 16 GB card has; on Windows the driver then "
+                              + "spills into host RAM and the run slows several-fold rather than failing"
+                            : "fits a 16 GB card",
+                    gpuGb > GPU_GRAPH_WARN_GB
+                            ? "Lower n_neighbors, cluster fewer cells, or run on the CPU."
+                            : "",
+                    gpuGb, 0));
+        }
         String reuseNote = reserve <= 0 ? "" : " That includes " + formatGb(reserve)
                 + " QP-CAT keeps between runs to reuse; turning off 'Reuse the neighbor "
                 + "graph between runs' in Preferences frees it.";

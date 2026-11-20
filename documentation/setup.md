@@ -75,6 +75,57 @@ are written to the QuPath log at worker start. Changes apply to workers started 
 change, so restart QuPath to move a running worker. If QuPath was started by a cluster
 scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
 
+### Neighbor graph and Leiden on the GPU
+
+For a Leiden run, QP-CAT can build the neighbor graph and run Leiden in a separate RAPIDS
+process: the neighbor search on cuML (exact up to 200,000 cells, IVF-flat above), the same
+fuzzy connectivities scanpy would compute on top, and cuGraph's Leiden at every resolution the
+run asks for. A working-group member measured 6 million cells by 25 markers, k=50, at two
+resolutions in 26 minutes on a 16 GB card under Windows 11 and WSL2, against about 47 hours
+for a CPU pipeline on 4 million cells. QP-CAT's own measurement: 1 million cells by 25 markers
+in 43 s end to end from a Windows QuPath, 29 s of it the neighbor search.
+
+RAPIDS runs on Linux only. On Windows the process runs inside WSL2 and QuPath starts it
+through `wsl.exe`; the matrix crosses as one file written into the WSL file system, the graph
+and the labels come back the same way (about a second each way at 1 million cells).
+
+**Setup**
+
+1. Install WSL2 with a Linux distribution (Windows only), and an NVIDIA driver that supports
+   CUDA 13 (`nvidia-smi` inside WSL shows the GPU).
+2. Copy [documentation/gpu-graph/pixi.toml](gpu-graph/pixi.toml) and its `pixi.lock` into a
+   folder on a local disk (on a networked home directory, use scratch), and run
+   `pixi install --frozen` there. The environment is about 6 GB and pins RAPIDS 26.10, CUDA 13,
+   Python 3.12. QP-CAT never installs, changes or removes it.
+3. **Edit > Preferences > QP-CAT: Python environment > GPU graph and Leiden: Python**: the
+   environment's Python, `<folder>/.pixi/envs/default/bin/python`. On Windows this is the path
+   inside WSL2. **GPU graph and Leiden: scratch folder** is where the three hand-over files go;
+   blank means `$TMPDIR` when set, else a folder beside the environment.
+4. In **Find cell populations (clustering)...** with Leiden selected, tick **Neighbor graph and
+   Leiden on the GPU (RAPIDS)**. The tick is remembered. The option only appears once the
+   Python preference is set.
+
+**What to expect**
+
+- The pre-run check estimates the card memory from the member's measurements (about 60 bytes
+  per graph nonzero, nonzeros about 1.44 x cells x k): a 16 GB card holds about 280M nonzeros,
+  near 4 million cells at k=50 or 13 million at k=15. Above that, the Windows driver spills into
+  host RAM over PCIe and the run slows several-fold rather than failing; the check warns.
+- Seeded runs differ from CPU runs the way two seeds differ (ARI 0.93 at resolution 0.5, 0.76
+  at 1.0 on our synthetic ground-truth set, the same spread as the CPU seed to seed), because
+  the graph is built by a different neighbor search. A run is reproducible with its own seed on
+  the same GPU path.
+- If the process cannot run (no Python set, WSL refusing to start, a library missing, a driver
+  too old for the build), Leiden runs on the CPU, a notification says why, and the run
+  summary records "cpu (gpu requested; ...)". A successful run records the card, the library
+  versions and the search used. The process's own log is `run.log` in the job folder, kept
+  when it fails.
+- One Windows wrinkle: a "Run as administrator" compatibility flag on
+  `C:\Program Files\WSL\wsl.exe` stops any unelevated program, QuPath included, from starting
+  WSL ("The requested operation requires elevation"). Clear it under the file's Properties >
+  Compatibility.
+- Batch files: `graph_backend: gpu` on the `clustering` block ([YAML reference](yaml-reference.md)).
+
 ### What a GPU actually accelerates
 
 | Operation | Device |
@@ -82,7 +133,8 @@ scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
 | Autoencoder, tile mode | **GPU** -- the real case. 64x64 tiles at 10,000 cells take 1-3 hours on CPU. |
 | Autoencoder, measurement mode | GPU, marginally. The network is small. |
 | Harmony batch correction | **GPU** in the GPU variant, when the run's cells fit in the card's free memory. Otherwise CPU, and the log and the run record say so. The GPU and the CPU can converge after different iteration counts, so the run record names the device. The opt-in harmonypy 2.1.0 (see [Harmony version](../README.md#batch-correction-harmony)) always runs on the CPU. |
-| Clustering (Leiden, KMeans, HDBSCAN, GMM, agglomerative) | CPU. No GPU code path exists. |
+| Leiden: the neighbor graph and the partition | **GPU, optional**, through a RAPIDS environment you install yourself; see [Neighbor graph and Leiden on the GPU](#neighbor-graph-and-leiden-on-the-gpu). Everything after the partition (PAGA, marker ranking, plots) stays on the CPU. |
+| KMeans, HDBSCAN, GMM, agglomerative | CPU. No GPU code path exists. |
 | BANKSY, UMAP | CPU. pybanksy and umap-learn are CPU-only. |
 | Spatial statistics, cellular neighborhoods | CPU. Permutation tests are CPU-bound. |
 | Phenotyping | CPU. Threshold arithmetic. |

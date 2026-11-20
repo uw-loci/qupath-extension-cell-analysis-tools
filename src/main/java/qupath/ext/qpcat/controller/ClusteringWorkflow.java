@@ -563,6 +563,9 @@ public class ClusteringWorkflow {
         if (result.getMissingNote() != null) {
             completeMsg += " " + result.getMissingNote() + ".";
         }
+        if (result.getGraphBackend() != null && result.getGraphBackend().startsWith("gpu")) {
+            completeMsg += " Graph and Leiden on the GPU.";
+        }
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -2001,6 +2004,7 @@ public class ClusteringWorkflow {
         r.stabilityRepeats = config.getStabilityRepeats();
         if (config.getAlgorithm() == ClusteringConfig.Algorithm.LEIDEN) {
             r.compareResolutions = config.getCompareResolutions().size();
+            r.gpuGraph = "gpu".equals(config.getGraphBackend());
         }
         r.ripley = config.isEnableRipley();
         r.coOccurrence = config.isEnableCoOccurrencePairwise()
@@ -2537,6 +2541,22 @@ public class ClusteringWorkflow {
                         String.valueOf(reuseNote), -1);
             }
 
+            // Where the Leiden graph ran. A GPU run that fell back says why, and the
+            // user is told once: the result is still right, just not the one they asked for.
+            Object graphBackend = task.outputs.get("graph_backend");
+            if (graphBackend != null) {
+                String gb = String.valueOf(graphBackend);
+                result.setGraphBackend(gb);
+                if (gb.startsWith("cpu (gpu requested")) {
+                    logger.warn("Leiden ran on the CPU although the GPU was asked for: {}", gb);
+                    Platform.runLater(() -> Dialogs.showWarningNotification("QPCAT",
+                            "The GPU graph was not used; Leiden ran on the CPU. " + gb));
+                } else if (gb.startsWith("gpu")) {
+                    OperationLogger.getInstance().logOperation("GPU GRAPH AND LEIDEN",
+                            Map.of("Backend", gb), gb, -1);
+                }
+            }
+
             // How UMAP was actually run. Recorded so a non-reproducible layout is
             // never silently non-reproducible.
             Object execNote = task.outputs.get("embedding_execution");
@@ -2721,6 +2741,22 @@ public class ClusteringWorkflow {
         inputs.put("embedding_params", config.getEmbeddingParams());
         inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
         inputs.put("reuse_budget_bytes", reuseBudgetBytes());
+        // Leiden's graph on the GPU: a separate RAPIDS process the worker starts
+        // (run_clustering.py gpu_bridge_run); the script travels as text because
+        // the worker has no file of its own to run.
+        inputs.put("graph_backend", config.getGraphBackend());
+        if ("gpu".equals(config.getGraphBackend())) {
+            inputs.put("gpu_python", QpcatPreferences.getGpuGraphPython());
+            inputs.put("gpu_scratch_dir", QpcatPreferences.getGpuGraphScratchDir());
+            try {
+                inputs.put("gpu_script_source",
+                        ApposeClusteringService.getInstance().loadScript("gpu_graph_leiden.py"));
+            } catch (java.io.IOException e) {
+                // The worker then reports "gpu_graph_leiden.py was not handed to the
+                // worker" and runs on the CPU; the jar is broken, not the user's setup.
+                logger.error("gpu_graph_leiden.py is missing from the jar: {}", e.getMessage());
+            }
+        }
         // Embedding dimensionality (2 default, 3 for a genuine third axis). Stored
         // in embeddingParams as "n_components"; forwarded as the top-level input the
         // Python task reads so a missing key cleanly defaults to 2.

@@ -666,9 +666,12 @@ public final class YamlBatchOrchestrator {
         // Normalization
         if (cc.getNormalization() != null) {
             config.setNormalization(parseNormalization(cc.getNormalization()));
-            if (cc.getMissingValues() != null) {
-                config.setMissingPolicy(qupath.ext.qpcat.model.MissingPolicy.fromId(cc.getMissingValues()));
-            }
+        }
+        if (cc.getMissingValues() != null) {
+            config.setMissingPolicy(qupath.ext.qpcat.model.MissingPolicy.fromId(cc.getMissingValues()));
+        }
+        if (cc.getGraphBackend() != null) {
+            config.setGraphBackend(cc.getGraphBackend());
         }
         // Embedding
         if (cc.getEmbedding() != null) {

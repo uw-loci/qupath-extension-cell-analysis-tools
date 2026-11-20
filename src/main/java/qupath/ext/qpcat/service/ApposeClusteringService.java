@@ -996,7 +996,7 @@ public class ApposeClusteringService {
         return runScript.substring(0, at);
     }
 
-    String loadScript(String scriptFileName) throws IOException {
+    public String loadScript(String scriptFileName) throws IOException {
         return ApposeSupport.loadResource(SCRIPTS_BASE + scriptFileName);
     }
 

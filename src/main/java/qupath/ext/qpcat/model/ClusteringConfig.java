@@ -110,6 +110,7 @@ public class ClusteringConfig {
     private Map<String, Object> algorithmParams = new HashMap<>();
     private Normalization normalization = Normalization.ZSCORE;
     private MissingPolicy missingPolicy = MissingPolicy.EXCLUDE_OBJECTS;
+    private String graphBackend = "cpu";
     private EmbeddingMethod embeddingMethod = EmbeddingMethod.UMAP;
     private Map<String, Object> embeddingParams = new HashMap<>();
     private List<String> selectedMeasurements;
@@ -306,6 +307,12 @@ public class ClusteringConfig {
 
     public Normalization getNormalization() { return normalization; }
     public void setNormalization(Normalization normalization) { this.normalization = normalization; }
+
+    /** Where Leiden's neighbor graph and partition run: "cpu" (default) or "gpu" (a RAPIDS process). */
+    public String getGraphBackend() { return graphBackend; }
+    public void setGraphBackend(String backend) {
+        this.graphBackend = "gpu".equalsIgnoreCase(backend == null ? "" : backend.trim()) ? "gpu" : "cpu";
+    }
 
     /** What the run does with an object lacking a value for a selected measurement (issue #29). */
     public MissingPolicy getMissingPolicy() { return missingPolicy; }

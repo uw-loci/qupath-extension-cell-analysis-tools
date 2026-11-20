@@ -90,6 +90,10 @@ public class ClusteringResult {
     private String missingNote;
     private int excludedObjects;
 
+    // Where the Leiden graph and partition ran, as the worker reported it: "cpu",
+    // "gpu (...)" or "cpu (gpu requested; <reason>)"; null for other algorithms.
+    private String graphBackend;
+
     // Measurement-name prefix the embedding columns were written under ("UMAP",
     // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
     // from names. A custom name is not recognisable by pattern, which is how the 3D view
@@ -138,6 +142,10 @@ public class ClusteringResult {
 
     /** @see #reuseNote */
     public String getReuseNote() { return reuseNote; }
+
+    /** Where the Leiden graph and partition ran, or null for other algorithms. */
+    public String getGraphBackend() { return graphBackend; }
+    public void setGraphBackend(String s) { this.graphBackend = s; }
 
     /** The missing-values sentence for this run, or null when nothing was missing. */
     public String getMissingNote() { return missingNote; }
