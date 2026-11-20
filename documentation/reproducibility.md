@@ -244,7 +244,9 @@ part-way.
 ### GPU
 
 The autoencoder, and Harmony batch correction when its cells fit in GPU memory, use the GPU
-today. Clustering and spatial statistics do not use a GPU, so the GPU environment variant
+today. Leiden's neighbor graph and partition can also run on a GPU, in a separate RAPIDS
+environment you install yourself (see [Neighbor graph and Leiden on the GPU](setup.md#neighbor-graph-and-leiden-on-the-gpu)).
+Other clustering and spatial statistics do not use a GPU, so the GPU environment variant
 costs a several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
 
 ---
