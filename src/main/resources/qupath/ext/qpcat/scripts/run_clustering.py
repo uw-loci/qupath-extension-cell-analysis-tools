@@ -13,6 +13,11 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   embedding_n_components: int (2 or 3, default 2) -- embedding dimensionality.
     2 keeps the historical NAME1/NAME2 scatter; 3 adds a genuine third axis
     (NAME1/NAME2/NAME3) for downstream 3D viewers.
+  graph_backend: str ("cpu" | "gpu", default "cpu")
+    Where Leiden's neighbor graph and partition run. "gpu" uses cuML for the
+    neighbor search and cuGraph for Leiden when both import, and falls back to
+    "cpu" with a logged reason when they do not. The UMAP connectivities on top
+    of the neighbors are computed the same way in both cases (see knn_graph_gpu).
   embedding_execution_mode: str ("auto" | "reproducible" | "fast", default "auto")
     Reproducibility-vs-speed policy for UMAP. umap-learn forces single-threaded
     execution whenever random_state is set, so a pinned seed costs every core.
@@ -66,6 +71,8 @@ Outputs (via task.outputs):
     (if embedding_method != "none"; second dim is 2 or 3)
   cluster_stats: NDArray (n_clusters x N_markers) float64 -- per-cluster marker means
   embedding_execution: str -- how UMAP was run (parallelism + init), for the audit log
+  graph_backend: str -- where the Leiden graph and partition ran ("cpu", "gpu ...",
+    or "cpu (gpu requested; ...)" when the GPU backend was asked for but unavailable)
   embedding_reproducible: bool -- whether the embedding is bit-reproducible
   marker_rankings: str (JSON) -- top markers per cluster with scores
   paga_connectivity: NDArray (n_clusters x n_clusters) float64 -- PAGA graph weights
@@ -306,6 +313,18 @@ try:
     pref_reuse_budget_bytes = max(0, int(reuse_budget_bytes))
 except NameError:
     pref_reuse_budget_bytes = 0
+
+# Where Leiden's neighbor graph and partition run (claude-reports/design/
+# 2026-11-19_qpcat-gpu-graph-leiden-backend.md). "cpu" unless asked otherwise.
+try:
+    pref_graph_backend = str(graph_backend).strip().lower()
+except NameError:
+    pref_graph_backend = "cpu"
+if pref_graph_backend not in ("cpu", "gpu"):
+    logger.warning(
+        "graph_backend %r is not 'cpu' or 'gpu'; using cpu", pref_graph_backend
+    )
+    pref_graph_backend = "cpu"
 
 # Spatial stats expansion (v1) inputs
 try:
@@ -1237,7 +1256,7 @@ elif embedding_method == "umap":
         min_dist=min_dist,
         metric=metric,
         n_components=embedding_n_components,
-        **exec_kwargs
+        **exec_kwargs,
     )
     embedding_result = reducer.fit_transform(cluster_matrix)
 
@@ -1559,23 +1578,99 @@ def validate_supplied_labels(labels, n_cells):
 SEEDED_ALGORITHMS = ("leiden", "kmeans", "minibatchkmeans", "gmm")
 
 
-def knn_graph(matrix, n_neighbors, seed):
-    """scanpy's neighbour graph over ``matrix``, the input Leiden reads.
+def graph_backend_available(backend):
+    """The backend that can run here, and why it is not the one asked for.
+
+    :param backend: "cpu" or "gpu"
+    :return: ("cpu", None) or ("gpu", None), or ("cpu", reason) when "gpu" was
+        asked for and cuML or cuGraph does not import
+    """
+    if backend != "gpu":
+        return "cpu", None
+    try:
+        import cuml  # noqa: F401
+        import cugraph  # noqa: F401
+    except Exception as e:  # ImportError, or a CUDA library failing to load
+        return "cpu", "%s: %s" % (type(e).__name__, str(e).splitlines()[0][:160])
+    return "gpu", None
+
+
+def knn_graph(matrix, n_neighbors, seed, backend="cpu"):
+    """The neighbour graph Leiden reads over ``matrix``, as scanpy builds it.
 
     Above 4,096 cells scanpy's search is approximate and the seed changes the
-    graph, so ``seed`` is part of what identifies it.
+    graph, so ``seed`` is part of what identifies it. With ``backend="gpu"``
+    the neighbour search runs on the GPU (knn_graph_gpu); the caller has
+    already checked graph_backend_available.
 
     :param matrix: cells x features
     :param n_neighbors: neighbours per cell
     :param seed: random seed for the neighbour search
+    :param backend: "cpu" or "gpu"
     :return: connectivities, a cells x cells CSR matrix
     """
+    if backend == "gpu":
+        return knn_graph_gpu(matrix, n_neighbors, seed)
     import scanpy as sc
     import anndata as ad
 
     adata = ad.AnnData(X=matrix)
     sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X", random_state=seed)
     return adata.obsp["connectivities"]
+
+
+def knn_graph_gpu(matrix, n_neighbors, seed):
+    """The same graph as knn_graph, with the neighbour search on the GPU.
+
+    cuML finds the ``n_neighbors`` nearest cells (exact brute force up to
+    GPU_BRUTE_FORCE_CELLS cells, NN-descent above), then umap-learn turns the
+    neighbours into the fuzzy connectivities scanpy would have made from its
+    own search. Only the search differs from the CPU path, and the search is
+    approximate on both paths above 4,096 cells.
+
+    :param matrix: cells x features
+    :param n_neighbors: neighbours per cell, including the cell itself as scanpy counts it
+    :param seed: random seed for the neighbour search and the fuzzy set
+    :return: connectivities, a cells x cells CSR matrix
+    """
+    import cupy as cp
+    from cuml.neighbors import NearestNeighbors
+    from scipy import sparse as sp
+    from umap.umap_ import fuzzy_simplicial_set
+
+    x = cp.asarray(np.ascontiguousarray(matrix, dtype=np.float32))
+    n_cells = x.shape[0]
+    algorithm = "brute" if n_cells <= GPU_BRUTE_FORCE_CELLS else "nn_descent"
+    nn = NearestNeighbors(
+        n_neighbors=n_neighbors, metric="euclidean", algorithm=algorithm
+    )
+    nn.fit(x)
+    dists, idx = nn.kneighbors(x)
+    knn_dists = cp.asnumpy(dists).astype(np.float32)
+    knn_indices = cp.asnumpy(idx).astype(np.int64)
+    del x, dists, idx
+    logger.info(
+        "GPU neighbour search: cuML %s, %d cells, k=%d", algorithm, n_cells, n_neighbors
+    )
+    # scanpy: _connectivity.umap(knn_indices, knn_dists, n_obs, n_neighbors) with
+    # umap's defaults (set_op_mix_ratio=1.0, local_connectivity=1.0).
+    placeholder = sp.coo_matrix(([], ([], [])), shape=(n_cells, 1))
+    connectivities, _sigmas, _rhos = fuzzy_simplicial_set(
+        placeholder,
+        n_neighbors,
+        np.random.RandomState(seed),
+        "euclidean",
+        knn_indices=knn_indices,
+        knn_dists=knn_dists,
+        set_op_mix_ratio=1.0,
+        local_connectivity=1.0,
+    )
+    return sp.csr_matrix(connectivities)
+
+
+# Above this many cells the GPU neighbour search is approximate (NN-descent),
+# as scanpy's is above 4,096; below it cuML's exact brute force is fast enough.
+GPU_BRUTE_FORCE_CELLS = 200_000
 
 
 def leiden_igraph(connectivities):
@@ -1632,6 +1727,93 @@ def leiden_labels(connectivities, resolution, seed):
     """
     graph, weights = leiden_igraph(connectivities)
     return leiden_partition(graph, weights, resolution, seed)
+
+
+class CpuLeidenEngine:
+    """One graph in igraph, partitioned at any number of resolutions."""
+
+    name = "cpu"
+    note = None
+
+    def __init__(self, connectivities):
+        self.graph, self.weights = leiden_igraph(connectivities)
+
+    def partition(self, resolution, seed):
+        return leiden_partition(self.graph, self.weights, resolution, seed)
+
+
+class GpuLeidenEngine:
+    """One graph in cuGraph, partitioned at any number of resolutions.
+
+    cuGraph's Leiden takes a seed; across seeds its partitions spread about as
+    igraph's do (measured on 11,306 synthetic cells, ARI 0.92 against igraph's
+    0.95 seed to seed). It is called directly: rapids-singlecell's wrapper
+    returned every cell as its own cluster at resolution 1.0 on the same graph.
+    """
+
+    name = "gpu"
+
+    def __init__(self, connectivities):
+        import cudf
+        import cugraph
+        from scipy import sparse as sp
+
+        self.connectivities = connectivities
+        self.note = None
+        self._cpu = None
+        coo = sp.triu(connectivities.tocsr(), k=1).tocoo()
+        edges = cudf.DataFrame(
+            {
+                "src": coo.row.astype(np.int32),
+                "dst": coo.col.astype(np.int32),
+                "w": coo.data.astype(np.float32),
+            }
+        )
+        self.n = connectivities.shape[0]
+        self.graph = cugraph.Graph(directed=False)
+        self.graph.from_cudf_edgelist(
+            edges, source="src", destination="dst", edge_attr="w", renumber=False
+        )
+        self._leiden = cugraph.leiden
+
+    def partition(self, resolution, seed):
+        if self._cpu is not None:
+            return self._cpu.partition(resolution, seed)
+        parts, modularity = self._leiden(
+            self.graph, max_iter=100, resolution=resolution, random_state=int(seed)
+        )
+        parts = parts.to_pandas()
+        labels = np.zeros(self.n, dtype=np.int64)
+        labels[parts["vertex"].to_numpy()] = parts["partition"].to_numpy()
+        n_clusters = int(np.unique(labels).size)
+        if n_clusters >= self.n or modularity < 0:
+            # cuGraph 26.10 returns every cell as its own cluster, with negative
+            # modularity, on graphs with hub nodes (measured: 11,306 synthetic
+            # cells with 2,847 exact duplicates, k=50, 50 nodes of degree > 200).
+            # igraph partitions the same graph normally, so finish on the CPU.
+            self.note = (
+                "cuGraph Leiden returned %d clusters for %d cells (modularity %.3f); "
+                "finished with igraph on the same graph"
+                % (n_clusters, self.n, modularity)
+            )
+            logger.warning("%s", self.note)
+            self._cpu = CpuLeidenEngine(self.connectivities)
+            return self._cpu.partition(resolution, seed)
+        return labels
+
+
+def leiden_engine(connectivities, backend):
+    """The engine that partitions ``connectivities`` on the given backend.
+
+    :param connectivities: cells x cells CSR matrix from knn_graph; read, never written
+    :param backend: "cpu" or "gpu", already checked with graph_backend_available
+    :return: a CpuLeidenEngine or GpuLeidenEngine
+    """
+    return (
+        GpuLeidenEngine(connectivities)
+        if backend == "gpu"
+        else CpuLeidenEngine(connectivities)
+    )
 
 
 def resolution_rows(resolutions, label_sets, run_labels):
@@ -1884,7 +2066,22 @@ if algorithm == "leiden":
     # range [1, inf) or None. Got 0 instead" -- names neither the control nor
     # the dialog, and arrives after the whole extraction has been paid for.
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
-    logger.info("Leiden: n_neighbors=%d, resolution=%.2f", n_neighbors, resolution)
+    _backend, _backend_reason = graph_backend_available(pref_graph_backend)
+    if _backend_reason is not None:
+        logger.warning(
+            "graph_backend gpu was asked for but is not available here (%s); "
+            "running Leiden on the CPU",
+            _backend_reason,
+        )
+        task.outputs["graph_backend"] = "cpu (gpu requested; %s)" % _backend_reason
+    else:
+        task.outputs["graph_backend"] = _backend
+    logger.info(
+        "Leiden: n_neighbors=%d, resolution=%.2f, backend=%s",
+        n_neighbors,
+        resolution,
+        _backend,
+    )
     seeded_params = {"n_neighbors": n_neighbors, "resolution": resolution}
     # The graph depends on the matrix, n_neighbors and the seed, never on the
     # resolution, so a resolution change reuses the last one (knn_cache.py).
@@ -1892,7 +2089,10 @@ if algorithm == "leiden":
     _graph_key = None
     if _reuse_on:
         _graph_key = knn_cache.make_key(
-            _matrix_digest, n_neighbors=n_neighbors, seed=clustering_seed
+            _matrix_digest,
+            n_neighbors=n_neighbors,
+            seed=clustering_seed,
+            backend=_backend,
         )
         _graph_hit = knn_cache.get("graph", _graph_key)
         if _graph_hit is not None:
@@ -1906,12 +2106,14 @@ if algorithm == "leiden":
         else:
             knn_cache.drop("graph", "n_neighbors or seed changed")
     if _graph is None:
-        _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)
+        _graph = knn_graph(
+            cluster_matrix, n_neighbors, clustering_seed, backend=_backend
+        )
         if _graph_key is not None:
             knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
-    _ig, _ig_weights = leiden_igraph(_graph)
+    _engine = leiden_engine(_graph, _backend)
     del _graph
-    labels = leiden_partition(_ig, _ig_weights, resolution, clustering_seed)
+    labels = _engine.partition(resolution, clustering_seed)
     if pref_compare_resolutions:
         _label_sets = []
         for _i, _r in enumerate(pref_compare_resolutions):
@@ -1921,9 +2123,7 @@ if algorithm == "leiden":
                 % (_r, _i + 1, len(pref_compare_resolutions)),
             )
             _label_sets.append(
-                labels
-                if _r == resolution
-                else leiden_partition(_ig, _ig_weights, _r, clustering_seed)
+                labels if _r == resolution else _engine.partition(_r, clustering_seed)
             )
         resolution_comparison = {
             "run_resolution": float(resolution),
@@ -1932,7 +2132,12 @@ if algorithm == "leiden":
             "rows": resolution_rows(pref_compare_resolutions, _label_sets, labels),
         }
         del _label_sets
-    del _ig, _ig_weights
+    if _engine.note:
+        task.outputs["graph_backend"] = "%s (%s)" % (
+            task.outputs["graph_backend"],
+            _engine.note,
+        )
+    del _engine
 
 elif algorithm == "kmeans":
     n_clusters = algorithm_params.get("n_clusters", 10)
