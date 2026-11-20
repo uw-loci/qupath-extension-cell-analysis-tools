@@ -41,7 +41,7 @@ class GpuGraphOptionTest {
         ScalingLimits.Finding f = some.stream().filter(x -> x.subject().startsWith("GPU graph")).findFirst().orElseThrow();
         assertEquals(ScalingLimits.Severity.WARN, f.severity());
         r.nCells = 500_000;
-        ScalingLimits.Finding ok = ScalingLimits.check(r).stream().filter(x -> x.subject().startsWith("GPU graph")).findFirst().orElseThrow();
-        assertEquals(ScalingLimits.Severity.OK, ok.severity());
+        assertTrue(ScalingLimits.check(r).stream().noneMatch(x -> x.subject().startsWith("GPU graph")),
+                "a run that fits the card gets no line");
     }
 }

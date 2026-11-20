@@ -539,17 +539,16 @@ public final class ScalingLimits {
         // frees the old one first.
         double reserve = Math.max(r.reuseHeldGb, r.reuseKeepGb);
         if (r.gpuGraph && r.algorithm == ClusteringConfig.Algorithm.LEIDEN) {
+            // Only a warning is worth a line: the dialog lists every scaling
+            // finding under "This will be slow at this size".
             double gpuGb = gpuGraphGb(r.nCells, r.nNeighbors);
-            out.add(new Finding(gpuGb > GPU_GRAPH_WARN_GB ? Severity.WARN : Severity.OK,
-                    "GPU graph and Leiden",
-                    gpuGb > GPU_GRAPH_WARN_GB
-                            ? "needs more GPU memory than a 16 GB card has; on Windows the driver then "
-                              + "spills into host RAM and the run slows several-fold rather than failing"
-                            : "fits a 16 GB card",
-                    gpuGb > GPU_GRAPH_WARN_GB
-                            ? "Lower n_neighbors, cluster fewer cells, or run on the CPU."
-                            : "",
-                    gpuGb, 0));
+            if (gpuGb > GPU_GRAPH_WARN_GB) {
+                out.add(new Finding(Severity.WARN, "GPU graph and Leiden",
+                        "needs more GPU memory than a 16 GB card has; on Windows the driver then "
+                        + "spills into host RAM and the run slows several-fold rather than failing",
+                        "Lower n_neighbors, cluster fewer cells, or run on the CPU.",
+                        gpuGb, 0));
+            }
         }
         String reuseNote = reserve <= 0 ? "" : " That includes " + formatGb(reserve)
                 + " QP-CAT keeps between runs to reuse; turning off 'Reuse the neighbor "

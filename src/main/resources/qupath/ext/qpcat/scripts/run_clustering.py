@@ -1700,7 +1700,14 @@ def gpu_cuda_path(prefix):
 
 
 def _wsl_run(args, timeout=60):
-    """Run a command inside WSL from Windows; returns its stdout text."""
+    """Run a command inside WSL from Windows; returns its stdout text.
+
+    wsl.exe joins its arguments with spaces and hands the line to the WSL
+    user's login shell, which parses it AGAIN: quotes, "$VAR" and "~" are
+    interpreted once more than a subprocess list suggests. Pass plain words
+    (paths without metacharacters) and put any real shell logic in a script
+    file, as gpu_bridge_run does.
+    """
     import subprocess
 
     r = subprocess.run(
@@ -1716,6 +1723,29 @@ def _wsl_run(args, timeout=60):
             )
         raise GpuBridgeError("wsl.exe failed: " + msg[:400])
     return r.stdout.replace("\x00", "")
+
+
+def _wsl_run_script(linux_job, python_cmd):
+    """The bash script that runs gpu_graph_leiden.py inside WSL.
+
+    Written into the job folder and started as ``bash <path>``, so the
+    environment set-up lives in a file with ordinary quoting instead of on a
+    wsl.exe command line (see _wsl_run). Mirrors _gpu_child_env.
+    """
+    return (
+        "#!/bin/bash\n"
+        "# Written by QP-CAT for one run; see run_clustering.py gpu_bridge_run.\n"
+        'cd "%(job)s" || exit 3\n'
+        'QPCAT_PY="%(py)s"\n'
+        '[ -x "$QPCAT_PY" ] || { echo "python not found or not executable: $QPCAT_PY" > run.log; exit 4; }\n'
+        'PREFIX="$(dirname "$(dirname "$QPCAT_PY")")"\n'
+        'CUDA_PATH="$PREFIX/targets/x86_64-linux"\n'
+        '[ -d "$CUDA_PATH" ] || CUDA_PATH="$PREFIX"\n'
+        'export PATH="$PREFIX/bin:$PATH" CONDA_PREFIX="$PREFIX" CUDA_PATH\n'
+        "export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1\n"
+        "unset PYTHONPATH\n"
+        'exec "$QPCAT_PY" gpu_graph_leiden.py "%(job)s" > run.log 2>&1\n'
+    ) % {"job": linux_job, "py": python_cmd}
 
 
 def gpu_bridge_run(
@@ -1752,21 +1782,25 @@ def gpu_bridge_run(
     t_all = time.monotonic()
     job_name = "job_%d_%d" % (os.getpid(), int(time.time()))
     if windows:
-        linux_scratch = scratch_dir or "~/.cache/qpcat-gpu"
-        out = _wsl_run(
-            [
-                "bash",
-                "-lc",
-                'mkdir -p "%s/%s" && cd "%s/%s" && pwd && wslpath -w "$PWD"'
-                % (linux_scratch, job_name, linux_scratch, job_name),
-            ]
-        )
-        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
-        if len(lines) < 2:
+        # Three plain commands, no quoting to survive the re-parse (see _wsl_run):
+        # the home folder (an unquoted ~ is expanded by the login shell), mkdir,
+        # and the Windows spelling of the folder for the file writes below.
+        linux_scratch = scratch_dir.strip().replace("\\", "/") if scratch_dir else ""
+        if not linux_scratch:
+            home = _wsl_run(["echo", "~"]).strip()
+            if not home.startswith("/"):
+                raise GpuBridgeError(
+                    "could not find the WSL home folder (got %r)" % home[:100]
+                )
+            linux_scratch = home + "/.cache/qpcat-gpu"
+        linux_job = linux_scratch.rstrip("/") + "/" + job_name
+        _wsl_run(["mkdir", "-p", linux_job])
+        job = _wsl_run(["wslpath", "-w", linux_job]).strip()
+        if not job or not os.path.isdir(job):
             raise GpuBridgeError(
-                "could not create the job folder inside WSL: " + out[:200]
+                "the job folder %s inside WSL is not reachable from Windows as %r"
+                % (linux_job, job[:200])
             )
-        linux_job, job = lines[-2], lines[-1]
     else:
         job = os.path.join(scratch_dir or gpu_scratch_default(python_cmd), job_name)
         try:
@@ -1800,6 +1834,11 @@ def gpu_bridge_run(
             newline="\n",
         ) as f:
             f.write(script_source)
+        if windows:
+            with open(
+                os.path.join(job, "run.sh"), "w", encoding="utf-8", newline="\n"
+            ) as f:
+                f.write(_wsl_run_script(linux_job, python_cmd))
     except OSError as e:
         raise GpuBridgeError("cannot write the hand-over files to %s (%s)" % (job, e))
     seconds = {"write": round(time.monotonic() - t0, 3)}
@@ -1815,20 +1854,9 @@ def gpu_bridge_run(
     t0 = time.monotonic()
     try:
         if windows:
-            cmd = [
-                "wsl.exe",
-                "--",
-                "bash",
-                "-lc",
-                'cd "%s" && P="%s" && PREFIX="$(dirname "$(dirname "$P")")" && '
-                'CUDA_PATH="$PREFIX/targets/x86_64-linux" && [ -d "$CUDA_PATH" ] || CUDA_PATH="$PREFIX"; '
-                'PATH="$PREFIX/bin:$PATH" CONDA_PREFIX="$PREFIX" CUDA_PATH="$CUDA_PATH" '
-                'PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1 env -u PYTHONPATH "$P" '
-                'gpu_graph_leiden.py "%s" > run.log 2>&1'
-                % (linux_job, python_cmd, linux_job),
-            ]
+            cmd = ["wsl.exe", "--", "bash", linux_job + "/run.sh"]
             r = subprocess.run(cmd, capture_output=True, text=True)
-            tail = r.stdout.replace("\x00", "")
+            tail = (r.stdout + r.stderr).replace("\x00", "")
         else:
             with open(os.path.join(job, "run.log"), "w") as log:
                 r = subprocess.run(
