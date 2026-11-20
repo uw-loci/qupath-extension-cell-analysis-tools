@@ -33,7 +33,7 @@ SCRIPTS_DIR = (
 
 
 def load_script_symbol(script_name, symbol, extra_globals=None):
-    """Execute one top-level function out of an Appose script and return it.
+    """Execute one top-level function or class out of an Appose script and return it.
 
     Parameters
     ----------
@@ -48,13 +48,13 @@ def load_script_symbol(script_name, symbol, extra_globals=None):
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name == symbol:
+        if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name == symbol:
             module = ast.Module(body=[node], type_ignores=[])
             namespace = dict(extra_globals or {})
             exec(compile(module, str(path), "exec"), namespace)
             return namespace[symbol]
 
-    raise LookupError("No top-level function %r in %s" % (symbol, path.name))
+    raise LookupError("No top-level function or class %r in %s" % (symbol, path.name))
 
 
 def worker_globals():
