@@ -1623,7 +1623,7 @@ def knn_graph_gpu(matrix, n_neighbors, seed):
     """The same graph as knn_graph, with the neighbour search on the GPU.
 
     cuML finds the ``n_neighbors`` nearest cells (exact brute force up to
-    GPU_BRUTE_FORCE_CELLS cells, NN-descent above), then umap-learn turns the
+    GPU_BRUTE_FORCE_CELLS cells, IVF-flat above), then umap-learn turns the
     neighbours into the fuzzy connectivities scanpy would have made from its
     own search. Only the search differs from the CPU path, and the search is
     approximate on both paths above 4,096 cells.
@@ -1640,7 +1640,8 @@ def knn_graph_gpu(matrix, n_neighbors, seed):
 
     x = cp.asarray(np.ascontiguousarray(matrix, dtype=np.float32))
     n_cells = x.shape[0]
-    algorithm = "brute" if n_cells <= GPU_BRUTE_FORCE_CELLS else "nn_descent"
+    # cuML 26.10 offers brute, ivfflat and ivfpq here (no nn_descent).
+    algorithm = "brute" if n_cells <= GPU_BRUTE_FORCE_CELLS else "ivfflat"
     nn = NearestNeighbors(
         n_neighbors=n_neighbors, metric="euclidean", algorithm=algorithm
     )
@@ -1668,7 +1669,7 @@ def knn_graph_gpu(matrix, n_neighbors, seed):
     return sp.csr_matrix(connectivities)
 
 
-# Above this many cells the GPU neighbour search is approximate (NN-descent),
+# Above this many cells the GPU neighbour search is approximate (IVF-flat),
 # as scanpy's is above 4,096; below it cuML's exact brute force is fast enough.
 GPU_BRUTE_FORCE_CELLS = 200_000
 
