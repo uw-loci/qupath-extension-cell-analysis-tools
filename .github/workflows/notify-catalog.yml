@@ -24,6 +24,9 @@ on:
 
 jobs:
   dispatch:
+    # Pre-releases never reach the catalog: a development build is installed by
+    # hand from the Releases page, and QuPath must not offer it as an update.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release tag and asset URL
