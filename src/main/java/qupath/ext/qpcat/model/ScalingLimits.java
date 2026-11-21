@@ -284,14 +284,24 @@ public final class ScalingLimits {
      * streamed, 5.05 GB through scanpy.
      */
     /**
-     * GPU memory the RAPIDS graph-and-Leiden process needs, from two measured runs
-     * (6M and 9M cells, k=50, 16 GiB card): about 60 bytes per CSR nonzero, with
-     * nonzeros about 1.44 x cells x k after symmetrization. A 16 GiB card holds about
-     * 280M nonzeros before the Windows driver spills into host RAM and the run slows
-     * several-fold instead of failing.
+     * GPU memory the RAPIDS graph-and-Leiden process needs: about 60 bytes per CSR
+     * nonzero, with nonzeros about 1.44 x cells x k after symmetrization. Fitted to a
+     * working-group member's 6M and 9M-cell runs (62 and 64 B) and confirmed on our own
+     * path 2026-11-21 (RTX 5060 Ti 16 GB, k=50: 58-61 B at 500k, 2M and 4M cells; 4M
+     * cells filled the card and spilled 6 GB into host RAM, 2.4x the 3M time). A 16 GB
+     * card holds about 280M nonzeros before the Windows driver spills instead of failing.
      */
     public static double gpuGraphGb(long nCells, int nNeighbors) {
         return nCells * 1.44 * nNeighbors * 60.0 / GB;
+    }
+
+    /**
+     * Host RAM the same process needs while it builds the fuzzy connectivities on the
+     * CPU: about 40 bytes per nonzero (35-42 B measured at 2M, 3M and 4M cells). The
+     * 4M run left 0.5 GB of a 19 GB WSL2 free.
+     */
+    public static double gpuGraphHostGb(long nCells, int nNeighbors) {
+        return nCells * 1.44 * nNeighbors * 40.0 / GB;
     }
 
     /** GPU memory above which the GPU graph is flagged: most cards in use have 16 GB or less. */
@@ -548,6 +558,19 @@ public final class ScalingLimits {
                         + "spills into host RAM and the run slows several-fold rather than failing",
                         "Lower n_neighbors, cluster fewer cells, or run on the CPU.",
                         gpuGb, 0));
+            }
+            double hostGb = gpuGraphHostGb(r.nCells, r.nNeighbors);
+            OptionalDouble ramNow = r.availableRamGb > 0
+                    ? OptionalDouble.of(r.availableRamGb) : detectRamGb();
+            if (ramNow.isPresent() && hostGb > ramNow.getAsDouble() * 0.8) {
+                out.add(new Finding(Severity.WARN, "GPU graph: host memory",
+                        "the GPU process also builds the connectivities in host RAM, and that "
+                        + "estimate is close to or above what is free now (" 
+                        + String.format(java.util.Locale.ROOT, "%.0f", ramNow.getAsDouble())
+                        + " GB); on Windows this is the memory WSL2 is allowed, not the machine's",
+                        "Lower n_neighbors, cluster fewer cells, close other programs, or raise "
+                        + "WSL2's memory limit in .wslconfig.",
+                        hostGb, 0));
             }
         }
         String reuseNote = reserve <= 0 ? "" : " That includes " + formatGb(reserve)

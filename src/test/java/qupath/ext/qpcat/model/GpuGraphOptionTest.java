@@ -42,6 +42,20 @@ class GpuGraphOptionTest {
         assertEquals(ScalingLimits.Severity.WARN, f.severity());
         r.nCells = 500_000;
         assertTrue(ScalingLimits.check(r).stream().noneMatch(x -> x.subject().startsWith("GPU graph")),
-                "a run that fits the card gets no line");
+                "a run that fits the card and the RAM gets no line");
+    }
+
+    @Test
+    void hostMemoryOfTheGpuProcessIsChecked() {
+        // 4M cells x 50 needs about 11 GB of host RAM for the connectivities (measured
+        // 2026-11-21); a 12 GB WSL2 is too close for comfort, 64 GB is fine.
+        ScalingLimits.Request r = new ScalingLimits.Request(ClusteringConfig.Algorithm.LEIDEN, 4_000_000, 25);
+        r.nNeighbors = 50;
+        r.gpuGraph = true;
+        r.availableRamGb = 12;
+        assertTrue(ScalingLimits.check(r).stream().anyMatch(x -> x.subject().equals("GPU graph: host memory")));
+        r.availableRamGb = 64;
+        assertTrue(ScalingLimits.check(r).stream().noneMatch(x -> x.subject().equals("GPU graph: host memory")));
+        assertTrue(ScalingLimits.gpuGraphHostGb(4_000_000, 50) > 10 && ScalingLimits.gpuGraphHostGb(4_000_000, 50) < 12);
     }
 }

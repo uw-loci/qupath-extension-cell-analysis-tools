@@ -110,10 +110,14 @@ and the labels come back the same way (about a second each way at 1 million cell
 
 **What to expect**
 
-- The pre-run check estimates the card memory from the member's measurements (about 60 bytes
-  per graph nonzero, nonzeros about 1.44 x cells x k): a 16 GB card holds about 280M nonzeros,
-  near 4 million cells at k=50 or 13 million at k=15. Above that, the Windows driver spills into
-  host RAM over PCIe and the run slows several-fold rather than failing; the check warns.
+- The pre-run check estimates the card memory at about 60 bytes per graph nonzero, with
+  nonzeros about 1.44 x cells x k: a 16 GB card holds about 280M nonzeros, near 4 million
+  cells at k=50 or 13 million at k=15. Above that, the Windows driver spills into host RAM over
+  PCIe and the run slows several-fold rather than failing; the check warns. Measured on our
+  16 GB card at k=50 (synthetic cells, 2026-11-21): 500k cells 33 s, 1M 70 s, 2M 3.0 min, 3M
+  5.3 min, and 4M cells 12.6 min with the card full and 6 GB spilled. The process also needs
+  host RAM for the connectivities, about 40 bytes per nonzero (11.5 GB at 4M x 50); the check
+  warns when that is close to what is free, which on Windows is the memory WSL2 is allowed.
 - Seeded runs differ from CPU runs the way two seeds differ (ARI 0.93 at resolution 0.5, 0.76
   at 1.0 on our synthetic ground-truth set, the same spread as the CPU seed to seed), because
   the graph is built by a different neighbor search. A run is reproducible with its own seed on
