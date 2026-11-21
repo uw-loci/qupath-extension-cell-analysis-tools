@@ -103,12 +103,16 @@ image and its saved copy in the project disagree:
 
 - *The saved copy of this image changed at ... while it was open.* A script run for the
   project, or another QuPath, wrote the entry. The viewer, and this dialog's class and
-  measurement lists, still show the older objects. **Reload saved data** is QuPath's own
-  reload (it asks first, because unsaved edits in the viewer are lost); **Ignore** stops the
-  message if the newer copy was your own Save.
+  measurement lists, still show the older objects.
 - *The viewer has unsaved edits.* A run uses them for this image. The class and measurement
   lists, and the missing-value count, for a project-wide scope read each image's saved copy,
-  so for the open image they lag until you save (Ctrl+S).
+  so for the open image they lag until you save.
+
+Which side to keep is your call, so the strip offers both: **Save** is QuPath's own Save (the
+viewer's objects become the saved copy, writing over whatever changed it), **Reload** is
+QuPath's own Reload (the viewer takes the saved copy; it asks first, because unsaved edits are
+lost). **Ignore** appears when the saved copy moved and stops the message, for the case where
+the newer copy was your own Save.
 
 The check happens when the dialog opens or regains focus, so coming back from the script
 editor after a project run shows it at once. The same strip sits on the Phenotyping and

@@ -138,8 +138,9 @@ worker loaded, how many threads each has, and which step never returned.
 QP-CAT's dialogs read the image open in the viewer. A script run **for the project** writes
 each entry's saved copy and leaves the viewer, and any open QP-CAT dialog, holding the old
 objects; the measurement list then still counts cells the script removed. The strip at the top
-of the dialog says so (see [the banner](clustering.md#the-banner-above-the-settings)):
-**Reload saved data** brings the viewer up to date, or reopen the image. A script run on the
+of the dialog says so (see [the banner](clustering.md#the-banner-above-the-settings)) and
+offers both ways out: **Reload** takes the saved copy into the viewer, **Save** writes the
+viewer's objects over it; which one depends on which side has what you want. A script run on the
 current image only (Run, not Run for project) changes the viewer directly and needs no reload.
 
 ## The Python console

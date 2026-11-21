@@ -31,7 +31,8 @@ public final class SavedDataBanner extends HBox {
 
     private final QuPathGUI qupath;
     private final Label text = new Label();
-    private final Button reload = new Button("Reload saved data");
+    private final Button save = new Button("Save");
+    private final Button reload = new Button("Reload");
     private final Button ignore = new Button("Ignore");
     private final ChangeListener<ImageData<BufferedImage>> imageListener =
             (obs, a, b) -> Platform.runLater(this::refresh);
@@ -49,15 +50,26 @@ public final class SavedDataBanner extends HBox {
         text.setStyle("-fx-font-size: 11px; -fx-text-fill: #4a3b00;");
         HBox.setHgrow(text, Priority.ALWAYS);
         text.setMaxWidth(Double.MAX_VALUE);
+        save.setStyle("-fx-font-size: 11px;");
         reload.setStyle("-fx-font-size: 11px;");
         ignore.setStyle("-fx-font-size: 11px;");
         // The sentence wraps; the buttons never shrink to "...".
+        save.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
         reload.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
         ignore.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
+        // Which side to keep is the user's call: Save keeps the viewer's objects and
+        // writes over the saved copy; Reload takes the saved copy and drops the viewer's.
+        save.setTooltip(Tooltips.of("QuPath's own Save: the viewer's objects become the saved "
+                + "copy, writing over whatever changed it."));
         reload.setTooltip(Tooltips.of("QuPath's own Reload: the viewer takes the saved copy. "
                 + "Unsaved edits in the viewer are lost; QuPath asks first."));
         ignore.setTooltip(Tooltips.of("The newer saved copy was your own Save, or you do not "
                 + "want it: stop reporting it until the saved copy changes again."));
+        save.setOnAction(e -> {
+            ImageData<BufferedImage> data = qupath.getImageData();
+            if (data != null) Commands.promptToSaveImageData(qupath, data, true);
+            refresh();
+        });
         reload.setOnAction(e -> {
             Commands.reloadImageData(qupath, qupath.getImageData());
             refresh();
@@ -67,7 +79,7 @@ public final class SavedDataBanner extends HBox {
             if (t != null) t.acceptSaved();
             refresh();
         });
-        getChildren().addAll(text, reload, ignore);
+        getChildren().addAll(text, save, reload, ignore);
         setVisible(false);
         setManaged(false);
         qupath.imageDataProperty().addListener(new WeakChangeListener<>(imageListener));
@@ -104,11 +116,11 @@ public final class SavedDataBanner extends HBox {
         boolean show = message != null;
         if (show) {
             text.setText(message);
-            boolean reloadable = status.savedAhead();
-            reload.setVisible(reloadable);
-            reload.setManaged(reloadable);
-            ignore.setVisible(reloadable);
-            ignore.setManaged(reloadable);
+            // Save and Reload in every state; Ignore only when the saved copy moved
+            // (it says "that newer copy is fine, stop reporting it").
+            boolean ignorable = status.savedAhead();
+            ignore.setVisible(ignorable);
+            ignore.setManaged(ignorable);
         }
         setVisible(show);
         setManaged(show);
@@ -121,14 +133,15 @@ public final class SavedDataBanner extends HBox {
                 : "";
         return switch (status.state()) {
             case SAVED_AHEAD -> "The saved copy of this image changed at " + when
-                    + " while it was open (a script run for the project, or another QuPath). "
-                    + "The viewer and this dialog show the older objects.";
+                    + " while it was open (a script run for the project, or another QuPath); "
+                    + "the viewer and this dialog show the older objects. Save keeps what the "
+                    + "viewer shows; Reload takes the saved copy.";
             case BOTH -> "The saved copy of this image changed at " + when
-                    + " while it was open, and the viewer has unsaved edits of its own. "
-                    + "Reloading discards those edits.";
+                    + " while it was open, and the viewer has unsaved edits of its own. Save "
+                    + "keeps the viewer's version; Reload takes the saved copy and drops those edits.";
             case LIVE_AHEAD -> "The viewer has unsaved edits. A run uses them for this image, but "
-                    + "the lists and counts for a project-wide scope read the saved copies; "
-                    + "QuPath's Save (Ctrl+S) brings them in line.";
+                    + "the lists and counts for a project-wide scope read the saved copies. "
+                    + "Save keeps the edits; Reload drops them.";
             case IN_SYNC, UNTRACKED -> null;
         };
     }
