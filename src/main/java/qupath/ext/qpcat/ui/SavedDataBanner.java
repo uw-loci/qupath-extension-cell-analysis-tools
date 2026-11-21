@@ -126,8 +126,9 @@ public final class SavedDataBanner extends HBox {
             case BOTH -> "The saved copy of this image changed at " + when
                     + " while it was open, and the viewer has unsaved edits of its own. "
                     + "Reloading discards those edits.";
-            case LIVE_AHEAD -> "The viewer has unsaved edits. QP-CAT works on what the viewer "
-                    + "shows and saves it with the results; QuPath's Save keeps them without a run.";
+            case LIVE_AHEAD -> "The viewer has unsaved edits. A run uses them for this image, but "
+                    + "the lists and counts for a project-wide scope read the saved copies; "
+                    + "QuPath's Save (Ctrl+S) brings them in line.";
             case IN_SYNC, UNTRACKED -> null;
         };
     }

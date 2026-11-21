@@ -106,8 +106,9 @@ image and its saved copy in the project disagree:
   measurement lists, still show the older objects. **Reload saved data** is QuPath's own
   reload (it asks first, because unsaved edits in the viewer are lost); **Ignore** stops the
   message if the newer copy was your own Save.
-- *The viewer has unsaved edits.* Nothing is wrong for the run: QP-CAT works on what the
-  viewer shows and saves it with the results. QuPath's Save keeps the edits without a run.
+- *The viewer has unsaved edits.* A run uses them for this image. The class and measurement
+  lists, and the missing-value count, for a project-wide scope read each image's saved copy,
+  so for the open image they lag until you save (Ctrl+S).
 
 The check happens when the dialog opens or regains focus, so coming back from the script
 editor after a project run shows it at once. The same strip sits on the Phenotyping and
