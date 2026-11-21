@@ -178,3 +178,35 @@ def test_an_unwritable_scratch_folder_is_a_bridge_error_not_a_crash():
             _blobs(), 10, 42, [1.0], sys.executable, "/nonexistent/qpcat", STUB
         )
     assert "scratch folder" in str(e.value)
+
+
+def test_a_missing_wsl_is_a_clear_bridge_error(monkeypatch):
+    import subprocess as sp
+
+    s = _symbols()
+
+    def no_wsl(*a, **k):
+        raise FileNotFoundError(
+            2, "The system cannot find the file specified", "wsl.exe"
+        )
+
+    monkeypatch.setattr(sp, "run", no_wsl)
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["_wsl_run"](["echo", "~"])
+    assert "Windows Subsystem for Linux is not installed" in str(e.value)
+
+
+def test_wsl_without_a_distribution_says_so(monkeypatch):
+    import subprocess as sp
+
+    s = _symbols()
+
+    class R:
+        returncode = 1
+        stdout = "W\x00i\x00n\x00d\x00o\x00w\x00s\x00 Subsystem for Linux has no installed distributions."
+        stderr = ""
+
+    monkeypatch.setattr(sp, "run", lambda *a, **k: R())
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["_wsl_run"](["echo", "~"])
+    assert "has no Linux distribution" in str(e.value)

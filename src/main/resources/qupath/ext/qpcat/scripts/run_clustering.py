@@ -1710,11 +1710,34 @@ def _wsl_run(args, timeout=60):
     """
     import subprocess
 
-    r = subprocess.run(
-        ["wsl.exe", "--"] + args, capture_output=True, text=True, timeout=timeout
-    )
+    try:
+        r = subprocess.run(
+            ["wsl.exe", "--"] + args, capture_output=True, text=True, timeout=timeout
+        )
+    except FileNotFoundError:
+        raise GpuBridgeError(
+            "wsl.exe was not found: Windows Subsystem for Linux is not installed on "
+            "this computer (or not on PATH). The GPU graph needs WSL2 with a Linux "
+            "distribution and a RAPIDS environment inside it; see Setup > Neighbor "
+            "graph and Leiden on the GPU, or untick the GPU option"
+        )
+    except subprocess.TimeoutExpired:
+        raise GpuBridgeError(
+            "wsl.exe did not answer within %d s (is the Linux distribution able to "
+            "start? try 'wsl.exe -- echo ok' in a terminal)" % timeout
+        )
     if r.returncode != 0:
         msg = (r.stdout + r.stderr).replace("\x00", "").strip()
+        if not msg:
+            msg = "exit code %d with no message" % r.returncode
+        if (
+            "no installed distributions" in msg.lower()
+            or "wsl_e_default_distro" in msg.lower()
+        ):
+            msg += (
+                " (WSL is installed but has no Linux distribution; install one, "
+                "for example 'wsl --install -d Ubuntu', then the RAPIDS environment)"
+            )
         if "elevation" in msg.lower():
             msg += (
                 " (Windows refuses to start WSL from an unelevated program; a "
