@@ -118,7 +118,8 @@ public class CellularNeighborhoodDialog {
         scroll.setFitToWidth(true);
         scroll.setPrefHeight(560);
 
-        dialog.getDialogPane().setContent(scroll);
+        // Stays above the scrolling content: the open image and its saved copy disagree.
+        dialog.getDialogPane().setContent(new SavedDataBanner(qupath).wrap(scroll));
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
 
         ButtonType runType = new ButtonType("Find neighborhoods", ButtonBar.ButtonData.OK_DONE);

@@ -133,6 +133,15 @@ worker loaded, how many threads each has, and which step never returned.
 | "Could not install harmonypy 2.1.0 for Harmony (it is downloaded from PyPI the first time). ... pip said: ..." | Clustering run (Harmony version 2.1.0) | the first run that asks for harmonypy 2.1.0 could not download it from PyPI | check the internet connection and run again, or choose **harmonypy 0.2.0** in **Harmony version**. Where the web is filtered, download the cp311 wheel for the machine from PyPI and run the `pip install --no-deps --target ...` command the message gives |
 
 ---
+## The dialog says the saved copy changed, or counts cells a script removed
+
+QP-CAT's dialogs read the image open in the viewer. A script run **for the project** writes
+each entry's saved copy and leaves the viewer, and any open QP-CAT dialog, holding the old
+objects; the measurement list then still counts cells the script removed. The strip at the top
+of the dialog says so (see [the banner](clustering.md#the-banner-above-the-settings)):
+**Reload saved data** brings the viewer up to date, or reopen the image. A script run on the
+current image only (Run, not Run for project) changes the viewer directly and needs no reload.
+
 ## The Python console
 
 Monitor Python-side output in real time.

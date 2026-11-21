@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **A banner when the open image and its saved copy disagree.** The Clustering, Phenotyping
+  and Cellular Neighborhood dialogs keep a one-line strip above their scrolling content that
+  appears when the project's saved copy of the open image changed while it was open (a script
+  run for the project, another QuPath) or when the viewer has unsaved edits, with QuPath's own
+  "Reload saved data" and an Ignore button. Checked when a dialog opens or regains focus, never
+  polled. Asked for after a working-group member removed cells with a script run for the
+  project and the dialog, reading the viewer, still counted them.
 - **Neighbor graph and Leiden on the GPU (RAPIDS), optional.** A Leiden run can build its
   neighbor graph with cuML and partition it with cuGraph in a separate RAPIDS environment you
   install from the shipped manifest (`documentation/gpu-graph/`), on Linux or inside WSL2 from a

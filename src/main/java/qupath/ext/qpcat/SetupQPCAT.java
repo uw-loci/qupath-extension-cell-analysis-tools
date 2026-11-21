@@ -1,5 +1,6 @@
 package qupath.ext.qpcat;
 
+import qupath.ext.qpcat.ui.SavedDataTracker;
 import qupath.ext.qpcat.ui.VersionedTitle;
 import qupath.ext.qpcat.ui.Tooltips;
 
@@ -212,6 +213,8 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
     @Override
     public void installExtension(QuPathGUI qupath) {
+        // Live-versus-saved state of the open image, for the dialogs' banner.
+        SavedDataTracker.install(qupath);
         logger.info("Installing extension: {}", EXTENSION_NAME);
         // An administrator's -Dqpcat.mcp.disabled=true (launcher java-options, not a
         // preference) leaves both MCP menu items out; say so once, here.

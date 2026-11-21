@@ -161,7 +161,8 @@ public class PhenotypingDialog {
         scrollPane.setFitToWidth(true);
         scrollPane.setPrefHeight(800);
 
-        dialog.getDialogPane().setContent(scrollPane);
+        // Stays above the scrolling content: the open image and its saved copy disagree.
+        dialog.getDialogPane().setContent(new SavedDataBanner(qupath).wrap(scrollPane));
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
 
         // Add Run button

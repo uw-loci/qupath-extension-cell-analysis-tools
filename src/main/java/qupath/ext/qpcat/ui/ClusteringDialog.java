@@ -229,6 +229,7 @@ public class ClusteringDialog {
     private CheckBox generatePlotsCheck;
     private CheckBox pagaCheck;
     private CheckBox gpuGraphCheck;
+    private SavedDataBanner savedDataBanner;
     private CheckBox stabilityCheck;
     private Spinner<Integer> stabilityRepeatsSpinner;
     private CheckBox compareResolutionsCheck;
@@ -506,7 +507,10 @@ public class ClusteringDialog {
         scrollPane.setFitToWidth(true);
         scrollPane.setPrefHeight(650);
 
-        dialog.getDialogPane().setContent(scrollPane);
+        // Above the scrolling content, so it stays in view: the open image and
+        // its saved copy disagree (a script run for the project, unsaved edits).
+        savedDataBanner = new SavedDataBanner(qupath);
+        dialog.getDialogPane().setContent(savedDataBanner.wrap(scrollPane));
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.CLOSE);
 
         // Add Run button

@@ -96,6 +96,23 @@ one-time modal says so. Duplicate the project folder before continuing. Re-arm i
 **Edit > Preferences > QP-CAT > "Backup Warning Acknowledged"**. Read-only tools
 (View Past Results, spatial statistics, Compute Embedding, Apply palette) never trigger it.
 
+### The banner above the settings
+
+A strip at the top of the dialog, above everything that scrolls, appears only when the open
+image and its saved copy in the project disagree:
+
+- *The saved copy of this image changed at ... while it was open.* A script run for the
+  project, or another QuPath, wrote the entry. The viewer, and this dialog's class and
+  measurement lists, still show the older objects. **Reload saved data** is QuPath's own
+  reload (it asks first, because unsaved edits in the viewer are lost); **Ignore** stops the
+  message if the newer copy was your own Save.
+- *The viewer has unsaved edits.* Nothing is wrong for the run: QP-CAT works on what the
+  viewer shows and saves it with the results. QuPath's Save keeps the edits without a run.
+
+The check happens when the dialog opens or regains focus, so coming back from the script
+editor after a project run shows it at once. The same strip sits on the Phenotyping and
+Cellular Neighborhood dialogs.
+
 ### What it writes
 
 - A **PathClass** per detection -- "Cluster 0", "Cluster 1", ...
