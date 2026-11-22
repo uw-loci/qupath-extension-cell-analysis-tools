@@ -79,6 +79,9 @@ Outputs (via task.outputs):
   embedding_execution: str -- how UMAP was run (parallelism + init), for the audit log
   graph_backend: str -- where the Leiden graph and partition ran ("cpu", "gpu ...",
     or "cpu (gpu requested; ...)" when the GPU backend was asked for but unavailable)
+  duplicate_rows: int -- Leiden only: cells whose measurement row another cell
+    shares; such rows are searched and partitioned once (see unique_rows)
+  unique_rows: int -- Leiden only: distinct measurement rows the graph was built over
   embedding_reproducible: bool -- whether the embedding is bit-reproducible
   marker_rankings: str (JSON) -- top markers per cluster with scores
   paga_connectivity: NDArray (n_clusters x n_clusters) float64 -- PAGA graph weights
@@ -1616,6 +1619,44 @@ def knn_graph(matrix, n_neighbors, seed):
     return adata.obsp["connectivities"]
 
 
+def unique_rows(matrix):
+    """The distinct rows of ``matrix``, so the neighbor search sees each row once.
+
+    Cells with identical measurements break both searches Leiden can use. The
+    approximate search (pynndescent, what scanpy runs) splits them off into
+    islands: 2,903 synthetic cells sharing 56 rows gave a graph of 37 connected
+    components and 65-83 Leiden clusters for 8 cell types at every resolution
+    (ARI 0.60 at best); the same rows searched once give 8 components and the 8
+    types at resolution 0.1-0.2 (ARI 0.92). The exact search (the GPU path)
+    joins them into hubs of degree in the thousands, on which cuGraph Leiden
+    returns every cell as its own cluster. Searching and partitioning the
+    distinct rows, then giving every cell the label of its row, avoids both.
+    A block of identical cells is then one node, so at a given resolution the
+    partition is finer than the hub graph gave. Rows are compared byte for byte, so only
+    bitwise identical rows count (0.8 s at 1,000,000 x 25 float32 with 30%
+    duplicates). With no duplicates ``matrix`` itself comes back, so the graph
+    is the one built before this existed.
+
+    :param matrix: cells x features
+    :return: (rows, row_of_cell, shared): the distinct rows, the index of each
+        cell's row in them (``rows[row_of_cell]`` rebuilds ``matrix``), and the
+        number of cells whose row another cell shares (0 when none)
+    """
+    arr = np.ascontiguousarray(matrix)
+    n = arr.shape[0]
+    if arr.ndim != 2 or n < 2 or arr.shape[1] == 0:
+        return arr, np.arange(n), 0
+    as_bytes = arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
+    _, first, row_of_cell, counts = np.unique(
+        as_bytes.ravel(), return_index=True, return_inverse=True, return_counts=True
+    )
+    row_of_cell = np.asarray(row_of_cell).ravel()
+    if first.shape[0] == n:
+        return arr, np.arange(n), 0
+    shared = int((counts[row_of_cell] > 1).sum())
+    return arr[first], row_of_cell, shared
+
+
 class GpuBridgeError(Exception):
     """The RAPIDS process could not run or did not deliver; the message says why."""
 
@@ -2077,8 +2118,9 @@ def fit_seeded(algorithm, params, matrix, seed):
     :return: (labels, fitted model); the model is the neighbour graph for Leiden
     """
     if algorithm == "leiden":
-        graph = knn_graph(matrix, params["n_neighbors"], seed)
-        return leiden_labels(graph, params["resolution"], seed), graph
+        rows, row_of_cell, _ = unique_rows(matrix)
+        graph = knn_graph(rows, params["n_neighbors"], seed)
+        return leiden_labels(graph, params["resolution"], seed)[row_of_cell], graph
     if algorithm == "kmeans":
         from sklearn.cluster import KMeans
 
@@ -2286,6 +2328,26 @@ if algorithm == "leiden":
     # range [1, inf) or None. Got 0 instead" -- names neither the control nor
     # the dialog, and arrives after the whole extraction has been paid for.
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
+    # Cells with identical measurement rows are searched and partitioned once
+    # per row, and every cell gets its row's label (see unique_rows).
+    _unique_matrix, _row_of_cell, _duplicate_cells = unique_rows(cluster_matrix)
+    task.outputs["duplicate_rows"] = int(_duplicate_cells)
+    task.outputs["unique_rows"] = int(_unique_matrix.shape[0])
+    if _duplicate_cells:
+        if _unique_matrix.shape[0] < 2:
+            raise ValueError(
+                "All %d cells have identical values for the selected measurements; "
+                "there is nothing to cluster. Choose measurements that vary between "
+                "cells." % n_cells
+            )
+        logger.info(
+            "Leiden: %d of %d cells have measurements identical to another cell's "
+            "(%d distinct rows); the neighbor search and Leiden run once per row",
+            _duplicate_cells,
+            n_cells,
+            _unique_matrix.shape[0],
+        )
+        n_neighbors = validate_n_neighbors(n_neighbors, _unique_matrix.shape[0])
     _backend, _backend_reason = gpu_bridge_available(
         pref_graph_backend, pref_gpu_python
     )
@@ -2304,8 +2366,10 @@ if algorithm == "leiden":
     _wanted_resolutions = [float(resolution)] + [
         float(r) for r in pref_compare_resolutions if float(r) != float(resolution)
     ]
-    # The graph depends on the matrix, n_neighbors and the seed, never on the
-    # resolution, so a resolution change reuses the last one (knn_cache.py).
+    # The graph depends on the distinct rows, n_neighbors and the seed, never on
+    # the resolution, so a resolution change reuses the last one (knn_cache.py).
+    # The key starts with the full matrix's digest (keep_only_matrix frees on
+    # it) and names the deduplicated matrix the graph was built over.
     _graph = None
     _graph_key = None
     _gpu_labels = {}
@@ -2316,6 +2380,7 @@ if algorithm == "leiden":
             n_neighbors=n_neighbors,
             seed=clustering_seed,
             backend=_backend,
+            rows=knn_cache.matrix_digest(_unique_matrix),
         )
         _graph_hit = knn_cache.get("graph", _graph_key)
         if _graph_hit is not None:
@@ -2331,7 +2396,7 @@ if algorithm == "leiden":
     if _graph is None and _backend == "gpu":
         try:
             _graph, _gpu_labels, _gpu_note, _gpu_seconds = gpu_bridge_run(
-                cluster_matrix,
+                _unique_matrix,
                 n_neighbors,
                 clustering_seed,
                 _wanted_resolutions,
@@ -2357,11 +2422,12 @@ if algorithm == "leiden":
                 exc_info=True,
             )
     if _graph is None:
-        _graph = knn_graph(cluster_matrix, n_neighbors, clustering_seed)
+        _graph = knn_graph(_unique_matrix, n_neighbors, clustering_seed)
         if _graph_key is not None:
             knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
     elif _graph_key is not None and _gpu_note is not None:
         knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
+    del _unique_matrix
     task.outputs["graph_backend"] = (
         _gpu_note
         if _gpu_note
@@ -2373,8 +2439,11 @@ if algorithm == "leiden":
     del _graph
 
     def _partition_at(_r):
+        # Labels per distinct row, handed to every cell with that row.
         _lab = _gpu_labels.get(float(_r))
-        return _lab if _lab is not None else _engine.partition(_r, clustering_seed)
+        if _lab is None:
+            _lab = _engine.partition(_r, clustering_seed)
+        return np.asarray(_lab)[_row_of_cell]
 
     labels = _partition_at(resolution)
     if pref_compare_resolutions:
@@ -2393,7 +2462,7 @@ if algorithm == "leiden":
             "rows": resolution_rows(pref_compare_resolutions, _label_sets, labels),
         }
         del _label_sets
-    del _engine, _gpu_labels
+    del _engine, _gpu_labels, _row_of_cell
 
 elif algorithm == "kmeans":
     n_clusters = algorithm_params.get("n_clusters", 10)

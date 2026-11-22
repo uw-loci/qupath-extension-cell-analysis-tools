@@ -94,6 +94,11 @@ public class ClusteringResult {
     // "gpu (...)" or "cpu (gpu requested; <reason>)"; null for other algorithms.
     private String graphBackend;
 
+    // Cells whose measurement row another cell shared, as the worker reported it.
+    // Leiden searches and partitions such rows once and gives every cell its row's
+    // label (run_clustering.unique_rows); 0 when none, and for other algorithms.
+    private int duplicateRows;
+
     // Measurement-name prefix the embedding columns were written under ("UMAP",
     // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
     // from names. A custom name is not recognisable by pattern, which is how the 3D view
@@ -146,6 +151,10 @@ public class ClusteringResult {
     /** Where the Leiden graph and partition ran, or null for other algorithms. */
     public String getGraphBackend() { return graphBackend; }
     public void setGraphBackend(String s) { this.graphBackend = s; }
+
+    /** @see #duplicateRows */
+    public int getDuplicateRows() { return duplicateRows; }
+    public void setDuplicateRows(int n) { this.duplicateRows = n; }
 
     /** The missing-values sentence for this run, or null when nothing was missing. */
     public String getMissingNote() { return missingNote; }

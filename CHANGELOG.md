@@ -25,6 +25,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   notification and the run summary. Measured: 1 million cells x 25 markers in 43 s end to end
   from a Windows QuPath on a 16 GB card. Details and limits in Setup.
 
+### Changed
+
+- **Leiden clusters cells with identical measurements once per distinct row.** Before the
+  neighbor search, exact duplicate rows are collapsed to one; the graph is built and
+  partitioned over the distinct rows, on the CPU and on the GPU, and every cell takes its
+  row's label. Identical rows broke both neighbor searches: the approximate CPU search
+  split them into islands (the 11,306-cell synthetic ground-truth dataset, 2,903 cells
+  sharing 56 rows, gave a 37-component graph and 76-83 clusters for 8 cell types at
+  `n_neighbors` 15, ARI 0.47 and 0.36 at resolutions 0.5 and 1.0; now 8 components, 20-30
+  clusters, ARI 0.68 and 0.61), and the exact GPU search made hubs on which cuGraph Leiden
+  returned every cell as its own cluster (now a normal partition that agrees with the CPU
+  path). The completion message and the Workflow-tab record say how many cells it
+  concerned; nothing changes when no two cells share a row. Stability replicates and the
+  between-run graph cache follow the same rows. Other algorithms are unaffected. Documented
+  under *Cells with identical measurements* in `clustering.md`.
+
 ### Fixed
 
 - A batch file's `missing_values` was ignored unless `normalization` was also set.
