@@ -84,7 +84,7 @@ public class ClusteringWorkflow {
     private static final Logger logger = LoggerFactory.getLogger(ClusteringWorkflow.class);
 
     /**
-     * F3: measurement-name prefixes that must be excluded from the
+     * Measurement-name prefixes that must be excluded from the
      * QP-CAT component-aggregate fan-out. Includes QP-CAT's own writeback
      * columns plus the embedding / cluster / featurization columns that
      * other paths attach to detections; averaging "UMAP1" or "Cluster"
@@ -105,7 +105,7 @@ public class ClusteringWorkflow {
     };
 
     /**
-     * F3: returns true when the measurement name is feedback-prone and
+     * Returns true when the measurement name is feedback-prone and
      * should be excluded from per-component aggregates.
      */
     private static boolean isFeedbackProneMeasurementName(String name) {
@@ -247,13 +247,13 @@ public class ClusteringWorkflow {
      * statistic, and refuse a subset that admits no cell.
      *
      * <p><b>Why refuse rather than quietly switch the statistics off.</b> The
-     * dialog greys them out, so a run started there cannot ask for both. A config
+     * dialog grays them out, so a run started there cannot ask for both. A config
      * that did not come from the dialog can: a hand-edited {@code _config.json}
      * fed through "Load Config from file...", a scripted {@code ClusteringConfig},
      * or a future YAML key (the batch schema has no field for the subset yet).
      * Changing someone's requested analysis without saying so is worse than
      * stopping. Dropping cells punches holes in the
-     * neighbour graph, so enrichment, Moran's I, Geary's C, Ripley and
+     * neighbor graph, so enrichment, Moran's I, Geary's C, Ripley and
      * co-occurrence computed over a subset answer a question about the subset's
      * own arrangement while reading as a statement about the tissue.
      *
@@ -264,7 +264,7 @@ public class ClusteringWorkflow {
      * RUN_INFO.txt as having been built over the subset.
      *
      * @param config the run configuration
-     * @throws IOException when the combination cannot be honoured
+     * @throws IOException when the combination cannot be honored
      */
     static void enforceClassSubsetRules(ClusteringConfig config) throws IOException {
         if (config == null || !config.isClassSubsetActive()) {
@@ -282,7 +282,7 @@ public class ClusteringWorkflow {
         if (config.isEnableCoOccurrenceOneVsRest()) asked.add("co-occurrence (one vs rest)");
         if (!asked.isEmpty()) {
             throw new IOException("Spatial statistics cannot be computed on a subset chosen by "
-                    + "classification: removing cells changes the neighbour graph, so "
+                    + "classification: removing cells changes the neighbor graph, so "
                     + String.join(", ", asked) + " would describe the subset's own arrangement "
                     + "rather than the tissue. Either clear the classification restriction or "
                     + "turn these statistics off.");
@@ -468,12 +468,12 @@ public class ClusteringWorkflow {
                         e.getMessage());
             }
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
             SpatialDecision decision = spatialEstimateDecider.apply(estSeconds);
             if (decision == SpatialDecision.CANCEL) {
                 cancelled = true;
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             } else if (decision == SpatialDecision.SKIP_SPATIAL) {
                 disableSpatialStats(config);
                 report(progressCallback, "Skipping spatial statistics.");
@@ -539,7 +539,7 @@ public class ClusteringWorkflow {
                     result.getMembershipConfidence(), 0);
         }
 
-        // v0.3 spatial graph overlay: build PathObjectConnections + write
+        // Spatial graph overlay: build PathObjectConnections + write
         // QPCAT spatial: / QPCAT component: measurements per the config
         // toggles. Runs on the current background thread; the helper
         // fires the hierarchy change event on the FX thread itself.
@@ -1012,13 +1012,13 @@ public class ClusteringWorkflow {
         reportPhase(progressCallback, "apply", "Applying results to project images...");
         ResultApplier applier = new ResultApplier();
 
-        // D1 note (v0.3.4): the project path builds a single global spatial
-        // graph over concatenated per-image coordinates. v0.3.4 fixes the
-        // per-cell numNeighbors + distance aggregates to recompute per-image
-        // from the sliced edges, but triangle areas and connected-component
-        // labels are still global-graph artefacts. The overlay PathObjectConnections
-        // per-image only show the in-segment edges, so visual results match
-        // the corrected aggregates. Document in CHANGELOG; no runtime dialog.
+        // The project path builds a single global spatial graph over
+        // concatenated per-image coordinates. Per-cell numNeighbors + distance
+        // aggregates are recomputed per image from the sliced edges, but
+        // triangle areas and connected-component labels are still global-graph
+        // artifacts. The overlay PathObjectConnections per image only show the
+        // in-segment edges, so visual results match the recomputed aggregates.
+        // Logged, no runtime dialog.
         if (result.hasSpatialGraphPayload()
                 && extraction.getImageSegments() != null
                 && extraction.getImageSegments().size() > 1) {
@@ -1113,7 +1113,7 @@ public class ClusteringWorkflow {
             ImageData<BufferedImage> imageData =
                     (ImageData<BufferedImage>) segment.getImageData();
 
-            // v0.3 spatial graph overlay -- per-segment slice + apply.
+            // Spatial graph overlay -- per-segment slice + apply.
             if (result.hasSpatialGraphPayload()) {
                 ClusteringResult.SpatialGraphPayload sliced =
                         result.getSpatialGraphPayload().slice(start, end);
@@ -1945,7 +1945,7 @@ public class ClusteringWorkflow {
         inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
 
         // The probe must partition exactly as the run will. A per-area graph is
-        // a different graph -- cheaper, and with a different neighbour
+        // a different graph -- cheaper, and with a different neighbor
         // structure -- so timing an un-partitioned one would estimate a run
         // that is not the one about to happen, and over-estimate it.
         AreaResolver.AreaAssignment probeAreas = resolveAreas(extraction, config);
@@ -2152,10 +2152,10 @@ public class ClusteringWorkflow {
                 }
             }, t -> currentTask = t);
 
-            // If the user cancelled (button -> requestCancel), do NOT parse or
+            // If the user canceled (button -> requestCancel), do NOT parse or
             // apply any results -- bail before anything touches the objects.
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
 
             // Parse core outputs
@@ -2191,7 +2191,7 @@ public class ClusteringWorkflow {
             result.setSpatialUnit(frame.unit());
             result.setPixelSizeUmByImage(frame.byImageName());
             // The heatmap needs to know whether zero means anything in these
-            // numbers; only Z-scored values have a centre to diverge about.
+            // numbers; only Z-scored values have a center to diverge about.
             if (config.getNormalization() != null) {
                 result.setNormalization(config.getNormalization().getId());
             }
@@ -2626,7 +2626,7 @@ public class ClusteringWorkflow {
                         version == null ? "" : ", harmonypy " + version));
             }
 
-            // ---- Spatial graph overlay (v0.3) outputs ----
+            // ---- Spatial graph overlay outputs ----
             ClusteringResult.SpatialGraphPayload payload = retrieveSpatialGraphPayload(
                     task, nCells);
             if (payload != null) {
@@ -2635,12 +2635,12 @@ public class ClusteringWorkflow {
 
             return result;
         } catch (IOException e) {
-            // A cancelled task ends in Appose's CANCELED state, which counts as an
+            // A canceled task ends in Appose's CANCELED state, which counts as an
             // error status -- so Task.waitFor() THROWS rather than returning, and the
             // "if (cancelled)" check above is never reached. Without this the user
             // gets "Task 'run_clustering' failed: ..." after pressing Cancel.
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
             throw e;
         } finally {
@@ -2733,7 +2733,7 @@ public class ClusteringWorkflow {
         }
 
         // Compute batch labels for batch correction. Images is the default and
-        // the historical behaviour; areas lets a 55-core TMA in a single image
+        // the historical behavior; areas lets a 55-core TMA in a single image
         // be corrected core-by-core, which per-image labels cannot express.
         List<Integer> batchLabels = null;
         if (config.isEnableBatchCorrection()) {
@@ -2825,7 +2825,7 @@ public class ClusteringWorkflow {
         }
 
         // Independent-area ids. Every spatial consumer on the Python side
-        // partitions on these, so no neighbour edge crosses a boundary that
+        // partitions on these, so no neighbor edge crosses a boundary that
         // tissue does not. Omitted when the levels cannot split anything,
         // which keeps single-section runs on exactly the previous path.
         if (areas != null) {
@@ -2845,7 +2845,7 @@ public class ClusteringWorkflow {
         inputs.put("minibatch_kmeans_batch_size", QpcatPreferences.getClusterMiniBatchSize());
         inputs.put("banksy_pca_dims_default", QpcatPreferences.getClusterBanksyPcaDims());
         inputs.put("plot_dpi", QpcatPreferences.getClusterPlotDpi());
-        // Colour maps for the figures matplotlib renders. Only names matplotlib
+        // Color maps for the figures matplotlib renders. Only names matplotlib
         // actually has cross over: a user's own QuPath .tsv map has no equivalent,
         // so it is OMITTED rather than sent -- the script falls back to its own
         // default on NameError. Omitting beats sending null: an absent input is a
@@ -2887,7 +2887,7 @@ public class ClusteringWorkflow {
             inputs.put("reference_names", ref.names());
         }
         // Absent from an older saved config -> isPcaPrecursor() is false, so the
-        // run reproduces on the full feature matrix as it originally did.
+        // run uses the full feature matrix, as that config expects.
         inputs.put("compute_paga", config.isComputePaga());
         inputs.put("pca_precursor_enabled", config.isPcaPrecursor());
         inputs.put("pca_precursor_n_comps", QpcatPreferences.getClusterPcaPrecursorComponents());
@@ -2903,8 +2903,8 @@ public class ClusteringWorkflow {
         inputs.put("spatial_autocorr_threshold", QpcatPreferences.getSpatialAutocorrThreshold());
         inputs.put("use_squidpy_graph_for_smoothing",
                 QpcatPreferences.isSpatialUseSquidpyGraphForSmoothing());
-        // Phase 5 enhancement: PNG output for spatial-stats plots so the
-        // Export figures (batch)... can pick them up.
+        // PNG output for spatial-stats plots so Export figures (batch)... can
+        // pick them up.
         inputs.put("spatial_persist_plots", config.getSpatialPersistPlots() != null
                 ? config.getSpatialPersistPlots() : QpcatPreferences.isSpatialPersistPlots());
         // Gate neighborhood-enrichment + Moran's I on the explicit spatial-
@@ -2919,13 +2919,13 @@ public class ClusteringWorkflow {
         inputs.put("enable_co_occurrence_one_vs_rest",
                 config.isEnableCoOccurrenceOneVsRest());
         inputs.put("cooc_matrix_radius", config.getCoOccurrenceMatrixRadius());
-        // ---- Spatial graph overlay (v0.3) inputs ----
+        // ---- Spatial graph overlay inputs ----
         inputs.put("write_node_measurements", config.isWriteNodeMeasurements());
         inputs.put("write_component_measurements", config.isWriteComponentMeasurements());
-        // F1: pass pixel size so the Python helper scales QPCAT spatial:
+        // Pass pixel size so the Python helper scales QPCAT spatial:
         // distance + triangle-area outputs to microns when calibration is
         // present. Falls back to 1.0 (pixels) when no calibration is
-        // available, matching the v0.2.7 spatial-stats unit treatment.
+        // available, matching the spatial-stats unit treatment.
         // Coordinates already in microns need no further scaling.
         inputs.put("pixel_size_um", frame.inMicrons() ? 1.0 : resolveSpatialPixelSizeUm(extraction));
         return inputs;
@@ -3093,7 +3093,7 @@ public class ClusteringWorkflow {
      * images" rather than "up to 55 images". The distinction matters because
      * matching is by class NAME: an image whose cells got that name from the
      * user's own classifier rather than a QP-CAT run would be rewritten too, and
-     * the only defence against that is showing the real numbers first.
+     * the only defense against that is showing the real numbers first.
      *
      * @param imageEntries images to scan
      * @param className    classification to count
@@ -3151,14 +3151,14 @@ public class ClusteringWorkflow {
      * @throws IOException if sub-clustering fails, or no image has a matching cell
      */
     /**
-     * Analyse the classifications the detections ALREADY carry, without clustering.
+     * Analyze the classifications the detections ALREADY carry, without clustering.
      *
      * <p>Computes the full results surface -- marker means, marker rankings, the
      * embedding, composition and spatial statistics -- treating each existing
      * PathClass as a population. It exists because a saved result is a snapshot of
      * one run: after sub-clustering, the sub-clusters and the clusters they came
      * from live in two disjoint results, while the objects carry the combined
-     * labelling that nothing could display.
+     * labeling that nothing could display.
      *
      * <p><b>Nothing is written to any object.</b> This method never calls
      * {@link ResultApplier}; that absence is the point. It reads classifications it
@@ -3168,7 +3168,7 @@ public class ClusteringWorkflow {
      * @param config           measurements, normalization, embedding and analysis
      *                         options; its algorithm is forced to EXISTING
      * @param entries          project images to read, or null for the current image
-     * @param includedClasses  class names to analyse, or null for every class found
+     * @param includedClasses  class names to analyze, or null for every class found
      * @param progressCallback optional progress messages
      * @return the result, auto-saved and ready for the results window
      * @throws IOException if no classified cells are found, or the analysis fails
@@ -3251,7 +3251,7 @@ public class ClusteringWorkflow {
                     + (labelSet.getUnclassified() > 0
                         ? " (" + labelSet.getUnclassified() + " unclassified, excluded)" : ""));
 
-            // Rebuild the groups over ONLY the analysed cells, preserving image
+            // Rebuild the groups over ONLY the analyzed cells, preserving image
             // boundaries so the segments still describe which cells came from where.
             List<MeasurementExtractor.ImageDetectionGroup> analysedGroups = new ArrayList<>();
             int cursor = 0;
@@ -4132,10 +4132,10 @@ public class ClusteringWorkflow {
         final int finalNChannels = nChannels;
         try {
             ApposeClusteringService.withExtensionClassLoader(() -> {
-                // Every NDArray here owns a /dev/shm segment. They used to be
-                // closed on the success path only -- and the two INPUT arrays
-                // were never closed at all, so a hybrid-mode run leaked
-                // nCells * nMeasurements * 8 bytes every time it succeeded.
+                // Every NDArray here owns a /dev/shm segment, so every one of
+                // them -- the two INPUT arrays included -- is closed on every
+                // path. Closing only on success leaks nCells * nMeasurements * 8
+                // bytes per successful hybrid-mode run.
                 // Same drain-list idiom as readSpatialGraphPayload below.
                 List<NDArray> shm = new ArrayList<>();
                 try {
@@ -4901,7 +4901,7 @@ public class ClusteringWorkflow {
             }
             // Each value is a STRING holding the same blob the single-area parser
             // reads, because run_per_area collects what each call wrote to its
-            // outputs rather than re-serialising them.
+            // outputs rather than re-serializing them.
             String blob = el.isJsonPrimitive() ? el.getAsString() : el.toString();
             try {
                 T parsed = parser.apply(blob, gson);
@@ -5012,7 +5012,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Read the neighbourhood-enrichment outputs of {@code spatial_stats.run_nhood_enrichment}
+     * Read the neighborhood-enrichment outputs of {@code spatial_stats.run_nhood_enrichment}
      * (z-scores, edge counts, cluster names, the permutation-null description) into
      * {@code result}, closing the arrays. Does nothing when there are none.
      */
@@ -5078,8 +5078,8 @@ public class ClusteringWorkflow {
      * <p>squidpy returns one fewer bin than it is given interval points: bin
      * {@code i} is the disc of radius {@code interval[i+1]}. Results saved before
      * this was noticed stored all the edges, so every table row and CSV line was
-     * labelled with the radius of the bin before it and a trailing all-NaN row was
-     * written. Normalising here heals those on load, so the table, the CSV and the
+     * labeled with the radius of the bin before it and a trailing all-NaN row was
+     * written. Normalizing here heals those on load, so the table, the CSV and the
      * figure caption agree without each of them knowing about it.
      *
      * @param intervals radii as stored (bin radii, or one more edge than bins)
@@ -5160,14 +5160,14 @@ public class ClusteringWorkflow {
         }
     }
 
-    // ==================== Spatial Graph Overlay (v0.3) ====================
+    // ==================== Spatial Graph Overlay ====================
 
     /**
      * Resolve the pixel size in microns for the run. Used to scale
      * per-cell distance + triangle-area columns from pixel units into
      * microns. Returns 1.0 (no scaling) when no calibration is available,
-     * which keeps the unit treatment consistent with the v0.2.7
-     * spatial-stats expansion. For multi-image runs, prefers the first
+     * which keeps the unit treatment consistent with the spatial
+     * statistics. For multi-image runs, prefers the first
      * segment's calibration; otherwise falls back to the current viewer's
      * image data and finally to 1.0.
      */
@@ -5320,7 +5320,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Pull the v0.3 spatial-graph payload from {@code task.outputs}.
+     * Pull the spatial-graph payload from {@code task.outputs}.
      * Returns {@code null} when no edge COO is present. Each output is
      * optional; missing arrays are left null on the payload.
      */
@@ -5415,7 +5415,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * Apply a v0.3 spatial-graph payload to the given image data: build
+     * Apply a spatial-graph payload to the given image data: build
      * {@link PathObjectConnections}, write {@code QPCAT spatial:} per-cell
      * measurements, and (when {@code writeComponentMeasurements} is true)
      * write per-component {@code QPCAT component:} aggregates. Fires a
@@ -5439,7 +5439,7 @@ public class ClusteringWorkflow {
      * @param overlayProceedOverride when non-null, use this pre-decided answer for a
      *   dense/large overlay INSTEAD of prompting. Multi-image runs decide once for the
      *   whole set (one prompt, not one per image) and pass the result here. Null keeps
-     *   the single-image prompt behaviour.
+     *   the single-image prompt behavior.
      */
     @SuppressWarnings("deprecation")
     public void applySpatialGraphPayload(
@@ -5452,10 +5452,10 @@ public class ClusteringWorkflow {
         if (imageData == null || detections == null || payload == null) return;
         int n = detections.size();
 
-        // D1 (v0.3.4): when the payload came from SpatialGraphPayload.slice
+        // When the payload came from SpatialGraphPayload.slice
         // (project / multi-image path), per-cell aggregates were
         // intentionally left null because the global values include
-        // phantom cross-image neighbours. Recompute them from the sliced
+        // phantom cross-image neighbors. Recompute them from the sliced
         // edge COO + this image's centroids + this image's pixel
         // calibration. Triangle areas stay null on multi-image (would
         // require per-image Delaunay re-triangulation).
@@ -5482,13 +5482,13 @@ public class ClusteringWorkflow {
             // Average connections per cell = degree (each undirected edge touches
             // two cells). Above ~4 the overlay tends to render as an unhelpful
             // white mass -- the edges fill the screen and we cannot yet
-            // colour-code edges or nodes to make it readable.
+            // color-code edges or nodes to make it readable.
             double avgDegree = n > 0 ? (2.0 * nEdges) / n : 0.0;
             boolean dense = avgDegree > OVERLAY_DENSITY_WARN;
             boolean large = threshold > 0 && nEdges > threshold;
             boolean proceed = true;
             if (dense || large) {
-                // F2: prompt the user instead of silently skipping. Workflow
+                // Prompt the user instead of silently skipping. Workflow
                 // runs on a background thread; use the CountDownLatch +
                 // Platform.runLater pattern documented in
                 // claude-reports/2025-01-30_dialog-fixes-session.md. For multi-image
@@ -5513,12 +5513,12 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * F2: confirmation dialog for pushing a large spatial-graph overlay to
+     * Confirmation dialog for pushing a large spatial-graph overlay to
      * the viewer. Called from a background thread; blocks until the user
      * answers Yes or No (default No). Returns true to proceed with the
      * push, false to skip. If the FX thread is unavailable (headless run,
      * tests) the prompt defaults to false (skip), matching the
-     * intake-specified "default to safer" behaviour.
+     * intake-specified "default to safer" behavior.
      */
     private boolean confirmOverlayPush(int nEdges, int threshold, double avgDegree,
                                        boolean dense, boolean large) {
@@ -5538,7 +5538,7 @@ public class ClusteringWorkflow {
             latch.await();
             return answer.get();
         } catch (IllegalStateException e) {
-            // FX toolkit not initialised (e.g. headless test run).
+            // FX toolkit not initialized (e.g. headless test run).
             logger.warn("Cannot prompt for overlay push (FX not running);"
                             + " defaulting to skip (edges={}, avgDegree={})",
                     nEdges, String.format("%.1f", avgDegree));
@@ -5557,7 +5557,7 @@ public class ClusteringWorkflow {
                     "This spatial graph averages %.1f connections per cell (%d edges).%n%n"
                             + "At this density the overlay usually renders as a solid white "
                             + "mass that fills the viewer and is not informative -- QP-CAT "
-                            + "cannot yet colour-code edges or nodes to make it readable.%n%n",
+                            + "cannot yet color-code edges or nodes to make it readable.%n%n",
                     avgDegree, nEdges));
         } else {
             body.append(String.format(
@@ -5614,7 +5614,7 @@ public class ClusteringWorkflow {
                     "The densest image averages %.1f connections per cell (up to %d edges).%n%n"
                             + "At this density the overlay usually renders as a solid white mass "
                             + "that fills the viewer and is not informative -- QP-CAT cannot yet "
-                            + "colour-code edges or nodes to make it readable.%n%n",
+                            + "color-code edges or nodes to make it readable.%n%n",
                     maxAvgDegree, maxEdges));
         } else {
             body.append(String.format(
@@ -5633,10 +5633,10 @@ public class ClusteringWorkflow {
         if (e instanceof ProjectImageEntry<?> pe && pe.getImageName() != null) {
             return pe.getImageName();
         }
-        // A current-image run carries no project entry, so this used to fall
-        // straight through to the literal "image" -- which is what every area
-        // label and every CSV row was then prefixed with. The open ImageData
-        // knows its own name; ask it before giving up.
+        // A current-image run carries no project entry; falling straight
+        // through to the literal "image" would prefix every area label and
+        // every CSV row with it. The open ImageData knows its own name; ask it
+        // before giving up.
         if (seg.getImageData() instanceof ImageData<?> data && data.getServer() != null) {
             String name = data.getServer().getMetadata().getName();
             if (name != null && !name.isBlank()) {
@@ -5698,7 +5698,7 @@ public class ClusteringWorkflow {
     }
 
     /**
-     * D1 fix (v0.3.4): recompute per-cell aggregates from the sliced
+     * Recompute per-cell aggregates from the sliced
      * edge COO of a multi-image-clustering payload, using this image's
      * own centroids and pixel calibration. Mutates the payload in place
      * (writes numNeighbors + meanDistance/medianDistance/maxDistance/
@@ -5731,7 +5731,7 @@ public class ClusteringWorkflow {
             cy[i] = detections.get(i).getROI().getCentroidY();
         }
 
-        // Per-cell neighbour distance lists.
+        // Per-cell neighbor distance lists.
         List<List<Double>> neighbours = new ArrayList<>(n);
         for (int i = 0; i < n; i++) neighbours.add(new ArrayList<>());
         int nEdges = er.length;
@@ -5806,7 +5806,7 @@ public class ClusteringWorkflow {
 
         // Single scan for the existing measurement-name set BEFORE writing
         // any new column so the feedback-loop guard sees only the original
-        // columns. F3: the guard now skips QP-CAT's other writeback
+        // columns. The guard also skips QP-CAT's other writeback
         // prefixes (UMAP*, tSNE*, PCA*, Cluster*, FM_*, ZS_*, AE_*) in
         // addition to QPCAT spatial: / QPCAT component:, via
         // isFeedbackProneMeasurementName().

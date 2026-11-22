@@ -7,14 +7,14 @@ synchronously inside the parent task's Python interpreter so they share
 the AnnData object that was built for the existing Moran's I / nhood
 enrichment branch.
 
-Zero new pip dependencies (see Phase 0 feasibility 4.0):
+No pip dependencies beyond those already pinned:
   - squidpy >= 1.4 (already pinned) provides:
       sq.gr.spatial_neighbors           - graph build (kNN / radius / Delaunay)
       sq.gr.ripley(mode='K' | 'L')      - Ripley point-pattern stats
       sq.gr.spatial_autocorr(mode='geary') - Geary's C per measurement
       sq.gr.co_occurrence               - co-occurrence (pairwise + one-vs-rest)
   - scipy >= 1.10 (already pinned) provides scipy.spatial.Delaunay
-  - matplotlib >= 3.7 (transitive via scanpy/squidpy) - Phase 5 PNG output
+  - matplotlib >= 3.7 (transitive via scanpy/squidpy) - PNG output
 
 Function contract: every callable below either populates `task.outputs`
 with a JSON or NDArray-backed entry, or logs a warning and returns
@@ -22,7 +22,7 @@ without setting outputs. Failures never bubble out of the helper - the
 Java side checks `task.outputs.containsKey(...)` per the existing
 `hasSpatialAutocorr` / `hasNhoodEnrichment` pattern.
 
-Phase 5 enhancement (Feature B precondition): each helper accepts an
+Each helper accepts an
 optional `plot_dir` + `plot_dpi` + `persist_plots` triplet. When all are
 supplied and persist_plots is truthy, a matplotlib PNG is written next
 to the existing run_clustering.py outputs. Filenames are part of the
@@ -195,7 +195,7 @@ def _safe_kwargs(fn, **kw):
     return {k: v for k, v in kw.items() if k in params}
 
 
-# Phase 5: Public filename contract consumed by Feature B's PlotKind enum.
+# Public filename contract consumed by the Java PlotKind enum.
 # Keep these stable; downstream FigureExportScripts.exportFigures references
 # the exact strings. Bumping a name is a breaking change for the export API.
 PLOT_FILE_RIPLEY = "ripley_k_l.png"
@@ -206,7 +206,7 @@ PLOT_FILE_COOC_CURVES = "co_occurrence_curves.png"
 
 
 def _should_persist(plot_dir, persist_plots):
-    """Common gate for the Phase 5 PNG-output enhancement.
+    """Common gate for PNG output.
 
     Returns True only when persist_plots is truthy AND plot_dir is a
     non-empty string AND we can create / reach that directory. Every
@@ -287,7 +287,7 @@ def area_slices(area_ids, n_cells=None):
 
     `area_ids` of None (or a single distinct value) yields ONE slice covering
     every cell, which is the un-partitioned case and reduces every caller
-    below to its pre-areas behaviour.
+    below to its pre-areas behavior.
     """
     if area_ids is None:
         if n_cells is None:
@@ -303,9 +303,9 @@ def area_slices(area_ids, n_cells=None):
 
 
 def _knn_cap(k, n_block):
-    """Largest usable neighbour count for a block of n_block cells.
+    """Largest usable neighbor count for a block of n_block cells.
 
-    sklearn raises when it is asked for more neighbours than there are other
+    sklearn raises when it is asked for more neighbors than there are other
     points, so a small area must reduce k rather than take the whole run down
     with it. Returns 0 when the block cannot support a graph at all.
     """
@@ -315,10 +315,9 @@ def _knn_cap(k, n_block):
 def _build_graph_block(coords, graph_type, k, radius, delaunay_max_edge):
     """Build (connectivities, distances) for ONE coordinate frame.
 
-    This is the single-frame logic that used to be inlined in
-    build_spatial_graph. Extracted so that the partitioned path and the
-    un-partitioned path are the SAME code with a different number of blocks,
-    rather than two implementations that can drift apart.
+    The single-frame logic shared by build_spatial_graph's partitioned and
+    un-partitioned paths, so they are the SAME code with a different number
+    of blocks rather than two implementations that can drift apart.
     """
     import anndata as ad
     import scipy.sparse as sp
@@ -326,9 +325,9 @@ def _build_graph_block(coords, graph_type, k, radius, delaunay_max_edge):
 
     n_block = int(coords.shape[0])
     if n_block < 2:
-        # A one-cell area has no neighbours. An empty block is the honest
+        # A one-cell area has no neighbors. An empty block is the honest
         # answer; those cells then contribute nothing to graph-based
-        # statistics instead of borrowing a neighbour from another specimen.
+        # statistics instead of borrowing a neighbor from another specimen.
         empty = sp.csr_matrix((n_block, n_block), dtype=np.float64)
         return empty, empty.copy()
 
@@ -717,7 +716,7 @@ def run_per_area(
     """Run a coordinate-based statistic once per independent area.
 
     Ripley's L and co-occurrence read obsm['spatial'] directly and never
-    consult the neighbour graph (verified against squidpy 1.6.6:
+    consult the neighbor graph (verified against squidpy 1.6.6:
     sq.gr.ripley and sq.gr.co_occurrence take no library_key), so making the
     GRAPH block-diagonal does nothing for them. Pooling a TMA's 55 cores into
     one point pattern measures the layout of the array, not the biology of any
@@ -785,7 +784,7 @@ RIPLEY_ENVELOPE_SIMS = 99
 
 
 def ripley_l_observed(coords, radii):
-    """Ripley's L for one point pattern, normalised by ITS OWN intensity.
+    """Ripley's L for one point pattern, normalized by ITS OWN intensity.
 
     ``K(r) = (A / n^2) * #{ordered pairs closer than r}``, then
     ``L(r) = sqrt(K(r) / pi)``.
@@ -996,7 +995,7 @@ def run_ripley(
         # squidpy stores per-cluster results under 'bins' / 'pvalues' / 'sims_stat'
         # but the exact key set varies by version. Read defensively and log
         # which shape matched so the audit log reveals the live squidpy
-        # contract on the workstation env (Phase 3 narrowing target).
+        # contract on the workstation env.
         k_shape_matched = None
         try:
             bins_df = k_data.get("bins") if isinstance(k_data, dict) else None
@@ -1176,7 +1175,7 @@ def run_ripley(
             )
             msg = (
                 "Ripley L extraction produced no curves: squidpy (%s) returned a "
-                "payload this build does not recognise (type=%s, keys=%s). No "
+                "payload this build does not recognize (type=%s, keys=%s). No "
                 "result was written -- this is an error, not a finding of "
                 "complete spatial randomness."
                 % (getattr(sq, "__version__", "?"), type(l_data).__name__, observed)
@@ -1233,7 +1232,7 @@ def run_ripley(
             # cannot be compared to its null is worse than no curve.
             msg = (
                 "Ripley L could not be recomputed (%s). No result was written: "
-                "squidpy's own L is normalised by the total cell count rather "
+                "squidpy's own L is normalized by the total cell count rather "
                 "than each cluster's, so it cannot be read against any null." % e
             )
             logger.error(msg)
@@ -1286,7 +1285,7 @@ def run_ripley(
             n_permutations,
         )
 
-        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        # matplotlib PNG output for the batch figure export.
         if _should_persist(plot_dir, persist_plots) and radii:
             try:
                 import matplotlib
@@ -1303,7 +1302,7 @@ def run_ripley(
                     fig, ax_l = plt.subplots(1, 1, figsize=(7, 5))
                     ax_k = None
 
-                # Centre on each cluster's OWN simulated-random median, which is
+                # Center on each cluster's OWN simulated-random median, which is
                 # what the in-app Ripley L tab plots. Until now this PNG drew the
                 # analytical Poisson diagonal instead, so a figure exported for a
                 # paper disagreed with the chart it was exported from -- and the
@@ -1338,7 +1337,7 @@ def run_ripley(
                             label=str(cname),
                             linewidth=1.2,
                         )
-                        # Each cluster's band in its own colour, so "is this
+                        # Each cluster's band in its own color, so "is this
                         # curve outside ITS band" is answerable with several
                         # drawn at once.
                         if (
@@ -1370,7 +1369,7 @@ def run_ripley(
                         linewidth=1.0,
                     )
                 if centred:
-                    # Randomness is a flat line at zero once centred.
+                    # Randomness is a flat line at zero once centered.
                     ax_l.axhline(
                         0.0,
                         linestyle="--",
@@ -1441,7 +1440,7 @@ def centre_on_median(curve, median):
     """Subtract a cluster's own simulated-random median from its L curve.
 
     This is what makes zero mean "random" on the Ripley plot. Both the in-app
-    chart and the exported PNG draw the centred form; they disagreed until
+    chart and the exported PNG draw the centered form; they disagreed until
     0.14.11, when the PNG still drew the analytical Poisson diagonal.
 
     Truncates to the shorter of the two rather than raising: a ragged pair means
@@ -1792,10 +1791,10 @@ def describe_nhood_null(n_permutations, n_areas):
 
 
 def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
-    """Neighbourhood enrichment z-scores and edge counts into task.outputs.
+    """Neighborhood enrichment z-scores and edge counts into task.outputs.
 
     Writes nhood_enrichment (z), nhood_counts (edges from a row-cluster cell
-    to a column-cluster neighbour), nhood_cluster_names (JSON) and nhood_null
+    to a column-cluster neighbor), nhood_cluster_names (JSON) and nhood_null
     (describe_nhood_null). With several areas the permutation null shuffles
     labels within each area, matching the per-area graph.
 
@@ -1956,8 +1955,8 @@ def run_geary_c(
       }
 
     Shares its squidpy call with Moran's I via compute_autocorr, which is also
-    what fixes the p-value: this used to prefer "pval_norm" and so discarded
-    both the permutation p it paid for and squidpy's Benjamini-Hochberg column.
+    what fixes the p-value: preferring "pval_norm" would discard both the
+    permutation p it paid for and squidpy's Benjamini-Hochberg column.
     "areas_above" counts areas with C <= 1 - threshold.
 
     ``marker_ticks(ax)`` relabels the PNG's measurement axis (the task scripts
@@ -2006,7 +2005,7 @@ def run_geary_c(
             res["n_areas"],
         )
 
-        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        # matplotlib PNG output for the batch figure export.
         if _should_persist(plot_dir, persist_plots) and marker_stats:
             try:
                 import matplotlib
@@ -2086,7 +2085,7 @@ def pick_radius_bin(intervals, requested, median_nn=None, nn_multiple=5.0):
 
     :param intervals: bin radii, ascending, one per data bin
     :param requested: radius asked for in coord units, or <= 0 for the default
-    :param median_nn: median nearest-neighbour distance, or None
+    :param median_nn: median nearest-neighbor distance, or None
     :param nn_multiple: default radius as a multiple of median_nn -- "about five
         cell diameters", the near end of the profile, because the ratio decays
         toward 1.0 as the disc grows
@@ -2126,11 +2125,11 @@ def radius_caption(intervals, coord_unit):
 def ratio_colour_scale(
     values, center=1.0, diverging_cmap="RdBu_r", sequential_cmap="viridis"
 ):
-    """Colour mapping for a ratio whose null value is meaningful.
+    """Color mapping for a ratio whose null value is meaningful.
 
-    Co-occurrence is a ratio with a null of 1.0, so the colour scale has to put
+    Co-occurrence is a ratio with a null of 1.0, so the color scale has to put
     the null in the middle: on a sequential map the eye cannot tell enrichment
-    from depletion, only "more" from "less". Returns a diverging map centred on
+    from depletion, only "more" from "less". Returns a diverging map centered on
     the null, and falls back to the sequential one when the data lies entirely on
     one side of it (TwoSlopeNorm requires vmin < vcenter < vmax).
 
@@ -2226,7 +2225,7 @@ def _save_co_occurrence_curves(
             loc="center left",
             bbox_to_anchor=(1.0, 0.5),
             fontsize="small",
-            title="Neighbour",
+            title="Neighbor",
         )
         caption = "Co-occurrence vs distance (descriptive; 1.0 = no association)"
         if shown < n:
@@ -2346,7 +2345,7 @@ def run_co_occurrence(
         # interval[1:] for its thresholds, so bin i is the disc of radius
         # interval[i+1]. Store THOSE radii, one per bin, so every consumer --
         # the caption, the heatmap ticks, the results table, the CSV -- zips
-        # 1:1 with the data instead of each labelling a bin with the radius of
+        # 1:1 with the data instead of each labeling a bin with the radius of
         # the one before it and emitting a trailing all-NaN row.
         edges = [float(v) for v in np.asarray(intervals).ravel()]
         n_bins = int(ratio_np.shape[2]) if ratio_np.ndim == 3 else len(edges)
@@ -2389,7 +2388,7 @@ def run_co_occurrence(
             coord_unit,
         )
 
-        # Phase 5: matplotlib PNG output for Feature B (batch figure export).
+        # matplotlib PNG output for the batch figure export.
         # For "pairwise" mode we save a square heatmap averaged across radii;
         # for "oneVsRest" we save a per-cluster vs radius heatmap (which is
         # the natural 2-D view of that collapsed tensor).
@@ -2576,8 +2575,8 @@ def compute_spatial_node_measurements(
     min_distance = np.full(n_cells, np.nan, dtype=np.float64)
 
     # Use CSR adjacency row-pointer for neighbor count -- that mirrors
-    # the legacy plugin which counts every connection regardless of
-    # whether it carries a distance.
+    # QuPath's own Delaunay plugin, which counts every connection regardless
+    # of whether it carries a distance.
     conn_indptr = conn_csr.indptr
     num_neighbors = np.diff(conn_indptr).astype(np.int32)
 
@@ -2761,10 +2760,10 @@ def build_smoothing_adjacency_squidpy(
     delaunay_max_edge=-1.0,
     area_ids=None,
 ):
-    """Hybrid-graph-reuse smoothing path (Phase 2 contract #2).
+    """Hybrid-graph-reuse smoothing path.
 
     Builds the smoothing adjacency via sq.gr.spatial_neighbors and returns
-    a row-normalised pure-A connectivity matrix (no +I diagonal). This is
+    a row-normalized pure-A connectivity matrix (no +I diagonal). This is
     the path the smoothing rewrite uses when
     qpcat.spatial.useSquidpyGraphForSmoothing is true.
 
@@ -2772,8 +2771,8 @@ def build_smoothing_adjacency_squidpy(
     a cell in a different specimen -- which would be a fabricated measurement,
     not a smoothed one.
 
-    The legacy path (run_clustering.py inline) uses (A + I) row-normalised
-    on a sklearn kNN graph. Numerical equivalence between the two paths
+    The default path (build_smoothing_adjacency_sklearn) uses (A + I)
+    row-normalized on a sklearn kNN graph. Numerical equivalence between the two paths
     is checked at the workstation (see documentation/scripting.md).
     """
     import anndata as ad
@@ -2799,7 +2798,7 @@ def banksy_k_cap(k_geom, n_block, max_m=1):
     """Largest usable k_geom for a block of n_block cells.
 
     banksy's generate_spatial_weights_fixed_nbrs asks sklearn for
-    `num_neighbours * (m + 1)` neighbours (banksy/main.py:158), so with
+    `num_neighbours * (m + 1)` neighbors (banksy/main.py:158), so with
     max_m=1 the real constraint is 2*k <= n-1, NOT k <= n-1. The old global
     cap used the latter, which is why a 20-cell run with k_geom=15 raised
     inside sklearn rather than being clamped.
@@ -2816,7 +2815,7 @@ def build_banksy_weights(
     max_m=1,
     nbr_weight_decay="scaled_gaussian",
 ):
-    """Per-area BANKSY neighbour weights, assembled block-diagonally.
+    """Per-area BANKSY neighbor weights, assembled block-diagonally.
 
     Returns a banksy_dict shaped exactly as initialize_banksy's output --
     {decay: {"weights": {m: csr}}} -- so the rest of the BANKSY pipeline
@@ -2827,7 +2826,7 @@ def build_banksy_weights(
     per area would give each area its own Leiden partition, and cluster 3 in
     one core would then be unrelated to cluster 3 in the next -- destroying
     the cross-area comparison the partitioning exists to make possible. Only
-    the neighbour graph is per area; clustering stays global.
+    the neighbor graph is per area; clustering stays global.
 
     It also leaves concatenate_all's z-score global (banksy/main.py:348).
     Reassembling per-area augmented MATRICES instead would z-score each area
@@ -2858,8 +2857,8 @@ def build_banksy_weights(
         order.append(idx)
         k_area = banksy_k_cap(k_geom, n_area, max_m)
         if k_area < 1:
-            # Too few cells for any neighbour graph. An all-zero block means
-            # these cells contribute no neighbourhood term and cluster on
+            # Too few cells for any neighbor graph. An all-zero block means
+            # these cells contribute no neighborhood term and cluster on
             # their own expression -- the honest answer for a 2-cell core.
             # Dropping them instead would misalign every downstream index,
             # because labels map back positionally on the Java side.
@@ -2907,7 +2906,7 @@ def build_banksy_weights(
         )
     if degenerate:
         logger.warning(
-            "BANKSY: %d area(s) have too few cells for a neighbour graph and were "
+            "BANKSY: %d area(s) have too few cells for a neighbor graph and were "
             "clustered on their own expression only (smallest has %d cell(s)); "
             "their results are not spatially informed",
             len(degenerate),
@@ -2927,24 +2926,24 @@ def build_banksy_weights(
 
     if len(slices) > 1:
         logger.info(
-            "BANKSY neighbour graph built per area: %d areas, no edges between them",
+            "BANKSY neighbor graph built per area: %d areas, no edges between them",
             len(slices),
         )
     return {nbr_weight_decay: {"weights": assembled}}
 
 
 def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
-    """Legacy smoothing adjacency: sklearn kNN, (A + I) row-normalised.
+    """Legacy smoothing adjacency: sklearn kNN, (A + I) row-normalized.
 
     This is the path that is byte-stable with respect to prior QP-CAT
     releases, lifted out of run_clustering.py so it can be tested at all --
     inline script bodies are unreachable by the AST loader the tests use.
 
-    With `area_ids`, neighbours are found within each area only. Smoothing a
+    With `area_ids`, neighbors are found within each area only. Smoothing a
     cell's features with those of a cell in a different specimen does not
     produce a smoothed measurement, it produces a fabricated one.
 
-    A single area reproduces the previous behaviour exactly.
+    A single area reproduces the previous behavior exactly.
     """
     import scipy.sparse as sp
     from sklearn.neighbors import NearestNeighbors
@@ -2959,7 +2958,7 @@ def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
     for area_id, idx in slices:
         n_area = idx.size
         if n_area < 2:
-            # No neighbours to average with; the (A + I) identity term below
+            # No neighbors to average with; the (A + I) identity term below
             # leaves the cell's own features untouched, which is the honest
             # answer for an isolated cell.
             continue
@@ -2969,7 +2968,7 @@ def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
         nn = NearestNeighbors(n_neighbors=k_area, metric="euclidean")
         nn.fit(coords[idx])
         _distances, indices = nn.kneighbors(coords[idx])
-        # Map block-local neighbour indices back to global cell indices.
+        # Map block-local neighbor indices back to global cell indices.
         rows.append(np.repeat(idx, k_area))
         cols.append(idx[indices.ravel()])
 

@@ -49,7 +49,7 @@ n_cells, n_markers = data.shape
 
 # Per-cell independent-area ids, if the run will use them. The probe MUST see
 # them: a graph built per area is a different graph -- cheaper, and with a
-# different neighbour structure -- so timing an un-partitioned graph would
+# different neighbor structure -- so timing an un-partitioned graph would
 # estimate a run that is not the one about to happen.
 try:
     probe_area_ids = np.asarray(list(area_ids), dtype=np.int64)

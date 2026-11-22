@@ -104,7 +104,7 @@ public class ValidationPanel extends ScrollPane {
                     note("Rows are clusters, columns the classes the cells carried before "
                             + "this run. ARI and NMI do not depend on which cluster number goes "
                             + "with which class; kappa does, so each cluster is first matched to "
-                            + "at most one class to maximise the cells on the diagonal. A "
+                            + "at most one class to maximize the cells on the diagonal. A "
                             + "cluster left without a class counts as wrong for kappa, which is "
                             + "why splitting one class into two clusters lowers kappa but not "
                             + "purity."));

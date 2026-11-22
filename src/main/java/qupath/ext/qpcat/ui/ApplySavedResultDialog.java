@@ -231,7 +231,7 @@ public final class ApplySavedResultDialog {
         sb.append("Applied '").append(name).append("' to ")
                 .append(report.imagesProcessed)
                 .append(report.imagesProcessed == 1 ? " image.\n" : " images.\n");
-        sb.append("Cells labelled: ").append(report.cellsMatched);
+        sb.append("Cells labeled: ").append(report.cellsMatched);
         if (report.cellsUnmatched > 0) {
             sb.append("   Unmatched: ").append(report.cellsUnmatched);
         }
@@ -247,7 +247,7 @@ public final class ApplySavedResultDialog {
         d.setTitle("QP-CAT - Apply Saved Result - Report");
         d.setHeaderText(report.cellsMatched > 0
                 ? "Saved result applied."
-                : "No cells were labelled -- see details.");
+                : "No cells were labeled -- see details.");
         d.getDialogPane().getButtonTypes().add(ButtonType.OK);
         d.getDialogPane().setContent(ta);
         d.getDialogPane().setPrefWidth(520);
@@ -255,7 +255,7 @@ public final class ApplySavedResultDialog {
 
         if (report.cellsMatched > 0) {
             Dialogs.showInfoNotification("QP-CAT",
-                    "Labelled " + report.cellsMatched + " cells across "
+                    "Labeled " + report.cellsMatched + " cells across "
                     + report.imagesProcessed + " image(s).");
         }
     }

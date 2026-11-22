@@ -35,6 +35,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **American spelling in every dialog, tooltip, preference description and log line.** "Colour map",
+  "centred", "cancelled", "neighbour", "labelled", "analyse" and the like now read "color map",
+  "centered", "canceled", "neighbor", "labeled", "analyze". Text only: no preference key,
+  measurement name, saved-file field, YAML key or script name changed.
 - **The GMM threshold says when two populations is the wrong count.** The method still fits
   two components and gates where they cross, but it now also fits one and three components to
   the same values (at most 50,000 of them) and compares the three by BIC. When one or three

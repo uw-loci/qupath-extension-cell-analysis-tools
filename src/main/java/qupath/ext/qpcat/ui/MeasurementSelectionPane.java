@@ -222,8 +222,8 @@ public class MeasurementSelectionPane extends VBox {
         // The buttons act on the rows CURRENTLY SHOWN, not on the whole panel --
         // filter to "mean", press Select All, and only those are ticked. That is
         // the point of them, and it is the one thing here that surprises people,
-        // so it gets the theme's own text colour at full strength rather than
-        // the #666 it used to have, which was grey on grey in dark mode.
+        // so it gets the theme's own text color at full strength rather than
+        // a fixed #666, which is gray on gray in dark mode.
         Label scopeHint = new Label(
                 "These four buttons act only on the rows shown above, after filtering.");
         scopeHint.setWrapText(true);
@@ -384,10 +384,6 @@ public class MeasurementSelectionPane extends VBox {
         missingPolicy.set(policy == null ? MissingPolicy.EXCLUDE_OBJECTS : policy);
     }
 
-    public ObjectProperty<MissingPolicy> missingPolicyProperty() {
-        return missingPolicy;
-    }
-
     /** True while the choice box is shown, i.e. a ticked measurement has a missing value. */
     public boolean isMissingBoxShown() {
         return missingBox.isVisible();
@@ -497,7 +493,7 @@ public class MeasurementSelectionPane extends VBox {
      * The pane is MOVED, not copied. A second list would need every check, the
      * filter text and the bulk-operation state mirrored back, and any field that
      * was missed would silently disagree with the real one. Re-parenting the live
-     * node means there is nothing to synchronise: the buttons act on the same
+     * node means there is nothing to synchronize: the buttons act on the same
      * items because they are the same buttons.
      */
     public void popOut() {
@@ -686,13 +682,6 @@ public class MeasurementSelectionPane extends VBox {
     /** All measurement names currently in the picker (checked or not). */
     public List<String> getAllMeasurements() {
         return items.stream().map(m -> m.name).collect(Collectors.toList());
-    }
-
-    public boolean hasSelection() {
-        for (Item m : items) {
-            if (m.selected.get()) return true;
-        }
-        return false;
     }
 
     /** Callback fired whenever the checked set changes (repopulate or a toggle). */

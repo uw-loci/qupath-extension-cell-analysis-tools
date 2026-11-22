@@ -172,7 +172,6 @@ public class ApposeClusteringService {
      * What {@link WorkerThreads} added to the worker's environment at the last
      * start; empty until a worker has started or when nothing was added.
      */
-    private volatile Map<String, String> workerThreadVariables = Map.of();
 
     /**
      * Tasks that leave the reuse cache ({@code knn_cache.py}) in place: the
@@ -500,7 +499,7 @@ public class ApposeClusteringService {
                     }
                 }
             } else if (ApposeSupport.looksLikeWindowsFileLock(fullMsg)) {
-                // v0.3.4: Windows file-lock during pixi link step. Do NOT auto-wipe
+                // Windows file-lock during the pixi link step. Do NOT auto-wipe
                 // -- another process is actively holding a file in .pixi/envs/, so
                 // a wipe risks corruption. Show the user the recovery steps.
                 String advice = ApposeSupport.windowsFileLockAdvice(getEnvironmentPath());
@@ -540,7 +539,6 @@ public class ApposeClusteringService {
             logger.info("Python worker starts with {} (preference 'Limit the Python worker "
                     + "to one OpenMP thread')", threadVars);
         }
-        workerThreadVariables = threadVars;
         Service fresh = pinned.python();
 
         fresh.debug(msg -> {
@@ -584,7 +582,7 @@ public class ApposeClusteringService {
         registerModule(fresh, "spatial_stats",
                 "spatial smoothing and spatial statistics may be unavailable");
         // A module outlives a task, which is what lets one clustering run keep
-        // its neighbour graph and embedding for the next.
+        // its neighbor graph and embedding for the next.
         registerModule(fresh, "knn_cache", "nothing is reused between clustering runs");
         reuseHeldBytes = 0;
         workerGpu = ApposeGpu.checkWorker(fresh, "QPCAT", logger);
@@ -720,7 +718,7 @@ public class ApposeClusteringService {
             try {
                 task = ApposeTaskRunner.run("QPCAT", workerSource, scriptName, script, inputs, options);
             } catch (IOException | RuntimeException e) {
-                // A failed or cancelled run may have kept something without
+                // A failed or canceled run may have kept something without
                 // reporting it, so its size is unknown: free it.
                 releaseReuseCacheLocked("the clustering run did not finish", true);
                 throw e;
@@ -735,7 +733,7 @@ public class ApposeClusteringService {
 
     /**
      * Bytes the worker keeps between clustering runs for reuse (the last
-     * neighbour graph and embedding), as the last run reported. The scaling
+     * neighbor graph and embedding), as the last run reported. The scaling
      * check counts it, because it stays allocated while the next task runs.
      */
     public long getReuseHeldBytes() {
@@ -844,11 +842,6 @@ public class ApposeClusteringService {
     /** The script holding the worker, or null when it is free. */
     public String getBusyScript() {
         return busyScript;
-    }
-
-    /** What {@link WorkerThreads} added to the worker's environment at its last start. */
-    public Map<String, String> getWorkerThreadVariables() {
-        return workerThreadVariables;
     }
 
     public String getInitError() { return initError; }

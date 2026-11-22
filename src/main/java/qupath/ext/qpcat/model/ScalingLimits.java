@@ -244,10 +244,10 @@ public final class ScalingLimits {
     }
 
     /**
-     * The Leiden neighbour graph the worker keeps for reuse (scanpy's
+     * The Leiden neighbor graph the worker keeps for reuse (scanpy's
      * connectivities). Measured 2026-10-20 in the QP-CAT env: 18 MB at
      * 100k/k=15, 60 MB at 100k/k=50, 182 MB at 300k/k=50 -- 12.1 bytes per
-     * cell per neighbour.
+     * cell per neighbor.
      */
     public static double reuseGraphGb(long nCells, int nNeighbors) {
         return nCells * (double) nNeighbors * 12.1 / GB;
@@ -262,7 +262,7 @@ public final class ScalingLimits {
      * Most a run will keep for reuse: its graph (Leiden only) and embedding,
      * capped at the budget, above which nothing more is kept.
      *
-     * @param graph whether the run builds a Leiden neighbour graph
+     * @param graph whether the run builds a Leiden neighbor graph
      * @param embeddingComponents embedding dimensions; 0 for none
      */
     public static double reuseKeepGb(long nCells, boolean graph, int nNeighbors,
@@ -273,7 +273,7 @@ public final class ScalingLimits {
     }
 
     /**
-     * Leiden peak RSS: the neighbour search plus Leiden, in a fresh process.
+     * Leiden peak RSS: the neighbor search plus Leiden, in a fresh process.
      * Measured 2026-10-21 in the QP-CAT env, 20 features, after QP-CAT began
      * streaming the graph into igraph itself (run_clustering.leiden_igraph):
      * 50k/k=15 0.84 GB, 50k/k=50 1.08, 100k/k=15 0.98, 100k/k=50 1.46,
@@ -600,7 +600,7 @@ public final class ScalingLimits {
                 addMemory(out, gb, ram,
                         "Leiden on " + fmt(r.nCells) + " cells with n_neighbors="
                                 + r.nNeighbors,
-                        "the nearest-neighbour graph holds n_neighbors entries per cell",
+                        "the nearest-neighbor graph holds n_neighbors entries per cell",
                         "Lower n_neighbors (15 is a common default) to shrink the graph "
                                 + "proportionally." + reuseNote);
             }
@@ -645,7 +645,7 @@ public final class ScalingLimits {
                     "Co-occurrence on " + scope + " (" + basis + ")",
                     "co-occurrence allocates one counter per cell per distance interval per "
                             + "CLUSTER PAIR, and compares every cell against every other one",
-                    "Turn off co-occurrence, or reduce the number of clusters. Neighbourhood "
+                    "Turn off co-occurrence, or reduce the number of clusters. Neighborhood "
                             + "enrichment answers a similar question at a fraction of the cost."
                             + reuseNote);
         }
@@ -657,7 +657,7 @@ public final class ScalingLimits {
                     "Ripley's L with a largest cluster of " + fmt(m) + " cells",
                     "Ripley's L computes every pairwise distance WITHIN each cluster, so the "
                             + "largest cluster sets the peak",
-                    "Turn off Ripley, or use neighbourhood enrichment instead." + reuseNote);
+                    "Turn off Ripley, or use neighborhood enrichment instead." + reuseNote);
         }
 
         out.sort((a, b) -> b.severity.compareTo(a.severity));

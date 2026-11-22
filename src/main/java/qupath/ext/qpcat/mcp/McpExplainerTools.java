@@ -722,7 +722,7 @@ public final class McpExplainerTools {
     /**
      * Runs the Appose round trip on a daemon thread with a wall-clock cap.
      *
-     * @return the result, or null when the cap was hit (the stray call is soft-cancelled
+     * @return the result, or null when the cap was hit (the stray call is soft-canceled
      *         and its result discarded when it eventually finishes)
      */
     private ExplainResult runExplainCapped(ExplainRequest req) throws IOException {

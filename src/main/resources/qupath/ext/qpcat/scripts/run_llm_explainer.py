@@ -4,7 +4,7 @@ LLM Cluster Explainer -- Appose task script.
 Sends per-cluster top-marker tables to a chosen LLM provider (Anthropic
 or Ollama) and returns structured phenotype suggestions for each cluster.
 
-Per the Phase 2 design contract (02_design.md, Carried-forward contracts):
+Contracts:
 
   * Anthropic and Ollama are the only providers in v1. The provider
     abstraction (see `_call_provider`) accepts a future third provider
@@ -317,10 +317,10 @@ def _call_provider(
     """
     Dispatch to the chosen provider. Returns
     ``(raw_response_text, input_tokens, output_tokens)``. Either token count
-    may be ``-1`` if the provider did not report it. Phase 5 (pi-3) split the
-    legacy single ``token_count`` into input/output components because
-    Anthropic Sonnet output costs ~5x input -- summing them blocks any
-    correct spend computation downstream.
+    may be ``-1`` if the provider did not report it. Input and output are
+    reported separately because Anthropic Sonnet output costs ~5x input -- a
+    single summed ``token_count`` blocks any correct spend computation
+    downstream.
     Raises ``_LlmError`` with a classified error_type on any provider-shaped
     failure. The provider-abstraction shape (this function's signature) is
     stable across v1 and accepts a future third provider as just another

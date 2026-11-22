@@ -80,7 +80,7 @@ public class PhenotypingDialog {
     // Per-marker gate spinners (marker full name -> spinner)
     private final Map<String, Spinner<Double>> markerGateSpinners = new LinkedHashMap<>();
 
-    // Histogram panel (Phase 5)
+    // Histogram panel
     private HistogramPanel histogramPanel;
     private ThresholdPreview thresholdPreview;
     private TitledPane histogramPane;
@@ -622,7 +622,7 @@ public class PhenotypingDialog {
                     + "'Macrophage = CD68 or CD163 or CD206' is one row, not three. "
                     + "The first rule a cell satisfies wins.\n\n"
                     + "Coming from SCIMAP? 'pos' there is NOT this. SCIMAP averages the "
-                    + "listed pos markers into a score, so a cell can be labelled while "
+                    + "listed pos markers into a score, so a cell can be labeled while "
                     + "failing one of them (it flags those 'likely-<type>'). QP-CAT's "
                     + "'pos' is SCIMAP's 'allpos': every listed marker must clear the "
                     + "gate. Rules copied across without that change give different "
@@ -1058,7 +1058,7 @@ public class PhenotypingDialog {
         phenoThread.start();
     }
 
-    // ========== Save/Load Rule Sets (Phase 2) ==========
+    // ========== Save/Load Rule Sets ==========
 
     private void saveRuleSet() {
         if (currentMarkers.isEmpty()) {
@@ -1229,7 +1229,7 @@ public class PhenotypingDialog {
                 + rulesList.size() + " rules.");
     }
 
-    // ========== Channel Validation (Phase 4) ==========
+    // ========== Channel Validation ==========
 
     private void validateChannels() {
         var project = qupath.getProject();
@@ -1315,7 +1315,7 @@ public class PhenotypingDialog {
         warnDialog.show();
     }
 
-    // ========== Histogram & Auto-Thresholding (Phase 5) ==========
+    // ========== Histogram & Auto-Thresholding ==========
 
     private void invalidateHistogramCache() {
         cachedHistogramData = null;

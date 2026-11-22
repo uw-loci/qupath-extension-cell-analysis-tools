@@ -11,9 +11,9 @@ import java.util.Locale;
  * single source of truth for the default color of "Cluster N" PathClasses
  * (seeded by {@link ResultApplier}) and for the interactive plots
  * ({@code EmbeddingScatterPanel} derives its JavaFX colors from this). The
- * Python scripts carry the same 40 hex values ({@code CLUSTER_PALETTE_HEX} in
- * {@code run_clustering.py} and {@code regenerate_plots.py}; a Python test
- * compares them with this file), so the QuPath viewer overlay, the embedding
+ * Python side carries the same 40 hex values ({@code CLUSTER_PALETTE_HEX} in
+ * {@code model_utils.py}; a Python test compares them with this file), so the
+ * QuPath viewer overlay, the embedding
  * scatter, the heatmap and the matplotlib PNGs all start from the same colors.
  * <p>
  * The first 20 are kept exactly as they were: users have figures drawn with them.

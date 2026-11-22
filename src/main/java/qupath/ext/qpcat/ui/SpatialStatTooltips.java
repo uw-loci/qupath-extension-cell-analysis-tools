@@ -34,7 +34,7 @@ final class SpatialStatTooltips {
     static final String COOC_ONE_VS_REST =
             "For each class, its co-occurrence against all other classes combined.\n"
             + "Much cheaper than pairwise, and enough when you only want to flag whether\n"
-            + "one population is spatially organised at all.";
+            + "one population is spatially organized at all.";
 
     static final String NHOOD_ENRICHMENT =
             "Permutation test on the neighbor graph: are cells of class A adjacent to\n"
@@ -68,10 +68,10 @@ final class SpatialStatTooltips {
             + "edges across gaps unless you cap the maximum edge length.";
 
     static final String LABEL_SOURCE =
-            "Which labels to analyse.\n\n"
+            "Which labels to analyze.\n\n"
             + "Current cell classifications: reads each cell's PathClass as it is now.\n"
             + "Saved QP-CAT result: matches a saved result's cluster labels to the cells in\n"
             + "memory by image and centroid, and does NOT write PathClasses -- so you can\n"
-            + "analyse a saved result without modifying the hierarchy. Renamed or merged\n"
+            + "analyze a saved result without modifying the hierarchy. Renamed or merged\n"
             + "clusters are keyed by their display names.";
 }

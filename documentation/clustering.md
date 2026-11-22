@@ -477,7 +477,7 @@ the previous run's neighbor graph and embedding; see
 
 <a name="caution-kmeans"></a>
 **KMeans** -- partitions around k centroids. Fast, but assumes round, equal-size clusters
-and is sensitive to initialisation (QP-CAT runs 10 inits). **"Choose k..." beside the
+and is sensitive to initialization (QP-CAT runs 10 inits). **"Choose k..." beside the
 `n_clusters` spinner** computes the elbow, silhouette and gap statistics on this run's own
 matrix -- see [Choosing k](#choosing-k), which also explains why they disagree and which to
 believe. (Fu & Perry 2020.)

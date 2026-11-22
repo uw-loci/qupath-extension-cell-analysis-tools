@@ -170,7 +170,7 @@ public final class GateActionBar {
                         gatedCount, r);
                 Platform.runLater(() -> {
                     nextGate[0]++;
-                    // Keep the just-gated region visible as a labelled outline and
+                    // Keep the just-gated region visible as a labeled outline and
                     // reset for the next selection, so many classes can be drawn in
                     // turn without losing track of earlier gates.
                     scatter.commitCurrentGate(className);

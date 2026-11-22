@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Result of a batch figure export run. Gson-serialisable; no JavaFX
+ * Result of a batch figure export run. Gson-serializable; no JavaFX
  * dependencies. Returned by
  * {@code BatchFigureExporter.exportProject(...)} so callers (the dialog,
- * Feature C's YAML batch, unit tests) can summarise what happened.
+ * Feature C's YAML batch, unit tests) can summarize what happened.
  */
 public final class ExportResult {
 
@@ -23,15 +23,11 @@ public final class ExportResult {
     public void incrementFilesWritten() { this.filesWritten++; }
 
     public List<String> getFailures() { return failures; }
-    public void setFailures(List<String> failures) {
-        this.failures = failures == null ? new ArrayList<>() : new ArrayList<>(failures);
-    }
     public void addFailure(String message) {
         if (message != null && !message.isEmpty()) failures.add(message);
     }
 
     public long getTotalBytes() { return totalBytes; }
-    public void setTotalBytes(long totalBytes) { this.totalBytes = totalBytes; }
     public void addBytes(long bytes) { this.totalBytes += bytes; }
 
     public boolean isCancelled() { return cancelled; }
@@ -52,7 +48,7 @@ public final class ExportResult {
             sb.append("; ").append(failures.size())
                     .append(" failure").append(failures.size() == 1 ? "" : "s");
         }
-        if (cancelled) sb.append("; cancelled");
+        if (cancelled) sb.append("; canceled");
         return sb.toString();
     }
 }

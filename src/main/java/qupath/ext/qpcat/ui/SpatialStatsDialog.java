@@ -27,7 +27,7 @@ import java.util.Locale;
  * excluding cells in chosen annotation classes. No clustering / embedding is
  * recomputed and the object hierarchy is not modified.
  * <p>
- * The scope may be the open image or any set of project images, each analysed
+ * The scope may be the open image or any set of project images, each analyzed
  * independently. An open image is therefore NOT required: with a project scope
  * {@link PostHocSpatialWorkflow} reads each entry itself, and the open image is
  * only a fast path for the one entry that happens to be loaded.
@@ -47,7 +47,7 @@ public class SpatialStatsDialog {
         boolean haveProject = qupath.getProject() != null
                 && !qupath.getProject().getImageList().isEmpty();
         // An open image is needed only when it is the ONLY thing that could be
-        // analysed. With a project, the scope below can pick images to read
+        // analyzed. With a project, the scope below can pick images to read
         // directly, which is what the workflow does anyway.
         if (imageData == null && !haveProject) {
             Dialogs.showWarningNotification("QP-CAT - spatial statistics",
@@ -108,7 +108,7 @@ public class SpatialStatsDialog {
         // a multi-image run unconfigurable whenever the class to exclude lived in
         // another image -- and left nothing at all to tick with no image open. So
         // offer the project's classes too, with the ones actually on annotations
-        // here listed first and labelled, because that is the difference between
+        // here listed first and labeled, because that is the difference between
         // "this will exclude something" and "this might".
         java.util.List<CheckBox> excludeBoxes = new java.util.ArrayList<>();
         VBox excludeContent = new VBox(4);
@@ -165,7 +165,7 @@ public class SpatialStatsDialog {
         Tooltip regionTip = Tooltips.of(
                 "How to split cells when the Independent areas control below has no "
                 + "levels added.\n\n"
-                + "Whole image: every cell in an image is analysed as one area.\n"
+                + "Whole image: every cell in an image is analyzed as one area.\n"
                 + "Selected annotations: one area per annotation you have selected in "
                 + "the current image.\n\n"
                 + "Adding an area level overrides this, so it is disabled while any "
@@ -392,7 +392,7 @@ public class SpatialStatsDialog {
         if (content.getScene() != null) content.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
     }
 
-    /** Chooser for a saved clustering result to use as the label source; null if cancelled. */
+    /** Chooser for a saved clustering result to use as the label source; null if canceled. */
     private static SavedClusteringResult pickSavedResult(QuPathGUI qupath) {
         if (qupath.getProject() == null) {
             Dialogs.showWarningNotification("QP-CAT", "A project must be open to load a saved result.");

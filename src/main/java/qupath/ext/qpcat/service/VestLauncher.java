@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
@@ -15,14 +14,13 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Launches the standalone <a href="https://github.com/scads/vest">VEST</a> 3D viewer on a
  * QP-CAT export bundle (embedding.csv + images/) and opens it in the browser.
  *
  * <p>VEST lives in its OWN on-demand Appose/pixi environment ({@code qpcat-vest}: Flask +
- * pandas + vision-embedding-space-travelling), kept deliberately separate from the
+ * pandas + vision-embedding-space-traveling), kept deliberately separate from the
  * clustering env so VEST's modern pandas/numpy never conflict with the scanpy/squidpy
  * stack. The env (~150-170 MB) builds lazily the first time the user launches VEST.</p>
  *
@@ -148,7 +146,7 @@ public final class VestLauncher {
         }
         report(status, "Building the VEST environment (one-time, ~165 MB download)...");
         logger.info("Building VEST Appose env '{}' at {}", ENV_NAME, getEnvDir());
-        String toml = loadResource(VEST_TOML_RESOURCE);
+        String toml = ApposeSupport.loadResource(VEST_TOML_RESOURCE);
         try {
             // TCCL-wrapped: the pixi Scheme/BuilderFactory is resolved via ServiceLoader.
             ApposeClusteringService.withExtensionClassLoader(() -> {
@@ -207,19 +205,6 @@ public final class VestLauncher {
         }, "qpcat-vest-out");
         t.setDaemon(true);
         t.start();
-    }
-
-    private static String loadResource(String resourcePath) throws IOException {
-        try (InputStream is = VestLauncher.class.getClassLoader()
-                .getResourceAsStream(resourcePath)) {
-            if (is == null) {
-                throw new IOException("Resource not found: " + resourcePath);
-            }
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(is, StandardCharsets.UTF_8))) {
-                return reader.lines().collect(Collectors.joining("\n"));
-            }
-        }
     }
 
     private static void report(Consumer<String> status, String msg) {

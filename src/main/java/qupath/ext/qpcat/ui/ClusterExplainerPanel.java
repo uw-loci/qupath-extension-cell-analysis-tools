@@ -144,9 +144,8 @@ public class ClusterExplainerPanel {
     /**
      * Construct the panel with an optional {@code resultName} -- the saved
      * clustering result this dialog is showing (or {@code null} for a live
-     * run). Phase 5 (pi-1) plumbs this through to the audit-log row so a
-     * reviewer can tie the LLM call back to the clustering run that produced
-     * the marker rankings.
+     * run). It is written to the audit-log row so a reviewer can tie the LLM
+     * call back to the clustering run that produced the marker rankings.
      */
     public ClusterExplainerPanel(ClusteringResult result, String resultName) {
         this.result = result;
@@ -168,7 +167,7 @@ public class ClusterExplainerPanel {
                 buildResultsSection()
         );
 
-        // Phase 5 (sci-2 / sci-3): Ctrl+Enter fires Run when the Run button
+        // Ctrl+Enter fires Run when the Run button
         // is enabled; Esc fires Cancel while a call is in flight. Handled at
         // the root level so the PasswordField (which consumes plain Enter)
         // does not swallow the shortcut. "Shortcut+Enter" maps to Ctrl+Enter
@@ -686,8 +685,8 @@ public class ClusterExplainerPanel {
                 "Re-run the explainer on the currently-selected cluster "
                 + "only. The new result replaces the old row."));
         regenSelectedBtn.setOnAction(e -> onRegenSelected());
-        // Disable until a row is selected -- regenerating "nothing" was
-        // previously a silent no-op that surfaced as a status label.
+        // Disable until a row is selected -- regenerating "nothing" would
+        // otherwise be a silent no-op that surfaced as a status label.
         regenSelectedBtn.disableProperty().bind(
                 resultsTable.getSelectionModel().selectedItemProperty().isNull());
 
@@ -816,7 +815,7 @@ public class ClusterExplainerPanel {
     }
 
     /**
-     * Phase 5 (pi-1, pi-5): assemble the per-call request with project /
+     * Assemble the per-call request with project /
      * clustering-result / image / user provenance pulled from the QuPath GUI
      * state at dispatch time. Missing context (e.g. no project loaded) drops
      * empty strings and the audit-log row renders them as {@code "(unknown)"}.
@@ -895,7 +894,7 @@ public class ClusterExplainerPanel {
 
     private void onCancelPressed() {
         cancelled.set(true);
-        statusLabel.setText("Cancelled. No results applied.");
+        statusLabel.setText("Canceled. No results applied.");
         progressBar.setVisible(false);
         setInFlight(false);
     }
@@ -924,7 +923,7 @@ public class ClusterExplainerPanel {
             long durationMs = Math.max(0, (System.nanoTime() - startNs) / 1_000_000L);
 
             if (cancelled.get()) {
-                logger.info("LLM explainer cancelled; not applying results.");
+                logger.info("LLM explainer canceled; not applying results.");
                 LlmExplainerService.writeAuditUnfinished(req, res, null, durationMs);
                 return;
             }
@@ -1294,7 +1293,7 @@ public class ClusterExplainerPanel {
             case "MALFORMED_RESPONSE" -> "Failed: provider returned an unexpected response shape.";
             case "MODEL_NOT_FOUND" -> "Failed: model not found on provider.";
             case "PROVIDER_DOWN" -> "Failed: provider returned 5xx.";
-            case "REQUEST_CANCELLED" -> "Cancelled. No results applied.";
+            case "REQUEST_CANCELLED" -> "Canceled. No results applied.";
             case "TIMEOUT" -> "Failed: no response within timeout.";
             case "INPUT_TOO_LARGE" -> "Failed: prompt exceeded the model's context window.";
             case "RESPONSE_TRUNCATED" -> "Failed: the reply was cut off at the model's output "

@@ -228,10 +228,10 @@ public final class SpatialStatsCsv {
     }
 
     /**
-     * One ordered pair of the neighbourhood-enrichment matrix.
+     * One ordered pair of the neighborhood-enrichment matrix.
      *
      * @param center   the cluster of the cell (matrix row)
-     * @param neighbor the cluster of its neighbour (matrix column)
+     * @param neighbor the cluster of its neighbor (matrix column)
      * @param z        z-score against the permutation null
      * @param edges    graph edges from a center cell to a neighbor cell; NaN when not recorded
      */

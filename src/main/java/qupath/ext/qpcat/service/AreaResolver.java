@@ -23,7 +23,7 @@ import java.util.Map;
  * object hierarchy according to an ordered list of {@link AreaLevelSpec} rows.
  * <p>
  * An area is a piece of tissue physically separate from every other piece. A
- * spatial neighbour graph must never join two areas: the distance between a
+ * spatial neighbor graph must never join two areas: the distance between a
  * cell in one TMA core and a cell in the next is not a distance through
  * tissue, so an edge across it is an invented adjacency that no downstream
  * statistic can detect. Every spatial consumer in QP-CAT takes the ids this
@@ -173,7 +173,7 @@ public final class AreaResolver {
      * @param imageNames      display name per image index (may be null/short; a
      *                        placeholder is used for any missing entry)
      * @param levels          ordered level rows, outermost first; null or empty
-     *                        is treated as images-only, i.e. today's behaviour
+     *                        is treated as images-only, i.e. today's behavior
      */
     public static AreaAssignment resolve(List<PathObject> detections,
                                          int[] imageIndexPerCell,

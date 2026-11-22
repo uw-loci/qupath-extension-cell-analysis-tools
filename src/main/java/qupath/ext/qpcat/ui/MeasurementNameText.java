@@ -17,7 +17,7 @@ import java.util.List;
  */
 final class MeasurementNameText {
 
-    /** The colour a Label's text takes, so the name follows the theme and selection. */
+    /** The color a Label's text takes, so the name follows the theme and selection. */
     private static final String FILL = "-fx-fill: -fx-text-background-color;";
     /** Weights are explicit: a table header makes every Text under it bold otherwise. */
     private static final String REGULAR = FILL + " -fx-font-weight: normal;";

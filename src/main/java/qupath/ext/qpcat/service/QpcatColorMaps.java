@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The colour maps QP-CAT offers, split by family.
+ * The color maps QP-CAT offers, split by family.
  *
  * <p>Built on QuPath's own {@link ColorMaps} registry rather than a private list,
  * so a user's own {@code .tsv} maps show up here too and the names match what they
@@ -26,9 +26,9 @@ import java.util.Set;
  * <p>A diverging map promises that its midpoint means something. Un-normalized
  * intensities have no meaningful zero, so painting them blue-white-red invites
  * reading the middle of an arbitrary range as "average" -- which is a false
- * statement made in colour. {@link #sequential()} and {@link #diverging()} are
+ * statement made in color. {@link #sequential()} and {@link #diverging()} are
  * therefore separate, and a caller offers exactly one of them based on whether its
- * data has a centre. This is the same split scanpy makes by defaulting matrixplot
+ * data has a center. This is the same split scanpy makes by defaulting matrixplot
  * to viridis and exposing {@code vcenter} separately.
  *
  * <h2>QuPath has no built-in diverging map</h2>
@@ -36,7 +36,7 @@ import java.util.Set;
  * <p>Its bundled set is Viridis, Inferno, Magma, Plasma and Svidro2 -- all
  * sequential. QP-CAT registers its own diverging maps on first use, including the
  * blue-white-red it has always drawn, which stays the default so an existing
- * figure does not change colour on upgrade.
+ * figure does not change color on upgrade.
  */
 public final class QpcatColorMaps {
 
@@ -52,7 +52,7 @@ public final class QpcatColorMaps {
      * QuPath's bundled maps, every one of them sequential.
      *
      * <p>Listed rather than detected because the registry does not record a
-     * family, and guessing one from the colours would be a heuristic that silently
+     * family, and guessing one from the colors would be a heuristic that silently
      * misfiles a user's map.
      */
     private static final List<String> BUILT_IN_SEQUENTIAL =
@@ -65,9 +65,9 @@ public final class QpcatColorMaps {
     /**
      * Registers QP-CAT's diverging maps and loads the user's own, once.
      *
-     * <p>QuPath only reads the user colour-map directory when its Measurement Map
+     * <p>QuPath only reads the user color-map directory when its Measurement Map
      * pane is first constructed, so a QP-CAT dialog opened before that pane would
-     * otherwise see only the bundled maps. Calling this makes the behaviour the
+     * otherwise see only the bundled maps. Calling this makes the behavior the
      * same either way.
      */
     public static synchronized void install() {
@@ -82,19 +82,19 @@ public final class QpcatColorMaps {
                             new double[]{0.0, 1.0, 0.0},
                             new double[]{1.0, 1.0, 0.0}),
                     // ColorBrewer RdBu, reversed so red is high -- the convention in
-                    // expression heatmaps, and colour-blind safe.
+                    // expression heatmaps, and color-blind safe.
                     divergingMap("Red-Blue (RdBu)",
                             new double[]{0.020, 0.820, 0.969, 0.404},
                             new double[]{0.188, 0.898, 0.718, 0.0},
                             new double[]{0.380, 0.941, 0.588, 0.122}),
                     // ColorBrewer PuOr, reversed. The safest diverging option for
-                    // red-green colour blindness.
+                    // red-green color blindness.
                     divergingMap("Orange-Purple (PuOr)",
                             new double[]{0.177, 0.600, 0.969, 0.600},
                             new double[]{0.0, 0.600, 0.969, 0.333},
                             new double[]{0.294, 0.788, 0.969, 0.020}));
         } catch (Exception e) {
-            logger.warn("Could not register QP-CAT diverging colour maps: {}", e.getMessage());
+            logger.warn("Could not register QP-CAT diverging color maps: {}", e.getMessage());
         }
         installUserMaps();
     }
@@ -105,7 +105,7 @@ public final class QpcatColorMaps {
     }
 
     /**
-     * Loads the user's own {@code .tsv} maps from QuPath's colour-map directory.
+     * Loads the user's own {@code .tsv} maps from QuPath's color-map directory.
      *
      * <p>Best-effort and silent on a missing directory, which is the normal case:
      * most users have never added one.
@@ -116,12 +116,12 @@ public final class QpcatColorMaps {
                     .getColormapsDirectoryPath();
             if (dir != null && Files.isDirectory(dir)) {
                 ColorMaps.installColorMaps(dir);
-                logger.debug("Installed user colour maps from {}", dir);
+                logger.debug("Installed user color maps from {}", dir);
             }
         } catch (Exception e) {
             // A missing or unreadable user directory must never stop a dialog
             // opening; the bundled maps are always there.
-            logger.debug("No user colour maps installed: {}", e.getMessage());
+            logger.debug("No user color maps installed: {}", e.getMessage());
         }
     }
 
@@ -155,7 +155,7 @@ public final class QpcatColorMaps {
         if (out.isEmpty()) {
             // Registry unavailable: the panel's own painter is the fallback, and
             // an empty combo would be worse than no combo.
-            logger.warn("No sequential colour maps found in the QuPath registry");
+            logger.warn("No sequential color maps found in the QuPath registry");
         }
         return out;
     }
@@ -237,7 +237,7 @@ public final class QpcatColorMaps {
      * matplotlib equivalent, so it returns null and the caller keeps its default
      * rather than passing a name that would raise.
      *
-     * @param name a QP-CAT / QuPath colour-map name
+     * @param name a QP-CAT / QuPath color-map name
      * @return the matplotlib colormap name, or null when there is no equivalent
      */
     public static String matplotlibName(String name) {

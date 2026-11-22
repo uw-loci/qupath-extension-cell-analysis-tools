@@ -648,7 +648,7 @@ public class BatchFigureExportDialog {
             Platform.runLater(() -> {
                 exportRunning.set(false);
                 if (done.isCancelled()) {
-                    statusLabel.setText("Cancelled after " + done.getFilesWritten()
+                    statusLabel.setText("Canceled after " + done.getFilesWritten()
                             + " files. Partial output in " + options.getOutputDir());
                 } else {
                     statusLabel.setText(done.summary());

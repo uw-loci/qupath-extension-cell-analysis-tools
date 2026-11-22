@@ -12,10 +12,10 @@ package qupath.ext.qpcat.model;
  *
  * <p>The width comes from the HIGHEST label in the run, not from the count of
  * clusters, so it only appears when it changes something: ten clusters are
- * labelled 0-9 and stay unpadded, eleven become "Cluster 00" .. "Cluster 10".
+ * labeled 0-9 and stay unpadded, eleven become "Cluster 00" .. "Cluster 10".
  *
  * <p>This name is also the {@link qupath.lib.objects.classes.PathClass} written
- * onto the cells and the key of a saved result's colour map, so every site that
+ * onto the cells and the key of a saved result's color map, so every site that
  * builds one from a label must use the SAME width or it will name a class
  * nothing is classified as. That is why the width is threaded explicitly rather
  * than each caller guessing: a result carries it ({@code clusterNameDigits()}),

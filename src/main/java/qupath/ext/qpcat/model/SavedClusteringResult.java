@@ -609,14 +609,13 @@ public class SavedClusteringResult {
      * when missing from older saves. The API key is intentionally absent --
      * only the response is persisted.
      * <p>
-     * Phase 5 (pi-4): {@code promptText} and {@code responseRaw} are persisted
-     * verbatim so a saved-result JSON is self-contained when archived without
-     * the day-stamped audit-log file. Both are scrubbed of API-key-shaped
+     * {@code promptText} and {@code responseRaw} are persisted verbatim so a
+     * saved-result JSON is self-contained when archived without the
+     * day-stamped audit-log file. Both are scrubbed of API-key-shaped
      * substrings before persistence, matching the audit-log invariant.
-     * Phase 5 (pi-3): {@code inputTokens} and {@code outputTokens} replace
-     * the prior single {@code tokenCount} field so spend computations have
-     * the split they need. Phase 5 (pi-9): {@code timestamp} is ISO-8601
-     * with a zone offset.
+     * {@code inputTokens} and {@code outputTokens} are stored separately so
+     * spend computations have the split they need. {@code timestamp} is
+     * ISO-8601 with a zone offset.
      */
     public static class LlmExplanationsBundle {
         private String provider;            // e.g. "ANTHROPIC", "OLLAMA"

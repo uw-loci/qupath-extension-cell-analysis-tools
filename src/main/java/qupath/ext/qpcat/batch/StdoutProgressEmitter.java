@@ -7,8 +7,7 @@ import java.util.Map;
 
 /**
  * Default {@link ProgressEmitter} writing to stdout (and stderr for
- * ERROR / WARN rows). Format per
- * {@code 02_design.ui-ux-draft.md} section 5.
+ * ERROR / WARN rows).
  */
 public final class StdoutProgressEmitter implements ProgressEmitter {
 

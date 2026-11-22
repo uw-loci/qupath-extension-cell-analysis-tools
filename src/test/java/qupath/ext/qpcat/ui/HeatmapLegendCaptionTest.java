@@ -12,15 +12,15 @@ class HeatmapLegendCaptionTest {
         assertThat(ClusterHeatmapPanel.legendCaption(true, true, "z-score"))
                 .isEqualTo("cluster mean (z-score)");
         assertThat(ClusterHeatmapPanel.legendCaption(false, true, "min-max 0-1"))
-                .isEqualTo("cluster mean (min-max 0-1), per marker -- no centre");
+                .isEqualTo("cluster mean (min-max 0-1), per marker -- no center");
         assertThat(ClusterHeatmapPanel.legendCaption(false, false, "raw values"))
-                .isEqualTo("cluster mean (raw values) -- no centre");
+                .isEqualTo("cluster mean (raw values) -- no center");
     }
 
     @Test
     void anOldResultWithNoNormalizationClaimsNoUnits() {
         assertThat(ClusterHeatmapPanel.legendCaption(false, true, ""))
-                .isEqualTo("not Z-scored, per marker -- no centre");
+                .isEqualTo("not Z-scored, per marker -- no center");
         assertThat(ClusterHeatmapPanel.legendCaption(true, true, "")).isEmpty();
     }
 }

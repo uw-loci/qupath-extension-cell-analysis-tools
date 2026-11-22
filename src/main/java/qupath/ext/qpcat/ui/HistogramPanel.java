@@ -268,21 +268,6 @@ public class HistogramPanel extends VBox {
         return currentMarker;
     }
 
-    /**
-     * Get the auto-threshold value for the given method name, or null if not available.
-     */
-    public Double getAutoThreshold(String methodKey) {
-        if (autoThresholds == null) return null;
-        return autoThresholds.get(methodKey);
-    }
-
-    /**
-     * Get all auto-thresholds for the current marker.
-     */
-    public Map<String, Double> getAutoThresholds() {
-        return autoThresholds;
-    }
-
     private void applySelectedMethod() {
         if (autoThresholds == null) return;
         String key = methodKey(methodCombo.getValue());
@@ -431,7 +416,7 @@ public class HistogramPanel extends VBox {
         for (int c : counts) {
             totalCells += c;
         }
-        // Counted from the quantiles, not by bin centre: a gate inside the first
+        // Counted from the quantiles, not by bin center: a gate inside the first
         // bin otherwise puts every cell of that bin on one side.
         double posFrac = GateCoverage.positiveFraction(quantiles, currentThreshold);
         if (Double.isNaN(posFrac) || totalCells == 0) {

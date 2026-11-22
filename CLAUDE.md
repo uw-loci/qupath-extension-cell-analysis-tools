@@ -2,6 +2,8 @@
 
 Apache-2.0 QuPath 0.7 extension (Java + Appose/Python). This file records repo-specific build
 notes; see `README.md` for the full feature set and `THIRD_PARTY_NOTICES.md` for licensing.
+Names to use (and the ones they replace) and the never-rename list of saved-file, preference,
+YAML, Appose and MCP keys: `documentation/developer/GLOSSARY.md`.
 
 ## Build order (cluster3d-core publishToMavenLocal FIRST)
 

@@ -142,7 +142,7 @@ public class OperationLogger {
      * Log an operation that carries one or more "large" multi-line bodies
      * (e.g. an LLM prompt + response) alongside the regular parameter map.
      * <p>
-     * Behaviour matches {@link #logOperation(String, Map, String, long)} for the
+     * Behavior matches {@link #logOperation(String, Map, String, long)} for the
      * one-liner parameters and result/duration, then appends each named block
      * indented two spaces deep:
      *
@@ -164,7 +164,7 @@ public class OperationLogger {
      *     {indented body}
      * </pre>
      *
-     * Each entry of {@code blocks} renders as one labelled block; iteration
+     * Each entry of {@code blocks} renders as one labeled block; iteration
      * order is preserved. {@code null} or empty values render as an empty
      * "(empty)" placeholder so the audit trail still records that the slot
      * existed. Bodies are emitted verbatim except that every line gets two

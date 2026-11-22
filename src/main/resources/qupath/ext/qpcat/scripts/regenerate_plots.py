@@ -44,68 +44,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-def _update(msg):
-    try:
-        task.update(msg)
-    except Exception:
-        pass
-
-
-# Default cluster colors, in numeric cluster-id order: matplotlib tab20 for
-# clusters 0-19, then 20 deeper tones for 20-39, repeating after that. The same
-# 40 values live in ClusterPalette.java on the Java side (and in the other QP-CAT
-# scripts that color by cluster); python_tests/test_cluster_palette.py keeps the
-# copies identical, so the viewer overlay, the interactive plots and these PNGs
-# give one cluster one color.
-CLUSTER_PALETTE_HEX = [
-    "#1F77B4",
-    "#FF7F0E",
-    "#2CA02C",
-    "#D62728",
-    "#9467BD",
-    "#8C564B",
-    "#E377C2",
-    "#7F7F7F",
-    "#BCBD22",
-    "#17BECF",
-    "#AEC7E8",
-    "#FFBB78",
-    "#98DF8A",
-    "#FF9896",
-    "#C5B0D5",
-    "#C49C94",
-    "#F7B6D2",
-    "#C7C7C7",
-    "#DBDB8D",
-    "#9EDAE5",
-    "#132E80",
-    "#A65F19",
-    "#2E731D",
-    "#801313",
-    "#5F1173",
-    "#733811",
-    "#A6197B",
-    "#344373",
-    "#736E1D",
-    "#116E73",
-    "#A67D4B",
-    "#A69119",
-    "#779926",
-    "#19A666",
-    "#11734C",
-    "#19A691",
-    "#1919A6",
-    "#A619A6",
-    "#73114C",
-    "#A6194A",
-]
-
-
-def cluster_palette_hex(cluster_id):
-    """Default "#RRGGBB" for a cluster id, wrapping past the 40 palette entries."""
-    return CLUSTER_PALETTE_HEX[int(cluster_id) % len(CLUSTER_PALETTE_HEX)]
-
-
 def _hex_to_rgb(s):
     s = s.strip().lstrip("#")
     if len(s) != 6:
@@ -121,7 +59,7 @@ def _hex_to_rgb(s):
 
 
 # 1. Load inputs
-_update("Loading cached embedding and labels...")
+report_progress(task, "Loading cached embedding and labels...")
 emb = embedding.ndarray().astype(np.float64, copy=True)
 labels = cluster_labels.ndarray().astype(np.int64, copy=True)
 n_cells = emb.shape[0]
@@ -175,7 +113,7 @@ present = [int(c) for c in np.unique(labels)]
 non_noise = [c for c in present if c >= 0]
 
 # 2. Embedding scatter colored by cluster
-_update("Rendering embedding scatter...")
+report_progress(task, "Rendering embedding scatter...")
 try:
     fig, ax = plt.subplots(figsize=(8, 6))
     # Draw noise first (light gray, behind the real clusters).
@@ -222,7 +160,7 @@ except Exception as e:
 
 # 3. Spatial scatter colored by cluster (only when coordinates are available)
 if coords is not None:
-    _update("Rendering spatial scatter...")
+    report_progress(task, "Rendering spatial scatter...")
     try:
         fig, ax = plt.subplots(figsize=(10, 8))
         if -1 in present:
@@ -274,5 +212,5 @@ if coords is not None:
 
 # 4. Emit paths
 task.outputs["plot_paths"] = json.dumps(plot_paths)
-_update("Done regenerating plots")
+report_progress(task, "Done regenerating plots")
 logger.info("Regenerated %d plot(s)", len(plot_paths))

@@ -41,7 +41,7 @@ public class ResultApplier {
      * <p>{@code PathROIObject.setPathClass} logs a WARN for every object handed
      * the null class ("Please use resetPathClass() instead") or an invalid one
      * ("Classification {} is invalid!"). Once, that is a helpful hint. In a loop
-     * over detections it is a denial of service: a 304,083-cell run that labelled
+     * over detections it is a denial of service: a 304,083-cell run that labeled
      * 67,228 cells as noise wrote 67,228 log lines and buried everything else,
      * including the run's own quality warnings.
      *
@@ -51,7 +51,7 @@ public class ResultApplier {
      * BLANK name is safe by contrast: {@code fromString} throws on it, loudly and
      * once. The {@code isValid()} branch below is therefore defensive rather than
      * a live path, and is cheap enough to keep. Routing every per-object write
-     * through here makes the safe behaviour the default instead of each call
+     * through here makes the safe behavior the default instead of each call
      * site's responsibility; {@code setPathClass(null)} is already silent in
      * QuPath, it is the NULL class singleton that is not.
      *
@@ -550,11 +550,11 @@ public class ResultApplier {
      * Marks a measurement as written by QP-CAT, matching "QPCAT CN",
      * "QPCAT spatial:" and "QPCAT component:".
      * <p>
-     * Embedding columns used to be bare ("UMAP1"), which made them indistinguishable
-     * from a user's own measurements in the picker -- so a later run could cluster ON A
-     * PREVIOUS RUN'S EMBEDDING without anything saying so. One run came back with UMAP1
-     * as a cluster's defining feature. The prefix is what makes "Hide QP-CAT's own measurements" able to
-     * clear every column QP-CAT produced in one click.
+     * Bare embedding columns ("UMAP1") would be indistinguishable from a user's own
+     * measurements in the picker -- so a later run could cluster ON A PREVIOUS RUN'S
+     * EMBEDDING without anything saying so (one run came back with UMAP1 as a
+     * cluster's defining feature). The prefix is also what makes "Hide QP-CAT's own
+     * measurements" able to clear every column QP-CAT produced in one click.
      */
     public static final String QPCAT_PREFIX = "QPCAT ";
 

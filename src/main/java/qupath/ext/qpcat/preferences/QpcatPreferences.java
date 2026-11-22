@@ -84,8 +84,8 @@ public final class QpcatPreferences {
     /**
      * Default for the PAGA cluster-connectivity graph.
      * <p>
-     * On, to match the behaviour every earlier version had. It is worth knowing
-     * that PAGA is the ONLY consumer of the per-cell nearest-neighbour graph,
+     * On, to match the behavior every earlier version had. It is worth knowing
+     * that PAGA is the ONLY consumer of the per-cell nearest-neighbor graph,
      * and building that graph is the slowest step of a run after the clustering
      * itself.
      */
@@ -103,19 +103,19 @@ public final class QpcatPreferences {
             PathPrefs.createPersistentPreference("qpcat.cluster.reuseBetweenRuns", true);
 
     /**
-     * Heatmap colour scale: one shared scale centred on zero, or each marker
+     * Heatmap color scale: one shared scale centered on zero, or each marker
      * rescaled between its own extremes.
      * <p>
      * Per marker is the default because it answers "which cluster is highest for
      * this marker" at a glance. It is also the one that misleads: every marker's
      * extremes land on pure blue and pure red whatever the spread, so the same
-     * colour means different numbers in different columns.
+     * color means different numbers in different columns.
      */
     private static final BooleanProperty heatmapSharedScale =
             PathPrefs.createPersistentPreference("qpcat.heatmap.sharedScale", false);
 
     /**
-     * Remembered heatmap colour map, per family.
+     * Remembered heatmap color map, per family.
      * <p>
      * Two preferences rather than one, because only the matching FAMILY may be
      * offered for a given display: a diverging map promises a meaningful midpoint,
@@ -258,7 +258,7 @@ public final class QpcatPreferences {
     private static final BooleanProperty aeCellsOnly = PathPrefs.createPersistentPreference(
             "qpcat.ae.cellsOnly", false);
 
-    // One-time acknowledgement of the "back up your project before running
+    // One-time acknowledgment of the "back up your project before running
     // classification-changing tools" warning. Set true the first time the user
     // continues past that modal; kept persistent so the warning shows once.
     private static final BooleanProperty acknowledgedBackupWarning =
@@ -338,9 +338,9 @@ public final class QpcatPreferences {
     private static final DoubleProperty clusterTsnePerplexity = PathPrefs.createPersistentPreference(
             "qpcat.cluster.tsnePerplexity", 30.0);
 
-    // 0 = auto, which is scikit-learn's own behaviour (min_samples = min_cluster_size).
-    // This used to default to 5 and was applied whatever min_cluster_size was set to,
-    // so a run asking for clusters of 500 still estimated density over 5 neighbours.
+    // 0 = auto, which is scikit-learn's own behavior (min_samples = min_cluster_size).
+    // A fixed value is applied whatever min_cluster_size is set to, so a default
+    // of 5 would make a run asking for clusters of 500 estimate density over 5 neighbors.
     private static final IntegerProperty clusterHdbscanMinSamples = PathPrefs.createPersistentPreference(
             "qpcat.cluster.hdbscanMinSamples", 0);
 
@@ -401,26 +401,23 @@ public final class QpcatPreferences {
     private static final DoubleProperty spatialAutocorrThreshold = PathPrefs.createPersistentPreference(
             "qpcat.spatial.autocorrThreshold", 0.05);
 
-    // Smoothing-rewrite feature flag. Per Phase 2 contract #2: when we
-    // cannot run the numerical-equivalence check in this environment, the
-    // smoothing rewrite is gated and defaults off so existing cluster
-    // labels are preserved bit-for-bit. Enable in Preferences to opt into
-    // the squidpy-backed smoothing path (delivers hybrid graph reuse).
+    // Smoothing-rewrite feature flag. Off by default so existing cluster
+    // labels are preserved bit-for-bit until the numerical-equivalence check
+    // has been run in this environment. Enable in Preferences to opt into
+    // the squidpy-backed smoothing path (reuses the spatial graph).
     private static final BooleanProperty spatialUseSquidpyGraphForSmoothing = PathPrefs.createPersistentPreference(
             "qpcat.spatial.useSquidpyGraphForSmoothing", false);
 
-    // Phase 5 enhancement (cross-feature with multi-figure batch export):
-    // persist Ripley K/L, Geary's C, and co-occurrence as matplotlib PNGs
-    // alongside the existing clustering plots. Default true so the new
-    // figure batch export (Export figures (batch)...) can pick them up out of
-    // the box. Disable to skip the savefig step and keep JSON-only output.
+    // Persist Ripley K/L, Geary's C, and co-occurrence as matplotlib PNGs
+    // alongside the clustering plots. Default true so Export figures
+    // (batch)... can pick them up out of the box. Disable to skip the
+    // savefig step and keep JSON-only output.
     private static final BooleanProperty spatialPersistPlots = PathPrefs.createPersistentPreference(
             "qpcat.spatial.persistPlots", true);
 
-    // ---- Spatial graph overlay (v0.3) ----
-    // Defaults match 02_design.md "Decisions carried" section. The overlay
-    // pushes the spatial neighbor graph into QuPath's PathObjectConnections
-    // slot after a Spatial Statistics run so the legacy
+    // ---- Spatial graph overlay ----
+    // The overlay pushes the spatial neighbor graph into QuPath's
+    // PathObjectConnections slot after a Spatial Statistics run so QuPath's
     // View -> Show object connections menu item renders it.
 
     private static final BooleanProperty spatialPushConnectionsToViewer =
@@ -513,7 +510,7 @@ public final class QpcatPreferences {
     public static String getEnvVariant() { return envVariant.get(); }
     public static void setEnvVariant(String v) { envVariant.set(v); }
 
-    /** Default for the PAGA graph, which alone needs the neighbour graph. */
+    /** Default for the PAGA graph, which alone needs the neighbor graph. */
     public static boolean isComputePaga() { return computePaga.get(); }
     public static void setComputePaga(boolean v) { computePaga.set(v); }
 
@@ -521,7 +518,7 @@ public final class QpcatPreferences {
     public static boolean isReuseBetweenRuns() { return reuseBetweenRuns.get(); }
     public static void setReuseBetweenRuns(boolean v) { reuseBetweenRuns.set(v); }
 
-    /** True when the heatmap uses one shared scale centred on zero. */
+    /** True when the heatmap uses one shared scale centered on zero. */
     public static boolean isHeatmapSharedScale() { return heatmapSharedScale.get(); }
     public static void setHeatmapSharedScale(boolean v) { heatmapSharedScale.set(v); }
 
@@ -538,7 +535,7 @@ public final class QpcatPreferences {
     public static void setChooseKGapReferences(int v) { chooseKGapReferences.set(v); }
 
     /**
-     * Remembered colour map for one family.
+     * Remembered color map for one family.
      *
      * @param centred true for data with a meaningful zero (diverging family)
      * @return the remembered map name; never null or blank
@@ -550,7 +547,7 @@ public final class QpcatPreferences {
     }
 
     /**
-     * Remembers a colour map for one family.
+     * Remembers a color map for one family.
      *
      * @param centred true for data with a meaningful zero (diverging family)
      * @param name    the map name, or null to go back to the default
@@ -764,7 +761,7 @@ public final class QpcatPreferences {
         spatialPersistPlots.set(v);
     }
 
-    // Spatial graph overlay (v0.3) getters / setters
+    // Spatial graph overlay getters / setters
     public static boolean isSpatialPushConnectionsToViewer() {
         return spatialPushConnectionsToViewer.get();
     }
@@ -1148,7 +1145,7 @@ public final class QpcatPreferences {
                 .description(Tooltips.wrap("Route spatial feature smoothing through squidpy's spatial_neighbors "
                         + "so the same graph backs both smoothing and the new statistics. "
                         + "Default: off. The v0 smoothing path uses an inline sklearn kNN graph "
-                        + "with (A + I) row-normalisation; the squidpy path uses pure-A "
+                        + "with (A + I) row-normalization; the squidpy path uses pure-A "
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
@@ -1177,42 +1174,42 @@ public final class QpcatPreferences {
                         + "0 skips it."))
                 .build());
 
-        // Colour maps are offered PER FAMILY, so there are two preferences rather
+        // Color maps are offered PER FAMILY, so there are two preferences rather
         // than one. Listing them as free-text is deliberate: the available names
         // depend on what the user has dropped in QuPath's colormaps directory,
         // which cannot be enumerated at the time this list is built. The heatmap's
         // own combo is the discoverable control; this is for persistence and for
         // headless runs.
         items.add(new PropertyItemBuilder<>(heatmapColorMapSequential, String.class)
-                .name("Heatmap colour map: sequential (no meaningful zero)")
+                .name("Heatmap color map: sequential (no meaningful zero)")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Colour map for values with no centre -- raw, "
+                .description(Tooltips.wrap("Color map for values with no center -- raw, "
                         + "min-max or percentile-normalized intensities, and the scanpy "
                         + "dotplot / matrixplot, which rescale each marker to 0-1. "
-                        + "Default Viridis. Pick from the Colours box in the heatmap "
+                        + "Default Viridis. Pick from the Colors box in the heatmap "
                         + "instead of typing here; a name that is not installed falls "
                         + "back to the default rather than failing."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(heatmapColorMapDiverging, String.class)
-                .name("Heatmap colour map: diverging (zero means something)")
+                .name("Heatmap color map: diverging (zero means something)")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Colour map for values with a meaningful "
-                        + "centre -- Z-scored means, and co-occurrence ratios whose null "
+                .description(Tooltips.wrap("Color map for values with a meaningful "
+                        + "center -- Z-scored means, and co-occurrence ratios whose null "
                         + "is 1.0. Default Blue-White-Red, which is what QP-CAT has "
                         + "always drawn. A diverging map is only ever offered for data "
-                        + "that HAS a centre: on raw intensities its pale midpoint would "
+                        + "that HAS a center: on raw intensities its pale midpoint would "
                         + "land on an arbitrary number and invite reading it as average."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(heatmapSharedScale, Boolean.class)
-                .name("Heatmap: shared colour scale centred on 0")
+                .name("Heatmap: shared color scale centered on 0")
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Off (default), each marker is stretched between "
                         + "its own lowest and highest cluster, so every marker's extremes are "
-                        + "pure blue and pure red whatever the spread -- and the same colour "
+                        + "pure blue and pure red whatever the spread -- and the same color "
                         + "means different numbers in different columns. On, the whole map "
-                        + "uses ONE scale symmetric about zero, so white is zero and a colour "
+                        + "uses ONE scale symmetric about zero, so white is zero and a color "
                         + "means the same number everywhere. With the default Z-score "
                         + "normalization those numbers are standard deviations from each "
                         + "marker's mean across all cells. Also switchable per results window "
@@ -1265,7 +1262,7 @@ public final class QpcatPreferences {
                         + "dialog reopens on whatever you last ran in that project, so "
                         + "leaving it up is how you change one setting and go again. Turn it "
                         + "on if you would rather not have it sitting in front of the "
-                        + "results. A cancelled or failed run never closes the dialog."))
+                        + "results. A canceled or failed run never closes the dialog."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialPersistPlots, Boolean.class)
@@ -1279,7 +1276,7 @@ public final class QpcatPreferences {
                         + "plots; disable only to skip the savefig step entirely."))
                 .build());
 
-        // --- Spatial Graph Overlay (v0.3) ---
+        // --- Spatial Graph Overlay ---
 
         items.add(new PropertyItemBuilder<>(spatialPushConnectionsToViewer, Boolean.class)
                 .name("Spatial Overlay: Push Connections to Viewer")
@@ -1334,7 +1331,7 @@ public final class QpcatPreferences {
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Post-hoc filter on the displayed spatial graph "
                         + "(default off). Hides edges connecting cells of different "
-                        + "classes. Toggle on after phenotyping to visualise "
+                        + "classes. Toggle on after phenotyping to visualize "
                         + "same-type neighborhoods; toggle off to restore the full "
                         + "graph. Does not re-run clustering."))
                 .build());

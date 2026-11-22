@@ -14,7 +14,7 @@ import java.util.Map;
  * (NaN when permutations were not run); {@code nPermutations} records the
  * actual count used (matches squidpy's {@code n_simulations}).
  * <p>
- * Gson-friendly POJO -- no behaviour, just accessors.
+ * Gson-friendly POJO -- no behavior, just accessors.
  */
 public class RipleyResult {
 

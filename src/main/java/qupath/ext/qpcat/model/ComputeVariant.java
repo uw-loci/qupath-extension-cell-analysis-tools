@@ -22,7 +22,7 @@ package qupath.ext.qpcat.model;
  * {@code documentation/setup.md} ("CPU or GPU") -- the honest summary is that today
  * only the autoencoder uses it.
  *
- * <p>Modelled on {@code CellposeModelFamily} in qupath-extension-cellAPpose,
+ * <p>Modeled on {@code CellposeModelFamily} in qupath-extension-cellAPpose,
  * which carries two mutually-exclusive environments the same way.
  */
 public enum ComputeVariant {

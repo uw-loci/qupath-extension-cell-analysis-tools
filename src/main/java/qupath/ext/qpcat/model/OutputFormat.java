@@ -3,9 +3,9 @@ package qupath.ext.qpcat.model;
 import java.util.Locale;
 
 /**
- * Raster output formats supported by the v1 figure exporter.
+ * Raster output formats supported by the figure exporter.
  * <p>
- * Vector formats (SVG, PDF, EPS) are deferred to v1.1 because honest
+ * Vector formats (SVG, PDF, EPS) are not implemented, because honest
  * vector output requires re-running matplotlib with a vector backend
  * rather than a simple Java-side transcode.
  */

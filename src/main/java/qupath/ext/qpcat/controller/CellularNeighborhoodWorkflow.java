@@ -76,7 +76,7 @@ public class CellularNeighborhoodWorkflow {
     }
 
     /** Request cancellation of an in-flight run; no labels are applied if it
-     *  is cancelled before the apply step. Best-effort. */
+     *  is canceled before the apply step. Best-effort. */
     public void requestCancel() {
         cancelled = true;
         Task t = currentTask;
@@ -190,7 +190,7 @@ public class CellularNeighborhoodWorkflow {
      * @param seed            random seed for k-means reproducibility
      * @param generateHeatmap render the CN x cell-type enrichment heatmap PNG
      * @param progress        optional progress callback (may be null)
-     * @return summary of the run; {@link CnResult#isApplied()} is false if cancelled
+     * @return summary of the run; {@link CnResult#isApplied()} is false if canceled
      * @throws IOException on extraction / Python failure
      */
     public CnResult run(CnWindow window, int nNeighborhoods, int seed,
@@ -270,9 +270,9 @@ public class CellularNeighborhoodWorkflow {
         String countsJson = (String) resultMap.get("counts");
         String heatmapPath = (String) resultMap.getOrDefault("heatmap_path", "");
 
-        // Honour a cancel that arrived during the Python run: write nothing.
+        // Honor a cancel that arrived during the Python run: write nothing.
         if (cancelled) {
-            report(progress, "Cancelled -- no labels were applied.");
+            report(progress, "Canceled -- no labels were applied.");
             return new CnResult(false, actualCn, nCells, countsJson, "", runId, paramsHash);
         }
 
@@ -548,7 +548,7 @@ public class CellularNeighborhoodWorkflow {
         String adjacencyHeatmap = (String) resultMap.getOrDefault("region_adjacency_heatmap_path", "");
 
         if (cancelled) {
-            report(progress, "Cancelled -- no labels were applied.");
+            report(progress, "Canceled -- no labels were applied.");
             return new CnProjectResult(false, actualCn, totalCells, loaded.size(),
                     safePath(resultsDir), "", "", "", "", "", "", "", divergenceWarning,
                     runId, paramsHash);
@@ -837,7 +837,7 @@ public class CellularNeighborhoodWorkflow {
         Map<String, Object> inputs = new java.util.HashMap<>();
         if (areaIds != null) {
             // Windows, region adjacency and the per-sample rows all key on
-            // this. Absent, the image is the area -- the previous behaviour,
+            // this. Absent, the image is the area -- the previous behavior,
             // and still correct, just the coarsest possible partition.
             List<Integer> areaIdList = new ArrayList<>(areaIds.length);
             for (int v : areaIds) areaIdList.add(v);
@@ -1129,12 +1129,6 @@ public class CellularNeighborhoodWorkflow {
             logger.warn("Could not convert adjacency JSON to CSV: {}", e.getMessage());
             return null;
         }
-    }
-
-    private static int maxLabel(int[] labels) {
-        int m = 0;
-        for (int v : labels) if (v > m) m = v;
-        return m;
     }
 
     private void report(Consumer<String> progress, String msg) {

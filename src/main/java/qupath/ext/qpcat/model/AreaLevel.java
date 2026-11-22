@@ -6,7 +6,7 @@ package qupath.ext.qpcat.model;
  * <p>
  * An "area" is a piece of tissue that is physically separate from every other
  * piece: a TMA core, a tissue section on a slide holding several, or a whole
- * image. Spatial neighbour graphs must never join cells from two different
+ * image. Spatial neighbor graphs must never join cells from two different
  * areas -- the distance between them is not a distance through tissue, so any
  * edge crossing that boundary is an invented adjacency.
  * <p>

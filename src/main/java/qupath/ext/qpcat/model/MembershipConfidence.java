@@ -36,7 +36,7 @@ public final class MembershipConfidence {
     /**
      * Confidence below which a label is reported as close to a coin flip.
      *
-     * <p>A convention for summarising, not a test. 0.9 was chosen because it
+     * <p>A convention for summarizing, not a test. 0.9 was chosen because it
      * separates the cases a user cares about, per the measurement above.
      */
     public static final double AMBIGUOUS_BELOW = 0.9;
@@ -115,7 +115,7 @@ public final class MembershipConfidence {
      * @param values         per-cell confidence, index-aligned with the cluster labels
      * @param runnerUp       per-cell second-best cluster id, or null; -1 where undefined
      * @param runnerUpValues per-cell confidence of the runner-up, or null
-     * @param entropy        per-cell normalised Shannon entropy, or null (posterior only)
+     * @param entropy        per-cell normalized Shannon entropy, or null (posterior only)
      */
     public MembershipConfidence(Kind kind, double[] values, int[] runnerUp,
                                 double[] runnerUpValues, double[] entropy) {
@@ -138,7 +138,7 @@ public final class MembershipConfidence {
     /** Per-cell runner-up confidence, or null. */
     public double[] getRunnerUpValues() { return runnerUpValues; }
 
-    /** Per-cell normalised entropy (0 certain, 1 uniform), or null. */
+    /** Per-cell normalized entropy (0 certain, 1 uniform), or null. */
     public double[] getEntropy() { return entropy; }
 
     /** True when there is a kind and at least one value to report. */
@@ -153,7 +153,7 @@ public final class MembershipConfidence {
      * Share of one cluster's cells whose label was close to a coin flip.
      *
      * @param clusterLabels per-cell cluster id, index-aligned with the values
-     * @param cluster       the cluster to summarise, or -1 for every cell
+     * @param cluster       the cluster to summarize, or -1 for every cell
      * @return the fraction below {@link #AMBIGUOUS_BELOW}, or NaN when the
      *         cluster holds no cell with a finite confidence
      */
@@ -186,8 +186,8 @@ public final class MembershipConfidence {
      * Median confidence within one cluster.
      *
      * @param clusterLabels per-cell cluster id, index-aligned with the values
-     * @param cluster       the cluster to summarise, or -1 for every cell
-     * @return the median, or NaN when there is nothing finite to summarise
+     * @param cluster       the cluster to summarize, or -1 for every cell
+     * @return the median, or NaN when there is nothing finite to summarize
      */
     public double median(int[] clusterLabels, int cluster) {
         List<Double> kept = new ArrayList<>();

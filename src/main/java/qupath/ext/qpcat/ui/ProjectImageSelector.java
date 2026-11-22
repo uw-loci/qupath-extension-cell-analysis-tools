@@ -237,7 +237,7 @@ public class ProjectImageSelector extends VBox {
     /**
      * Pop the selector as a modal OK/Cancel dialog. Returns the chosen entries
      * on OK (empty list allowed -> caller decides), or {@link Optional#empty()}
-     * if the user cancelled.
+     * if the user canceled.
      *
      * @param owner            owner window (may be null)
      * @param project          the project to list

@@ -24,7 +24,7 @@ import java.util.function.Consumer;
  * {@code Platform.runLater} block (which is null-guarded for the
  * headless case in {@link ClusteringWorkflow}).</p>
  *
- * <p>Design choice (Phase 2): parallel facade, not callback refactor.
+ * <p>Design choice: a parallel facade, not a callback refactor.
  * Cost: ~80 LOC for the facade plus the targeted null-guard added to
  * {@code ClusteringWorkflow.runProjectClustering(...)}. Single-image
  * methods ({@code runClustering}, {@code runPhenotyping}, etc.) on the

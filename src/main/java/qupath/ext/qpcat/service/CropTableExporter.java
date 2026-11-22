@@ -510,7 +510,7 @@ public final class CropTableExporter {
         try (CellCropService cropService = new CellCropService(qupath)) {
             for (int i = 0; i < selected.size(); i++) {
                 if (cancelled != null && cancelled.getAsBoolean()) {
-                    report(progress, "Cancelled after " + i + " cell(s).");
+                    report(progress, "Canceled after " + i + " cell(s).");
                     break;
                 }
                 Candidate c = selected.get(i);

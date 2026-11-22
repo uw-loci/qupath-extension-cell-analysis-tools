@@ -86,7 +86,7 @@ public class LlmExplainerService {
         public final String promptHash;
         public final String prompt;
         public final String responseRaw;
-        public final int tokenCount;        // legacy: input + output, or -1
+        public final int tokenCount;        // input + output, or -1 (the combined count the audit log keeps)
         public final int inputTokens;       // -1 when provider didn't report
         public final int outputTokens;      // -1 when provider didn't report
         public final String errorType;       // null on success
@@ -121,7 +121,7 @@ public class LlmExplainerService {
     /**
      * Parameters of a single LLM call.
      * <p>
-     * Phase 5 (pi-1, pi-5): {@code projectName}, {@code resultName},
+     * {@code projectName}, {@code resultName},
      * {@code imageName}, {@code operatorUser} are optional context fields
      * surfaced in the audit-log row so a reviewer can tie an
      * {@code === LLM EXPLAIN ===} block back to the clustering run and
@@ -137,10 +137,10 @@ public class LlmExplainerService {
         public int topN = 10;
         public List<Integer> clusterIds = Collections.emptyList(); // empty = all
         public int timeoutSec = 60;
-        public String projectName = "";     // pi-1: project-level provenance
-        public String resultName = "";      // pi-1: clustering-result name/hash
-        public String imageName = "";       // pi-1: image-level provenance
-        public String operatorUser = "";    // pi-5: OS user attribution
+        public String projectName = "";     // project-level provenance
+        public String resultName = "";      // clustering-result name/hash
+        public String imageName = "";       // image-level provenance
+        public String operatorUser = "";    // OS user attribution
         /** MCP only: the connecting client's User-Agent, sanitised; empty elsewhere. */
         public String client = "";
         /** Set when this write replaces an existing bundle: "<provider>/<label> written <timestamp>". */
@@ -165,13 +165,13 @@ public class LlmExplainerService {
      * <p>
      * Wraps the Appose dispatch in
      * {@link ApposeClusteringService#withExtensionClassLoader(java.util.concurrent.Callable)}
-     * (TCCL workaround) and never blocks on the FX thread by design --
+     * (so Appose sees the extension class loader) and never blocks on the FX thread by design --
      * callers spawn a daemon thread and marshal results back via Platform.runLater.
      *
      * @param req       request parameters
      * @param cancelled soft-cancel flag; checked after the Appose call
      *                  returns. When set, the call's result is discarded
-     *                  and a synthetic cancelled ExplainResult is returned.
+     *                  and a synthetic canceled ExplainResult is returned.
      */
     public ExplainResult runExplain(ExplainRequest req, AtomicBoolean cancelled)
             throws IOException {
@@ -211,7 +211,7 @@ public class LlmExplainerService {
         }
 
         if (cancelled != null && cancelled.get()) {
-            logger.info("LLM explainer call returned but was cancelled mid-flight; "
+            logger.info("LLM explainer call returned but was canceled mid-flight; "
                     + "discarding result.");
             return cancelledResult();
         }
@@ -249,7 +249,7 @@ public class LlmExplainerService {
     private static ExplainResult cancelledResult() {
         return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v2",
                 "", "", "", -1, -1, -1, "REQUEST_CANCELLED",
-                "Cancelled by user; result discarded.");
+                "Canceled by user; result discarded.");
     }
 
     /**
@@ -302,11 +302,10 @@ public class LlmExplainerService {
      * Build the {@link LlmExplanationsBundle} that gets attached to
      * {@code SavedClusteringResult} for persistence.
      * <p>
-     * Phase 5 (pi-4): persists the verbatim prompt and response text
-     * (already scrubbed via {@link LlmAuditScrubber} so the saved JSON is
-     * safe to share). Phase 5 (pi-3): persists input/output tokens
-     * separately. Phase 5 (pi-9): timestamp is an ISO-8601 string with a
-     * zone offset (replaces the prior zone-less {@code LocalDateTime}).
+     * Persists the verbatim prompt and response text (already scrubbed via
+     * {@link LlmAuditScrubber} so the saved JSON is safe to share), the
+     * input/output tokens separately, and the timestamp as an ISO-8601
+     * string with a zone offset.
      */
     public static LlmExplanationsBundle toBundle(ExplainResult result,
                                                    Provider provider,
@@ -330,15 +329,13 @@ public class LlmExplainerService {
     /**
      * Write a multi-line audit-log entry for a successful or failed call.
      * <p>
-     * Phase 5 (pi-1): emits {@code Project}, {@code Clustering result}, and
-     * {@code Image} so a reviewer can tie the row back to the clustering run
-     * even after the log file is moved or excerpted into supplementary
-     * material. Phase 5 (pi-5): emits {@code User} for lab-internal
-     * attribution on shared workstations. Phase 5 (pi-3): emits
-     * {@code Input tokens} and {@code Output tokens} separately; the legacy
-     * {@code Token count} (combined) is retained for backward compatibility.
-     * Phase 5 (pi-6): emits {@code Cancelled: true} when the call was
-     * soft-cancelled by the user, matching the existing doc.
+     * Emits {@code Project}, {@code Clustering result}, and {@code Image} so
+     * a reviewer can tie the row back to the clustering run even after the
+     * log file is moved or excerpted into supplementary material; {@code User}
+     * for lab-internal attribution on shared workstations; {@code Input tokens}
+     * and {@code Output tokens} separately, plus the combined
+     * {@code Token count} for older readers of the log; and
+     * {@code Cancelled: true} when the call was soft-canceled by the user.
      * <p>
      * The bearer-token redaction lives in the Python error classifier, so
      * by the time we get an errorDetail string here it is already scrubbed;
@@ -393,13 +390,13 @@ public class LlmExplainerService {
 
     /**
      * Write an {@code === LLM EXPLAIN [CANCELLED] ===} or {@code [FAILED]} block for a
-     * call that never reached the results: cancelled by the user, or thrown. A call
-     * cancelled because it hung is often a configuration problem (a wrong URL, a proxy),
+     * call that never reached the results: canceled by the user, or thrown. A call
+     * canceled because it hung is often a configuration problem (a wrong URL, a proxy),
      * so the provider, model and duration are recorded either way.
      *
      * @param req        the request
      * @param partial    whatever came back before the end; null when nothing did
-     * @param error      the exception's message when the call threw; null when cancelled
+     * @param error      the exception's message when the call threw; null when canceled
      * @param durationMs wall-clock duration
      */
     public static void writeAuditUnfinished(ExplainRequest req, ExplainResult partial,

@@ -9,8 +9,8 @@ import qupath.ext.qpcat.model.CnWindow;
  * <p>
  * Everything QP-CAT produces belongs under a single {@code qpcat/} folder in the project,
  * so a user can find it, back it up, or delete it without picking QP-CAT's output out of
- * QuPath's own. These were previously spelled out at each call site, which is how
- * cellular neighborhoods ended up writing to its own top-level folder and how the
+ * QuPath's own. Every path goes through here: spelling them out at each call site
+ * is how cellular neighborhoods once wrote to its own top-level folder and how the
  * scratch directory came to sit beside {@code project.qpproj}.
  * <p>
  * Paths are relative to the project directory (the parent of {@code project.qpproj}).

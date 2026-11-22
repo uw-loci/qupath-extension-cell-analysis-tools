@@ -104,7 +104,7 @@ public class ClusteringDialog {
     /**
      * Separator marking a series as one edge of a cluster's null band, e.g.
      * {@code "Cluster 3 \u2014 band lo"}. Derived from the cluster's own series name so
-     * a band hides with its cluster and is drawn in its colour.
+     * a band hides with its cluster and is drawn in its color.
      */
     private static final String BAND_SUFFIX = " -- band ";
 
@@ -135,7 +135,7 @@ public class ClusteringDialog {
         CLUSTER,
         /** Re-cluster one class's cells into '<name>.N' sub-labels. */
         SUBCLUSTER,
-        /** Analyse the classifications already on the cells. Writes nothing. */
+        /** Analyze the classifications already on the cells. Writes nothing. */
         ANALYZE_EXISTING;
 
         /**
@@ -245,7 +245,7 @@ public class ClusteringDialog {
             new java.lang.ref.WeakReference<>(null);
     private CheckBox compareClassesCheck;
     private CheckBox spatialAnalysisCheck;
-    /** Why the spatial statistics are greyed out; shown only while subsetting. */
+    /** Why the spatial statistics are grayed out; shown only while subsetting. */
     private Label spatialStatsSubsetNote;
     private CheckBox spatialSmoothingCheck;
     private Spinner<Integer> smoothingIterationsSpinner;
@@ -290,7 +290,7 @@ public class ClusteringDialog {
     private Spinner<Double> coOccMatrixRadiusSpinner;
     private Label permutationLabel;
 
-    // Spatial Graph Overlay (v0.3) controls
+    // Spatial graph overlay controls
     private CheckBox pushConnectionsCheck;
     private Spinner<Integer> connectionsPromptThresholdSpinner;
     private Spinner<Double> spatialGraphDelaunayMaxEdgeUmSpinner;
@@ -360,12 +360,12 @@ public class ClusteringDialog {
     }
 
     /**
-     * A dialog that analyses the classifications already on the cells.
+     * A dialog that analyzes the classifications already on the cells.
      *
      * <p>Read-only: it computes the same heatmap, marker rankings, composition and
      * embedding as a clustering run, but over the classes the objects already
      * carry, and never writes a classification back. This is how a sub-cluster is
-     * seen alongside the clusters it came from -- the combined labelling lives on
+     * seen alongside the clusters it came from -- the combined labeling lives on
      * the objects, not in any one saved result.
      *
      * @param qupath the QuPath instance
@@ -393,7 +393,7 @@ public class ClusteringDialog {
                 ? "Re-cluster cells classified as '" + subclusterParentClass
                         + "' into sub-labels -- choose the scope below"
                 : analyzeExisting
-                    ? "Analyse the classifications already on the cells. Nothing is "
+                    ? "Analyze the classifications already on the cells. Nothing is "
                       + "re-clustered and no classification is changed."
                     : "Configure clustering parameters");
         dialog.setResizable(true);
@@ -420,7 +420,7 @@ public class ClusteringDialog {
         }
         if (analyzeExisting) {
             // Project-wide by DEFAULT, for the same reason sub-clustering is: the
-            // classes being analysed almost always came from a project-wide run,
+            // classes being analyzed almost always came from a project-wide run,
             // so opening on the current image would compare a SUBSET of each
             // population and say nothing about it. Reading one image would look
             // like a smaller but valid answer, which is the failure worth
@@ -431,7 +431,7 @@ public class ClusteringDialog {
                     + "follow this choice."
                     + (pooled
                         ? "  All project images is the default: the classes you are "
-                          + "analysing usually span the project, and reading one image "
+                          + "analyzing usually span the project, and reading one image "
                           + "would silently describe a subset of every population."
                         : ""));
         }
@@ -715,12 +715,12 @@ public class ClusteringDialog {
                 + "Keep it fixed to reproduce a result. CHANGE IT to check the result is\n"
                 + "stable -- a cluster boundary that moves when only the seed moves was\n"
                 + "never a real boundary. Default 42.\n\n"
-                + "Greyed out only when the algorithm is deterministic (HDBSCAN,\n"
+                + "Grayed out only when the algorithm is deterministic (HDBSCAN,\n"
                 + "Agglomerative) and no embedding is being computed."));
 
         // Reproducibility vs speed. umap-learn turns OFF all parallelism the moment
         // a random seed is supplied (it forces n_jobs=1 and drops numba prange from
-        // the layout optimisation), so the seed above is not free -- on 16 cores it
+        // the layout optimization), so the seed above is not free -- on 16 cores it
         // costs 6-8x, and the penalty grows with cell count. Rather than silently
         // pick one, let the user choose, and default to deciding by dataset size.
         embeddingModeCombo = new ComboBox<>(FXCollections.observableArrayList(
@@ -959,7 +959,7 @@ public class ClusteringDialog {
     private boolean pendingIncludeUnclassified;
 
     /**
-     * The classes to analyse, in place of the algorithm picker.
+     * The classes to analyze, in place of the algorithm picker.
      *
      * <p>This mode has no algorithm -- the groups already exist. What replaces that
      * choice is which of them to include, so the run is legible before it starts.
@@ -1023,10 +1023,10 @@ public class ClusteringDialog {
             restrictToClassesCheck = new CheckBox("Restrict this run to chosen classifications");
             restrictToClassesCheck.setSelected(false);
             restrictToClassesCheck.setTooltip(Tooltips.of(
-                    "Off, every cell in the scope is clustered -- the behaviour when this\n"
+                    "Off, every cell in the scope is clustered -- the behavior when this\n"
                     + "option did not exist.\n\n"
                     + "On, only the cells whose classification you tick enter the run. This\n"
-                    + "DISABLES the spatial statistics: removing cells changes the neighbour\n"
+                    + "DISABLES the spatial statistics: removing cells changes the neighbor\n"
                     + "graph, so enrichment, Moran's I, Geary's C, Ripley and co-occurrence\n"
                     + "would describe the subset's own arrangement while reading as a\n"
                     + "statement about the tissue."));
@@ -1059,7 +1059,7 @@ public class ClusteringDialog {
     }
 
     /**
-     * Grey out the spatial statistics while a class subset is in force, and say
+     * Gray out the spatial statistics while a class subset is in force, and say
      * why on the first one so the reason is on screen rather than in a tooltip.
      *
      * <p>{@code ClusteringWorkflow.enforceClassSubsetRules} refuses the same
@@ -1235,8 +1235,8 @@ public class ClusteringDialog {
                     row.included.set(choice == null || choice.contains(e.getKey()));
                     classRows.add(row);
                 }
-                // Subsetting treats "nothing has labelled these yet" as a
-                // population you may want; analysing existing classes cannot,
+                // Subsetting treats "nothing has labeled these yet" as a
+                // population you may want; analyzing existing classes cannot,
                 // because a heterogeneous remainder is not a group to compare.
                 if (subsetMode && unclassifiedCount > 0) {
                     ClassRow row = new ClassRow(CellClasses.UNCLASSIFIED_DISPLAY,
@@ -1288,7 +1288,7 @@ public class ClusteringDialog {
     }
 
     private TitledPane createAlgorithmSection() {
-        // EXISTING is not a clustering method -- it analyses the classes already on
+        // EXISTING is not a clustering method -- it analyzes the classes already on
         // the cells, and is reached from its own menu item, not from this list.
         algorithmCombo = new ComboBox<>(FXCollections.observableArrayList(
                 java.util.Arrays.stream(Algorithm.values())
@@ -1386,7 +1386,7 @@ public class ClusteringDialog {
         hdbscanSelectionCombo.setTooltip(Tooltips.of(
                 "How clusters are read off the density tree.\n\n"
                 + "Excess of mass (scikit-learn's default): keeps the most\n"
-                + "persistent clusters. It favours large ones, so where the lobes\n"
+                + "persistent clusters. It favors large ones, so where the lobes\n"
                 + "of the space differ in density it returns their common parent --\n"
                 + "one cluster holding almost everything, with very little noise.\n\n"
                 + "Leaf: takes the leaves of the tree instead -- scikit-learn's own\n"
@@ -1448,12 +1448,11 @@ public class ClusteringDialog {
 
         // The random seed, visible and in the section that owns it.
         //
-        // It used to sit inside a collapsed "Advanced" pane inside the
-        // Dimensionality Reduction section -- so the control deciding whether a
-        // Leiden / KMeans / GMM / BANKSY run is reproducible was two levels down a
-        // pane belonging to a different section, one the user may have set to None.
-        // Found when a workshop reader was told "leave the random seed at 42" and
-        // could not find the setting.
+        // Not inside a collapsed "Advanced" pane in the Dimensionality Reduction
+        // section: there, the control deciding whether a Leiden / KMeans / GMM /
+        // BANKSY run is reproducible would be two levels down a pane belonging to
+        // a different section, one the user may have set to None. A workshop
+        // reader told to "leave the random seed at 42" could not find it there.
         //
         // Shown always and DISABLED when it has no effect, rather than hidden: a
         // visible control that does nothing is a far smaller problem than a hidden
@@ -1655,7 +1654,7 @@ public class ClusteringDialog {
                 + "Those are computed either way -- the old label said 'marker\n"
                 + "ranking', which read as though unticking this would remove them.\n\n"
                 + "PAGA has its own box below, because it is the only thing that\n"
-                + "needs a per-cell neighbour graph and that graph is the expensive\n"
+                + "needs a per-cell neighbor graph and that graph is the expensive\n"
                 + "part. Its picture follows that box, not this one.\n\n"
                 + "Applies to every run, including Analyze current classifications:\n"
                 + "the plots do not depend on how the labels were produced."));
@@ -1670,7 +1669,7 @@ public class ClusteringDialog {
                 "Build the PAGA graph: which clusters sit next to each other in\n"
                 + "expression space, drawn as a node-and-edge diagram.\n\n"
                 + "This is usually the slowest step after the clustering itself,\n"
-                + "because it needs a nearest-neighbour graph over every cell -- and\n"
+                + "because it needs a nearest-neighbor graph over every cell -- and\n"
                 + "NOTHING ELSE in the run uses that graph. The marker rankings, the\n"
                 + "heatmap and the dendrogram are all computed without it.\n\n"
                 + "Turn it off if you do not read the PAGA tab; the rest of the\n"
@@ -1710,18 +1709,18 @@ public class ClusteringDialog {
         // not cluster. Worse, it would not be merely pointless: smoothing rewrites
         // the normalized matrix that the cluster means, heatmap and marker
         // rankings are computed from, so a class would report a marker its
-        // NEIGHBOURS carry. Those means are the entire output here, so the option
+        // NEIGHBORS carry. Those means are the entire output here, so the option
         // is closed rather than left as a trap.
         if (mode == RunMode.ANALYZE_EXISTING) {
             spatialSmoothingCheck.setSelected(false);
             spatialSmoothingCheck.setDisable(true);
             spatialSmoothingCheck.setTooltip(Tooltips.of(
-                    "Not available when analysing existing classifications.\n\n"
+                    "Not available when analyzing existing classifications.\n\n"
                     + "Smoothing blends each cell's markers with its neighbors'\n"
                     + "before clustering -- but nothing is clustered here, and the\n"
                     + "blended values would become the marker means this mode\n"
                     + "reports. A class would look positive for a marker its\n"
-                    + "NEIGHBOURS carry, which is the opposite of what you are\n"
+                    + "NEIGHBORS carry, which is the opposite of what you are\n"
                     + "asking the tool."));
         }
 
@@ -1807,7 +1806,7 @@ public class ClusteringDialog {
                 + "the platform support matrix.");
         batchCorrectionCheck.setTooltip(harmonypyMissing ? unavailableTooltip : activeTooltip);
 
-        // What Harmony corrects over. Images is the historical behaviour;
+        // What Harmony corrects over. Images is the historical behavior;
         // areas lets a TMA inside ONE image be corrected core-by-core, which
         // per-image labels cannot express at all.
         batchKeyCombo = new ComboBox<>();
@@ -1918,7 +1917,7 @@ public class ClusteringDialog {
 
         spatialStatsSubsetNote = new Label(
                 "Spatial statistics are off because this run is restricted to chosen "
-                + "classifications. Removing cells changes the neighbour graph, so these "
+                + "classifications. Removing cells changes the neighbor graph, so these "
                 + "statistics would describe the subset's own arrangement while reading as "
                 + "a statement about the tissue. Clear the restriction above to use them.");
         spatialStatsSubsetNote.setWrapText(true);
@@ -1999,7 +1998,7 @@ public class ClusteringDialog {
         if (mode == RunMode.ANALYZE_EXISTING) {
             compareClassesCheck.setDisable(true);
             compareClassesCheck.setTooltip(Tooltips.of(
-                    "Not available when analysing existing classifications: the\n"
+                    "Not available when analyzing existing classifications: the\n"
                     + "classes ARE the labels here, so they would agree perfectly."));
         }
 
@@ -2216,7 +2215,7 @@ public class ClusteringDialog {
         coOccMatrixRadiusSpinner.setTooltip(Tooltips.of(
                 "Radius the pairwise co-occurrence MATRIX is drawn at, in microns\n"
                 + "(pixels only if an image in the run has no pixel size).\n\n"
-                + "0 = auto: about five median nearest-neighbour distances, which keeps\n"
+                + "0 = auto: about five median nearest-neighbor distances, which keeps\n"
                 + "the figure in the short-range part of the profile where the statistic\n"
                 + "discriminates. The figure title always states the radius it used.\n\n"
                 + "Affects the matrix figure only. The Co-occurrence tables, the CSV and\n"
@@ -2257,7 +2256,7 @@ public class ClusteringDialog {
         banksyNote.setWrapText(true);
         WrapHeight.bind(banksyNote);
 
-        // ---- v0.3 Viewer overlay + measurements block ----
+        // ---- Viewer overlay + measurements block ----
         VBox overlayBlock = createViewerOverlayBlock();
 
         VBox content = new VBox(6, graphBox, statsBox,
@@ -2270,10 +2269,8 @@ public class ClusteringDialog {
     }
 
     /**
-     * v0.3 viewer-overlay block: 7 new controls below the BANKSY note in
-     * the Spatial Statistics TitledPane. Tooltip strings from
-     * {@code 02_ui_design.md} lines 125-133. Visibility/enable rules from
-     * lines 156-174.
+     * Viewer-overlay block: the controls below the BANKSY note in the
+     * Spatial Statistics TitledPane.
      */
     private VBox createViewerOverlayBlock() {
         pushConnectionsCheck = new CheckBox("Push graph edges to viewer");
@@ -2523,7 +2520,7 @@ public class ClusteringDialog {
                     candidates,
                     candidates.get(0));
             if (picked == null || picked.isBlank()) {
-                // User cancelled the picker.
+                // User canceled the picker.
                 return;
             }
             resultName = picked;
@@ -2535,7 +2532,7 @@ public class ClusteringDialog {
                                 imageData, resultName);
                 Platform.runLater(() -> {
                     if (outcome.isLegacyBundle()) {
-                        // F4: legacy bundle predates v0.3's edge COO write.
+                        // The saved bundle predates the edge COO write.
                         Dialogs.showWarningNotification("QPCAT",
                                 "This saved result predates v0.3 and contains no"
                                         + " edge data. Re-run clustering once on v0.3"
@@ -2636,7 +2633,7 @@ public class ClusteringDialog {
         progressBar.setMaxWidth(Double.MAX_VALUE);
 
         // Cancel aborts the in-flight run. Because results are only written to
-        // objects AFTER the Python task returns, cancelling leaves the project
+        // objects AFTER the Python task returns, canceling leaves the project
         // untouched -- no partial measurements.
         cancelButton = new Button("Cancel");
         cancelButton.setVisible(false);
@@ -2648,7 +2645,7 @@ public class ClusteringDialog {
             ClusteringWorkflow wf = activeWorkflow;
             if (wf != null) {
                 cancelButton.setDisable(true);
-                statusLabel.setText("Cancelling...");
+                statusLabel.setText("Canceling...");
                 wf.requestCancel();
             }
         });
@@ -2870,7 +2867,7 @@ public class ClusteringDialog {
         // A live selection silently narrows a current-image run to the selected
         // objects, and nothing on screen said so -- a stray single cell produced
         // a 1-row matrix whose only symptom was a log line about the shape.
-        // That behaviour is deliberate (selecting annotations to restrict a run
+        // That behavior is deliberate (selecting annotations to restrict a run
         // is useful), so this states it rather than removing it.
         String selectionNote = describeSelectionScope();
 
@@ -3111,7 +3108,7 @@ public class ClusteringDialog {
      * In {@link RunMode#ANALYZE_EXISTING} the labels come from the cells, so the
      * mode IS the algorithm. The Algorithm combo is still BUILT in that mode (so
      * its controls are never null) but is not shown and still holds its default,
-     * so reading it directly is always wrong there -- it reported an analyse run
+     * so reading it directly is always wrong there -- it reported an analyze run
      * as a Leiden one in the saved result's metadata and in the suggested file
      * name. Every read of the algorithm goes through here.
      *
@@ -3185,7 +3182,7 @@ public class ClusteringDialog {
                 } else {
                     addMethodInfo(
                             "Partitions cells into k clusters around centroids. Fast, but assumes "
-                            + "round, equal-size clusters and is sensitive to initialisation "
+                            + "round, equal-size clusters and is sensitive to initialization "
                             + "(QP-CAT runs 10 inits). Use \"Choose k...\" for the elbow, "
                             + "silhouette and gap statistics computed on this run's own matrix -- "
                             + "they regularly disagree, and only the gap statistic can tell you "
@@ -3614,7 +3611,7 @@ public class ClusteringDialog {
         config.setSpatialPermutations(
                 QpcatPreferences.getSpatialPermutations());
 
-        // v0.3 spatial graph overlay
+        // Spatial graph overlay
         config.setPushConnectionsToViewer(pushConnectionsCheck.isSelected());
         config.setConnectionsPromptThreshold(
                 connectionsPromptThresholdSpinner.getValue());
@@ -4123,7 +4120,7 @@ public class ClusteringDialog {
         enableCoOccPairwiseCheck.setSelected(config.isEnableCoOccurrencePairwise());
         enableCoOccOneVsRestCheck.setSelected(config.isEnableCoOccurrenceOneVsRest());
 
-        // v0.3 spatial graph overlay
+        // Spatial graph overlay
         pushConnectionsCheck.setSelected(config.isPushConnectionsToViewer());
         if (config.getConnectionsPromptThreshold() > 0) {
             connectionsPromptThresholdSpinner.getValueFactory().setValue(
@@ -4622,7 +4619,7 @@ public class ClusteringDialog {
                     refreshClassifications();
 
                     // Only on SUCCESS, and only after the results window exists:
-                    // a cancelled or failed run leaves the dialog up, because the
+                    // a canceled or failed run leaves the dialog up, because the
                     // settings that produced it are what you want to change.
                     if (QpcatPreferences.isCloseDialogAfterRun() && settingsDialog != null) {
                         closingAfterRun = true;
@@ -4633,21 +4630,21 @@ public class ClusteringDialog {
                 // Cancellation is not a failure: nothing was written to objects.
                 ClusteringWorkflow wf = activeWorkflow;
                 if (wf != null && wf.wasCancelled()) {
-                    logger.info("Clustering cancelled by user; no measurements applied.");
+                    logger.info("Clustering canceled by user; no measurements applied.");
                     Platform.runLater(() -> {
                         setRunActive(false);
                         activeWorkflow = null;
-                        statusLabel.setText("Cancelled -- no measurements were applied.");
+                        statusLabel.setText("Canceled -- no measurements were applied.");
                         Dialogs.showInfoNotification("QPCAT",
-                                "Clustering cancelled. No measurements were added to the objects.");
+                                "Clustering canceled. No measurements were added to the objects.");
                     });
                     return;
                 }
                 logger.error("Clustering failed", e);
                 // Best-effort input count for the audit log: the current image's
-                // detection count (the common single-image case). Previously this
-                // was hardcoded to 0, which read as "no data" and obscured
-                // diagnosis of failures on real inputs.
+                // detection count (the common single-image case). A hardcoded 0
+                // would read as "no data" and obscure diagnosis of failures on
+                // real inputs.
                 int inputCells = 0;
                 try {
                     var failImageData = qupath.getImageData();
@@ -4703,7 +4700,7 @@ public class ClusteringDialog {
             }
             return "Also set for this run:\n  - " + String.join("\n  - ", costs) + "\n";
         } catch (RuntimeException e) {
-            logger.debug("Could not summarise run costs for the prompt: {}", e.getMessage());
+            logger.debug("Could not summarize run costs for the prompt: {}", e.getMessage());
             return "";
         }
     }
@@ -5086,10 +5083,10 @@ public class ClusteringDialog {
             heatmapScroll.setFitToWidth(true);
             Tab tab = new Tab("Heatmap", wrapWithGuide(heatmapScroll,
                     "Mean marker expression per cluster. Each row is a cluster, each "
-                    + "column is a marker. The colour bar under the map is the key: its "
+                    + "column is a marker. The color bar under the map is the key: its "
                     + "right end is high, and with Z-score normalization its middle is zero "
-                    + "(average for that marker). Scale: and Colours: above the map change "
-                    + "the range and the colours. Hover over cells for exact values.\n"
+                    + "(average for that marker). Scale: and Colors: above the map change "
+                    + "the range and the colors. Hover over cells for exact values.\n"
                     + "Use this to identify which markers define each cluster and to guide "
                     + "cell type annotation in the Phenotyping dialog.",
                     "heatmap-tab",
@@ -6343,14 +6340,14 @@ public class ClusteringDialog {
         guide.setStyle(BannerStyles.GUIDE_TEXT);
         guide.setMaxWidth(Double.MAX_VALUE);
         // Same one-line trap as the banners: a wrapping Label reports its
-        // preferred height as a single line, and BorderPane sizes the centre by
+        // preferred height as a single line, and BorderPane sizes the center by
         // that, so a two-line guide lost its second line. This bar is on every
         // results tab, so it was the most-seen instance of the bug.
         WrapHeight.bind(guide);
         HBox.setHgrow(guide, Priority.ALWAYS);
 
         // A BorderPane, not an HBox: the right-hand region is laid out at its
-        // preferred width FIRST and the centre gets what is left. An HBox instead
+        // preferred width FIRST and the center gets what is left. An HBox instead
         // shares out shortfall by shrinking children toward their minimums, which
         // is how the Documentation link ended up as "..." (or clipped away
         // entirely) whenever the window was narrower than the guide text.
@@ -6611,8 +6608,8 @@ public class ClusteringDialog {
      *
      * @param items lines to list; null banner when empty
      * @param heading bold first line
-     * @param headColor heading text colour
-     * @param textColor item text colour
+     * @param headColor heading text color
+     * @param textColor item text color
      * @param background banner background
      * @param border banner border
      * @return the banner, or null when there is nothing to say
@@ -7230,7 +7227,7 @@ public class ClusteringDialog {
                 case "dotplot" -> {
                     tabName = "Dotplot";
                     // The dot SIZE is scanpy's `obs_tidy > expression_cutoff` over
-                    // adata.X, which here is the NORMALISED matrix -- so what it
+                    // adata.X, which here is the NORMALIZED matrix -- so what it
                     // means depends on the Normalization setting, and under
                     // z-score it is not "expressing" at all. The figure's own
                     // caption states the cutoff and the units for the run that
@@ -7238,7 +7235,7 @@ public class ClusteringDialog {
                     guide = "Dot size = fraction of the cluster's cells above the cutoff named "
                             + "in the caption under the figure. Dot color = the cluster's mean, "
                             + "rescaled per marker so the column's highest cluster takes the "
-                            + "top of the colour scale (1) -- colors are not comparable across "
+                            + "top of the color scale (1) -- colors are not comparable across "
                             + "columns.\n"
                             + "What the size means follows the Normalization setting, and the "
                             + "caption says which. Min-Max or None: a large dot means most of the "
@@ -7246,7 +7243,7 @@ public class ClusteringDialog {
                             + "the marker's 1st percentile. Z-score, the default: above the marker's "
                             + "MEAN OVER EVERY CELL IN THIS RUN, which is not the same as expressing "
                             + "it -- a marker present in every cell can show a half-size dot.\n"
-                            + "Large dots at the top of the colour scale indicate markers that are "
+                            + "Large dots at the top of the color scale indicate markers that are "
                             + "both highly expressed and broadly active in that cluster -- strong "
                             + "candidate markers for cell type identity.";
                     docAnchor = "dotplot-tab";
@@ -7266,8 +7263,8 @@ public class ClusteringDialog {
                     tabName = "Stacked Violin";
                     guide = "Distribution of expression values for each marker within each cluster. "
                             + "Wider regions indicate more cells at that expression level. Values "
-                            + "are in the run's normalized units, which the colour-scale title "
-                            + "names, and are NOT rescaled per marker. Colour = each violin's median. "
+                            + "are in the run's normalized units, which the color-scale title "
+                            + "names, and are NOT rescaled per marker. Color = each violin's median. "
                             + "A flat base is not cut off: each violin stops at the lowest value a "
                             + "cell has, and many cells sit exactly there.\n"
                             + "Bimodal (double-peaked) distributions within a single cluster suggest "
@@ -7277,7 +7274,7 @@ public class ClusteringDialog {
                 }
                 case "paga" -> {
                     tabName = "PAGA Trajectory";
-                    guide = "Cluster connectivity in the nearest-neighbour graph. Thicker edges "
+                    guide = "Cluster connectivity in the nearest-neighbor graph. Thicker edges "
                             + "mean two clusters' cells are ADJACENT IN EXPRESSION SPACE; node size "
                             + "is cell count.\n"
                             + "PAGA was built for developmental scRNA-seq, where cells occupy a "
@@ -7304,7 +7301,7 @@ public class ClusteringDialog {
                             + "Brighter (toward yellow) = clusters found as spatial neighbors "
                             + "more often; darker (toward purple) = less often. Only a positive "
                             + "z-score means more often than chance and a negative one less "
-                            + "often: the colour scale is not centred on zero, so read the colour "
+                            + "often: the color scale is not centered on zero, so read the color "
                             + "bar to see where zero falls.\n"
                             + "Diagonal values show self-enrichment (spatial clustering). "
                             + "Use this to identify tissue microenvironment compositions.";
@@ -7336,7 +7333,7 @@ public class ClusteringDialog {
                             + "named in the title: > 1 = enriched as neighbors, < 1 = "
                             + "depleted, 1.0 = no association (white on the diverging scale). "
                             + "Set it with 'Matrix radius' under Spatial statistics; 0 picks "
-                            + "about five median nearest-neighbour distances. For the whole "
+                            + "about five median nearest-neighbor distances. For the whole "
                             + "profile see the Co-occurrence curves tab or the pairwise "
                             + "TABLE.";
                     docAnchor = "co-occurrence-tabs";
@@ -7387,7 +7384,7 @@ public class ClusteringDialog {
         String body =
                 "QP-CAT renders three complementary views of marker expression per cluster:\n\n"
                 + "Heatmap (interactive)\n"
-                + "  - Column-normalised mean expression per cluster.\n"
+                + "  - Column-normalized mean expression per cluster.\n"
                 + "  - Hover for exact values, zoom, pan.\n"
                 + "  - Use when exploring live in the dialog.\n\n"
                 + "Matrix Plot (matplotlib PNG)\n"
@@ -7484,7 +7481,7 @@ public class ClusteringDialog {
         // finishes on a later pulse, so toggling two clusters in quick succession
         // lets a pending remove-timeline fire against a series that has already
         // been re-added; XYChart.removeSeriesFromDisplay then unboxes a null out
-        // of its colour map and throws NPE on the FX thread, once per pulse. The
+        // of its color map and throws NPE on the FX thread, once per pulse. The
         // aborted removal also leaves the line node drawn, which is where the
         // stray dashed curves came from. Non-animated, removal is synchronous
         // inside the list change and the window does not exist.
@@ -7536,7 +7533,7 @@ public class ClusteringDialog {
         }
         // Build (and rebuild) the L chart. Two views of the same numbers:
         //
-        //   CENTRED (default) -- plot L(r) minus that cluster's own simulated
+        //   CENTERED (default) -- plot L(r) minus that cluster's own simulated
         //   median, so zero IS randomness and the whole y-axis is signal.
         //   ABSOLUTE -- the raw L(r) curves.
         //
@@ -7581,7 +7578,7 @@ public class ClusteringDialog {
                     lChart.getData().add(series);
                     lSeries.add(series);
 
-                    // Each cluster's band in ITS OWN colour, so "is this curve
+                    // Each cluster's band in ITS OWN color, so "is this curve
                     // outside its band" is answerable with several drawn at once.
                     if (useCentred && envLo != null && envHi != null
                             && i < envLo.length && i < envHi.length && haveMid) {
@@ -7605,7 +7602,7 @@ public class ClusteringDialog {
             }
 
             if (useCentred) {
-                // Randomness is a flat line at zero once centred; draw it so the
+                // Randomness is a flat line at zero once centered; draw it so the
                 // reading is "above this line = clustering" with nothing to infer.
                 javafx.scene.chart.XYChart.Series<Number, Number> zero =
                         new javafx.scene.chart.XYChart.Series<>();
@@ -7651,8 +7648,8 @@ public class ClusteringDialog {
         };
         buildLSeries.run();
 
-        // Colour both charts from the shared cluster palette. Without this JavaFX cycles
-        // eight default colours, so a 20-cluster run repeats colours and the null blends in.
+        // Color both charts from the shared cluster palette. Without this JavaFX cycles
+        // eight default colors, so a 20-cluster run repeats colors and the null blends in.
         Map<String, String> hexByName = new LinkedHashMap<>();
         if (clusterNames != null) {
             for (int i = 0; i < clusterNames.size(); i++) {
@@ -7663,7 +7660,7 @@ public class ClusteringDialog {
         }
         hexByName.put(POISSON_NULL_SERIES, "-fx-text-base-color");
         hexByName.put(CSR_NULL_SERIES, "-fx-text-base-color");
-        // A band takes its cluster's colour, so several can be on screen at once
+        // A band takes its cluster's color, so several can be on screen at once
         // and each still belongs to something visible.
         for (String n : hexByNameEnvelope) {
             int cut = n.indexOf(BAND_SUFFIX);
@@ -7762,7 +7759,7 @@ public class ClusteringDialog {
      * JavaFX offers no per-series visibility, so hiding one means removing it from
      * the chart's data and adding it back later. Re-adding re-assigns the default
      * {@code .default-colorN} style class, so the caller must re-apply the palette
-     * afterwards or the survivors take JavaFX's eight-colour cycle instead.
+     * afterwards or the survivors take JavaFX's eight-color cycle instead.
      *
      * @param chart  the chart to update
      * @param all    every series in the order they were first added
@@ -7790,10 +7787,10 @@ public class ClusteringDialog {
 
     /**
      * The checkbox column beside the Ripley charts: one tick per cluster, in the
-     * chart's own colour, plus All / None.
+     * chart's own color, plus All / None.
      *
      * @param names      series names in chart order (clusters only, not the null)
-     * @param hexByName  series name -&gt; CSS colour, for the swatches
+     * @param hexByName  series name -&gt; CSS color, for the swatches
      * @param hidden     the live set of hidden names, mutated in place
      * @param onChange   run after every change, to re-sync the charts
      * @return a node to place beside the charts
@@ -7817,7 +7814,7 @@ public class ClusteringDialog {
             cb.setSelected(show);
             String hex = hexByName.get(name);
             if (hex != null && hex.startsWith("#")) {
-                // A swatch in the curve's own colour, so the list reads as the
+                // A swatch in the curve's own color, so the list reads as the
                 // legend rather than as an unrelated set of names.
                 Region swatch = new Region();
                 swatch.setMinSize(10, 10);
@@ -7881,11 +7878,11 @@ public class ClusteringDialog {
     }
 
     /**
-     * Apply the dashed grey style to a Poisson null overlay series once
+     * Apply the dashed gray style to a Poisson null overlay series once
      * its line node is rendered. JavaFX assigns the .chart-series-line
      * node lazily; the listener fires on the first non-null assignment.
      * Colorblind-safe: shape (dash pattern) carries the "this is the null
-     * reference" meaning, not colour alone.
+     * reference" meaning, not color alone.
      */
     private static void stylePoissonNullSeries(
             javafx.scene.chart.XYChart.Series<Number, Number> series) {
@@ -7904,16 +7901,16 @@ public class ClusteringDialog {
     }
 
     /**
-     * Colour each series' line and its legend swatch from the same cluster palette the
+     * Color each series' line and its legend swatch from the same cluster palette the
      * rest of QP-CAT uses.
      * <p>
-     * JavaFX's default chart palette has eight colours and repeats, so a 20-cluster run
-     * gave several clusters the same colour and handed the Poisson null one of them.
+     * JavaFX's default chart palette has eight colors and repeats, so a 20-cluster run
+     * gave several clusters the same color and handed the Poisson null one of them.
      * Legend swatches are matched by LABEL TEXT, not by index: {@code lookupAll} returns
      * an unordered set, so position cannot be trusted.
      *
-     * @param chart      the chart to colour
-     * @param hexByName  series name -> CSS colour
+     * @param chart      the chart to color
+     * @param hexByName  series name -> CSS color
      * @param nullName   the Poisson null series name, drawn dashed instead of solid
      */
     private static void applySeriesColors(
@@ -7930,8 +7927,8 @@ public class ClusteringDialog {
                 if (nullName.equals(name) || CSR_NULL_SERIES.equals(name)) {
                     series.getNode().setStyle(NULL_SERIES_STYLE);
                 } else if (name.contains(BAND_SUFFIX)) {
-                    // Dashed and thin, in the cluster's colour: the shape says
-                    // "this is a reference", the colour says whose.
+                    // Dashed and thin, in the cluster's color: the shape says
+                    // "this is a reference", the color says whose.
                     series.getNode().setStyle("-fx-stroke: " + hex
                             + "; -fx-stroke-dash-array: 4 4; -fx-stroke-width: 1px;"
                             + " -fx-opacity: 0.85;");
@@ -7979,7 +7976,7 @@ public class ClusteringDialog {
     }
 
     /**
-     * CSS colour for a Ripley series, from the cluster's own colour where the key is a
+     * CSS color for a Ripley series, from the cluster's own color where the key is a
      * plain label, so the chart agrees with the heatmap, the scatter and the viewer.
      */
     private static String ripleySeriesHex(ClusteringResult result, String key, int fallbackIndex) {

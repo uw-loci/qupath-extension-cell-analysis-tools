@@ -12,8 +12,7 @@ import java.util.Map;
  * Java POJO mirror of the v1 QP-CAT YAML headless-batch schema.
  *
  * <p>Field shape matches the schema documented in
- * {@code documentation/yaml-reference.md} and the design contract in
- * {@code agent-reports/extension-team/qpcat-yaml-batch/02_design.md}. The
+ * {@code documentation/yaml-reference.md}. The
  * POJO is populated by {@link BatchYamlParser#parse(java.nio.file.Path)}
  * from a SnakeYAML {@code Map<String, Object>}, then validated by
  * {@link BatchYamlValidator#validate(BatchYamlSchema)} before any work

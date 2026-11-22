@@ -11,8 +11,7 @@ import javafx.scene.layout.Region;
 /**
  * Small shared helpers for building JavaFX {@link Label}s in QP-CAT dialogs.
  * <p>
- * Consolidates the {@code tipLabel} helper that was previously copy-pasted
- * byte-for-byte across several dialog classes.
+ * One {@code tipLabel} helper for every dialog class.
  */
 public final class UiLabels {
 

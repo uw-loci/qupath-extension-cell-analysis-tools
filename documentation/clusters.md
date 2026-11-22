@@ -97,7 +97,7 @@ just the open image.
 
 <!-- TODO: Add screenshot of the Modify Clusters dialog with a merged row selected -->
 
-A rename or merge is a label edit, so it has to reach the same cells the run labelled. The
+A rename or merge is a label edit, so it has to reach the same cells the run labeled. The
 dialog is therefore built around a **saved clustering result**: it reads the run's per-cell
 references and relabels the matching cells in all of the images that run touched (matched by
 source image id + centroid, the same mechanism as "Apply saved result"). This is the

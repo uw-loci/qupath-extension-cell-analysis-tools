@@ -1,11 +1,11 @@
-"""The cluster palette is one list kept in three places.
+"""The cluster palette is one list kept in two places.
 
 ClusterPalette.java seeds the "Cluster N" class colors and the interactive plots;
-run_clustering.py hands the same colors to scanpy and the spatial scatter;
-regenerate_plots.py falls back to them when no custom color arrives. The scripts
-cannot import each other or the Java, so each carries its own copy, and this test
-is what makes them one palette. Cluster 00 and Cluster 20 were both blue until the
-list grew past 20, which is also pinned here.
+model_utils.py carries the same colors for every script (run_clustering.py hands
+them to scanpy and the spatial scatter, regenerate_plots.py falls back to them
+when no custom color arrives). The Python cannot read the Java, so this test is
+what makes the two copies one palette. Cluster 00 and Cluster 20 were both blue
+until the list grew past 20, which is also pinned here.
 """
 
 import ast
@@ -52,7 +52,7 @@ def java_palette():
     return ["#%02X%02X%02X" % tuple(int(v) for v in t) for t in triples]
 
 
-@pytest.mark.parametrize("script", ["run_clustering.py", "regenerate_plots.py"])
+@pytest.mark.parametrize("script", ["model_utils.py"])
 def test_script_palette_matches_the_java_palette(script):
     assert script_constant(script, "CLUSTER_PALETTE_HEX") == java_palette()
 
@@ -64,7 +64,7 @@ def test_palette_has_forty_colors_and_keeps_tab20_first():
     assert len(set(palette)) == 40, "a color repeats inside the first 40"
 
 
-@pytest.mark.parametrize("script", ["run_clustering.py", "regenerate_plots.py"])
+@pytest.mark.parametrize("script", ["model_utils.py"])
 def test_cluster_palette_hex_wraps_past_forty(script):
     fn = load_script_symbol(
         script,

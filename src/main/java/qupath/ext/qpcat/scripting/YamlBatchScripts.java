@@ -27,11 +27,11 @@ import java.util.Map;
  *
  * <p><strong>Stability promise (v1).</strong> Package path
  * ({@code qupath.ext.qpcat.scripting}), class name ({@code YamlBatchScripts}),
- * method names ({@code runBatch}), and the recognised option-key set listed
+ * method names ({@code runBatch}), and the recognized option-key set listed
  * below are part of QP-CAT's public scripting API. Breaking changes go
  * through a deprecation period of at least one minor version.</p>
  *
- * <p>Recognised option keys:</p>
+ * <p>Recognized option keys:</p>
  * <ul>
  *   <li>{@code config} -- {@link java.nio.file.Path} or {@link String}
  *       (path to YAML file) or {@link String} starting with whitespace +

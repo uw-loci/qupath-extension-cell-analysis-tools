@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * Public, FX-free, Groovy-callable facade for QP-CAT's v1 spatial
  * statistics surface (Ripley K/L, Geary's C, neighborhood enrichment,
- * Moran's I, co-occurrence). Each method returns a normalised options
+ * Moran's I, co-occurrence). Each method returns a normalized options
  * map that the clustering workflow consumes when dispatching the Python
  * task.
  *
@@ -30,11 +30,11 @@ public final class SpatialStatsScripts {
     public static final int PERMUTATIONS_ADAPTIVE = -1;
 
     /**
-     * Phase 5 cross-feature contract. When {@code persistPlots} is set on
+     * When {@code persistPlots} is set on
      * an options map, the corresponding statistic also writes a
      * matplotlib PNG into the result's plot directory so the
      * Export figures (batch)... can pick it up.
-     * Default behaviour (no key set) reads
+     * Default behavior (no key set) reads
      * {@code QpcatPreferences.isSpatialPersistPlots()} which itself
      * defaults to {@code true}.
      */
@@ -45,7 +45,7 @@ public final class SpatialStatsScripts {
     /**
      * Stage Ripley K and L (cluster-on-cluster point-pattern statistic).
      *
-     * <p>Recognised keys:</p>
+     * <p>Recognized keys:</p>
      * <ul>
      *   <li>{@code maxRadius} - largest r to evaluate (pixel units). -1 =
      *       auto-derive from data extent.</li>
@@ -57,8 +57,8 @@ public final class SpatialStatsScripts {
      *       detections.</li>
      *   <li>{@code persistPlots} - boolean. When true (default) a
      *       matplotlib PNG named {@code ripley_k_l.png} is also written
-     *       to the result's plot directory (Phase 5 cross-feature
-     *       contract with Export figures (batch)...).</li>
+     *       to the result's plot directory, for Export figures
+     *       (batch)....</li>
      * </ul>
      */
     public static Map<String, Object> ripley(Map<String, Object> graphHandle,
@@ -94,7 +94,7 @@ public final class SpatialStatsScripts {
     /**
      * Stage Geary's C per measurement.
      *
-     * <p>Recognised keys:</p>
+     * <p>Recognized keys:</p>
      * <ul>
      *   <li>{@code measurements} - {@code List<String>} to restrict the
      *       evaluation. Null / empty = every numeric per-detection
@@ -160,7 +160,7 @@ public final class SpatialStatsScripts {
     /**
      * Stage co-occurrence (pairwise or one-vs-rest).
      *
-     * <p>Recognised keys:</p>
+     * <p>Recognized keys:</p>
      * <ul>
      *   <li>{@code mode} - "pairwise" (default) or "oneVsRest"
      *       (case-insensitive).</li>

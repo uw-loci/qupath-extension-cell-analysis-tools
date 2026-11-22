@@ -101,7 +101,7 @@ def elbow_suggestion(ks, inertias):
     if ks.size < 3:
         return None
 
-    # Normalise both axes: without it the answer depends on the units of the
+    # Normalize both axes: without it the answer depends on the units of the
     # measurements, so z-scored and raw runs would elbow at different k.
     def unit(v):
         lo, hi = float(v.min()), float(v.max())

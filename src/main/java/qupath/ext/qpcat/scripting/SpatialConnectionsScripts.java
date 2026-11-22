@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Public, Groovy-callable facade for QP-CAT's v0.3 spatial graph
+ * Public, Groovy-callable facade for QP-CAT's spatial graph
  * overlay. Two surfaces:
  *
  * <ul>
@@ -42,7 +42,7 @@ import java.util.Map;
  *       {@link ImageData} under {@link #KEY_OVERLAY_SOURCE_GROUP}.</li>
  * </ul>
  *
- * <p><strong>Stability promise (v0.3).</strong> Package path, class
+ * <p><strong>Stability promise.</strong> Package path, class
  * name, method names, and the saved-result name parameter shape are
  * part of QP-CAT's public scripting API. The underlying
  * {@link PathObjectConnections} API is marked {@code @Deprecated} in
@@ -74,8 +74,8 @@ public final class SpatialConnectionsScripts {
     /**
      * Outcome of {@link #pushConnectionsToViewer(ImageData, String)}.
      * Carries the saved-result name, the number of edges actually pushed,
-     * the detection count, and whether the saved bundle predated the v0.3
-     * edge-COO write path (legacy bundles attach an empty group; the
+     * the detection count, and whether the saved bundle predates the
+     * edge-COO write path (such bundles attach an empty group; the
      * dialog uses {@link #isLegacyBundle()} to warn the user).
      */
     public static final class PushResult {
@@ -224,10 +224,10 @@ public final class SpatialConnectionsScripts {
 
         // Build a PathObjectConnectionGroup that mirrors the saved edge
         // list. The saved bundle does not (yet) carry the COO triplet;
-        // for v0.3 the "push to viewer now" path expects the bundle to
-        // include the edge list. If absent we fall back to an empty
-        // group with a clear log line -- the typical project predates
-        // v0.3 and rebuilding the graph requires re-running clustering.
+        // the "push to viewer now" path expects the bundle to include the
+        // edge list. If absent we fall back to an empty group with a clear
+        // log line -- a project saved before the edge list was written
+        // needs clustering re-run to rebuild the graph.
         DefaultPathObjectConnectionGroup group = buildGroupFromBundle(bundle, detections);
         attachGroup(imageData, group, resultName);
 
@@ -286,7 +286,7 @@ public final class SpatialConnectionsScripts {
      * no-op.</p>
      *
      * <p>Cells with null pathClass drop their edges entirely under the
-     * filter (intended behaviour -- the tooltip and the docs call
+     * filter (intended behavior -- the tooltip and the docs call
      * this out).</p>
      */
     public static FilterResult applySameClassFilter(ImageData<?> imageData, boolean enabled) {
@@ -393,7 +393,7 @@ public final class SpatialConnectionsScripts {
      * Remove every {@link PathObjectConnectionGroup} attached to
      * {@code imageData} and drop the QP-CAT overlay stash properties
      * (source group + result name). Use when connections from prior
-     * runs (QP-CAT's own previous overlay, QuPath's legacy Delaunay
+     * runs (QP-CAT's own previous overlay, QuPath's Delaunay
      * Clustering plugin, or any other tool that writes to
      * {@link PathObjectConnections}) need to be wiped without rerunning
      * cell detection.
@@ -472,7 +472,7 @@ public final class SpatialConnectionsScripts {
 
     private static DefaultPathObjectConnectionGroup buildGroupFromBundle(
             SpatialStatsBundle bundle, List<PathObject> detections) {
-        // v0.3 does NOT persist the edge COO on disk yet (the bundle
+        // The edge COO is NOT persisted on disk (the bundle
         // is JSON-only, and edge arrays are too large for round-trip).
         // The current ImageData property (set during the most recent
         // clustering run) is the canonical source. If no group has
@@ -643,8 +643,8 @@ public final class SpatialConnectionsScripts {
 
     /**
      * Minimal PathObjectConnectionGroup that exposes only the detection
-     * set with no edges. Used as the seed for an empty group on legacy
-     * projects (where the saved bundle predates the edge-COO write).
+     * set with no edges. Used as the seed for an empty group on projects
+     * whose saved bundle predates the edge-COO write.
      */
     private static final class EmptyView implements PathObjectConnectionGroup {
         private final Map<PathObject, Boolean> contains = new HashMap<>();

@@ -280,7 +280,7 @@ public class ClusteringResultManager {
         Set<Integer> seen = new HashSet<>();
         // Keyed by the class name the cells actually carry, padding included --
         // applyClusterColors looks each key up with PathClass.fromString, so an
-        // unpadded key would colour a class nothing is classified as.
+        // unpadded key would color a class nothing is classified as.
         int digits = ClusterNaming.digitsForLabels(labels);
         for (int lab : labels) {
             if (lab < 0 || !seen.add(lab)) continue;
@@ -292,19 +292,13 @@ public class ClusteringResultManager {
     }
 
     /**
-     * Write {@code content} to {@code file} atomically: write a sibling temp file, flush,
-     * then move it into place. A crash or exception mid-write leaves the previous good
-     * file intact instead of a truncated/empty JSON (a plain {@code Files.writeString}
+     * Write {@code value} as JSON to {@code file} atomically: write a sibling temp file,
+     * flush, then move it into place. A crash or exception mid-write leaves the previous
+     * good file intact instead of a truncated/empty JSON (a plain {@code Files.writeString}
      * truncates first, so an interruption destroys the existing result). Falls back to a
-     * non-atomic replace only if the filesystem rejects ATOMIC_MOVE.
-     */
-    private static void writeStringAtomic(Path file, String content) throws IOException {
-        writeAtomic(file, w -> w.write(content));
-    }
-
-    /**
-     * As {@link #writeStringAtomic} but serializing {@code value} straight into the
-     * temp file's writer, so the JSON is never materialized as one giant String.
+     * non-atomic replace only if the filesystem rejects ATOMIC_MOVE. The value is
+     * serialized straight into the temp file's writer, so the JSON is never materialized
+     * as one giant String.
      * <p>
      * A saved result carries eight per-cell arrays (labels, embedding, image ids and
      * names, parent names, x, y, bbox). At a million cells {@code GSON.toJson(value)}
@@ -477,7 +471,7 @@ public class ClusteringResultManager {
      * a set of cells (no embedding / markers / plots). Backs the optional "Save as
      * new result" on the "Manage Clusters" MANUAL path, which exists only when no
      * saved result was available to target -- so a first re-appliable result can be
-     * bootstrapped from hand-labelled detections.
+     * bootstrapped from hand-labeled detections.
      *
      * @param labels       per-cell integer label (parallel to the cell arrays); &lt; 0 = unclassified
      * @param names        label -&gt; class name (so the snapshot re-applies the exact names)

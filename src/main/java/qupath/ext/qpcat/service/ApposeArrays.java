@@ -46,8 +46,8 @@ import qupath.lib.roi.interfaces.ROI;
  *   <li><b>Byte order is native</b> on both sides: numpy reads the shared
  *       segment as native order, and the buffer Appose hands out is native
  *       order already. {@link #bytes} makes that explicit and rewinds.</li>
- *   <li><b>Values are raw.</b> No scaling, no normalisation, no gamma: a uint8
- *       value of 200 arrives as 200.0f in a float32 array. Normalise in Python,
+ *   <li><b>Values are raw.</b> No scaling, no normalization, no gamma: a uint8
+ *       value of 200 arrives as 200.0f in a float32 array. Normalize in Python,
  *       where the model's expectations are.</li>
  *   <li><b>The caller owns every array returned</b> and must close it, on
  *       every path. Shared memory does not go away with the Java object.
@@ -129,7 +129,7 @@ public final class ApposeArrays {
 
     /**
      * An RGB image as (H, W, 3) uint8, red first, read through
-     * {@link BufferedImage#getRGB}, so any colour model is converted to sRGB.
+     * {@link BufferedImage#getRGB}, so any color model is converted to sRGB.
      */
     public static NDArray rgbUint8HWC(BufferedImage img) {
         int h = img.getHeight();
@@ -195,7 +195,7 @@ public final class ApposeArrays {
      * (H, W, k) for more than one band, (H, W) for exactly one. The two-axis
      * form for a single band is deliberate: libraries that take an optional
      * channel axis (Cellpose among them) treat a trailing axis of length 1 as a
-     * channel and change behaviour.
+     * channel and change behavior.
      */
     public static NDArray bandsFloat32HWC(BufferedImage img, int[] bands) {
         return allocateBandsHWC(img, bands, bands.length > 1);
@@ -242,7 +242,7 @@ public final class ApposeArrays {
     /**
      * A ROI rasterised as an (H, W) uint8 mask over the region starting at
      * ({@code x}, {@code y}) in full-resolution image coordinates: 255 where
-     * the pixel centre is inside the ROI, 0 elsewhere.
+     * the pixel center is inside the ROI, 0 elsewhere.
      */
     public static NDArray roiMaskUint8HW(ROI roi, int x, int y, int w, int h) {
         NDArray array = allocate(NDArray.DType.UINT8, h, w);

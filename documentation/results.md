@@ -76,7 +76,7 @@ In the Heatmap, the right end of the color bar is high relative expression and t
 low, per marker across clusters: red and blue on the default Blue-White-Red map (z-score),
 yellow and dark purple on Viridis (any other normalization). With any normalization other
 than z-score the bar runs from *low* to *high*, and the line under it reads, for example,
-`cluster mean (min-max 0-1), per marker -- no centre`: the map has no zero to diverge from.
+`cluster mean (min-max 0-1), per marker -- no center`: the map has no zero to diverge from.
 This is the tab that tells you which markers define each cluster, and the one
 to work from when annotating cell types. Hover over a square for the mean value and the number
 of cells in that cluster -- a mean over 40 cells and a mean over 4,000 look identical here and
