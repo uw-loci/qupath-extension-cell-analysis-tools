@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.mcp.McpJsonRpc.CallContext;
 import qupath.ext.qpcat.mcp.McpJsonRpc.Tool;
 import qupath.ext.qpcat.mcp.McpJsonRpc.ToolResult;
+import qupath.ext.qpcat.model.AgentLabel;
 import qupath.ext.qpcat.model.ClusterExplanation;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.SavedClusteringResult.LlmExplanationsBundle;
@@ -58,7 +59,6 @@ public final class McpExplainerTools {
     public static final String EXPLAINER_TAB_TITLE = "Cluster Explainer (LLM) [Experimental]";
     static final String VIEW_PAST_RESULTS_PATH =
             "Extensions > QP-CAT > Results & populations > View Past Results...";
-    static final int MAX_AGENT_LABEL = 60;
     static final long EXPLAIN_CAP_SECONDS = 300;
 
     static final String APPOSE_NOT_RUNNING =
@@ -446,7 +446,7 @@ public final class McpExplainerTools {
                 String agentRaw = requireString(args, "agent");
                 if (agentRaw == null) throw new Invalid("The \"agent\" argument must be a non-empty "
                         + "string naming the agent, for the audit log. Nothing has changed.");
-                p.agent = sanitizeAgentLabel(agentRaw);
+                p.agent = AgentLabel.clean(agentRaw);
                 p.overwrite = readOverwrite(args);
                 p.promptHash = readPromptHash(args);
             }
@@ -746,18 +746,6 @@ public final class McpExplainerTools {
             if (cause instanceof IOException io) throw io;
             throw new IOException(cause != null ? cause.toString() : e.toString(), cause);
         }
-    }
-
-    /** Agent label as stored and shown: control characters stripped, at most 60 chars. */
-    static String sanitizeAgentLabel(String raw) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < raw.length(); i++) {
-            char c = raw.charAt(i);
-            if (c >= 0x20 && c != 0x7f) sb.append(c);
-        }
-        String s = sb.toString().trim();
-        if (s.length() > MAX_AGENT_LABEL) s = s.substring(0, MAX_AGENT_LABEL).trim();
-        return s.isEmpty() ? "(unnamed agent)" : s;
     }
 
     static String describeSource(LlmExplanationsBundle b) {

@@ -177,14 +177,6 @@ class McpExplainerToolsTest {
         }
     }
 
-    @Test
-    void agentLabelIsTruncatedAndStrippedOfControlCharacters() {
-        assertThat(McpExplainerTools.sanitizeAgentLabel("Claude\u0007 Code\n(opus)"))
-                .isEqualTo("Claude Code(opus)");
-        assertThat(McpExplainerTools.sanitizeAgentLabel("x".repeat(100))).hasSize(60);
-        assertThat(McpExplainerTools.sanitizeAgentLabel("\u0001\u0002")).isEqualTo("(unnamed agent)");
-    }
-
     // ---- Phase 5 fixes ----
 
     @Test

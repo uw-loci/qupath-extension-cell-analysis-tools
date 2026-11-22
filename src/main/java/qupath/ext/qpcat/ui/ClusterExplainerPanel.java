@@ -40,6 +40,7 @@ import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.mcp.ExplanationListeners;
+import qupath.ext.qpcat.model.AgentLabel;
 import qupath.ext.qpcat.model.ClusterExplanation;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.PhenotypeNames;
@@ -127,8 +128,6 @@ public class ClusterExplainerPanel {
     private ScrollPane scrollPane;
     private VBox resultsBox;
 
-    /** Longest agent label shown; it is free text from a network client. */
-    static final int AGENT_LABEL_MAX = 60;
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     private final ObservableList<ClusterExplanation> tableRows =
@@ -1106,28 +1105,9 @@ public class ClusterExplainerPanel {
         sourceLabel.setManaged(true);
     }
 
-    /** As {@link #sanitizeAgentLabel}, but blank for no label rather than a phrase. */
+    /** As {@link AgentLabel#clean}, but blank for no label rather than a phrase. */
     private static String sanitizeLabelOrBlank(String raw) {
-        return raw == null || raw.isBlank() ? "" : sanitizeAgentLabel(raw);
-    }
-
-    /** Agent labels are untrusted network text: no control characters, 60 chars at most. */
-    static String sanitizeAgentLabel(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return "an unnamed agent";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < raw.length() && sb.length() < AGENT_LABEL_MAX; i++) {
-            char c = raw.charAt(i);
-            if (!Character.isISOControl(c)) {
-                sb.append(c);
-            }
-        }
-        String out = sb.toString().trim();
-        if (out.isEmpty()) {
-            return "an unnamed agent";
-        }
-        return raw.length() > out.length() && sb.length() >= AGENT_LABEL_MAX ? out + "..." : out;
+        return raw == null || raw.isBlank() ? "" : AgentLabel.clean(raw);
     }
 
     /** ISO-8601 with offset -> local HH:mm; anything else is passed through. */

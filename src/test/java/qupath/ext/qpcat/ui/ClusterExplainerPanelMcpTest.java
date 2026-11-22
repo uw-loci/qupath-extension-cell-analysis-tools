@@ -242,15 +242,4 @@ class ClusterExplainerPanelMcpTest {
                 .contains("self-reported by the agent")
                 .contains("without verifying it");
     }
-
-    @Test
-    void agentLabelsAreUntrustedText() {
-        assertThat(ClusterExplainerPanel.sanitizeAgentLabel(null)).isEqualTo("an unnamed agent");
-        assertThat(ClusterExplainerPanel.sanitizeAgentLabel("  \t\n ")).isEqualTo("an unnamed agent");
-        assertThat(ClusterExplainerPanel.sanitizeAgentLabel("Codex\u0007\nCLI")).isEqualTo("CodexCLI");
-        String long100 = "x".repeat(100);
-        String shown = ClusterExplainerPanel.sanitizeAgentLabel(long100);
-        assertThat(shown).hasSize(ClusterExplainerPanel.AGENT_LABEL_MAX + 3).endsWith("...");
-        assertThat(ClusterExplainerPanel.sanitizeAgentLabel("Gemini CLI")).isEqualTo("Gemini CLI");
-    }
 }

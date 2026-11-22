@@ -35,6 +35,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **One cleaning rule and one wording for an MCP agent's label.** The label an agent gives for
+  itself was cleaned by two functions that disagreed: the audit log and saved suggestions cut it
+  at 60 characters silently and recorded an empty one as "(unnamed agent)"; the Cluster
+  Explainer tab added "..." and said "an unnamed agent". Both now use the same rule: control
+  characters removed, trimmed, cut at 60 characters with "..." added, and "an unnamed agent"
+  when nothing is left. Labels in results saved earlier are shown as they were stored.
 - **One measurement normalization for every analysis.** Clustering, phenotyping, the threshold
   preview (Compute Thresholds), the VEST 3D embedding and the geosketch cell selection each had
   their own copy of z-score / min-max / percentile; they now share one function. **Clustering,
