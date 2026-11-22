@@ -727,6 +727,18 @@ Uses gamma mixture models for marker gating, better suited to the right-skewed, 
 
 ---
 
+### BIC comparison of component counts
+
+The Bayesian information criterion (BIC) scores a fitted model by its likelihood with a penalty for its parameter count; the difference in BIC between two models approximates twice the log of their Bayes factor, and Kass and Raftery read a difference of 6 or more as "strong" evidence for the lower-scoring model.
+
+**Original paper:**
+> Kass RE, Raftery AE. "Bayes Factors." *Journal of the American Statistical Association* 90(430), 773-795 (1995).
+> https://doi.org/10.1080/01621459.1995.10476572
+
+**Used in:** Auto-thresholding (GMM method). Beside the two-component mixture the gate is built on, QP-CAT fits one- and three-component mixtures to the same values (at most 50,000 of them) and compares the three by BIC; a note under the counts says when one or three components win by at least 6. The gate does not change; see [Phenotyping](phenotyping.md#when-two-populations-is-the-wrong-count).
+
+---
+
 ### Marker Ranking -- Wilcoxon Rank-Sum Test
 
 Non-parametric test for identifying differentially expressed markers between clusters.

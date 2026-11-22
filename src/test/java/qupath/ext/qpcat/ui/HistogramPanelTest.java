@@ -8,6 +8,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import qupath.ext.qpcat.model.GmmFit;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -50,6 +51,10 @@ class HistogramPanelTest {
     }
 
     private static HistogramPanel panelWith(Map<String, Double> auto) {
+        return panelWith(auto, null);
+    }
+
+    private static HistogramPanel panelWith(Map<String, Double> auto, GmmFit fit) {
         double[] v = values();
         int bins = 50;
         int[] counts = new int[bins];
@@ -63,7 +68,7 @@ class HistogramPanelTest {
         return FxHarness.onFxGet(() -> {
             HistogramPanel p = new HistogramPanel();
             FxHarness.layOutOffscreen(p);
-            p.setMarkerData("Cell: CD3 mean", counts, edges, quantiles(v), auto, null, 0.5);
+            p.setMarkerData("Cell: CD3 mean", counts, edges, quantiles(v), auto, fit, 0.5);
             return p;
         });
     }
@@ -142,5 +147,40 @@ class HistogramPanelTest {
         selectMethod(p, "Triangle");
         selectMethod(p, "Manual");
         assertThat(FxHarness.onFxGet(warning::isVisible)).isFalse();
+    }
+
+    @Test
+    void theGmmBicNoteShowsUnderTheCountsOnlyWhileGmmIsSelected() {
+        Map<String, Double> auto = new LinkedHashMap<>();
+        auto.put("gmm", 0.5);
+        auto.put("triangle", 0.5);
+        String note = "one population by BIC - the gate splits a single distribution; "
+                + "this marker may have no positive cells.";
+        GmmFit fit = new GmmFit(new double[] {0.3, 0.6}, new double[] {0.1, 0.1},
+                new double[] {0.5, 0.5}, 370, 1, note);
+        HistogramPanel p = panelWith(auto, fit);
+        Label warning = field(p, "suggestionWarningLabel");
+
+        selectMethod(p, "GMM (Gaussian)");
+        assertThat(FxHarness.onFxGet(warning::isVisible)).isTrue();
+        assertThat(FxHarness.onFxGet(warning::getText)).isEqualTo("GMM (Gaussian) fit: " + note);
+
+        selectMethod(p, "Triangle");
+        assertThat(FxHarness.onFxGet(warning::isVisible)).isFalse();
+    }
+
+    @Test
+    void theCoverageWarningAndTheBicNoteStackWhenBothApply() {
+        Map<String, Double> auto = new LinkedHashMap<>();
+        auto.put("gmm", 0.0);
+        GmmFit fit = new GmmFit(new double[] {0.3, 0.6}, new double[] {0.1, 0.1},
+                new double[] {0.5, 0.5}, 370, 3, "three populations by BIC (means 0.1, 0.3, 0.6) - x.");
+        HistogramPanel p = panelWith(auto, fit);
+        Label warning = field(p, "suggestionWarningLabel");
+
+        selectMethod(p, "GMM (Gaussian)");
+        assertThat(FxHarness.onFxGet(warning::getText)).isEqualTo(
+                "GMM (Gaussian) suggestion: Calls 100.0% of cells positive - check it against the histogram.\n"
+                + "GMM (Gaussian) fit: three populations by BIC (means 0.1, 0.3, 0.6) - x.");
     }
 }

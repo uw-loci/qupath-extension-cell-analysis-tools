@@ -1535,6 +1535,7 @@ public class PhenotypingDialog {
 
         int updated = 0;
         List<String> extreme = new ArrayList<>();
+        List<String> otherCount = new ArrayList<>();
         for (Map.Entry<String, Spinner<Double>> entry : markerGateSpinners.entrySet()) {
             String marker = entry.getKey();
             if (cachedHistogramData.containsKey(marker)) {
@@ -1547,19 +1548,33 @@ public class PhenotypingDialog {
                     updated++;
                     double frac = GateCoverage.positiveFraction(parseQuantiles(markerData), threshold);
                     if (GateCoverage.warning(frac) != null) {
-                        extreme.add(String.format("%s (%.0f%%)", MeasurementNames.shorten(marker), 100.0 * frac));
+                        extreme.add(String.format(Locale.ROOT, "%s (%.0f%%)",
+                                MeasurementNames.shorten(marker), 100.0 * frac));
+                    }
+                    GmmFit fit = "gmm".equals(selectedMethod)
+                            ? GmmFit.fromMap((Map<?, ?>) markerData.get("gmm")) : null;
+                    if (fit != null && fit.populationsByBic() != null) {
+                        otherCount.add(MeasurementNames.shorten(marker) + " (" + fit.populationsByBic() + ")");
                     }
                 }
             }
         }
 
-        String applied = "Applied '" + selectedMethod + "' thresholds to " + updated + " markers.";
-        if (extreme.isEmpty()) {
-            Dialogs.showInfoNotification("QPCAT", applied);
+        StringBuilder message = new StringBuilder(
+                "Applied '" + selectedMethod + "' thresholds to " + updated + " markers.");
+        if (!extreme.isEmpty()) {
+            message.append(" Check these - they call almost all or almost no cells positive: ")
+                    .append(String.join(", ", extreme)).append('.');
+        }
+        if (!otherCount.isEmpty()) {
+            message.append(" Two populations is not the best fit for: ")
+                    .append(String.join(", ", otherCount))
+                    .append(" - see the note under each histogram.");
+        }
+        if (extreme.isEmpty() && otherCount.isEmpty()) {
+            Dialogs.showInfoNotification("QPCAT", message.toString());
         } else {
-            Dialogs.showWarningNotification("QPCAT", applied
-                    + " Check these - they call almost all or almost no cells positive: "
-                    + String.join(", ", extreme));
+            Dialogs.showWarningNotification("QPCAT", message.toString());
         }
     }
 

@@ -14,6 +14,8 @@ import qupath.ext.qpcat.model.GateCoverage;
 import qupath.ext.qpcat.model.GmmFit;
 import qupath.ext.qpcat.model.MeasurementNames;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -22,7 +24,8 @@ import java.util.function.Consumer;
  * Shows histogram bars split-colored at the threshold, with auto-thresholding
  * method selection and pos/neg cell count statistics; the fitted components are
  * drawn while GMM is selected. A suggested threshold that calls more than 95% or
- * fewer than 5% of cells positive is flagged.
+ * fewer than 5% of cells positive is flagged, as is a GMM fit whose BIC
+ * comparison prefers one or three populations over two.
  */
 public class HistogramPanel extends VBox {
 
@@ -445,7 +448,15 @@ public class HistogramPanel extends VBox {
         Double suggested = (key != null && autoThresholds != null) ? autoThresholds.get(key) : null;
         String warning = suggested == null ? null
                 : GateCoverage.warning(GateCoverage.positiveFraction(quantiles, suggested));
-        showSuggestionWarning(warning == null ? null : methodCombo.getValue() + " suggestion: " + warning);
+        List<String> lines = new ArrayList<>();
+        if (warning != null) {
+            lines.add(methodCombo.getValue() + " suggestion: " + warning);
+        }
+        // The script's BIC note (one or three populations) rides with the fit.
+        if ("gmm".equals(key) && gmmFit != null && gmmFit.note() != null) {
+            lines.add(methodCombo.getValue() + " fit: " + gmmFit.note());
+        }
+        showSuggestionWarning(lines.isEmpty() ? null : String.join("\n", lines));
     }
 
     private void showSuggestionWarning(String text) {
