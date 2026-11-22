@@ -2514,8 +2514,36 @@ def run_co_occurrence(
         logger.warning("Co-occurrence (%s) failed: %s", mode, e)
 
 
+def node_distance_scale(coord_unit, pixel_size_um):
+    """Factor that puts graph distances into the unit their columns are written in.
+
+    Pixel coordinates give pixel columns and need no pixel size. Micron
+    coordinates need the microns per coordinate unit from the caller (1.0 when
+    the caller scaled the coordinates itself); a missing or unusable value is an
+    error, never a silent 1.0.
+
+    :param coord_unit: "um" or "px", the unit of the spatial coordinates
+    :param pixel_size_um: microns per coordinate unit, or None when not supplied
+    :return: the factor to multiply distances by
+    :raises ValueError: micron output without a usable pixel size
+    """
+    if str(coord_unit) != "um":
+        return 1.0
+    try:
+        scale = float(pixel_size_um)
+    except (TypeError, ValueError):
+        scale = float("nan")
+    if not np.isfinite(scale) or scale <= 0.0:
+        raise ValueError(
+            "Spatial distances were requested in microns but no usable pixel size "
+            "was supplied (got %r). Every image in the run needs a pixel size."
+            % (pixel_size_um,)
+        )
+    return scale
+
+
 def compute_spatial_node_measurements(
-    spatial_connectivities, spatial_distances, coords, graph_type, pixel_size_um=1.0
+    spatial_connectivities, spatial_distances, coords, graph_type, distance_scale
 ):
     """Return a dict of per-cell measurement arrays + edge-COO triplet.
 
@@ -2536,12 +2564,11 @@ def compute_spatial_node_measurements(
     type since connected components are well-defined on kNN, Radius, and
     Delaunay graphs alike.
 
-    pixel_size_um scales the distance + triangle-area outputs into microns.
-    Java passes PixelCalibration.getAveragedPixelSizeMicrons() when
-    PixelCalibration.hasPixelSizeMicrons() is true, otherwise 1.0 (units
-    remain pixels for uncalibrated images). Distances scale by
-    pixel_size_um; triangle areas scale by pixel_size_um ** 2. Edge COO
-    indices and num_neighbors counts are unit-free and unaffected.
+    distance_scale comes from node_distance_scale and has no default: distances
+    are multiplied by it and triangle areas by its square, so the columns are in
+    the unit of the coordinates times that factor. A value that is not finite
+    and above zero raises ValueError. Edge COO indices and num_neighbors counts
+    are unit-free and unaffected.
 
     Returns dict with keys: row, col, num_neighbors, mean_distance,
     median_distance, max_distance, min_distance, component_labels, and
@@ -2550,12 +2577,11 @@ def compute_spatial_node_measurements(
     import scipy.sparse as sp
     from scipy.sparse.csgraph import connected_components
 
-    try:
-        scale = float(pixel_size_um)
-    except (TypeError, ValueError):
-        scale = 1.0
+    scale = float(distance_scale)
     if not np.isfinite(scale) or scale <= 0.0:
-        scale = 1.0
+        raise ValueError(
+            "distance_scale must be finite and above zero, got %r" % (distance_scale,)
+        )
     n_cells = spatial_connectivities.shape[0]
     conn_csr = spatial_connectivities.tocsr()
     # Symmetrise just in case (squidpy returns a symmetric matrix for
@@ -2651,7 +2677,7 @@ def compute_spatial_node_measurements(
             nonzero = count_areas > 0
             mean_areas[nonzero] = sum_areas[nonzero] / count_areas[nonzero]
             max_areas[~nonzero] = np.nan
-            # Triangle areas scale by pixel_size_um ** 2; NaN entries
+            # Triangle areas scale by distance_scale ** 2; NaN entries
             # propagate through the multiply unchanged.
             area_scale = scale * scale
             mean_areas = mean_areas * area_scale

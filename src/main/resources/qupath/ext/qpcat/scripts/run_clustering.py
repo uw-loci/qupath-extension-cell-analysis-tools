@@ -425,14 +425,15 @@ try:
 except NameError:
     pref_write_component_measurements = False
 
-# Pixel calibration scaling for QPCAT spatial: distance / triangle-area
-# columns. Java passes PixelCalibration.getAveragedPixelSizeMicrons() when
-# the image has a calibration, otherwise 1.0 (columns stay in pixels for
-# uncalibrated images). See F1 in 06_test_response.md.
+# Microns per unit of spatial_coords, for the QPCAT spatial: distance and
+# triangle-area columns. Java scales the coordinates itself, so it sends 1.0
+# with coord_unit "um" and nothing with "px" (those columns stay in pixels).
+# No stand-in value: spatial_stats.node_distance_scale refuses a run in
+# microns that arrives without one.
 try:
-    pref_spatial_pixel_size_um = float(pixel_size_um)
-except (NameError, TypeError, ValueError):
-    pref_spatial_pixel_size_um = 1.0
+    pref_spatial_pixel_size_um = pixel_size_um
+except NameError:
+    pref_spatial_pixel_size_um = None
 
 # Unit of spatial_coords. Java scales each image's centroids to microns when
 # every image in the run is calibrated, so radii and distances come back in
@@ -3610,6 +3611,12 @@ if has_spatial and n_clusters_found > 1:
             "environment (Setup & help > Rebuild analysis environment) and try again."
         ) from _e
 
+    # Raises when the coordinates are in microns and no pixel size came with
+    # them; outside the try below so the run stops instead of logging a warning.
+    _node_distance_scale = _qpcat_spatial.node_distance_scale(
+        pref_coord_unit, pref_spatial_pixel_size_um
+    )
+
     adata.obsm["spatial"] = spatial_data
     adata.obsm["X_spatial"] = spatial_data  # for scanpy plotting (basis='spatial')
     logger.info("Spatial coordinates loaded (%d cells)", spatial_data.shape[0])
@@ -3645,7 +3652,7 @@ if has_spatial and n_clusters_found > 1:
                 adata.obsp.get("spatial_distances"),
                 spatial_data,
                 pref_spatial_graph_type,
-                pixel_size_um=pref_spatial_pixel_size_um,
+                distance_scale=_node_distance_scale,
             )
             _qpcat_spatial.emit_spatial_node_outputs(
                 task,

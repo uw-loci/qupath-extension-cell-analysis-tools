@@ -826,8 +826,11 @@ Radius: 12.4 to 248.6 um, 50 bins
 
 Radii are in **um** whenever every image in the run has a pixel size -- a clustering run and
 *Spatial statistics on existing clusters* alike, each image scaled by its own pixel size. A
-clustering run that includes an uncalibrated image stays in **px** throughout (the post-hoc
-path decides per image), and the line says so.
+clustering run in which no image has a pixel size is in **px** throughout (the post-hoc
+path decides per image), and the line says so. A clustering run that mixes images with and
+without a pixel size is refused when it would write a micron output; see
+[the pixel size rule](spatial-statistics.md#interpretation-caveats). A current-image
+clustering run reported px on a calibrated image from 0.22.0 until 0.26.0.
 
 #### What each view aggregates
 

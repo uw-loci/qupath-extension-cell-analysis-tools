@@ -408,6 +408,29 @@ to the object hierarchy -- this is read-only.
   inputs, Ripley radii, co-occurrence intervals, and distances are all in um), which
   makes areas comparable across images. Uncalibrated images fall back to pixels
   (shown in the summary table's Unit column).
+- **Pixel size rule for a clustering run.** Each image uses its own pixel size; no
+  value is ever borrowed from another image or assumed to be 1.
+
+  | Images in the run | Radius / Delaunay inputs, Ripley radii, co-occurrence distances | Per-cell `QPCAT spatial:` distances and triangle areas |
+  |---|---|---|
+  | every image has a pixel size (they may differ) | microns | microns |
+  | no image has a pixel size | pixels | pixels |
+  | some have one, some do not | pixels | **the run is refused** before anything is computed, with a message naming the images without a pixel size (five, then "and N more") |
+
+  The refusal applies only when the run would write a micron output: **Write per-cell node
+  measurements** is ticked, or a Delaunay max edge is set in microns, and the run uses
+  cell positions at all (spatial analysis, a spatial statistic, spatial smoothing or
+  BANKSY). A clustering run with none of those runs on any images. To clear it, set the
+  pixel size on the named images (open the image, **Image** tab, double-click **Pixel
+  width** or **Pixel height**, enter microns) or, to run in pixels throughout, untick
+  **Write per-cell node measurements**.
+- **A clustering run on the current image only reported pixels until 0.26.0**, also on a
+  calibrated image: the radius, the Delaunay max edge, Ripley radii and co-occurrence
+  distances were taken and reported in pixels (and labeled px), from 0.22.0 through
+  0.26.0-dev.5. Runs over several images were in microns as documented. From 0.26.0 a
+  current-image run on a calibrated image is in microns, so its radii differ from an
+  earlier run of the same image by the pixel size; re-run a current-image result whose
+  radius you set in microns.
 - Very small areas / classes give unstable permutation statistics.
 
 ---

@@ -41,6 +41,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **Clustering runs: one pixel size rule for spatial outputs, and a current-image run is now in
+  microns.** Checked what a run did with pixel sizes in three cases, then fixed what was wrong.
+  **Images with different pixel sizes in one run were handled correctly** (since 0.22.0 for the
+  statistics, since 0.3.4 for the per-cell columns): each image's positions are scaled by its
+  own pixel size, so earlier multi-image results with differing pixel sizes do **not** have
+  wrong values. Two things were wrong:
+  - **A clustering run on the current image reported pixels on a calibrated image** (0.22.0
+    through 0.26.0-dev.5). The radius of a Radius graph, Ripley radii and co-occurrence
+    distances were taken and reported in pixels (labeled px), and a Delaunay max edge set in
+    microns was ignored in favor of the pixel setting; only the per-cell `QPCAT spatial:`
+    columns were in microns. A current-image run on a calibrated image is now in microns
+    throughout, as the documentation said. **Re-run a current-image result from those versions
+    if its Radius graph, Delaunay max edge or co-occurrence radius was set as microns:** the
+    value was applied as pixels. Runs over several images were not affected.
+  - **A run over images with and without a pixel size** wrote the per-cell `QPCAT spatial:`
+    distance columns in microns on the calibrated images and in pixels on the others, under one
+    column name, and converted a micron Delaunay max edge with the first image's pixel size.
+    Such a run is now refused before anything is computed, with a message naming the images
+    without a pixel size (five, then "and N more") and where to set it. Only a run that would
+    write a micron output is refused (per-cell node measurements ticked, or a micron Delaunay
+    max edge, in a run that uses cell positions); unticking **Write per-cell node measurements**
+    runs it in pixels, as before. A run where no image has a pixel size stays in pixels and is
+    not refused, and a clustering run with no spatial output runs on any images.
+  The pixel size sent to Python no longer has a stand-in: a multi-image run with no calibrated
+  image used to send the pixel size of whatever image was open in the viewer (the value was
+  discarded for multi-image runs, so no result changed), and the Python side used 1.0 when
+  none arrived. A run in microns that reaches Python without a pixel size now stops with an
+  error.
+
 - **A saved result keeps the full record of the run.** Thirteen things a run reported were held
   only while its results window was open and were gone when the result was reopened from
   **View Past Results**: the per-cell membership confidence (so a reopened GMM, HDBSCAN or

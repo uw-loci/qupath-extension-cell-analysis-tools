@@ -52,6 +52,7 @@ import qupath.ext.qpcat.service.ExistingLabelReader;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.PixelSizes;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.ColorTools;
@@ -4673,6 +4674,12 @@ public class ClusteringDialog {
                     progressBar.setProgress(0);
                     setRunActive(false);
                     activeWorkflow = null;
+                    if (e instanceof PixelSizes.MissingPixelSizeException) {
+                        statusLabel.setText("Not run: an image has no pixel size.");
+                        UserErrors.show(logger, "QP-CAT clustering: pixel size needed",
+                                e.getMessage());
+                        return;
+                    }
                     statusLabel.setText("Error: " + e.getMessage());
                     UserErrors.notify(logger, "QPCAT",
                             "Clustering failed: " + e.getMessage());
