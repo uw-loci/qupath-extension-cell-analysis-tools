@@ -18,9 +18,11 @@ import javafx.scene.layout.*;
 import javafx.scene.text.TextFlow;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.model.ClassConditionKind;
 import qupath.ext.qpcat.model.ClusteringConfig.Normalization;
 import qupath.ext.qpcat.model.GateCoverage;
 import qupath.ext.qpcat.model.GmmFit;
@@ -108,20 +110,21 @@ public class PhenotypingDialog {
 
         public Map<String, String> getConditions() { return conditions; }
 
-        /** Class names the cell's current class must be among (empty: no condition). */
-        private final List<String> classIs = new ArrayList<>();
-        /** Class names the cell's current class must not be among. */
-        private final List<String> classIsNot = new ArrayList<>();
+        /** Conditions on the cell's current class, one mutable list per kind (empty: no condition). */
+        private final Map<ClassConditionKind, List<String>> classConditions =
+                ClassConditionKind.emptyConditions();
 
-        public List<String> getClassIs() { return classIs; }
-        public List<String> getClassIsNot() { return classIsNot; }
-        public boolean hasClassConditions() { return !classIs.isEmpty() || !classIsNot.isEmpty(); }
+        public Map<ClassConditionKind, List<String>> getClassConditions() { return classConditions; }
+        public List<String> getClassNames(ClassConditionKind kind) { return classConditions.get(kind); }
+        public boolean hasClassConditions() { return ClassConditionKind.anyPresent(classConditions); }
 
-        /** One line for the table: "is Tumor; is not Stroma, Immune". */
+        /** One line for the table: "is Tumor; has component CD45; lacks component Ki67". */
         public String classSummary() {
             List<String> parts = new ArrayList<>();
-            if (!classIs.isEmpty()) parts.add("is " + String.join(", ", classIs));
-            if (!classIsNot.isEmpty()) parts.add("is not " + String.join(", ", classIsNot));
+            for (ClassConditionKind kind : ClassConditionKind.values()) {
+                List<String> names = classConditions.get(kind);
+                if (!names.isEmpty()) parts.add(kind.label() + " " + String.join(", ", names));
+            }
             return String.join("; ", parts);
         }
     }
@@ -664,6 +667,23 @@ public class PhenotypingDialog {
         return new ArrayList<>(names);
     }
 
+    /**
+     * The components of the known class names, split on QuPath's derived-class
+     * separator: "CD45: Ki67" contributes "CD45" and "Ki67". What a "has component"
+     * or "lacks component" condition can name.
+     */
+    private static List<String> classComponents(List<String> classNames) {
+        Set<String> components = new TreeSet<>();
+        for (String name : classNames) components.addAll(ClassConditionKind.componentsOf(name));
+        return new ArrayList<>(components);
+    }
+
+    /** One line of the class-condition list: a kind and the name it tests. */
+    private record ClassConditionLine(ClassConditionKind kind, String name) {
+        @Override
+        public String toString() { return kind.label() + " " + name; }
+    }
+
     /** Edit the selected rule's class conditions in a small dialog. */
     private void editClassConditions() {
         PhenotypeRule rule = rulesTable.getSelectionModel().getSelectedItem();
@@ -671,18 +691,37 @@ public class PhenotypingDialog {
             Dialogs.showWarningNotification("QPCAT", "Select a rule first.");
             return;
         }
-        List<String> known = knownClassNames();
-        ComboBox<String> classCombo = new ComboBox<>(FXCollections.observableArrayList(known));
+        List<String> knownNames = knownClassNames();
+        List<String> knownComponents = classComponents(knownNames);
+        ComboBox<String> classCombo = new ComboBox<>();
         classCombo.setEditable(true);
-        classCombo.setPromptText(known.isEmpty() ? "type a class name" : "choose or type a class name");
         classCombo.setPrefWidth(240);
-        ChoiceBox<String> modeBox = new ChoiceBox<>(FXCollections.observableArrayList("is", "is not"));
-        modeBox.setValue("is");
-        ListView<String> current = new ListView<>();
+        ChoiceBox<ClassConditionKind> modeBox = new ChoiceBox<>(
+                FXCollections.observableArrayList(ClassConditionKind.values()));
+        modeBox.setConverter(new StringConverter<>() {
+            @Override
+            public String toString(ClassConditionKind k) { return k == null ? "" : k.label(); }
+            @Override
+            public ClassConditionKind fromString(String s) { return null; }
+        });
+        // Whole-name kinds list the class names; component kinds list the parts
+        // those names are built from, so "CD45" is offered when the classes are
+        // "CD45: Ki67" and "CD45".
+        Runnable refreshChoices = () -> {
+            boolean components = modeBox.getValue() != null && modeBox.getValue().matchesComponents();
+            List<String> choices = components ? knownComponents : knownNames;
+            classCombo.setItems(FXCollections.observableArrayList(choices));
+            String what = components ? "class component" : "class name";
+            classCombo.setPromptText(choices.isEmpty() ? "type a " + what : "choose or type a " + what);
+        };
+        modeBox.valueProperty().addListener((obs, o, n) -> refreshChoices.run());
+        modeBox.setValue(ClassConditionKind.IS);
+        ListView<ClassConditionLine> current = new ListView<>();
         Runnable refreshList = () -> {
-            List<String> lines = new ArrayList<>();
-            for (String c : rule.getClassIs()) lines.add("is " + c);
-            for (String c : rule.getClassIsNot()) lines.add("is not " + c);
+            List<ClassConditionLine> lines = new ArrayList<>();
+            for (ClassConditionKind kind : ClassConditionKind.values()) {
+                for (String c : rule.getClassNames(kind)) lines.add(new ClassConditionLine(kind, c));
+            }
             current.setItems(FXCollections.observableArrayList(lines));
         };
         refreshList.run();
@@ -692,24 +731,25 @@ public class PhenotypingDialog {
             String name = classCombo.getEditor().getText();
             if (name == null || name.isBlank()) return;
             name = name.trim();
-            List<String> target = "is".equals(modeBox.getValue()) ? rule.getClassIs() : rule.getClassIsNot();
+            List<String> target = rule.getClassNames(modeBox.getValue());
             if (!target.contains(name)) target.add(name);
             refreshList.run();
         });
         Button remove = new Button("Remove");
         remove.setOnAction(e -> {
-            String line = current.getSelectionModel().getSelectedItem();
+            ClassConditionLine line = current.getSelectionModel().getSelectedItem();
             if (line == null) return;
-            if (line.startsWith("is not ")) rule.getClassIsNot().remove(line.substring(7));
-            else if (line.startsWith("is ")) rule.getClassIs().remove(line.substring(3));
+            rule.getClassNames(line.kind()).remove(line.name());
             refreshList.run();
         });
         HBox addRow = new HBox(6, new Label("Class"), modeBox, classCombo, add);
         addRow.setAlignment(Pos.CENTER_LEFT);
         VBox box = new VBox(8,
-                new Label("Rule \"" + rule.getCellType() + "\" also requires the cell's current class to be:"),
+                new Label("Rule \"" + rule.getCellType() + "\" also requires the cell's current class to:"),
                 addRow, current, remove,
-                new Label("Apply the classifier before running phenotyping; the classes are read\n"
+                new Label("\"is\" / \"is not\" match the whole class name; \"has component\" / \"lacks\n"
+                        + "component\" match one part of a composite class such as \"CD45: Ki67\".\n"
+                        + "Apply the classifier before running phenotyping; the classes are read\n"
                         + "just before phenotyping replaces them. All conditions AND together."));
         box.setPadding(new Insets(10));
         Dialog<ButtonType> dialog = new Dialog<>();
@@ -801,8 +841,7 @@ public class PhenotypingDialog {
         for (PhenotypeRule rule : rulesList) {
             Map<String, Object> ruleMap = new LinkedHashMap<>();
             ruleMap.put("cellType", rule.getCellType());
-            if (!rule.getClassIs().isEmpty()) ruleMap.put("classIs", new ArrayList<>(rule.getClassIs()));
-            if (!rule.getClassIsNot().isEmpty()) ruleMap.put("classIsNot", new ArrayList<>(rule.getClassIsNot()));
+            ClassConditionKind.putInto(ruleMap, rule.getClassConditions());
             for (String marker : currentMarkers) {
                 String cond = rule.getCondition(marker);
                 // Only pos/neg are gating conditions; "" (unselected) and
@@ -1056,8 +1095,7 @@ public class PhenotypingDialog {
                 }
             }
             PhenotypeRuleSet.RuleEntry entry = new PhenotypeRuleSet.RuleEntry(rule.getCellType(), conditions);
-            entry.setClassIs(rule.getClassIs());
-            entry.setClassIsNot(rule.getClassIsNot());
+            entry.setClassConditions(rule.getClassConditions());
             entries.add(entry);
         }
         ruleSet.setRules(entries);
@@ -1164,8 +1202,9 @@ public class PhenotypingDialog {
         if (ruleSet.getRules() != null) {
             for (PhenotypeRuleSet.RuleEntry entry : ruleSet.getRules()) {
                 PhenotypeRule rule = new PhenotypeRule(entry.getCellType());
-                rule.getClassIs().addAll(entry.getClassIs());
-                rule.getClassIsNot().addAll(entry.getClassIsNot());
+                for (Map.Entry<ClassConditionKind, List<String>> cc : entry.getClassConditions().entrySet()) {
+                    rule.getClassNames(cc.getKey()).addAll(cc.getValue());
+                }
                 if (entry.getConditions() != null) {
                     for (Map.Entry<String, String> cond : entry.getConditions().entrySet()) {
                         // Only set conditions for markers that are present

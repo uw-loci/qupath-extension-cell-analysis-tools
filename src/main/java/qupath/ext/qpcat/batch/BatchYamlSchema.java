@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.batch;
 
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.model.ClassConditionKind;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -344,10 +345,13 @@ public final class BatchYamlSchema {
         private List<String> anyMarkers = new ArrayList<>();
         private double requireMinZscore = 1.0;
         private double excludeMaxZscore = 1.0;
-        /** Class names the cell's current class must be among ({@code class_is}). */
-        private List<String> classIs = new ArrayList<>();
-        /** Class names the cell's current class must not be among ({@code class_is_not}). */
-        private List<String> classIsNot = new ArrayList<>();
+        /**
+         * Class conditions ({@code class_is}, {@code class_is_not}, {@code class_has},
+         * {@code class_lacks}) on the cell's class at run time, by kind; every kind
+         * is present, empty when unused.
+         */
+        private final Map<ClassConditionKind, List<String>> classConditions =
+                ClassConditionKind.emptyConditions();
 
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
@@ -380,14 +384,16 @@ public final class BatchYamlSchema {
             this.excludeMaxZscore = excludeMaxZscore;
         }
 
-        public List<String> getClassIs() { return classIs; }
-        public void setClassIs(List<String> classIs) {
-            this.classIs = classIs == null ? new ArrayList<>() : new ArrayList<>(classIs);
-        }
+        public Map<ClassConditionKind, List<String>> getClassConditions() { return classConditions; }
 
-        public List<String> getClassIsNot() { return classIsNot; }
-        public void setClassIsNot(List<String> classIsNot) {
-            this.classIsNot = classIsNot == null ? new ArrayList<>() : new ArrayList<>(classIsNot);
+        /**
+         * Replace the names for one kind.
+         *
+         * @param kind which condition
+         * @param names class names or components; null clears the kind
+         */
+        public void setClassCondition(ClassConditionKind kind, List<String> names) {
+            classConditions.put(kind, names == null ? new ArrayList<>() : new ArrayList<>(names));
         }
     }
 

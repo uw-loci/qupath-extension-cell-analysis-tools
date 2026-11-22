@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Phenotyping rules can match one component of a composite classifier's class.** Next to
+  "class is" and "class is not", **+ Add class condition...** now offers **has component** and
+  **lacks component**: QuPath writes a composite classifier's output as `CD45: Ki67`, so a rule
+  for "CD45+ and Ki67-" is `has component CD45, lacks component Ki67`, with the marker gates left
+  at `--`, instead of one whole-name condition per derived class. The chooser lists the
+  components found in the project's classes, the Class column shows them, saved rule sets keep
+  them, and batch files write them as `class_has` / `class_lacks` (#28).
 - **A banner when the open image and its saved copy disagree.** The Clustering, Phenotyping
   and Cellular Neighborhood dialogs keep a one-line strip above their scrolling content that
   appears when the project's saved copy of the open image changed while it was open (a script

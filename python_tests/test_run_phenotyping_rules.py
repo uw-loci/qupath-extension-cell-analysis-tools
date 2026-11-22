@@ -17,17 +17,33 @@ from conftest import load_script_symbol
 # The shipped script logs through a module-level `logger` that Appose provides;
 # the AST loader lifts the function out without it, so inject a real one. Kept a
 # real logger rather than a stub so a malformed format string still fails here.
-evaluate_rule = load_script_symbol(
-    "run_phenotyping.py",
+# The module-level constants and the helpers evaluate_rule calls are injected the
+# same way, each helper loaded from the shipped source before the next needs it.
+CLASS_CONDITION_KEYS = ("classIs", "classIsNot", "classHas", "classLacks")
+SCRIPT_GLOBALS = {
+    "np": np,
+    "logger": logging.getLogger("test.phenotyping"),
+    "CLASS_IS": "classIs",
+    "CLASS_IS_NOT": "classIsNot",
+    "CLASS_HAS": "classHas",
+    "CLASS_LACKS": "classLacks",
+    "CLASS_CONDITION_KEYS": CLASS_CONDITION_KEYS,
+    "RULE_META_KEYS": ("cellType",) + CLASS_CONDITION_KEYS,
+    "CLASS_COMPONENT_SEPARATOR": ": ",
+}
+for _name in (
+    "class_components",
+    "has_class_condition",
+    "class_condition_mask",
     "evaluate_rule",
-    extra_globals={
-        "np": np,
-        "logger": logging.getLogger("test.phenotyping"),
-        "CLASS_IS": "classIs",
-        "CLASS_IS_NOT": "classIsNot",
-        "RULE_META_KEYS": ("cellType", "classIs", "classIsNot"),
-    },
-)
+):
+    SCRIPT_GLOBALS[_name] = load_script_symbol(
+        "run_phenotyping.py", _name, extra_globals=SCRIPT_GLOBALS
+    )
+class_components = SCRIPT_GLOBALS["class_components"]
+has_class_condition = SCRIPT_GLOBALS["has_class_condition"]
+class_condition_mask = SCRIPT_GLOBALS["class_condition_mask"]
+evaluate_rule = SCRIPT_GLOBALS["evaluate_rule"]
 
 # cells x markers, values already normalized to [0, 1]; gate is 0.5 throughout.
 #            CD3   CD8   CD68  CD163
@@ -148,3 +164,111 @@ def test_class_condition_without_classes_matches_nothing():
 
 def test_rules_without_class_conditions_ignore_the_classes():
     assert run_with_classes({"cellType": "T", "CD3": "pos"}) == ({0, 1}, True)
+
+
+# --- component conditions (issue #28): one part of a composite classifier's class ---
+
+# What a QuPath composite classifier over CD45 / Ki67 / CD8 writes: the positive
+# components joined by ": ", a plain name for one positive, "" for none.
+COMPOSITE = np.array(
+    [
+        "CD45: Ki67",  # 0
+        "CD45",  # 1
+        "Ki67",  # 2
+        "",  # 3: no class
+        "CD45: CD8: Ki67",  # 4
+        "CD45: CD8",  # 5
+    ],
+    dtype=object,
+)
+
+
+def run_composite(rule):
+    return run_with_classes(rule, COMPOSITE)
+
+
+def test_class_components_split_on_qupaths_separator():
+    assert class_components("CD45: Ki67") == {"CD45", "Ki67"}
+    assert class_components("CD45") == {"CD45"}
+    assert class_components("CD45: Positive") == {"CD45", "Positive"}
+    assert class_components("") == frozenset()
+    assert class_components(None) == frozenset()
+    assert class_components("Tumor:Ki67") == {"Tumor:Ki67"}, "no space, no split"
+
+
+def test_has_component_matches_every_derived_name_containing_it():
+    got, has = run_composite({"cellType": "X", "classHas": ["CD45"]})
+    assert got == {0, 1, 4, 5} and has is True
+
+
+def test_lacks_component_keeps_the_unclassified_cell():
+    got, _ = run_composite({"cellType": "X", "classLacks": ["Ki67"]})
+    assert got == {1, 3, 5}, "no class has no components, so it lacks everything"
+
+
+def test_has_and_lacks_together_is_the_issue_28_example():
+    # "CD45+ and Ki67-" without naming every derived class.
+    got, _ = run_composite(
+        {"cellType": "X", "classHas": ["CD45"], "classLacks": ["Ki67"]}
+    )
+    assert got == {1, 5}
+
+
+def test_several_has_components_are_anded():
+    got, _ = run_composite({"cellType": "X", "classHas": ["CD45", "Ki67"]})
+    assert got == {0, 4}
+
+
+def test_several_lacks_components_all_exclude():
+    got, _ = run_composite({"cellType": "X", "classLacks": ["Ki67", "CD8"]})
+    assert got == {1, 3}
+
+
+def test_component_match_is_exact_not_substring():
+    got, _ = run_composite({"cellType": "X", "classHas": ["CD4"]})
+    assert got == set(), "CD4 is not a component of CD45"
+
+
+def test_component_conditions_and_with_whole_name_and_markers():
+    # classIs still means the whole name, so combining keeps both meanings.
+    got, _ = run_composite({"cellType": "X", "classHas": ["CD45"], "classIs": ["CD45"]})
+    assert got == {1}
+    # cells 0 and 1 are CD3+; only cell 1 lacks Ki67 (cell 4, 5 are CD3-).
+    got, _ = run_composite({"cellType": "X", "CD3": "pos", "classLacks": ["Ki67"]})
+    assert got == {1}
+
+
+def test_has_component_without_classes_matches_nothing():
+    m, has = evaluate_rule(
+        {"cellType": "X", "classHas": ["CD45"]}, DATA, IDX, {}, 0.5, None
+    )
+    assert not m.any() and has is True
+
+
+def test_has_class_condition_sees_every_kind():
+    assert has_class_condition({"cellType": "X", "classHas": ["CD45"]})
+    assert has_class_condition({"cellType": "X", "classLacks": ["CD45"]})
+    assert has_class_condition({"cellType": "X", "classIs": ["Tumor"]})
+    assert not has_class_condition({"cellType": "X", "CD3": "pos", "classHas": []})
+
+
+def test_counts_equal_a_direct_count_over_the_derived_classes():
+    # Random composite classes for many cells; the mask must agree with a
+    # per-cell split of the name, the definition the docs give.
+    rng = np.random.default_rng(28)
+    markers = ["CD45", "Ki67", "CD8", "PanCK"]
+    classes = []
+    for _ in range(5000):
+        positives = [m for m in markers if rng.random() < 0.5]
+        classes.append(": ".join(positives))
+    classes = np.array(classes, dtype=object)
+    rule = {"cellType": "X", "classHas": ["CD45", "PanCK"], "classLacks": ["Ki67"]}
+    mask = class_condition_mask(rule, classes)
+    expected = np.array(
+        [
+            {"CD45", "PanCK"} <= set(c.split(": ")) and "Ki67" not in c.split(": ")
+            for c in classes
+        ]
+    )
+    assert mask.sum() > 0
+    np.testing.assert_array_equal(mask, expected)

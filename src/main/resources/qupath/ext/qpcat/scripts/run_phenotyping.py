@@ -29,20 +29,78 @@ import numpy as np
 import pandas as pd
 from appose import NDArray as PyNDArray
 
+# Rule keys that test the class a cell already carries. The first two match the
+# whole class name; the last two match one COMPONENT of a derived class, so a
+# composite classifier's "CD45: Ki67" counts as having CD45 (and lacking CD8).
 CLASS_IS = "classIs"
 CLASS_IS_NOT = "classIsNot"
-RULE_META_KEYS = ("cellType", CLASS_IS, CLASS_IS_NOT)
+CLASS_HAS = "classHas"
+CLASS_LACKS = "classLacks"
+CLASS_CONDITION_KEYS = (CLASS_IS, CLASS_IS_NOT, CLASS_HAS, CLASS_LACKS)
+RULE_META_KEYS = ("cellType",) + CLASS_CONDITION_KEYS
+# QuPath joins the components of a derived class with this (PathClass.toString).
+CLASS_COMPONENT_SEPARATOR = ": "
+
+
+def class_components(class_name):
+    """The components of a QuPath class name: "CD45: Ki67" -> {"CD45", "Ki67"}.
+
+    The empty name (no class) has no components, so it fails every ``classHas``
+    and passes every ``classLacks``, as a cell with no class should.
+    """
+    if not class_name:
+        return frozenset()
+    return frozenset(
+        part for part in class_name.split(CLASS_COMPONENT_SEPARATOR) if part
+    )
+
+
+def has_class_condition(rule):
+    """True when the rule names at least one class under any class-condition key."""
+    return any(rule.get(key) for key in CLASS_CONDITION_KEYS)
+
+
+def class_condition_mask(rule, cell_classes):
+    """Boolean mask of the cells whose current class passes the rule's class conditions.
+
+    ``cell_classes`` holds one class name per cell ("" for none). The four
+    conditions AND together: the whole name must be one of ``classIs`` and none
+    of ``classIsNot``; every component listed under ``classHas`` must be among
+    the class's components and no component under ``classLacks`` may be. The
+    component tests are evaluated once per distinct class name, not per cell.
+    """
+    n_cells = len(cell_classes)
+    mask = np.ones(n_cells, dtype=bool)
+    class_is = list(rule.get(CLASS_IS) or [])
+    class_is_not = list(rule.get(CLASS_IS_NOT) or [])
+    class_has = set(rule.get(CLASS_HAS) or [])
+    class_lacks = set(rule.get(CLASS_LACKS) or [])
+    if class_is:
+        mask &= np.isin(cell_classes, class_is)
+    if class_is_not:
+        mask &= ~np.isin(cell_classes, class_is_not)
+    if class_has or class_lacks:
+        names, inverse = np.unique(
+            np.asarray(cell_classes, dtype=str), return_inverse=True
+        )
+        passes = np.empty(len(names), dtype=bool)
+        for i, name in enumerate(names):
+            components = class_components(name)
+            passes[i] = class_has <= components and not (class_lacks & components)
+        mask &= passes[inverse.reshape(-1)]
+    return mask
 
 
 def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes=None):
     """Boolean mask of cells satisfying ONE rule, plus whether it had criteria.
 
-    Besides the marker conditions, a rule may carry ``classIs`` and
-    ``classIsNot``: lists of class names the cell's CURRENT class (the one a
-    classifier or an earlier run gave it, passed in ``cell_classes``, one name
-    per cell, "" for none) must be in, or must not be in. Both AND with the
-    rest of the row. A class condition with no classes supplied matches
-    nothing, for the same reason an any-group on absent markers does.
+    Besides the marker conditions, a rule may test the cell's CURRENT class
+    (the one a classifier or an earlier run gave it, passed in ``cell_classes``,
+    one name per cell, "" for none): ``classIs`` / ``classIsNot`` on the whole
+    name, ``classHas`` / ``classLacks`` on its components (see
+    ``class_condition_mask``). All AND with the rest of the row. A class
+    condition with no classes supplied matches nothing, for the same reason an
+    any-group on absent markers does.
 
     A rule is an AND over four kinds of condition:
 
@@ -72,9 +130,7 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
     has_anypos = False
     has_anyneg = False
     has_criteria = False
-    class_is = list(rule.get(CLASS_IS) or [])
-    class_is_not = list(rule.get(CLASS_IS_NOT) or [])
-    if class_is or class_is_not:
+    if has_class_condition(rule):
         has_criteria = True
         if cell_classes is None:
             logger.warning(
@@ -84,10 +140,7 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
             )
             matches &= False
         else:
-            if class_is:
-                matches &= np.isin(cell_classes, class_is)
-            if class_is_not:
-                matches &= ~np.isin(cell_classes, class_is_not)
+            matches &= class_condition_mask(rule, cell_classes)
 
     for marker, condition in rule.items():
         if marker in RULE_META_KEYS or not condition:
@@ -230,7 +283,7 @@ else:
 marker_idx = {name: i for i, name in enumerate(list(marker_names))}
 norm_data = df_norm.values
 
-# The class each cell already carries, for rules with classIs / classIsNot
+# The class each cell already carries, for rules with class conditions
 # (injected by Appose as JSON, one name per cell, "" for none; absent when the
 # caller predates it).
 try:
@@ -244,9 +297,7 @@ try:
         cell_classes = None
 except NameError:
     cell_classes = None
-if cell_classes is not None and any(
-    r.get(CLASS_IS) or r.get(CLASS_IS_NOT) for r in rules
-):
+if cell_classes is not None and any(has_class_condition(r) for r in rules):
     n_classed = int(np.sum(cell_classes != ""))
     logger.info(
         "Class conditions in use: %d of %d cells carry a class", n_classed, n_cells

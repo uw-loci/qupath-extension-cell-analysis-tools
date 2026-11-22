@@ -2,6 +2,7 @@ package qupath.ext.qpcat.model;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,10 +41,16 @@ public class PhenotypeRuleSet {
     public static class RuleEntry {
         private String cellType;
         private Map<String, String> conditions;
-        /** Class names the cell's current class must be among; empty means no such condition. */
+        /**
+         * Class conditions, one nullable list per {@link ClassConditionKind} so a
+         * saved file carries only the kinds in use and one written before a kind
+         * existed reads as "no condition". Access through
+         * {@link #getClassConditions()} / {@link #setClassCondition}.
+         */
         private List<String> classIs;
-        /** Class names the cell's current class must not be among. */
         private List<String> classIsNot;
+        private List<String> classHas;
+        private List<String> classLacks;
 
         public RuleEntry() {
             this.conditions = new LinkedHashMap<>();
@@ -58,14 +65,50 @@ public class PhenotypeRuleSet {
         public void setCellType(String cellType) { this.cellType = cellType; }
         public Map<String, String> getConditions() { return conditions; }
         public void setConditions(Map<String, String> conditions) { this.conditions = conditions; }
-        /** @return never null; a file written before class conditions existed reads as empty */
-        public List<String> getClassIs() { return classIs == null ? List.of() : classIs; }
-        public void setClassIs(List<String> classIs) {
-            this.classIs = classIs == null || classIs.isEmpty() ? null : new ArrayList<>(classIs);
+
+        /**
+         * The class conditions by kind.
+         *
+         * @return a map with every kind present; a kind not in the file is an empty list
+         */
+        public Map<ClassConditionKind, List<String>> getClassConditions() {
+            Map<ClassConditionKind, List<String>> m = new EnumMap<>(ClassConditionKind.class);
+            m.put(ClassConditionKind.IS, listOrEmpty(classIs));
+            m.put(ClassConditionKind.IS_NOT, listOrEmpty(classIsNot));
+            m.put(ClassConditionKind.HAS, listOrEmpty(classHas));
+            m.put(ClassConditionKind.LACKS, listOrEmpty(classLacks));
+            return m;
         }
-        public List<String> getClassIsNot() { return classIsNot == null ? List.of() : classIsNot; }
-        public void setClassIsNot(List<String> classIsNot) {
-            this.classIsNot = classIsNot == null || classIsNot.isEmpty() ? null : new ArrayList<>(classIsNot);
+
+        /**
+         * Set the names for one kind; an empty or null list removes the kind from the file.
+         *
+         * @param kind which condition
+         * @param names class names or components; copied
+         */
+        public void setClassCondition(ClassConditionKind kind, List<String> names) {
+            List<String> v = names == null || names.isEmpty() ? null : new ArrayList<>(names);
+            switch (kind) {
+                case IS -> classIs = v;
+                case IS_NOT -> classIsNot = v;
+                case HAS -> classHas = v;
+                case LACKS -> classLacks = v;
+            }
+        }
+
+        /**
+         * Set every kind at once.
+         *
+         * @param conditions per-kind names; a missing kind clears that kind
+         */
+        public void setClassConditions(Map<ClassConditionKind, List<String>> conditions) {
+            for (ClassConditionKind k : ClassConditionKind.values()) {
+                setClassCondition(k, conditions == null ? null : conditions.get(k));
+            }
+        }
+
+        private static List<String> listOrEmpty(List<String> l) {
+            return l == null ? new ArrayList<>() : new ArrayList<>(l);
         }
     }
 

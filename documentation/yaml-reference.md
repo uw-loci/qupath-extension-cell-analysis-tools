@@ -220,6 +220,8 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
 | `rules[].class_is` | list[string] | `[]` | The cell's class at run time (from a classifier applied beforehand, or an earlier run) must be one of these. ANDed with the marker conditions; full-name match. |
 | `rules[].class_is_not` | list[string] | `[]` | The cell's class at run time must not be any of these. |
+| `rules[].class_has` | list[string] | `[]` | Every listed name must be a **component** of the cell's class at run time, where a composite classifier's `CD45: Ki67` has the components `CD45` and `Ki67` (split on `: `, matched exactly). `class_has: [CD45]` with `class_lacks: [Ki67]` is "CD45+ and Ki67-" across every derived class the panel produces. |
+| `rules[].class_lacks` | list[string] | `[]` | No listed name may be a component of the cell's class at run time. A cell with no class lacks every component. |
 | `rules[].require_min_zscore` | double | `1.0` | Minimum z-score for `require_markers`. |
 | `rules[].exclude_max_zscore` | double | `1.0` | Maximum z-score for `exclude_markers`. |
 | `llm_explainer` | object | -- | Validated but not run; see below. |

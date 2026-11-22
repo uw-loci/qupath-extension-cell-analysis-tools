@@ -2,6 +2,7 @@ package qupath.ext.qpcat.batch;
 
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.model.ClassConditionKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -71,9 +72,15 @@ public final class BatchYamlParser {
     private static final Set<String> KNOWN_PHENOTYPING = new HashSet<>(Arrays.asList(
             "enabled", "rules", "llm_explainer", "missing_values"));
 
-    private static final Set<String> KNOWN_PHENO_RULE = new HashSet<>(Arrays.asList(
-            "name", "require_markers", "exclude_markers", "any_markers",
-            "require_min_zscore", "exclude_max_zscore", "class_is", "class_is_not"));
+    private static final Set<String> KNOWN_PHENO_RULE = knownPhenoRuleKeys();
+
+    private static Set<String> knownPhenoRuleKeys() {
+        Set<String> keys = new HashSet<>(Arrays.asList(
+                "name", "require_markers", "exclude_markers", "any_markers",
+                "require_min_zscore", "exclude_max_zscore"));
+        keys.addAll(ClassConditionKind.yamlKeys());
+        return keys;
+    }
 
     private static final Set<String> KNOWN_LLM = new HashSet<>(Arrays.asList(
             "enabled", "provider", "model",
@@ -416,6 +423,11 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_PHENO_RULE) + "'?"));
                 continue;
             }
+            ClassConditionKind classKind = ClassConditionKind.fromYamlKey(key);
+            if (classKind != null) {
+                rule.setClassCondition(classKind, asStringList(value));
+                continue;
+            }
             switch (key) {
                 case "name" -> rule.setName(asString(value));
                 case "require_markers" -> rule.setRequireMarkers(asStringList(value));
@@ -423,8 +435,6 @@ public final class BatchYamlParser {
                 case "any_markers" -> rule.setAnyMarkers(asStringList(value));
                 case "require_min_zscore" -> rule.setRequireMinZscore(asDouble(value, 1.0));
                 case "exclude_max_zscore" -> rule.setExcludeMaxZscore(asDouble(value, 1.0));
-                case "class_is" -> rule.setClassIs(asStringList(value));
-                case "class_is_not" -> rule.setClassIsNot(asStringList(value));
                 default -> {}
             }
         }

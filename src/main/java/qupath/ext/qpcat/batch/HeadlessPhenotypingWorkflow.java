@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
+import qupath.ext.qpcat.model.ClassConditionKind;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -119,7 +120,8 @@ public final class HeadlessPhenotypingWorkflow {
 
     /**
      * YAML rules to the {@code phenotype_rules} payload:
-     * {@code [{"cellType": "T_cell", "<marker>": "pos"|"neg", ..., "classIs": [...], "classIsNot": [...]}, ...]}.
+     * {@code [{"cellType": "T_cell", "<marker>": "pos"|"neg", ..., "classIs": [...], "classHas": [...], ...}, ...]}
+     * (one list per {@link ClassConditionKind} in use).
      * Order is preserved because {@code run_phenotyping.py} evaluates
      * first-match-wins.
      */
@@ -128,8 +130,7 @@ public final class HeadlessPhenotypingWorkflow {
         for (BatchYamlSchema.PhenotypeRuleEntry r : rules) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("cellType", r.getName());
-            if (!r.getClassIs().isEmpty()) m.put("classIs", new ArrayList<>(r.getClassIs()));
-            if (!r.getClassIsNot().isEmpty()) m.put("classIsNot", new ArrayList<>(r.getClassIsNot()));
+            ClassConditionKind.putInto(m, r.getClassConditions());
             if (r.getRequireMarkers() != null) {
                 for (String marker : r.getRequireMarkers()) m.put(marker, "pos");
             }

@@ -139,9 +139,11 @@ your gates, because the audit log records how many rules ran, not what they were
   only `anypos` markers are absent from the data matches nothing (rather than matching
   everything).
 - **A rule may also require the class a cell already has.** Select the rule, click
-  **+ Add class condition...** and choose a class and *is* or *is not*. The condition ANDs
-  with the marker conditions, so `class is Tumor, Ki67: pos` is "the cells the classifier
-  called Tumor that are Ki67 positive". See [Using a class as a condition](#using-a-class-as-a-condition).
+  **+ Add class condition...** and choose a class and *is* or *is not* (the whole class
+  name), or a component and *has component* or *lacks component* (one part of a composite
+  classifier's class such as `CD45: Ki67`). The condition ANDs with the marker conditions,
+  so `class is Tumor, Ki67: pos` is "the cells the classifier called Tumor that are Ki67
+  positive". See [Using a class as a condition](#using-a-class-as-a-condition).
 - **"neg" on the other markers makes a rule exclusive.** This is the most common
   surprise. If `markerA+` is defined as `A: pos, B: neg, C: neg`, then a cell that is
   positive for **both** A and B matches **neither** `markerA+` (B is not neg) **nor**
@@ -183,19 +185,42 @@ runs: the class a QuPath object classifier, the [QP-CAT classifier](autoencoder.
 earlier run gave it.
 
 1. Apply the classifier first, so the cells carry its classes.
-2. In the rule table, select the rule and click **+ Add class condition...**. Choose a
-   class (the list holds the project's classes and every class on the open image's cells;
-   you can also type one), choose **is** or **is not**, and click **Add**. A rule can hold
-   several: *is* names are an OR among themselves, *is not* names all exclude, and both AND
-   with the marker conditions. A **Class** column appears in the table while any rule has
-   one.
+2. In the rule table, select the rule and click **+ Add class condition...**. Choose the
+   kind of condition, then a class (the list holds the project's classes and every class on
+   the open image's cells; you can also type one), and click **Add**. A rule can hold
+   several, and all of them AND with the marker conditions. A **Class** column appears in
+   the table while any rule has one.
 3. Run. The classes are read just before phenotyping replaces them, so the classifier's
    output is used and then overwritten by the phenotypes, as for any run.
 
-Class names match in full: a condition on `Tumor` does not match `Tumor: Ki67+`. A rule with a
-class condition on cells that carry no class matches nothing, and the log says so ("Rules use
-class conditions but no cell in scope has a class"). Saved rule sets keep the conditions; a
-batch file writes them as `class_is` and `class_is_not` ([YAML reference](yaml-reference.md)).
+The four kinds:
+
+| Condition | Matches when | Several names |
+|---|---|---|
+| **is** | the whole class name is one of the names | an OR: any of them |
+| **is not** | the whole class name is none of the names | all exclude |
+| **has component** | every listed name is a component of the class | an AND: all must be present |
+| **lacks component** | no listed name is a component of the class | all exclude |
+
+*is* and *is not* match the name in full: `Tumor` does not match `Tumor: Ki67`. They suit a
+single-class classifier.
+
+*has component* and *lacks component* are for a **composite** classifier. QuPath writes its
+output as a derived class built from the positive components, `CD45: Ki67` for a cell positive
+for both and `CD45` for one positive, so "CD45+ and Ki67-" is not one class but every name that
+contains `CD45` and lacks `Ki67`, and the list grows with the panel. The rule `class has
+component CD45, class lacks component Ki67`, with every marker gate left at `--`, covers all
+of them and does not change when a marker is added to the panel. The components are the parts
+of the name split on `: ` (QuPath's separator), matched exactly: `CD4` is not a component of
+`CD45`. A single-measurement classifier's `CD45: Positive` splits the same way, so
+`has component Positive` works on it. With the chooser set to a component kind, the list offers
+the components found in the project's classes rather than the whole names. A cell with no
+class has no components: it fails every *has component* and passes every *lacks component*.
+
+A rule with a class condition on cells that carry no class matches nothing, and the log says so
+("Rules use class conditions but no cell in scope has a class"). Saved rule sets keep the
+conditions; a batch file writes them as `class_is`, `class_is_not`, `class_has` and
+`class_lacks` ([YAML reference](yaml-reference.md)).
 
 ---
 ## Auto-thresholding
