@@ -221,7 +221,8 @@ Automatically compute marker gate thresholds instead of setting them manually.
      components are drawn on the histogram, in the same cells-per-bar units as the bars. A
      spike of identical values at the end of the range is left out of the fit; when it would
      flatten the curves, the axis zooms to them and the plot says *axis zoomed*, so the spike's
-     bar is cut off at the top
+     bar is cut off at the top. A note under the counts says when the values look like one
+     population or three rather than two (see [the GMM note](#when-two-populations-is-the-wrong-count))
    - **Gamma** -- gamma distribution fit, good for strictly positive markers
 7. You can drag the red threshold line with the mouse for fine-tuning (it moves in steps of
    0.001), or type a value into the **Threshold** box (up to four decimals, the precision the
@@ -268,7 +269,7 @@ only, and it is exact, so on a single image the two can differ by up to 0.1% of 
 | Method | What it fits | Where the threshold goes | Source |
 |---|---|---|---|
 | **Triangle** | scikit-image `threshold_triangle` on the values left after dropping end spikes | the triangle rule on the histogram | [Zack et al. 1977](references.md#triangle-threshold-method) |
-| **GMM (Gaussian)** | a two-component Gaussian mixture (`random_state=42`, up to 200 iterations) on the same values | where the two weighted densities cross between the means; the midpoint of the means if they do not cross | [References](references.md#phenotyping-and-gating) |
+| **GMM (Gaussian)** | a two-component Gaussian mixture (`random_state=42`, up to 200 iterations) on the same values; one- and three-component mixtures are also fitted and compared with it by BIC | where the two weighted densities cross between the means; the midpoint of the means if they do not cross. A note says when BIC prefers one or three populations; the gate does not move for it | [References](references.md#phenotyping-and-gating) |
 | **Gamma** | one gamma distribution (location fixed at 0) on every value, shifted to be positive | the mode plus 1 standard deviation of that gamma (when the fitted shape is 1 or less the mode is 0) | inspired by [GammaGateR](references.md#gammagater-gamma-distribution-gating), which fits a gamma *mixture*; QP-CAT's single-gamma rule is a different, simpler method |
 
 The Phenotyping preferences (**Edit > Preferences > QP-CAT: Run Phenotyping**) set **Histogram
@@ -297,5 +298,38 @@ Leaving the spike out, they suggest 0.129 (24.5% positive, the figure above) and
 (30.2%); Gamma, which still fits every value including the spike and whose method did not
 change, gives 0.361 (24.0%). Triangle still tends to mark too many cells positive when a dim
 shoulder sits next to the spike, so check it against GMM and Gamma.
+
+### When two populations is the wrong count
+
+GMM always fits two components and gates where they cross, so it has an answer even when the
+values are not two groups. To catch that, it also fits one and three components to the same
+values (at most 50,000 of them, sampled with a fixed seed) and compares the three fits by the
+Bayesian information criterion (BIC). When one or three components beat two by a BIC difference
+of at least 6 ("strong" evidence, [Kass and Raftery 1995](references.md#bic-comparison-of-component-counts)),
+a second orange line appears under the counts while **GMM (Gaussian)** is selected, and **Apply
+to All Markers** names the markers it applies to. **The suggested gate does not move**: it is
+still the two-component crossing, so earlier runs and saved rule sets mean what they did.
+
+- *"GMM (Gaussian) fit: one population by BIC - the gate splits a single distribution; this
+  marker may have no positive cells."* The gate sits inside one group. On the synthetic image
+  tme_07, CD20 (a marker with no B cells on that image) gets this note. When a spike of
+  no-signal cells was left out of the fit the note counts the cells outside it instead and says
+  they may all be positive, or all negative: on tme_01, Ki67 reads *"one population by BIC among
+  the 104 cells outside the spike ..."* (the count from the dataset's own cell table; QuPath's
+  detections give a slightly different one) because every cell with Ki67 signal is Ki67 positive,
+  and the gate splits them for no reason.
+- *"GMM (Gaussian) fit: three populations by BIC (means 0.0986, 0.593, 0.839) - the gate
+  separates the negative group from the dim and bright groups; consider a manual threshold
+  between the dim and bright groups."* Negative, dim and bright groups were absorbed by two
+  components; the note gives the three means and says which pair the gate separates (when it
+  falls between the dim and bright means, it says so and suggests a threshold between the
+  negative and dim groups instead, if dim cells count as positive). PanCK on every synthetic
+  image gets this note (the means above are tme_01 with Percentile scaling). Which side the
+  dim cells belong on is a biological call, not a fitting one.
+
+A note is a reason to look at the histogram, not a verdict: BIC rewards extra components on any
+long tail, and a marker can be truly absent from an image. On tme_01 the other five markers
+(CD31, CD3, CD8, CD20, CD68) get no note; on tme_06, CD8 and CD68 do, where a small dim group
+sits at 0.04-0.08 between the zero spike and the bright cells.
 
 ---

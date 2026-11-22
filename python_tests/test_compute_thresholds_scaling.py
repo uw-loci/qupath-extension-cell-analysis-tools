@@ -45,7 +45,9 @@ def test_the_scaling_reproduces_the_run_exactly(normalization):
     offset, scale, low, high = params(df, normalization)
     clipped = df if low is None else df.clip(lower=low, upper=high, axis=1)
     pd.testing.assert_frame_equal(
-        (clipped - offset) / scale, run_phenotyping_norm(df, normalization), check_exact=True
+        (clipped - offset) / scale,
+        run_phenotyping_norm(df, normalization),
+        check_exact=True,
     )
 
 
@@ -57,10 +59,16 @@ def test_a_constant_column_does_not_divide_by_zero():
 
 @requires("sklearn")
 def test_the_threshold_comes_from_the_reported_components():
-    crossing = load_script_symbol("compute_thresholds.py", "gmm_crossing", {"math": __import__("math")})
-    interior = load_script_symbol("compute_thresholds.py", "interior_values", {"np": np})
+    crossing = load_script_symbol(
+        "compute_thresholds.py", "gmm_crossing", {"math": __import__("math")}
+    )
+    interior = load_script_symbol(
+        "compute_thresholds.py", "interior_values", {"np": np}
+    )
     fit_fn = load_script_symbol(
-        "compute_thresholds.py", "gmm_fit", {"np": np, "interior_values": interior}
+        "compute_thresholds.py",
+        "gmm_fit",
+        {"np": np, "interior_values": interior, "BIC_SAMPLE": 50000, "BIC_MARGIN": 6.0},
     )
     threshold = load_script_symbol(
         "compute_thresholds.py", "gmm_threshold", {"gmm_crossing": crossing}

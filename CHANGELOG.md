@@ -25,6 +25,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   notification and the run summary. Measured: 1 million cells x 25 markers in 43 s end to end
   from a Windows QuPath on a 16 GB card. Details and limits in Setup.
 
+### Changed
+
+- **The GMM threshold says when two populations is the wrong count.** The method still fits
+  two components and gates where they cross, but it now also fits one and three components to
+  the same values (at most 50,000 of them) and compares the three by BIC. When one or three
+  win by a BIC difference of at least 6, a second orange line under the histogram's counts
+  says so: one population ("the gate splits a single distribution; this marker may have no
+  positive cells", or, past a spike of no-signal cells, that those cells may all be positive)
+  or three (the three means and which pair of groups the gate separates, with a manual
+  threshold suggested between the other pair). **Apply to All Markers** names the markers
+  with a note. The suggested gate itself does not move, so earlier runs and saved rule sets
+  are unchanged. Raised on 2026-11-09 from the threshold-preview figure, where a marker
+  absent from an image was still split in two.
+
 ### Fixed
 
 - A batch file's `missing_values` was ignored unless `normalization` was also set.

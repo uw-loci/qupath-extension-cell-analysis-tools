@@ -4,14 +4,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The two-component Gaussian mixture behind a GMM threshold, lower mean first.
+ * The two-component Gaussian mixture behind a GMM threshold, lower mean first,
+ * and what a BIC comparison with 1 and 3 components said about it.
  *
- * @param means   component means
- * @param stds    component standard deviations
- * @param weights component weights
- * @param nFit    how many cells the mixture was fitted to
+ * @param means         component means
+ * @param stds          component standard deviations
+ * @param weights       component weights
+ * @param nFit          how many cells the mixture was fitted to
+ * @param bicComponents the component count BIC prefers (1, 2 or 3; 2 when the
+ *                      script did not say)
+ * @param note          the script's note when that count is not 2, else null
  */
-public record GmmFit(double[] means, double[] stds, double[] weights, int nFit) {
+public record GmmFit(double[] means, double[] stds, double[] weights, int nFit,
+                     int bicComponents, String note) {
 
     /**
      * @param map a marker's "gmm" entry
@@ -29,7 +34,9 @@ public record GmmFit(double[] means, double[] stds, double[] weights, int nFit) 
                 || !(map.get("n_fit") instanceof Number n)) {
             return null;
         }
-        return new GmmFit(means, stds, weights, n.intValue());
+        int components = map.get("bic_components") instanceof Number k ? k.intValue() : 2;
+        String note = map.get("note") instanceof String s && !s.isBlank() ? s : null;
+        return new GmmFit(means, stds, weights, n.intValue(), components, note);
     }
 
     private static double[] doubles(Object list) {
@@ -44,6 +51,15 @@ public record GmmFit(double[] means, double[] stds, double[] weights, int nFit) 
             values[i] = n.doubleValue();
         }
         return values;
+    }
+
+    /** @return "one population by BIC" or "three populations by BIC", or null when BIC agrees with 2 */
+    public String populationsByBic() {
+        return switch (bicComponents) {
+            case 1 -> "one population by BIC";
+            case 3 -> "three populations by BIC";
+            default -> null;
+        };
     }
 
     /**
