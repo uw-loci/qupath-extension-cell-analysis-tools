@@ -94,7 +94,7 @@ public final class QpcatColorMaps {
                             new double[]{0.0, 0.600, 0.969, 0.333},
                             new double[]{0.294, 0.788, 0.969, 0.020}));
         } catch (Exception e) {
-            logger.warn("Could not register QP-CAT diverging colour maps: {}", e.getMessage());
+            logger.warn("Could not register QP-CAT diverging color maps: {}", e.getMessage());
         }
         installUserMaps();
     }
@@ -116,12 +116,12 @@ public final class QpcatColorMaps {
                     .getColormapsDirectoryPath();
             if (dir != null && Files.isDirectory(dir)) {
                 ColorMaps.installColorMaps(dir);
-                logger.debug("Installed user colour maps from {}", dir);
+                logger.debug("Installed user color maps from {}", dir);
             }
         } catch (Exception e) {
             // A missing or unreadable user directory must never stop a dialog
             // opening; the bundled maps are always there.
-            logger.debug("No user colour maps installed: {}", e.getMessage());
+            logger.debug("No user color maps installed: {}", e.getMessage());
         }
     }
 
@@ -155,7 +155,7 @@ public final class QpcatColorMaps {
         if (out.isEmpty()) {
             // Registry unavailable: the panel's own painter is the fallback, and
             // an empty combo would be worse than no combo.
-            logger.warn("No sequential colour maps found in the QuPath registry");
+            logger.warn("No sequential color maps found in the QuPath registry");
         }
         return out;
     }

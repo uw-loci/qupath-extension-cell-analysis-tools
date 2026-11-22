@@ -235,7 +235,7 @@ public class ClusterManagementDialog {
                     ? "Only the result you are viewing and its versions are listed, so an edit "
                       + "cannot land on an unrelated run by accident.  "
                     : "")
-                    + "The result records exactly which cells the run labelled, so an edit "
+                    + "The result records exactly which cells the run labeled, so an edit "
                     + "reaches all of them, across every image that run covered, and is "
                     + "written as a new copy leaving the original untouched.");
         } else {
@@ -300,7 +300,7 @@ public class ClusterManagementDialog {
         subclusterBtn.setDisable(true);
         subclusterBtn.setTooltip(Tooltips.of(
                 "Re-cluster only the cells of the selected cluster into sub-types, "
-                + "labelled '<name>.0', '<name>.1', ... Opens the Run Clustering dialog "
+                + "labeled '<name>.0', '<name>.1', ... Opens the Run Clustering dialog "
                 + "scoped to that class, where you pick the scope and algorithm."));
         subclusterBtn.setOnAction(e -> subclusterSelected());
 

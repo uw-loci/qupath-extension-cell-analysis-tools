@@ -58,7 +58,7 @@ class ClassSubsetRulesTest {
                     .as("subset + %s", one.label())
                     .isInstanceOf(IOException.class)
                     .hasMessageContaining(one.label())
-                    .hasMessageContaining("neighbour graph");
+                    .hasMessageContaining("neighbor graph");
         }
     }
 

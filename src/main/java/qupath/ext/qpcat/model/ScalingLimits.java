@@ -600,7 +600,7 @@ public final class ScalingLimits {
                 addMemory(out, gb, ram,
                         "Leiden on " + fmt(r.nCells) + " cells with n_neighbors="
                                 + r.nNeighbors,
-                        "the nearest-neighbour graph holds n_neighbors entries per cell",
+                        "the nearest-neighbor graph holds n_neighbors entries per cell",
                         "Lower n_neighbors (15 is a common default) to shrink the graph "
                                 + "proportionally." + reuseNote);
             }
@@ -645,7 +645,7 @@ public final class ScalingLimits {
                     "Co-occurrence on " + scope + " (" + basis + ")",
                     "co-occurrence allocates one counter per cell per distance interval per "
                             + "CLUSTER PAIR, and compares every cell against every other one",
-                    "Turn off co-occurrence, or reduce the number of clusters. Neighbourhood "
+                    "Turn off co-occurrence, or reduce the number of clusters. Neighborhood "
                             + "enrichment answers a similar question at a fraction of the cost."
                             + reuseNote);
         }
@@ -657,7 +657,7 @@ public final class ScalingLimits {
                     "Ripley's L with a largest cluster of " + fmt(m) + " cells",
                     "Ripley's L computes every pairwise distance WITHIN each cluster, so the "
                             + "largest cluster sets the peak",
-                    "Turn off Ripley, or use neighbourhood enrichment instead." + reuseNote);
+                    "Turn off Ripley, or use neighborhood enrichment instead." + reuseNote);
         }
 
         out.sort((a, b) -> b.severity.compareTo(a.severity));

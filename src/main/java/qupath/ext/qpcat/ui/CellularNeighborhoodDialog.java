@@ -348,7 +348,7 @@ public class CellularNeighborhoodDialog {
             CellularNeighborhoodWorkflow wf = activeWorkflow;
             if (wf != null) {
                 wf.requestCancel();
-                statusLabel.setText("Cancelling...");
+                statusLabel.setText("Canceling...");
                 cancelButton.setDisable(true);
             }
         });
@@ -456,7 +456,7 @@ public class CellularNeighborhoodDialog {
                 Platform.runLater(() -> {
                     setRunActive(false);
                     if (!result.isApplied()) {
-                        statusLabel.setText("Cancelled -- no labels were applied.");
+                        statusLabel.setText("Canceled -- no labels were applied.");
                         return;
                     }
                     statusLabel.setText("Done: " + result.getNNeighborhoods()
@@ -504,7 +504,7 @@ public class CellularNeighborhoodDialog {
                 Platform.runLater(() -> {
                     setRunActive(false);
                     if (!result.isApplied()) {
-                        statusLabel.setText("Cancelled -- no labels were applied.");
+                        statusLabel.setText("Canceled -- no labels were applied.");
                         return;
                     }
                     statusLabel.setText("Done: " + result.getNNeighborhoods()

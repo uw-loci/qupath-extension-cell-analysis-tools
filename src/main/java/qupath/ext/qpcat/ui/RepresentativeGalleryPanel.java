@@ -318,10 +318,10 @@ public class RepresentativeGalleryPanel extends VBox {
         }
         sb.append(".\n\n");
         sb.append("Different clusters therefore show DIFFERENT CHANNELS, with different\n");
-        sb.append("display settings. Brightness, contrast and colour do not carry the same\n");
+        sb.append("display settings. Brightness, contrast and color do not carry the same\n");
         sb.append("meaning from one image to the next.\n\n");
         sb.append("Do NOT place these side by side to argue that one cluster is brighter,\n");
-        sb.append("darker or differently coloured than another. They can only be read one\n");
+        sb.append("darker or differently colored than another. They can only be read one\n");
         sb.append("at a time, as \"what does a typical cell of this cluster look like in the\n");
         sb.append("markers that define it\".\n\n");
         if (fixedChannel != null && !fixedChannel.isBlank()) {

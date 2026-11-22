@@ -378,7 +378,7 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E021", "phenotyping.rules",
                     "marker '" + asciiSafe(e.getKey()) + "' is gated at more than one "
                     + "threshold (" + detail + "). Phenotyping applies ONE gate per "
-                    + "marker across all rules, so this cannot be honoured as written. "
+                    + "marker across all rules, so this cannot be honored as written. "
                     + "Give the marker the same require_min_zscore / exclude_max_zscore "
                     + "in every rule that uses it, or split the rules into separate runs."));
         }

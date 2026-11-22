@@ -165,7 +165,7 @@ public class SpatialStatsDialog {
         Tooltip regionTip = Tooltips.of(
                 "How to split cells when the Independent areas control below has no "
                 + "levels added.\n\n"
-                + "Whole image: every cell in an image is analysed as one area.\n"
+                + "Whole image: every cell in an image is analyzed as one area.\n"
                 + "Selected annotations: one area per annotation you have selected in "
                 + "the current image.\n\n"
                 + "Adding an area level overrides this, so it is disabled while any "

@@ -1175,7 +1175,7 @@ def run_ripley(
             )
             msg = (
                 "Ripley L extraction produced no curves: squidpy (%s) returned a "
-                "payload this build does not recognise (type=%s, keys=%s). No "
+                "payload this build does not recognize (type=%s, keys=%s). No "
                 "result was written -- this is an error, not a finding of "
                 "complete spatial randomness."
                 % (getattr(sq, "__version__", "?"), type(l_data).__name__, observed)
@@ -1232,7 +1232,7 @@ def run_ripley(
             # cannot be compared to its null is worse than no curve.
             msg = (
                 "Ripley L could not be recomputed (%s). No result was written: "
-                "squidpy's own L is normalised by the total cell count rather "
+                "squidpy's own L is normalized by the total cell count rather "
                 "than each cluster's, so it cannot be read against any null." % e
             )
             logger.error(msg)
@@ -2225,7 +2225,7 @@ def _save_co_occurrence_curves(
             loc="center left",
             bbox_to_anchor=(1.0, 0.5),
             fontsize="small",
-            title="Neighbour",
+            title="Neighbor",
         )
         caption = "Co-occurrence vs distance (descriptive; 1.0 = no association)"
         if shown < n:
@@ -2906,7 +2906,7 @@ def build_banksy_weights(
         )
     if degenerate:
         logger.warning(
-            "BANKSY: %d area(s) have too few cells for a neighbour graph and were "
+            "BANKSY: %d area(s) have too few cells for a neighbor graph and were "
             "clustered on their own expression only (smallest has %d cell(s)); "
             "their results are not spatially informed",
             len(degenerate),
@@ -2926,7 +2926,7 @@ def build_banksy_weights(
 
     if len(slices) > 1:
         logger.info(
-            "BANKSY neighbour graph built per area: %d areas, no edges between them",
+            "BANKSY neighbor graph built per area: %d areas, no edges between them",
             len(slices),
         )
     return {nbr_weight_decay: {"weights": assembled}}

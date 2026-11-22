@@ -282,7 +282,7 @@ public class ClusteringWorkflow {
         if (config.isEnableCoOccurrenceOneVsRest()) asked.add("co-occurrence (one vs rest)");
         if (!asked.isEmpty()) {
             throw new IOException("Spatial statistics cannot be computed on a subset chosen by "
-                    + "classification: removing cells changes the neighbour graph, so "
+                    + "classification: removing cells changes the neighbor graph, so "
                     + String.join(", ", asked) + " would describe the subset's own arrangement "
                     + "rather than the tissue. Either clear the classification restriction or "
                     + "turn these statistics off.");
@@ -468,12 +468,12 @@ public class ClusteringWorkflow {
                         e.getMessage());
             }
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
             SpatialDecision decision = spatialEstimateDecider.apply(estSeconds);
             if (decision == SpatialDecision.CANCEL) {
                 cancelled = true;
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             } else if (decision == SpatialDecision.SKIP_SPATIAL) {
                 disableSpatialStats(config);
                 report(progressCallback, "Skipping spatial statistics.");
@@ -2155,7 +2155,7 @@ public class ClusteringWorkflow {
             // If the user canceled (button -> requestCancel), do NOT parse or
             // apply any results -- bail before anything touches the objects.
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
 
             // Parse core outputs
@@ -2637,7 +2637,7 @@ public class ClusteringWorkflow {
             // "if (cancelled)" check above is never reached. Without this the user
             // gets "Task 'run_clustering' failed: ..." after pressing Cancel.
             if (cancelled) {
-                throw new IOException("Clustering cancelled before results were applied.");
+                throw new IOException("Clustering canceled before results were applied.");
             }
             throw e;
         } finally {
@@ -5554,7 +5554,7 @@ public class ClusteringWorkflow {
                     "This spatial graph averages %.1f connections per cell (%d edges).%n%n"
                             + "At this density the overlay usually renders as a solid white "
                             + "mass that fills the viewer and is not informative -- QP-CAT "
-                            + "cannot yet colour-code edges or nodes to make it readable.%n%n",
+                            + "cannot yet color-code edges or nodes to make it readable.%n%n",
                     avgDegree, nEdges));
         } else {
             body.append(String.format(
@@ -5611,7 +5611,7 @@ public class ClusteringWorkflow {
                     "The densest image averages %.1f connections per cell (up to %d edges).%n%n"
                             + "At this density the overlay usually renders as a solid white mass "
                             + "that fills the viewer and is not informative -- QP-CAT cannot yet "
-                            + "colour-code edges or nodes to make it readable.%n%n",
+                            + "color-code edges or nodes to make it readable.%n%n",
                     maxAvgDegree, maxEdges));
         } else {
             body.append(String.format(

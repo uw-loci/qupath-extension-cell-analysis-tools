@@ -211,7 +211,7 @@ public class LlmExplainerService {
         }
 
         if (cancelled != null && cancelled.get()) {
-            logger.info("LLM explainer call returned but was cancelled mid-flight; "
+            logger.info("LLM explainer call returned but was canceled mid-flight; "
                     + "discarding result.");
             return cancelledResult();
         }
@@ -249,7 +249,7 @@ public class LlmExplainerService {
     private static ExplainResult cancelledResult() {
         return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v2",
                 "", "", "", -1, -1, -1, "REQUEST_CANCELLED",
-                "Cancelled by user; result discarded.");
+                "Canceled by user; result discarded.");
     }
 
     /**

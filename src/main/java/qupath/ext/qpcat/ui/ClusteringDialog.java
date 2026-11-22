@@ -393,7 +393,7 @@ public class ClusteringDialog {
                 ? "Re-cluster cells classified as '" + subclusterParentClass
                         + "' into sub-labels -- choose the scope below"
                 : analyzeExisting
-                    ? "Analyse the classifications already on the cells. Nothing is "
+                    ? "Analyze the classifications already on the cells. Nothing is "
                       + "re-clustered and no classification is changed."
                     : "Configure clustering parameters");
         dialog.setResizable(true);
@@ -431,7 +431,7 @@ public class ClusteringDialog {
                     + "follow this choice."
                     + (pooled
                         ? "  All project images is the default: the classes you are "
-                          + "analysing usually span the project, and reading one image "
+                          + "analyzing usually span the project, and reading one image "
                           + "would silently describe a subset of every population."
                         : ""));
         }
@@ -715,7 +715,7 @@ public class ClusteringDialog {
                 + "Keep it fixed to reproduce a result. CHANGE IT to check the result is\n"
                 + "stable -- a cluster boundary that moves when only the seed moves was\n"
                 + "never a real boundary. Default 42.\n\n"
-                + "Greyed out only when the algorithm is deterministic (HDBSCAN,\n"
+                + "Grayed out only when the algorithm is deterministic (HDBSCAN,\n"
                 + "Agglomerative) and no embedding is being computed."));
 
         // Reproducibility vs speed. umap-learn turns OFF all parallelism the moment
@@ -1023,10 +1023,10 @@ public class ClusteringDialog {
             restrictToClassesCheck = new CheckBox("Restrict this run to chosen classifications");
             restrictToClassesCheck.setSelected(false);
             restrictToClassesCheck.setTooltip(Tooltips.of(
-                    "Off, every cell in the scope is clustered -- the behaviour when this\n"
+                    "Off, every cell in the scope is clustered -- the behavior when this\n"
                     + "option did not exist.\n\n"
                     + "On, only the cells whose classification you tick enter the run. This\n"
-                    + "DISABLES the spatial statistics: removing cells changes the neighbour\n"
+                    + "DISABLES the spatial statistics: removing cells changes the neighbor\n"
                     + "graph, so enrichment, Moran's I, Geary's C, Ripley and co-occurrence\n"
                     + "would describe the subset's own arrangement while reading as a\n"
                     + "statement about the tissue."));
@@ -1386,7 +1386,7 @@ public class ClusteringDialog {
         hdbscanSelectionCombo.setTooltip(Tooltips.of(
                 "How clusters are read off the density tree.\n\n"
                 + "Excess of mass (scikit-learn's default): keeps the most\n"
-                + "persistent clusters. It favours large ones, so where the lobes\n"
+                + "persistent clusters. It favors large ones, so where the lobes\n"
                 + "of the space differ in density it returns their common parent --\n"
                 + "one cluster holding almost everything, with very little noise.\n\n"
                 + "Leaf: takes the leaves of the tree instead -- scikit-learn's own\n"
@@ -1654,7 +1654,7 @@ public class ClusteringDialog {
                 + "Those are computed either way -- the old label said 'marker\n"
                 + "ranking', which read as though unticking this would remove them.\n\n"
                 + "PAGA has its own box below, because it is the only thing that\n"
-                + "needs a per-cell neighbour graph and that graph is the expensive\n"
+                + "needs a per-cell neighbor graph and that graph is the expensive\n"
                 + "part. Its picture follows that box, not this one.\n\n"
                 + "Applies to every run, including Analyze current classifications:\n"
                 + "the plots do not depend on how the labels were produced."));
@@ -1669,7 +1669,7 @@ public class ClusteringDialog {
                 "Build the PAGA graph: which clusters sit next to each other in\n"
                 + "expression space, drawn as a node-and-edge diagram.\n\n"
                 + "This is usually the slowest step after the clustering itself,\n"
-                + "because it needs a nearest-neighbour graph over every cell -- and\n"
+                + "because it needs a nearest-neighbor graph over every cell -- and\n"
                 + "NOTHING ELSE in the run uses that graph. The marker rankings, the\n"
                 + "heatmap and the dendrogram are all computed without it.\n\n"
                 + "Turn it off if you do not read the PAGA tab; the rest of the\n"
@@ -1715,12 +1715,12 @@ public class ClusteringDialog {
             spatialSmoothingCheck.setSelected(false);
             spatialSmoothingCheck.setDisable(true);
             spatialSmoothingCheck.setTooltip(Tooltips.of(
-                    "Not available when analysing existing classifications.\n\n"
+                    "Not available when analyzing existing classifications.\n\n"
                     + "Smoothing blends each cell's markers with its neighbors'\n"
                     + "before clustering -- but nothing is clustered here, and the\n"
                     + "blended values would become the marker means this mode\n"
                     + "reports. A class would look positive for a marker its\n"
-                    + "NEIGHBOURS carry, which is the opposite of what you are\n"
+                    + "NEIGHBORS carry, which is the opposite of what you are\n"
                     + "asking the tool."));
         }
 
@@ -1917,7 +1917,7 @@ public class ClusteringDialog {
 
         spatialStatsSubsetNote = new Label(
                 "Spatial statistics are off because this run is restricted to chosen "
-                + "classifications. Removing cells changes the neighbour graph, so these "
+                + "classifications. Removing cells changes the neighbor graph, so these "
                 + "statistics would describe the subset's own arrangement while reading as "
                 + "a statement about the tissue. Clear the restriction above to use them.");
         spatialStatsSubsetNote.setWrapText(true);
@@ -1998,7 +1998,7 @@ public class ClusteringDialog {
         if (mode == RunMode.ANALYZE_EXISTING) {
             compareClassesCheck.setDisable(true);
             compareClassesCheck.setTooltip(Tooltips.of(
-                    "Not available when analysing existing classifications: the\n"
+                    "Not available when analyzing existing classifications: the\n"
                     + "classes ARE the labels here, so they would agree perfectly."));
         }
 
@@ -2215,7 +2215,7 @@ public class ClusteringDialog {
         coOccMatrixRadiusSpinner.setTooltip(Tooltips.of(
                 "Radius the pairwise co-occurrence MATRIX is drawn at, in microns\n"
                 + "(pixels only if an image in the run has no pixel size).\n\n"
-                + "0 = auto: about five median nearest-neighbour distances, which keeps\n"
+                + "0 = auto: about five median nearest-neighbor distances, which keeps\n"
                 + "the figure in the short-range part of the profile where the statistic\n"
                 + "discriminates. The figure title always states the radius it used.\n\n"
                 + "Affects the matrix figure only. The Co-occurrence tables, the CSV and\n"
@@ -2645,7 +2645,7 @@ public class ClusteringDialog {
             ClusteringWorkflow wf = activeWorkflow;
             if (wf != null) {
                 cancelButton.setDisable(true);
-                statusLabel.setText("Cancelling...");
+                statusLabel.setText("Canceling...");
                 wf.requestCancel();
             }
         });
@@ -3180,7 +3180,7 @@ public class ClusteringDialog {
                 } else {
                     addMethodInfo(
                             "Partitions cells into k clusters around centroids. Fast, but assumes "
-                            + "round, equal-size clusters and is sensitive to initialisation "
+                            + "round, equal-size clusters and is sensitive to initialization "
                             + "(QP-CAT runs 10 inits). Use \"Choose k...\" for the elbow, "
                             + "silhouette and gap statistics computed on this run's own matrix -- "
                             + "they regularly disagree, and only the gap statistic can tell you "
@@ -4628,13 +4628,13 @@ public class ClusteringDialog {
                 // Cancellation is not a failure: nothing was written to objects.
                 ClusteringWorkflow wf = activeWorkflow;
                 if (wf != null && wf.wasCancelled()) {
-                    logger.info("Clustering cancelled by user; no measurements applied.");
+                    logger.info("Clustering canceled by user; no measurements applied.");
                     Platform.runLater(() -> {
                         setRunActive(false);
                         activeWorkflow = null;
-                        statusLabel.setText("Cancelled -- no measurements were applied.");
+                        statusLabel.setText("Canceled -- no measurements were applied.");
                         Dialogs.showInfoNotification("QPCAT",
-                                "Clustering cancelled. No measurements were added to the objects.");
+                                "Clustering canceled. No measurements were added to the objects.");
                     });
                     return;
                 }
@@ -4698,7 +4698,7 @@ public class ClusteringDialog {
             }
             return "Also set for this run:\n  - " + String.join("\n  - ", costs) + "\n";
         } catch (RuntimeException e) {
-            logger.debug("Could not summarise run costs for the prompt: {}", e.getMessage());
+            logger.debug("Could not summarize run costs for the prompt: {}", e.getMessage());
             return "";
         }
     }
@@ -5081,10 +5081,10 @@ public class ClusteringDialog {
             heatmapScroll.setFitToWidth(true);
             Tab tab = new Tab("Heatmap", wrapWithGuide(heatmapScroll,
                     "Mean marker expression per cluster. Each row is a cluster, each "
-                    + "column is a marker. The colour bar under the map is the key: its "
+                    + "column is a marker. The color bar under the map is the key: its "
                     + "right end is high, and with Z-score normalization its middle is zero "
-                    + "(average for that marker). Scale: and Colours: above the map change "
-                    + "the range and the colours. Hover over cells for exact values.\n"
+                    + "(average for that marker). Scale: and Colors: above the map change "
+                    + "the range and the colors. Hover over cells for exact values.\n"
                     + "Use this to identify which markers define each cluster and to guide "
                     + "cell type annotation in the Phenotyping dialog.",
                     "heatmap-tab",
@@ -7223,7 +7223,7 @@ public class ClusteringDialog {
                     guide = "Dot size = fraction of the cluster's cells above the cutoff named "
                             + "in the caption under the figure. Dot color = the cluster's mean, "
                             + "rescaled per marker so the column's highest cluster takes the "
-                            + "top of the colour scale (1) -- colors are not comparable across "
+                            + "top of the color scale (1) -- colors are not comparable across "
                             + "columns.\n"
                             + "What the size means follows the Normalization setting, and the "
                             + "caption says which. Min-Max or None: a large dot means most of the "
@@ -7231,7 +7231,7 @@ public class ClusteringDialog {
                             + "the marker's 1st percentile. Z-score, the default: above the marker's "
                             + "MEAN OVER EVERY CELL IN THIS RUN, which is not the same as expressing "
                             + "it -- a marker present in every cell can show a half-size dot.\n"
-                            + "Large dots at the top of the colour scale indicate markers that are "
+                            + "Large dots at the top of the color scale indicate markers that are "
                             + "both highly expressed and broadly active in that cluster -- strong "
                             + "candidate markers for cell type identity.";
                     docAnchor = "dotplot-tab";
@@ -7251,8 +7251,8 @@ public class ClusteringDialog {
                     tabName = "Stacked Violin";
                     guide = "Distribution of expression values for each marker within each cluster. "
                             + "Wider regions indicate more cells at that expression level. Values "
-                            + "are in the run's normalized units, which the colour-scale title "
-                            + "names, and are NOT rescaled per marker. Colour = each violin's median. "
+                            + "are in the run's normalized units, which the color-scale title "
+                            + "names, and are NOT rescaled per marker. Color = each violin's median. "
                             + "A flat base is not cut off: each violin stops at the lowest value a "
                             + "cell has, and many cells sit exactly there.\n"
                             + "Bimodal (double-peaked) distributions within a single cluster suggest "
@@ -7262,7 +7262,7 @@ public class ClusteringDialog {
                 }
                 case "paga" -> {
                     tabName = "PAGA Trajectory";
-                    guide = "Cluster connectivity in the nearest-neighbour graph. Thicker edges "
+                    guide = "Cluster connectivity in the nearest-neighbor graph. Thicker edges "
                             + "mean two clusters' cells are ADJACENT IN EXPRESSION SPACE; node size "
                             + "is cell count.\n"
                             + "PAGA was built for developmental scRNA-seq, where cells occupy a "
@@ -7289,7 +7289,7 @@ public class ClusteringDialog {
                             + "Brighter (toward yellow) = clusters found as spatial neighbors "
                             + "more often; darker (toward purple) = less often. Only a positive "
                             + "z-score means more often than chance and a negative one less "
-                            + "often: the colour scale is not centred on zero, so read the colour "
+                            + "often: the color scale is not centered on zero, so read the color "
                             + "bar to see where zero falls.\n"
                             + "Diagonal values show self-enrichment (spatial clustering). "
                             + "Use this to identify tissue microenvironment compositions.";
@@ -7321,7 +7321,7 @@ public class ClusteringDialog {
                             + "named in the title: > 1 = enriched as neighbors, < 1 = "
                             + "depleted, 1.0 = no association (white on the diverging scale). "
                             + "Set it with 'Matrix radius' under Spatial statistics; 0 picks "
-                            + "about five median nearest-neighbour distances. For the whole "
+                            + "about five median nearest-neighbor distances. For the whole "
                             + "profile see the Co-occurrence curves tab or the pairwise "
                             + "TABLE.";
                     docAnchor = "co-occurrence-tabs";
@@ -7372,7 +7372,7 @@ public class ClusteringDialog {
         String body =
                 "QP-CAT renders three complementary views of marker expression per cluster:\n\n"
                 + "Heatmap (interactive)\n"
-                + "  - Column-normalised mean expression per cluster.\n"
+                + "  - Column-normalized mean expression per cluster.\n"
                 + "  - Hover for exact values, zoom, pan.\n"
                 + "  - Use when exploring live in the dialog.\n\n"
                 + "Matrix Plot (matplotlib PNG)\n"

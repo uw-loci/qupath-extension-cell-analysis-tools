@@ -1145,7 +1145,7 @@ public final class QpcatPreferences {
                 .description(Tooltips.wrap("Route spatial feature smoothing through squidpy's spatial_neighbors "
                         + "so the same graph backs both smoothing and the new statistics. "
                         + "Default: off. The v0 smoothing path uses an inline sklearn kNN graph "
-                        + "with (A + I) row-normalisation; the squidpy path uses pure-A "
+                        + "with (A + I) row-normalization; the squidpy path uses pure-A "
                         + "connectivity, which can produce subtly different cluster labels at "
                         + "boundaries. Enable only after verifying numerical equivalence on a "
                         + "representative project."))
@@ -1181,35 +1181,35 @@ public final class QpcatPreferences {
         // own combo is the discoverable control; this is for persistence and for
         // headless runs.
         items.add(new PropertyItemBuilder<>(heatmapColorMapSequential, String.class)
-                .name("Heatmap colour map: sequential (no meaningful zero)")
+                .name("Heatmap color map: sequential (no meaningful zero)")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Colour map for values with no centre -- raw, "
+                .description(Tooltips.wrap("Color map for values with no center -- raw, "
                         + "min-max or percentile-normalized intensities, and the scanpy "
                         + "dotplot / matrixplot, which rescale each marker to 0-1. "
-                        + "Default Viridis. Pick from the Colours box in the heatmap "
+                        + "Default Viridis. Pick from the Colors box in the heatmap "
                         + "instead of typing here; a name that is not installed falls "
                         + "back to the default rather than failing."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(heatmapColorMapDiverging, String.class)
-                .name("Heatmap colour map: diverging (zero means something)")
+                .name("Heatmap color map: diverging (zero means something)")
                 .category(CATEGORY_CLUSTERING)
-                .description(Tooltips.wrap("Colour map for values with a meaningful "
-                        + "centre -- Z-scored means, and co-occurrence ratios whose null "
+                .description(Tooltips.wrap("Color map for values with a meaningful "
+                        + "center -- Z-scored means, and co-occurrence ratios whose null "
                         + "is 1.0. Default Blue-White-Red, which is what QP-CAT has "
                         + "always drawn. A diverging map is only ever offered for data "
-                        + "that HAS a centre: on raw intensities its pale midpoint would "
+                        + "that HAS a center: on raw intensities its pale midpoint would "
                         + "land on an arbitrary number and invite reading it as average."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(heatmapSharedScale, Boolean.class)
-                .name("Heatmap: shared colour scale centred on 0")
+                .name("Heatmap: shared color scale centered on 0")
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Off (default), each marker is stretched between "
                         + "its own lowest and highest cluster, so every marker's extremes are "
-                        + "pure blue and pure red whatever the spread -- and the same colour "
+                        + "pure blue and pure red whatever the spread -- and the same color "
                         + "means different numbers in different columns. On, the whole map "
-                        + "uses ONE scale symmetric about zero, so white is zero and a colour "
+                        + "uses ONE scale symmetric about zero, so white is zero and a color "
                         + "means the same number everywhere. With the default Z-score "
                         + "normalization those numbers are standard deviations from each "
                         + "marker's mean across all cells. Also switchable per results window "
@@ -1262,7 +1262,7 @@ public final class QpcatPreferences {
                         + "dialog reopens on whatever you last ran in that project, so "
                         + "leaving it up is how you change one setting and go again. Turn it "
                         + "on if you would rather not have it sitting in front of the "
-                        + "results. A cancelled or failed run never closes the dialog."))
+                        + "results. A canceled or failed run never closes the dialog."))
                 .build());
 
         items.add(new PropertyItemBuilder<>(spatialPersistPlots, Boolean.class)
@@ -1331,7 +1331,7 @@ public final class QpcatPreferences {
                 .category(CATEGORY_CLUSTERING)
                 .description(Tooltips.wrap("Post-hoc filter on the displayed spatial graph "
                         + "(default off). Hides edges connecting cells of different "
-                        + "classes. Toggle on after phenotyping to visualise "
+                        + "classes. Toggle on after phenotyping to visualize "
                         + "same-type neighborhoods; toggle off to restore the full "
                         + "graph. Does not re-run clustering."))
                 .build());

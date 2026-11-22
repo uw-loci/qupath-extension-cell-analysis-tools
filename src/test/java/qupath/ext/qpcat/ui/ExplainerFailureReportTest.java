@@ -47,7 +47,7 @@ class ExplainerFailureReportTest {
     void aCancelIsNotAnError() {
         Logger log = mock(Logger.class);
         ClusterExplainerPanel.reportFailure(log, "REQUEST_CANCELLED", "Cancelled by user.");
-        verify(log).info(anyString(), eq("Cancelled. No results applied."));
+        verify(log).info(anyString(), eq("Canceled. No results applied."));
         verifyNoMoreInteractions(log);
     }
 }

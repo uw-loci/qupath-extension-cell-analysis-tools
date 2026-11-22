@@ -894,7 +894,7 @@ public class ClusterExplainerPanel {
 
     private void onCancelPressed() {
         cancelled.set(true);
-        statusLabel.setText("Cancelled. No results applied.");
+        statusLabel.setText("Canceled. No results applied.");
         progressBar.setVisible(false);
         setInFlight(false);
     }
@@ -923,7 +923,7 @@ public class ClusterExplainerPanel {
             long durationMs = Math.max(0, (System.nanoTime() - startNs) / 1_000_000L);
 
             if (cancelled.get()) {
-                logger.info("LLM explainer cancelled; not applying results.");
+                logger.info("LLM explainer canceled; not applying results.");
                 LlmExplainerService.writeAuditUnfinished(req, res, null, durationMs);
                 return;
             }
@@ -1293,7 +1293,7 @@ public class ClusterExplainerPanel {
             case "MALFORMED_RESPONSE" -> "Failed: provider returned an unexpected response shape.";
             case "MODEL_NOT_FOUND" -> "Failed: model not found on provider.";
             case "PROVIDER_DOWN" -> "Failed: provider returned 5xx.";
-            case "REQUEST_CANCELLED" -> "Cancelled. No results applied.";
+            case "REQUEST_CANCELLED" -> "Canceled. No results applied.";
             case "TIMEOUT" -> "Failed: no response within timeout.";
             case "INPUT_TOO_LARGE" -> "Failed: prompt exceeded the model's context window.";
             case "RESPONSE_TRUNCATED" -> "Failed: the reply was cut off at the model's output "

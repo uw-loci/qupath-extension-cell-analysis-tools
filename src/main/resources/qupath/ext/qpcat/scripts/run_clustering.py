@@ -620,7 +620,7 @@ if do_spatial_smoothing and has_spatial_coords:
             area_ids=area_ids_list,
         )
         logger.info(
-            "Spatial smoothing using squidpy graph (%s, pure-A row-normalised)",
+            "Spatial smoothing using squidpy graph (%s, pure-A row-normalized)",
             pref_spatial_graph_type,
         )
     else:
@@ -639,7 +639,7 @@ if do_spatial_smoothing and has_spatial_coords:
             spatial_data, k=pref_spatial_knn, area_ids=area_ids_list
         )
         logger.info(
-            "Spatial smoothing using sklearn kNN ((A + I) row-normalised, k=%d)",
+            "Spatial smoothing using sklearn kNN ((A + I) row-normalized, k=%d)",
             min(pref_spatial_knn, n - 1),
         )
 
@@ -3098,7 +3098,7 @@ def cluster_quality_warnings(labels, algorithm, marker_names=None):
     n_real = int(np.unique(real).size) if real.size else 0
 
     if n_real == 0:
-        out.append("No clusters were found: all %d cells were labelled noise." % n)
+        out.append("No clusters were found: all %d cells were labeled noise." % n)
     elif n_real == 1:
         out.append(
             "Only ONE cluster was found -- every clustered cell got the same "
@@ -3470,15 +3470,15 @@ if _harmony_device_note is not None:
 if not can_analyze:
     if n_clusters_found <= 1:
         _analysis_notes.append(
-            "Only ONE group was analysed, so there is nothing to rank it against: "
+            "Only ONE group was analyzed, so there is nothing to rank it against: "
             "the marker ranking compares each group with all the others. The Marker "
             "Rankings and Marker Fingerprints tabs are absent for that reason. Check "
-            "the class list -- analysing a single classification, or unticking all but "
+            "the class list -- analyzing a single classification, or unticking all but "
             "one, gives this."
         )
     elif n_neigh < 2:
         _analysis_notes.append(
-            "Too few cells (%d) to build a neighbour graph, so the marker ranking, "
+            "Too few cells (%d) to build a neighbor graph, so the marker ranking, "
             "PAGA and the per-feature plots were all skipped." % n_cells
         )
 
@@ -3565,7 +3565,7 @@ if can_analyze:
         if not pref_compute_paga:
             raise RuntimeError(
                 "PAGA was not requested (the 'Cluster connectivity graph' box is "
-                "unticked), so its neighbour graph was not built"
+                "unticked), so its neighbor graph was not built"
             )
         sc.tl.paga(adata, groups="cluster")
         paga_conn = adata.uns["paga"]["connectivities"].toarray()

@@ -62,7 +62,7 @@ what you copy out of them is the name itself.
 
 | View | Shows | Use for |
 |---|---|---|
-| **Heatmap** (interactive) | Column-normalised mean expression per cluster. The line under the colour bar names the units of the means ("cluster mean (z-score)"), and so does the hover, with the cell count. Ctrl+scroll or the zoom buttons to resize. | Exploring |
+| **Heatmap** (interactive) | Column-normalized mean expression per cluster. The line under the color bar names the units of the means ("cluster mean (z-score)"), and so does the hover, with the cell count. Ctrl+scroll or the zoom buttons to resize. | Exploring |
 | **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a colour compares clusters within one marker, not markers with each other -- the colour scale is titled "Mean in cluster (each marker scaled 0-1)"; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
 | **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = per-marker rescaled mean. Same zoom controls. [What size and colour mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
 
@@ -76,7 +76,7 @@ In the Heatmap, the right end of the color bar is high relative expression and t
 low, per marker across clusters: red and blue on the default Blue-White-Red map (z-score),
 yellow and dark purple on Viridis (any other normalization). With any normalization other
 than z-score the bar runs from *low* to *high*, and the line under it reads, for example,
-`cluster mean (min-max 0-1), per marker -- no centre`: the map has no zero to diverge from.
+`cluster mean (min-max 0-1), per marker -- no center`: the map has no zero to diverge from.
 This is the tab that tells you which markers define each cluster, and the one
 to work from when annotating cell types. Hover over a square for the mean value and the number
 of cells in that cluster -- a mean over 40 cells and a mean over 4,000 look identical here and

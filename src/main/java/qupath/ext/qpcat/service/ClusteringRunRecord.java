@@ -314,7 +314,7 @@ public final class ClusteringRunRecord {
                 && (config.isEnableSpatialSmoothing()
                     || config.getAlgorithm() == ClusteringConfig.Algorithm.BANKSY)) {
             sb.append("      NOTE       : the spatial graph spans ONLY the subset above,\n");
-            sb.append("                   so a cell's neighbours exclude every cell whose\n");
+            sb.append("                   so a cell's neighbors exclude every cell whose\n");
             sb.append("                   classification was not selected.\n");
         }
         // The precursor changes cluster labels, so a record headed "How to

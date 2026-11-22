@@ -272,7 +272,7 @@ public class CellularNeighborhoodWorkflow {
 
         // Honor a cancel that arrived during the Python run: write nothing.
         if (cancelled) {
-            report(progress, "Cancelled -- no labels were applied.");
+            report(progress, "Canceled -- no labels were applied.");
             return new CnResult(false, actualCn, nCells, countsJson, "", runId, paramsHash);
         }
 
@@ -548,7 +548,7 @@ public class CellularNeighborhoodWorkflow {
         String adjacencyHeatmap = (String) resultMap.getOrDefault("region_adjacency_heatmap_path", "");
 
         if (cancelled) {
-            report(progress, "Cancelled -- no labels were applied.");
+            report(progress, "Canceled -- no labels were applied.");
             return new CnProjectResult(false, actualCn, totalCells, loaded.size(),
                     safePath(resultsDir), "", "", "", "", "", "", "", divergenceWarning,
                     runId, paramsHash);

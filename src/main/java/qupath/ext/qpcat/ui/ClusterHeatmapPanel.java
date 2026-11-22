@@ -243,19 +243,19 @@ public class ClusterHeatmapPanel extends VBox {
                 ? ScaleMode.SHARED_CENTERED : ScaleMode.PER_MARKER;
         scaleCombo.setStyle("-fx-font-size: 10px;");
         scaleCombo.setTooltip(Tooltips.of(
-                "How cell values become colours. THE MIDDLE OF THE COLOUR BAR IS\n"
+                "How cell values become colors. THE MIDDLE OF THE COLOR BAR IS\n"
                 + "ZERO in both: with the default Z-score normalization, zero means\n"
-                + "this cluster is average for this marker; colours toward the bar's\n"
+                + "this cluster is average for this marker; colors toward the bar's\n"
                 + "right end are above it and toward its left end below.\n\n"
-                + "What differs is the reach of the colour:\n\n"
+                + "What differs is the reach of the color:\n\n"
                 + "Per marker: each column uses its own strongest value, so a weakly\n"
-                + "varying marker still shows its pattern. Colour is comparable DOWN\n"
+                + "varying marker still shows its pattern. Color is comparable DOWN\n"
                 + "a column, not across columns.\n\n"
                 + "Shared across markers: one reach for the whole map, so the same\n"
-                + "colour is the same number anywhere in it -- and a marker that\n"
+                + "color is the same number anywhere in it -- and a marker that\n"
                 + "barely varies correctly looks like the middle of the bar.\n\n"
                 + "With Normalization set to None the values are raw intensities and\n"
-                + "zero is not a meaningful centre, so neither mode is informative."));
+                + "zero is not a meaningful center, so neither mode is informative."));
         scaleCombo.valueProperty().addListener((o, a, b) -> {
             boolean shared = SCALE_SHARED.equals(b);
             scaleMode = shared ? ScaleMode.SHARED_CENTERED : ScaleMode.PER_MARKER;
@@ -271,13 +271,13 @@ public class ClusterHeatmapPanel extends VBox {
         colorMapCombo = new javafx.scene.control.ComboBox<>();
         colorMapCombo.setStyle("-fx-font-size: 10px;");
         colorMapCombo.setTooltip(Tooltips.of(
-                "Colour map for the cells. Only maps suited to THIS data are listed:\n\n"
+                "Color map for the cells. Only maps suited to THIS data are listed:\n\n"
                 + "Z-scored values have a meaningful zero, so diverging maps are\n"
                 + "offered and the midpoint is zero.\n\n"
-                + "Raw / min-max / percentile values have no centre, so sequential\n"
+                + "Raw / min-max / percentile values have no center, so sequential\n"
                 + "maps are offered instead -- a diverging map would put its pale\n"
                 + "midpoint on an arbitrary number and invite reading it as average.\n\n"
-                + "Includes any colour maps you have added to QuPath's colormaps\n"
+                + "Includes any color maps you have added to QuPath's colormaps\n"
                 + "directory. The choice is remembered per family."));
         colorMapCombo.valueProperty().addListener((o, a, b) -> {
             if (b == null) {
@@ -291,7 +291,7 @@ public class ClusterHeatmapPanel extends VBox {
 
         javafx.scene.layout.HBox zoomBar = new javafx.scene.layout.HBox(
                 4, titleLabel, new Label("  Scale:"), scaleCombo,
-                new Label("  Colours:"), colorMapCombo,
+                new Label("  Colors:"), colorMapCombo,
                 new Label("  Zoom:"), zoomOutBtn, zoomInBtn, zoomResetBtn,
                 new Label("  Show:"), filterBtn);
         zoomBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
@@ -537,7 +537,7 @@ public class ClusterHeatmapPanel extends VBox {
     static String legendCaption(boolean centred, boolean perMarker, String units) {
         if (centred) return units.isEmpty() ? "" : "cluster mean (" + units + ")";
         String what = units.isEmpty() ? "not Z-scored" : "cluster mean (" + units + ")";
-        return what + (perMarker ? ", per marker" : "") + " -- no centre";
+        return what + (perMarker ? ", per marker" : "") + " -- no center";
     }
 
     private void redraw() {

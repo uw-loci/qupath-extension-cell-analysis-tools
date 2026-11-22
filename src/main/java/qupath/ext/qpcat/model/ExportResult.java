@@ -52,7 +52,7 @@ public final class ExportResult {
             sb.append("; ").append(failures.size())
                     .append(" failure").append(failures.size() == 1 ? "" : "s");
         }
-        if (cancelled) sb.append("; cancelled");
+        if (cancelled) sb.append("; canceled");
         return sb.toString();
     }
 }

@@ -620,7 +620,7 @@ public class PhenotypingDialog {
                     + "'Macrophage = CD68 or CD163 or CD206' is one row, not three. "
                     + "The first rule a cell satisfies wins.\n\n"
                     + "Coming from SCIMAP? 'pos' there is NOT this. SCIMAP averages the "
-                    + "listed pos markers into a score, so a cell can be labelled while "
+                    + "listed pos markers into a score, so a cell can be labeled while "
                     + "failing one of them (it flags those 'likely-<type>'). QP-CAT's "
                     + "'pos' is SCIMAP's 'allpos': every listed marker must clear the "
                     + "gate. Rules copied across without that change give different "
