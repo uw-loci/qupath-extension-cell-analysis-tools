@@ -436,10 +436,13 @@ public final class BatchYamlValidator {
                         && !rule.getRequireMarkers().isEmpty();
                 boolean hasAny = rule.getAnyMarkers() != null
                         && !rule.getAnyMarkers().isEmpty();
-                if (!hasRequire && !hasAny) {
+                boolean hasClass = rule.getClassConditions() != null
+                        && qupath.ext.qpcat.model.ClassConditionKind.anyPresent(rule.getClassConditions());
+                if (!hasRequire && !hasAny && !hasClass) {
                     r.add(ValidationIssue.error("E001", base + ".require_markers",
                             "required and must have at least one marker "
-                            + "(or use any_markers for an at-least-one group)"));
+                            + "(or use any_markers for an at-least-one group, or a class "
+                            + "condition: class_is, class_is_not, class_has, class_lacks)"));
                 }
             }
             validateGateConsistency(p.getRules(), r);

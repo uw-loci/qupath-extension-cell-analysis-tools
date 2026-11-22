@@ -1032,9 +1032,9 @@ public final class QpcatPreferences {
                         + "'GPU' (CUDA, and REQUIRES an NVIDIA GPU -- it cannot be installed "
                         + "without one).\n\n"
                         + "These cannot be one environment: a lockfile pins exact package "
-                        + "builds, and a CPU build of PyTorch cannot use a GPU. Today only the "
-                        + "autoencoder benefits; see documentation/setup.md (\"CPU or GPU\") for "
-                        + "what is and is not accelerated.\n\n"
+                        + "builds, and a CPU build of PyTorch cannot use a GPU. Today the autoencoder "
+                        + "and Harmony batch correction benefit; see documentation/setup.md "
+                        + "(\"CPU or GPU\") for what is and is not accelerated.\n\n"
                         + "Switching builds a separate environment and re-downloads several GB."))
                 .build());
 

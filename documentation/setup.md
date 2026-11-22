@@ -91,24 +91,26 @@ RAPIDS runs on Linux only. On Windows the process runs inside WSL2 and QuPath st
 through `wsl.exe`; the matrix crosses as one file written into the WSL file system, the graph
 and the labels come back the same way (about a second each way at 1 million cells).
 
-**Setup**
+#### Setup
 
 1. Install WSL2 with a Linux distribution (Windows only), and an NVIDIA driver that supports
    CUDA 13 (`nvidia-smi` inside WSL shows the GPU).
-2. Copy [documentation/gpu-graph/pixi.toml](gpu-graph/pixi.toml) and its `pixi.lock` into a
+2. Install [pixi](https://pixi.sh) (0.72 or later, the lock format the file uses), copy
+   [documentation/gpu-graph/pixi.toml](gpu-graph/pixi.toml) and its `pixi.lock` into a
    folder on a local disk (on a networked home directory, use scratch), and run
    `pixi install --frozen` there. The environment is about 6 GB and pins RAPIDS 26.10, CUDA 13,
    Python 3.12. QP-CAT never installs, changes or removes it.
-3. **Edit > Preferences > QP-CAT: Python environment > GPU graph and Leiden: Python**: the
-   environment's Python, `<folder>/.pixi/envs/default/bin/python`. On Windows this is the path
-   inside WSL2. **GPU graph and Leiden: scratch folder** is where the three hand-over files go;
-   blank means `$TMPDIR` when set, else a folder beside the environment on Linux, and
-   `~/.cache/qpcat-gpu` inside WSL2 on Windows.
+3. Under **Edit > Preferences > QP-CAT: Python environment**, two preferences:
+
+   | Preference | Value |
+   |---|---|
+   | **GPU graph and Leiden: Python** | the environment's Python, `<folder>/.pixi/envs/default/bin/python`; on Windows the path inside WSL2, a plain absolute path with no spaces |
+   | **GPU graph and Leiden: scratch folder** | where the three hand-over files go; blank means `$TMPDIR` when set, else a folder beside the environment on Linux, and `~/.cache/qpcat-gpu` inside WSL2 on Windows |
 4. In **Find cell populations (clustering)...** with Leiden selected, tick **Neighbor graph and
    Leiden on the GPU (RAPIDS)**. The tick is remembered. The option only appears once the
    Python preference is set.
 
-**What to expect**
+#### What to expect
 
 - The pre-run check estimates the card memory at about 60 bytes per graph nonzero, with
   nonzeros about 1.44 x cells x k: a 16 GB card holds about 280M nonzeros, near 4 million
@@ -118,10 +120,13 @@ and the labels come back the same way (about a second each way at 1 million cell
   5.3 min, and 4M cells 12.6 min with the card full and 6 GB spilled. The process also needs
   host RAM for the connectivities, about 40 bytes per nonzero (11.5 GB at 4M x 50); the check
   warns when that is close to what is free, which on Windows is the memory WSL2 is allowed.
-- Seeded runs differ from CPU runs the way two seeds differ (ARI 0.93 at resolution 0.5, 0.76
-  at 1.0 on our synthetic ground-truth set, the same spread as the CPU seed to seed), because
-  the graph is built by a different neighbor search. A run is reproducible with its own seed on
-  the same GPU path.
+- A GPU run partitions differently from a CPU run of the same settings, because the graph
+  comes from a different neighbor search (exact below 200,000 cells, IVF-flat above). On one
+  and the same graph, cuGraph's Leiden and igraph's differ only the way two seeds differ (ARI
+  0.93 at resolution 0.5 and 0.76 at 1.0 on the 11,306-cell synthetic ground-truth set, against
+  0.95 and 0.77 for the CPU seed to seed). Below 200,000 cells the GPU search is exact and a run
+  repeats with its own seed; above, the IVF-flat index is trained without a seed, so repeat runs
+  can differ slightly. The run summary ends with "Graph and Leiden on the GPU." when it ran there.
 - If the process cannot run (no Python set, WSL refusing to start, a library missing, a driver
   too old for the build), Leiden runs on the CPU, a notification says why, and the run
   summary records "cpu (gpu requested; ...)". A successful run records the card, the library

@@ -375,7 +375,9 @@ public class PhenotypingDialog {
         classBtn.setTooltip(Tooltips.of(
                 "Make the selected rule also require the class a cell already has\n"
                 + "(from a QuPath object classifier, the QP-CAT classifier, or an earlier\n"
-                + "run): the class is X, or is not X. ANDed with the marker conditions.\n"
+                + "run): the class is X, is not X, has component X or lacks component X\n"
+                + "(components are the parts of a composite class such as CD45: Ki67).\n"
+                + "ANDed with the marker conditions; a rule may have class conditions only.\n"
                 + "Apply the classifier before running phenotyping; the classes are read\n"
                 + "just before phenotyping replaces them."));
         Button upBtn = UiLabels.whole(new Button("Move Up"));
@@ -910,10 +912,13 @@ public class PhenotypingDialog {
                         String c = rule.getCondition(m);
                         return "pos".equals(c) || "neg".equals(c);
                     });
-            if (!hasCondition) {
+            // A class condition is a condition: "has component CD45, lacks component
+            // Ki67" with every gate at "--" takes a composite classifier's output as the
+            // phenotype, which is what #28 asked for.
+            if (!hasCondition && !rule.hasClassConditions()) {
                 Dialogs.showWarningNotification("QPCAT",
-                        "Rule '" + name + "' has no marker conditions. "
-                        + "Each rule needs at least one pos/neg marker.");
+                        "Rule '" + name + "' has no conditions. Each rule needs at least "
+                        + "one pos/neg marker or a class condition.");
                 return;
             }
         }

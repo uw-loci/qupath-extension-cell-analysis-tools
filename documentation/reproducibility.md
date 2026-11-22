@@ -144,8 +144,10 @@ it, so QP-CAT reuses that run's neighbor graph and embedding instead of rebuildi
 is on by default (**Edit > Preferences > QP-CAT: Run Clustering > Reuse the neighbor graph
 between runs**) and gives up nothing in the results: a graph is reused only for the same
 cells, in the same order, after the same normalization, smoothing, batch correction and PCA,
-with the same `n_neighbors` and seed, and on one machine a reused graph is identical to a
-rebuilt one. The embedding is reused on the same terms, for any algorithm, so a run that
+with the same `n_neighbors` and seed and the same set of distinct rows (identical rows are
+collapsed before the search), and on one machine a reused graph is identical to a rebuilt
+one. Only CPU-built graphs are kept: a run with the GPU graph ticked always rebuilds, so its
+labels always come from cuGraph. The embedding is reused on the same terms, for any algorithm, so a run that
 changes only k or the clustering method reuses it too.
 
 What it costs is memory. The Leiden neighbor graph is about 0.6 KB per cell at
@@ -246,7 +248,9 @@ part-way.
 The autoencoder, and Harmony batch correction when its cells fit in GPU memory, use the GPU
 today. Leiden's neighbor graph and partition can also run on a GPU, in a separate RAPIDS
 environment you install yourself (see [Neighbor graph and Leiden on the GPU](setup.md#neighbor-graph-and-leiden-on-the-gpu)).
-Other clustering and spatial statistics do not use a GPU, so the GPU environment variant
-costs a several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
+The GPU path builds a different graph from the CPU path: an exact search below 200,000 cells,
+which repeats with the same seed, and an unseeded IVF-flat index above, which may not. Other
+clustering and spatial statistics do not use a GPU, so the GPU environment variant costs a
+several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
 
 ---

@@ -113,7 +113,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `banksy_lambda` | double | `0.2` | BANKSY only. |
 | `banksy_k_geom` | int | `15` | BANKSY only. |
 | `missing_values` | string | `exclude_objects` | What to do with an object lacking a value for a selected measurement: `exclude_objects` (left out, stays unclassified, counted), `exclude_measurements` (the measurements with a gap are left out, every object stays) or `impute` (the column median, the pre-0.25.0 behavior). See [clustering.md](clustering.md#objects-with-missing-measurements). |
-| `graph_backend` | string | `cpu` | Leiden only. `gpu` builds the neighbor graph and runs Leiden in the RAPIDS process set up in [Setup](setup.md#neighbor-graph-and-leiden-on-the-gpu); falls back to `cpu` with the reason in the log when it cannot run. |
+| `graph_backend` | string | `cpu` | Leiden only. `gpu` builds the neighbor graph and runs Leiden in the RAPIDS process set up in [Setup](setup.md#neighbor-graph-and-leiden-on-the-gpu); the **GPU graph and Leiden: Python** preference must be set on the machine running the batch, or the run falls back to `cpu` with the reason in the log. |
 | `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99`. `log1p` is accepted but **not implemented** -- it runs z-score and logs a warning; there is no log transform. |
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
@@ -534,3 +534,25 @@ Warnings (non-fatal):
 - W009 `audit.capture_prompts` has no effect
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
+
+### Example: a composite classifier's output as the phenotype, Leiden on the GPU
+
+```yaml
+version: '1.0'
+scope:
+  projects: [/data/panel-a/project.qpproj]
+clustering:
+  type: LEIDEN
+  n_neighbors: 50
+  resolution: 0.5
+  graph_backend: gpu        # needs the GPU graph and Leiden: Python preference on this machine
+phenotyping:
+  enabled: true
+  rules:
+    - name: CD45+ Ki67-     # a composite classifier wrote CD45: Ki67, CD45, Ki67, ...
+      class_has: [CD45]
+      class_lacks: [Ki67]
+    - name: Tumor
+      class_is: [Tumor]
+      require_markers: [PanCK]
+```

@@ -217,7 +217,7 @@ images rarely produce this (noise alone separates them); synthetic images with n
 switched off and heavily rounded exports do.
 
 This matters for Leiden only, because Leiden starts from a nearest-neighbor graph. Identical
-rows sit at distance zero from one another, and both neighbor searches handle that badly:
+rows (identical means bitwise-equal after normalization) sit at distance zero from one another, and both neighbor searches handle that badly:
 the approximate search (what runs on the CPU) splits them into islands disconnected from the
 rest of the graph, and the exact search (the GPU path) joins them into hubs with thousands of
 edges. Measured on the 11,306-cell synthetic ground-truth dataset, where 2,903 cells share
@@ -231,10 +231,12 @@ partitions it over the distinct rows, and gives every cell the label of its row.
 the same measurements therefore always land in the same cluster, which is also what any
 clustering of those values has to say about them. The same dataset then gives a CPU graph of
 8 components at `n_neighbors` 15 with 20 clusters at resolution 0.5 (ARI 0.68) and 30 at 1.0
-(ARI 0.61); at `n_neighbors` 50 the CPU and GPU paths agree (13-14 clusters, ARI 0.77-0.78
-at resolution 0.5) where before they did not, and at resolution 0.1-0.2 the deduplicated
+(ARI 0.61); at `n_neighbors` 50 the CPU and GPU paths both give 13-14 clusters with ARI
+0.77-0.78 against the truth at resolution 0.5, where before the GPU path collapsed, and at resolution 0.1-0.2 the deduplicated
 graph recovers the 8 cell types themselves (ARI 0.92), which the original graph never did
-(ARI 0.60 at best, at any resolution). One consequence to know about: a block of identical
+(ARI 0.60 at best, at any resolution). The runs behind these numbers are recorded in
+`qupath-work/rapids-test/dedupe_before_after.log` and `.json` (seed 42, 21 z-scored marker
+means). One consequence to know about: a block of identical
 cells is one node in the graph, not thousands, so at the same resolution the partition is
 finer than the hub graph gave; sweep the resolution as always.
 The completion message reports it ("2,903 cells had identical measurements and were

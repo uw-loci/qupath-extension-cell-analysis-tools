@@ -27,7 +27,7 @@ class ClusterPaletteTest {
      * closest pair (light blue vs light purple) sits at 16.6, so the 40 are held to
      * the standard the first 20 already met.
      */
-    private static final double MIN_DELTA_E = 15.0;
+    private static final double MIN_DELTA_E = 16.0;
 
     @Test
     void firstColorIsTab20Blue() {

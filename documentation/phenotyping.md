@@ -217,6 +217,13 @@ of the name split on `: ` (QuPath's separator), matched exactly: `CD4` is not a 
 the components found in the project's classes rather than the whole names. A cell with no
 class has no components: it fails every *has component* and passes every *lacks component*.
 
+Click path for that rule: **Add Rule**, name it, select its row, **+ Add class condition...**,
+set the kind to *has component*, pick `CD45`, **Add**; set the kind to *lacks component*, pick
+`Ki67`, **Add**; **Close**. The rules table's **Class** column then reads
+`has component CD45; lacks component Ki67`, every marker gate stays at `--`, and **Run
+Phenotyping** accepts the rule (a class condition counts as a condition). Components are
+matched exactly, including case and spaces.
+
 A rule with a class condition on cells that carry no class matches nothing, and the log says so
 ("Rules use class conditions but no cell in scope has a class"). Saved rule sets keep the
 conditions; a batch file writes them as `class_is`, `class_is_not`, `class_has` and

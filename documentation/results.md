@@ -14,7 +14,7 @@ one view of the same result.
 - [Cluster Explainer (LLM) [Experimental]](#cluster-explainer-llm-tab)
 - [Spatial tabs](#spatial-tabs)
 - [Saving a plot](#saving-a-plot)
-- [Cluster colors](#cluster-colours)
+- [Cluster colors](#cluster-colors)
 - [3D view](#3d-view)
 
 The sections follow the order you would read the results in, not the order of the tabs. The
@@ -62,15 +62,15 @@ what you copy out of them is the name itself.
 
 | View | Shows | Use for |
 |---|---|---|
-| **Heatmap** (interactive) | Column-normalised mean expression per cluster. The line under the colour bar names the units of the means ("cluster mean (z-score)"), and so does the hover, with the cell count. Ctrl+scroll or the zoom buttons to resize. | Exploring |
-| **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a colour compares clusters within one marker, not markers with each other -- the colour scale is titled "Mean in cluster (each marker scaled 0-1)"; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
-| **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; colour = per-marker rescaled mean. Same zoom controls. [What size and colour mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
+| **Heatmap** (interactive) | Column-normalized mean expression per cluster. The line under the color bar names the units of the means ("cluster mean (z-score)"), and so does the hover, with the cell count. Ctrl+scroll or the zoom buttons to resize. | Exploring |
+| **Matrix Plot** (PNG) | Mean per cluster with each marker rescaled to 0-1 across the clusters (scanpy `standard_scale="var"`), so a color compares clusters within one marker, not markers with each other -- the color scale is titled "Mean in cluster (each marker scaled 0-1)"; plus row and column dendrograms. Zoom -/+/Fit/100%, or Ctrl+scroll. | Figures |
+| **Dotplot** (PNG) | Dot size = fraction of the cluster's cells above a cutoff the caption names; color = per-marker rescaled mean. Same zoom controls. [What size and color mean](#dot-size) | When the share of cells, not only the mean, changes the reading |
 
 Matrix Plot for figures, Heatmap for exploration, Dotplot when a marker is high in a few
 cells rather than low in many -- a distinction the other two cannot show, because they
 collapse to per-cluster means.
 
-![The Heatmap tab for a seven-cluster KMeans run on the eight-image synthetic dataset. Rows are Cluster 0 to Cluster 6, columns are the 24 "mean" measurements (Nucleus, Cell and Cytoplasm compartments of DAPI, PanCK, Ki67, aSMA, CD3, CD8, CD20 and CD68), with each marker name in bold. Each cluster has a few saturated red columns, for example Cluster 4 in the three CD20 columns and Cluster 6 in PanCK and Ki67. Above the map are the Scale, Colours, Zoom and Rows/columns controls; the colour bar underneath runs from "- per marker" through 0 to "+ per marker" and is titled "cluster mean (z-score)"](images/cluster-marker-heatmap.png)
+![The Heatmap tab for a seven-cluster KMeans run on the eight-image synthetic dataset. Rows are Cluster 0 to Cluster 6, columns are the 24 "mean" measurements (Nucleus, Cell and Cytoplasm compartments of DAPI, PanCK, Ki67, aSMA, CD3, CD8, CD20 and CD68), with each marker name in bold. Each cluster has a few saturated red columns, for example Cluster 4 in the three CD20 columns and Cluster 6 in PanCK and Ki67. Above the map are the Scale, Colors, Zoom and Rows/columns controls; the color bar underneath runs from "- per marker" through 0 to "+ per marker" and is titled "cluster mean (z-score)"](images/cluster-marker-heatmap.png)
 
 In the Heatmap, the right end of the color bar is high relative expression and the left end
 low, per marker across clusters: red and blue on the default Blue-White-Red map (z-score),
@@ -90,7 +90,7 @@ only `...: Mean` columns is a run in which only those were ticked.
 
 <a name="dot-size"></a>
 
-### What the Dotplot's dot size and colour actually mean
+### What the Dotplot's dot size and color actually mean
 
 **Dot size** is the fraction of a cluster's cells above a cutoff. scanpy puts that cutoff at
 **0 in the units of the matrix being plotted**, and QP-CAT plots the **normalized** matrix,
@@ -110,14 +110,14 @@ Measured on 3,098 cells of the synthetic TME dataset, fraction above the cutoff 
 z-score against the fraction carrying any signal: **DAPI 0.495 vs 1.000**, CD3 0.258 vs
 0.352, CD8 0.138 vs 0.201. DAPI is in every cell, and under z-score half its dots vanish.
 
-**Dot colour** is the mean of the normalized value per cluster, then **rescaled per marker to
+**Dot color** is the mean of the normalized value per cluster, then **rescaled per marker to
 0-1** (scanpy's `standard_scale="var"`). So within one column, the brightest dot (yellow on
 the default Viridis map) is the cluster with the highest mean for that marker and the darkest
 the lowest; colors are **not** comparable across columns, and 1.0 does not mean "fully expressed", it means "the highest of these clusters".
-The colour scale is titled "Mean in cluster (each marker scaled 0-1)" to say so; scanpy's own
+The color scale is titled "Mean in cluster (each marker scaled 0-1)" to say so; scanpy's own
 title, "Mean expression in group", did not.
 
-![A dotplot from the same seven-cluster run under z-score normalization. Rows are clusters 2, 5, 1, 6, 0, 3 and 4 in dendrogram order, columns the 24 mean measurements with the marker in bold. Large yellow dots pick out each cluster's markers (cluster 2 in CD3 and CD8, cluster 4 in CD20, cluster 6 in PanCK and Ki67). The size legend is titled "% of cluster above 0 (see note below)", the colour bar "Mean in cluster (each marker scaled 0-1)", and the caption under the plot reads "dot size = fraction of the cluster's cells above each marker's MEAN OVER ALL CELLS IN THIS RUN (z-score > 0); not the fraction expressing"](images/dotplot.png)
+![A dotplot from the same seven-cluster run under z-score normalization. Rows are clusters 2, 5, 1, 6, 0, 3 and 4 in dendrogram order, columns the 24 mean measurements with the marker in bold. Large yellow dots pick out each cluster's markers (cluster 2 in CD3 and CD8, cluster 4 in CD20, cluster 6 in PanCK and Ki67). The size legend is titled "% of cluster above 0 (see note below)", the color bar "Mean in cluster (each marker scaled 0-1)", and the caption under the plot reads "dot size = fraction of the cluster's cells above each marker's MEAN OVER ALL CELLS IN THIS RUN (z-score > 0); not the fraction expressing"](images/dotplot.png)
 
 **The figure is skipped when the size carries nothing.** On measurements with no zero
 floor, Min-Max puts every cell except one per marker above the cutoff, so every dot is
@@ -149,7 +149,7 @@ Dotplot the values are *not* rescaled per marker, so the value axis is directly 
 across clusters within a marker, and across markers only to the extent the normalization
 made them so.
 
-**The fill colour is each violin's median**, in the same normalized units, and the colour
+**The fill color is each violin's median**, in the same normalized units, and the color
 scale's title names them: "Median in cluster (z-score)", "(min-max 0-1)", "(p1-p99 scaled
 0-1)" or, with Normalization set to None, "(raw values)". Under z-score a scale running to 2
 means two standard deviations above that marker's mean over every cell in the run, not an
@@ -165,16 +165,16 @@ of a violin. On the synthetic demo data 54% to 93% of cells are exactly at the l
 for every marker except DAPI, and DAPI is the one marker drawn as full ovals.
 
 The marker part of each label is bold, as in every figure (see the top of this page), the
-labels are angled at 45 degrees, each cluster row is twice scanpy's default height, and the colour scale
+labels are angled at 45 degrees, each cluster row is twice scanpy's default height, and the color scale
 sits under the dendrogram rather than in a column of its own.
 
 ![A stacked violin from the same seven-cluster run. One row per cluster, one violin per measurement, filled by the cluster's median on a white-to-dark-blue scale titled "Median in cluster (z-score)". Most violins are thin lines with a flat base; the DAPI violins are full ovals, and the defining markers stand out as wide dark violins, such as cluster 6 in Ki67 and cluster 4 in CD20. Labels are angled at 45 degrees with the marker in bold, and a dendrogram on the right groups the clusters](images/stacked-violin.png)
 
-<a name="heatmap-colours"></a>
+<a name="heatmap-colors"></a>
 
-### Choosing the colour map
+### Choosing the color map
 
-The **Colours** box offers the colour maps QuPath has installed, **including any `.tsv` maps
+The **Colors** box offers the color maps QuPath has installed, **including any `.tsv` maps
 you have added to QuPath's `colormaps` directory** -- so a lab palette shows up here too. The
 choice is remembered.
 
@@ -183,15 +183,15 @@ choice is remembered.
 | Your normalization | Family offered | Default | Why |
 |---|---|---|---|
 | **Z-score** (the default) | diverging | Blue-White-Red | Zero means "average for this marker", so a scale with a pale midpoint states something true |
-| None, Min-Max, Percentile | sequential | Viridis | There is no meaningful zero. A diverging map would put its pale middle on an arbitrary number and invite reading it as average -- a false claim made in colour |
+| None, Min-Max, Percentile | sequential | Viridis | There is no meaningful zero. A diverging map would put its pale middle on an arbitrary number and invite reading it as average -- a false claim made in color |
 
 QuPath ships no diverging map (Viridis, Inferno, Magma, Plasma and Svidro2 are all sequential),
 so QP-CAT registers its own: **Blue-White-Red** (what it has always drawn, kept as the default
-so an upgrade does not recolour an existing figure), **Red-Blue (RdBu)** and **Orange-Purple
-(PuOr)**. The last two are ColorBrewer scales and are the safer choices for colour-blind
+so an upgrade does not recolor an existing figure), **Red-Blue (RdBu)** and **Orange-Purple
+(PuOr)**. The last two are ColorBrewer scales and are the safer choices for color-blind
 readers.
 
-The same two choices also colour the figures Python renders -- the scanpy dot plot and matrix
+The same two choices also color the figures Python renders -- the scanpy dot plot and matrix
 plot, and the [co-occurrence](#co-occurrence-tabs) heatmaps -- wherever matplotlib has the same
 map. A map of your own has no matplotlib equivalent, so those figures keep their defaults
 rather than failing. Co-occurrence picks its family from the data for the same reason as above:
@@ -202,7 +202,7 @@ list with a text filter and **All** / **None** / **Only these**. Ticking redraws
 Use it when the two measurements you want to compare sit ten rows apart in a 40-measurement
 panel: hide the rest and they end up side by side. Nothing is recomputed -- these are the same
 means, shown alone -- but note that with **Scale** set to *Shared across markers* the reach of
-the colour is taken over what is shown, so colours do change when you filter. The title says
+the color is taken over what is shown, so colors do change when you filter. The title says
 "showing N of M" whenever a filter is on.
 
 <a name="embedding-tab-interactive"></a>
@@ -210,11 +210,11 @@ the colour is taken over what is shown, so colours do change when you filter. Th
 
 ## Embedding
 
-Interactive 2D scatter of every cell, coloured by cluster, in a tab named after the embedding
+Interactive 2D scatter of every cell, colored by cluster, in a tab named after the embedding
 (**UMAP 2D**, for example). Scroll to zoom, middle-drag to
 pan, hover for details. The plot fills the window and redraws as you resize, and cells and
 gate outlines are clipped to the plot frame when you zoom or pan. A scrollable
-legend lists each cluster with its live colour and cell count.
+legend lists each cluster with its live color and cell count.
 
 A second tab, **Embedding Plot**, is the same layout drawn by scanpy as a fixed figure for
 papers. Export it with [**Save plot...**](#saving-a-plot).
@@ -258,10 +258,10 @@ An HDBSCAN result with noise has a **Noise (unclustered)** column and slice hold
 cells, so each row still adds up to every cell in the group; the heading counts clusters
 without it ("5 clusters (+606 noise)").
 
-The pies use the cluster colours, the same ones as the legend above them, the embedding and
+The pies use the cluster colors, the same ones as the legend above them, the embedding and
 the viewer.
 
-![The Composition by image tab for the seven-cluster run. The heading reads "11421 cells across 8 images, 7 clusters", followed by a colour legend for Cluster 0 to Cluster 6, the Counts / Row % toggle, Copy table (TSV) and Export figure + table buttons, a table of per-image counts (tme_00.tif: 403, 296, 189, 216, 106, 200, 120, total 1530) and one pie per image in the same colours as the legend. Every pie holds every cluster in similar proportions, which is what clusters that are not a batch effect look like](images/composition-by-image.png)
+![The Composition by image tab for the seven-cluster run. The heading reads "11421 cells across 8 images, 7 clusters", followed by a color legend for Cluster 0 to Cluster 6, the Counts / Row % toggle, Copy table (TSV) and Export figure + table buttons, a table of per-image counts (tme_00.tif: 403, 296, 189, 216, 106, 200, 120, total 1530) and one pie per image in the same colors as the legend. Every pie holds every cluster in similar proportions, which is what clusters that are not a batch effect look like](images/composition-by-image.png)
 
 <a name="composition-by-image-tab"></a>
 <a name="composition-by-image"></a>
@@ -271,7 +271,7 @@ the viewer.
 The batch-effect check, and worth making a habit on any project-wide run. Biologically
 meaningful clusters span images -- the same cell type appears in every slide containing it.
 
-**If each cluster is confined to one image** -- its pie one solid colour, one non-zero
+**If each cluster is confined to one image** -- its pie one solid color, one non-zero
 cell per table row -- the run separated cells by image, not by phenotype. That is a batch
 effect. Usual causes: per-image differences in staining or illumination (z-score and
 min-max are computed globally, not per image, so a consistent per-image offset survives
@@ -421,7 +421,7 @@ works across detection engines that name things differently ("CD8: Cell: Mean",
 nothing matches, the crops fall back to the viewer's current channels.
 
 > **The trade-off is comparability.** Once each cluster is drawn in different channels the
-> montages **cannot be compared with each other** -- brightness, contrast and colour no
+> montages **cannot be compared with each other** -- brightness, contrast and color no
 > longer mean the same thing between them. Read them one at a time, as "what does a typical
 > cell of this cluster look like in the markers that define it". The panel says so while the
 > option is on, and **Save montages** writes a `WARNING.txt` beside the PNGs so the caveat
@@ -773,8 +773,8 @@ choose it, is in [Spatial statistics](spatial-statistics.md).
 |---|---|
 | **Spatial Autocorrelation** (Moran's I) | Per measurement, ranked by I: I > 0 clustered, ~0 random, < 0 dispersed, plus in how many images the structure holds. Measurements high in I and consistent across images are the candidates for a spatially-aware run. [Full description below](#spatial-autocorrelation-tab). |
 | **Geary's C** | Per measurement, ranked by C: C < 1 nearby cells similar, ~1 random, > 1 dissimilar, plus the same per-image count. Weights local detail more than Moran's I. [Full description below](#gearys-c-tab). |
-| **Neighborhood Enrichment** | Cluster x cluster permutation z-score, with the number of graph edges behind each one: z > 0 = neighbors more often than chance, z < 0 = less. The standard interaction matrix. The **(plot)** tab is the same matrix as a heatmap, whose colour scale is not centred on zero. [Full description below](#neighborhood-enrichment-tab). |
-| **Spatial Scatter** | Every cell at its tissue coordinates, coloured by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
+| **Neighborhood Enrichment** | Cluster x cluster permutation z-score, with the number of graph edges behind each one: z > 0 = neighbors more often than chance, z < 0 = less. The standard interaction matrix. The **(plot)** tab is the same matrix as a heatmap, whose color scale is not centred on zero. [Full description below](#neighborhood-enrichment-tab). |
+| **Spatial Scatter** | Every cell at its tissue coordinates, colored by cluster; one plot per image. [Full description below](#spatial-scatter-tab). |
 | **Ripley L** | Plotted **relative to random**: each curve minus its own simulated-random median, so the flat line at zero is randomness. Above zero = clustering at that radius; below = dispersion; inside the cluster's dashed band = not distinguishable from random. Untick **Relative to random** for the raw L(r). For multi-image runs, an **Area** selector shows each area's curves one at a time. [Full description below](#ripley-l-tab). |
 | **Co-occurrence** | P(neighbour is B \| centre is A) / P(neighbour is B) by radius. > 1 enriched, < 1 depleted, **1.0 no association**. [Full description below](#co-occurrence-tabs). Zoom controls available. For multi-image runs, an **Area** selector shows each area's table one at a time. |
 
@@ -1000,7 +1000,7 @@ line), to `qpcat_neighborhood_enrichment.csv`.
 
 ### Spatial Scatter
 
-Every cell drawn at its **tissue coordinates**, coloured by cluster. This is the map, not
+Every cell drawn at its **tissue coordinates**, colored by cluster. This is the map, not
 the embedding: it shows when two clusters that overlap in the embedding sit in different
 parts of the section.
 
@@ -1031,7 +1031,7 @@ is the evidence behind the count.
 
 The **Ripley L** chart opens showing the first cluster only, with **Recommend 1 at a time** under **Show clusters**. Each cluster draws three lines, not one: its curve, plus the two dashed edges of its own simulated-random band. Seven clusters is therefore twenty-one lines, and the question the chart exists to answer -- is this curve outside *its* band, and at which radii -- cannot be read off it. With one cluster shown the axes rescale onto that cluster and the answer is direct.
 
-The panel to the right lists every cluster with a checkbox, each in its curve's own colour. Tick another to compare two; past two or three, matching a curve to its band gets hard. **All** shows every cluster at once, which is useful for spotting which ones differ from the rest. **None** hides them all.
+The panel to the right lists every cluster with a checkbox, each in its curve's own color. Tick another to compare two; past two or three, matching a curve to its band gets hard. **All** shows every cluster at once, which is useful for spotting which ones differ from the rest. **None** hides them all.
 
 The random reference is never hidden, by either button. It is what the curves are read against, so an empty chart without it would be unreadable. In the default **Relative to random** view it is the flat line at zero labelled *Random (simulated)*; results saved before simulated envelopes existed instead show the analytical *Poisson null* diagonal.
 
@@ -1059,7 +1059,7 @@ name.
 
 For many plots across many images, use [batch figure export](exporting.md).
 
-<a name="cluster-colours"></a>
+<a name="cluster-colors"></a>
 
 ## Cluster colors
 
@@ -1071,7 +1071,7 @@ deeper tones (navy, dark orange, forest green, ...), so a 40-cluster legend has 
 entries; from Cluster 40 the colors repeat. The static PNGs a run writes use the same 40 colors,
 by cluster number.
 
-The static matplotlib PNGs are already on disk and do not recolour by themselves. Turn on
+The static matplotlib PNGs are already on disk and do not recolor by themselves. Turn on
 **Auto-Regenerate Static Plots on Color Change** in preferences if you want them
 rewritten -- it costs a Python round-trip each time, which is why it is off by default.
 

@@ -82,6 +82,28 @@ class PhenotypeClassConditionsTest {
     }
 
     @Test
+    void aRuleWithOnlyClassConditionsNeedsNoMarker() {
+        List<ValidationIssue> issues = validateYaml(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "phenotyping:\n"
+                        + "  enabled: true\n"
+                        + "  rules:\n"
+                        + "    - name: CD45+ Ki67-\n"
+                        + "      class_has: [CD45]\n"
+                        + "      class_lacks: [Ki67]\n");
+        assertThat(issues).noneMatch(i -> "E001".equals(i.getCode()));
+        assertThat(validateYaml(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "phenotyping:\n"
+                        + "  enabled: true\n"
+                        + "  rules:\n"
+                        + "    - name: Nothing\n"))
+                .anyMatch(i -> "E001".equals(i.getCode()));
+    }
+
+    @Test
     void wholeCompositeNameInAComponentConditionIsWarned() {
         // "CD45: Ki67" has no component equal to itself: the rule could never match.
         List<ValidationIssue> issues = validateYaml(

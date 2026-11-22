@@ -12,7 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   "class is" and "class is not", **+ Add class condition...** now offers **has component** and
   **lacks component**: QuPath writes a composite classifier's output as `CD45: Ki67`, so a rule
   for "CD45+ and Ki67-" is `has component CD45, lacks component Ki67`, with the marker gates left
-  at `--`, instead of one whole-name condition per derived class. The chooser lists the
+  at `--` (a class condition now counts as a condition, in the dialog and in batch files),
+  instead of one whole-name condition per derived class. The chooser lists the
   components found in the project's classes, the Class column shows them, saved rule sets keep
   them, and batch files write them as `class_has` / `class_lacks` (#28).
 - **A banner when the open image and its saved copy disagree.** The Clustering, Phenotyping
@@ -60,8 +61,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   sharing 56 rows, gave a 37-component graph and 76-83 clusters for 8 cell types at
   `n_neighbors` 15, ARI 0.47 and 0.36 at resolutions 0.5 and 1.0; now 8 components, 20-30
   clusters, ARI 0.68 and 0.61), and the exact GPU search made hubs on which cuGraph Leiden
-  returned every cell as its own cluster (now a normal partition that agrees with the CPU
-  path). The completion message and the Workflow-tab record say how many cells it
+  returned every cell as its own cluster (now a normal partition; at `n_neighbors` 50 both
+  paths give 13-14 clusters with ARI 0.77-0.78 against the truth). The completion message and the Workflow-tab record say how many cells it
   concerned; nothing changes when no two cells share a row. Stability replicates and the
   between-run graph cache follow the same rows. Other algorithms are unaffected. Documented
   under *Cells with identical measurements* in `clustering.md`.
