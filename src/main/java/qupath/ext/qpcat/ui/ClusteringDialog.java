@@ -3147,8 +3147,9 @@ public class ClusteringDialog {
                                 + "Leiden: Python (on Windows inside WSL2, through wsl.exe). The matrix "
                                 + "crosses as a file; the graph and labels come back the same way.\n\n"
                                 + "The graph is built by an exact search (IVF-flat above 200,000 cells) "
-                                + "instead of scanpy's approximate one, so a GPU run partitions differently "
-                                + "from a CPU run of the same settings; repeat it with the same seed below "
+                                + "instead of scanpy's approximate one; a GPU run differs from a CPU run of "
+                                + "the same settings about as much as two seeds differ (ARI 0.91-0.94 against "
+                                + "0.93-0.94 on our ground-truth set). Repeat it with the same seed below "
                                 + "200,000 cells for the same answer. If the process cannot run, Leiden runs "
                                 + "on the CPU and a notification says why. The run summary records which ran."));
                         gpuGraphCheck.selectedProperty().addListener((o, a, b) -> {

@@ -120,11 +120,12 @@ and the labels come back the same way (about a second each way at 1 million cell
   5.3 min, and 4M cells 12.6 min with the card full and 6 GB spilled. The process also needs
   host RAM for the connectivities, about 40 bytes per nonzero (11.5 GB at 4M x 50); the check
   warns when that is close to what is free, which on Windows is the memory WSL2 is allowed.
-- A GPU run partitions differently from a CPU run of the same settings, because the graph
-  comes from a different neighbor search (exact below 200,000 cells, IVF-flat above). On one
-  and the same graph, cuGraph's Leiden and igraph's differ only the way two seeds differ (ARI
-  0.93 at resolution 0.5 and 0.76 at 1.0 on the 11,306-cell synthetic ground-truth set, against
-  0.95 and 0.77 for the CPU seed to seed). Below 200,000 cells the GPU search is exact and a run
+- A GPU run differs from a CPU run of the same settings the way two seeds differ, although
+  the graph comes from a different neighbor search (exact below 200,000 cells, IVF-flat above).
+  Measured on the 11,306-cell synthetic ground-truth set at HEAD (`n_neighbors` 15 and 50,
+  resolutions 0.5 and 1.0, seed 42): CPU path against GPU path ARI 0.91-0.94, CPU seed 42
+  against seed 7 ARI 0.93-0.94, and each path against the truth within 0.03 of the other
+  (`qupath-work/rapids-test/path_vs_path.json`). Below 200,000 cells the GPU search is exact and a run
   repeats with its own seed; above, the IVF-flat index is trained without a seed, so repeat runs
   can differ slightly. The run summary ends with "Graph and Leiden on the GPU." when it ran there.
 - If the process cannot run (no Python set, WSL refusing to start, a library missing, a driver
