@@ -2,7 +2,8 @@
 Shared utilities for QP-CAT task scripts.
 
 Provides device detection, UMAP execution resolution, cancellation checks, the
-shared non-finite measurement guard and the figure labels (bold markers, color
+shared non-finite measurement guard, the measurement normalization and the
+figure labels (bold markers, color
 scale titles). Loaded into every task script's global scope by
 ApposeClusteringService at init, so task scripts use these without importing.
 
@@ -66,6 +67,48 @@ def impute_nonfinite(data, context="measurements"):
         context,
     )
     return arr, n_nonfinite
+
+
+def normalization_params(df, method, pct_low=0.01, pct_high=0.99):
+    """Per-column (offset, scale, low, high) for a normalization method.
+
+    A value becomes (clip(value, low, high) - offset) / scale; low and high are
+    None unless the method clips. NaN is skipped in every statistic. A column
+    that cannot give a spread (constant, or under "zscore" fewer than two
+    finite values) gets scale 1, so its finite values come out as 0 rather
+    than NaN; a missing value stays NaN.
+
+    method: "zscore", "minmax", "percentile" (clip to the pct_low and pct_high
+    quantiles, given as fractions in either order, then rescale to [0, 1]);
+    anything else leaves the values as they are.
+    """
+    if method == "zscore":
+        return df.mean().fillna(0.0), df.std().replace(0, 1).fillna(1), None, None
+    if method == "minmax":
+        dmin = df.min()
+        return dmin, (df.max() - dmin).replace(0, 1).fillna(1), None, None
+    if method == "percentile":
+        lo = max(0.0, min(pct_low, pct_high))
+        hi = min(1.0, max(pct_low, pct_high))
+        p_low = df.quantile(lo)
+        p_high = df.quantile(hi)
+        return p_low, (p_high - p_low).replace(0, 1).fillna(1), p_low, p_high
+    zeros = df.count() * 0.0
+    return zeros, zeros + 1.0, None, None
+
+
+def normalize_frame(df, method, pct_low=0.01, pct_high=0.99):
+    """Normalize every column of a measurement DataFrame; returns a new frame.
+
+    The one normalization for clustering, phenotyping, threshold previews, the
+    VEST embedding and geosketch selection. See normalization_params.
+    """
+    if method not in ("zscore", "minmax", "percentile"):
+        return df.copy()
+    offset, scale, low, high = normalization_params(df, method, pct_low, pct_high)
+    if low is not None:
+        df = df.clip(lower=low, upper=high, axis=1)
+    return (df - offset) / scale
 
 
 def single_threaded():

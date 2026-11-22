@@ -496,27 +496,7 @@ _progress(
     0.05, "Normalizing measurements (%d cells x %d markers)..." % (n_cells, n_markers)
 )
 
-if normalization == "zscore":
-    # fillna(1) as well as the zero guard: a column with fewer than two finite
-    # values has an undefined standard deviation, and dividing by it turns the
-    # whole column NaN. embed_3d.py and geosketch_select.py already do both.
-    std = df.std().replace(0, 1).fillna(1)
-    df_norm = (df - df.mean().fillna(0.0)) / std
-elif normalization == "minmax":
-    dmin = df.min()
-    dmax = df.max()
-    drange = dmax - dmin
-    drange[drange == 0] = 1
-    df_norm = (df - dmin) / drange
-elif normalization == "percentile":
-    p1 = df.quantile(0.01)
-    p99 = df.quantile(0.99)
-    drange = p99 - p1
-    drange[drange == 0] = 1
-    df_norm = df.clip(lower=p1, upper=p99, axis=1)
-    df_norm = (df_norm - p1) / drange
-else:
-    df_norm = df.copy()
+df_norm = normalize_frame(df, normalization)
 
 logger.info("Normalization: %s", normalization)
 # What was done to the matrix, in order, for the Choose k sweep to report.

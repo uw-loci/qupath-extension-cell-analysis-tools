@@ -233,25 +233,7 @@ df = pd.DataFrame(data, columns=marker_names)
 # 2. Normalize
 task.update("Normalizing measurements...")
 
-if normalization == "zscore":
-    std = df.std()
-    std[std == 0] = 1
-    df_norm = (df - df.mean()) / std
-elif normalization == "minmax":
-    dmin = df.min()
-    dmax = df.max()
-    drange = dmax - dmin
-    drange[drange == 0] = 1
-    df_norm = (df - dmin) / drange
-elif normalization == "percentile":
-    p1 = df.quantile(0.01)
-    p99 = df.quantile(0.99)
-    drange = p99 - p1
-    drange[drange == 0] = 1
-    df_norm = df.clip(lower=p1, upper=p99, axis=1)
-    df_norm = (df_norm - p1) / drange
-else:
-    df_norm = df.copy()
+df_norm = normalize_frame(df, normalization)
 
 logger.info("Normalization: %s", normalization)
 

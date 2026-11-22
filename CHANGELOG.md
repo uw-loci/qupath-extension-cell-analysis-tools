@@ -35,6 +35,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **One measurement normalization for every analysis.** Clustering, phenotyping, the threshold
+  preview (Compute Thresholds), the VEST 3D embedding and the geosketch cell selection each had
+  their own copy of z-score / min-max / percentile; they now share one function. **Clustering,
+  the embedding and the geosketch selection give the same numbers as before, to the last bit**
+  (tested against the old code on a fixed random matrix, with constant, partly missing and
+  entirely missing markers). **Phenotyping can change in one case only:** under **z-score**, a
+  marker that has a value on fewer than two cells in the run (measured on exactly one cell, or a
+  run of a single cell). Such a marker has no standard deviation; the old code divided by it, so
+  the one cell that did have a value lost it and matched neither a "positive" nor a "negative"
+  condition for that marker. That cell now scores 0 (its own mean), so it is called positive
+  when the marker's gate is 0 or below (0 is the z-score default) and negative when the gate is
+  above 0. Cells with no value for a marker are unchanged: still neither positive nor negative.
+  Min-max, percentile (still the 1st to 99th percentile) and no normalization are unchanged in
+  phenotyping, and so is every marker with two or more values under z-score.
 - **Cellular neighborhoods refuse a radius window on an image with no pixel size.** A radius is
   in microns. Until now an image with no pixel size had the radius read as pixels (a pixel size
   of 1), noted only in `cn_RUN_INFO.txt` and the Workflow step. The run now stops before any

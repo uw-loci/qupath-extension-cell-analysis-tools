@@ -79,23 +79,8 @@ try:
 except NameError:
     pct_high = 0.99
 
-# ---- normalize (same rules as run_clustering.py) ------------------------
-if norm == "zscore":
-    std = df.std().replace(0, 1).fillna(1)
-    df_norm = (df - df.mean()) / std
-elif norm == "minmax":
-    dmin = df.min()
-    drange = (df.max() - dmin).replace(0, 1).fillna(1)
-    df_norm = (df - dmin) / drange
-elif norm == "percentile":
-    lo = max(0.0, min(pct_low, pct_high))
-    hi = min(1.0, max(pct_low, pct_high))
-    p1 = df.quantile(lo)
-    p99 = df.quantile(hi)
-    drange = (p99 - p1).replace(0, 1).fillna(1)
-    df_norm = (df.clip(lower=p1, upper=p99, axis=1) - p1) / drange
-else:
-    df_norm = df.copy()
+# ---- normalize ----------------------------------------------------------
+df_norm = normalize_frame(df, norm, pct_low, pct_high)
 
 x = df_norm.to_numpy(dtype=np.float64)
 

@@ -63,11 +63,18 @@ def worker_globals():
     Grows as scripts come to rely on more of model_utils."""
     import contextlib
 
+    normalization_params = load_script_symbol("model_utils.py", "normalization_params")
     return {
         "single_threaded": load_script_symbol(
             "model_utils.py", "single_threaded", {"contextlib": contextlib}
         ),
         "report_progress": load_script_symbol("model_utils.py", "report_progress"),
+        "normalization_params": normalization_params,
+        "normalize_frame": load_script_symbol(
+            "model_utils.py",
+            "normalize_frame",
+            {"normalization_params": normalization_params},
+        ),
     }
 
 

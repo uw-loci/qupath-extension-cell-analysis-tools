@@ -7,7 +7,7 @@ import pytest
 
 from conftest import load_script_symbol, requires
 
-params = load_script_symbol("compute_thresholds.py", "normalization_params", {"pd": pd})
+params = load_script_symbol("model_utils.py", "normalization_params")
 
 
 def frame():
@@ -17,26 +17,9 @@ def frame():
     return df
 
 
-def run_phenotyping_norm(df, normalization):
-    """The normalization block of run_phenotyping.py, copied verbatim."""
-    if normalization == "zscore":
-        std = df.std()
-        std[std == 0] = 1
-        return (df - df.mean()) / std
-    if normalization == "minmax":
-        dmin = df.min()
-        dmax = df.max()
-        drange = dmax - dmin
-        drange[drange == 0] = 1
-        return (df - dmin) / drange
-    if normalization == "percentile":
-        p1 = df.quantile(0.01)
-        p99 = df.quantile(0.99)
-        drange = p99 - p1
-        drange[drange == 0] = 1
-        out = df.clip(lower=p1, upper=p99, axis=1)
-        return (out - p1) / drange
-    return df.copy()
+normalize_frame = load_script_symbol(
+    "model_utils.py", "normalize_frame", {"normalization_params": params}
+)
 
 
 @pytest.mark.parametrize("normalization", ["zscore", "minmax", "percentile", "none"])
@@ -46,7 +29,7 @@ def test_the_scaling_reproduces_the_run_exactly(normalization):
     clipped = df if low is None else df.clip(lower=low, upper=high, axis=1)
     pd.testing.assert_frame_equal(
         (clipped - offset) / scale,
-        run_phenotyping_norm(df, normalization),
+        normalize_frame(df, normalization),
         check_exact=True,
     )
 

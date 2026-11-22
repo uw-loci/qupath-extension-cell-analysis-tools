@@ -113,31 +113,6 @@ def gmm_crossing(m1, s1, w1, m2, s2, w2):
     return (m1 + m2) / 2.0
 
 
-def normalization_params(df, normalization):
-    """Per-column (offset, scale, low, high) for the chosen normalization.
-
-    A value becomes (clip(value, low, high) - offset) / scale. low and high are
-    None unless the method clips. Same statistics as run_phenotyping.py.
-    """
-    if normalization == "zscore":
-        std = df.std()
-        std[std == 0] = 1
-        return df.mean(), std, None, None
-    if normalization == "minmax":
-        dmin = df.min()
-        drange = df.max() - dmin
-        drange[drange == 0] = 1
-        return dmin, drange, None, None
-    if normalization == "percentile":
-        p1 = df.quantile(0.01)
-        p99 = df.quantile(0.99)
-        drange = p99 - p1
-        drange[drange == 0] = 1
-        return p1, drange, p1, p99
-    zeros = pd.Series(0.0, index=df.columns)
-    return zeros, zeros + 1.0, None, None
-
-
 def gmm_fit(values, max_iter=200):
     """2-component GMM fitted to interior_values(values), lower mean first.
 
@@ -267,7 +242,7 @@ logger.info("Computing thresholds for %d cells x %d markers", n_cells, n_markers
 
 df = pd.DataFrame(data, columns=marker_names)
 
-# 2. Normalize (same logic as run_phenotyping.py)
+# 2. Normalize (model_utils.normalization_params, as run_phenotyping.py gates)
 task.update("Normalizing measurements...")
 
 norm_offset, norm_scale, clip_low, clip_high = normalization_params(df, normalization)
