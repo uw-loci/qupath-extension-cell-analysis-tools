@@ -29,7 +29,7 @@ import java.util.Set;
  * <p><strong>Stability promise (v1).</strong> Package path
  * ({@code qupath.ext.qpcat.scripting}), class name
  * ({@code FigureExportScripts}), method name ({@code exportFigures}),
- * and the recognised option-key set listed in documentation/scripting.md are
+ * and the recognized option-key set listed in documentation/scripting.md are
  * part of QP-CAT's public scripting API. Breaking changes go through a
  * deprecation period of at least one minor version.</p>
  *
@@ -49,7 +49,7 @@ public final class FigureExportScripts {
      * Export figures from a saved clustering result for one or more
      * project images.
      *
-     * <p>Recognised keys:</p>
+     * <p>Recognized keys:</p>
      * <ul>
      *   <li>{@code imageNames} -- {@code List<String>}. Empty / null /
      *       containing {@code "*"} = every image in the project.</li>

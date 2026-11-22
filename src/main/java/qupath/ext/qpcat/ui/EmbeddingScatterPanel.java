@@ -164,7 +164,7 @@ public class EmbeddingScatterPanel extends VBox {
     private boolean[] gatedMask;                                    // per-cell, nCells
     private int gatedCount = 0;
     private Consumer<int[]> onGate;
-    // Committed gates: previously drawn-and-labelled polygons kept visible on the
+    // Committed gates: previously drawn-and-labeled polygons kept visible on the
     // plot (in DATA coords so they survive zoom/pan) so you can annotate many
     // populations without losing track of where earlier gates were.
     private final List<List<double[]>> committedPolys = new ArrayList<>();
@@ -636,7 +636,7 @@ public class EmbeddingScatterPanel extends VBox {
             }
         }
 
-        // Committed gates -- prior labelled selections, same projection.
+        // Committed gates -- prior labeled selections, same projection.
         // Drawn as thin colored outlines + label.
         for (int gi = 0; gi < committedPolys.size(); gi++) {
             List<double[]> dp = committedPolys.get(gi);
@@ -1220,7 +1220,7 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     /**
-     * Commit the active gate as a persistent, labelled outline and reset the
+     * Commit the active gate as a persistent, labeled outline and reset the
      * active gate so the next one can be drawn. Used to annotate many populations
      * in turn without losing track of earlier gates. No-op if no closed gate is
      * active.
@@ -1234,7 +1234,7 @@ public class EmbeddingScatterPanel extends VBox {
         redraw();
     }
 
-    /** Number of committed (labelled) gates currently shown. */
+    /** Number of committed (labeled) gates currently shown. */
     public int getCommittedGateCount() {
         return committedPolys.size();
     }
@@ -1299,7 +1299,7 @@ public class EmbeddingScatterPanel extends VBox {
     /**
      * Digest of the coordinates currently plotted, for
      * {@link qupath.ext.qpcat.service.GateStore}: it is how a gate saved on one
-     * embedding run is recognised as not belonging to another.
+     * embedding run is recognized as not belonging to another.
      */
     public String dataFingerprint() {
         return GateSet.fingerprintOf(embedding);
@@ -1311,7 +1311,7 @@ public class EmbeddingScatterPanel extends VBox {
     }
 
     /**
-     * Add a labelled gate outline without going through the drawing handlers.
+     * Add a labeled gate outline without going through the drawing handlers.
      *
      * <p>How a saved gate comes back onto the plot. The active gate is left
      * alone, so a replay never disturbs a selection in progress.

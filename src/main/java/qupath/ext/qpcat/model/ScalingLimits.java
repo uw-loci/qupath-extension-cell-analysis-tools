@@ -244,10 +244,10 @@ public final class ScalingLimits {
     }
 
     /**
-     * The Leiden neighbour graph the worker keeps for reuse (scanpy's
+     * The Leiden neighbor graph the worker keeps for reuse (scanpy's
      * connectivities). Measured 2026-10-20 in the QP-CAT env: 18 MB at
      * 100k/k=15, 60 MB at 100k/k=50, 182 MB at 300k/k=50 -- 12.1 bytes per
-     * cell per neighbour.
+     * cell per neighbor.
      */
     public static double reuseGraphGb(long nCells, int nNeighbors) {
         return nCells * (double) nNeighbors * 12.1 / GB;
@@ -262,7 +262,7 @@ public final class ScalingLimits {
      * Most a run will keep for reuse: its graph (Leiden only) and embedding,
      * capped at the budget, above which nothing more is kept.
      *
-     * @param graph whether the run builds a Leiden neighbour graph
+     * @param graph whether the run builds a Leiden neighbor graph
      * @param embeddingComponents embedding dimensions; 0 for none
      */
     public static double reuseKeepGb(long nCells, boolean graph, int nNeighbors,
@@ -273,7 +273,7 @@ public final class ScalingLimits {
     }
 
     /**
-     * Leiden peak RSS: the neighbour search plus Leiden, in a fresh process.
+     * Leiden peak RSS: the neighbor search plus Leiden, in a fresh process.
      * Measured 2026-10-21 in the QP-CAT env, 20 features, after QP-CAT began
      * streaming the graph into igraph itself (run_clustering.leiden_igraph):
      * 50k/k=15 0.84 GB, 50k/k=50 1.08, 100k/k=15 0.98, 100k/k=50 1.46,

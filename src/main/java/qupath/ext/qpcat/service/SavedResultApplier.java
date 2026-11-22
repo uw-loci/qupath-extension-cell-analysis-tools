@@ -124,7 +124,7 @@ public final class SavedResultApplier {
     /**
      * Apply a rename/merge to the detections across every image the saved result
      * references, in place (bare class names, no result-name namespace) -- so
-     * "Cluster 3" becomes "Tumor" everywhere the original run labelled cells, not
+     * "Cluster 3" becomes "Tumor" everywhere the original run labeled cells, not
      * just on the open image. Cells are matched by source image id + centroid,
      * identically to {@link #apply}. The caller is responsible for having written
      * the non-destructive renamed COPY of the saved result beforehand; this method

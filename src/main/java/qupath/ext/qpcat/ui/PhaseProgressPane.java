@@ -53,7 +53,7 @@ public final class PhaseProgressPane extends VBox {
         setSpacing(3);
         ticker.setCycleCount(Animation.INDEFINITE);
         // Stop ticking whenever the checklist is hidden. complete() covers a run that
-        // finishes, but a cancelled or failed run only hides the pane -- and an
+        // finishes, but a canceled or failed run only hides the pane -- and an
         // INDEFINITE timeline left running would tick for the life of the dialog.
         // Hooking visibility catches every exit, including ones added later.
         visibleProperty().addListener((obs, was, isVisible) -> {

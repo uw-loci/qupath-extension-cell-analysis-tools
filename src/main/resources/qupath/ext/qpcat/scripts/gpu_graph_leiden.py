@@ -13,9 +13,9 @@ Writes there:
                  "seconds": {...}} or {"ok": false, "error": "..."}
 
 This is not an Appose script: it is started by run_clustering.py (gpu_bridge_run) with
-stdout and stderr sent to a log file in the job folder. The neighbour search runs on cuML
+stdout and stderr sent to a log file in the job folder. The neighbor search runs on cuML
 (exact brute force up to brute_force_cells, IVF-flat above); umap-learn turns the
-neighbours into the fuzzy connectivities scanpy would have made, so only the search
+neighbors into the fuzzy connectivities scanpy would have made, so only the search
 differs from QP-CAT's CPU graph; cuGraph partitions the graph. cuGraph 26.10 returns every
 cell as its own cluster on graphs with hub nodes (exact duplicate cells); such a result is
 reported as "degenerate" and the worker partitions the returned graph with igraph instead.
@@ -57,7 +57,7 @@ def versions():
 
 
 def knn_graph_gpu(matrix, n_neighbors, seed, brute_force_cells):
-    """The connectivities scanpy would build, with the neighbour search on the GPU."""
+    """The connectivities scanpy would build, with the neighbor search on the GPU."""
     import cupy as cp
     from cuml.neighbors import NearestNeighbors
     from umap.umap_ import fuzzy_simplicial_set

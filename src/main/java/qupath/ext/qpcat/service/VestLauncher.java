@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
  * QP-CAT export bundle (embedding.csv + images/) and opens it in the browser.
  *
  * <p>VEST lives in its OWN on-demand Appose/pixi environment ({@code qpcat-vest}: Flask +
- * pandas + vision-embedding-space-travelling), kept deliberately separate from the
+ * pandas + vision-embedding-space-traveling), kept deliberately separate from the
  * clustering env so VEST's modern pandas/numpy never conflict with the scanpy/squidpy
  * stack. The env (~150-170 MB) builds lazily the first time the user launches VEST.</p>
  *

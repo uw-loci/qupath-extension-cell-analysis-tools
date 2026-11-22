@@ -30,7 +30,7 @@ import qupath.lib.objects.PathObject;
  * toward the unlabelled remainder and give {@code rank_genes_groups} a comparison
  * group that means nothing. {@code CellularNeighborhoodWorkflow} keeps such cells
  * as a class called "Unclassified", which is right there -- every cell has to
- * contribute to a neighbourhood window -- and wrong here. The count is returned
+ * contribute to a neighborhood window -- and wrong here. The count is returned
  * so the caller can report it rather than let cells vanish silently.
  *
  * <p><b>The null-class singleton counts as unclassified.</b>
@@ -84,7 +84,7 @@ public final class ExistingLabelReader {
         /** Cells excluded for having no classification. */
         public int getUnclassified() { return unclassified; }
 
-        /** Distinct classes being analysed. */
+        /** Distinct classes being analyzed. */
         public int getNClasses() { return names.size(); }
     }
 
@@ -123,7 +123,7 @@ public final class ExistingLabelReader {
      * Read labels from one image's detections.
      *
      * @param detections      cells to read; nothing is modified
-     * @param includedClasses class names to analyse, or null for every class present
+     * @param includedClasses class names to analyze, or null for every class present
      * @return the labels, names and the detections they belong to
      */
     public static LabelSet read(Collection<? extends PathObject> detections,
@@ -136,7 +136,7 @@ public final class ExistingLabelReader {
      *
      * @param perImage        one detection collection per image, in the order the
      *                        caller will extract measurements
-     * @param includedClasses class names to analyse, or null for every class present
+     * @param includedClasses class names to analyze, or null for every class present
      * @return the labels, names and the detections they belong to
      */
     public static LabelSet read(List<? extends Collection<? extends PathObject>> perImage,

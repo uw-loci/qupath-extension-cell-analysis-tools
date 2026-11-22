@@ -52,7 +52,7 @@ public final class CompositionFigure {
     private final int noiseColumn;
     /**
      * Zero-pad width of the default cluster names, from the labels this figure was
-     * tallied over. It is also the width of the PathClass whose colour
+     * tallied over. It is also the width of the PathClass whose color
      * {@link #defaultColorRgb(int)} reads, so an exported figure and the viewer agree.
      */
     private final int clusterDigits;

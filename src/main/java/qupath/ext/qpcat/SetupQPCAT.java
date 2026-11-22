@@ -437,7 +437,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 Map.of("min_cluster_size", 15), c -> {}));
 
         // Quick Delaunay: Leiden over a Delaunay-graph spatial-smoothing pass.
-        // Honours the user's existing qpcat.spatial.* preferences for the
+        // Honors the user's existing qpcat.spatial.* preferences for the
         // Delaunay max-edge cutoff (microns or pixels per calibration) and
         // the same-class post-hoc edge filter; defaults are sensible (-1 =
         // no pruning, filter off) until the user sets them in
@@ -584,9 +584,9 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
             }
         });
 
-        // Environment tools. These used to be their own "Utilities" submenu; they
-        // now sit in "Setup & help" beside the setup / rebuild actions they belong
-        // with, so there is one place to go when something is wrong.
+        // Environment tools sit in "Setup & help" beside the setup / rebuild
+        // actions they belong with, so there is one place to go when something
+        // is wrong.
 
         // Python Console
         MenuItem pythonConsoleItem = new MenuItem(res.getString("menu.pythonConsole"));
@@ -594,7 +594,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
         // Clear cell connections (wipes ALL PathObjectConnectionGroups from
         // ImageData; useful when overlays stack across runs, or when a
-        // legacy QuPath Delaunay-clustering run left an unwanted group
+        // QuPath Delaunay-clustering run left an unwanted group
         // behind). Bound to imageData != null. Confirms before wiping
         // when at least one group is currently attached.
         MenuItem clearConnectionsItem = new MenuItem(res.getString("menu.clearConnections"));

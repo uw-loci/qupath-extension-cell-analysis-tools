@@ -222,8 +222,8 @@ public class MeasurementSelectionPane extends VBox {
         // The buttons act on the rows CURRENTLY SHOWN, not on the whole panel --
         // filter to "mean", press Select All, and only those are ticked. That is
         // the point of them, and it is the one thing here that surprises people,
-        // so it gets the theme's own text colour at full strength rather than
-        // the #666 it used to have, which was grey on grey in dark mode.
+        // so it gets the theme's own text color at full strength rather than
+        // a fixed #666, which is gray on gray in dark mode.
         Label scopeHint = new Label(
                 "These four buttons act only on the rows shown above, after filtering.");
         scopeHint.setWrapText(true);
@@ -497,7 +497,7 @@ public class MeasurementSelectionPane extends VBox {
      * The pane is MOVED, not copied. A second list would need every check, the
      * filter text and the bulk-operation state mirrored back, and any field that
      * was missed would silently disagree with the real one. Re-parenting the live
-     * node means there is nothing to synchronise: the buttons act on the same
+     * node means there is nothing to synchronize: the buttons act on the same
      * items because they are the same buttons.
      */
     public void popOut() {

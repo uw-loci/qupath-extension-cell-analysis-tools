@@ -242,7 +242,7 @@ public final class GateApplier {
      *
      *  <p>The id is tried first because the position search is tolerant by
      *  design -- it probes +-1px and then takes the nearest within 2px -- and a
-     *  tolerant search can return a NEIGHBOURING cell, which classifies the
+     *  tolerant search can return a NEIGHBORING cell, which classifies the
      *  wrong one with nothing reported. A ref that knows its own id never needs
      *  that risk. */
     private static PathObject resolve(CellRef ref, Map<String, PathObject> byId,

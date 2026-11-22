@@ -431,7 +431,7 @@ public class HistogramPanel extends VBox {
         for (int c : counts) {
             totalCells += c;
         }
-        // Counted from the quantiles, not by bin centre: a gate inside the first
+        // Counted from the quantiles, not by bin center: a gate inside the first
         // bin otherwise puts every cell of that bin on one side.
         double posFrac = GateCoverage.positiveFraction(quantiles, currentThreshold);
         if (Double.isNaN(posFrac) || totalCells == 0) {

@@ -11,7 +11,7 @@ import java.text.ParseException;
  * Small helpers for JavaFX {@link Spinner} controls.
  * <p>
  * The central one is {@link #commitOnFocusLoss(Spinner)}, which works around a
- * long-standing JavaFX behaviour (JDK-8150946): an editable {@code Spinner} only
+ * long-standing JavaFX behavior (JDK-8150946): an editable {@code Spinner} only
  * commits the text typed into its editor when the user presses Enter. Clicking a
  * button -- e.g. "Run", "Apply to All", "Compute" -- moves focus away WITHOUT
  * committing, so {@code spinner.getValue()} returns the previous value and the

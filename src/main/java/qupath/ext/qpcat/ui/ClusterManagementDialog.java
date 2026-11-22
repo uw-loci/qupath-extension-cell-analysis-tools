@@ -35,7 +35,7 @@ import java.util.*;
  * Dialog for renaming and merging cluster classifications.
  *
  * <p>A rename or merge is a label edit, so it must reach the same cells the
- * original clustering run labelled -- not just the open image. The dialog is
+ * original clustering run labeled -- not just the open image. The dialog is
  * therefore built around a <b>saved clustering result</b> as the target: its
  * recorded per-cell references drive a cross-image relabel, and the edit is
  * written as a NON-DESTRUCTIVE copy (the original result is never mutated). The

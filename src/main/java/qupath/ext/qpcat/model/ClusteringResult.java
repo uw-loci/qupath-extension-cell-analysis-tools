@@ -74,7 +74,7 @@ public class ClusteringResult {
     // Indices are into the same cell order as clusterLabels / cellRefs.
     private String representativesJson;
 
-    // How the embedding was actually computed (parallelism + initialisation), as
+    // How the embedding was actually computed (parallelism + initialization), as
     // reported by run_clustering.py. A parallel UMAP layout is not bit-reproducible,
     // so the audit trail has to say which path was taken -- see
     // model_utils.resolve_umap_execution.
@@ -101,7 +101,7 @@ public class ClusteringResult {
 
     // Measurement-name prefix the embedding columns were written under ("UMAP",
     // "UMAP_Demo", ...), so a viewer can plot THIS run's embedding instead of guessing
-    // from names. A custom name is not recognisable by pattern, which is how the 3D view
+    // from names. A custom name is not recognizable by pattern, which is how the 3D view
     // ended up opening on the first three measurements.
     private String embeddingPrefix;
 
@@ -259,8 +259,8 @@ public class ClusteringResult {
      * The normalization id the run used, e.g. "zscore".
      * <p>
      * The heatmap needs it to decide whether zero means anything: only Z-scored
-     * values have a centre worth diverging about. Null on an older saved result,
-     * which the heatmap treats as "not centred".
+     * values have a center worth diverging about. Null on an older saved result,
+     * which the heatmap treats as "not centered".
      */
     public String getNormalization() { return normalization; }
     public void setNormalization(String v) { this.normalization = v; }
@@ -467,7 +467,7 @@ public class ClusteringResult {
 
     // Spatial analysis results
     private double[][] nhoodEnrichment;
-    // Edges from a row-cluster cell to a column-cluster neighbour; null on results saved before 0.23.
+    // Edges from a row-cluster cell to a column-cluster neighbor; null on results saved before 0.23.
     private double[][] nhoodCounts;
     // One line naming the permutation null (spatial_stats.describe_nhood_null).
     private String nhoodNull;
@@ -688,7 +688,7 @@ public class ClusteringResult {
                 || hasCoOccurrencePairwise() || hasCoOccurrenceOneVsRest();
     }
 
-    // ==================== Spatial Graph Overlay (v0.3) ====================
+    // ==================== Spatial Graph Overlay ====================
     //
     // Transient payload carrying the edge COO plus per-cell measurement
     // arrays returned by the Python helper. NOT persisted to disk -- the
@@ -702,7 +702,7 @@ public class ClusteringResult {
     public boolean hasSpatialGraphPayload() { return spatialGraphPayload != null; }
 
     /**
-     * Transient bundle of v0.3 spatial-graph outputs. Lives only on the
+     * Transient bundle of spatial-graph outputs. Lives only on the
      * in-memory ClusteringResult so the workflow can materialise the
      * graph + per-cell measurements after the Appose task completes.
      */
@@ -769,12 +769,12 @@ public class ClusteringResult {
          * image. Edge entries whose endpoints land outside the slice
          * are dropped; surviving endpoints are remapped to [0, end-start).
          *
-         * <p><strong>v0.3.4 (D1 fix):</strong> per-cell aggregates
+         * <p><strong>Per-cell aggregates</strong>
          * (numNeighbors, mean/median/max/min distance, triangle areas)
          * are intentionally <em>left null</em> on the sliced output.
          * The global values are not correct per-image: a cell at
          * pixel (100, 100) in image A and a cell at (100, 100) in image
-         * B both contribute neighbours to each other in the global
+         * B both contribute neighbors to each other in the global
          * graph (extractMultiImage concatenates per-image coordinates
          * without offset), so the global numNeighbors counts include
          * phantom cross-image edges and the global distance aggregates
@@ -791,7 +791,7 @@ public class ClusteringResult {
         public SpatialGraphPayload slice(int start, int end) {
             SpatialGraphPayload out = new SpatialGraphPayload();
             int n = end - start;
-            // D1: per-cell aggregates intentionally NOT copied (see Javadoc).
+            // Per-cell aggregates intentionally NOT copied (see Javadoc).
             // Component labels are graph-build-time outputs; component
             // membership for any cell that lost all its edges to the
             // cross-image slice is still recoverable, so we keep these.

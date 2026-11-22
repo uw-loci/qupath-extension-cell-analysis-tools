@@ -85,7 +85,7 @@ public class ClusterCompositionPanel extends BorderPane {
     }
 
     /**
-     * As above, but labelling clusters with {@code clusterNameFn} -- the custom
+     * As above, but labeling clusters with {@code clusterNameFn} -- the custom
      * names of a renamed / merged result. Pass null for the default "Cluster N".
      *
      * @param noiseColumn   the noise row of the result, which counts the noise cells;

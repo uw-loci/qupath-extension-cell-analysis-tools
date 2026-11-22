@@ -2,7 +2,7 @@
 Shared utilities for QP-CAT task scripts.
 
 Provides device detection, UMAP execution resolution, cancellation checks, the
-shared non-finite measurement guard and the figure labels (bold markers, colour
+shared non-finite measurement guard and the figure labels (bold markers, color
 scale titles). Loaded into every task script's global scope by
 ApposeClusteringService at init, so task scripts use these without importing.
 
@@ -126,7 +126,7 @@ def detect_device():
 
 
 # Cell count at or above which "auto" embedding mode drops the pinned seed in
-# favour of parallelism. Measured on 16 cores, 30 markers, umap-learn 0.5.12:
+# favor of parallelism. Measured on 16 cores, 30 markers, umap-learn 0.5.12:
 #
 #   n=100k   seeded 62.5 s   parallel+PCA-init 10.2 s
 #   n=250k   seeded  175 s   parallel+PCA-init 22.4 s
@@ -136,7 +136,7 @@ def detect_device():
 # hours and reads as a hang.
 EMBEDDING_FAST_MODE_CELLS = 200000
 
-# Cell count above which UMAP's spectral initialisation is replaced by PCA.
+# Cell count above which UMAP's spectral initialization is replaced by PCA.
 # spectral init runs ARPACK eigsh single-threaded regardless of n_jobs and
 # scales about N^1.9 (0.2 s at 25k, 4.1 s at 100k, 23.2 s at 250k), and it can
 # fail to converge and silently fall back to random init having spent the time.
@@ -144,11 +144,11 @@ EMBEDDING_PCA_INIT_CELLS = 100000
 
 
 def resolve_umap_execution(n_cells, seed, mode):
-    """Pick UMAP's parallelism and initialisation for this dataset size.
+    """Pick UMAP's parallelism and initialization for this dataset size.
 
     umap-learn couples reproducibility to serialism: passing any ``random_state``
     makes it force ``n_jobs=1`` (umap_.py:1950, applied to pynndescent via
-    ``numba.set_num_threads``) AND compile the layout optimisation without numba
+    ``numba.set_num_threads``) AND compile the layout optimization without numba
     ``prange`` (``parallel=random_state is None``, umap_.py:2891). So a pinned
     seed costs every core in BOTH halves of UMAP -- roughly 6-8x on a 16-core
     box, and the gap widens with cell count.
@@ -160,7 +160,7 @@ def resolve_umap_execution(n_cells, seed, mode):
     seed : int
         The user's random seed.
     mode : str
-        "reproducible" -- always pin the seed (exactly the pre-0.9.7 behaviour).
+        "reproducible" -- always pin the seed (exactly the pre-0.9.7 behavior).
         "fast"         -- always drop the seed and use every core.
         "auto"         -- reproducible below EMBEDDING_FAST_MODE_CELLS, fast above.
 
@@ -195,7 +195,7 @@ def resolve_umap_execution(n_cells, seed, mode):
         kwargs["n_jobs"] = -1
         note = "parallel (all cores, layout not bit-reproducible)"
 
-        # Replace the spectral initialisation once its ARPACK eigensolve stops
+        # Replace the spectral initialization once its ARPACK eigensolve stops
         # being cheap. This is only reached on the non-reproducible path, where
         # the layout is already free to differ between runs. Preference order for
         # large N is pca > tswspectral > spectral (umap-learn PR #924).
@@ -312,7 +312,7 @@ def bold_marker_ticks(ax, axis="x"):
 
 
 def legend_title(statistic, normalization, per_marker_scaled=False):
-    """Colour-scale title for a cluster x marker figure that names its units.
+    """Color-scale title for a cluster x marker figure that names its units.
 
     scanpy's default, "Mean expression in group", hides that the figures draw the
     run's NORMALIZED matrix. ``"Median"``, ``"zscore"`` ->

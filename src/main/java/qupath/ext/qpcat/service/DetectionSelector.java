@@ -133,7 +133,7 @@ public final class DetectionSelector {
      * Restrict cells to a chosen set of classifications.
      *
      * <p>Unclassified cells are a choice of their own, not a leftover: a user
-     * selecting a population may well mean "the ones nothing has labelled yet", so
+     * selecting a population may well mean "the ones nothing has labeled yet", so
      * {@code includeUnclassified} is separate from the name list rather than
      * encoded as a reserved name that a real class could collide with. This
      * differs deliberately from {@code ExistingLabelReader}, which always excludes

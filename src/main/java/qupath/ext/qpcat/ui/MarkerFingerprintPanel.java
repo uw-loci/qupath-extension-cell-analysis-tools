@@ -646,10 +646,10 @@ public class MarkerFingerprintPanel extends BorderPane {
     /**
      * Mark a node as a search hit: a warm tint plus a border, which reads as
      * "found" without recolouring anything that already carries meaning (the
-     * cluster tints and channel colours are data here, not decoration).
+     * cluster tints and channel colors are data here, not decoration).
      */
     private static void markHit(javafx.scene.layout.Region node) {
-        // -fx-background as well as the colour, so the text on it is dark in either theme.
+        // -fx-background as well as the color, so the text on it is dark in either theme.
         node.setStyle((node.getStyle() == null ? "" : node.getStyle())
                 + "-fx-background: #fff2b8; -fx-background-color: #fff2b8; -fx-border-color: #d9a400; "
                 + "-fx-border-width: 1; -fx-border-radius: 4; -fx-background-radius: 4;");
@@ -716,7 +716,7 @@ public class MarkerFingerprintPanel extends BorderPane {
             if (FoldChanges.atLimit(lfc)) tip.append(" (one side's mean is about zero)");
         }
         if (!Double.isNaN(score)) tip.append(String.format("%nWilcoxon score: %.2f", score));
-        // Labelled by where it came from, not by what it would mean if the clusters
+        // Labeled by where it came from, not by what it would mean if the clusters
         // had been defined independently of these measurements. They were not.
         if (!Double.isNaN(padj)) {
             tip.append(String.format("%nscanpy adj. p: %.2e (ranks markers; not a test"

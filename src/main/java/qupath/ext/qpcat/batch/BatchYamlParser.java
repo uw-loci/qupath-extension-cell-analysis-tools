@@ -29,7 +29,7 @@ import java.util.Set;
  *   <li>SnakeYAML returns a raw {@code Map<String, Object>}.</li>
  *   <li>This parser walks the map, populates a {@link BatchYamlSchema}
  *       POJO, and accumulates {@code E002 unknown-field} errors for any
- *       top-level / per-block key the schema doesn't recognise.</li>
+ *       top-level / per-block key the schema doesn't recognize.</li>
  * </ol>
  *
  * <p>Type-mismatch and value-range errors are <em>not</em> reported here;
@@ -40,7 +40,7 @@ public final class BatchYamlParser {
 
     private static final Logger logger = LoggerFactory.getLogger(BatchYamlParser.class);
 
-    // Recognised top-level keys -- anything else triggers E002.
+    // Recognized top-level keys -- anything else triggers E002.
     private static final Set<String> KNOWN_TOP_LEVEL = new HashSet<>(Arrays.asList(
             "version", "audit", "scope",
             "clustering", "phenotyping", "spatial_stats", "figure_export",

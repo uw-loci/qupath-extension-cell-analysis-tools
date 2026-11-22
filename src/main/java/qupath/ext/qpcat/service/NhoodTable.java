@@ -7,7 +7,7 @@ import java.util.function.UnaryOperator;
 import qupath.ext.qpcat.model.ClusteringResult;
 
 /**
- * The neighbourhood-enrichment matrix as a text table: each cell is the z-score with
+ * The neighborhood-enrichment matrix as a text table: each cell is the z-score with
  * the number of graph edges it rests on, so a large z from a handful of edges reads
  * as such. Pure string building, unit-tested without a toolkit.
  */

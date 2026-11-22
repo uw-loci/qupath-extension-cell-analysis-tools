@@ -22,7 +22,7 @@ public class ClusteringConfig {
         BANKSY("banksy", "BANKSY (spatially-aware)"),
         NONE("none", "None (embedding only)"),
         /**
-         * Not a clustering method: analyse the classifications the cells already
+         * Not a clustering method: analyze the classifications the cells already
          * carry. Deliberately a distinct id rather than reusing "none", which sets
          * {@code embedding_only} in the Python script and switches off the marker
          * ranking, PAGA and every plot -- the whole output this path exists for.
@@ -149,7 +149,7 @@ public class ClusteringConfig {
      * Build the PAGA cluster-connectivity graph.
      * <p>
      * Defaults true so an older saved config reproduces its original run. It is
-     * the only consumer of the per-cell nearest-neighbour graph, which is the
+     * the only consumer of the per-cell nearest-neighbor graph, which is the
      * slowest step after clustering itself -- the marker rankings, heatmap and
      * dendrogram are all computed without it.
      */
@@ -176,7 +176,7 @@ public class ClusteringConfig {
      * <p>
      * Deliberately a nullable {@link Boolean}, not a primitive. The precursor
      * CHANGES CLUSTER LABELS, and Gson leaves a field absent from the JSON at its
-     * initialised value -- so a primitive defaulting to {@code true} would silently
+     * initialized value -- so a primitive defaulting to {@code true} would silently
      * switch it on for every config saved before this option existed, breaking the
      * reproduce-this-run contract RUN_INFO.txt makes. Null means "written before
      * the option existed" and reads as OFF -- which is also the default for a new
@@ -189,13 +189,13 @@ public class ClusteringConfig {
      * {@code "reproducible"} or {@code "fast"}.
      * <p>
      * umap-learn disables ALL parallelism as soon as a {@code random_state} is
-     * supplied -- it forces {@code n_jobs=1} and compiles the layout optimisation
+     * supplied -- it forces {@code n_jobs=1} and compiles the layout optimization
      * without numba {@code prange}. So a fixed seed costs every core, which is
      * measurably 6-8x on 16 cores and grows worse with cell count. "auto" keeps the
      * seeded path on datasets small enough for it to be quick and switches to the
      * parallel path above {@code EMBEDDING_FAST_MODE_CELLS} (200k, defined in
      * {@code model_utils.py}); "reproducible" pins the seed whatever the size (the
-     * pre-0.9.7 behaviour); "fast" always uses every core.
+     * pre-0.9.7 behavior); "fast" always uses every core.
      */
     private String embeddingExecutionMode = "auto";
 
@@ -224,7 +224,7 @@ public class ClusteringConfig {
 
     /**
      * Radius the pairwise co-occurrence MATRIX is drawn at, in the image's
-     * coordinate unit; -1 picks a default near five median nearest-neighbour
+     * coordinate unit; -1 picks a default near five median nearest-neighbor
      * distances.
      * <p>
      * The matrix has to name one radius rather than average them: squidpy's bins
@@ -235,7 +235,7 @@ public class ClusteringConfig {
      */
     private double coOccurrenceMatrixRadius = -1.0;
 
-    // ---- Spatial graph overlay (v0.3) ----
+    // ---- Spatial graph overlay ----
     // pushConnectionsToViewer: when true, materialise the spatial graph as
     // PathObjectConnections after the run; the user toggles the overlay via
     // View -> Show object connections.
@@ -249,7 +249,7 @@ public class ClusteringConfig {
     private double delaunayMaxEdgeUm = -1.0;
     // writeNodeMeasurements / writeComponentMeasurements: drive emission of
     // per-cell QPCAT spatial: columns and per-component QPCAT component:
-    // columns. Defaults match the v0.3 must-have decisions in 02_design.md.
+    // columns.
     private boolean writeNodeMeasurements = true;
     private boolean writeComponentMeasurements = false;
     // limitEdgesBySameClass: post-hoc Java-side filter applied to the
@@ -259,18 +259,18 @@ public class ClusteringConfig {
     // ---- Independent areas ----
     // Ordered hierarchy levels, outermost first, that split cells into
     // physically separate analysis areas. No spatial graph is ever built
-    // across two areas. Null / empty means images-only, i.e. the behaviour
+    // across two areas. Null / empty means images-only, i.e. the behavior
     // before this existed.
     private List<AreaLevelSpec> areaLevels;
 
     /**
      * Which grouping Harmony corrects over: {@code "images"} (the default and
-     * the historical behaviour) or {@code "areas"}.
+     * the historical behavior) or {@code "areas"}.
      * <p>
      * Kept separate from {@link #areaLevels} on purpose. Splitting the spatial
      * graph by TMA core is a statement about geometry and is essentially always
      * right; treating each core as a batch is a statement about technical
-     * variation and is a judgement call -- 55 batches of a few thousand cells
+     * variation and is a judgment call -- 55 batches of a few thousand cells
      * can over-correct real biology away.
      */
     private String batchKey = BATCH_KEY_IMAGES;
@@ -340,7 +340,7 @@ public class ClusteringConfig {
     /**
      * Ordered independent-area levels, outermost first. Never null: a config
      * saved before this field existed loads with images-only, which is the
-     * behaviour it was saved under.
+     * behavior it was saved under.
      *
      * @see #areaLevels
      */
@@ -614,7 +614,7 @@ public class ClusteringConfig {
     /** @see #spatialPersistPlots */
     public void setSpatialPersistPlots(Boolean v) { this.spatialPersistPlots = v; }
 
-    // ---- Spatial graph overlay (v0.3) accessors ----
+    // ---- Spatial graph overlay accessors ----
 
     public boolean isPushConnectionsToViewer() { return pushConnectionsToViewer; }
     public void setPushConnectionsToViewer(boolean v) { this.pushConnectionsToViewer = v; }

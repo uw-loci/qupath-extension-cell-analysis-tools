@@ -51,7 +51,7 @@ import org.slf4j.LoggerFactory;
  *       every user report starts with a false alarm.</li>
  * </ol>
  *
- * <p>Locking is the caller's: hold whatever serialises your tasks around the
+ * <p>Locking is the caller's: hold whatever serializes your tasks around the
  * call, and make sure that lock is not the worker object itself, because the
  * worker is replaced mid-call.
  */
@@ -70,7 +70,7 @@ public final class ApposeTaskRunner {
 
         /**
          * Replaces {@code stale} with a fresh worker, re-running whatever
-         * initialisation the fresh one needs. Should be a no-op when another
+         * initialization the fresh one needs. Should be a no-op when another
          * thread has already replaced it.
          */
         void replaceWorker(Service stale) throws IOException;

@@ -126,7 +126,7 @@ else:  # umap (default)
     n_neigh = int(min(umap_neighbors, max(2, n_cells - 1)))
     # Same reproducibility-vs-parallelism trade as run_clustering.py: a pinned
     # random_state makes umap-learn force n_jobs=1 and drop numba prange from the
-    # layout optimisation. Today this script only ever sees the VEST exporter's
+    # layout optimization. Today this script only ever sees the VEST exporter's
     # sketch (~1000 cells) so "auto" keeps the seeded path, but the coupling is
     # the same and must not silently bite if the cap is ever raised.
     try:

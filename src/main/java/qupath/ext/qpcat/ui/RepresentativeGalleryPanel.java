@@ -351,7 +351,7 @@ public class RepresentativeGalleryPanel extends VBox {
     /**
      * Why the channel controls are unavailable, in the user's terms.
      *
-     * <p>Two different causes with two different fixes, and a greyed-out control
+     * <p>Two different causes with two different fixes, and a grayed-out control
      * cannot distinguish them unless it says so. Leaving that unsaid is how
      * someone spends ten minutes wondering whether the feature shipped at all.
      */
@@ -371,10 +371,10 @@ public class RepresentativeGalleryPanel extends VBox {
      * can now work.
      *
      * <p>Called from {@link #rebuild()}, which "Update from viewer" triggers. The
-     * channel list used to be read ONCE in the constructor, so opening an image
-     * after the results window was already up left every channel control dead
-     * until the window was closed and reopened -- with nothing on screen saying
-     * so.
+     * channel list is re-read here rather than ONCE in the constructor: otherwise
+     * opening an image after the results window was already up would leave every
+     * channel control dead until the window was closed and reopened -- with nothing
+     * on screen saying so.
      */
     private void refreshChannelAvailability() {
         refreshingChannels = true;
@@ -448,7 +448,7 @@ public class RepresentativeGalleryPanel extends VBox {
             }
 
             // Per-cluster channels imply the legend: without it the reader has
-            // differently-coloured crops and no way to tell what any colour is.
+            // differently-colored crops and no way to tell what any color is.
             if (perClusterChannels) {
                 Region legend = buildChannelLegend(c);
                 if (legend != null) {
@@ -535,7 +535,7 @@ public class RepresentativeGalleryPanel extends VBox {
         // channels ACTUALLY USED -- which includes the fixed channel. Listing
         // only the ranked matches would describe something other than the image
         // beside it, which is worse than no legend: each cluster is in different
-        // colours and the legend is the only way to read them.
+        // colors and the legend is the only way to read them.
         List<String> matched;
         if (perClusterChannels) {
             matched = channelsForCluster(cluster);
@@ -761,8 +761,8 @@ public class RepresentativeGalleryPanel extends VBox {
     /**
      * Compose one cluster's crops into a montage.
      *
-     * <p>Static and fully parameterised so the geometry can be tested: the
-     * centring and the background are the parts a reader notices and the parts
+     * <p>Static and fully parameterized so the geometry can be tested: the
+     * centering and the background are the parts a reader notices and the parts
      * no unit test would otherwise cover.
      *
      * @param dark  render for fluorescence (black ground) rather than brightfield
@@ -798,7 +798,7 @@ public class RepresentativeGalleryPanel extends VBox {
 
         int x = 0;
         for (BufferedImage c : crops) {
-            // Centre vertically. Top-aligning crops of different heights is the
+            // Center vertically. Top-aligning crops of different heights is the
             // other half of the ragged-edge problem.
             g.drawImage(c, x, (maxH - c.getHeight()) / 2, null);
             x += c.getWidth() + gutter;

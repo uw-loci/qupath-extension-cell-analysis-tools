@@ -101,7 +101,7 @@ public class GearyCResult {
     public static class Entry {
         private double c;
         private double pValue;
-        // Boxed, and null when absent, NOT NaN: these objects are serialised
+        // Boxed, and null when absent, NOT NaN: these objects are serialized
         // into a saved result with a plain Gson, which refuses NaN outright
         // ("NaN is not a valid double value as per JSON specification"). A NaN
         // default here made saving any result carrying Geary data throw.

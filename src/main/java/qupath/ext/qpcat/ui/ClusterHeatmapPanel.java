@@ -34,7 +34,7 @@ public class ClusterHeatmapPanel extends VBox {
     private static final double MARGIN_RIGHT_MIN = 15;
     /** Gap between the grid and the start of the rotated labels. */
     private static final double LABEL_GAP = 5;
-    /** Reserved strip under the labels for the colour-scale bar and its text. */
+    /** Reserved strip under the labels for the color-scale bar and its text. */
     private static final double LEGEND_BAND = 46;
     /** Rotation applied to the column labels, in degrees. */
     private static final double LABEL_ANGLE = 45;
@@ -48,7 +48,7 @@ public class ClusterHeatmapPanel extends VBox {
     static final String SCALE_SHARED = "Shared across markers";
 
     private javafx.scene.control.ComboBox<String> scaleCombo;
-    /** Colour-map picker; its items are the family matching {@link #centred}. */
+    /** Color-map picker; its items are the family matching {@link #centred}. */
     private javafx.scene.control.ComboBox<String> colorMapCombo;
     /** The map currently painting, resolved from the picker. */
     private qupath.lib.color.ColorMaps.ColorMap colorMap;
@@ -128,8 +128,8 @@ public class ClusterHeatmapPanel extends VBox {
      * Tell the panel which normalization produced its values.
      * <p>
      * Only Z-scored values have a meaningful zero, so only they get a diverging
-     * blue-white-red scale centred on it. Anything else is painted with viridis
-     * and the legend says there is no centre, because a diverging palette over
+     * blue-white-red scale centered on it. Anything else is painted with viridis
+     * and the legend says there is no center, because a diverging palette over
      * data with no midpoint is exactly the mismatch that made white land on an
      * arbitrary number.
      *
@@ -138,7 +138,7 @@ public class ClusterHeatmapPanel extends VBox {
     public void setNormalization(String normalizationId) {
         this.centred = "zscore".equalsIgnoreCase(normalizationId);
         this.units = ClusteringConfig.Normalization.unitsOf(normalizationId);
-        // Which colour-map family is correct follows from this, so reload it.
+        // Which color-map family is correct follows from this, so reload it.
         refreshColorMaps();
         if (data != null) {
             recomputeScale();
@@ -164,7 +164,7 @@ public class ClusterHeatmapPanel extends VBox {
     /** Multiplier on the cell size; 1.0 is the historical fixed 25px. */
     private double zoom = 1.0;
 
-    /** How cell values are mapped to colour. */
+    /** How cell values are mapped to color. */
     enum ScaleMode {
         /** Each marker rescaled between its own lowest and highest cluster mean. */
         PER_MARKER,
@@ -174,15 +174,15 @@ public class ClusterHeatmapPanel extends VBox {
 
     private ScaleMode scaleMode = ScaleMode.PER_MARKER;
     /**
-     * True when zero is a meaningful centre, i.e. the run was Z-scored. False for
-     * raw / min-max / percentile values, which have no centre to diverge about.
+     * True when zero is a meaningful center, i.e. the run was Z-scored. False for
+     * raw / min-max / percentile values, which have no center to diverge about.
      */
     private boolean centred = true;
     /** Units of the cluster means, e.g. "z-score"; "" when the run did not say. */
     private String units = "";
     /** Half-width of the shared scale, in the units of the incoming means. */
     private double sharedExtent = 1;
-    /** Low end of the shared scale when the data has no centre. */
+    /** Low end of the shared scale when the data has no center. */
     private double sharedLow = 0;
     /** Per-column half-widths for PER_MARKER, in those same units. */
     private double[] columnExtent;
@@ -264,7 +264,7 @@ public class ClusterHeatmapPanel extends VBox {
             redraw();
         });
 
-        // Colour-map picker. Only the family matching the data is offered: a
+        // Color-map picker. Only the family matching the data is offered: a
         // diverging map promises a meaningful midpoint, and un-normalized
         // intensities have none, so offering blue-white-red for them would invite
         // reading the middle of an arbitrary range as "average".
@@ -328,9 +328,9 @@ public class ClusterHeatmapPanel extends VBox {
      * tooltip -- reads the visible subset, so hiding two thirds of a 40-marker
      * panel brings the markers that are left next to each other instead of ten
      * rows apart. Nothing is recomputed from the cells: these are the same means,
-     * shown alone. With the per-marker scale that is exactly the same colour for
+     * shown alone. With the per-marker scale that is exactly the same color for
      * a kept column; with the shared scale the reach is taken over what is shown,
-     * so colours do change, which is the point of that mode.
+     * so colors do change, which is the point of that mode.
      */
     private void applyVisibility() {
         if (fullData == null) {
@@ -395,7 +395,7 @@ public class ClusterHeatmapPanel extends VBox {
         // Column labels are drawn at 45 degrees from the bottom of the grid, so a
         // label of width L reaches L*cos(45) BOTH down and to the right. The
         // bottom and right margins were fixed at 100 and 15, so a long marker
-        // name ran off both edges -- and the colour-scale legend, drawn in that
+        // name ran off both edges -- and the color-scale legend, drawn in that
         // same bottom band, had its "Low"/"High" text placed 4px BELOW the canvas
         // and so never appeared at all. Measure, as the left gutter already does.
         double widest = 0;
@@ -440,10 +440,10 @@ public class ClusterHeatmapPanel extends VBox {
      * mean. Every marker's extremes then land on pure blue and pure red whatever
      * its spread, so a marker varying a thousandfold and one varying one percent
      * are drawn identically -- and the value under the pointer no longer matches
-     * the colour beside it in any other column.
+     * the color beside it in any other column.
      * <p>
      * SHARED_CENTERED puts the whole matrix on ONE scale, symmetric about zero,
-     * so white is zero and the same colour means the same number everywhere.
+     * so white is zero and the same color means the same number everywhere.
      * With the default Z-score normalization those numbers are standard
      * deviations from each marker's mean across all cells, which is the reading
      * most people expect from a blue-white-red heatmap.
@@ -510,7 +510,7 @@ public class ClusterHeatmapPanel extends VBox {
         // column between its own min and max, which put white at the midpoint of
         // whatever that column happened to contain -- so zero, the one value in a
         // z-scored matrix that means something ("this cluster is average for this
-        // marker"), landed on an arbitrary colour, and a column of all-negative
+        // marker"), landed on an arbitrary color, and a column of all-negative
         // values still showed a pure red cell. Anchoring zero keeps each column's
         // own dynamic range while making white mean the same thing everywhere.
         columnExtent = new double[nMarkers];
@@ -527,12 +527,12 @@ public class ClusterHeatmapPanel extends VBox {
     }
 
     /**
-     * Line under the colour bar naming what the colours are.
+     * Line under the color bar naming what the colors are.
      *
      * @param centred   true for Z-scored values
-     * @param perMarker true when each column has its own colour range
+     * @param perMarker true when each column has its own color range
      * @param units     the normalization's units, "" when unknown
-     * @return the caption ("" for centred values of unknown units)
+     * @return the caption ("" for centered values of unknown units)
      */
     static String legendCaption(boolean centred, boolean perMarker, String units) {
         if (centred) return units.isEmpty() ? "" : "cluster mean (" + units + ")";
@@ -614,7 +614,7 @@ public class ClusterHeatmapPanel extends VBox {
                     legendX + legendW, legendY + 22);
             return;
         }
-        // Both centred modes have a zero to label. Per marker has no single
+        // Both centered modes have a zero to label. Per marker has no single
         // number for the ends -- each column has its own -- so it says so.
         gc.fillText(shared ? String.format("%.2f", -sharedExtent) : "- per marker",
                 legendX, legendY + 22);
@@ -659,14 +659,14 @@ public class ClusterHeatmapPanel extends VBox {
     }
 
     /**
-     * Map a [0,1] value to a colour using the chosen map.
+     * Map a [0,1] value to a color using the chosen map.
      *
      * <p>Falls back to the hand-written scales when the QuPath registry gives
      * nothing, so the heatmap always paints: a blank figure is a worse failure
-     * than a figure in the previous default colours.
+     * than a figure in the previous default colors.
      *
      * @param val position along the scale, 0..1
-     * @return the colour at that position
+     * @return the color at that position
      */
     private Color valueToColor(double val) {
         val = Math.max(0, Math.min(1, val));
@@ -699,11 +699,11 @@ public class ClusterHeatmapPanel extends VBox {
     /**
      * Viridis, as eight sampled stops with linear interpolation between them.
      * <p>
-     * Perceptually uniform and colour-blind safe, which is why it is matplotlib's
+     * Perceptually uniform and color-blind safe, which is why it is matplotlib's
      * and scanpy's default for data that only goes one way.
      *
      * @param t position along the scale, 0..1
-     * @return the colour at that position
+     * @return the color at that position
      */
     private static Color viridis(double t) {
         final double[][] stops = {

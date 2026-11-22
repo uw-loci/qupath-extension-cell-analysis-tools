@@ -349,7 +349,7 @@ public final class ClusteringRunRecord {
 
         if (fromObjects) {
             // The standard steps below would be a false promise here: re-running
-            // analyses whatever the objects carry THEN, not what they carried when
+            // analyzes whatever the objects carry THEN, not what they carried when
             // this was captured. Say so instead of offering steps that lie.
             sb.append("Reproducing this result\n");
             sb.append("-----------------------\n");

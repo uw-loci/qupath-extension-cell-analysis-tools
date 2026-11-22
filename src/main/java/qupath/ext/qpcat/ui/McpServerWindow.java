@@ -602,7 +602,7 @@ public final class McpServerWindow {
         statusLabel.setStyle(unexpectedStop ? AMBER_TEXT : "-fx-font-weight: bold;");
     }
 
-    /** @return the status line for one state; the word comes first, never a colour */
+    /** @return the status line for one state; the word comes first, never a color */
     static String statusText(State s) {
         if (s.running()) {
             String since = s.startedAt() != null

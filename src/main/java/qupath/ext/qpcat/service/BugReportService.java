@@ -261,7 +261,7 @@ public class BugReportService {
 
     /**
      * Platform-injected core of {@link #scrubPaths(String)}, so the Windows
-     * behaviour is testable from Linux.
+     * behavior is testable from Linux.
      *
      * <p>On Windows the same home path reaches a log in several separator forms,
      * and a literal match catches only the first: the filesystem form

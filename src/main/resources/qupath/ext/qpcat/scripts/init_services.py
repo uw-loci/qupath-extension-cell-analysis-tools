@@ -100,13 +100,13 @@ try:
             _hp_err,
         )
 
-    # Probe banksy the same way. This used to be a bare `import banksy` in the
-    # required block above, which was wrong twice over: a broken pybanksy took
+    # Probe banksy the same way, not as a bare `import banksy` in the required
+    # block above. That would be wrong twice over: a broken pybanksy would take
     # the WHOLE init down into `init_error` -- which nothing on the Java side
-    # reads -- so verification still passed and the failure only surfaced when
-    # a user picked BANKSY; and because it sat before the harmonypy probe, it
-    # also left HARMONYPY_AVAILABLE False, reporting Harmony as missing when
-    # the real casualty was banksy. Catch Exception, not just ImportError:
+    # reads -- so verification would pass and the failure only surface when a
+    # user picked BANKSY; and sitting before the harmonypy probe, it would also
+    # leave HARMONYPY_AVAILABLE False, reporting Harmony as missing when the
+    # real casualty was banksy. Catch Exception, not just ImportError:
     # pybanksy pulls a deep scientific stack, and a version mismatch inside it
     # raises things other than ImportError.
     try:

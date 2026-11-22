@@ -15,7 +15,7 @@ import java.util.Map;
  * {@code ClassifySubsetScripts} -- static methods, single
  * options-map argument, no UI dependency.
  *
- * <p>Recognised option keys (all optional; the facade uses literal
+ * <p>Recognized option keys (all optional; the facade uses literal
  * defaults so it stays callable without a live JavaFX environment.
  * To pick up the persisted Preferences defaults, fetch them via
  * {@code qupath.ext.qpcat.preferences.QpcatPreferences} before calling
@@ -58,7 +58,7 @@ public final class SpatialGraphScripts {
     public static final double DEFAULT_DELAUNAY_MAX_EDGE = -1.0;
 
     /**
-     * Resolve a normalised options map describing the graph constructor.
+     * Resolve a normalized options map describing the graph constructor.
      * The returned map contains the canonical option keys with the
      * facade-level literal defaults. The graph itself is built downstream
      * inside the Python clustering task; this surface lets a Groovy
@@ -66,7 +66,7 @@ public final class SpatialGraphScripts {
      *
      * @param opts user-supplied options (may be {@code null} or empty;
      *             unrecognised keys log a warning and are ignored)
-     * @return a normalised options map suitable for passing through to the
+     * @return a normalized options map suitable for passing through to the
      *         clustering workflow
      */
     public static Map<String, Object> buildGraph(Map<String, ?> opts) {
@@ -106,7 +106,7 @@ public final class SpatialGraphScripts {
     }
 
     /**
-     * Normalise the {@code areas} option into a canonical list of level maps.
+     * Normalize the {@code areas} option into a canonical list of level maps.
      * <p>
      * Each entry is {@code [level: "tma_cores"|"annotations", classes: [...]]}.
      * {@code images} is rejected rather than accepted-and-ignored: it is
@@ -167,7 +167,7 @@ public final class SpatialGraphScripts {
         return out;
     }
 
-    /** Visible for testing. Normalise the graph-type token. */
+    /** Visible for testing. Normalize the graph-type token. */
     public static String normaliseType(Object raw) {
         if (raw == null) return "knn";
         String s = raw.toString().trim().toLowerCase(Locale.ROOT);

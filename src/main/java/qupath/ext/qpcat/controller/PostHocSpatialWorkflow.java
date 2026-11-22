@@ -58,7 +58,7 @@ import java.util.function.Consumer;
  * the docs) says "area", so the two workflows share one vocabulary and their
  * long-format CSVs can be concatenated rather than reconciled. Do not
  * reintroduce "window" or "region" in anything a user reads; in QP-CAT
- * "window" now means only the per-cell neighbourhood window in Cellular
+ * "window" now means only the per-cell neighborhood window in Cellular
  * Neighborhoods, which is a genuinely different thing.
  *
  * <p>Each analysis <b>area</b> -- a whole image, an annotation class merged per
@@ -467,7 +467,7 @@ public class PostHocSpatialWorkflow {
         }
 
         // Independent areas take precedence: they are the shared definition of
-        // "a piece of tissue analysed on its own", used identically by the
+        // "a piece of tissue analyzed on its own", used identically by the
         // clustering and cellular-neighborhood workflows. Each area becomes one
         // window with its own graph, permutation null and class-index space.
         if (AreaLevelSpec.hasSubImageLevels(opts.areaLevels)) {

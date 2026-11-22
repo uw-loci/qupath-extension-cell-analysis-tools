@@ -160,9 +160,9 @@ except NameError:
 # Independent areas. An area is a piece of tissue physically separate from
 # every other piece -- a TMA core, one of several sections on a slide, an
 # image. Windows are built within an area and never across one, because a
-# neighbour in another core is not a neighbour.
+# neighbor in another core is not a neighbor.
 #
-# Absent, the image IS the area, which is the previous behaviour and still
+# Absent, the image IS the area, which is the previous behavior and still
 # correct -- just the coarsest possible partition.
 try:
     area_ids_arr = np.asarray(area_ids, dtype=np.int64)
@@ -326,7 +326,7 @@ def build_composition_per_unit(
 
     A unit is an independent area when areas are configured, otherwise an
     image. Windows are built WITHIN a unit and never across one: a cell in the
-    next TMA core is not a neighbour, so counting it would put a mixture in the
+    next TMA core is not a neighbor, so counting it would put a mixture in the
     composition vector that the tissue does not contain.
 
     Lifted out of the script body so it can be unit-tested at all -- the test
@@ -412,7 +412,7 @@ enrichment = np.log2((mean_comp + eps) / (global_freq[None, :] + eps))
 def _save_heatmap(
     matrix, row_labels, col_labels, title, cbar_label, cmap, vmin, vmax, fname
 ):
-    """Write a labelled heatmap PNG; returns the path or "" on failure."""
+    """Write a labeled heatmap PNG; returns the path or "" on failure."""
     try:
         os.makedirs(out_dir, exist_ok=True)
         import matplotlib
@@ -605,7 +605,7 @@ def _region_adjacency():
     # of cells do not risk an OOM in the Appose worker).
     block = 100000
     adj = np.zeros((n_cn, n_cn), dtype=np.float64)
-    # Region adjacency is a neighbour count, so it partitions on the same unit
+    # Region adjacency is a neighbor count, so it partitions on the same unit
     # as the windows: two CNs in different cores are not adjacent.
     units = unique_samples if multi_sample else np.array([0])
     for unit in units:

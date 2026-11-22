@@ -19,7 +19,7 @@ import javafx.scene.control.Tooltip;
  *       the Tooltip for us. QuPath renders preference descriptions through
  *       ControlsFX's {@code PropertySheet}, so we never see that Tooltip
  *       instance and cannot set {@code wrapText} on it; inserting real newlines
- *       is the only lever we have, and they are honoured regardless.</li>
+ *       is the only lever we have, and they are honored regardless.</li>
  * </ul>
  */
 public final class Tooltips {

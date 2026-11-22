@@ -84,7 +84,7 @@ public class AreaLevelSpec {
         return false;
     }
 
-    /** The default configuration: split by image only, i.e. today's behaviour. */
+    /** The default configuration: split by image only, i.e. today's behavior. */
     public static List<AreaLevelSpec> imagesOnly() {
         List<AreaLevelSpec> levels = new ArrayList<>();
         levels.add(new AreaLevelSpec(AreaLevel.IMAGES));

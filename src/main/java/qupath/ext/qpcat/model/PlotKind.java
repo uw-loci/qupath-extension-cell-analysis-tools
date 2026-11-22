@@ -81,7 +81,7 @@ public enum PlotKind {
         COMPUTED,
         /** JavaFX scene-graph node available only while the results dialog is open. */
         JAVAFX,
-        /** Text-only -- not currently renderable; reserved for v1.1 (e.g. Moran's I correlogram). */
+        /** Text-only -- no renderer is implemented (e.g. Moran's I correlogram). */
         TEXT_ONLY
     }
 

@@ -4,10 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Result of a batch figure export run. Gson-serialisable; no JavaFX
+ * Result of a batch figure export run. Gson-serializable; no JavaFX
  * dependencies. Returned by
  * {@code BatchFigureExporter.exportProject(...)} so callers (the dialog,
- * Feature C's YAML batch, unit tests) can summarise what happened.
+ * Feature C's YAML batch, unit tests) can summarize what happened.
  */
 public final class ExportResult {
 

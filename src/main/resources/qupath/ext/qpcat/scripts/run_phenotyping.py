@@ -110,9 +110,8 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
 
     The any-groups are per row, not per marker: all markers marked `anypos` in a
     row form one group. That is what lets "Macrophage = CD68 or CD163 or CD206"
-    be a single row instead of three -- and three rows sharing a cell type is the
-    idiom that produced the counts bug fixed on 2026-08-19, because labels are
-    rule indices.
+    be a single row instead of three -- and three rows sharing a cell type
+    miscount, because labels are rule indices.
 
     Note the deliberate asymmetry with an EMPTY group: a row with no `anypos`
     markers imposes no any-constraint, whereas a row whose only condition is
@@ -219,7 +218,7 @@ logger.info("Received %d cells x %d markers", n_cells, n_markers)
 # answer -- imputing the column median would invent a value and could call the
 # cell positive. pandas skips NaN when computing the normalization statistics,
 # and `NaN > threshold` is False, so such a cell is gated negative for that
-# marker. That is the intended behaviour; warn so it is not silent.
+# marker. That is the intended behavior; warn so it is not silent.
 n_nonfinite = int(np.count_nonzero(~np.isfinite(data)))
 if n_nonfinite > 0:
     logger.warning(
@@ -337,7 +336,7 @@ for rule_idx, rule in enumerate(rules):
 # a cell positive for >= 2 markers then matches no rule and falls through. Break
 # the Unknown bucket down by how many rule markers each Unknown cell is positive
 # for, so a too-strict rule set is obvious at a glance (e.g. "most of my Unknowns
-# are multi-positive"). Computed while Unknown cells are still labelled -1.
+# are multi-positive"). Computed while Unknown cells are still labeled -1.
 unknown_mask = labels == -1
 rule_markers = sorted(
     {

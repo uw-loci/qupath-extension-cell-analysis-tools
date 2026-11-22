@@ -767,7 +767,7 @@ public final class YamlBatchOrchestrator {
      *
      * @param id the YAML value, already lower-cased
      * @return the matching algorithm
-     * @throws IllegalArgumentException if the type is not recognised
+     * @throws IllegalArgumentException if the type is not recognized
      */
     private static ClusteringConfig.Algorithm parseAlgorithm(String id) {
         for (ClusteringConfig.Algorithm a : ClusteringConfig.Algorithm.values()) {
@@ -800,7 +800,7 @@ public final class YamlBatchOrchestrator {
      *
      * @param id the YAML value
      * @return the matching normalization
-     * @throws IllegalArgumentException if it is not recognised
+     * @throws IllegalArgumentException if it is not recognized
      */
     private static ClusteringConfig.Normalization parseNormalization(String id) {
         for (ClusteringConfig.Normalization n : ClusteringConfig.Normalization.values()) {
@@ -828,7 +828,7 @@ public final class YamlBatchOrchestrator {
      *
      * @param id the YAML value
      * @return the matching embedding method
-     * @throws IllegalArgumentException if it is not recognised
+     * @throws IllegalArgumentException if it is not recognized
      */
     private static ClusteringConfig.EmbeddingMethod parseEmbedding(String id) {
         for (ClusteringConfig.EmbeddingMethod e : ClusteringConfig.EmbeddingMethod.values()) {

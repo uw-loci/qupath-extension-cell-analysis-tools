@@ -13,7 +13,7 @@ import qupath.fx.dialogs.Dialogs;
  * image the run covers, and QP-CAT's saved-result copies do not restore the
  * project's pre-run state. So the very first time the user opens one of these
  * tools we strongly recommend duplicating the project folder first. The
- * acknowledgement is persisted ({@link QpcatPreferences#hasAcknowledgedBackupWarning()}),
+ * acknowledgment is persisted ({@link QpcatPreferences#hasAcknowledgedBackupWarning()}),
  * so the warning appears once; it can be re-armed from
  * Edit &gt; Preferences &gt; QP-CAT (General &gt; "Backup Warning Acknowledged").</p>
  */
@@ -35,8 +35,8 @@ public final class BackupWarningDialog {
      * Must be called on the JavaFX Application Thread (menu actions already are).
      *
      * @return {@code true} to proceed with opening the tool; {@code false} if the
-     *         user cancelled (e.g. to back up first). When cancelled, the
-     *         acknowledgement is NOT recorded, so the warning shows again next time.
+     *         user canceled (e.g. to back up first). When canceled, the
+     *         acknowledgment is NOT recorded, so the warning shows again next time.
      */
     public static boolean acknowledgeOnce() {
         if (QpcatPreferences.hasAcknowledgedBackupWarning()) {

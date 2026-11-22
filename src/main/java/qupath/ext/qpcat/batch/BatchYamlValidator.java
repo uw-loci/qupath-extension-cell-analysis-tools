@@ -24,9 +24,7 @@ import java.util.regex.Pattern;
 /**
  * Semantic validator for the v1 QP-CAT batch YAML schema.
  *
- * <p>Implements the error / warning taxonomy in
- * {@code agent-reports/extension-team/qpcat-yaml-batch/02_design.ui-ux-draft.md}
- * section 4. Each rule maps to a stable error code (E001-E021) or warning
+ * <p>Each rule maps to a stable error code (E001-E021) or warning
  * code (W001-W004). The validator accumulates issues; the orchestrator
  * decides whether to dispatch based on {@link ValidationResult#hasErrors()}.</p>
  *
@@ -38,7 +36,7 @@ import java.util.regex.Pattern;
  * <p>The filename-slug shorthand {@code "ripley"} is expanded here for
  * {@link BatchYamlSchema.FigureExportBlock#getFigures()} (the YAML allows
  * either {@code [ripley]} or {@code [ripley_k, ripley_l]}; the validator
- * normalises to the explicit pair).</p>
+ * normalizes to the explicit pair).</p>
  */
 public final class BatchYamlValidator {
 
@@ -122,7 +120,7 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E001", "version", "required field missing"));
             return;
         }
-        // Normalise "1" -> "1.0"
+        // Normalize "1" -> "1.0"
         String normalised = v.trim();
         if (normalised.equals("1")) normalised = "1.0";
 
@@ -341,7 +339,7 @@ public final class BatchYamlValidator {
     }
 
     /**
-     * Reject rule sets that ask for a per-marker gate the engine cannot honour.
+     * Reject rule sets that ask for a per-marker gate the engine cannot honor.
      * <p>
      * The YAML carries a z-score threshold <b>per rule</b>
      * ({@code require_min_zscore} / {@code exclude_max_zscore}), but

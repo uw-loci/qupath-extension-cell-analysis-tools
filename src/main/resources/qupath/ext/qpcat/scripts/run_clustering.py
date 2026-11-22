@@ -5,7 +5,7 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
   measurements: NDArray (N_cells x N_markers, float64)
   marker_names: list[str]
   algorithm: str ("leiden", "kmeans", "hdbscan", "agglomerative", "minibatchkmeans",
-    "gmm", "existing"). "existing" computes no clusters: it analyses the labels
+    "gmm", "existing"). "existing" computes no clusters: it analyzes the labels
     sent in supplied_labels, which are the classifications already on the objects.
   algorithm_params: dict (algorithm-specific parameters)
   normalization: str ("zscore", "minmax", "percentile", "none")
@@ -67,7 +67,7 @@ Optional inputs:
   reference_labels: NDArray (N_cells,) int32 -- class code per cell, -1 for none;
     with reference_names (list[str]) asks for agreement_with_classes
   reuse_budget_bytes: int (default 0) -- most the worker may keep between runs for
-    reuse (the Leiden neighbour graph and the embedding; see knn_cache.py).
+    reuse (the Leiden neighbor graph and the embedding; see knn_cache.py).
     0 keeps nothing and frees whatever an earlier run kept.
 
 Outputs (via task.outputs):
@@ -235,7 +235,7 @@ except NameError:
 # separate from every other piece -- a TMA core, one of several sections on a
 # slide, an image. No spatial graph may join two of them: the distance between
 # a cell in one core and a cell in the next is not a distance through tissue.
-# None means "one area", which is the pre-areas behaviour.
+# None means "one area", which is the pre-areas behavior.
 try:
     area_ids_list = list(area_ids)
 except NameError:
@@ -287,7 +287,7 @@ try:
 except NameError:
     pref_plot_dpi = 150
 
-# Colour maps for the figures matplotlib renders here, as matplotlib names. The
+# Color maps for the figures matplotlib renders here, as matplotlib names. The
 # Java side sends only names matplotlib actually has -- a user's own QuPath .tsv
 # map has no equivalent and is sent as None rather than as a name that would
 # raise. Defaults are what these figures have always used, so omitting the
@@ -434,9 +434,9 @@ try:
 except NameError:
     pref_use_squidpy_smoothing = False
 # Neighborhood enrichment + Moran's I are gated on the explicit "spatial
-# analysis" choice. Previously they ran whenever spatial COORDS were present,
-# which is always true for BANKSY -- so every BANKSY run triggered them
-# uninvited (and nhood_enrichment is the step that deadlocked on Windows).
+# analysis" choice, not on spatial COORDS being present: that is always true
+# for BANKSY, so every BANKSY run would trigger them uninvited (and
+# nhood_enrichment is the step that deadlocked on Windows).
 # Default True only matters if an older caller omits the flag.
 try:
     pref_enable_spatial_analysis = enable_spatial_analysis
@@ -463,7 +463,7 @@ try:
 except NameError:
     pref_enable_co_occurrence_one_vs_rest = False
 
-# v0.3 spatial graph overlay flags. push_connections_to_viewer drives the
+# Spatial graph overlay flags. push_connections_to_viewer drives the
 # Java-side rebuild of PathObjectConnections; the edge COO is emitted
 # unconditionally so the Java side can also rebuild on demand from saved
 # results without a re-run. write_node_measurements toggles per-cell
@@ -495,12 +495,11 @@ try:
 except NameError:
     pref_coord_unit = "px"
 
-# Phase 5 enhancement: persist spatial-stats plots as PNG. Gated by the
+# Persist spatial-stats plots as PNG. Gated by the
 # qpcat.spatial.persistPlots preference (default true). When the parent
-# task is also generating plots (generate_plots + output_dir), the new
-# spatial-stats PNGs land in the same directory so Feature B's batch
-# figure exporter can pick them up alongside the existing matplotlib
-# outputs.
+# task is also generating plots (generate_plots + output_dir), the
+# spatial-stats PNGs land in the same directory so the batch figure
+# exporter can pick them up alongside the other matplotlib outputs.
 try:
     pref_spatial_persist_plots = spatial_persist_plots
 except NameError:
@@ -519,7 +518,7 @@ def require_finite(matrix, step, column_names=None, max_named=6):
         matrix: 2-D array to check.
         step: what just ran, named in the error.
         column_names: optional per-column names, used to name the offenders.
-        max_named: how many column names to list before summarising.
+        max_named: how many column names to list before summarizing.
 
     Raises:
         ValueError: naming the step and the affected columns.
@@ -594,10 +593,10 @@ if do_spatial_smoothing and has_spatial_coords:
     n = len(spatial_data)
 
     if pref_use_squidpy_smoothing:
-        # Hybrid graph reuse path (Phase 2 contract #2): same squidpy
-        # spatial_neighbors graph backs smoothing AND the new statistics.
-        # Pure-A row-normalised connectivity (no +I diagonal); produces
-        # subtly different cluster labels at boundaries vs the legacy
+        # Hybrid graph reuse path: the same squidpy spatial_neighbors graph
+        # backs smoothing AND the spatial statistics.
+        # Pure-A row-normalized connectivity (no +I diagonal); produces
+        # subtly different cluster labels at boundaries vs the sklearn
         # (A + I) path. Gated behind qpcat.spatial.useSquidpyGraphForSmoothing
         # so existing projects retain bit-for-bit reproducibility.
         # spatial_stats is registered as an importable module by
@@ -625,7 +624,7 @@ if do_spatial_smoothing and has_spatial_coords:
             pref_spatial_graph_type,
         )
     else:
-        # Legacy path - sklearn kNN with (A + I) row-normalisation.
+        # Default path: sklearn kNN with (A + I) row-normalization.
         # This path is byte-stable with respect to prior QP-CAT releases
         # whenever there is a single area.
         try:
@@ -1054,7 +1053,7 @@ def pca_rank_marchenko_pastur(X, max_comps, iters=5):
 
     Chosen for wide data (thousands of genes or markers), where permutation-based
     tests would mean repeatedly decomposing a very large matrix, and where the law's
-    large-p behaviour is the regime it was derived for. It assumes roughly
+    large-p behavior is the regime it was derived for. It assumes roughly
     homoskedastic noise; on count data that is an approximation, which is why the
     result is capped rather than trusted blindly.
 
@@ -1138,7 +1137,7 @@ def resolve_pca_precursor(enabled, n_features, n_comps, algorithm_name):
     when there is something to reduce: the feature count has to exceed the target
     component count ``n_comps``, which keeps small panels on the full matrix.
     BANKSY is always exempt -- it runs its own PCA over spatially-augmented
-    features, so a generic precursor would corrupt that neighbourhood
+    features, so a generic precursor would corrupt that neighborhood
     construction.
     """
     if algorithm_name == "banksy":
@@ -1152,7 +1151,7 @@ def resolve_pca_precursor(enabled, n_features, n_comps, algorithm_name):
 
 # ---- Optional PCA precursor -------------------------------------------------
 # Canonical scanpy reduces to N principal components first, then builds the
-# neighbour graph / UMAP / Leiden on those PCs. Compartment-heavy panels reach
+# neighbor graph / UMAP / Leiden on those PCs. Compartment-heavy panels reach
 # hundreds of features, where doing the same both denoises and cuts runtime.
 #
 # ORDER MATTERS: this sits AFTER normalization, spatial smoothing and Harmony,
@@ -1432,21 +1431,21 @@ resolution_comparison = None
 
 
 def validate_n_neighbors(n_neighbors, n_cells):
-    """Check a neighbour count before scikit-learn sees it.
+    """Check a neighbor count before scikit-learn sees it.
 
     Two ways this goes wrong, and neither produces a readable error downstream:
 
     * **Zero or negative.** An editable JavaFX Spinner's min/max constrain its
       arrows, not text typed into it, so a 2-to-500 control could commit 0.
-    * **More neighbours than cells.** A run over a handful of cells -- a stray
-      selection, a tiny annotation -- cannot have 50 neighbours per cell.
+    * **More neighbors than cells.** A run over a handful of cells -- a stray
+      selection, a tiny annotation -- cannot have 50 neighbors per cell.
 
     Raises ValueError naming the number and the cell count, so the dialog can
     show something the user can act on.
 
-    :param n_neighbors: requested neighbour count
+    :param n_neighbors: requested neighbor count
     :param n_cells: rows in the matrix being clustered
-    :return: the neighbour count to use, reduced to fit when necessary
+    :return: the neighbor count to use, reduced to fit when necessary
     """
     try:
         k = int(n_neighbors)
@@ -1465,7 +1464,7 @@ def validate_n_neighbors(n_neighbors, n_cells):
             "objects selected in the viewer, the run uses only those -- clear "
             "the selection to use the whole image." % n_cells
         )
-    # scanpy counts each cell as its own first neighbour, so the most it can ask
+    # scanpy counts each cell as its own first neighbor, so the most it can ask
     # for is n_cells - 1. Reduce rather than refuse: the user asked for a graph,
     # and the largest one this many cells can support is still a graph.
     if k > n_cells - 1:
@@ -1485,7 +1484,7 @@ def validate_n_neighbors(n_neighbors, n_cells):
 # ---- Cluster membership confidence ------------------------------------------
 #
 # Reporting threshold for "this label was close to a coin flip". A convention for
-# summarising, not a test: 0.9 was chosen because it separates the cases a user
+# summarizing, not a test: 0.9 was chosen because it separates the cases a user
 # cares about. Measured with a 2-component GMM -- two separated blobs left 0.0%
 # of cells below it, a uniform continuum left 22.5%, while their MEDIAN
 # confidences were 1.0000 and 0.9925 and so told the two apart not at all.
@@ -1513,7 +1512,7 @@ def posterior_confidence(proba):
     ----------
     proba : array (n_cells, n_components)
         Rows are per-cell distributions over components. Rows need not be exactly
-        normalised; each is divided by its own sum.
+        normalized; each is divided by its own sum.
 
     Returns
     -------
@@ -1556,22 +1555,22 @@ def posterior_confidence(proba):
 
 
 def distance_margin(distances):
-    """Per-cell separation margin from distances to each cluster centre.
+    """Per-cell separation margin from distances to each cluster center.
 
-    ``(d2 - d1) / d2`` where d1 is the nearest centre and d2 the next nearest:
-    dimensionless, 0 when a cell sits exactly between two centres and approaching
+    ``(d2 - d1) / d2`` where d1 is the nearest center and d2 the next nearest:
+    dimensionless, 0 when a cell sits exactly between two centers and approaching
     1 when it sits on one. **This is not a probability** and must never be
-    labelled as one -- it has no calibration and depends on the feature scaling.
+    labeled as one -- it has no calibration and depends on the feature scaling.
 
     Parameters
     ----------
     distances : array (n_cells, n_clusters)
-        Distance from each cell to each cluster centre.
+        Distance from each cell to each cluster center.
 
     Returns
     -------
     dict with keys ``margin`` and ``runner_up`` (index of the second-nearest
-    centre, -1 when there is only one).
+    center, -1 when there is only one).
     """
     distances = np.asarray(distances, dtype=np.float64)
     if distances.ndim != 2 or distances.shape[0] == 0:
@@ -1655,14 +1654,14 @@ SEEDED_ALGORITHMS = ("leiden", "kmeans", "minibatchkmeans", "gmm")
 
 
 def knn_graph(matrix, n_neighbors, seed):
-    """scanpy's neighbour graph over ``matrix``, the input Leiden reads.
+    """scanpy's neighbor graph over ``matrix``, the input Leiden reads.
 
     Above 4,096 cells scanpy's search is approximate and the seed changes the
     graph, so ``seed`` is part of what identifies it.
 
     :param matrix: cells x features
-    :param n_neighbors: neighbours per cell
-    :param seed: random seed for the neighbour search
+    :param n_neighbors: neighbors per cell
+    :param seed: random seed for the neighbor search
     :return: connectivities, a cells x cells CSR matrix
     """
     import scanpy as sc
@@ -2060,7 +2059,7 @@ def _tail(path, n=600):
         return ""
 
 
-# Above this many cells the GPU neighbour search is approximate (IVF-flat),
+# Above this many cells the GPU neighbor search is approximate (IVF-flat),
 # as scanpy's is above 4,096; below it cuML's exact brute force is fast enough.
 GPU_BRUTE_FORCE_CELLS = 200_000
 
@@ -2169,7 +2168,7 @@ def fit_seeded(algorithm, params, matrix, seed):
         batch_size, n_components, covariance_type)
     :param matrix: cells x features
     :param seed: random seed
-    :return: (labels, fitted model); the model is the neighbour graph for Leiden
+    :return: (labels, fitted model); the model is the neighbor graph for Leiden
     """
     if algorithm == "leiden":
         rows, row_of_cell, _ = unique_rows(matrix)
@@ -2538,7 +2537,7 @@ elif algorithm == "hdbscan":
 
     # min_samples 0 means "follow sklearn": its own default is min_samples =
     # min_cluster_size. A small FIXED min_samples alongside a large
-    # min_cluster_size estimates density over a handful of neighbours while
+    # min_cluster_size estimates density over a handful of neighbors while
     # demanding clusters of hundreds, which leaves the condensed tree shallow
     # and hands excess-of-mass selection the giant parent. Measured on a 3D
     # UMAP of 107,282 cells with obvious separated lobes: min_cluster_size=500
@@ -2554,7 +2553,7 @@ elif algorithm == "hdbscan":
         min_samples = min_cluster_size
 
     # How clusters are read off the condensed tree. "eom" (excess of mass, the
-    # sklearn default) favours the largest persistent cluster and under-segments
+    # sklearn default) favors the largest persistent cluster and under-segments
     # a space whose lobes differ in density; "leaf" takes the leaves instead --
     # sklearn's own wording is "the most fine grained and homogeneous clusters".
     # On embedding coordinates, where the lobes ARE the answer, leaf is usually
@@ -2673,7 +2672,7 @@ elif algorithm == "banksy":
     # Cap parameters to what the dataset supports (BANKSY errors otherwise on
     # small cell counts or few markers). The BANKSY matrix has (max_m+1) blocks
     # of n_markers columns (max_m=1 here), so PCA dims cannot exceed ~2*n_markers.
-    # banksy asks sklearn for k_geom * (m + 1) neighbours, so the real bound is
+    # banksy asks sklearn for k_geom * (m + 1) neighbors, so the real bound is
     # 2*k_geom <= n-1; the per-area builder applies the same cap per area.
     k_geom = max(2, banksy_k_cap(k_geom, n_cells, max_m=1))
     capped_pca = max(2, min(int(pca_dims), n_cells - 1, 2 * n_markers))
@@ -2693,7 +2692,7 @@ elif algorithm == "banksy":
     )
 
     # Expression AnnData for the augmented-matrix step. The coordinates are not
-    # read from here any more -- build_banksy_weights owns the neighbour graph
+    # read from here any more -- build_banksy_weights owns the neighbor graph
     # and hands back the same {decay: {"weights": ...}} structure
     # initialize_banksy would have produced.
     adata_banksy = ad.AnnData(X=df_norm.values.astype(np.float32))
@@ -2712,7 +2711,7 @@ elif algorithm == "banksy":
         "BANKSY: initializing spatial neighbor graph (%d cells, %d area(s))..."
         % (n_cells, n_areas),
     )
-    # Neighbour weights are built PER AREA and assembled block-diagonally, so a
+    # Neighbor weights are built PER AREA and assembled block-diagonally, so a
     # cell's spatial context never includes a cell from another core, section
     # or image. Everything after this runs on the full cell set, which keeps
     # one global Leiden partition and therefore cluster labels that mean the
@@ -2840,7 +2839,7 @@ def save_scanpy_plot(plot_obj, path, dpi, caption="", after_render=None):
     if after_render is not None:
         after_render(plot_obj)
     if caption:
-        # Bottom-centred: the dendrogram occupies the top. bbox_inches="tight"
+        # Bottom-centered: the dendrogram occupies the top. bbox_inches="tight"
         # keeps text drawn outside the axes, so the note survives into the PNG.
         #
         # BELOW THE TICK LABELS, not at a fixed offset. A dotplot's marker names
@@ -2909,9 +2908,9 @@ def angle_marker_labels(plot_obj, rotation=45):
 
 
 def legend_under_dendrogram(plot_obj):
-    """Move the colour scale from its own column to below the dendrogram.
+    """Move the color scale from its own column to below the dendrogram.
 
-    scanpy keeps a column right of the dendrogram for the colour scale; the space
+    scanpy keeps a column right of the dendrogram for the color scale; the space
     under the dendrogram, beside the angled labels, is empty. The emptied column
     is hidden so ``bbox_inches="tight"`` crops it. No dendrogram: left as is.
     """
@@ -2952,8 +2951,8 @@ def dot_size_fractions(matrix, labels, cutoff=0.0):
 
     ``sc.pl.dotplot`` sizes each dot by ``obs_tidy > expression_cutoff``, with
     the cutoff defaulting to 0.0, and it reads ``adata.X``. QP-CAT puts the
-    NORMALISED matrix there, so the quantity is "fraction of cells in this
-    cluster above `cutoff` in normalised units" and its meaning changes with the
+    NORMALIZED matrix there, so the quantity is "fraction of cells in this
+    cluster above `cutoff` in normalized units" and its meaning changes with the
     Normalization setting -- not "fraction expressing", which is what the tab
     guide, the docs and the figure legend all used to call it.
 
@@ -3015,7 +3014,7 @@ def dot_size_caption(normalization, cutoff=0.0):
 
     Z-SCORE GETS ITS OWN SENTENCE because that is the case where "fraction
     expressing" -- what the legend, the tab guide and the docs all called this
-    -- is simply the wrong name. Centring on the mean moves the cutoff off the
+    -- is simply the wrong name. Centering on the mean moves the cutoff off the
     marker's zero and onto its average over every cell in the run, all images
     pooled. Not "cohort mean": a pathologist reads cohort as patients. Measured on 3,098 real cells, fraction
     above the cutoff under z-score against the fraction actually carrying any
@@ -3419,7 +3418,7 @@ adata.uns["cluster_colors"] = [
 if embedding_result is not None:
     adata.obsm["X_embed"] = embedding_result
 
-# When the PCA precursor ran, expose those components so the post-hoc neighbour
+# When the PCA precursor ran, expose those components so the post-hoc neighbor
 # graph is built in the SAME space the clustering used (scanpy's use_rep="X_pca"
 # convention). adata.X stays the original per-marker features, so
 # rank_genes_groups and the dotplot values remain in the user's measurement
@@ -3431,7 +3430,7 @@ if pca_precursor_info is not None and cluster_matrix.shape[0] == adata.n_obs:
     adata.obsm["X_pca"] = cluster_matrix
     _analysis_rep = "X_pca"
 
-# Whether to build the PAGA graph, and with it the per-cell nearest-neighbour
+# Whether to build the PAGA graph, and with it the per-cell nearest-neighbor
 # graph it needs. Default True so a config written before this option existed
 # reproduces its original run.
 try:
@@ -3441,7 +3440,7 @@ except NameError:
 
 # PAGA's ONLY consumer is its PNG -- the "PAGA Trajectory" tab is that image, and
 # nothing reads the connectivity matrix itself. So with plots off there is no
-# output to collect, and computing it (plus the neighbour graph, the slowest step
+# output to collect, and computing it (plus the neighbor graph, the slowest step
 # in the run) buys nothing at all.
 try:
     _plots_wanted = bool(generate_plots)
@@ -3455,9 +3454,10 @@ embedding_only = algorithm == "none"
 can_analyze = n_neigh >= 2 and n_clusters_found > 1 and not embedding_only
 
 # Why the Marker Rankings / Marker Fingerprints tabs might not appear. Both come
-# from the ranking below, and every path that skips it used to do so with
-# nothing but a log line -- so the tabs were simply absent and the user had to
-# guess. These are appended to the quality warnings the results window shows.
+# from the ranking below, and every path that skips it records why here rather
+# than in a log line alone -- otherwise the tabs would simply be absent and the
+# user left to guess. These are appended to the quality warnings the results
+# window shows.
 _analysis_notes = []
 # Outputs the user asked for and did not get, with the reason. Kept apart from
 # the quality warnings: those say the RESULT is suspect, these say a figure or
@@ -3655,11 +3655,11 @@ if has_spatial and n_clusters_found > 1:
         )
         task.outputs["spatial_graph_type"] = pref_spatial_graph_type
 
-        # v0.3 spatial graph overlay: emit edge COO + optional per-cell
+        # Spatial graph overlay: emit edge COO + optional per-cell
         # node measurements + optional component labels. The edge COO is
         # always emitted so the Java side can rebuild PathObjectConnections
         # without re-running clustering. The measurement-write flags are
-        # honoured Python-side so the wire payload stays minimal for
+        # honored Python-side so the wire payload stays minimal for
         # measurement-disabled runs.
         try:
             _node_payload = _qpcat_spatial.compute_spatial_node_measurements(
@@ -3743,7 +3743,7 @@ if has_spatial and n_clusters_found > 1:
     # Each new statistic wraps in its own try/except via the helper module
     # and never escapes to the parent task. Java side checks task.outputs
     # for each key independently (hasRipley / hasGeary / etc.).
-    # Phase 5: route PNG output for the new stats into the same directory
+    # Route PNG output for the spatial stats into the same directory
     # the existing matplotlib plots write to (output_dir, when set). If
     # the user disabled plots entirely (plot_dir is None) we skip the
     # savefig step regardless of persist_plots.
@@ -3755,15 +3755,15 @@ if has_spatial and n_clusters_found > 1:
 
     # Pre-init plot_paths so the spatial-stats helpers' on-disk PNGs can
     # be advertised to SavedClusteringResult.plotPaths under the keys
-    # Feature B's PlotKind enum consumes (ripley_k, ripley_l, geary_c,
+    # the Java PlotKind enum consumes (ripley_k, ripley_l, geary_c,
     # cooc_pairwise, cooc_one_vs_rest). Section 7 reuses the same dict
     # below and emits it via task.outputs['plot_paths'].
     plot_paths = {}
 
     # Ripley's L and co-occurrence read the coordinates directly and never
-    # consult the neighbour graph, so making the graph block-diagonal does
+    # consult the neighbor graph, so making the graph block-diagonal does
     # nothing for them -- they have to be looped per area. Geary's C, Moran's I
-    # and neighbourhood enrichment all go through the graph and are already
+    # and neighborhood enrichment all go through the graph and are already
     # correct once it is partitioned, so they stay pooled.
     _per_area_stats = area_ids_list is not None and n_areas > 1
     _ripley_by_area = None
@@ -3809,7 +3809,7 @@ if has_spatial and n_clusters_found > 1:
             if os.path.exists(_ripley_path):
                 # The single PNG carries both K and L panels; expose under
                 # both PlotKind savedPlotKey values so either checkbox in
-                # Feature B's exporter finds it.
+                # the batch figure exporter finds it.
                 plot_paths["ripley_l"] = _ripley_path
 
     if pref_enable_geary:
@@ -3985,7 +3985,7 @@ if do_plots and plot_dir and can_analyze:
     import matplotlib.pyplot as plt
 
     os.makedirs(plot_dir, exist_ok=True)
-    # plot_paths was pre-initialised in section 6c when spatial-stats ran,
+    # plot_paths was pre-initialized in section 6c when spatial-stats ran,
     # so we either inherit the spatial PNG entries or start fresh here.
     try:
         plot_paths  # noqa: F821 -- name probe
@@ -4024,7 +4024,7 @@ if do_plots and plot_dir and can_analyze:
 
     # Dotplot with dendrogram. Its dot SIZE is the fraction of each cluster's
     # cells above scanpy's expression_cutoff (0.0) in whatever units adata.X is
-    # in -- which here is the NORMALISED matrix, so it is not "fraction
+    # in -- which here is the NORMALIZED matrix, so it is not "fraction
     # expressing" and its meaning moves with the Normalization setting. No
     # cutoff is invented per mode; what happens instead is that the figure says
     # what the size means, and is not drawn at all when the size says nothing.
@@ -4304,8 +4304,8 @@ if do_plots and plot_dir and can_analyze:
         task.outputs["plot_paths"] = json.dumps(plot_paths)
 else:
     # do_plots was False but spatial-stats may still have populated
-    # plot_paths in section 6c -- emit it so Feature B can find the
-    # spatial PNGs even when matplotlib plots are disabled.
+    # plot_paths in section 6c -- emit it so the batch figure exporter can
+    # find the spatial PNGs even when matplotlib plots are disabled.
     try:
         if plot_paths:
             task.outputs["plot_paths"] = json.dumps(plot_paths)

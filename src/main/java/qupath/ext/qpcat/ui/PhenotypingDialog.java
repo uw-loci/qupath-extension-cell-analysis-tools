@@ -80,7 +80,7 @@ public class PhenotypingDialog {
     // Per-marker gate spinners (marker full name -> spinner)
     private final Map<String, Spinner<Double>> markerGateSpinners = new LinkedHashMap<>();
 
-    // Histogram panel (Phase 5)
+    // Histogram panel
     private HistogramPanel histogramPanel;
     private ThresholdPreview thresholdPreview;
     private TitledPane histogramPane;
@@ -1053,7 +1053,7 @@ public class PhenotypingDialog {
         phenoThread.start();
     }
 
-    // ========== Save/Load Rule Sets (Phase 2) ==========
+    // ========== Save/Load Rule Sets ==========
 
     private void saveRuleSet() {
         if (currentMarkers.isEmpty()) {
@@ -1224,7 +1224,7 @@ public class PhenotypingDialog {
                 + rulesList.size() + " rules.");
     }
 
-    // ========== Channel Validation (Phase 4) ==========
+    // ========== Channel Validation ==========
 
     private void validateChannels() {
         var project = qupath.getProject();
@@ -1310,7 +1310,7 @@ public class PhenotypingDialog {
         warnDialog.show();
     }
 
-    // ========== Histogram & Auto-Thresholding (Phase 5) ==========
+    // ========== Histogram & Auto-Thresholding ==========
 
     private void invalidateHistogramCache() {
         cachedHistogramData = null;

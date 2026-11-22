@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Plain Java options POJO for batch figure export. Gson-serialisable; no
+ * Plain Java options POJO for batch figure export. Gson-serializable; no
  * JavaFX dependencies. Constructed by the v1 dialog and by Feature C's
  * YAML batch executor; consumed by
  * {@code BatchFigureExporter.exportProject(...)}.

@@ -1,8 +1,8 @@
 """
-The last neighbour graph and embedding, kept in the Python worker between runs.
+The last neighbor graph and embedding, kept in the Python worker between runs.
 
 A run that changes only the Leiden resolution clusters the same matrix, so its
-neighbour graph and its embedding are the ones the previous run built. Measured
+neighbor graph and its embedding are the ones the previous run built. Measured
 at 300,000 cells, k=50: the graph took 107 s and the clustering 53 s, and at
 100,000 cells a seeded UMAP took 60 s. This module keeps the most recent graph
 and embedding so the next run can reuse them instead of rebuilding.
