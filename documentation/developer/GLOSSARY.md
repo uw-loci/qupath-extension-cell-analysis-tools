@@ -34,6 +34,8 @@ never for the spelling alone. Nothing in the last section is ever renamed.
 | run record (`ClusteringRunRecord`) | the human-readable summary written beside a saved result |
 | measurement | a QuPath measurement column (UI side) |
 | marker | the same column inside the analysis matrix and in results |
+| cell matching, saved result (`CellMatcher`) | finds a saved result's cells in the image by object ID first; the centroid is used only for results saved before 0.21.0, with an exact key rounded to 0.5 px |
+| cell matching, gates (`GateApplier`) | same order (object ID, then centroid for pre-0.21.0 results), but a tolerant whole-pixel key probed at +-1 px (then the nearest cell within 2 px); deliberately different from `CellMatcher`'s, not to be merged |
 
 ## Never change
 
