@@ -18,6 +18,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Modality;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import org.slf4j.Logger;
@@ -6002,7 +6003,8 @@ public class ClusteringDialog {
         VBox.setVgrow(tabPane, javafx.scene.layout.Priority.ALWAYS);
 
         mainContent.setPadding(new Insets(10));
-        Scene scene = new Scene(mainContent, 850, 650);
+        Scene scene = new Scene(mainContent, RESULTS_SCENE_WIDTH,
+                resultsSceneHeight(Screen.getPrimary().getVisualBounds().getHeight()));
         stage.setScene(scene);
         stage.show();
 
@@ -6023,6 +6025,30 @@ public class ClusteringDialog {
                 }
             });
         }
+    }
+
+    /** Width of the results window's scene at open. */
+    static final double RESULTS_SCENE_WIDTH = 850;
+
+    /** Height the results window's scene asks for when the screen allows it. */
+    static final double RESULTS_SCENE_HEIGHT = 840;
+
+    /**
+     * Room left between the scene and the screen's visual bounds (the area minus
+     * the taskbar) for the window frame and title bar, so an 840 px scene opens as a
+     * window under 900 px on a 1080 px screen.
+     */
+    static final double RESULTS_SCENE_SCREEN_MARGIN = 60;
+
+    /**
+     * Height of the results window's scene at open for a screen whose visual bounds
+     * (height minus the taskbar) are {@code visualBoundsHeight} px: 840 where it
+     * fits, less on a shorter screen, never below 500. 650 left the 3D View's class
+     * list with five visible rows above 12 classes.
+     */
+    static double resultsSceneHeight(double visualBoundsHeight) {
+        return Math.max(500, Math.min(RESULTS_SCENE_HEIGHT,
+                visualBoundsHeight - RESULTS_SCENE_SCREEN_MARGIN));
     }
 
     /**
@@ -6354,8 +6380,9 @@ public class ClusteringDialog {
      * If a {@code ScrollPane} sits in that content, its {@code getContent()} is
      * returned instead: snapshotting the ScrollPane captures only the current
      * viewport, silently cropping anything scrolled out of view. An embedding
-     * scatter or 3D view returns the panel itself: their scroll panes hold the legend
-     * or a side panel, and each builds its own figure.
+     * scatter, 3D view or composition panel returns the panel itself: their scroll
+     * panes hold the legend, a side panel or the pies alone, and each builds its
+     * own figure.
      */
     static Node plotContentOf(Tab tab) {
         Node content = tab.getContent();
@@ -6366,6 +6393,10 @@ public class ClusteringDialog {
         EmbeddingScatterPanel scatter = findFirst(content, EmbeddingScatterPanel.class);
         if (scatter != null) {
             return scatter;
+        }
+        ClusterCompositionPanel composition = findFirst(content, ClusterCompositionPanel.class);
+        if (composition != null) {
+            return composition;
         }
         var pane3d = findFirst(content, qupath.ext.cluster3d.ui.Cluster3DNavigatorPane.class);
         if (pane3d != null) {
@@ -6437,14 +6468,22 @@ public class ClusteringDialog {
 
         try {
             double scale = QpcatPreferences.getSavedPlotSnapshotScale();
-            SnapshotParameters params = new SnapshotParameters();
-            params.setTransform(Transform.scale(scale, scale));
-            Node figure = target instanceof EmbeddingScatterPanel scatter
-                    ? scatter.exportView(scale)
-                    : target instanceof qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d
-                            ? pane3d.exportView(scale) : target;
-            WritableImage image = figure.snapshot(params, null);
-            BufferedImage buffered = SwingFXUtils.fromFXImage(image, null);
+            BufferedImage buffered;
+            if (target instanceof ClusterCompositionPanel composition) {
+                // The composition tabs draw their figure (title, legend, pies) off
+                // the scene graph, the same picture Export figure + table writes;
+                // a snapshot of the tab held the pies with no legend.
+                buffered = composition.renderFigure(scale);
+            } else {
+                SnapshotParameters params = new SnapshotParameters();
+                params.setTransform(Transform.scale(scale, scale));
+                Node figure = target instanceof EmbeddingScatterPanel scatter
+                        ? scatter.exportView(scale)
+                        : target instanceof qupath.ext.cluster3d.ui.Cluster3DNavigatorPane pane3d
+                                ? pane3d.exportView(scale) : target;
+                WritableImage image = figure.snapshot(params, null);
+                buffered = SwingFXUtils.fromFXImage(image, null);
+            }
             ImageIO.write(buffered, "png", file);
             // Same export convention as every other QP-CAT export: say where it
             // went and open the folder, rather than only naming the file.

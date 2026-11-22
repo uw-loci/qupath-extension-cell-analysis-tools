@@ -26,6 +26,7 @@ import qupath.ext.qpcat.service.CompositionFigure;
 import qupath.ext.qpcat.service.FilenameSanitizer;
 
 import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -408,6 +409,16 @@ public class ClusterCompositionPanel extends BorderPane {
             UserErrors.notify(logger, "QPCAT",
                     "Could not write composition export: " + e.getMessage());
         }
+    }
+
+    /**
+     * The composition figure (title, cluster legend, one pie per group) at a layout
+     * scale, as "Export figure + table..." draws it. The Results window's "Save
+     * plot..." writes this instead of snapshotting the pies' scroll pane, which
+     * held no legend.
+     */
+    public BufferedImage renderFigure(double scale) {
+        return figure.render(scale, figure::defaultColorRgb);
     }
 
     private Color colorFor(int cluster) {

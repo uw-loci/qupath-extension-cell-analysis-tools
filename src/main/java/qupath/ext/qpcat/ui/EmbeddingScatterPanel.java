@@ -86,7 +86,7 @@ public class EmbeddingScatterPanel extends VBox {
      */
     private static final int MIN_DRAW_PER_CLUSTER = 500;
 
-    // Cluster color palette (up to 20 distinct colors), derived from the shared
+    // Cluster color palette (40 distinct colors before it repeats), derived from the shared
     // canonical palette in ClusterPalette so the plots, the seeded PathClass
     // colors, and the Python PNGs all agree before any user customization.
     private static final Color[] CLUSTER_COLORS = buildPalette();

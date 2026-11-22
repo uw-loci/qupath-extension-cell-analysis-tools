@@ -16,16 +16,16 @@ public final class NamedPalettes {
 
     private NamedPalettes() {}
 
-    /** The default palette name (matches the canonical seeded palette). */
-    public static final String DEFAULT = "tab20 (default)";
+    /** The default palette name (the canonical seeded palette: tab20 + 20 deeper tones). */
+    public static final String DEFAULT = "QP-CAT default (tab20 + 20 deeper tones)";
 
     private static final Map<String, int[]> PALETTES = new LinkedHashMap<>();
 
     static {
-        // tab20 -- the canonical QP-CAT palette (numeric-id order).
-        int[] tab20 = new int[ClusterPalette.size()];
-        for (int i = 0; i < tab20.length; i++) tab20[i] = ClusterPalette.rgbFor(i);
-        PALETTES.put(DEFAULT, tab20);
+        // The canonical QP-CAT palette (numeric-id order): tab20, then 20 deeper tones.
+        int[] canonical = new int[ClusterPalette.size()];
+        for (int i = 0; i < canonical.length; i++) canonical[i] = ClusterPalette.rgbFor(i);
+        PALETTES.put(DEFAULT, canonical);
 
         // tab10 -- the 10 saturated tab colors.
         PALETTES.put("tab10", rgb(

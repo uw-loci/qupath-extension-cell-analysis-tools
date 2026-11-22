@@ -20,7 +20,7 @@ Inputs (injected by Appose; accessed as variables, NOT task.inputs):
   cluster_labels: NDArray (N,) int32 -- cluster id per cell, -1 = noise (required)
   output_dir: str -- directory to write the PNG(s) into (required)
   cluster_colors: list[str] (optional) -- "#RRGGBB" per cluster id (index = id).
-                  Missing / short -> fall back to the built-in tab20 palette.
+                  Missing / short -> fall back to the built-in default palette.
   spatial_coords: NDArray (N x 2, float64) (optional) -- centroid X,Y in pixels;
                   when present, spatial_scatter.png is (re)generated too.
   embedding_name: str (optional) -- axis-label stem (default "Embedding")
@@ -51,30 +51,59 @@ def _update(msg):
         pass
 
 
-# Built-in tab20 fallback (0..1 RGB), numeric-id order -- matches ClusterPalette
-# on the Java side so a missing custom color still looks like the default plot.
-_TAB20 = [
-    (31, 119, 180),
-    (255, 127, 14),
-    (44, 160, 44),
-    (214, 39, 40),
-    (148, 103, 189),
-    (140, 86, 75),
-    (227, 119, 194),
-    (127, 127, 127),
-    (188, 189, 34),
-    (23, 190, 207),
-    (174, 199, 232),
-    (255, 187, 120),
-    (152, 223, 138),
-    (255, 152, 150),
-    (197, 176, 213),
-    (196, 156, 148),
-    (247, 182, 210),
-    (199, 199, 199),
-    (219, 219, 141),
-    (158, 218, 229),
+# Default cluster colors, in numeric cluster-id order: matplotlib tab20 for
+# clusters 0-19, then 20 deeper tones for 20-39, repeating after that. The same
+# 40 values live in ClusterPalette.java on the Java side (and in the other QP-CAT
+# scripts that color by cluster); python_tests/test_cluster_palette.py keeps the
+# copies identical, so the viewer overlay, the interactive plots and these PNGs
+# give one cluster one color.
+CLUSTER_PALETTE_HEX = [
+    "#1F77B4",
+    "#FF7F0E",
+    "#2CA02C",
+    "#D62728",
+    "#9467BD",
+    "#8C564B",
+    "#E377C2",
+    "#7F7F7F",
+    "#BCBD22",
+    "#17BECF",
+    "#AEC7E8",
+    "#FFBB78",
+    "#98DF8A",
+    "#FF9896",
+    "#C5B0D5",
+    "#C49C94",
+    "#F7B6D2",
+    "#C7C7C7",
+    "#DBDB8D",
+    "#9EDAE5",
+    "#132E80",
+    "#A65F19",
+    "#2E731D",
+    "#801313",
+    "#5F1173",
+    "#733811",
+    "#A6197B",
+    "#344373",
+    "#736E1D",
+    "#116E73",
+    "#A67D4B",
+    "#A69119",
+    "#779926",
+    "#19A666",
+    "#11734C",
+    "#19A691",
+    "#1919A6",
+    "#A619A6",
+    "#73114C",
+    "#A6194A",
 ]
+
+
+def cluster_palette_hex(cluster_id):
+    """Default "#RRGGBB" for a cluster id, wrapping past the 40 palette entries."""
+    return CLUSTER_PALETTE_HEX[int(cluster_id) % len(CLUSTER_PALETTE_HEX)]
 
 
 def _hex_to_rgb(s):
@@ -133,13 +162,12 @@ except NameError:
 
 
 def _color_for(cluster_id):
-    """Palette color for a cluster id: custom hex if supplied, else tab20."""
+    """Palette color for a cluster id: custom hex if supplied, else the default."""
     if colors_in is not None and 0 <= cluster_id < len(colors_in):
         rgb = _hex_to_rgb(colors_in[cluster_id])
         if rgb is not None:
             return rgb
-    r, g, b = _TAB20[cluster_id % len(_TAB20)]
-    return (r / 255.0, g / 255.0, b / 255.0)
+    return _hex_to_rgb(cluster_palette_hex(cluster_id))
 
 
 plot_paths = {}
