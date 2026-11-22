@@ -73,6 +73,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Dark theme:** the missing-values choices were pale gray on the amber box, and the saved-data
+  strip cut its sentence to "..." at the default dialog width with three buttons; both now read in
+  full (found from dark-theme screenshots, 2026-11-22).
 - A batch file's `missing_values` was ignored unless `normalization` was also set.
 - **Cluster 20 is no longer Cluster 0's blue.** The default palette repeated every 20 classes,
   so a 40-cluster figure had look-alike pairs the legend could not separate. Clusters 20-39 now

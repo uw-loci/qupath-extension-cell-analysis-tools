@@ -284,9 +284,12 @@ public class MeasurementSelectionPane extends VBox {
             rb.setUserData(policy);
             rb.setSelected(policy == missingPolicy.get());
             rb.setWrapText(true);
+            // Fixed dark text: the box is pale amber in both themes, and the dark
+            // theme's light text was unreadable on it.
+            rb.setStyle("-fx-text-fill: #3d2a00;");
             Label note = new Label();
             note.setWrapText(true);
-            note.setStyle("-fx-font-size: 11px; -fx-text-fill: -fx-text-base-color; -fx-opacity: 0.75;");
+            note.setStyle("-fx-font-size: 11px; -fx-text-fill: #6b4e12;");
             note.setPadding(new Insets(0, 0, 2, 22));
             WrapHeight.bind(note);
             policyButtons.put(policy, rb);

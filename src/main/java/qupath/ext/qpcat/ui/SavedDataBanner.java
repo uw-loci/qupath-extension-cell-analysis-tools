@@ -51,6 +51,9 @@ public final class SavedDataBanner extends HBox {
         text.setStyle("-fx-font-size: 11px; -fx-text-fill: #4a3b00;");
         HBox.setHgrow(text, Priority.ALWAYS);
         text.setMaxWidth(Double.MAX_VALUE);
+        // Wrap to as many lines as the sentence needs instead of eliding to "..."
+        // when three buttons leave it little width.
+        text.setMinHeight(javafx.scene.layout.Region.USE_PREF_SIZE);
         save.setStyle("-fx-font-size: 11px;");
         reload.setStyle("-fx-font-size: 11px;");
         ignore.setStyle("-fx-font-size: 11px;");
