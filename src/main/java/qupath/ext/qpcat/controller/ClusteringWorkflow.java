@@ -560,15 +560,8 @@ public class ClusteringWorkflow {
                 ? "Embedding computed for " + result.getNCells() + " cells."
                 : "Clustering complete: " + result.clusterCountText()
                     + " found for " + result.getNCells() + " cells.";
-        if (result.getMissingNote() != null) {
-            completeMsg += " " + result.getMissingNote() + ".";
-        }
-        if (result.getGraphBackend() != null && result.getGraphBackend().startsWith("gpu")) {
-            completeMsg += " Graph and Leiden on the GPU.";
-        }
-        if (result.getDuplicateRows() > 0) {
-            completeMsg += " " + String.format(java.util.Locale.ROOT, "%,d", result.getDuplicateRows())
-                    + " cells had identical measurements and were clustered once per distinct row.";
+        for (String note : result.runNotes()) {
+            completeMsg += " " + note;
         }
         report(progressCallback, completeMsg);
 
@@ -1153,6 +1146,9 @@ public class ClusteringWorkflow {
         String completeMsg = "Project clustering complete: " + result.clusterCountText()
                 + " found for " + result.getNCells() + " cells across "
                 + extraction.getImageSegments().size() + " images.";
+        for (String note : result.runNotes()) {
+            completeMsg += " " + note;
+        }
         report(progressCallback, completeMsg);
 
         // Audit trail

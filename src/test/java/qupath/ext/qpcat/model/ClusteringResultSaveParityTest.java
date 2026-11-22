@@ -44,28 +44,6 @@ class ClusteringResultSaveParityTest {
     private static final Map<String, String> SUPPLIED_BY_CALLER = Map.of(
             "normalization", "fromResult takes the config's normalization as an argument");
 
-    /**
-     * KNOWN_DROPPED: set on the in-memory result, absent after a save and reload,
-     * and not documented as transient. Found by this test on 2026-11-22 and left
-     * as they are; each needs a decision (persist it, or move it to TRANSIENT with
-     * a reason). See claude-reports/TODO_LIST.md, "QP-CAT: SavedClusteringResult
-     * over ClusteringResult". Fix a field, then delete its line here.
-     */
-    private static final Set<String> KNOWN_DROPPED = Set.of(
-            "membershipConfidence",
-            "embeddingExecution",
-            "reuseNote",
-            "missingNote",
-            "excludedObjects",
-            "graphBackend",
-            "duplicateRows",
-            "pcaPrecursor",
-            "batchCorrection",
-            "inputSelection",
-            "areasSummaryCsv",
-            "areasStatisticsCsv",
-            "areaResolutionSummary");
-
     private static final int N_CELLS = 3;
 
     private static List<Field> resultFields() {
@@ -198,7 +176,6 @@ class ClusteringResultSaveParityTest {
         Set<String> accounted = new TreeSet<>();
         accounted.addAll(TRANSIENT.keySet());
         accounted.addAll(SUPPLIED_BY_CALLER.keySet());
-        accounted.addAll(KNOWN_DROPPED);
 
         Set<String> unexplained = new TreeSet<>(lostInRoundTrip());
         unexplained.removeAll(accounted);
@@ -215,7 +192,6 @@ class ClusteringResultSaveParityTest {
         Set<String> stale = new TreeSet<>();
         stale.addAll(TRANSIENT.keySet());
         stale.addAll(SUPPLIED_BY_CALLER.keySet());
-        stale.addAll(KNOWN_DROPPED);
         stale.removeAll(lost);
         assertThat(stale)
                 .as("listed as not saved, but these now round-trip (or no longer exist): "
@@ -226,9 +202,8 @@ class ClusteringResultSaveParityTest {
     @Test
     void theListsDoNotOverlapAndEveryTransientHasAReason() {
         Set<String> overlap = new TreeSet<>(TRANSIENT.keySet());
-        overlap.retainAll(KNOWN_DROPPED);
+        overlap.retainAll(SUPPLIED_BY_CALLER.keySet());
         assertThat(overlap).isEmpty();
-        assertThat(KNOWN_DROPPED).doesNotContainAnyElementsOf(SUPPLIED_BY_CALLER.keySet());
         assertThat(TRANSIENT.values()).allSatisfy(reason -> assertThat(reason).isNotBlank());
     }
 

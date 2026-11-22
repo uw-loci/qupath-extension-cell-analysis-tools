@@ -5,6 +5,7 @@ import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.InputSelection;
+import qupath.ext.qpcat.model.MembershipConfidence;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +40,24 @@ class ClusteringRunRecordInputTest {
         String info = ClusteringRunRecord.buildRunInfo("r", new ClusteringConfig(), r, "x.tif");
         assertThat(info).contains("Input       : 1 annotation (Tumor x1)\n"
                 + "  - Tumor  'Region 1'  id=a1  409 detections inside\n");
+    }
+
+    @Test
+    void runInfoSaysWhatTheRunReported() {
+        ClusteringResult r = new ClusteringResult(new int[]{0, 0, 1}, 2, null, null, new String[0]);
+        r.setMissingNote("2 object(s) excluded for a missing value in 1 selected measurement(s): [CD3]");
+        r.setDuplicateRows(12);
+        r.setGraphBackend("cpu (gpu requested; no CUDA device)");
+        r.setEmbeddingExecution("parallel, spectral init");
+        r.setMembershipConfidence(new MembershipConfidence(MembershipConfidence.Kind.MARGIN,
+                new double[]{0.95, 0.5, 0.99}, null, null, null));
+        String info = ClusteringRunRecord.buildRunInfo("r", new ClusteringConfig(), r, "x.tif");
+        assertThat(info)
+                .contains("Missing     : 2 object(s) excluded for a missing value")
+                .contains("Identical   : 12 cells shared their measurement row")
+                .contains("Confidence  : Separation margin, 33.3% of cells below 0.90\n")
+                .contains("Graph backend    : cpu (gpu requested; no CUDA device)\n")
+                .contains("      execution  : parallel, spectral init\n");
     }
 
     @Test

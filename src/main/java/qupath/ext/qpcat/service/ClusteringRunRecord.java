@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.InputSelection;
+import qupath.ext.qpcat.model.MembershipConfidence;
 import qupath.lib.common.GeneralTools;
 
 import qupath.ext.qpcat.model.ClusterNaming;
@@ -20,6 +21,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -233,11 +235,27 @@ public final class ClusteringRunRecord {
             sb.append("Outcome     : ").append(result.getNRealClusters())
                     .append(" cluster(s) over ").append(result.getNCells()).append(" cells");
             if (result.hasNoise()) {
-                sb.append(String.format("  (%d cells, %.1f%%, left unclustered as noise)",
+                sb.append(String.format(Locale.ROOT, "  (%d cells, %.1f%%, left unclustered as noise)",
                         result.getNNoiseCells(),
                         100.0 * result.getNNoiseCells() / Math.max(1, result.getNCells())));
             }
             sb.append('\n');
+            if (result.getMissingNote() != null) {
+                sb.append("Missing     : ").append(result.getMissingNote()).append('\n');
+            }
+            if (result.getDuplicateRows() > 0) {
+                sb.append("Identical   : ").append(result.getDuplicateRows())
+                        .append(" cells shared their measurement row with another cell; each "
+                                + "distinct row was clustered once\n");
+            }
+            if (result.hasMembershipConfidence()) {
+                MembershipConfidence mc = result.getMembershipConfidence();
+                sb.append("Confidence  : ").append(mc.getKind().getColumnName())
+                        .append(String.format(Locale.ROOT, ", %.1f%% of cells below %.2f",
+                                100.0 * mc.ambiguousFraction(),
+                                MembershipConfidence.AMBIGUOUS_BELOW))
+                        .append('\n');
+            }
             for (String w : result.getQualityWarnings()) {
                 sb.append("WARNING     : ").append(w).append('\n');
             }
@@ -283,6 +301,12 @@ public final class ClusteringRunRecord {
         // says why the run was faster than a fresh one.
         if (result != null && result.getReuseNote() != null) {
             sb.append("      reuse      : ").append(result.getReuseNote()).append('\n');
+        }
+        if (result != null && result.getEmbeddingExecution() != null) {
+            sb.append("      execution  : ").append(result.getEmbeddingExecution()).append('\n');
+        }
+        if (result != null && result.getGraphBackend() != null) {
+            sb.append("Graph backend    : ").append(result.getGraphBackend()).append('\n');
         }
         sb.append("Batch correction : ").append(describeBatchCorrection(config, result))
                 .append('\n');

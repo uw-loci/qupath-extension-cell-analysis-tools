@@ -41,6 +41,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **A saved result keeps the full record of the run.** Thirteen things a run reported were held
+  only while its results window was open and were gone when the result was reopened from
+  **View Past Results**: the per-cell membership confidence (so a reopened GMM, HDBSCAN or
+  KMeans result had no **Cluster confidence** tab), how the embedding was run, what was reused
+  from an earlier run, the graph backend (CPU or GPU), the PCA precursor, what batch correction
+  did, the missing-values note and the number of objects left out, the count of cells with
+  identical measurements, the annotations or detections a single-image run was narrowed to, how
+  the independent areas resolved, and the two per-area tables. All are now written to the
+  result's JSON file and read back. A reopened result shows the same notes under its banners
+  that the run showed when it finished (missing values, "Graph and Leiden on the GPU",
+  identical cells), and a project run's completion message now carries them too. `RUN_INFO.txt`
+  gains **Missing**, **Identical**, **Confidence**, **Graph backend** and embedding
+  **execution** lines. Results saved by earlier versions open as before, without these (they
+  were never written). The membership confidence adds to the file: measured at 11,421 cells,
+  about 0.27 MB (HDBSCAN, one value per cell), 0.63 MB (KMeans) and 0.91 MB (GMM, four values
+  per cell) on a file of roughly 4 MB.
+
 - **One cleaning rule and one wording for an MCP agent's label.** The label an agent gives for
   itself was cleaned by two functions that disagreed: the audit log and saved suggestions cut it
   at 60 characters silently and recorded an empty one as "(unnamed agent)"; the Cluster

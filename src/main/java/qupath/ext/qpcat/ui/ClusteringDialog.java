@@ -6000,6 +6000,13 @@ public class ClusteringDialog {
         // calmer banner rather than the amber one above.
         Node omittedBanner = buildOmittedBanner(result);
         if (omittedBanner != null) mainContent.getChildren().add(omittedBanner);
+        // What the run reported when it finished, so a reopened result says it too.
+        if (!result.runNotes().isEmpty()) {
+            Label runNotes = new Label(String.join(" ", result.runNotes()));
+            runNotes.setWrapText(true);
+            WrapHeight.bind(runNotes);
+            mainContent.getChildren().add(runNotes);
+        }
         mainContent.getChildren().add(tabPane);
         if (colorPanel != null) mainContent.getChildren().add(colorPanel);
         if (locationField != null) mainContent.getChildren().add(locationField);

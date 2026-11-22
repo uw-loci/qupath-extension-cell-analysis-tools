@@ -14,7 +14,12 @@ Every run auto-saves to `<project>/qpcat/cluster_results/`. Four routes back, fr
 
 **1. View it again, nothing recomputed.**
 **Results & populations > View Past Results...** reloads the labels, plots and spatial
-statistics exactly as computed.
+statistics exactly as computed. From 0.26.0 the saved result also carries what the run
+reported when it finished: the per-cell membership confidence (the **Cluster confidence** tab),
+the missing-values note, the count of cells with identical measurements, the graph backend,
+the PCA precursor, what batch correction did, what was reused, how the embedding was run, the
+input selection and the per-area tables. A result saved by an earlier version opens without
+them.
 
 **Note: Multi-image results from v0.16.x and earlier.** A saved result from before v0.17.0 carries whatever it stored at the time. If it was a multi-image run, the spatial statistics are pooled (images stacked in one coordinate frame) rather than partitioned. Re-run the analysis to get the corrected, per-image spatial statistics; the pooled results cannot be repaired in-place. Multi-image results saved by 0.22.0 or earlier also carry neighborhood-enrichment z-scores whose null shuffled labels across images, and show z without edge counts; re-run to get the per-image null.
 

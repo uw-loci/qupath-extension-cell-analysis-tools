@@ -148,6 +148,28 @@ public class ClusteringResult {
     /** @see #reuseNote */
     public String getReuseNote() { return reuseNote; }
 
+    /**
+     * What a reader of the result should know about how the run went: missing
+     * values, a GPU graph, cells that shared a measurement row.
+     *
+     * @return one sentence per note, empty when there is nothing to say
+     */
+    public java.util.List<String> runNotes() {
+        java.util.List<String> notes = new java.util.ArrayList<>();
+        if (missingNote != null && !missingNote.isBlank()) {
+            notes.add(missingNote.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
+                    + missingNote.substring(1) + ".");
+        }
+        if (graphBackend != null && graphBackend.startsWith("gpu")) {
+            notes.add("Graph and Leiden on the GPU.");
+        }
+        if (duplicateRows > 0) {
+            notes.add(String.format(java.util.Locale.ROOT, "%,d", duplicateRows)
+                    + " cells had identical measurements and were clustered once per distinct row.");
+        }
+        return notes;
+    }
+
     /** Where the Leiden graph and partition ran, or null for other algorithms. */
     public String getGraphBackend() { return graphBackend; }
     public void setGraphBackend(String s) { this.graphBackend = s; }
@@ -513,22 +535,20 @@ public class ClusteringResult {
     public void setSpatialAutocorrAreas(String v) { this.spatialAutocorrAreas = v; }
 
     // ---- Independent areas ----
-    // Ready-to-write CSV text produced by the Python side. Held here only long
-    // enough to be written next to the saved result; deliberately NOT part of
-    // the persisted SavedClusteringResult schema, since the files themselves
-    // are the artifact.
+    // CSV text produced by the Python side: written next to the saved result
+    // as files, and kept in the saved result so the record is complete.
     private String areasSummaryCsv;
     private String areasStatisticsCsv;
 
     /**
      * Per-cell parent-annotation CLASS (never the object name), index-aligned
      * with the cluster labels. Null entries mean "no classified annotation
-     * ancestor". Drives the "Composition by class" tab; not persisted, because
-     * the tab only exists while the live result is open.
+     * ancestor". Drives the "Composition by class" tab; saved when two or more
+     * classes are present.
      */
     private String[] cellParentClasses;
 
-    /** Per-cell independent-area display name. Same lifetime as the above. */
+    /** Per-cell independent-area display name; saved when there are two or more areas. */
     private String[] cellAreaNames;
 
     public String[] getCellParentClasses() { return cellParentClasses; }

@@ -113,6 +113,30 @@ public class SavedClusteringResult {
     private Double spatialAutocorrThreshold;
     private String spatialAutocorrAreas;
 
+    // What the run did, as reported when it ran (all absent on saves before 0.26.0).
+    private String embeddingExecution;
+    private String reuseNote;
+    private String graphBackend;
+    private String pcaPrecursor;
+    private String batchCorrection;
+    private String missingNote;
+    private int excludedObjects;
+    private int duplicateRows;
+    private InputSelection inputSelection;
+    private String areaResolutionSummary;
+    // The per-area tables, also written beside the result as CSV files.
+    private String areasSummaryCsv;
+    private String areasStatisticsCsv;
+
+    // Membership confidence, stored like clusterLabels: one plain array per
+    // quantity, index-aligned with the cells. membershipConfidenceKind is
+    // MembershipConfidence.Kind.getId(); all null when the algorithm reports none.
+    private String membershipConfidenceKind;
+    private double[] membershipConfidence;
+    private int[] membershipRunnerUp;
+    private double[] membershipRunnerUpConfidence;
+    private double[] membershipEntropy;
+
     // LLM Cluster Explainer (optional; null on older saves)
     private LlmExplanationsBundle llmExplanations;
 
@@ -347,6 +371,26 @@ public class SavedClusteringResult {
     public String getSpatialAutocorrAreas() { return spatialAutocorrAreas; }
     public void setSpatialAutocorrAreas(String v) { this.spatialAutocorrAreas = v; }
 
+    // --- What the run did ---
+    public String getEmbeddingExecution() { return embeddingExecution; }
+    public String getReuseNote() { return reuseNote; }
+    public String getGraphBackend() { return graphBackend; }
+    public String getPcaPrecursor() { return pcaPrecursor; }
+    public String getBatchCorrection() { return batchCorrection; }
+    public String getMissingNote() { return missingNote; }
+    public int getExcludedObjects() { return excludedObjects; }
+    public int getDuplicateRows() { return duplicateRows; }
+    public InputSelection getInputSelection() { return inputSelection; }
+    public String getAreaResolutionSummary() { return areaResolutionSummary; }
+    public String getAreasSummaryCsv() { return areasSummaryCsv; }
+    public String getAreasStatisticsCsv() { return areasStatisticsCsv; }
+
+    /** Id of the membership-confidence kind, or null when the run reported none. */
+    public String getMembershipConfidenceKind() { return membershipConfidenceKind; }
+
+    /** Per-cell membership confidence, or null when the run reported none. */
+    public double[] getMembershipConfidence() { return membershipConfidence; }
+
     // --- LLM Cluster Explainer ---
     public LlmExplanationsBundle getLlmExplanations() { return llmExplanations; }
     public void setLlmExplanations(LlmExplanationsBundle bundle) { this.llmExplanations = bundle; }
@@ -423,6 +467,27 @@ public class SavedClusteringResult {
         saved.setSpatialAutocorrAreas(result.getSpatialAutocorrAreas());
 
         saved.setPixelSizeUmByImage(result.getPixelSizeUmByImage());
+
+        saved.embeddingExecution = result.getEmbeddingExecution();
+        saved.reuseNote = result.getReuseNote();
+        saved.graphBackend = result.getGraphBackend();
+        saved.pcaPrecursor = result.getPcaPrecursor();
+        saved.batchCorrection = result.getBatchCorrection();
+        saved.missingNote = result.getMissingNote();
+        saved.excludedObjects = result.getExcludedObjects();
+        saved.duplicateRows = result.getDuplicateRows();
+        saved.inputSelection = result.getInputSelection();
+        saved.areaResolutionSummary = result.getAreaResolutionSummary();
+        saved.areasSummaryCsv = result.getAreasSummaryCsv();
+        saved.areasStatisticsCsv = result.getAreasStatisticsCsv();
+        MembershipConfidence mc = result.getMembershipConfidence();
+        if (mc != null && mc.getKind() != null) {
+            saved.membershipConfidenceKind = mc.getKind().getId();
+            saved.membershipConfidence = mc.getValues();
+            saved.membershipRunnerUp = mc.getRunnerUp();
+            saved.membershipRunnerUpConfidence = mc.getRunnerUpValues();
+            saved.membershipEntropy = mc.getEntropy();
+        }
         // Plot-click navigation + representative crops.
         saved.setRepresentativesJson(result.getRepresentativesJson());
         CellRef[] refs = result.getCellRefs();
@@ -553,6 +618,25 @@ public class SavedClusteringResult {
             result.setCellRefs(refs);
         }
         result.setPixelSizeUmByImage(pixelSizeUmByImage);
+        result.setEmbeddingExecution(embeddingExecution);
+        result.setReuseNote(reuseNote);
+        result.setGraphBackend(graphBackend);
+        result.setPcaPrecursor(pcaPrecursor);
+        result.setBatchCorrection(batchCorrection);
+        result.setMissingNote(missingNote);
+        result.setExcludedObjects(excludedObjects);
+        result.setDuplicateRows(duplicateRows);
+        result.setInputSelection(inputSelection);
+        result.setAreaResolutionSummary(areaResolutionSummary);
+        result.setAreasSummaryCsv(areasSummaryCsv);
+        result.setAreasStatisticsCsv(areasStatisticsCsv);
+        MembershipConfidence.Kind confidenceKind =
+                MembershipConfidence.Kind.fromId(membershipConfidenceKind);
+        if (confidenceKind != null && membershipConfidence != null) {
+            result.setMembershipConfidence(new MembershipConfidence(confidenceKind,
+                    membershipConfidence, membershipRunnerUp, membershipRunnerUpConfidence,
+                    membershipEntropy));
+        }
         if (cellParentNames != null) {
             result.setCellParentNames(cellParentNames);
         }
