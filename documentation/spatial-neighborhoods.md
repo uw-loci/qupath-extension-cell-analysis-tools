@@ -117,9 +117,12 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
      Schurch et al. used ~10.
    - **Radius (um)**: every cell within a fixed physical radius (the CytoMAP-style
      neighborhood -- more interpretable and density-aware). 50 um is a common
-     start. Needs image pixel calibration; an uncalibrated image treats the radius
-     as pixels (converted per image, so differing pixel sizes are handled), and
-     `cn_RUN_INFO.txt` and that image's Workflow step name it when that happens.
+     start. Every image in the run needs a pixel size (the radius is converted per
+     image, so differing pixel sizes are handled). If any image has none, the run
+     is refused before it starts and the message names the images (the first five,
+     then "and N more"). To set a pixel size in QuPath: open the image, go to the
+     **Image** tab, double-click **Pixel width** or **Pixel height** and enter the
+     size in microns. A nearest-neighbors window needs no pixel size.
 6. **Number of neighborhoods** -- how many CNs to group the windows into
    (k-means). Try a few values; 6-12 is typical.
 7. **Render enrichment heatmap** (on by default) writes the heatmaps (see below).

@@ -198,13 +198,16 @@ except NameError:
 
 
 def _radius_px_for(image_index):
-    """Convert the radius (microns) to pixels for one image; falls back to
-    treating the radius as pixels when the image is uncalibrated."""
-    ps = 1.0
+    """Convert the radius (microns) to pixels for one image. An image with no
+    pixel size is an error: QuPath refuses such a run before it gets here."""
+    ps = None
     if pixel_sizes is not None and 0 <= image_index < len(pixel_sizes):
         ps = pixel_sizes[image_index]
-    if ps is None or ps <= 0:
-        ps = 1.0
+    if ps is None or not np.isfinite(ps) or ps <= 0:
+        raise ValueError(
+            "Radius window: image %d has no pixel size, so a radius in microns "
+            "cannot be converted to pixels." % image_index
+        )
     return radius_um / ps
 
 

@@ -29,6 +29,7 @@ import qupath.ext.qpcat.controller.CellularNeighborhoodWorkflow;
 import qupath.ext.qpcat.model.CnWindow;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.PixelSizes;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.objects.PathObject;
@@ -65,6 +66,7 @@ public class CellularNeighborhoodDialog {
 
     /** "(no grouping)" sentinel for the group-by metadata-key combo. */
     private static final String NO_GROUPING = "(no grouping)";
+    private static final String PIXEL_SIZE_TITLE = "QP-CAT cellular neighborhoods: pixel size needed";
 
     private Label classSummaryLabel;
     private Label statusLabel;
@@ -290,8 +292,8 @@ public class CellularNeighborhoodDialog {
                 "Window = the k nearest cells. Density-adaptive (shrinks in dense tissue)."));
         windowRadius.setTooltip(Tooltips.of(
                 "Window = every cell within a fixed physical radius (CytoMAP-style).\n"
-                + "More interpretable and density-aware; needs image pixel calibration\n"
-                + "(treated as pixels if the image is uncalibrated)."));
+                + "More interpretable and density-aware. Every image in the run needs a\n"
+                + "pixel size (Image tab); the run is refused when one has none."));
 
         radiusSpinner = new Spinner<>(1.0, 1000.0, 50.0, 5.0);
         radiusSpinner.setEditable(true);
@@ -476,6 +478,11 @@ public class CellularNeighborhoodDialog {
                         e.getMessage(), -1);
                 Platform.runLater(() -> {
                     setRunActive(false);
+                    if (e instanceof PixelSizes.MissingPixelSizeException) {
+                        statusLabel.setText("Not run: an image has no pixel size.");
+                        UserErrors.show(logger, PIXEL_SIZE_TITLE, e.getMessage());
+                        return;
+                    }
                     statusLabel.setText("Error: " + e.getMessage());
                     UserErrors.notify(logger, "QPCAT",
                             "Cellular-neighborhood analysis failed: " + e.getMessage());
@@ -523,6 +530,11 @@ public class CellularNeighborhoodDialog {
                         e.getMessage(), -1);
                 Platform.runLater(() -> {
                     setRunActive(false);
+                    if (e instanceof PixelSizes.MissingPixelSizeException) {
+                        statusLabel.setText("Not run: an image has no pixel size.");
+                        UserErrors.show(logger, PIXEL_SIZE_TITLE, e.getMessage());
+                        return;
+                    }
                     statusLabel.setText("Error: " + e.getMessage());
                     UserErrors.notify(logger, "QPCAT",
                             "Joint cellular-neighborhood analysis failed: " + e.getMessage());

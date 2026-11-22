@@ -13,10 +13,12 @@ import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
+import qupath.ext.qpcat.service.PixelSizes;
 import qupath.ext.qpcat.service.QpcatPaths;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
+import qupath.lib.images.servers.ImageServer;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
@@ -204,6 +206,11 @@ public class CellularNeighborhoodWorkflow {
         if (imageData == null) {
             throw new IOException("No image is open");
         }
+        double pxUm = PixelSizes.umOrNaN(imageData.getServer());
+        if (window.radiusMode()) {
+            requirePixelSizes(List.of(
+                    new PixelSizes.NamedPixelSize(imageNameOf(imageData), pxUm)));
+        }
         PathObjectHierarchy hierarchy = imageData.getHierarchy();
         List<PathObject> detections = DetectionSelector.filterToCellsWhenPresent(
                 hierarchy.getDetectionObjects(), "neighborhoods");
@@ -225,7 +232,6 @@ public class CellularNeighborhoodWorkflow {
         }
 
         int nCells = detections.size();
-        double pxUm = pixelSizeMicrons(imageData);
         logger.info("Cellular neighborhoods: {} cells, {} cell-type classes",
                 nCells, classNames.size());
 
@@ -256,7 +262,8 @@ public class CellularNeighborhoodWorkflow {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     executeTask(detections, typeLabels, classNames, window.kNeighbors(),
                             nNeighborhoods, seed, generateHeatmap, heatmapDirFinal,
-                            window.radiusMode(), window.radiusMicrons(), new double[]{pxUm},
+                            window.radiusMode(), window.radiusMicrons(),
+                            window.radiusMode() ? new double[]{pxUm} : null,
                             areaLevels, imageNameOf(imageData), imageData.getHierarchy(),
                             progress));
         } catch (IOException e) {
@@ -379,6 +386,17 @@ public class CellularNeighborhoodWorkflow {
             throw new IOException("No project images selected.");
         }
 
+        ImageData<BufferedImage> openData = qupath.getImageData();
+        ProjectImageEntry<BufferedImage> openEntry =
+                (qupath.getProject() != null && openData != null)
+                        ? qupath.getProject().getEntry(openData) : null;
+
+        // A radius is in microns: refuse before loading anything if an image has no pixel size.
+        if (window.radiusMode()) {
+            report(progress, "Checking pixel sizes of " + imageEntries.size() + " images...");
+            requirePixelSizes(readPixelSizes(imageEntries, openEntry, openData));
+        }
+
         // 1. Load detections per image; skip images that fail or have none.
         report(progress, "Loading detections from " + imageEntries.size() + " images...");
         List<LoadedImage> loaded = new ArrayList<>();
@@ -386,10 +404,6 @@ public class CellularNeighborhoodWorkflow {
         // labels and region annotations appear in the viewer immediately. A
         // detached readImageData() copy is written to disk only, which forces the
         // user to "Reload data" to see anything (the bug this guards against).
-        ImageData<BufferedImage> openData = qupath.getImageData();
-        ProjectImageEntry<BufferedImage> openEntry =
-                (qupath.getProject() != null && openData != null)
-                        ? qupath.getProject().getEntry(openData) : null;
         for (int idx = 0; idx < imageEntries.size(); idx++) {
             ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
             report(progress, "Loading image " + (idx + 1) + "/" + imageEntries.size()
@@ -457,7 +471,11 @@ public class CellularNeighborhoodWorkflow {
         for (int imgIdx = 0; imgIdx < loaded.size(); imgIdx++) {
             LoadedImage li = loaded.get(imgIdx);
             imageNames.add(li.entry.getImageName());
-            pixelSizes[imgIdx] = pixelSizeMicrons(li.imageData);
+            pixelSizes[imgIdx] = PixelSizes.umOrNaN(li.imageData.getServer());
+            if (window.radiusMode()) {
+                requirePixelSizes(List.of(new PixelSizes.NamedPixelSize(
+                        li.entry.getImageName(), pixelSizes[imgIdx])));
+            }
             for (PathObject det : li.detections) {
                 var roi = det.getROI();
                 coords[pos][0] = roi.getCentroidX();
@@ -529,7 +547,7 @@ public class CellularNeighborhoodWorkflow {
                     runCnTask(coords, typeLabels, classNames, window.kNeighbors(), nNeighborhoods,
                             seed, generateHeatmap, resultsDir, imageIds, imageNames,
                             groupLabelsF, groupNamesF, window.radiusMode(),
-                            window.radiusMicrons(), pixelSizes,
+                            window.radiusMicrons(), window.radiusMode() ? pixelSizes : null,
                             areaIdsF, areaNamesF, progress));
         } catch (IOException e) {
             throw e;
@@ -589,12 +607,8 @@ public class CellularNeighborhoodWorkflow {
         });
 
         // 8. Write the cohort tables + a run-info file next to the heatmaps.
-        List<String> radiusInPixels = loaded.stream()
-                .filter(li -> radiusReadAsPixels(window, li.imageData))
-                .map(li -> li.entry.getImageName())
-                .toList();
         writeCohortTables(resultsDir, perSampleJson, groupJson, adjacencyJson, runId, paramsHash,
-                window, radiusInPixels, nNeighborhoods, actualCn, totalCells, loaded.size(),
+                window, nNeighborhoods, actualCn, totalCells, loaded.size(),
                 classNames, groupMetadataKey, divergenceWarning);
 
         long elapsed = System.currentTimeMillis() - startTime;
@@ -770,31 +784,38 @@ public class CellularNeighborhoodWorkflow {
         return "Current image";
     }
 
-    /** Averaged pixel size in microns, or 1.0 if the image is uncalibrated. */
-    /** Whether a radius window was read as pixels because the image has no pixel size. */
-    private static boolean radiusReadAsPixels(CnWindow window, ImageData<BufferedImage> imageData) {
-        if (!window.radiusMode()) {
-            return false;
+    /**
+     * Pixel size of each entry, read from its image server without loading its
+     * objects. An entry whose server cannot be opened is left out: the run skips it.
+     */
+    private static List<PixelSizes.NamedPixelSize> readPixelSizes(
+            List<ProjectImageEntry<BufferedImage>> entries,
+            ProjectImageEntry<BufferedImage> openEntry, ImageData<BufferedImage> openData) {
+        List<PixelSizes.NamedPixelSize> sizes = new ArrayList<>(entries.size());
+        for (ProjectImageEntry<BufferedImage> entry : entries) {
+            if (openEntry != null && openEntry.equals(entry)) {
+                sizes.add(new PixelSizes.NamedPixelSize(entry.getImageName(),
+                        PixelSizes.umOrNaN(openData.getServer())));
+                continue;
+            }
+            try (ImageServer<BufferedImage> server = entry.getServerBuilder().build()) {
+                sizes.add(new PixelSizes.NamedPixelSize(entry.getImageName(),
+                        PixelSizes.umOrNaN(server)));
+            } catch (Exception e) {
+                logger.warn("Could not open {} to read its pixel size: {}",
+                        entry.getImageName(), e.getMessage());
+            }
         }
-        try {
-            return !imageData.getServer().getPixelCalibration().hasPixelSizeMicrons();
-        } catch (Exception e) {
-            return true;  // pixelSizeMicrons falls back to 1 here too
-        }
+        return sizes;
     }
 
-    /** The extra Workflow line for {@link #radiusReadAsPixels}, or an empty string. */
-    private static String pixelRadiusLine(CnWindow window, ImageData<BufferedImage> imageData) {
-        return radiusReadAsPixels(window, imageData)
-                ? "\n// No pixel size on this image: the radius was read as pixels." : "";
-    }
-
-    private static double pixelSizeMicrons(ImageData<BufferedImage> imageData) {
-        try {
-            double um = imageData.getServer().getPixelCalibration().getAveragedPixelSizeMicrons();
-            return (um > 0 && !Double.isNaN(um)) ? um : 1.0;
-        } catch (Exception e) {
-            return 1.0;
+    /** Refuse a radius-window run when an image has no pixel size. */
+    private static void requirePixelSizes(List<PixelSizes.NamedPixelSize> sizes) throws IOException {
+        String refusal = PixelSizes.refusalMessage(
+                "A radius window is in microns, so it", PixelSizes.uncalibrated(sizes));
+        if (refusal != null) {
+            throw new PixelSizes.MissingPixelSizeException(refusal
+                    + "\nOr choose the Nearest neighbors (k) window, which needs no pixel size.");
         }
     }
 
@@ -871,7 +892,7 @@ public class CellularNeighborhoodWorkflow {
             inputs.put("group_names", groupNames);
         }
         // Window definition: kNN (default) or physical radius in microns. The
-        // per-image pixel sizes let Python convert microns -> pixels per block.
+        // per-image pixel sizes let Python convert microns -> pixels per block (radius mode only).
         inputs.put("window_mode", radiusMode ? "radius" : "knn");
         if (radiusMode) {
             inputs.put("radius_microns", radiusMicrons);
@@ -928,8 +949,7 @@ public class CellularNeighborhoodWorkflow {
                     "// Cell-type classes used: " + nClasses,
                     "// Result: " + actualCn + " neighborhoods over " + nCells + " cells",
                     "// Neighborhood id written as measurement 'QPCAT CN'",
-                    "// run_id: " + runId + "  params_hash: " + paramsHash)
-                    + pixelRadiusLine(window, imageData);
+                    "// run_id: " + runId + "  params_hash: " + paramsHash);
             String stepName = "QP-CAT: cellular neighborhoods (" + actualCn
                     + " neighborhoods, " + window.summary() + ")";
             imageData.getHistoryWorkflow().addStep(
@@ -964,8 +984,7 @@ public class CellularNeighborhoodWorkflow {
                             + " images; re-running cellular neighborhoods on this image",
                     "//   alone would produce DIFFERENT labels (a CN id would no longer mean",
                     "//   the same mixture across the cohort). To reproduce, re-run with the",
-                    "//   same image scope. run_id: " + runId + "  params_hash: " + paramsHash)
-                    + pixelRadiusLine(window, imageData);
+                    "//   same image scope. run_id: " + runId + "  params_hash: " + paramsHash);
             String stepName = "QP-CAT: cellular neighborhoods (joint, " + nImages
                     + " images, " + actualCn + " neighborhoods, " + window.summary() + ")";
             imageData.getHistoryWorkflow().addStep(
@@ -983,7 +1002,7 @@ public class CellularNeighborhoodWorkflow {
      */
     private void writeCohortTables(Path resultsDir, String perSampleJson, String groupJson,
                                    String adjacencyJson, String runId, String paramsHash,
-                                   CnWindow window, List<String> radiusInPixels,
+                                   CnWindow window,
                                    int nNeighborhoods, int actualCn,
                                    int totalCells, int nImages, List<String> classNames,
                                    String groupMetadataKey, String divergenceWarning) {
@@ -1013,10 +1032,6 @@ public class CellularNeighborhoodWorkflow {
             info.append("run_id: ").append(runId).append('\n');
             info.append("params_hash: ").append(paramsHash).append('\n');
             info.append("window: ").append(window.detail()).append('\n');
-            if (!radiusInPixels.isEmpty()) {
-                info.append("  read as pixels on images with no pixel size: ")
-                        .append(String.join(", ", radiusInPixels)).append('\n');
-            }
             info.append("n_neighborhoods requested: ").append(nNeighborhoods)
                     .append(" (produced ").append(actualCn).append(")\n");
             info.append("images: ").append(nImages).append('\n');

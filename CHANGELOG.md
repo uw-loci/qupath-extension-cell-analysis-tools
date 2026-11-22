@@ -35,6 +35,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **Cellular neighborhoods refuse a radius window on an image with no pixel size.** A radius is
+  in microns. Until now an image with no pixel size had the radius read as pixels (a pixel size
+  of 1), noted only in `cn_RUN_INFO.txt` and the Workflow step. The run now stops before any
+  image is loaded, names the images with no pixel size (the first five, then "and N more") and
+  says where to set it (Image tab, double-click Pixel width or Pixel height). In a multi-image
+  run one such image refuses the whole run. A nearest-neighbors window needs no pixel size and
+  runs as before.
 - **A number typed into a box is the number used, without pressing Enter.** The number boxes
   of Spatial Statistics, the VEST export and the autoencoder's uncertain-cell review now behave
   like the ones in every other QP-CAT dialog when you click elsewhere: the typed value is kept,
