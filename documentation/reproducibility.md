@@ -58,7 +58,8 @@ different labels that look valid.
 
 **3. Keep a canonical recipe.**
 **Save Config... / Load Config...** store named configs in
-`<project>/qpcat/cluster_configs/`.
+`<project>/qpcat/cluster_configs/`. The **Load Config...** list has a **Delete** button for a
+config you no longer want.
 
 **4. Run it headless.**
 Translate the parameters in `RUN_INFO.txt` into a batch YAML and run `qpcat_batch.groovy`.

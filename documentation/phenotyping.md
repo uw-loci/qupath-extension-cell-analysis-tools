@@ -79,7 +79,9 @@ set data-driven gates instead.
 scope, so the same rule set run on a different set of images applies the same number to a
 different scale; check the histogram again when you change the images. Click **Save Rules...**
 before you run: the rule file (normalization, markers, gates, rules) is the only record of
-your gates, because the audit log records how many rules ran, not what they were.
+your gates, because the audit log records how many rules ran, not what they were. **Load Rules...**
+lists the rule sets saved in the project; select one and click **Delete** to remove it (it asks
+first, and the file cannot be brought back).
 
 ### Step by step
 

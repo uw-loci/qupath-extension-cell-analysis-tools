@@ -3857,17 +3857,22 @@ public class ClusteringDialog {
         }
 
         try {
-            List<String> configNames = ClusteringConfigManager.listConfigs(project);
-            if (configNames.isEmpty()) {
+            if (ClusteringConfigManager.listConfigs(project).isEmpty()) {
                 Dialogs.showWarningNotification("QPCAT", "No saved configs found.");
                 return;
             }
 
-            ChoiceDialog<String> choiceDialog = new ChoiceDialog<>(configNames.get(0), configNames);
-            choiceDialog.setTitle("Load Clustering Config");
-            choiceDialog.setHeaderText("Select a saved configuration:");
-            choiceDialog.initOwner(owner);
-            var result = choiceDialog.showAndWait();
+            var result = new SavedItemChooser(owner, "Load Clustering Config",
+                    "Select a saved configuration:", "configuration", "Delete Clustering Config",
+                    () -> ClusteringConfigManager.listConfigs(project),
+                    name -> {
+                        boolean deleted = ClusteringConfigManager.deleteConfig(project, name);
+                        if (deleted) {
+                            OperationLogger.getInstance().logEvent("CONFIG DELETED",
+                                    "Deleted clustering config '" + name + "'");
+                        }
+                        return deleted;
+                    }).showAndWait();
             if (result.isEmpty()) return;
 
             String configName = result.get();

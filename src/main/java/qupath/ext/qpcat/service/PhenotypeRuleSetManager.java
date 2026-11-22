@@ -100,15 +100,23 @@ public class PhenotypeRuleSetManager {
     }
 
     /**
-     * Delete a rule set by name from the project.
+     * Delete a saved rule set by name from the project.
+     *
+     * @return true when a rule set of that name existed and was deleted
      */
-    public static void deleteRuleSet(Project<?> project, String name) throws IOException {
+    public static boolean deleteRuleSet(Project<?> project, String name) throws IOException {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
         Path rulesDir = getRulesDirectory(project);
-        Path file = rulesDir.resolve(name + JSON_EXT);
-
-        if (Files.exists(file)) {
-            Files.delete(file);
+        Path file = rulesDir.resolve(name + JSON_EXT).normalize();
+        if (!rulesDir.normalize().equals(file.getParent())) {
+            return false;
+        }
+        boolean deleted = Files.deleteIfExists(file);
+        if (deleted) {
             logger.info("Deleted phenotype rule set '{}'", name);
         }
+        return deleted;
     }
 }

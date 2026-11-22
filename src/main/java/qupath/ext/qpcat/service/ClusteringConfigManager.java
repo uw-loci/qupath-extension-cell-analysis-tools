@@ -262,16 +262,24 @@ public class ClusteringConfigManager {
     }
 
     /**
-     * Delete a config by name from the project.
+     * Delete a saved config by name from the project.
+     *
+     * @return true when a config of that name existed and was deleted
      */
-    public static void deleteConfig(Project<?> project, String name) throws IOException {
+    public static boolean deleteConfig(Project<?> project, String name) throws IOException {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
         Path configsDir = getConfigsDirectory(project);
-        Path file = configsDir.resolve(name + JSON_EXT);
-
-        if (Files.exists(file)) {
-            Files.delete(file);
+        Path file = configsDir.resolve(name + JSON_EXT).normalize();
+        if (!configsDir.normalize().equals(file.getParent())) {
+            return false;
+        }
+        boolean deleted = Files.deleteIfExists(file);
+        if (deleted) {
             logger.info("Deleted clustering config '{}'", name);
         }
+        return deleted;
     }
 
 }

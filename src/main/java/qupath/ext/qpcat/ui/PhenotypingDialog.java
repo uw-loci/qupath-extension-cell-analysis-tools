@@ -1139,11 +1139,24 @@ public class PhenotypingDialog {
             return;
         }
 
-        ChoiceDialog<String> choiceDialog = new ChoiceDialog<>(available.get(0), available);
-        choiceDialog.setTitle("Load Rule Set");
-        choiceDialog.setHeaderText("Select a rule set to load:");
-        choiceDialog.initOwner(owner);
-        var result = choiceDialog.showAndWait();
+        java.util.Optional<String> result;
+        try {
+            result = new SavedItemChooser(owner, "Load Rule Set",
+                    "Select a rule set to load:", "rule set", "Delete Rule Set",
+                    () -> PhenotypeRuleSetManager.listRuleSets(project),
+                    name -> {
+                        boolean deleted = PhenotypeRuleSetManager.deleteRuleSet(project, name);
+                        if (deleted) {
+                            OperationLogger.getInstance().logEvent("RULE SET DELETED",
+                                    "Deleted phenotype rule set '" + name + "'");
+                        }
+                        return deleted;
+                    }).showAndWait();
+        } catch (Exception e) {
+            UserErrors.notify(logger, "QPCAT",
+                    "Failed to list rule sets: " + e.getMessage());
+            return;
+        }
         if (result.isEmpty()) return;
 
         try {

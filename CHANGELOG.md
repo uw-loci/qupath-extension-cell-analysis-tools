@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Saved clustering configurations and phenotype rule sets can be deleted.** **Load Config...**
+  (Clustering) and **Load Rules...** (Phenotyping) now open a list of the saved names instead of
+  a drop-down, with a **Delete** button beside it. Select a name, click Delete, and confirm
+  ("Delete the saved configuration 'X'? This cannot be undone."); the file is removed from the
+  project and the list is re-read. Load, or a double-click on a name, loads it as before.
+  Until now a saved name could only be removed by deleting its file by hand.
 - **Phenotyping rules can match one component of a composite classifier's class.** Next to
   "class is" and "class is not", **+ Add class condition...** now offers **has component** and
   **lacks component**: QuPath writes a composite classifier's output as `CD45: Ki67`, so a rule

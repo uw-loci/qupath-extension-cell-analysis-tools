@@ -133,6 +133,10 @@ so subcellular spots nested inside cells are not clustered as though they were c
 the count ignored is logged. With no cell objects (a nucleus-only detection method),
 every detection is analysed.
 
+**Saved configurations.** **Save Config...** stores the dialog's settings under a name in the
+project and **Load Config...** lists them; select one there and click **Delete** to remove a
+configuration you no longer want (it asks first, and the file cannot be brought back).
+
 ## Choosing measurements
 
 **Mean intensity**, not median, max, or area. Mean best represents average expression,
