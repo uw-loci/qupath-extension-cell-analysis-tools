@@ -70,7 +70,7 @@ public final class UncertainCellReviewWindow {
     private final TableView<Row> table = new TableView<>(rows);
     private final FlowPane classButtons = new FlowPane(6, 6);
     private final Label status = new Label();
-    private final Spinner<Integer> countSpinner = new Spinner<>(5, 500, 50, 5);
+    private final Spinner<Integer> countSpinner = SpinnerUtils.intSpinner(5, 500, 50, 5, 90);
     private final CheckBox spreadCheck = new CheckBox("Take turns between predicted classes");
     private final Deque<Answer> history = new ArrayDeque<>();
     private int answered;
@@ -127,8 +127,6 @@ public final class UncertainCellReviewWindow {
         refresh.setOnAction(e -> reload());
         spreadCheck.setTooltip(Tooltips.of("Least confident cell of each predicted class in turn, so one "
                 + "large uncertain class cannot fill the list."));
-        countSpinner.setEditable(true);
-        countSpinner.setPrefWidth(90);
         HBox top = new HBox(8, new Label("Cells:"), countSpinner, spreadCheck, refresh);
         top.setAlignment(Pos.CENTER_LEFT);
 

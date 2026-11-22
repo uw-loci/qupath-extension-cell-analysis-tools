@@ -126,17 +126,17 @@ public final class VestExportDialog {
         ComboBox<String> budgetBox = new ComboBox<>();
         budgetBox.getItems().addAll(BUDGET_LABELS);
         budgetBox.setValue(BUDGET_LABELS[0]);   // default: Low
-        Spinner<Integer> customBudget = intSpinner(50, 200000, 1000, 500);
+        Spinner<Integer> customBudget = SpinnerUtils.intSpinner(50, 200000, 1000, 500, 110);
         customBudget.setDisable(true);
         budgetBox.valueProperty().addListener((o, a, b) ->
                 customBudget.setDisable(!isCustom(b)));
 
-        Spinner<Integer> minPerClassSpinner = intSpinner(0, 100000, 30, 5);
+        Spinner<Integer> minPerClassSpinner = SpinnerUtils.intSpinner(0, 100000, 30, 5, 110);
         minPerClassSpinner.setTooltip(Tooltips.of("Minimum cells exported per cluster, "
                 + "honored whenever that many exist -- so a huge cluster cannot squeeze "
                 + "small clusters out of the view."));
 
-        Spinner<Double> cropScaleSpinner = doubleSpinner(1.0, 10.0, 3.0, 0.5, 1);
+        Spinner<Double> cropScaleSpinner = SpinnerUtils.doubleSpinner(1.0, 10.0, 3.0, 0.5, 110);
         cropScaleSpinner.setTooltip(Tooltips.of("Crop side as a multiple of each cell's "
                 + "bounding box (larger = more context around the cell)."));
 
@@ -153,13 +153,13 @@ public final class VestExportDialog {
         });
 
         // ---- advanced settings ----
-        Spinner<Integer> seedSpinner = intSpinner(0, Integer.MAX_VALUE, 42, 1);
-        Spinner<Integer> neighborsSpinner = intSpinner(2, 200, 15, 1);
-        Spinner<Double> minDistSpinner = doubleSpinner(0.0, 1.0, 0.1, 0.05, 2);
-        Spinner<Double> perplexitySpinner = doubleSpinner(0.0, 200.0, 0.0, 5.0, 1);
+        Spinner<Integer> seedSpinner = SpinnerUtils.intSpinner(0, Integer.MAX_VALUE, 42, 1, 110);
+        Spinner<Integer> neighborsSpinner = SpinnerUtils.intSpinner(2, 200, 15, 1, 110);
+        Spinner<Double> minDistSpinner = SpinnerUtils.doubleSpinner(0.0, 1.0, 0.1, 0.05, 110);
+        Spinner<Double> perplexitySpinner = SpinnerUtils.doubleSpinner(0.0, 200.0, 0.0, 5.0, 110);
         perplexitySpinner.setTooltip(Tooltips.of("t-SNE perplexity. 0 = auto from cell count."));
-        Spinner<Double> pctLowSpinner = doubleSpinner(0.0, 0.5, 0.01, 0.01, 3);
-        Spinner<Double> pctHighSpinner = doubleSpinner(0.5, 1.0, 0.99, 0.01, 3);
+        Spinner<Double> pctLowSpinner = SpinnerUtils.doubleSpinner(0.0, 0.5, 0.01, 0.01, 110);
+        Spinner<Double> pctHighSpinner = SpinnerUtils.doubleSpinner(0.5, 1.0, 0.99, 0.01, 110);
 
         GridPane adv = new GridPane();
         adv.setHgap(8);
@@ -359,21 +359,5 @@ public final class VestExportDialog {
         }, "QPCAT-OpenFolder");
         t.setDaemon(true);
         t.start();
-    }
-
-    private static Spinner<Integer> intSpinner(int min, int max, int val, int step) {
-        Spinner<Integer> s = new Spinner<>(min, max, val, step);
-        s.setEditable(true);
-        s.setPrefWidth(110);
-        return s;
-    }
-
-    private static Spinner<Double> doubleSpinner(double min, double max, double val,
-                                                 double step, int decimals) {
-        Spinner<Double> s = new Spinner<>();
-        s.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, val, step));
-        s.setEditable(true);
-        s.setPrefWidth(110);
-        return s;
     }
 }

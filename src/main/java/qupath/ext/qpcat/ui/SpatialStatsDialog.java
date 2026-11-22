@@ -189,11 +189,11 @@ public class SpatialStatsDialog {
         graphType.getItems().addAll("knn", "radius", "delaunay");
         graphType.setValue(safeGraphType(QpcatPreferences.getSpatialGraphType()));
 
-        Spinner<Integer> kSpin = intSpinner(2, 200, Math.max(2, QpcatPreferences.getSpatialGraphK()));
-        Spinner<Double> radiusSpin = doubleSpinner(-1, 100000, QpcatPreferences.getSpatialGraphRadius(), 5);
-        Spinner<Double> delaunaySpin = doubleSpinner(-1, 100000,
-                QpcatPreferences.getSpatialGraphDelaunayMaxEdge(), 5);
-        Spinner<Integer> permSpin = intSpinner(0, 100000, Math.max(0, QpcatPreferences.getSpatialPermutations()));
+        Spinner<Integer> kSpin = SpinnerUtils.intSpinner(2, 200, Math.max(2, QpcatPreferences.getSpatialGraphK()), 1, 110);
+        Spinner<Double> radiusSpin = SpinnerUtils.doubleSpinner(-1, 100000, QpcatPreferences.getSpatialGraphRadius(), 5, 110);
+        Spinner<Double> delaunaySpin = SpinnerUtils.doubleSpinner(-1, 100000,
+                QpcatPreferences.getSpatialGraphDelaunayMaxEdge(), 5, 110);
+        Spinner<Integer> permSpin = SpinnerUtils.intSpinner(0, 100000, Math.max(0, QpcatPreferences.getSpatialPermutations()), 1, 110);
 
         Label kLbl = UiLabels.whole(new Label("kNN neighbors (k):"));
         Label rLbl = UiLabels.whole(new Label("Radius (um, -1 = auto):"));
@@ -460,20 +460,5 @@ public class SpatialStatsDialog {
     private static String safeGraphType(String v) {
         if ("knn".equals(v) || "radius".equals(v) || "delaunay".equals(v)) return v;
         return "knn";
-    }
-
-    private static Spinner<Integer> intSpinner(int min, int max, int val) {
-        Spinner<Integer> s = new Spinner<>(min, max, val);
-        s.setEditable(true);
-        s.setPrefWidth(110);
-        return s;
-    }
-
-    private static Spinner<Double> doubleSpinner(double min, double max, double val, double step) {
-        Spinner<Double> s = new Spinner<>(new SpinnerValueFactory.DoubleSpinnerValueFactory(
-                min, max, val, step));
-        s.setEditable(true);
-        s.setPrefWidth(110);
-        return s;
     }
 }

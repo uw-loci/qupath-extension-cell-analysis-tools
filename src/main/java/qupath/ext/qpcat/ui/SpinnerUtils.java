@@ -6,18 +6,18 @@ import javafx.util.StringConverter;
 
 import java.text.DecimalFormat;
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Small helpers for JavaFX {@link Spinner} controls.
  * <p>
- * The central one is {@link #commitOnFocusLoss(Spinner)}, which works around a
- * long-standing JavaFX behavior (JDK-8150946): an editable {@code Spinner} only
- * commits the text typed into its editor when the user presses Enter. Clicking a
- * button -- e.g. "Run", "Apply to All", "Compute" -- moves focus away WITHOUT
- * committing, so {@code spinner.getValue()} returns the previous value and the
- * user's typed input is silently ignored. Installing a focus listener that
- * commits the editor text on focus loss makes the spinner behave the way users
- * expect: whatever is shown in the box is what gets read.
+ * Every editable spinner in the extension is built by {@link #intSpinner} or
+ * {@link #doubleSpinner}, or has {@link #commitOnFocusLoss(Spinner)} attached, so
+ * that the text in the box is the value read once focus leaves it, without Enter.
+ * JavaFX 25 commits on focus loss by itself, but an emptied box then holds a null
+ * value and unparseable text throws inside the focus listener; the helper clamps
+ * to the range and reverts both cases to the last valid value.
  */
 public final class SpinnerUtils {
 
@@ -60,18 +60,57 @@ public final class SpinnerUtils {
     }
 
     /**
+     * An editable integer spinner that commits typed text on focus loss.
+     *
+     * @param prefWidth preferred width in pixels
+     */
+    public static Spinner<Integer> intSpinner(int min, int max, int val, int step, double prefWidth) {
+        Spinner<Integer> s = new Spinner<>(min, max, val, step);
+        s.setEditable(true);
+        s.setPrefWidth(prefWidth);
+        commitOnFocusLoss(s);
+        return s;
+    }
+
+    /**
+     * An editable decimal spinner that commits typed text on focus loss and shows
+     * up to four decimals, so a typed 0.005 is not rounded when it is committed.
+     *
+     * @param prefWidth preferred width in pixels
+     */
+    public static Spinner<Double> doubleSpinner(double min, double max, double val, double step,
+                                                double prefWidth) {
+        Spinner<Double> s = new Spinner<>(
+                new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, val, step));
+        s.setEditable(true);
+        s.setPrefWidth(prefWidth);
+        showFourDecimals(s);
+        commitOnFocusLoss(s);
+        return s;
+    }
+
+    /**
      * Commit the spinner's editor text to its value whenever it loses focus.
      * Safe to call on any editable spinner; a no-op when the spinner is not
-     * editable or has no converter. Unparseable text is reverted to the last
-     * valid value rather than throwing.
+     * editable or has no converter. Unparseable or empty text is reverted to
+     * the last valid value rather than throwing or leaving a null value.
      */
-    public static void commitOnFocusLoss(Spinner<?> spinner) {
+    public static <T> void commitOnFocusLoss(Spinner<T> spinner) {
         if (spinner == null) {
             return;
         }
+        // JavaFX's own focus handling sets the value to null for empty text
+        // before this listener runs, so the last real value is kept here.
+        List<T> lastValid = new ArrayList<>(1);
+        lastValid.add(spinner.getValue());
+        spinner.valueProperty().addListener((obs, old, value) -> {
+            if (value != null) {
+                lastValid.set(0, value);
+            }
+        });
         spinner.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
             if (!isFocused) {
-                commitEditorText(spinner);
+                commitEditorText(spinner, lastValid.get(0));
             }
         });
     }
@@ -106,7 +145,7 @@ public final class SpinnerUtils {
         return value;   // a factory with no declared range: nothing to clamp to
     }
 
-    private static <T> void commitEditorText(Spinner<T> spinner) {
+    private static <T> void commitEditorText(Spinner<T> spinner, T lastValid) {
         if (!spinner.isEditable()) {
             return;
         }
@@ -118,19 +157,21 @@ public final class SpinnerUtils {
         if (converter == null) {
             return;
         }
-        String text = spinner.getEditor().getText();
-        // Nothing typed beyond the current value -- skip.
-        if (text == null) {
+        T value = null;
+        try {
+            String text = spinner.getEditor().getText();
+            value = text == null ? null : converter.fromString(text);
+        } catch (Exception e) {
+            // Unparseable input: handled below like empty text.
+        }
+        if (value != null) {
+            factory.setValue(clampToRange(factory, value));
             return;
         }
-        try {
-            T value = converter.fromString(text);
-            if (value != null) {
-                factory.setValue(clampToRange(factory, value));
-            }
-        } catch (Exception e) {
-            // Unparseable input: revert the editor to the last valid value.
-            spinner.getEditor().setText(converter.toString(factory.getValue()));
+        // Empty or unparseable: back to the last valid value, in the box too.
+        if (factory.getValue() == null && lastValid != null) {
+            factory.setValue(lastValid);
         }
+        spinner.getEditor().setText(converter.toString(factory.getValue()));
     }
 }

@@ -35,6 +35,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **A number typed into a box is the number used, without pressing Enter.** The number boxes
+  of Spatial Statistics, the VEST export and the autoencoder's uncertain-cell review now behave
+  like the ones in every other QP-CAT dialog when you click elsewhere: the typed value is kept,
+  brought inside the box's range, and text that is not a number (or an emptied box) goes back to
+  the last value instead of leaving the box with no value. Decimal boxes in these dialogs and in
+  the crop/table export show up to four decimals, so a typed 0.005 stays 0.005.
 - **American spelling in every dialog, tooltip, preference description and log line.** "Colour map",
   "centred", "cancelled", "neighbour", "labelled", "analyse" and the like now read "color map",
   "centered", "canceled", "neighbor", "labeled", "analyze". Text only: no preference key,

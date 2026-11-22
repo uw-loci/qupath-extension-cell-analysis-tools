@@ -12,7 +12,6 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Spinner;
-import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.GridPane;
@@ -102,18 +101,18 @@ public final class CropTableExportDialog {
         CheckBox classColCheck = new CheckBox("Add a 'classification' column (class name)");
         classColCheck.setSelected(true);
 
-        Spinner<Integer> capSpinner = intSpinner(50, 1_000_000, 2000, 500);
+        Spinner<Integer> capSpinner = SpinnerUtils.intSpinner(50, 1_000_000, 2000, 500, 120);
         capSpinner.setTooltip(Tooltips.of(
                 "Total cells across all classifications. One PNG per cell, so this is\n"
                 + "also the number of files written."));
-        Spinner<Integer> floorSpinner = intSpinner(0, 10_000, 30, 10);
+        Spinner<Integer> floorSpinner = SpinnerUtils.intSpinner(0, 10_000, 30, 10, 120);
         floorSpinner.setTooltip(Tooltips.of(
                 "Fewest cells to take from each classification, so a rare population is\n"
                 + "not sampled away by a large one. Raises the total when the floors\n"
                 + "together exceed the budget."));
-        Spinner<Double> cropScaleSpinner = doubleSpinner(1.0, 10.0,
-                CellCropService.DEFAULT_CROP_SCALE, 0.5);
-        Spinner<Integer> seedSpinner = intSpinner(0, 999_999, 42, 1);
+        Spinner<Double> cropScaleSpinner = SpinnerUtils.doubleSpinner(1.0, 10.0,
+                CellCropService.DEFAULT_CROP_SCALE, 0.5, 120);
+        Spinner<Integer> seedSpinner = SpinnerUtils.intSpinner(0, 999_999, 42, 1, 120);
         seedSpinner.setTooltip(Tooltips.of(
                 "Sampling seed. The same settings and the same cells write the same\n"
                 + "file twice; change it to draw a different sample."));
@@ -410,22 +409,5 @@ public final class CropTableExportDialog {
         }
         sb.append(" See README.txt for the command to open it.");
         return sb.toString();
-    }
-
-    private static Spinner<Integer> intSpinner(int min, int max, int val, int step) {
-        Spinner<Integer> s = new Spinner<>(min, max, val, step);
-        s.setEditable(true);
-        s.setPrefWidth(120);
-        SpinnerUtils.commitOnFocusLoss(s);
-        return s;
-    }
-
-    private static Spinner<Double> doubleSpinner(double min, double max, double val, double step) {
-        Spinner<Double> s = new Spinner<>();
-        s.setValueFactory(new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, val, step));
-        s.setEditable(true);
-        s.setPrefWidth(120);
-        SpinnerUtils.commitOnFocusLoss(s);
-        return s;
     }
 }
