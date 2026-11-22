@@ -409,6 +409,21 @@ public final class BatchYamlValidator {
         if (p.getRules() != null) {
             for (int i = 0; i < p.getRules().size(); i++) {
                 BatchYamlSchema.PhenotypeRuleEntry rule = p.getRules().get(i);
+                // A component condition naming a whole composite class can never match:
+                // components are the parts split on ": ".
+                for (var kindEntry : rule.getClassConditions().entrySet()) {
+                    if (kindEntry.getKey() != qupath.ext.qpcat.model.ClassConditionKind.HAS
+                            && kindEntry.getKey() != qupath.ext.qpcat.model.ClassConditionKind.LACKS) continue;
+                    for (String name : kindEntry.getValue()) {
+                        if (name != null && name.contains(": ")) {
+                            r.add(ValidationIssue.warning("W009", "phenotyping.rules[" + i + "]."
+                                    + kindEntry.getKey().yamlKey(),
+                                    "'" + asciiSafe(name) + "' is a whole composite class name; "
+                                    + "component conditions match one part, so list its parts "
+                                    + "separately ('" + asciiSafe(name.replace(": ", "', '")) + "')"));
+                        }
+                    }
+                }
                 String base = "phenotyping.rules[" + i + "]";
                 if (rule.getName() == null || rule.getName().isEmpty()) {
                     r.add(ValidationIssue.error("E001", base + ".name", "required field missing"));

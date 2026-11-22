@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import sys
 import textwrap
 
@@ -47,6 +48,7 @@ def _symbols():
     g = {
         "np": np,
         "os": os,
+        "re": re,
         "sys": sys,
         "logger": logging.getLogger("test"),
         "GPU_BRUTE_FORCE_CELLS": 200_000,
@@ -66,6 +68,8 @@ def _symbols():
         "gpu_cuda_path",
         "_gpu_child_env",
         "_wsl_run",
+        "_check_wsl_path",
+        "_trim_failed_job",
         "_tail",
         "gpu_bridge_run",
     ]:
@@ -210,3 +214,50 @@ def test_wsl_without_a_distribution_says_so(monkeypatch):
     with pytest.raises(s["GpuBridgeError"]) as e:
         s["_wsl_run"](["echo", "~"])
     assert "has no Linux distribution" in str(e.value)
+
+
+def test_windows_paths_must_be_plain_absolute_linux_paths():
+    s = _symbols()
+    ok = "/home/me/rapids/.pixi/envs/default/bin/python"
+    s["_check_wsl_path"](ok, "x")  # no raise
+    for bad in (
+        "C:\\scratch",
+        "/home/me/my scratch",
+        "/home/me/$HOME",
+        "",
+        "relative/path",
+    ):
+        with pytest.raises(s["GpuBridgeError"]) as e:
+            s["_check_wsl_path"](bad, "GPU graph and Leiden: scratch folder")
+        assert "GPU graph and Leiden: scratch folder" in str(e.value)
+
+
+def test_a_failed_job_keeps_only_the_small_files(tmp_path):
+    s = _symbols()
+    for name in (
+        "matrix.npy",
+        "graph.npz",
+        "labels_0.npy",
+        "run.log",
+        "params.json",
+        "result.json",
+    ):
+        (tmp_path / name).write_bytes(b"x")
+    s["_trim_failed_job"](str(tmp_path))
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "params.json",
+        "result.json",
+        "run.log",
+    ]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_a_failing_gpu_process_leaves_no_matrix_behind(tmp_path):
+    s = _symbols()
+    scratch = tmp_path / "FAIL"
+    with pytest.raises(s["GpuBridgeError"]):
+        s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
+    jobs = list(scratch.glob("job_*"))
+    assert len(jobs) == 1
+    left = sorted(p.name for p in jobs[0].iterdir())
+    assert "matrix.npy" not in left and "run.log" in left

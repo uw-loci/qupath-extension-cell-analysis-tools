@@ -36,8 +36,9 @@ public final class SavedDataBanner extends HBox {
     private final Button ignore = new Button("Ignore");
     private final ChangeListener<ImageData<BufferedImage>> imageListener =
             (obs, a, b) -> Platform.runLater(this::refresh);
-    private final ChangeListener<Boolean> focusListener =
-            (obs, a, focused) -> { if (focused) refresh(); };
+    // Both directions: losing focus records a save the user just made before a
+    // script runs elsewhere; regaining it shows what that script did.
+    private final ChangeListener<Boolean> focusListener = (obs, a, focused) -> refresh();
 
     public SavedDataBanner(QuPathGUI qupath) {
         super(8);
@@ -67,7 +68,12 @@ public final class SavedDataBanner extends HBox {
                 + "want it: stop reporting it until the saved copy changes again."));
         save.setOnAction(e -> {
             ImageData<BufferedImage> data = qupath.getImageData();
-            if (data != null) Commands.promptToSaveImageData(qupath, data, true);
+            // A save with no viewer edits (the saved-copy-changed case) would
+            // otherwise read as yet another outside write: accept it as the baseline.
+            if (data != null && Commands.promptToSaveImageData(qupath, data, true)) {
+                SavedDataTracker t = SavedDataTracker.getInstance();
+                if (t != null) t.acceptSaved();
+            }
             refresh();
         });
         reload.setOnAction(e -> {

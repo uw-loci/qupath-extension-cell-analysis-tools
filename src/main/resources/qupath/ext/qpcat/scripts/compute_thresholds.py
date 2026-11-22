@@ -167,26 +167,37 @@ def gmm_fit(values, max_iter=200):
 
     # Subsample for the comparison (see BIC_SAMPLE); the 2-component fit is
     # reused when every value is in it, so this costs two extra fits then.
-    sample = column
-    if len(column) > BIC_SAMPLE:
-        picked = np.random.default_rng(42).choice(fit_values, BIC_SAMPLE, replace=False)
-        sample = picked.reshape(-1, 1)
-    bic = {}
-    means3 = None
-    for k in (1, 2, 3):
-        if k == 2 and sample is column:
-            model = gmm
-        else:
-            model = GaussianMixture(n_components=k, random_state=42, max_iter=max_iter)
-            model.fit(sample)
-        bic[k] = float(model.bic(sample))
-        if k == 3:
-            means3 = sorted(float(m) for m in model.means_.flatten())
-    better = [k for k in (1, 3) if bic[k] <= bic[2] - BIC_MARGIN]
-    best = min(better, key=bic.get) if better else 2
-    fit["bic_components"] = best
-    if best == 3:
-        fit["means3"] = means3
+    # The comparison is advisory: if a 1- or 3-component fit cannot be made
+    # (a few near-identical values give an ill-defined covariance), the gate
+    # above stands and the count stays at 2, as before the comparison existed.
+    fit["bic_components"] = 2
+    try:
+        sample = column
+        if len(column) > BIC_SAMPLE:
+            picked = np.random.default_rng(42).choice(
+                fit_values, BIC_SAMPLE, replace=False
+            )
+            sample = picked.reshape(-1, 1)
+        bic = {}
+        means3 = None
+        for k in (1, 2, 3):
+            if k == 2 and sample is column:
+                model = gmm
+            else:
+                model = GaussianMixture(
+                    n_components=k, random_state=42, max_iter=max_iter
+                )
+                model.fit(sample)
+            bic[k] = float(model.bic(sample))
+            if k == 3:
+                means3 = sorted(float(m) for m in model.means_.flatten())
+        better = [k for k in (1, 3) if bic[k] <= bic[2] - BIC_MARGIN]
+        best = min(better, key=bic.get) if better else 2
+        fit["bic_components"] = best
+        if best == 3:
+            fit["means3"] = means3
+    except Exception as e:  # advisory only; never costs the gate
+        logger.warning("GMM component comparison skipped: %s", e)
     return fit
 
 

@@ -98,6 +98,7 @@ Outputs (via task.outputs):
 
 import sys
 import os
+import re
 import logging
 
 logger = logging.getLogger("qpcat.clustering")
@@ -1807,7 +1808,11 @@ def _wsl_run(args, timeout=60):
 
     try:
         r = subprocess.run(
-            ["wsl.exe", "--"] + args, capture_output=True, text=True, timeout=timeout
+            ["wsl.exe", "--"] + args,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
         )
     except FileNotFoundError:
         raise GpuBridgeError(
@@ -1841,6 +1846,31 @@ def _wsl_run(args, timeout=60):
             )
         raise GpuBridgeError("wsl.exe failed: " + msg[:400])
     return r.stdout.replace("\x00", "")
+
+
+def _check_wsl_path(path, preference):
+    """Refuse a path that would not survive wsl.exe's re-parse (see _wsl_run).
+
+    :raises GpuBridgeError: naming the preference when the path is not an
+        absolute Linux path or carries whitespace or shell metacharacters
+    """
+    bad = re.compile(r"[\s$`\"'\;&|<>(){}*?]")
+    if not path or not path.startswith("/") or bad.search(path):
+        raise GpuBridgeError(
+            "'%s' must be a path inside WSL2 that starts with '/' and has no spaces "
+            "or shell characters (got %r)" % (preference, (path or "")[:120])
+        )
+
+
+def _trim_failed_job(job):
+    """Drop the bulky hand-over files of a failed job, keeping run.log, result.json
+    and params.json so the failure can still be read."""
+    for name in os.listdir(job) if os.path.isdir(job) else []:
+        if name in ("matrix.npy", "graph.npz") or name.startswith("labels_"):
+            try:
+                os.remove(os.path.join(job, name))
+            except OSError:
+                pass
 
 
 def _wsl_run_script(linux_job, python_cmd):
@@ -1904,6 +1934,9 @@ def gpu_bridge_run(
         # the home folder (an unquoted ~ is expanded by the login shell), mkdir,
         # and the Windows spelling of the folder for the file writes below.
         linux_scratch = scratch_dir.strip().replace("\\", "/") if scratch_dir else ""
+        _check_wsl_path(python_cmd, "GPU graph and Leiden: Python")
+        if linux_scratch:
+            _check_wsl_path(linux_scratch, "GPU graph and Leiden: scratch folder")
         if not linux_scratch:
             home = _wsl_run(["echo", "~"]).strip()
             if not home.startswith("/"):
@@ -1973,7 +2006,7 @@ def gpu_bridge_run(
     try:
         if windows:
             cmd = ["wsl.exe", "--", "bash", linux_job + "/run.sh"]
-            r = subprocess.run(cmd, capture_output=True, text=True)
+            r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
             tail = (r.stdout + r.stderr).replace("\x00", "")
         else:
             with open(os.path.join(job, "run.log"), "w") as log:
@@ -1990,6 +2023,7 @@ def gpu_bridge_run(
     seconds["process"] = round(time.monotonic() - t0, 3)
     result_path = os.path.join(job, "result.json")
     if not os.path.exists(result_path):
+        _trim_failed_job(job)
         log_tail = _tail(os.path.join(job, "run.log")) or tail
         raise GpuBridgeError(
             "the GPU process wrote no result (exit %s); its log %s ends with: %s"
@@ -1998,6 +2032,7 @@ def gpu_bridge_run(
     with open(result_path) as f:
         result = json.load(f)
     if not result.get("ok"):
+        _trim_failed_job(job)
         err = str(result.get("error", ""))[-800:]
         versions = result.get("versions", {})
         raise GpuBridgeError(
@@ -2060,7 +2095,7 @@ def _tail(path, n=600):
         return ""
 
 
-# Above this many cells the GPU neighbour search is approximate (IVF-flat),
+# Above this many cells the GPU neighbor search is approximate (IVF-flat),
 # as scanpy's is above 4,096; below it cuML's exact brute force is fast enough.
 GPU_BRUTE_FORCE_CELLS = 200_000
 
@@ -2384,7 +2419,14 @@ if algorithm == "leiden":
     n_neighbors = validate_n_neighbors(n_neighbors, n_cells)
     # Cells with identical measurement rows are searched and partitioned once
     # per row, and every cell gets its row's label (see unique_rows).
-    _unique_matrix, _row_of_cell, _duplicate_cells = unique_rows(cluster_matrix)
+    # The GPU process reads float32, so rows are compared in float32 when it
+    # is asked for: two rows distinct only beyond float32 precision would reach
+    # cuML as duplicates, the hub case unique_rows exists to prevent.
+    _unique_matrix, _row_of_cell, _duplicate_cells = unique_rows(
+        np.ascontiguousarray(cluster_matrix, dtype=np.float32)
+        if pref_graph_backend == "gpu"
+        else cluster_matrix
+    )
     task.outputs["duplicate_rows"] = int(_duplicate_cells)
     task.outputs["unique_rows"] = int(_unique_matrix.shape[0])
     if _duplicate_cells:
@@ -2428,14 +2470,24 @@ if algorithm == "leiden":
     _graph_key = None
     _gpu_labels = {}
     _gpu_note = None
-    if _reuse_on:
-        _graph_key = knn_cache.make_key(
+    # The cache holds CPU graphs only. A GPU graph comes with cuGraph's labels,
+    # which a cached copy would not carry (igraph would partition it: same
+    # seed, another answer), and the GPU search costs seconds. A GPU run that
+    # fell back stores its CPU graph under the cpu key, so the next GPU-ticked
+    # run retries the GPU and a CPU run can reuse the graph.
+    _rows_digest = knn_cache.matrix_digest(_unique_matrix) if _reuse_on else None
+
+    def _cpu_graph_key():
+        return knn_cache.make_key(
             _matrix_digest,
             n_neighbors=n_neighbors,
             seed=clustering_seed,
-            backend=_backend,
-            rows=knn_cache.matrix_digest(_unique_matrix),
+            backend="cpu",
+            rows=_rows_digest,
         )
+
+    if _reuse_on and _backend == "cpu":
+        _graph_key = _cpu_graph_key()
         _graph_hit = knn_cache.get("graph", _graph_key)
         if _graph_hit is not None:
             _graph = _graph_hit[0]
@@ -2477,10 +2529,10 @@ if algorithm == "leiden":
             )
     if _graph is None:
         _graph = knn_graph(_unique_matrix, n_neighbors, clustering_seed)
-        if _graph_key is not None:
+        if _reuse_on:
+            if _graph_key is None:
+                _graph_key = _cpu_graph_key()
             knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
-    elif _graph_key is not None and _gpu_note is not None:
-        knn_cache.put("graph", _graph, _graph_key, pref_reuse_budget_bytes)
     del _unique_matrix
     task.outputs["graph_backend"] = (
         _gpu_note

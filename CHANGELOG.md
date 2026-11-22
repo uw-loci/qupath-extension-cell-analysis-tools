@@ -45,6 +45,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   with a note. The suggested gate itself does not move, so earlier runs and saved rule sets
   are unchanged. Raised on 2026-11-09 from the threshold-preview figure, where a marker
   absent from an image was still split in two.
+- **The between-run graph cache holds CPU graphs only.** A GPU-built graph is never reused
+  (a cached copy would be partitioned by igraph with a different answer from cuGraph's, and
+  the GPU search costs seconds), and a GPU run that fell back stores its CPU graph under the
+  CPU key, so the next GPU-ticked run tries the GPU again and the run summary always says
+  where the graph came from. The GPU path also compares rows in float32 before deduplicating,
+  refuses a Windows preference path that is not a plain absolute path inside WSL2, reads
+  wsl.exe's output leniently, and keeps only the small files of a failed hand-over.
 - **Leiden clusters cells with identical measurements once per distinct row.** Before the
   neighbor search, exact duplicate rows are collapsed to one; the graph is built and
   partitioned over the distinct rows, on the CPU and on the GPU, and every cell takes its

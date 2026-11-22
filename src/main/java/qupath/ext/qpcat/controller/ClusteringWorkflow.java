@@ -2558,8 +2558,11 @@ public class ClusteringWorkflow {
                 result.setGraphBackend(gb);
                 if (gb.startsWith("cpu (gpu requested")) {
                     logger.warn("Leiden ran on the CPU although the GPU was asked for: {}", gb);
-                    Platform.runLater(() -> Dialogs.showWarningNotification("QPCAT",
-                            "The GPU graph was not used; Leiden ran on the CPU. " + gb));
+                    // Headless dispatch has no FX toolkit; the log line above is the record there.
+                    if (qupath != null) {
+                        Platform.runLater(() -> Dialogs.showWarningNotification("QPCAT",
+                                "The GPU graph was not used; Leiden ran on the CPU. " + gb));
+                    }
                 } else if (gb.startsWith("gpu")) {
                     OperationLogger.getInstance().logOperation("GPU GRAPH AND LEIDEN",
                             Map.of("Backend", gb), gb, -1);

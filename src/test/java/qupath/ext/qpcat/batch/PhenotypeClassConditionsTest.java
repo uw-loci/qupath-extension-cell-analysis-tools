@@ -82,6 +82,41 @@ class PhenotypeClassConditionsTest {
     }
 
     @Test
+    void wholeCompositeNameInAComponentConditionIsWarned() {
+        // "CD45: Ki67" has no component equal to itself: the rule could never match.
+        List<ValidationIssue> issues = validateYaml(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "phenotyping:\n"
+                        + "  enabled: true\n"
+                        + "  rules:\n"
+                        + "    - name: X\n"
+                        + "      require_markers: [CD3]\n"
+                        + "      class_has: ['CD45: Ki67']\n");
+        assertThat(issues).anyMatch(i -> "W009".equals(i.getCode())
+                && i.getFieldPath().endsWith("class_has")
+                && i.getMessage().contains("'CD45', 'Ki67'"));
+        assertThat(validateYaml(
+                "version: '1.0'\n"
+                        + "scope: { projects: [/tmp/p] }\n"
+                        + "phenotyping:\n"
+                        + "  enabled: true\n"
+                        + "  rules:\n"
+                        + "    - name: X\n"
+                        + "      require_markers: [CD3]\n"
+                        + "      class_has: [CD45]\n"))
+                .noneMatch(i -> "W009".equals(i.getCode()));
+    }
+
+    private static List<ValidationIssue> validateYaml(String yaml) {
+        BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(yaml);
+        ValidationResult vr = BatchYamlValidator.validate(po.getSchema());
+        List<ValidationIssue> all = new java.util.ArrayList<>(po.getIssues());
+        all.addAll(vr.getIssues());
+        return all;
+    }
+
+    @Test
     void aMisspelledClassKeyIsRejectedWithASuggestion() {
         BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(
                 "version: '1.0'\n"

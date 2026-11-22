@@ -6004,7 +6004,7 @@ public class ClusteringDialog {
 
         mainContent.setPadding(new Insets(10));
         Scene scene = new Scene(mainContent, RESULTS_SCENE_WIDTH,
-                resultsSceneHeight(Screen.getPrimary().getVisualBounds().getHeight()));
+                resultsSceneHeight(screenHeightFor(ownerStage)));
         stage.setScene(scene);
         stage.show();
 
@@ -6046,6 +6046,16 @@ public class ClusteringDialog {
      * fits, less on a shorter screen, never below 500. 650 left the 3D View's class
      * list with five visible rows above 12 classes.
      */
+    /** Visual height of the screen holding {@code window}, or the primary screen's. */
+    static double screenHeightFor(javafx.stage.Window window) {
+        if (window != null && window.getWidth() > 0) {
+            var screens = Screen.getScreensForRectangle(window.getX(), window.getY(),
+                    window.getWidth(), window.getHeight());
+            if (!screens.isEmpty()) return screens.get(0).getVisualBounds().getHeight();
+        }
+        return Screen.getPrimary().getVisualBounds().getHeight();
+    }
+
     static double resultsSceneHeight(double visualBoundsHeight) {
         return Math.max(500, Math.min(RESULTS_SCENE_HEIGHT,
                 visualBoundsHeight - RESULTS_SCENE_SCREEN_MARGIN));
