@@ -28,6 +28,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 ### Fixed
 
 - A batch file's `missing_values` was ignored unless `normalization` was also set.
+- **Cluster 20 is no longer Cluster 0's blue.** The default palette repeated every 20 classes,
+  so a 40-cluster figure had look-alike pairs the legend could not separate. Clusters 20-39 now
+  get twenty deeper tones (navy, dark orange, forest green, ...), chosen so every pair among the
+  first 40 is at least as far apart as the closest pair inside tab20; Clusters 0-19 keep their
+  colors. The run's own PNGs use the same 40 colors by cluster number: the embedding scatter and
+  the PAGA graph had been using scanpy's default palette (its cluster 7 is olive, ours gray;
+  past 28 clusters an unrelated 102-color list), and the spatial scatter a tab20 colormap
+  resampled to the cluster count, which gave neighboring clusters the same color past 20.
+- **Save plot... on a composition tab saved the pies with no legend**, because the pies are the
+  tab's scroll pane. It now writes the same figure as **Export figure + table...** (title, cluster
+  legend, pies) at the plot-resolution preference.
+- **The results window opens taller (840 px scene, under 900 px as a window) where the screen
+  allows it**, shorter on a small screen. At 650 px the 3D View's class list showed five rows
+  above 12 classes, two with the cell preview open.
 
 ## [0.25.0] - 2026-11-19
 

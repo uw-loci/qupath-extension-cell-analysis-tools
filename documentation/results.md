@@ -1049,8 +1049,8 @@ export, so this is the only way to get them out. On a 2D embedding tab such as *
 is the plot beside its legend, in columns no taller than the plot, dark on white in any theme. On
 **3D View** it is the cloud beside its legend, on white unless you chose a background color, and the
 legend lists only the classes you left ticked; its title says how many (`Classes (30 of 40)`). On a
-composition tab the PNG is the pies only; **Export figure + table...**
-on that tab also writes the legend and table.
+composition tab the PNG is the figure **Export figure + table...** writes: the title, the cluster
+legend and every pie; that button also writes the table as CSV and each pie as its own file.
 
 The chooser opens in this result's own folder. The PNG includes content scrolled out of
 view, and resolution follows the **Plot resolution (DPI)** preference, so it matches the figures
@@ -1064,7 +1064,12 @@ For many plots across many images, use [batch figure export](exporting.md).
 ## Cluster colors
 
 **Extensions > QP-CAT > Results & populations > Apply cluster color palette...** sets the
-palette. Colours update live in the embedding, the composition pies and the viewer.
+palette. Colors update live in the embedding, the composition pies and the viewer.
+
+The default palette gives Clusters 0-19 matplotlib's tab20 colors and Clusters 20-39 twenty
+deeper tones (navy, dark orange, forest green, ...), so a 40-cluster legend has no two look-alike
+entries; from Cluster 40 the colors repeat. The static PNGs a run writes use the same 40 colors,
+by cluster number.
 
 The static matplotlib PNGs are already on disk and do not recolour by themselves. Turn on
 **Auto-Regenerate Static Plots on Color Change** in preferences if you want them
