@@ -59,17 +59,12 @@ public final class ScopeResolver {
     /** Outcome of resolving {@link BatchYamlSchema.ScopeBlock}. */
     public static final class ResolvedScope {
         private final List<ResolvedProject> projects = new ArrayList<>();
-        private final List<ValidationIssue> issues = new ArrayList<>();
+        private final ValidationResult issues = new ValidationResult();
 
         public List<ResolvedProject> getProjects() { return projects; }
-        public List<ValidationIssue> getIssues() { return issues; }
+        public List<ValidationIssue> getIssues() { return issues.getIssues(); }
 
-        public boolean hasErrors() {
-            for (ValidationIssue i : issues) {
-                if (i.getSeverity() == ValidationIssue.Severity.ERROR) return true;
-            }
-            return false;
-        }
+        public boolean hasErrors() { return issues.hasErrors(); }
 
         public int totalImages() {
             int n = 0;
@@ -95,7 +90,7 @@ public final class ScopeResolver {
 
     private static ResolvedProject resolveOneProject(
             String raw, int index, BatchYamlSchema.ScopeBlock scope,
-            List<ValidationIssue> issues) {
+            ValidationResult issues) {
         Path candidate;
         try {
             candidate = Path.of(raw).toAbsolutePath();
@@ -151,7 +146,7 @@ public final class ScopeResolver {
     @SuppressWarnings("unchecked")
     private static List<ProjectImageEntry<BufferedImage>> filterImages(
             Project<BufferedImage> project, BatchYamlSchema.ScopeBlock scope,
-            int projectIndex, List<ValidationIssue> issues) {
+            int projectIndex, ValidationResult issues) {
         List<ProjectImageEntry<BufferedImage>> all = project.getImageList();
         Object filter = scope.getImages();
         if (filter == null || (filter instanceof String s && s.equalsIgnoreCase("all"))) {

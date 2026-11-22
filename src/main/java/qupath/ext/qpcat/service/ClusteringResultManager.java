@@ -292,19 +292,13 @@ public class ClusteringResultManager {
     }
 
     /**
-     * Write {@code content} to {@code file} atomically: write a sibling temp file, flush,
-     * then move it into place. A crash or exception mid-write leaves the previous good
-     * file intact instead of a truncated/empty JSON (a plain {@code Files.writeString}
+     * Write {@code value} as JSON to {@code file} atomically: write a sibling temp file,
+     * flush, then move it into place. A crash or exception mid-write leaves the previous
+     * good file intact instead of a truncated/empty JSON (a plain {@code Files.writeString}
      * truncates first, so an interruption destroys the existing result). Falls back to a
-     * non-atomic replace only if the filesystem rejects ATOMIC_MOVE.
-     */
-    private static void writeStringAtomic(Path file, String content) throws IOException {
-        writeAtomic(file, w -> w.write(content));
-    }
-
-    /**
-     * As {@link #writeStringAtomic} but serializing {@code value} straight into the
-     * temp file's writer, so the JSON is never materialized as one giant String.
+     * non-atomic replace only if the filesystem rejects ATOMIC_MOVE. The value is
+     * serialized straight into the temp file's writer, so the JSON is never materialized
+     * as one giant String.
      * <p>
      * A saved result carries eight per-cell arrays (labels, embedding, image ids and
      * names, parent names, x, y, bbox). At a million cells {@code GSON.toJson(value)}

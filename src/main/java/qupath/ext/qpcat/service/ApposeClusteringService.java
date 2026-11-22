@@ -172,7 +172,6 @@ public class ApposeClusteringService {
      * What {@link WorkerThreads} added to the worker's environment at the last
      * start; empty until a worker has started or when nothing was added.
      */
-    private volatile Map<String, String> workerThreadVariables = Map.of();
 
     /**
      * Tasks that leave the reuse cache ({@code knn_cache.py}) in place: the
@@ -540,7 +539,6 @@ public class ApposeClusteringService {
             logger.info("Python worker starts with {} (preference 'Limit the Python worker "
                     + "to one OpenMP thread')", threadVars);
         }
-        workerThreadVariables = threadVars;
         Service fresh = pinned.python();
 
         fresh.debug(msg -> {
@@ -844,11 +842,6 @@ public class ApposeClusteringService {
     /** The script holding the worker, or null when it is free. */
     public String getBusyScript() {
         return busyScript;
-    }
-
-    /** What {@link WorkerThreads} added to the worker's environment at its last start. */
-    public Map<String, String> getWorkerThreadVariables() {
-        return workerThreadVariables;
     }
 
     public String getInitError() { return initError; }

@@ -49,13 +49,6 @@ import numpy as np
 import pandas as pd
 
 
-def _update(msg):
-    try:
-        task.update(msg)
-    except Exception:
-        pass
-
-
 def _flag(name, default=False):
     try:
         return bool(globals()[name])
@@ -74,7 +67,7 @@ def _sanitize(obj):
 
 
 # 1. Load inputs
-_update("Loading cell positions and labels...")
+report_progress(task, "Loading cell positions and labels...")
 coords = spatial_coords.ndarray().astype(np.float64, copy=True)
 n_cells = coords.shape[0]
 logger.info("Post-hoc spatial stats: %d cells", n_cells)
@@ -214,7 +207,7 @@ if n_label_classes < 2:
     )
 
 # 2. Build AnnData
-_update("Building AnnData...")
+report_progress(task, "Building AnnData...")
 import anndata as ad
 import squidpy as sq
 import spatial_stats as _spatial
@@ -235,7 +228,7 @@ adata.obs["cluster"] = pd.Categorical(label_strs, categories=categories, ordered
 logger.info("AnnData built: %d cells, %d classes", n_cells, n_label_classes)
 
 # 3. Spatial neighbor graph
-_update("Building spatial neighbor graph (%s)..." % g_type)
+report_progress(task, "Building spatial neighbor graph (%s)..." % g_type)
 _spatial.build_spatial_graph(
     adata,
     graph_type=g_type,
@@ -271,7 +264,7 @@ any_stat = False
 
 # 4. Neighborhood enrichment + Moran's I (shared with run_clustering)
 if want_nhood:
-    _update("Computing neighborhood enrichment...")
+    report_progress(task, "Computing neighborhood enrichment...")
     any_stat |= _spatial.run_nhood_enrichment(
         adata, task, n_perms, area_ids=sa_area_ids
     )
@@ -301,7 +294,7 @@ if want_moran:
     else:
         # Shared with run_clustering.py. This block used to carry its own copy
         # of the squidpy call, and its own copy of that call's two defects.
-        _update("Computing Moran's I spatial autocorrelation...")
+        report_progress(task, "Computing Moran's I spatial autocorrelation...")
         if _spatial.run_moran_i(
             adata,
             task,
@@ -314,7 +307,7 @@ if want_moran:
 
 # 5. v1 expansion stats (Ripley / Geary / co-occurrence)
 if want_ripley:
-    _update("Computing Ripley L (%d permutations)..." % n_perms)
+    report_progress(task, "Computing Ripley L (%d permutations)..." % n_perms)
     _spatial.run_ripley(
         adata,
         task,
@@ -335,7 +328,7 @@ if want_geary:
     if feats is None or mnames is None:
         logger.warning("Geary's C requested but no feature matrix supplied; skipping.")
     else:
-        _update("Computing Geary's C (%d permutations)..." % n_perms)
+        report_progress(task, "Computing Geary's C (%d permutations)..." % n_perms)
         _spatial.run_geary_c(
             adata,
             task,
@@ -357,7 +350,7 @@ if want_geary:
                 plot_paths["geary_c"] = p
 
 if want_cooc_pair:
-    _update("Computing co-occurrence (pairwise)...")
+    report_progress(task, "Computing co-occurrence (pairwise)...")
     _spatial.run_co_occurrence(
         adata,
         task,
@@ -380,7 +373,7 @@ if want_cooc_pair:
             plot_paths["cooc_curves"] = p
 
 if want_cooc_ovr:
-    _update("Computing co-occurrence (one vs rest)...")
+    report_progress(task, "Computing co-occurrence (one vs rest)...")
     _spatial.run_co_occurrence(
         adata,
         task,
@@ -419,7 +412,7 @@ if _numba_saved is not None:
     except Exception:
         pass
 
-_update("Spatial statistics complete")
+report_progress(task, "Spatial statistics complete")
 logger.info(
     "Post-hoc spatial statistics done (%d cells, %d classes)", n_cells, n_label_classes
 )

@@ -23,15 +23,11 @@ public final class ExportResult {
     public void incrementFilesWritten() { this.filesWritten++; }
 
     public List<String> getFailures() { return failures; }
-    public void setFailures(List<String> failures) {
-        this.failures = failures == null ? new ArrayList<>() : new ArrayList<>(failures);
-    }
     public void addFailure(String message) {
         if (message != null && !message.isEmpty()) failures.add(message);
     }
 
     public long getTotalBytes() { return totalBytes; }
-    public void setTotalBytes(long totalBytes) { this.totalBytes = totalBytes; }
     public void addBytes(long bytes) { this.totalBytes += bytes; }
 
     public boolean isCancelled() { return cancelled; }

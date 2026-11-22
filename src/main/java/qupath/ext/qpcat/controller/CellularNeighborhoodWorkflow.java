@@ -1131,12 +1131,6 @@ public class CellularNeighborhoodWorkflow {
         }
     }
 
-    private static int maxLabel(int[] labels) {
-        int m = 0;
-        for (int v : labels) if (v > m) m = v;
-        return m;
-    }
-
     private void report(Consumer<String> progress, String msg) {
         if (progress != null) progress.accept(msg);
         logger.info(msg);

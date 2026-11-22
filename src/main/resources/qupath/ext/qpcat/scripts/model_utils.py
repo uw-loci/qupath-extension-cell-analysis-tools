@@ -228,6 +228,69 @@ def check_cancelled(task_obj):
         raise RuntimeError("QPCAT_CANCELLED: cancelled by the user")
 
 
+def report_progress(task_obj, message):
+    """Send a progress line to the Java side; a failed send never aborts the run."""
+    try:
+        task_obj.update(message)
+    except Exception:
+        pass
+
+
+# Default cluster colors, in numeric cluster-id order: matplotlib tab20 for
+# clusters 0-19, then 20 deeper tones for 20-39, repeating after that. The same
+# 40 values live in ClusterPalette.java on the Java side;
+# python_tests/test_cluster_palette.py keeps the two copies identical, so the
+# viewer overlay, the interactive plots and the matplotlib PNGs give one cluster
+# one color. Task scripts see these names through the worker's global scope.
+CLUSTER_PALETTE_HEX = [
+    "#1F77B4",
+    "#FF7F0E",
+    "#2CA02C",
+    "#D62728",
+    "#9467BD",
+    "#8C564B",
+    "#E377C2",
+    "#7F7F7F",
+    "#BCBD22",
+    "#17BECF",
+    "#AEC7E8",
+    "#FFBB78",
+    "#98DF8A",
+    "#FF9896",
+    "#C5B0D5",
+    "#C49C94",
+    "#F7B6D2",
+    "#C7C7C7",
+    "#DBDB8D",
+    "#9EDAE5",
+    "#132E80",
+    "#A65F19",
+    "#2E731D",
+    "#801313",
+    "#5F1173",
+    "#733811",
+    "#A6197B",
+    "#344373",
+    "#736E1D",
+    "#116E73",
+    "#A67D4B",
+    "#A69119",
+    "#779926",
+    "#19A666",
+    "#11734C",
+    "#19A691",
+    "#1919A6",
+    "#A619A6",
+    "#73114C",
+    "#A6194A",
+]
+
+
+def cluster_palette_hex(cluster_id):
+    """Default "#RRGGBB" for a cluster id, wrapping past the 40 palette entries."""
+    return CLUSTER_PALETTE_HEX[int(cluster_id) % len(CLUSTER_PALETTE_HEX)]
+
+
 def split_measurement_name(name):
     """Split a QuPath measurement name into (before, marker, after).
 

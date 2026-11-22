@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.WeakChangeListener;
 import org.slf4j.Logger;
@@ -61,7 +60,6 @@ public final class SavedDataTracker {
     /** One check's answer. {@code savedAtMillis} is the data file's modification time, 0 when unknown. */
     public record Status(State state, long savedAtMillis, String imageName) {
         public boolean savedAhead() { return state == State.SAVED_AHEAD || state == State.BOTH; }
-        public boolean liveAhead() { return state == State.LIVE_AHEAD || state == State.BOTH; }
     }
 
     /** The pure decision, kept apart from QuPath so a table test can cover it. */
@@ -184,11 +182,6 @@ public final class SavedDataTracker {
         } catch (RuntimeException e) {
             return "the open image";
         }
-    }
-
-    /** For tests and the banner: the FX thread is not required by this class. */
-    static boolean onFxThread() {
-        return Platform.isFxApplicationThread();
     }
 
     @Override

@@ -116,4 +116,30 @@ class AreaLevelConfigTest {
         mutable.add("Tumor");
         assertThat(spec.getAnnotationClasses()).containsExactly("Tissue");
     }
+
+    @Test
+    void describeNamesTheImagesLevelFirstInBothStyles() {
+        List<AreaLevelSpec> levels = List.of(
+                new AreaLevelSpec(AreaLevel.IMAGES),
+                new AreaLevelSpec(AreaLevel.TMA_CORES),
+                new AreaLevelSpec(AreaLevel.ANNOTATIONS, List.of("Tissue", "Tumor")));
+
+        // The YAML dry-run row: ids, no spaces.
+        assertThat(AreaLevelSpec.describe(levels, true))
+                .isEqualTo("images>tma_cores>annotations[Tissue,Tumor]");
+        // The run record: display names.
+        assertThat(AreaLevelSpec.describe(levels, false))
+                .isEqualTo("Images > TMA cores > Annotations [Tissue, Tumor]");
+        // A YAML list never carries the images level; it is still named.
+        assertThat(AreaLevelSpec.describe(levels.subList(1, 3), true))
+                .isEqualTo("images>tma_cores>annotations[Tissue,Tumor]");
+    }
+
+    @Test
+    void describeOfImagesOnlySaysSo() {
+        assertThat(AreaLevelSpec.describe(null, true)).isEqualTo("images");
+        assertThat(AreaLevelSpec.describe(List.of(), true)).isEqualTo("images");
+        assertThat(AreaLevelSpec.describe(AreaLevelSpec.imagesOnly(), false))
+                .isEqualTo("images only (one area per image; cells within an image share a graph)");
+    }
 }

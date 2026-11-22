@@ -384,10 +384,6 @@ public class MeasurementSelectionPane extends VBox {
         missingPolicy.set(policy == null ? MissingPolicy.EXCLUDE_OBJECTS : policy);
     }
 
-    public ObjectProperty<MissingPolicy> missingPolicyProperty() {
-        return missingPolicy;
-    }
-
     /** True while the choice box is shown, i.e. a ticked measurement has a missing value. */
     public boolean isMissingBoxShown() {
         return missingBox.isVisible();
@@ -686,13 +682,6 @@ public class MeasurementSelectionPane extends VBox {
     /** All measurement names currently in the picker (checked or not). */
     public List<String> getAllMeasurements() {
         return items.stream().map(m -> m.name).collect(Collectors.toList());
-    }
-
-    public boolean hasSelection() {
-        for (Item m : items) {
-            if (m.selected.get()) return true;
-        }
-        return false;
     }
 
     /** Callback fired whenever the checked set changes (repopulate or a toggle). */

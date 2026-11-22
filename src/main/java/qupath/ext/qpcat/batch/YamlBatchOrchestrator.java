@@ -578,7 +578,7 @@ public final class YamlBatchOrchestrator {
                             "embedding", String.valueOf(c.getEmbedding()),
                             // How the spatial graph is partitioned changes the
                             // result, so a dry run has to show it.
-                            "area_levels", describeAreaLevels(c),
+                            "area_levels", AreaLevelSpec.describe(c.getAreaLevels(), true),
                             "batch_key", c.getBatchKey() == null
                                     ? "images" : c.getBatchKey(),
                             "harmony_version", c.getHarmonyVersion() == null
@@ -613,27 +613,6 @@ public final class YamlBatchOrchestrator {
     }
 
     // ---------------- Clustering config translation ----------------
-
-    /**
-     * Compact description of the configured area levels for the dry-run row,
-     * e.g. {@code "images>tma_cores>annotations[Tissue]"}. Always names the
-     * implicit images level so the dry run shows the real partition rather
-     * than only the part the YAML spelled out.
-     */
-    private static String describeAreaLevels(BatchYamlSchema.ClusteringBlock c) {
-        if (c.getAreaLevels() == null || c.getAreaLevels().isEmpty()) {
-            return "images";
-        }
-        StringBuilder sb = new StringBuilder("images");
-        for (AreaLevelSpec spec : c.getAreaLevels()) {
-            sb.append('>').append(spec.getLevel().getId());
-            if (spec.getLevel() == AreaLevel.ANNOTATIONS && !spec.matchesAnyClass()) {
-                sb.append('[').append(String.join(",", spec.getAnnotationClasses()))
-                        .append(']');
-            }
-        }
-        return sb.toString();
-    }
 
     private static ClusteringConfig buildClusteringConfig(
             BatchYamlSchema.ClusteringBlock cc,

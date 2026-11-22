@@ -53,18 +53,11 @@ public final class ValidationResult {
         return false;
     }
 
-    public boolean hasWarnings() {
-        for (ValidationIssue i : issues) {
-            if (i.getSeverity() == ValidationIssue.Severity.WARNING) return true;
-        }
-        return false;
-    }
 
     public int errorCount() { return getErrors().size(); }
     public int warningCount() { return getWarnings().size(); }
 
     /** True when there are zero errors AND zero warnings. */
-    public boolean isClean() { return issues.isEmpty(); }
 
     @Override
     public String toString() {

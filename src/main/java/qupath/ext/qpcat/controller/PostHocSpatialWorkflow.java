@@ -87,19 +87,8 @@ public class PostHocSpatialWorkflow {
     // Absolute path of the persisted results folder from the last run, or null.
     private String lastSavedPath;
 
-    // Explicit project for headless runs (QuPath script), where qupath is null.
-    private Project<BufferedImage> headlessProject;
-
     public PostHocSpatialWorkflow(QuPathGUI qupath) {
         this.qupath = qupath;
-    }
-
-    /**
-     * Supply the project for headless runs (YAML batch / script mode), where
-     * {@code qupath} is null. Required to persist results to the project folder.
-     */
-    public void setHeadlessProject(Project<BufferedImage> project) {
-        this.headlessProject = project;
     }
 
     @SuppressWarnings("unchecked")
@@ -107,7 +96,7 @@ public class PostHocSpatialWorkflow {
         if (qupath != null && qupath.getProject() != null) {
             return (Project<BufferedImage>) qupath.getProject();
         }
-        return headlessProject;
+        return null;
     }
 
     @SuppressWarnings("unchecked")

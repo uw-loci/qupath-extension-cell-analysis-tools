@@ -330,11 +330,6 @@ public class EmbeddingScatterPanel extends VBox {
                 : "Scroll to zoom  -  drag to pan");
     }
 
-    /** Crop window size as a multiple of each cell's bounding box. */
-    public void setCropScale(double cropScale) {
-        this.cropScale = cropScale;
-    }
-
     /** A measurement axis title with its marker in bold; an embedding axis stays plain. */
     private static MeasurementNames.Parts axisTitle(String measurement, String embeddingAxis) {
         return measurement != null
@@ -1171,10 +1166,6 @@ public class EmbeddingScatterPanel extends VBox {
                     ? "Scroll to zoom  -  middle-drag to pan  -  click a point to center + select its cell"
                     : "Scroll to zoom  -  drag to pan"));
         redraw();
-    }
-
-    public boolean isGateMode() {
-        return gateMode;
     }
 
     /** Register a callback fired when a gate polygon is closed; receives the

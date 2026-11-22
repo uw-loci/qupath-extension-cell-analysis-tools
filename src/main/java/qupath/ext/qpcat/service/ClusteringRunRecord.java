@@ -295,7 +295,8 @@ public final class ClusteringRunRecord {
         // partitioned per TMA core produces different clusters from one built
         // across the whole slide. A record that omitted them would describe a
         // run nobody could reproduce.
-        sb.append("Independent areas: ").append(describeAreaLevels(config)).append('\n');
+        sb.append("Independent areas: ").append(AreaLevelSpec.describe(config.getAreaLevels(), false))
+                .append('\n');
         if (result != null && result.getAreaResolutionSummary() != null) {
             sb.append("      resolved to : ").append(result.getAreaResolutionSummary())
                     .append('\n');
@@ -483,27 +484,6 @@ public final class ClusteringRunRecord {
                     .append('\n');
         }
         return out.toString();
-    }
-
-    /**
-     * Human-readable description of the independent-area levels, e.g.
-     * {@code "images > TMA cores > Annotations [Tissue]"}. Always names the
-     * implicit images level, so the record shows the whole partition rather
-     * than only the part the user configured.
-     */
-    private static String describeAreaLevels(ClusteringConfig config) {
-        List<AreaLevelSpec> levels = config.getAreaLevels();
-        if (!config.hasSubImageAreaLevels()) {
-            return "images only (one area per image; cells within an image share a graph)";
-        }
-        StringBuilder sb = new StringBuilder();
-        for (AreaLevelSpec spec : levels) {
-            if (sb.length() > 0) {
-                sb.append(" > ");
-            }
-            sb.append(spec.toString());
-        }
-        return sb.toString();
     }
 
     private static int measurementCount(ClusteringConfig config) {

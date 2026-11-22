@@ -67,6 +67,7 @@ def worker_globals():
         "single_threaded": load_script_symbol(
             "model_utils.py", "single_threaded", {"contextlib": contextlib}
         ),
+        "report_progress": load_script_symbol("model_utils.py", "report_progress"),
     }
 
 

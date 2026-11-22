@@ -76,16 +76,8 @@ logger = logging.getLogger("qpcat.cellular_neighborhoods")
 import numpy as np
 from appose import NDArray as PyNDArray
 
-
-def _update(msg):
-    try:
-        task.update(msg)
-    except Exception:
-        pass
-
-
 # 1. Load inputs
-_update("Loading cell positions and types...")
+report_progress(task, "Loading cell positions and types...")
 coords = spatial_coords.ndarray().astype(np.float64, copy=True)
 n_cells = coords.shape[0]
 logger.info("Cellular neighborhoods: %d cells", n_cells)
@@ -354,14 +346,15 @@ def build_composition_per_unit(
 
 
 if multi_sample:
-    _update(
+    report_progress(
+        task,
         "Building per-%s spatial windows (%s) across %d %ss..."
         % (
             sample_kind,
             ("radius=%.1fum" % radius_um) if radius_mode else ("k=%d" % k),
             unique_samples.shape[0],
             sample_kind,
-        )
+        ),
     )
     build_composition_per_unit(
         composition,
@@ -375,17 +368,21 @@ if multi_sample:
     )
 else:
     if radius_mode:
-        _update("Building spatial windows (radius=%.1f um)..." % radius_um)
+        report_progress(
+            task, "Building spatial windows (radius=%.1f um)..." % radius_um
+        )
         r_px = _radius_px_for(0)
     else:
-        _update("Building spatial windows (k=%d nearest neighbors)..." % k)
+        report_progress(
+            task, "Building spatial windows (k=%d nearest neighbors)..." % k
+        )
         r_px = None
     composition[:, :] = _composition_for_block(0, coords, labels_arr, radius_px=r_px)
 
 # 4. Cluster the POOLED composition vectors into N cellular neighborhoods.
 #    One global k-means is what makes a CN id mean the same mixture in every
 #    image, so per-sample proportions are comparable.
-_update("Clustering windows into %d neighborhoods..." % n_cn)
+report_progress(task, "Clustering windows into %d neighborhoods..." % n_cn)
 from sklearn.cluster import KMeans
 
 km = KMeans(n_clusters=n_cn, random_state=rng_seed, n_init=10)
@@ -447,7 +444,7 @@ def _save_heatmap(
 # 6. CN x cell-type enrichment heatmap (rows = neighborhoods, cols = cell types).
 heatmap_path = ""
 if want_heatmap and out_dir:
-    _update("Rendering enrichment heatmap...")
+    report_progress(task, "Rendering enrichment heatmap...")
     vmax = float(np.nanmax(np.abs(enrichment))) if enrichment.size else 1.0
     if not np.isfinite(vmax) or vmax <= 0:
         vmax = 1.0
@@ -470,7 +467,9 @@ per_sample_heatmap_path = ""
 group_json = ""
 group_heatmap_path = ""
 if multi_sample:
-    _update("Summarizing per-%s neighborhood proportions..." % sample_kind)
+    report_progress(
+        task, "Summarizing per-%s neighborhood proportions..." % sample_kind
+    )
     n_samples = unique_samples.shape[0]
     # Map the (possibly sparse) unit ids to 0..n_samples-1 row order.
     img_order = list(unique_samples)
@@ -535,7 +534,7 @@ if multi_sample:
     if group_labels_arr is not None and (
         group_labels_arr.shape[0] > max(row_image_index)
     ):
-        _update("Summarizing per-group neighborhood proportions...")
+        report_progress(task, "Summarizing per-group neighborhood proportions...")
         grp_for_row = np.array(
             [int(group_labels_arr[i]) for i in row_image_index], dtype=np.int64
         )
@@ -651,7 +650,7 @@ def _region_adjacency():
 
 
 try:
-    _update("Computing neighborhood adjacency...")
+    report_progress(task, "Computing neighborhood adjacency...")
     adj = _region_adjacency()  # symmetric within/between-CN edge counts
     # log2 observed/expected enrichment: A[a,b] * D / (deg_a * deg_b). This divides
     # out neighborhood frequency (an abundant CN no longer looks adjacent to
@@ -701,7 +700,7 @@ except Exception as e:
     logger.warning("Neighborhood adjacency failed: %s", e)
 
 # 8. Package outputs.
-_update("Packaging results...")
+report_progress(task, "Packaging results...")
 labels_nd = PyNDArray(dtype="int32", shape=[n_cells])
 np.copyto(labels_nd.ndarray(), cn_labels)
 task.outputs["neighborhood_labels"] = labels_nd

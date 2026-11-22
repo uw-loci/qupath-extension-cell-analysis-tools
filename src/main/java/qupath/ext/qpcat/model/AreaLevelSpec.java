@@ -91,6 +91,37 @@ public class AreaLevelSpec {
         return levels;
     }
 
+    /**
+     * Describes a level list for people, always naming the implicit images level first.
+     *
+     * @param levels  the configured levels; null or empty means images only
+     * @param compact true for a one-line table cell ({@code images>tma_cores>annotations[Tissue]}),
+     *                false for display names joined by {@code " > "} or a sentence when the
+     *                images level is the only one
+     */
+    public static String describe(List<AreaLevelSpec> levels, boolean compact) {
+        if (!hasSubImageLevels(levels)) {
+            return compact ? AreaLevel.IMAGES.getId()
+                    : "images only (one area per image; cells within an image share a graph)";
+        }
+        StringBuilder sb = new StringBuilder(
+                compact ? AreaLevel.IMAGES.getId() : AreaLevel.IMAGES.getDisplayName());
+        for (AreaLevelSpec spec : levels) {
+            if (spec == null || spec.getLevel() == AreaLevel.IMAGES) {
+                continue;
+            }
+            if (compact) {
+                sb.append('>').append(spec.getLevel().getId());
+                if (spec.getLevel() == AreaLevel.ANNOTATIONS && !spec.matchesAnyClass()) {
+                    sb.append('[').append(String.join(",", spec.getAnnotationClasses())).append(']');
+                }
+            } else {
+                sb.append(" > ").append(spec);
+            }
+        }
+        return sb.toString();
+    }
+
     @Override
     public String toString() {
         if (getLevel() == AreaLevel.ANNOTATIONS && !matchesAnyClass()) {
