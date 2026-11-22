@@ -208,6 +208,42 @@ itself counts every image, and the completion message says what it left out.
 Batch files set the same choice with `missing_values` (see the YAML reference); an
 unlabeled object in a batch run is one the policy excluded.
 
+### Cells with identical measurements
+
+Two cells can have exactly the same value for every ticked measurement. It happens when
+the measurements are quantized and the cells are marker-negative: a cell whose every
+compartment reads 0.00 on every marker is indistinguishable from the next such cell. Real
+images rarely produce this (noise alone separates them); synthetic images with noise
+switched off and heavily rounded exports do.
+
+This matters for Leiden only, because Leiden starts from a nearest-neighbor graph. Identical
+rows sit at distance zero from one another, and both neighbor searches handle that badly:
+the approximate search (what runs on the CPU) splits them into islands disconnected from the
+rest of the graph, and the exact search (the GPU path) joins them into hubs with thousands of
+edges. Measured on the 11,306-cell synthetic ground-truth dataset, where 2,903 cells share
+56 distinct rows: the CPU graph at `n_neighbors` 15 had 37 connected components and gave
+76 clusters for 8 cell types at resolution 0.5 (ARI 0.47 against the truth) and 83 at
+resolution 1.0 (ARI 0.36), and cuGraph on the exact graph at `n_neighbors` 50 returned every
+cell as its own cluster.
+
+So before the neighbor search, Leiden collapses identical rows to one, builds the graph and
+partitions it over the distinct rows, and gives every cell the label of its row. Cells with
+the same measurements therefore always land in the same cluster, which is also what any
+clustering of those values has to say about them. The same dataset then gives a CPU graph of
+8 components at `n_neighbors` 15 with 20 clusters at resolution 0.5 (ARI 0.68) and 30 at 1.0
+(ARI 0.61); at `n_neighbors` 50 the CPU and GPU paths agree (13-14 clusters, ARI 0.77-0.78
+at resolution 0.5) where before they did not, and at resolution 0.1-0.2 the deduplicated
+graph recovers the 8 cell types themselves (ARI 0.92), which the original graph never did
+(ARI 0.60 at best, at any resolution). One consequence to know about: a block of identical
+cells is one node in the graph, not thousands, so at the same resolution the partition is
+finer than the hub graph gave; sweep the resolution as always.
+The completion message reports it ("2,903 cells had identical measurements and were
+clustered once per distinct row") and the Workflow-tab record carries the same line; when no
+two cells share a row nothing changes and nothing is reported. KMeans, GMM, HDBSCAN and
+Agglomerative do not build a neighbor graph and are unaffected. A run in which every cell
+has the same values is refused with a message naming the problem, since there is nothing to
+cluster.
+
 ## Choosing a normalization
 
 | Method | Use when | Avoid when |

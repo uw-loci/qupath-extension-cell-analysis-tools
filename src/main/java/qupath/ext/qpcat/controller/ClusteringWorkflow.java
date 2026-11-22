@@ -566,6 +566,10 @@ public class ClusteringWorkflow {
         if (result.getGraphBackend() != null && result.getGraphBackend().startsWith("gpu")) {
             completeMsg += " Graph and Leiden on the GPU.";
         }
+        if (result.getDuplicateRows() > 0) {
+            completeMsg += " " + String.format(java.util.Locale.ROOT, "%,d", result.getDuplicateRows())
+                    + " cells had identical measurements and were clustered once per distinct row.";
+        }
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -1336,6 +1340,11 @@ public class ClusteringWorkflow {
                 if (result.getBatchCorrection() != null) {
                     lines.add("//   Cluster means, heatmap and marker rankings use CORRECTED values.");
                 }
+            }
+            if (result.getDuplicateRows() > 0) {
+                lines.add("// Identical measurements: " + result.getDuplicateRows()
+                        + " cells shared their row with another cell; each distinct row was");
+                lines.add("//   searched and clustered once, and every cell took its row's label.");
             }
             lines.add("// Result: " + result.clusterCountText() + ", "
                     + result.getNCells() + " cells"
@@ -2554,6 +2563,18 @@ public class ClusteringWorkflow {
                 } else if (gb.startsWith("gpu")) {
                     OperationLogger.getInstance().logOperation("GPU GRAPH AND LEIDEN",
                             Map.of("Backend", gb), gb, -1);
+                }
+            }
+
+            // Cells whose measurement row another cell shared: Leiden clustered each
+            // such row once, and the completion message says how many cells that was.
+            Object duplicateRows = task.outputs.get("duplicate_rows");
+            if (duplicateRows instanceof Number) {
+                result.setDuplicateRows(((Number) duplicateRows).intValue());
+                if (result.getDuplicateRows() > 0) {
+                    logger.info("{} cells had measurements identical to another cell's; "
+                            + "the neighbor search and Leiden ran once per distinct row",
+                            result.getDuplicateRows());
                 }
             }
 
