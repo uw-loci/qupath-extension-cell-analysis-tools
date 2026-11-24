@@ -462,12 +462,19 @@ public class CellularNeighborhoodDialog {
                         return;
                     }
                     statusLabel.setText("Done: " + result.getNNeighborhoods()
-                            + " neighborhoods over " + result.getNCells() + " cells.");
-                    Dialogs.showInfoNotification("QPCAT",
-                            "Cellular neighborhoods complete: " + result.getNNeighborhoods()
+                            + " neighborhoods over " + result.getNCells() + " cells."
+                            + (result.getNotes().isEmpty() ? ""
+                                    : " " + String.join(" ", result.getNotes())));
+                    String done = "Cellular neighborhoods complete: " + result.getNNeighborhoods()
                             + " neighborhoods.\nStored as the 'QPCAT CN' measurement on each cell "
                             + "(cell-type classes preserved). Color by neighborhood with "
-                            + "Measure > Show measurement maps.");
+                            + "Measure > Show measurement maps.";
+                    if (result.getNotes().isEmpty()) {
+                        Dialogs.showInfoNotification("QPCAT", done);
+                    } else {
+                        Dialogs.showWarningNotification("QPCAT",
+                                done + "\n" + String.join("\n", result.getNotes()));
+                    }
                     maybeOfferHeatmap(result.getHeatmapPath());
                 });
             } catch (Exception e) {
@@ -595,8 +602,10 @@ public class CellularNeighborhoodDialog {
         storeNote.setStyle("-fx-text-fill: derive(-fx-text-base-color, 25%); -fx-font-size: 11px;");
         box.getChildren().add(storeNote);
 
-        if (result.getDivergenceWarning() != null) {
-            Label warn = new Label("Heads up: " + result.getDivergenceWarning());
+        List<String> headsUp = new ArrayList<>(result.getNotes());
+        if (result.getDivergenceWarning() != null) headsUp.add(result.getDivergenceWarning());
+        for (String note : headsUp) {
+            Label warn = new Label("Heads up: " + note);
             warn.setWrapText(true);
             WrapHeight.bind(warn);
             warn.setStyle("-fx-text-fill: #a05000;");

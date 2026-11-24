@@ -158,6 +158,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Cellular neighborhoods: no more empty neighborhoods reported as real.** When the windows
+  held fewer distinct cell-type mixtures than the number of neighborhoods asked for (two cell
+  types and a window of 5 give at most 6, against the default 10), k-means formed fewer groups,
+  but the results still listed the requested number: the extra neighborhoods had no cells, a
+  composition of zero and an enrichment of about -19 for every cell type, and that -19 set the
+  heatmap's color range so the real neighborhoods looked almost white. The neighborhoods found
+  are now numbered without gaps, the count reported is the count found, and the dialog says how
+  many were found against how many were requested. Earlier runs where this happened listed
+  empty neighborhoods and washed-out heatmaps; the labels on the cells were correct.
 - **Moran's I and Geary's C: a measurement with no statistic no longer gets the strongest
   p-value in the table.** A measurement that is constant over the cells tested (common in a
   small area, or a marker no cell expresses) has no Moran's I or Geary's C, yet its row showed
