@@ -158,6 +158,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **An infinite measurement value is now missing, everywhere.** A value of Infinity (a CSV
+  `Infinity` cell, a script that divides by zero) used to count as present: the missing-values
+  badge and the run's missing-values note ignored it, "Exclude objects" kept the object, and the
+  clustering then quietly replaced the value with the column median. Infinite values are now
+  counted, badged and handled by the missing-values choice exactly like absent ones, and the
+  dialog and the result say "missing or infinite". Phenotyping was worse: one infinite value
+  under z-score made every other value of that marker minus infinity, so the marker called no
+  cell positive (or every cell, for minus infinity), and min-max scaled every cell to 0.
+  Normalization statistics now ignore infinite values, phenotyping gates such a cell negative
+  for that marker and says so in the results window, and Compute Thresholds no longer drops a
+  marker with an infinite value: it is fitted on the finite values, and a note under the
+  histogram says what was left out, or why a marker has no histogram or threshold at all (too
+  few finite values, every cell the same value, a method that could not be fitted). Phenotypes
+  and thresholds from any earlier version on data holding an infinite value were wrong for that
+  marker; clustering results were imputed without notice.
 - **Dark theme:** the missing-values choices were pale gray on the amber box, and the saved-data
   strip cut its sentence to "..." at the default dialog width with three buttons; both now read in
   full (found from dark-theme screenshots, 2026-11-22).

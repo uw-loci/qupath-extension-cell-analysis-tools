@@ -85,6 +85,8 @@ public class PhenotypingDialog {
     private ThresholdPreview thresholdPreview;
     private TitledPane histogramPane;
     private Map<String, Map<String, Object>> cachedHistogramData;
+    /** What Compute Thresholds says about the markers' data; hidden when it says nothing. */
+    private final Label thresholdNotesLabel = new Label();
     private String cachedHistogramNorm;
 
     /**
@@ -442,7 +444,10 @@ public class PhenotypingDialog {
         HBox buttonBar = new HBox(8, computeBtn, applyAllBtn);
         buttonBar.setAlignment(Pos.CENTER_LEFT);
 
-        VBox box = new VBox(5, histogramPanel, buttonBar, thresholdPreview.node());
+        thresholdNotesLabel.setWrapText(true);
+        thresholdNotesLabel.setStyle("-fx-text-fill: #7a4a00;");
+        showThresholdNotes(List.of());
+        VBox box = new VBox(5, histogramPanel, thresholdNotesLabel, buttonBar, thresholdPreview.node());
         histogramPane = new TitledPane("Histogram & Auto-Thresholding", box);
         histogramPane.setExpanded(false);
         histogramPane.setCollapsible(true);
@@ -1025,13 +1030,24 @@ public class PhenotypingDialog {
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
                     int nPhenotypes = (Integer) result.get("n_phenotypes");
-                    statusLabel.setText("Complete: " + nPhenotypes + " phenotypes assigned");
+                    @SuppressWarnings("unchecked")
+                    List<String> warnings = result.get("warnings") instanceof List<?> l
+                            ? (List<String>) l : List.of();
+                    statusLabel.setText("Complete: " + nPhenotypes + " phenotypes assigned"
+                            + (warnings.isEmpty() ? "" : " (" + warnings.size()
+                            + " warning(s); see the results)"));
                     runButton.setDisable(false);
                     setBusy(false, null, null);
-                    Dialogs.showInfoNotification("QPCAT",
-                            "Phenotyping complete: " + nPhenotypes + " phenotypes assigned.");
+                    if (warnings.isEmpty()) {
+                        Dialogs.showInfoNotification("QPCAT",
+                                "Phenotyping complete: " + nPhenotypes + " phenotypes assigned.");
+                    } else {
+                        Dialogs.showWarningNotification("QPCAT",
+                                "Phenotyping complete with " + warnings.size()
+                                + " warning(s); see the results window.");
+                    }
                     showResultsSummary((String) result.get("phenotype_counts"),
-                            (String) result.get("unknown_breakdown"));
+                            (String) result.get("unknown_breakdown"), warnings);
                 });
             } catch (Exception e) {
                 logger.error("Phenotyping failed", e);
@@ -1332,6 +1348,7 @@ public class PhenotypingDialog {
 
     private void invalidateHistogramCache() {
         cachedHistogramData = null;
+        showThresholdNotes(List.of());
         cachedHistogramNorm = null;
         if (histogramPanel != null) {
             histogramPanel.clearDisplay();
@@ -1423,9 +1440,13 @@ public class PhenotypingDialog {
                         }
                     });
                     thresholdPreview.setScalings(scalings);
+                    List<String> notes = thresholdNotes(histData);
+                    showThresholdNotes(notes);
                     progressBar.setProgress(1.0);
                     progressBar.setVisible(false);
-                    statusLabel.setText("Thresholds computed for " + histData.size() + " markers. "
+                    long fitted = histData.values().stream().filter(d -> d.get("counts") != null).count();
+                    statusLabel.setText("Thresholds computed for " + fitted + " of " + histData.size()
+                            + " markers. " + (notes.isEmpty() ? "" : "See the notes under the histogram. ")
                             + "Click a marker column header to view.");
                     histogramPane.setExpanded(true);
 
@@ -1480,8 +1501,12 @@ public class PhenotypingDialog {
 
         Map<String, Object> markerData = cachedHistogramData.get(marker);
 
-        // Parse counts
+        // Parse counts; a marker with too few finite values has none (its note says why)
         List<Number> countsList = (List<Number>) markerData.get("counts");
+        if (countsList == null) {
+            histogramPanel.clearDisplay();
+            return;
+        }
         int[] counts = new int[countsList.size()];
         for (int i = 0; i < countsList.size(); i++) {
             counts[i] = countsList.get(i).intValue();
@@ -1552,6 +1577,7 @@ public class PhenotypingDialog {
         }
 
         int updated = 0;
+        List<String> noThreshold = new ArrayList<>();
         List<String> extreme = new ArrayList<>();
         List<String> otherCount = new ArrayList<>();
         for (Map.Entry<String, Spinner<Double>> entry : markerGateSpinners.entrySet()) {
@@ -1574,6 +1600,8 @@ public class PhenotypingDialog {
                     if (fit != null && fit.populationsByBic() != null) {
                         otherCount.add(MeasurementNames.shorten(marker) + " (" + fit.populationsByBic() + ")");
                     }
+                } else {
+                    noThreshold.add(MeasurementNames.shorten(marker));
                 }
             }
         }
@@ -1589,7 +1617,12 @@ public class PhenotypingDialog {
                     .append(String.join(", ", otherCount))
                     .append(" - see the note under each histogram.");
         }
-        if (extreme.isEmpty() && otherCount.isEmpty()) {
+        if (!noThreshold.isEmpty()) {
+            message.append(" No '").append(selectedMethod).append("' threshold for: ")
+                    .append(String.join(", ", noThreshold))
+                    .append(" - their gates were left as they were; see the notes under the histogram.");
+        }
+        if (extreme.isEmpty() && otherCount.isEmpty() && noThreshold.isEmpty()) {
             Dialogs.showInfoNotification("QPCAT", message.toString());
         } else {
             Dialogs.showWarningNotification("QPCAT", message.toString());
@@ -1598,7 +1631,8 @@ public class PhenotypingDialog {
 
     // ========== Results Display ==========
 
-    private void showResultsSummary(String phenotypeCountsJson, String unknownBreakdownJson) {
+    private void showResultsSummary(String phenotypeCountsJson, String unknownBreakdownJson,
+                                    List<String> warnings) {
         if (phenotypeCountsJson == null) return;
 
         try {
@@ -1620,6 +1654,7 @@ public class PhenotypingDialog {
             sb.append(String.format("%-30s %10d%n", "Total", total));
 
             appendUnknownBreakdown(sb, unknownBreakdownJson, gson);
+            appendWarnings(sb, warnings);
 
             Dialog<ButtonType> resultsDialog = new Dialog<>();
             resultsDialog.initOwner(owner);
@@ -1640,6 +1675,39 @@ public class PhenotypingDialog {
         } catch (Exception e) {
             logger.warn("Failed to show phenotyping results: {}", e.getMessage());
         }
+    }
+
+    /**
+     * One line per note compute_thresholds.py attached to a marker ("CD3: ..."), in marker order.
+     *
+     * @param histData the parsed histograms_json
+     * @return the lines; empty when no marker has a note
+     */
+    @SuppressWarnings("unchecked")
+    static List<String> thresholdNotes(Map<String, Map<String, Object>> histData) {
+        List<String> lines = new ArrayList<>();
+        if (histData == null) return lines;
+        histData.forEach((marker, data) -> {
+            Object notes = data == null ? null : data.get("notes");
+            if (notes instanceof List<?> list) {
+                for (Object n : list) lines.add(MeasurementNames.shorten(marker) + ": " + n);
+            }
+        });
+        return lines;
+    }
+
+    private void showThresholdNotes(List<String> notes) {
+        thresholdNotesLabel.setText(String.join("\n", notes));
+        thresholdNotesLabel.setVisible(!notes.isEmpty());
+        thresholdNotesLabel.setManaged(!notes.isEmpty());
+    }
+
+    /** Appends the run's warnings about the data, one per line; nothing when there are none. */
+    static void appendWarnings(StringBuilder sb, List<String> warnings) {
+        if (warnings == null || warnings.isEmpty()) return;
+        sb.append("\nWarnings\n");
+        sb.append("-".repeat(42)).append("\n");
+        for (String w : warnings) sb.append("- ").append(w).append("\n");
     }
 
     /**

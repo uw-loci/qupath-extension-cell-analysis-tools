@@ -102,6 +102,31 @@ class MeasurementExtractorMissingTest {
         assertEquals("img2", res.getImageSegments().get(1).getImageEntry());
     }
 
+    /** H07: an infinite value is missing exactly like NaN, under every policy. */
+    @Test
+    void infinityIsMissingLikeNaN() {
+        List<PathObject> inf = List.of(cell(1, 10.0), cell(2, Double.POSITIVE_INFINITY),
+                cell(3, 30.0), cell(4, Double.NEGATIVE_INFINITY));
+        var r = MeasurementExtractor.missingValues(inf, List.of("A", "B"));
+        assertEquals(Map.of("B", 2), r.perMeasurement());
+        assertEquals(2, r.objectsWithMissing());
+
+        var excl = new MeasurementExtractor(MissingPolicy.EXCLUDE_OBJECTS).extract(inf, List.of("A", "B"));
+        assertEquals(2, excl.getNCells());
+        assertEquals(2, excl.getExcludedObjects());
+        assertTrue(excl.missingSummary().contains("missing or infinite"));
+
+        var drop = new MeasurementExtractor(MissingPolicy.EXCLUDE_MEASUREMENTS).extract(inf, List.of("A", "B"));
+        assertEquals(List.of("B"), drop.getExcludedMeasurements());
+
+        var imp = new MeasurementExtractor(MissingPolicy.IMPUTE).extract(inf, List.of("A", "B"));
+        assertTrue(Double.isNaN(imp.getData()[1][1]), "+Inf travels as NaN for the median");
+        assertTrue(Double.isNaN(imp.getData()[3][1]), "-Inf travels as NaN for the median");
+        for (double[] row : imp.getData()) {
+            for (double v : row) assertTrue(!Double.isInfinite(v));
+        }
+    }
+
     @Test
     void idsRoundTrip() {
         for (MissingPolicy p : MissingPolicy.values()) {

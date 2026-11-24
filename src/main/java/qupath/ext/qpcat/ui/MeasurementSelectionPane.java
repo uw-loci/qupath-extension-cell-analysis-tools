@@ -261,7 +261,8 @@ public class MeasurementSelectionPane extends VBox {
         HBox.setHgrow(headSpacer, Priority.ALWAYS);
         missingSort.setStyle("-fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0;");
         missingSort.setTooltip(Tooltips.of(
-                "Sort the list by how many objects lack a value for each measurement,\n"
+                "Sort the list by how many objects lack a value (missing or infinite)\n"
+                + "for each measurement, "
                 + "most first. Click again for the usual order."));
         missingSort.setOnAction(e -> setSortByMissing(sorted.getComparator() == null));
         missingHeader.getChildren().addAll(measurementHead, headSpacer, missingSort);
@@ -416,11 +417,12 @@ public class MeasurementSelectionPane extends VBox {
                 ? String.format(Locale.ROOT, " (%.1f%%)", 100.0 * objects / missingTotalObjects) : "";
         missingHeadline.setText(atLeast + String.format(Locale.ROOT, "%,d", objects) + " of "
                 + String.format(Locale.ROOT, "%,d", missingTotalObjects) + " objects" + pct
-                + " lack a value for " + affected.size() + " of the " + selected.size()
+                + " lack a value (missing or infinite) for " + affected.size() + " of the " + selected.size()
                 + " selected measurements" + (missingSource != null ? ", counted on " + missingSource
                 + "; the run counts every image" : "") + ".");
         missingWhy.setText("An object without a nucleus (a sectioned cell, or a detection that is "
-                + "not a cell) has no value there. For this run:");
+                + "not a cell) has no value there; an imported or scripted measurement can also be "
+                + "infinite (a division by zero). For this run:");
         policyNotes.get(MissingPolicy.EXCLUDE_OBJECTS).setText(
                 (atLeast.isEmpty() ? String.format(Locale.ROOT, "%,d", objects) : "those") + " objects get "
                 + "no label; the count goes into the results");

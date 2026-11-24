@@ -73,7 +73,8 @@ def normalization_params(df, method, pct_low=0.01, pct_high=0.99):
     """Per-column (offset, scale, low, high) for a normalization method.
 
     A value becomes (clip(value, low, high) - offset) / scale; low and high are
-    None unless the method clips. NaN is skipped in every statistic. A column
+    None unless the method clips. NaN and +-Inf are skipped in every statistic,
+    so one infinite value cannot move a marker's center or spread. A column
     that cannot give a spread (constant, or under "zscore" fewer than two
     finite values) gets scale 1, so its finite values come out as 0 rather
     than NaN; a missing value stays NaN.
@@ -82,19 +83,24 @@ def normalization_params(df, method, pct_low=0.01, pct_high=0.99):
     quantiles, given as fractions in either order, then rescale to [0, 1]);
     anything else leaves the values as they are.
     """
+    if method not in ("zscore", "minmax", "percentile"):
+        zeros = df.count() * 0.0
+        return zeros, zeros + 1.0, None, None
+    if np.isinf(df.to_numpy(dtype=np.float64)).any():
+        df = df.where(np.isfinite(df))
     if method == "zscore":
-        return df.mean().fillna(0.0), df.std().replace(0, 1).fillna(1), None, None
-    if method == "minmax":
-        dmin = df.min()
-        return dmin, (df.max() - dmin).replace(0, 1).fillna(1), None, None
-    if method == "percentile":
+        offset, scale = df.mean().fillna(0.0), df.std().replace(0, 1).fillna(1)
+        low = high = None
+    elif method == "minmax":
+        offset = df.min()
+        scale, low, high = (df.max() - offset).replace(0, 1).fillna(1), None, None
+    else:
         lo = max(0.0, min(pct_low, pct_high))
         hi = min(1.0, max(pct_low, pct_high))
-        p_low = df.quantile(lo)
-        p_high = df.quantile(hi)
-        return p_low, (p_high - p_low).replace(0, 1).fillna(1), p_low, p_high
-    zeros = df.count() * 0.0
-    return zeros, zeros + 1.0, None, None
+        low = df.quantile(lo)
+        high = df.quantile(hi)
+        offset, scale = low, (high - low).replace(0, 1).fillna(1)
+    return offset, scale, low, high
 
 
 def normalize_frame(df, method, pct_low=0.01, pct_high=0.99):

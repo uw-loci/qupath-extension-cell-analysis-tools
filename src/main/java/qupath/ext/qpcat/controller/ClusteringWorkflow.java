@@ -1824,6 +1824,14 @@ public class ClusteringWorkflow {
             if (task.outputs.containsKey("unknown_breakdown")) {
                 result.put("unknown_breakdown", task.outputs.get("unknown_breakdown"));
             }
+            List<String> warnings = new ArrayList<>();
+            if (task.outputs.containsKey("warnings")) {
+                List<String> w = gson.fromJson((String) task.outputs.get("warnings"),
+                        new TypeToken<List<String>>(){}.getType());
+                if (w != null) warnings.addAll(w);
+            }
+            for (String w : warnings) logger.warn("Phenotyping: {}", w);
+            result.put("warnings", warnings);
 
             return result;
         } finally {
