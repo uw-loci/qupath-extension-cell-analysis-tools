@@ -24,8 +24,8 @@ import java.util.regex.Pattern;
 /**
  * Semantic validator for the v1 QP-CAT batch YAML schema.
  *
- * <p>Each rule maps to a stable error code (E001-E021) or warning
- * code (W001-W004). The validator accumulates issues; the orchestrator
+ * <p>Each rule maps to a stable error code (E001-E025) or warning
+ * code (W001-W013). The validator accumulates issues; the orchestrator
  * decides whether to dispatch based on {@link ValidationResult#hasErrors()}.</p>
  *
  * <p>Semantic checks NOT performed here (done by the orchestrator before any
@@ -247,10 +247,11 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E005", "clustering.normalization",
                     "'" + asciiSafe(c.getNormalization()) + "' is not one of " + NORMALIZATIONS));
         }
-        if (c.getMissingValues() != null
-                && !MISSING_VALUES.contains(c.getMissingValues().toLowerCase(Locale.ROOT))) {
-            r.add(ValidationIssue.error("E005", "clustering.missing_values",
-                    "'" + asciiSafe(c.getMissingValues()) + "' is not one of " + MISSING_VALUES));
+        validateMissingValues(c.getMissingValues(), "clustering.missing_values", r);
+        if ("louvain".equalsIgnoreCase(type) && !reuseSaved) {
+            r.add(ValidationIssue.warning("W013", "clustering.type",
+                    "'louvain' is not implemented; this run uses Leiden. Write type: leiden "
+                    + "to make that explicit."));
         }
         if (c.getGraphBackend() != null
                 && !GRAPH_BACKENDS.contains(c.getGraphBackend().toLowerCase(Locale.ROOT))) {
@@ -404,9 +405,18 @@ public final class BatchYamlValidator {
         }
     }
 
+    /** E005 unless {@code value} is null or one of {@link #MISSING_VALUES}. */
+    private static void validateMissingValues(String value, String path, ValidationResult r) {
+        if (value != null && !MISSING_VALUES.contains(value.toLowerCase(Locale.ROOT))) {
+            r.add(ValidationIssue.error("E005", path,
+                    "'" + asciiSafe(value) + "' is not one of " + MISSING_VALUES));
+        }
+    }
+
     private static void validatePhenotyping(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.PhenotypingBlock p = s.getPhenotyping();
         if (p == null) return;
+        validateMissingValues(p.getMissingValues(), "phenotyping.missing_values", r);
         if (p.isEnabled()
                 && (p.getRules() == null || p.getRules().isEmpty())
                 && (p.getLlmExplainer() == null || !p.getLlmExplainer().isEnabled())) {
@@ -456,6 +466,9 @@ public final class BatchYamlValidator {
         }
         BatchYamlSchema.LlmExplainerBlock llm = p.getLlmExplainer();
         if (llm != null && llm.isEnabled()) {
+            r.add(ValidationIssue.warning("W012", "phenotyping.llm_explainer.enabled",
+                    "the batch checks this block but never runs the Cluster Explainer; it runs "
+                    + "only from the Results window. No explanations will be produced."));
             if (llm.getProvider() == null || llm.getProvider().isEmpty()) {
                 r.add(ValidationIssue.error("E001",
                         "phenotyping.llm_explainer.provider",
@@ -500,6 +513,17 @@ public final class BatchYamlValidator {
         BatchYamlSchema.SpatialStatsBlock ss = s.getSpatialStats();
         if (ss == null) return;
         if (!ss.isEnabled()) return;
+        BatchYamlSchema.ClusteringBlock c = s.getClustering();
+        boolean clusters = c != null && !"reuse_saved".equalsIgnoreCase(c.getMode())
+                && !"skip".equalsIgnoreCase(c.getType());
+        if (!clusters) {
+            r.add(ValidationIssue.warning("W011", "spatial_stats",
+                    "will NOT run: spatial statistics are computed only during a clustering "
+                    + "run (clustering.mode: run), and this file "
+                    + (c == null ? "has no clustering block" : "does not cluster")
+                    + ". Run clustering again with this block, or use Spatial statistics on "
+                    + "existing clusters in the GUI."));
+        }
 
         BatchYamlSchema.GraphConstructor g = ss.getGraph();
         if (g == null) {

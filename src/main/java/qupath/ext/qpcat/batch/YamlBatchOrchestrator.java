@@ -57,6 +57,10 @@ public final class YamlBatchOrchestrator {
 
     private YamlBatchOrchestrator() {}
 
+    /** Row text when spatial_stats is requested but no clustering runs to compute it. */
+    static final String SPATIAL_NOT_RUN = "NOT RUN: spatial statistics are computed only "
+            + "during a clustering run (clustering.mode: run); this run does not cluster";
+
     /** Per-image outcome row. */
     public static final class ImageOutcome {
         private final String imageName;
@@ -259,13 +263,10 @@ public final class YamlBatchOrchestrator {
                 }
             }
 
-            if (!options.isDryRun()) {
-                runProjectPhenotyping(schema, rp, plans.get(rp), emitter);
-            }
-
             // Cluster-composition figures describe the result as a whole, so
             // they are written once for the run, not once per image.
             Set<String> emittedComposition = new LinkedHashSet<>();
+            List<ImageOutcome> projectOutcomes = new ArrayList<>();
             for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
                 processed++;
                 ImageOutcome out = new ImageOutcome(entry.getImageName());
@@ -304,6 +305,7 @@ public final class YamlBatchOrchestrator {
 
                 out.setElapsed(System.currentTimeMillis() - imgStart);
                 outcome.getImages().add(out);
+                projectOutcomes.add(out);
 
                 if (out.isSuccess()) {
                     emitter.emitRow(ProgressEmitter.Level.OK, processed, totalImages,
@@ -316,6 +318,20 @@ public final class YamlBatchOrchestrator {
                 }
             }
             if (stopRequested) break;
+
+            // Phenotyping runs once per project AFTER clustering, as documented: run
+            // before the per-image clustering, its labels were overwritten by the
+            // cluster labels. A failure fails the project's images and honors stop.
+            if (!options.isDryRun()) {
+                String phenotypingError = runProjectPhenotyping(schema, rp, plans.get(rp), emitter);
+                if (phenotypingError != null) {
+                    failImages(projectOutcomes, "phenotyping", phenotypingError);
+                    if (stopOnError) {
+                        stopRequested = true;
+                        break;
+                    }
+                }
+            }
         }
 
         outcome.setTotalElapsedMs(System.currentTimeMillis() - t0);
@@ -328,18 +344,29 @@ public final class YamlBatchOrchestrator {
                 yamlBatchEndParams(outcome, options.isDryRun()),
                 "completed", outcome.getTotalElapsedMs());
 
-        // Exit code per design section 6
-        if (options.isDryRun()) {
-            outcome.setExitCode(0);
-        } else if (stopRequested) {
-            outcome.setExitCode(3);
-        } else if (outcome.failed() > 0) {
-            outcome.setExitCode(1);
-        } else {
-            outcome.setExitCode(0);
-        }
+        outcome.setExitCode(exitCode(options.isDryRun(), stopRequested, outcome));
         emitter.emit(ProgressEmitter.Level.OK, "Exit code: " + outcome.getExitCode());
         return outcome;
+    }
+
+    /**
+     * Exit code per design section 6: 0 success or dry run, 3 stopped by
+     * {@code on_error: stop}, 1 when any image failed.
+     */
+    static int exitCode(boolean dryRun, boolean stopRequested, BatchOutcome outcome) {
+        if (dryRun) return 0;
+        if (stopRequested) return 3;
+        return outcome.failed() > 0 ? 1 : 0;
+    }
+
+    /**
+     * Mark every image that has not already failed as failed at {@code step}, so a
+     * project-level failure (phenotyping) counts against the exit code.
+     */
+    static void failImages(List<ImageOutcome> outcomes, String step, String error) {
+        for (ImageOutcome o : outcomes) {
+            if (o.isSuccess()) o.markFailure(step, error);
+        }
     }
 
     // ---------------- Per-image dispatch ----------------
@@ -443,28 +470,24 @@ public final class YamlBatchOrchestrator {
         }
 
         // ---- Phenotyping ----
-        // Runs ONCE per project, not per image -- see runProjectPhenotyping. The
-        // rules are z-score gates, and z-scores are only comparable across images
-        // if the cells are normalized together, so a per-image loop would silently
-        // give each image its own thresholds.
+        // Runs ONCE per project, after every image is clustered -- see
+        // runProjectPhenotyping. The rules are z-score gates, and z-scores are only
+        // comparable across images if the cells are normalized together.
 
         // ---- Spatial stats ----
-        // The existing pipeline runs spatial stats AS PART OF clustering when
-        // ClusteringConfig flags are set (see ClusteringWorkflow line 706+).
-        // For reuse_saved we cannot re-run spatial stats without re-running
-        // clustering -- this is a v1 limitation surfaced as a WARN. Real-run
-        // spatial-stats is implicitly handled via the clustering config below.
+        // Spatial statistics are computed AS PART OF a clustering run (ClusteringConfig
+        // flags). Without one (reuse_saved, type: skip, no clustering block) they do
+        // not run; the validator warns (W011) and this row says so at WARN.
         if (schema.getSpatialStats() != null && schema.getSpatialStats().isEnabled()) {
             BatchYamlSchema.SpatialStatsBlock ss = schema.getSpatialStats();
-            emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
+            boolean ran = isRealClusteringRun(schema);
+            emitter.emitRow(ran ? ProgressEmitter.Level.INFO : ProgressEmitter.Level.WARN,
+                    index, total,
                     ProgressEmitter.fields("image", entry.getImageName(),
                             "step", "spatial_stats",
                             "graph", ss.getGraph().getType(),
                             "stats", ss.getStatistics().size()),
-                    schema.getClustering() != null
-                            && !"reuse_saved".equalsIgnoreCase(schema.getClustering().getMode())
-                            ? "ran inline with clustering"
-                            : "deferred (reuse_saved cannot re-run spatial stats without re-clustering)");
+                    ran ? "ran inline with clustering" : SPATIAL_NOT_RUN);
         }
 
         // ---- Figure export ----
@@ -500,16 +523,19 @@ public final class YamlBatchOrchestrator {
      * in each one. This matches the GUI's all-images scope, which normalizes
      * jointly for the same reason.
      * <p>
-     * Non-fatal: phenotyping failure is reported and the run continues, because
-     * clustering results for the project are already saved by this point.
+     * A failure is reported as an ERROR row and returned; the caller fails the
+     * project's images (exit code 1, or 3 under {@code on_error: stop}).
+     *
+     * @return null on success or when there is nothing to run, else the error message
      */
-    private static void runProjectPhenotyping(BatchYamlSchema schema,
+    private static String runProjectPhenotyping(BatchYamlSchema schema,
                                               ScopeResolver.ResolvedProject rp,
                                               BatchMeasurements.Plan plan,
                                               ProgressEmitter emitter) {
         BatchYamlSchema.PhenotypingBlock pb = schema.getPhenotyping();
-        if (pb == null || !pb.isEnabled()) return;
-        if (pb.getRules() == null || pb.getRules().isEmpty()) return;  // llm-only block
+        if (pb == null || !pb.isEnabled()) return null;
+        if (pb.getRules() == null || pb.getRules().isEmpty()) return null;  // llm-only block
+        if (rp.getImages().isEmpty()) return null;
 
         int nImages = rp.getImages().size();
         emitter.emit(ProgressEmitter.Level.INFO, "Phenotyping across " + nImages
@@ -534,9 +560,12 @@ public final class YamlBatchOrchestrator {
             emitter.emit(ProgressEmitter.Level.OK, "Phenotyping complete: "
                     + res.getNPhenotypes() + " phenotype(s) assigned to "
                     + res.getNCells() + " cells across " + nImages + " image(s)");
+            return null;
         } catch (Exception e) {
-            emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed: "
-                    + BatchYamlParser.asciiSafe(e.getMessage()));
+            String msg = BatchYamlParser.asciiSafe(e.getMessage());
+            emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed for project "
+                    + rp.getProjectPath() + ": " + msg);
+            return msg == null || msg.isEmpty() ? e.getClass().getSimpleName() : msg;
         }
     }
 
@@ -719,11 +748,13 @@ public final class YamlBatchOrchestrator {
         }
         if (schema.getSpatialStats() != null && schema.getSpatialStats().isEnabled()) {
             BatchYamlSchema.SpatialStatsBlock ss = schema.getSpatialStats();
-            emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
+            boolean runs = isRealClusteringRun(schema);
+            emitter.emitRow(runs ? ProgressEmitter.Level.INFO : ProgressEmitter.Level.WARN,
+                    index, total,
                     ProgressEmitter.fields("step", "spatial_stats",
                             "graph", ss.getGraph().getType(),
                             "stats", ss.getStatistics()),
-                    null);
+                    runs ? null : SPATIAL_NOT_RUN);
         }
         if (schema.getFigureExport() != null && schema.getFigureExport().isEnabled()) {
             BatchYamlSchema.FigureExportBlock fe = schema.getFigureExport();

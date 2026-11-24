@@ -127,7 +127,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (logged as a warning). An unrecognized value is an error. |
+| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (warning W013). An unrecognized value is an error. |
 | `mode` | string | `run` | `run` (run a new clustering) or `reuse_saved` (skip clustering; attach `saved_result_name`). |
 | `saved_result_name` | string | -- | Required when `mode: reuse_saved`. |
 | `resolution` | double | `1.0` | Leiden / Louvain only. Range `(0, 10]`. |
@@ -232,7 +232,9 @@ clustering:
 
 ## `phenotyping` (optional, object)
 
-Runs after clustering. Skipped entirely if omitted or `enabled: false`.
+Runs once per project after every image is clustered, so its labels are the ones the cells
+keep. Skipped entirely if omitted or `enabled: false`. If it fails, every image of the project
+is counted as failed (exit code 1, or 3 with `on_error: stop`, which also stops the run).
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -288,8 +290,9 @@ includes those images.
 
 ### `phenotyping.llm_explainer` (optional, object)
 
-**Validated but not run.** The batch checks this block (including E018 for an inline key)
-and then ignores it; the Cluster Explainer runs only from the Results window.
+**Validated but not run.** The batch checks this block (including E018 for an inline key),
+warns that it will not run (W012), and then ignores it; the Cluster Explainer runs only from
+the Results window.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -305,7 +308,7 @@ and then ignores it; the Cluster Explainer runs only from the Results window.
 
 ## `spatial_stats` (optional, object)
 
-Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, statistics cannot be re-run without re-clustering. Spatial permutations are seeded and need no key.
+Runs as part of clustering when `clustering.mode: run`. Without a clustering run (`reuse_saved`, `type: skip`, or no `clustering` block) the statistics are **not computed**: the validator warns (W011) and each image's row says `NOT RUN`. Spatial permutations are seeded and need no key.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -584,6 +587,9 @@ Warnings (non-fatal):
 - W008 `audit.log_level` has no effect
 - W009 `audit.capture_prompts` has no effect
 - W010 A clustering measurement missing from some images in scope
+- W011 `spatial_stats` requested but no clustering runs to compute it
+- W012 `phenotyping.llm_explainer.enabled` is never run by the batch
+- W013 `clustering.type: louvain` runs Leiden
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
 

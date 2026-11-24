@@ -243,6 +243,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   in every image, and prints the list at the start of the run and in the dry run. Batch
   clustering runs from earlier versions without `clustering.measurements` clustered on position,
   size and earlier results as well as intensities.
+- **Batch runs report what did not run, and a phenotyping failure fails the run.** A
+  `spatial_stats` block without a clustering run (`mode: reuse_saved`, `type: skip`, or no
+  `clustering` block) computed nothing and said "deferred" at INFO; an enabled
+  `llm_explainer` was checked and never run, without a word; `type: louvain` ran Leiden with a
+  log line only. Each now warns in the validator and the dry run (W011, W012, W013) and
+  spatial rows say `NOT RUN`. A phenotyping failure printed an ERROR and still exited 0 and
+  ignored `on_error: stop`; it now fails the project's images (exit 1, or 3 and a stop under
+  `on_error: stop`). `phenotyping.missing_values` is checked before anything runs, as
+  `clustering.missing_values` is. Phenotyping now runs after every image of the project is
+  clustered, as the reference says: it used to run before per-image clustering, whose cluster
+  labels then replaced the phenotype labels. Batch runs from earlier versions that clustered
+  each image on its own and phenotyped in the same file left the cells with cluster labels, not
+  phenotypes, although phenotyping reported success.
 
 ## [0.25.0] - 2026-11-19
 

@@ -56,6 +56,43 @@ class BatchYamlValidatorTest {
     }
 
     @Test
+    void w011_spatial_stats_without_a_clustering_run_will_not_run() {
+        String block = "spatial_stats:\n  graph: { type: knn }\n  statistics: [moran_i]\n";
+        for (String clustering : new String[] {
+                "", "clustering: { mode: reuse_saved, saved_result_name: r }\n",
+                "clustering: { type: skip }\n"}) {
+            assertThat(hasCode(validate(BASE + clustering + block), "W011"))
+                    .as(clustering).isTrue();
+        }
+        assertThat(hasCode(validate(BASE + "clustering: { type: leiden }\n" + block), "W011"))
+                .isFalse();
+    }
+
+    @Test
+    void w012_llm_explainer_is_never_run_by_the_batch() {
+        List<ValidationIssue> issues = validate(BASE + "phenotyping:\n  rules:\n"
+                + "    - name: T\n      require_markers: [A]\n"
+                + "  llm_explainer: { enabled: true, provider: ollama, model: m }\n");
+        assertThat(hasCode(issues, "W012")).isTrue();
+    }
+
+    @Test
+    void w013_louvain_runs_leiden() {
+        assertThat(hasCode(validate(BASE + "clustering: { type: louvain }\n"), "W013")).isTrue();
+    }
+
+    @Test
+    void e005_phenotyping_missing_values_is_validated_before_anything_runs() {
+        List<ValidationIssue> issues = validate(BASE + "phenotyping:\n  missing_values: drop\n"
+                + "  rules:\n    - name: T\n      require_markers: [A]\n");
+        assertThat(issues).anyMatch(i -> i.getCode().equals("E005")
+                && i.getFieldPath().equals("phenotyping.missing_values"));
+        assertThat(validate(BASE + "phenotyping:\n  missing_values: IMPUTE\n"
+                + "  rules:\n    - name: T\n      require_markers: [A]\n"))
+                .noneMatch(i -> i.getFieldPath().equals("phenotyping.missing_values"));
+    }
+
+    @Test
     void w008_audit_log_level_has_no_effect() {
         List<ValidationIssue> issues = validate(BASE + "audit:\n  log_level: WARN\n");
         assertThat(hasCode(issues, "W008"))
