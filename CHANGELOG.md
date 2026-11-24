@@ -212,6 +212,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   (E024): only the last one could be selected by name, and their saved results and figures
   would overwrite each other. Batch runs from earlier versions with a single string under
   `scope.images` processed (and wrote results to) every image in the project.
+- **Batch figure export reads the result the run saved.** Figure export looked the result up
+  by the raw `yaml_<image>` name, while the result had been saved under that name with the
+  characters a file name cannot hold removed, so an image named with `:` or `/` failed with
+  "Result file not found"; after a `joint: true` run it looked for `yaml_<image>` rather than
+  the `yaml_joint` result just saved, and could export an older result of that image. It now
+  uses the name the save returned. Per-image clustering of several images under one
+  `clustering.result_name` is refused (E025): each image replaced the previous one's saved
+  result, so earlier batch runs kept only the last image's result. Batch figure exports from
+  earlier `joint: true` runs without `figure_export.result_name` may have come from an older
+  saved result.
 
 ## [0.25.0] - 2026-11-19
 

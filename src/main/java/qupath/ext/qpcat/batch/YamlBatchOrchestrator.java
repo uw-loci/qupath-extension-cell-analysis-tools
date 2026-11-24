@@ -183,6 +183,16 @@ public final class YamlBatchOrchestrator {
         emitter.emit(ProgressEmitter.Level.INFO,
                 "Resolved scope: " + resolved.getProjects().size()
                         + " project(s), " + totalImages + " image(s)");
+        List<ValidationIssue> nameIssues = sharedResultNameIssues(schema, resolved);
+        if (!nameIssues.isEmpty()) {
+            for (ValidationIssue issue : nameIssues) {
+                emitter.emit(ProgressEmitter.Level.ERROR, issue.format());
+            }
+            emitter.emit(ProgressEmitter.Level.ERROR, "Run aborted before any work dispatched.");
+            outcome.setExitCode(2);
+            outcome.setTotalElapsedMs(System.currentTimeMillis() - t0);
+            return outcome;
+        }
 
         if (totalImages == 0) {
             emitter.emit(ProgressEmitter.Level.WARN, "Scope resolved to zero images");
@@ -216,14 +226,15 @@ public final class YamlBatchOrchestrator {
             OperationLogger.getInstance().setProject(rp.getProject());
 
             // One joint clustering run per project, before the per-image steps.
+            String jointResultName = null;
             if (jointClustering) {
                 if (options.isDryRun()) {
                     emitter.emit(ProgressEmitter.Level.INFO, "WOULD-RUN joint clustering across "
                             + rp.getImages().size() + " image(s) of project "
                             + rp.getProjectPath());
                 } else {
-                    boolean ok = runJointClustering(schema, rp, emitter, outcome);
-                    if (!ok) {
+                    jointResultName = runJointClustering(schema, rp, emitter, outcome);
+                    if (jointResultName == null) {
                         // Failures were recorded per image inside runJointClustering.
                         if (stopOnError) {
                             stopRequested = true;
@@ -258,7 +269,8 @@ public final class YamlBatchOrchestrator {
                     attempt++;
                     try {
                         runOneImage(schema, options, rp, entry, processed, totalImages,
-                                emitter, outcome, out, jointClustering, emittedComposition);
+                                emitter, outcome, out, jointClustering, jointResultName,
+                                emittedComposition);
                         done = true;
                     } catch (Exception e) {
                         String msg = BatchYamlParser.asciiSafe(e.getMessage());
@@ -329,12 +341,16 @@ public final class YamlBatchOrchestrator {
                                      BatchOutcome outcome,
                                      ImageOutcome out,
                                      boolean skipClustering,
+                                     String jointResultName,
                                      Set<String> emittedComposition) throws IOException {
         if (options.isDryRun()) {
             emitDryRunDescription(schema, entry, index, total, emitter, skipClustering);
             return;
         }
         ClusteringResult clustering = null;
+        // The saved result this image's later steps read: the name a save
+        // returned (sanitized for the file system), or the one reuse_saved loaded.
+        String resultName = jointResultName;
 
         // ---- Clustering ----
         // Skipped per-image when the run clustered all images jointly already
@@ -362,6 +378,7 @@ public final class YamlBatchOrchestrator {
                         name = names.get(0);
                     }
                     clustering = ClusteringResultManager.loadResult(rp.getProject(), name);
+                    resultName = name;
                     emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                             ProgressEmitter.fields("image", entry.getImageName(),
                                     "step", "clustering", "clusters", clustering.getNClusters()),
@@ -385,12 +402,12 @@ public final class YamlBatchOrchestrator {
                     HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
                     clustering = hw.runClustering(List.of(entry), config, null);
                     // Persist the saved result so spatial_stats / figure_export
-                    // can pick it up.
-                    String resultName = cc.getResultName() != null
+                    // can pick it up, under the name saveResult actually used.
+                    String requested = cc.getResultName() != null
                             ? cc.getResultName()
                             : ("yaml_" + entry.getImageName());
-                    ClusteringResultManager.saveResult(
-                            rp.getProject(), resultName, clustering,
+                    resultName = ClusteringResultManager.saveResult(
+                            rp.getProject(), requested, clustering,
                             config.getAlgorithm().getId(),
                             config.getNormalization().getId(),
                             config.getEmbeddingMethod().getId());
@@ -440,7 +457,7 @@ public final class YamlBatchOrchestrator {
         if (schema.getFigureExport() != null && schema.getFigureExport().isEnabled()) {
             BatchYamlSchema.FigureExportBlock fe = schema.getFigureExport();
             try {
-                ExportResult er = runFigureExport(fe, rp, entry, schema.getClustering(),
+                ExportResult er = runFigureExport(fe, rp, entry, resultName,
                         emittedComposition);
                 outcome.addFiguresWritten(er.getFilesWritten());
                 emitter.emitRow(ProgressEmitter.Level.OK, index, total,
@@ -523,6 +540,37 @@ public final class YamlBatchOrchestrator {
                 : parseNormalization(yaml).getId();
     }
 
+    /**
+     * E025 when per-image clustering would save several images of one project
+     * under the same {@code clustering.result_name}: each save replaced the last,
+     * so only the final image's result was kept.
+     *
+     * @param schema   the validated batch file
+     * @param resolved the resolved scope
+     * @return the errors; empty when the names cannot collide
+     */
+    static List<ValidationIssue> sharedResultNameIssues(BatchYamlSchema schema,
+                                                        ScopeResolver.ResolvedScope resolved) {
+        List<ValidationIssue> issues = new ArrayList<>();
+        if (!isRealClusteringRun(schema) || schema.getClustering().isJoint()
+                || schema.getClustering().getResultName() == null) {
+            return issues;
+        }
+        for (ScopeResolver.ResolvedProject rp : resolved.getProjects()) {
+            if (rp.getImages().size() > 1) {
+                issues.add(ValidationIssue.error("E025", "clustering.result_name",
+                        "every one of the " + rp.getImages().size() + " images of project '"
+                        + BatchYamlParser.asciiSafe(String.valueOf(rp.getProjectPath()))
+                        + "' is clustered on its own and would be saved as '"
+                        + BatchYamlParser.asciiSafe(schema.getClustering().getResultName())
+                        + "', each replacing the last. Remove result_name (each image is then "
+                        + "saved as yaml_<image>) or set joint: true to cluster them together "
+                        + "under that name."));
+            }
+        }
+        return issues;
+    }
+
     /** True when the schema asks for an actual clustering run (not reuse_saved / skip). */
     private static boolean isRealClusteringRun(BatchYamlSchema schema) {
         if (schema.getClustering() == null) return false;
@@ -537,10 +585,11 @@ public final class YamlBatchOrchestrator {
      * (clustering.joint: true). Delegates to the same project-clustering path the
      * GUI uses, so labels are globally consistent and each image is saved with a
      * scope-aware Workflow record. Saves the combined result under the configured
-     * {@code result_name} so figure_export can pick it up. Returns true on success;
-     * on failure marks every image of the project as a clustering failure.
+     * {@code result_name} so figure_export can pick it up. Returns the name the
+     * result was saved under, or null on failure, when every image of the project
+     * is marked as a clustering failure.
      */
-    private static boolean runJointClustering(BatchYamlSchema schema,
+    private static String runJointClustering(BatchYamlSchema schema,
                                               ScopeResolver.ResolvedProject rp,
                                               ProgressEmitter emitter,
                                               BatchOutcome outcome) {
@@ -553,15 +602,16 @@ public final class YamlBatchOrchestrator {
             config.setClusterEntireProject(true);
             HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
             ClusteringResult clustering = hw.runClustering(rp.getImages(), config, null);
-            String resultName = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
-            ClusteringResultManager.saveResult(rp.getProject(), resultName, clustering,
+            String requested = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
+            String resultName = ClusteringResultManager.saveResult(rp.getProject(), requested,
+                    clustering,
                     config.getAlgorithm().getId(),
                     config.getNormalization().getId(),
                     config.getEmbeddingMethod().getId());
             emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
                     + clustering.clusterCountText() + ", " + clustering.getNCells()
                     + " cells across " + n + " image(s); saved as '" + resultName + "'");
-            return true;
+            return resultName;
         } catch (Exception e) {
             String msg = BatchYamlParser.asciiSafe(e.getMessage());
             emitter.emit(ProgressEmitter.Level.ERROR, "Joint clustering failed: " + msg);
@@ -570,7 +620,7 @@ public final class YamlBatchOrchestrator {
                 o.markFailure("clustering", msg);
                 outcome.getImages().add(o);
             }
-            return false;
+            return null;
         }
     }
 
@@ -826,7 +876,7 @@ public final class YamlBatchOrchestrator {
     private static ExportResult runFigureExport(BatchYamlSchema.FigureExportBlock fe,
                                                   ScopeResolver.ResolvedProject rp,
                                                   ProjectImageEntry<BufferedImage> entry,
-                                                  BatchYamlSchema.ClusteringBlock cc,
+                                                  String runResultName,
                                                   Set<String> emittedComposition)
             throws IOException {
         Map<String, Object> opts = new LinkedHashMap<>();
@@ -866,15 +916,12 @@ public final class YamlBatchOrchestrator {
                 return er;
             }
         }
-        // Result name: explicit > clustering.result_name (per design Q6)
+        // Result name: figure_export.result_name, else the result this run saved or
+        // loaded for the image, else the name a per-image batch run saves under.
         String rn = fe.getResultName();
-        if ((rn == null || rn.isEmpty()) && cc != null) {
-            rn = cc.getResultName() != null ? cc.getResultName()
-                    : cc.getSavedResultName();
-        }
         if (rn == null || rn.isEmpty()) {
-            // fall back to the auto-saved-result name used by clustering above
-            rn = "yaml_" + entry.getImageName();
+            rn = runResultName != null ? runResultName
+                    : ClusteringResultManager.safeResultName("yaml_" + entry.getImageName());
         }
         opts.put("resultName", rn);
 
@@ -910,13 +957,9 @@ public final class YamlBatchOrchestrator {
                                                          Set<String> emittedComposition)
             throws IOException {
         ExportResult result = new ExportResult();
-        // Resolve saved result
+        // Throws when the result is missing or unreadable; the caller marks the image failed.
         var saved = qupath.ext.qpcat.service.ClusteringResultManager.loadSavedResult(
                 rp.getProject(), options.getResultName());
-        if (saved == null) {
-            result.addFailure(entry.getImageName() + ": no saved result '" + options.getResultName() + "'");
-            return result;
-        }
         Set<PlotKind> kinds = options.getPlotKinds();
         if (kinds == null || kinds.isEmpty()) {
             kinds = FigureExportScripts.matplotlibKinds();

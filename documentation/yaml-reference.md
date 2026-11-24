@@ -152,7 +152,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `embedding_seed` | int | `42` | Random seed for the embedding (UMAP / t-SNE / PCA). Mirrors the GUI **Random seed** spinner in the Clustering Algorithm section, which drives both the embedding and the stochastic algorithms. |
 | `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). Recorded in the audit log. |
 | `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
-| `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per-image. |
+| `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per image (`yaml_joint` with `joint: true`); characters a file name cannot hold are removed, and later steps read the result under that cleaned name. Set with per-image clustering of more than one image, it is refused (E025): each image would replace the last. |
 | `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
 | `pca_precursor` | boolean | `false` | Reduce features to principal components before embedding + clustering (the scanpy flow). Only engages when the feature count exceeds the component count (`PCA Precursor Components` preference, default 50); BANKSY is always exempt. Omitted means off, so a YAML written before this option existed keeps producing the clusters it always did. |
@@ -319,7 +319,7 @@ Dispatches into `BatchFigureExporter`. Skipped entirely if omitted or `enabled: 
 | `formats` | list[string] | `[png]` | One or more of `png`, `tiff`. |
 | `dpi` | int | `300` | Range `[72, 1200]`. |
 | `filename_pattern` | string | `{image}_{plot}.{ext}` | Tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain `{image}`, `{plot}`, `{ext}` (E012). |
-| `result_name` | string | -- (falls back to `clustering.result_name`) | Saved-result key to export from. |
+| `result_name` | string | -- (the result this run saved or loaded) | Saved-result key to export from. Left out: the result the clustering step just saved (or loaded with `reuse_saved`) for the image, else `yaml_<image>`. |
 | `overwrite_existing` | boolean | `false` | If `false`, fails on first existing file. |
 | `skip_missing_plots` | boolean | `true` | If `true`, missing plots are recorded as failures but the export continues. |
 
@@ -547,6 +547,7 @@ figure_export:
 - E022 A key repeated in the same block
 - E023 A name listed more than once in one list
 - E024 Two images in the resolved scope of one project share a name
+- E025 `clustering.result_name` set for per-image clustering of several images
 
 Warnings (non-fatal):
 
