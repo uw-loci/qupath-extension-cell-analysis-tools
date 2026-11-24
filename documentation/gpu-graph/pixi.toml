@@ -1,6 +1,6 @@
 # QP-CAT's optional RAPIDS environment for the GPU neighbor graph and Leiden (Linux and WSL2 only).
 # Install once:  pixi install --frozen   (in this folder; about 6 GB)
-# Then set Edit > Preferences > QP-CAT: Python environment > GPU graph and Leiden: Python to
+# Then set Edit > Preferences > QP-CAT: Python environment > GPU (RAPIDS): Python to
 #   <this folder>/.pixi/envs/default/bin/python
 # QP-CAT never installs, changes or removes this environment.
 [workspace]

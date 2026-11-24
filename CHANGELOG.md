@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **UMAP on the GPU.** With the **GPU (RAPIDS): Python** preference set, the Clustering dialog
+  (for any algorithm) and **Map cells in 2D...** offer **UMAP on the GPU (RAPIDS)**: cuML's UMAP
+  in the same RAPIDS environment as the GPU graph, as its own process, on the matrix and with the
+  settings the CPU UMAP uses (2D or 3D); cells with identical measurements share one point. The
+  *UMAP speed vs reproducibility* setting applies unchanged: seeded, the GPU layout repeats bit
+  for bit on one card (measured from 11,306 to 4 million cells); it is a different layout from the
+  CPU's. Measured on a 16 GB RTX 5060 Ti under WSL2 (25 features, `n_neighbors` 15): 1 million
+  cells in 35 s seeded or 28 s unseeded against 5.1 min for the CPU on 16 threads; 2 million in
+  1.9 min / 48 s against 8.7 min; 4 million in 6.5 min / 87 s. Any failure runs UMAP on the CPU
+  with a notification, and the run record's embedding `execution` line names the device (or
+  `cpu (gpu requested; <reason>)`). Batch files: `embedding_backend: gpu` on the `clustering`
+  block (W015 when the embedding is not UMAP). The pre-run check estimates the card and host
+  memory. The two GPU preferences are now named **GPU (RAPIDS): Python** and **GPU (RAPIDS):
+  scratch folder** (their keys are unchanged). Setup: *UMAP on the GPU*.
+
 - **Non-square pixels are reported in runs that measure distances.** Cellular neighborhoods,
   spatial statistics and clustering with spatial smoothing, BANKSY or spatial analysis note the
   images whose pixel width and height differ by more than 1 %, with both sizes, and say that

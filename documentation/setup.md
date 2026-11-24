@@ -30,9 +30,10 @@ After setup: **Edit > Preferences > QP-CAT: Python environment > Environment loc
 
 **Only the autoencoder and Harmony batch correction use a GPU through this variant.** Clustering,
 embedding, phenotyping, spatial statistics and cellular neighborhoods run on the CPU whatever
-hardware you have. The one optional exception is Leiden's neighbor graph and partition, which
-can run on the GPU in a separate RAPIDS environment you install yourself; see
-[Neighbor graph and Leiden on the GPU](#neighbor-graph-and-leiden-on-the-gpu).
+hardware you have. The two optional exceptions are Leiden's neighbor graph and partition, and
+UMAP, which can run on the GPU in a separate RAPIDS environment you install yourself; see
+[Neighbor graph and Leiden on the GPU](#neighbor-graph-and-leiden-on-the-gpu) and
+[UMAP on the GPU](#umap-on-the-gpu).
 
 | Variant | Installs on | GPU used for |
 |---|---|---|
@@ -112,8 +113,8 @@ and the labels come back the same way (about a second each way at 1 million cell
 
    | Preference | Value |
    |---|---|
-   | **GPU graph and Leiden: Python** | the environment's Python, `<folder>/.pixi/envs/default/bin/python`; on Windows the path inside WSL2, a plain absolute path with no spaces |
-   | **GPU graph and Leiden: scratch folder** | where the three hand-over files go; blank means `$TMPDIR` when set, else a folder beside the environment on Linux, and `~/.cache/qpcat-gpu` inside WSL2 on Windows |
+   | **GPU (RAPIDS): Python** | the environment's Python, `<folder>/.pixi/envs/default/bin/python`; on Windows the path inside WSL2, a plain absolute path with no spaces |
+   | **GPU (RAPIDS): scratch folder** | where the three hand-over files go; blank means `$TMPDIR` when set, else a folder beside the environment on Linux, and `~/.cache/qpcat-gpu` inside WSL2 on Windows |
 4. In **Find cell populations (clustering)...** with Leiden selected, tick **Neighbor graph and
    Leiden on the GPU (RAPIDS)**. The tick is remembered. The option only appears once the
    Python preference is set.
@@ -172,6 +173,65 @@ and the labels come back the same way (about a second each way at 1 million cell
   Compatibility.
 - Batch files: `graph_backend: gpu` on the `clustering` block ([YAML reference](yaml-reference.md)).
 
+### UMAP on the GPU
+
+With the same RAPIDS environment, UMAP can run on the GPU too: cuML's UMAP, for any clustering
+algorithm, and in **Explore & spatial > Map cells in 2D...**. It runs as its own process of the
+same script, through the same hand-over (on Windows inside WSL2, started through `wsl.exe` the same way),
+writes to the same `run.log`, and releases the card before clustering starts.
+
+- **Turning it on.** With the **GPU (RAPIDS): Python** preference set, the Dimensionality
+  Reduction section shows **UMAP on the GPU (RAPIDS)** under UMAP's `n_neighbors` and
+  `min_dist` (and Map cells in 2D shows it under its own UMAP settings). The tick is its own,
+  separate from the Leiden one, and remembered. Batch files: `embedding_backend: gpu` on the
+  `clustering` block.
+- **Same input, same settings.** The GPU gets the matrix the CPU UMAP would get (the
+  normalized measurements, or the PCA precursor's components when that is on) with the same
+  `n_neighbors`, `min_dist`, metric, dimensions (2D or 3D) and seed. Cells with identical
+  measurements are embedded once and share one point, as the GPU graph treats them.
+- **A different layout from the CPU's.** cuML and umap-learn are two implementations; the same
+  groups come out, placed differently. Compare GPU layouts with GPU layouts.
+- **Reproducibility.** *UMAP speed vs reproducibility* applies as on the CPU, with the same
+  rule. Seeded (*Reproducible*, or *Automatic* under 200,000 cells), cuML searches neighbors
+  exactly and optimizes deterministically, and the layout repeats bit for bit: measured
+  identical in repeat runs from 11,306 cells to 4 million, each in its own process (2D; 3D at
+  11,306, 20,000 and 100,000 cells). That holds on one card and RAPIDS version; another card
+  has not been compared. Unseeded (*Fast*, or *Automatic* from 200,000 cells), cuML uses
+  NN-descent above 50,000 cells for euclidean and cosine, and the layout differs from run to
+  run. On the GPU the seed is cheap where umap-learn's costs every core:
+
+  | Cells | CPU, *Fast* (16 threads) | GPU, seeded | GPU, unseeded | Card | Host RAM, GPU process |
+  |---|---|---|---|---|---|
+  | 500,000 | 2.3 min | 16 s | 17 s | 0.7 GB | 0.8-2.2 GB |
+  | 1,000,000 | 5.1 min | 35 s | 28 s | 1.0 GB | 1.3-3.0 GB |
+  | 2,000,000 | 8.7 min | 1.9 min | 48 s | 1.9 GB | 2.1-4.8 GB |
+  | 3,000,000 | not run | 3.8 min | 72 s | 2.9 GB | 2.0-6.7 GB |
+  | 4,000,000 | not run | 6.5 min | 87 s | 4.1 GB | 2.8-9.6 GB |
+
+  Measured 2026-11-24 on a 16 GB RTX 5060 Ti under WSL2 (19 GB), synthetic 8-blob cells by 25
+  features, `n_neighbors` 15, `min_dist` 0.1, 2D; times include the process start (about 7 s).
+  The seeded time grows with the square of the cell count (the exact search); the unseeded one
+  about linearly. Host RAM is highest unseeded, where cuML's NN-descent builds its graph in host
+  memory (about 2.2 KB per cell). The CPU arm was not run above 2 million cells: it needed
+  9 GB at 2 million, and 3 million would not have fit the RAM free. For scale, a working-group
+  member's runs of QP-CAT's CPU UMAP took 14.5 min for about 5 million cells x 13 markers on
+  native Linux and 15.9 min for about 4 million x 10 under WSL2.
+- **Quality.** On those blobs every arm separated the 8 groups (15-nearest-neighbor vote of
+  the group in the embedding: 100 %) with trustworthiness 0.948-0.949 on a 10,000-cell
+  subsample, CPU and GPU alike. On the 11,306-cell synthetic ground-truth set (8 cell types, 21
+  measurements): trustworthiness 0.965 on the GPU against 0.968 on the CPU, cell type
+  recovered by a 15-neighbor vote 99.96 % on both, and 67 % of each cell's 15 nearest
+  neighbors kept against 43 % (much of that difference is the 2,903 cells with identical
+  measurements, which the GPU places on one point and the CPU spreads).
+- The pre-run check estimates the card (0.3 GB plus about 950 bytes per cell at `n_neighbors`
+  15) and the host memory (seeded about 1.5 GB plus 550 bytes per cell, unseeded about 1 GB
+  plus 2.2 KB per cell), and warns when either is close to the limit.
+- If the process cannot run, UMAP runs on the CPU, a notification says why, and the run record's
+  embedding `execution` line starts `cpu (gpu requested; ...)`. A GPU run records the card, the
+  cuML version, seeded or not, the neighbor search and whether the layout repeats, for example
+  `gpu (NVIDIA GeForce RTX 5060 Ti on Linux; cuML 26.10.00; seeded, exact neighbor search,
+  repeats run to run on one card)`; the run summary ends with "UMAP on the GPU.".
+
 ### What a GPU actually accelerates
 
 | Operation | Device |
@@ -180,14 +240,14 @@ and the labels come back the same way (about a second each way at 1 million cell
 | Autoencoder, measurement mode | GPU, marginally. The network is small. |
 | Harmony batch correction | **GPU** in the GPU variant, when the run's cells fit in the card's free memory. Otherwise CPU, and the log and the run record say so. The GPU and the CPU can converge after different iteration counts, so the run record names the device. The opt-in harmonypy 2.1.0 (see [Harmony version](../README.md#batch-correction-harmony)) always runs on the CPU. |
 | Leiden: the neighbor graph and the partition | **GPU, optional**, through a RAPIDS environment you install yourself; see [Neighbor graph and Leiden on the GPU](#neighbor-graph-and-leiden-on-the-gpu). Everything after the partition (PAGA, marker ranking, plots) stays on the CPU. |
+| UMAP | **GPU, optional**, cuML in the same RAPIDS environment, for any clustering algorithm and in **Map cells in 2D...**; see [UMAP on the GPU](#umap-on-the-gpu). t-SNE and PCA stay on the CPU. |
 | KMeans, HDBSCAN, GMM, agglomerative | CPU. No GPU code path exists. |
-| BANKSY, UMAP | CPU. pybanksy and umap-learn are CPU-only. |
+| BANKSY | CPU. pybanksy is CPU-only. |
 | Spatial statistics, cellular neighborhoods | CPU. Permutation tests are CPU-bound. |
 | Phenotyping | CPU. Threshold arithmetic. |
 
-UMAP and permutation statistics have GPU implementations elsewhere (RAPIDS `cuml`, `cugraph`).
-The neighbor graph is the exception, covered by the Leiden row above. Adopting any of the
-others is tracked internally; nothing is promised here beyond the table.
+Permutation statistics have GPU implementations elsewhere (RAPIDS `cugraph`, among others).
+Adopting them is tracked internally; nothing is promised here beyond the table.
 
 ### "I have a GPU but it is not being used"
 

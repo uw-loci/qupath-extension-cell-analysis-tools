@@ -154,7 +154,8 @@ with the same `n_neighbors` and seed and the same set of distinct rows (identica
 collapsed before the search), and on one machine a reused graph is identical to a rebuilt
 one. Only CPU-built graphs are kept: a run with the GPU graph ticked always rebuilds, so its
 labels always come from cuGraph. The embedding is reused on the same terms, for any algorithm, so a run that
-changes only k or the clustering method reuses it too.
+changes only k or the clustering method reuses it too; a GPU UMAP is reused only by a run that
+asks for the GPU, a CPU UMAP only by one that does not.
 
 What it costs is memory. The Leiden neighbor graph is about 0.6 KB per cell at
 `n_neighbors` 50 (about 180 MB at 300,000 cells), and QP-CAT keeps at most a tenth of this
@@ -197,7 +198,8 @@ This is the only group where running the same thing twice can give you a differe
 | Setting | Where | Effect |
 |---|---|---|
 | **Random seed (clustering + embedding)** | Run Clustering > **Clustering Algorithm** | One seed for the whole run: the embedding *and* the stochastic algorithms (KMeans, MiniBatch KMeans, GMM, Leiden, BANKSY). Leiden is the default, so this normally decides whether your cluster assignments repeat. Default 42. Grayed out only when the algorithm is deterministic (HDBSCAN, Agglomerative) **and** no embedding is being computed. |
-| **UMAP speed vs reproducibility** | Run Clustering > Dimensionality Reduction > Advanced | *Automatic (seed under 200,000 cells)* (default; YAML `auto`) pins the seed below 200,000 cells and uses every core above it. *Reproducible (always seeded, 1 core)* (`reproducible`) always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. *Fast (all cores, layout varies)* (`fast`) never pins it. |
+| **UMAP speed vs reproducibility** | Run Clustering > Dimensionality Reduction > Advanced | *Automatic (seed under 200,000 cells)* (default; YAML `auto`) pins the seed below 200,000 cells and uses every core above it. *Reproducible (always seeded, 1 core)* (`reproducible`) always pins the seed -- **6-8x slower on 16 cores**, because umap-learn disables all parallelism the moment a `random_state` is supplied. *Fast (all cores, layout varies)* (`fast`) never pins it. With **UMAP on the GPU (RAPIDS)** ticked the same rule decides cuML's seed: seeded, the GPU layout repeats bit for bit run to run on one card and RAPIDS version (measured from 11,306 to 4 million cells), and costs far less than on the CPU (35 s against 28 s unseeded at 1 million cells, 6.5 min against 87 s at 4 million); unseeded, cuML's approximate NN-descent search makes it differ between runs. A GPU layout is never the CPU's. See [UMAP on the GPU](setup.md#umap-on-the-gpu). |
+| **UMAP on the GPU (RAPIDS)** | Run Clustering > Dimensionality Reduction (and Map cells in 2D), shown once the GPU (RAPIDS) Python preference is set | Repeatable as above, but not comparable to a CPU UMAP of the same settings: two implementations place the same groups differently. The run record's embedding `execution` line names the device, seeded or not, and whether the layout repeats; a run that fell back to the CPU says `cpu (gpu requested; <reason>)`. |
 
 Re-run with a different seed and compare. A boundary that moves when only the seed changes is
 not supported by the data at this resolution; a boundary that does not move is not proven
@@ -257,7 +259,9 @@ environment you install yourself (see [Neighbor graph and Leiden on the GPU](set
 The GPU path builds a different graph from the CPU path: an exact search up to 400,000 cells,
 which repeats with the same seed, and NN-descent above, which does not (two runs on the
 synthetic ground-truth set agree at ARI 0.83). The run summary's graph note says which search
-ran and whether it repeats. Other
+ran and whether it repeats. UMAP can run in the same environment
+([UMAP on the GPU](setup.md#umap-on-the-gpu)): seeded it repeats exactly and is quick, which
+removes most of the speed reason to choose *Fast*. Other
 clustering and spatial statistics do not use a GPU, so the GPU environment variant costs a
 several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
 

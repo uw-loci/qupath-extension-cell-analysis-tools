@@ -138,7 +138,8 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `banksy_lambda` | double | `0.2` | BANKSY only. |
 | `banksy_k_geom` | int | `15` | BANKSY only. |
 | `missing_values` | string | `exclude_objects` | What to do with an object lacking a value for a selected measurement: `exclude_objects` (left out, stays unclassified, counted), `exclude_measurements` (the measurements with a gap are left out, every object stays) or `impute` (the column median, the pre-0.25.0 behavior). See [clustering.md](clustering.md#objects-with-missing-measurements). |
-| `graph_backend` | string | `cpu` | Leiden only. `gpu` builds the neighbor graph and runs Leiden in the RAPIDS process set up in [Setup](setup.md#neighbor-graph-and-leiden-on-the-gpu); the **GPU graph and Leiden: Python** preference must be set on the machine running the batch, or the run falls back to `cpu` with the reason in the log. |
+| `graph_backend` | string | `cpu` | Leiden only. `gpu` builds the neighbor graph and runs Leiden in the RAPIDS process set up in [Setup](setup.md#neighbor-graph-and-leiden-on-the-gpu); the **GPU (RAPIDS): Python** preference must be set on the machine running the batch, or the run falls back to `cpu` with the reason in the log. |
+| `embedding_backend` | string | `cpu` | UMAP only, any algorithm. `gpu` runs UMAP with cuML in the same RAPIDS environment ([Setup](setup.md#umap-on-the-gpu)); the **GPU (RAPIDS): Python** preference must be set on the machine running the batch, or UMAP runs on the CPU with the reason in the log and in the run record's embedding `execution` line. `embedding_execution_mode` applies as on the CPU. Any other value is refused (E005); `gpu` with another `embedding` warns (W015) and runs that embedding on the CPU. |
 | `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99` (the same as `percentile`), any case. Also used by `phenotyping`. `log1p` is refused (E005): there is no log transform. |
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
@@ -150,7 +151,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `tsne_iterations` | int | `1000` | t-SNE only. Max optimization steps (typical 1,000-5,000). |
 | `tsne_early_exaggeration` | double | `12.0` | t-SNE only. Typical 4-12. |
 | `embedding_seed` | int | `42` | Random seed for the embedding (UMAP / t-SNE / PCA). Mirrors the GUI **Random seed** spinner in the Clustering Algorithm section, which drives both the embedding and the stochastic algorithms. |
-| `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). Recorded in the audit log. |
+| `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). With `embedding_backend: gpu` the same rule decides the GPU's seed: seeded, a GPU layout repeats run to run on one card. Recorded in the audit log. |
 | `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
 | `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per image (`yaml_joint` with `joint: true`); characters a file name cannot hold are replaced with `_` (deleted before 0.26.0), and later steps read the result under that cleaned name. Set with per-image clustering of more than one image, it is refused (E025): each image would replace the last. |
 | `overwrite_existing` | boolean | `false` | What happens when a saved result of that name already exists (from an earlier run of the same file, say). `false`: the image's clustering is refused before it runs, with a message naming the result. `true`: the new result replaces it. Before 0.26.0 it was always replaced, silently. |
@@ -596,6 +597,7 @@ Warnings (non-fatal):
 - W012 `phenotyping.llm_explainer.enabled` is never run by the batch
 - W013 `clustering.type: louvain` runs Leiden
 - W014 A note about the data the run reads (tiles analyzed as cells, cells pooled across z-slices or time points, measurement names that differ only in case or spaces, a class spelled like "Unclassified", ...). Printed in the dry run, and again by the run after each clustering and phenotyping step (`W014 clustering: ...`, `W014 phenotyping: ...`); the clustering notes are also saved with the result
+- W015 `clustering.embedding_backend: gpu` with an `embedding` other than `umap` (that embedding runs on the CPU)
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
 
@@ -608,7 +610,7 @@ scope:
 clustering:
   type: LEIDEN
   resolution: 0.5
-  graph_backend: gpu        # needs the GPU graph and Leiden: Python preference on this machine
+  graph_backend: gpu        # needs the GPU (RAPIDS): Python preference on this machine
 phenotyping:
   enabled: true
   rules:
