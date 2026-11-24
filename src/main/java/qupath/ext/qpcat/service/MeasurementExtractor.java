@@ -88,13 +88,13 @@ public class MeasurementExtractor {
             int affected = missingPerMeasurement.size();
             switch (missingPolicy) {
                 case EXCLUDE_OBJECTS:
-                    return excludedObjects + " object(s) excluded for a missing value in "
+                    return excludedObjects + " object(s) excluded for a missing or infinite value in "
                             + affected + " selected measurement(s): " + missingPerMeasurement.keySet();
                 case EXCLUDE_MEASUREMENTS:
-                    return excludedMeasurements.size() + " measurement(s) with missing values left out, "
+                    return excludedMeasurements.size() + " measurement(s) with missing or infinite values left out, "
                             + "every object kept: " + excludedMeasurements;
                 default:
-                    return "missing values in " + affected + " selected measurement(s) replaced by the "
+                    return "missing or infinite values in " + affected + " selected measurement(s) replaced by the "
                             + "column median: " + missingPerMeasurement;
             }
         }
@@ -320,7 +320,7 @@ public class MeasurementExtractor {
     }
 
     /**
-     * Counts, per measurement, the objects that lack a value (absent or NaN), and
+     * Counts, per measurement, the objects that lack a value (absent, NaN or infinite), and
      * the objects lacking at least one. Only measurements with a missing value
      * appear in the map, in the order given.
      *
@@ -339,7 +339,7 @@ public class MeasurementExtractor {
             boolean any = false;
             for (String m : measurements) {
                 Number v = ml.get(m);
-                if (v == null || Double.isNaN(v.doubleValue())) {
+                if (lacks(v)) {
                     per.merge(m, 1, Integer::sum);
                     any = true;
                 }
@@ -380,9 +380,9 @@ public class MeasurementExtractor {
                     (report.perMeasurement().containsKey(n) ? dropped : kept).add(n);
                 }
                 if (kept.isEmpty()) {
-                    throw new IllegalArgumentException("Every selected measurement has a missing value "
+                    throw new IllegalArgumentException("Every selected measurement has a missing or infinite value "
                             + "on some object, so excluding those measurements leaves nothing to run on. "
-                            + "Exclude the objects instead, or replace the missing values.");
+                            + "Exclude the objects instead, or replace those values.");
                 }
                 logger.warn("Policy {}: leaving out {} measurement(s): {}", missingPolicy, dropped.size(), dropped);
                 return new Applied(detections, kept.toArray(new String[0]), segments, 0,
@@ -406,9 +406,9 @@ public class MeasurementExtractor {
                     newSegments.add(new ImageSegment(seg.getImageEntry(), seg.getImageData(), start, kept.size()));
                 }
                 if (kept.isEmpty()) {
-                    throw new IllegalArgumentException("Every object lacks a value for a selected "
+                    throw new IllegalArgumentException("Every object lacks a finite value for a selected "
                             + "measurement, so excluding them leaves nothing to run on. Deselect the "
-                            + "measurements with missing values, or replace the missing values.");
+                            + "measurements with missing or infinite values, or replace those values.");
                 }
                 logger.warn("Policy {}: leaving out {} object(s); {} remain", missingPolicy,
                         report.objectsWithMissing(), kept.size());
@@ -427,9 +427,14 @@ public class MeasurementExtractor {
         var ml = det.getMeasurements();
         for (String n : names) {
             Number v = ml.get(n);
-            if (v == null || Double.isNaN(v.doubleValue())) return true;
+            if (lacks(v)) return true;
         }
         return false;
+    }
+
+    /** True for a value the run cannot use: absent, NaN or infinite (issue #29 treats all three alike). */
+    private static boolean lacks(Number v) {
+        return v == null || !Double.isFinite(v.doubleValue());
     }
 
     private static void record(ExtractionResult result, MissingPolicy policy, Applied applied) {
@@ -471,13 +476,12 @@ public class MeasurementExtractor {
             var ml = det.getMeasurements();
             for (int j = 0; j < measurementNames.length; j++) {
                 Number val = ml.get(measurementNames[j]);
-                if (val != null && !Double.isNaN(val.doubleValue())) {
+                if (!lacks(val)) {
                     data[i][j] = val.doubleValue();
                 } else {
-                    // Leave missing values as NaN so the Python side imputes them
-                    // per-column median (run_clustering.py / embed_3d.py both do).
-                    // Filling 0.0 here injected a fake extreme value that biased
-                    // normalization and clustering.
+                    // Absent, NaN and infinite all travel as NaN, which the worker
+                    // imputes only under the IMPUTE policy (the other policies have
+                    // already removed them). 0.0 here would be a fake extreme value.
                     data[i][j] = Double.NaN;
                     missing++;
                 }
@@ -485,7 +489,7 @@ public class MeasurementExtractor {
         }
 
         if (missing > 0) {
-            logger.warn("Left {} missing measurement value(s) as NaN for downstream "
+            logger.warn("Left {} missing or infinite measurement value(s) as NaN for downstream "
                     + "per-column median imputation", missing);
         }
 

@@ -53,7 +53,10 @@ Inputs (injected by Appose 0.10.0):
 
 Outputs (via task.outputs):
   neighborhood_labels: NDArray (N_cells,) int32 -- CN id per cell (0..N-1)
-  n_neighborhoods: int -- actual number of neighborhoods produced
+  n_neighborhoods: int -- actual number of neighborhoods produced (labels are
+                    0..n_neighborhoods-1 with no empty id, which can be fewer than
+                    requested; "notes" then says so)
+  notes: str (JSON list) -- sentences the dialog shows about this run
   neighborhood_counts: str (JSON) -- {cn_id: n_cells}
   composition_json: str (JSON) -- {class_names, mean_composition[CN][class]}
   enrichment_json: str (JSON) -- {class_names, log2_enrichment[CN][class]}
@@ -75,6 +78,37 @@ logger = logging.getLogger("qpcat.cellular_neighborhoods")
 
 import numpy as np
 from appose import NDArray as PyNDArray
+
+
+def compact_labels(raw_labels):
+    """Renumber k-means labels to 0..m-1 over the ids actually used, keeping their order.
+
+    k-means returns fewer clusters than asked when the windows hold fewer
+    distinct composition vectors than that; the unused ids would otherwise be
+    empty neighborhoods with zero composition.
+
+    :return: (labels as int32, m)
+    """
+    raw = np.asarray(raw_labels, dtype=np.int64)
+    found = np.unique(raw)
+    remap = np.full(int(found.max()) + 1 if found.size else 1, -1, dtype=np.int64)
+    remap[found] = np.arange(found.size)
+    return remap[raw].astype(np.int32), int(found.size)
+
+
+def fewer_neighborhoods_note(found, requested, distinct_windows):
+    """What the user is told when k-means produced fewer neighborhoods than requested."""
+    return (
+        "%d neighborhood(s) were found, not the %d requested: the windows hold only %d "
+        "distinct cell-type mixture(s), so k-means could not form more. The results "
+        "list the %d found. Use more cell types, a larger window, or fewer neighborhoods."
+        % (found, requested, distinct_windows, found)
+    )
+
+
+# What the user has to know about this run, shown by the Cellular Neighborhoods
+# dialog (task output "notes").
+cn_notes = []
 
 # 1. Load inputs
 report_progress(task, "Loading cell positions and types...")
@@ -212,6 +246,7 @@ def _radius_px_for(image_index):
 
 
 # n_cn cannot exceed the number of cells; k handled per-image below.
+requested_cn = max(1, n_cn)
 n_cn = max(1, min(n_cn, n_cells))
 
 # Distinct analysis units -- areas when supplied, otherwise images.
@@ -388,10 +423,21 @@ else:
 report_progress(task, "Clustering windows into %d neighborhoods..." % n_cn)
 from sklearn.cluster import KMeans
 
+import warnings
+
 km = KMeans(n_clusters=n_cn, random_state=rng_seed, n_init=10)
-cn_labels = km.fit_predict(composition).astype(np.int32)
-actual_cn = int(len(np.unique(cn_labels)))
-logger.info("Produced %d cellular neighborhoods", actual_cn)
+with warnings.catch_warnings():
+    # "Number of distinct clusters found smaller than n_clusters": reported below.
+    warnings.simplefilter("ignore")
+    raw_cn_labels = km.fit_predict(composition)
+cn_labels, n_cn = compact_labels(raw_cn_labels)
+if n_cn < requested_cn:
+    cn_notes.append(
+        fewer_neighborhoods_note(
+            n_cn, requested_cn, int(np.unique(composition, axis=0).shape[0])
+        )
+    )
+logger.info("Produced %d cellular neighborhoods", n_cn)
 
 # 5. Summaries: per-CN mean composition + log2 enrichment over the global
 #    cell-type frequencies (the canonical Schurch-style CN x cell-type plot).
@@ -441,6 +487,10 @@ def _save_heatmap(
         return path
     except Exception as e:
         logger.warning("Failed to render heatmap %s: %s", fname, e)
+        cn_notes.append(
+            "The heatmap %s could not be drawn (%s); the tables have the numbers."
+            % (fname, type(e).__name__)
+        )
         return ""
 
 
@@ -701,6 +751,10 @@ try:
         )
 except Exception as e:
     logger.warning("Neighborhood adjacency failed: %s", e)
+    cn_notes.append(
+        "The neighborhood adjacency table could not be computed (%s: %s)."
+        % (type(e).__name__, e)
+    )
 
 # 8. Package outputs.
 report_progress(task, "Packaging results...")
@@ -722,5 +776,8 @@ task.outputs["group_proportions_json"] = group_json
 task.outputs["group_heatmap_path"] = group_heatmap_path
 task.outputs["region_adjacency_json"] = region_adjacency_json
 task.outputs["region_adjacency_heatmap_path"] = region_adjacency_heatmap_path
+task.outputs["notes"] = json.dumps(cn_notes)
+for _note in cn_notes:
+    logger.warning("Cellular neighborhoods: %s", _note)
 
 logger.info("Cellular-neighborhood results packaged")

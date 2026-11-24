@@ -571,8 +571,15 @@ if use_tiles:
     data = None
     n_markers = 0
 else:
+    refuse_duplicate_names(marker_names)
     data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
     data = data.astype(np.float32)
+    require_finite(
+        data,
+        "The float32 conversion of the measurements",
+        list(marker_names),
+        reason=FLOAT32_RANGE_REASON,
+    )
     n_cells, n_markers = data.shape
     raw_tiles = None
     img_channels = 0
@@ -873,6 +880,11 @@ if use_tiles:
                 tile_measurements.ndarray(), context="tile measurement"
             )
             tile_meas_data = tile_meas_data.astype(np.float32)
+            require_finite(
+                tile_meas_data,
+                "The float32 conversion of the tile measurements",
+                reason=FLOAT32_RANGE_REASON,
+            )
             n_tile_measurements = tile_meas_data.shape[1]
             tile_meas_mean = tile_meas_data.mean(axis=0)
             tile_meas_std = tile_meas_data.std(axis=0)
@@ -1311,9 +1323,14 @@ np.copyto(conf_nd.ndarray(), pred_conf)
 task.outputs["prediction_confidence"] = conf_nd
 
 task.outputs["n_classes"] = n_classes
-task.outputs["final_recon_loss"] = float(avg_recon)
-task.outputs["final_class_accuracy"] = float(accuracy) if has_labels else -1.0
-task.outputs["best_val_accuracy"] = float(best_val_acc) if best_val_acc >= 0 else -1.0
+# A direct float output travels as a bare JSON number, and NaN is not one.
+task.outputs["final_recon_loss"] = finite_json(float(avg_recon))
+task.outputs["final_class_accuracy"] = (
+    float(accuracy) if has_labels and np.isfinite(accuracy) else -1.0
+)
+task.outputs["best_val_accuracy"] = (
+    float(best_val_acc) if np.isfinite(best_val_acc) and best_val_acc >= 0 else -1.0
+)
 task.outputs["best_epoch"] = int(best_epoch + 1)
 task.outputs["active_units"] = n_active
 task.outputs["model_state_base64"] = model_b64

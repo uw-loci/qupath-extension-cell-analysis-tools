@@ -13,7 +13,7 @@ from conftest import load_script_symbol
 
 @pytest.fixture(scope="module")
 def require_finite():
-    return load_script_symbol("run_clustering.py", "require_finite", {"np": np})
+    return load_script_symbol("model_utils.py", "require_finite", {"np": np})
 
 
 def test_finite_input_passes_quietly(require_finite):

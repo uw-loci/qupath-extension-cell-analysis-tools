@@ -56,14 +56,41 @@ def _flag(name, default=False):
         return default
 
 
-def _sanitize(obj):
-    if isinstance(obj, dict):
-        return {k: _sanitize(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_sanitize(v) for v in obj]
-    if isinstance(obj, float):
-        return obj if np.isfinite(obj) else None
-    return obj
+def drop_untestable_columns(feats, names):
+    """Drop columns whose spread is zero or not finite; returns (feats, names, dropped).
+
+    feats and names come back as None when no column is left.
+    """
+    col_std = np.nanstd(feats, axis=0)
+    good = np.isfinite(col_std) & (col_std > 0)
+    names = (
+        list(names)
+        if names is not None
+        else ["column %d" % i for i in range(feats.shape[1])]
+    )
+    dropped = [n for n, keep in zip(names, good) if not keep]
+    feats = feats[:, good]
+    names = [n for n, keep in zip(names, good) if keep]
+    if feats.shape[1] == 0:
+        return None, None, dropped
+    return feats, names, dropped
+
+
+def dropped_columns_note(dropped, none_left, max_named=6):
+    """The note for measurements Moran's I and Geary's C cannot test."""
+    shown = ", ".join(dropped[:max_named])
+    if len(dropped) > max_named:
+        shown += " and %d more" % (len(dropped) - max_named)
+    head = (
+        "Every selected measurement"
+        if none_left
+        else "%d measurement(s)" % len(dropped)
+    )
+    return (
+        "%s left out of Moran's I and Geary's C, because the value does not vary "
+        "across these cells (or is not finite), so the statistic is undefined: %s."
+        % (head, shown)
+    )
 
 
 # 1. Load inputs
@@ -98,43 +125,33 @@ for s in dict.fromkeys(label_strs):
         categories.append(s)
 n_label_classes = len(categories)
 
-# Optional feature matrix (for Geary's C / Moran's I).
+# Optional feature matrix (for Geary's C / Moran's I). Notes about it are
+# collected here and recorded after reset_notes() below, which would erase them.
+feature_notes = []
 try:
     feats = feature_matrix.ndarray().astype(np.float64, copy=True)
     if feats.shape[0] != n_cells:
-        logger.warning(
-            "feature_matrix rows (%d) != n_cells (%d); ignoring",
-            feats.shape[0],
-            n_cells,
+        # A QP-CAT defect, not the user's data: the Java side extracts one row
+        # per cell. Refuse rather than test measurements against the wrong cells.
+        raise ValueError(
+            "feature_matrix has %d rows for %d cells" % (feats.shape[0], n_cells)
         )
-        feats = None
 except NameError:
     feats = None
 try:
     mnames = list(marker_names)
 except NameError:
     mnames = None
+refuse_duplicate_names(mnames)
+features_selected = feats is not None and feats.shape[1] > 0
 
 # Drop zero-variance feature columns: Geary's C / Moran's I are undefined (0/0)
 # on a constant vector, which is common in small windows or when one class
 # dominates. Keep marker names aligned with the surviving columns.
 if feats is not None:
-    col_std = np.nanstd(feats, axis=0)
-    good = np.isfinite(col_std) & (col_std > 0)
-    if not np.all(good):
-        dropped = int((~good).sum())
-        logger.warning(
-            "Dropping %d zero-variance / non-finite feature column(s) before "
-            "spatial autocorrelation",
-            dropped,
-        )
-        feats = feats[:, good]
-        if mnames is not None:
-            mnames = [m for m, keep in zip(mnames, good) if keep]
-    if feats.shape[1] == 0:
-        logger.warning("No usable feature columns remain; Geary/Moran will be skipped.")
-        feats = None
-        mnames = None
+    feats, mnames, dropped_names = drop_untestable_columns(feats, mnames)
+    if dropped_names:
+        feature_notes.append(dropped_columns_note(dropped_names, feats is None))
 
 # Graph parameters.
 try:
@@ -215,6 +232,8 @@ import spatial_stats as _spatial
 # Long-lived worker, and runWindows loops over every window in one process, so
 # without this a note from one window reappears in the next one's results.
 _spatial.reset_notes()
+for _note in feature_notes:
+    _spatial.note_for_user(_note)
 
 if feats is not None:
     X = feats.astype(np.float32, copy=False)
@@ -283,12 +302,18 @@ if want_nhood:
             plt.close("all")
             plot_paths["nhood_enrichment"] = p
         except Exception as e:
-            logger.warning("Failed to draw the neighborhood enrichment heatmap: %s", e)
+            _spatial.note_for_user(
+                "The neighborhood enrichment heatmap could not be drawn.",
+                detail="%s: %s" % (type(e).__name__, e),
+            )
 
 if want_moran:
     if feats is None or mnames is None:
         _spatial.note_for_user(
-            "Moran's I did not run because no measurements were selected to "
+            "Moran's I did not run because no measurement was left to test (see "
+            "above), so there is no Spatial Autocorrelation tab."
+            if features_selected
+            else "Moran's I did not run because no measurements were selected to "
             "test, so there is no Spatial Autocorrelation tab."
         )
     else:
@@ -326,7 +351,13 @@ if want_ripley:
 
 if want_geary:
     if feats is None or mnames is None:
-        logger.warning("Geary's C requested but no feature matrix supplied; skipping.")
+        _spatial.note_for_user(
+            "Geary's C did not run because no measurement was left to test (see "
+            "above), so there is no Geary's C tab."
+            if features_selected
+            else "Geary's C did not run because no measurements were selected to "
+            "test, so there is no Geary's C tab."
+        )
     else:
         report_progress(task, "Computing Geary's C (%d permutations)..." % n_perms)
         _spatial.run_geary_c(

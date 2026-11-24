@@ -123,6 +123,16 @@ public class CellularNeighborhoodWorkflow {
         public String getHeatmapPath() { return heatmapPath; }
         public String getRunId() { return runId; }
         public String getParamsHash() { return paramsHash; }
+
+        private List<String> notes = List.of();
+
+        /** What the run says about the data (e.g. fewer neighborhoods found than requested). */
+        public List<String> getNotes() { return notes; }
+
+        CnResult withNotes(List<String> n) {
+            this.notes = n == null ? List.of() : List.copyOf(n);
+            return this;
+        }
     }
 
     /** Immutable summary returned for a joint multi-image (cohort) run. */
@@ -180,6 +190,16 @@ public class CellularNeighborhoodWorkflow {
         public String getRegionAdjacencyJson() { return regionAdjacencyJson; }
         /** Non-null when scope images do not share the same cell-type class set. */
         public String getDivergenceWarning() { return divergenceWarning; }
+
+        private List<String> notes = List.of();
+
+        /** What the run says about the data (e.g. fewer neighborhoods found than requested). */
+        public List<String> getNotes() { return notes; }
+
+        CnProjectResult withNotes(List<String> n) {
+            this.notes = n == null ? List.of() : List.copyOf(n);
+            return this;
+        }
         public String getRunId() { return runId; }
         public String getParamsHash() { return paramsHash; }
     }
@@ -313,7 +333,8 @@ public class CellularNeighborhoodWorkflow {
                        "params_hash", paramsHash),
                 completeMsg, elapsed);
 
-        return new CnResult(true, actualCn, nCells, countsJson, heatmapPath, runId, paramsHash);
+        return new CnResult(true, actualCn, nCells, countsJson, heatmapPath, runId, paramsHash)
+                .withNotes(notesOf(resultMap));
     }
 
     /** A project image loaded for a joint CN run: entry, data, detections. */
@@ -630,11 +651,37 @@ public class CellularNeighborhoodWorkflow {
         return new CnProjectResult(true, actualCn, totalCells, loaded.size(),
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
                 adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
-                divergenceWarning, runId, paramsHash);
+                divergenceWarning, runId, paramsHash).withNotes(notesOf(resultMap));
         } finally {
             // Close every ImageData we read ourselves; leave the live open image alone.
             closeLoaded(loaded);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> notesOf(Map<String, Object> resultMap) {
+        Object n = resultMap.get("notes");
+        return n instanceof List<?> ? (List<String>) n : List.of();
+    }
+
+    /**
+     * The script's "notes" output (a JSON list of sentences), each logged at WARN.
+     *
+     * @param raw the output value, or null when the script sent none
+     * @return the sentences; empty when there are none
+     */
+    static List<String> parseNotes(Object raw) {
+        List<String> notes = new ArrayList<>();
+        if (raw == null) return notes;
+        try {
+            for (var e : JsonParser.parseString(String.valueOf(raw)).getAsJsonArray()) {
+                notes.add(e.getAsString());
+            }
+        } catch (Exception e) {
+            logger.warn("Could not read the cellular-neighborhood notes: {}", e.getMessage());
+        }
+        for (String note : notes) logger.warn("Cellular neighborhoods: {}", note);
+        return notes;
     }
 
     /** Build a human-readable warning if images do not share the same class set. */
@@ -923,6 +970,7 @@ public class CellularNeighborhoodWorkflow {
             result.put("n_neighborhoods", ((Number) task.outputs.get("n_neighborhoods")).intValue());
             result.put("counts", String.valueOf(task.outputs.get("neighborhood_counts")));
             result.put("heatmap_path", String.valueOf(task.outputs.getOrDefault("heatmap_path", "")));
+            result.put("notes", parseNotes(task.outputs.get("notes")));
             result.put("per_sample_json", String.valueOf(task.outputs.getOrDefault("per_sample_proportions_json", "")));
             result.put("per_sample_heatmap_path", String.valueOf(task.outputs.getOrDefault("per_sample_heatmap_path", "")));
             result.put("group_json", String.valueOf(task.outputs.getOrDefault("group_proportions_json", "")));

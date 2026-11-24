@@ -30,7 +30,10 @@ Outputs (via task.outputs):
     numbers, so the dialog can judge a cell as the run will); "gmm" (the two
     fitted components, lower mean first, when the fit succeeded, with
     "bic_components", the component count BIC prefers, "means3" when that
-    is 3, and "note" when it is not 2)
+    is 3, and "note" when it is not 2); "notes" (sentences the dialog shows
+    about this marker's data: infinite values left out, a constant marker, a
+    method that could not be fitted). A marker with too few finite values
+    gets only {"skipped": true, "notes": [...]}, never silently nothing.
 """
 
 import importlib.util
@@ -236,10 +239,18 @@ task.update("Loading measurements for threshold computation...")
 # HERE before any arithmetic. Doing the maths in float32 would change
 # results -- normalization and the distribution fits below are sensitive
 # to it -- which is exactly the regression this upcast exists to prevent.
+refuse_duplicate_names(marker_names)
 data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Computing thresholds for %d cells x %d markers", n_cells, n_markers)
 
+# An infinite value is missing, as on the Java side: masked to NaN BEFORE the
+# normalization, so it moves no statistic and percentile clipping cannot turn
+# +Inf into a valid value at the top of the range. Counted per marker for the
+# note the dialog shows.
+n_infinite = np.isinf(data).sum(axis=0)
+if n_infinite.any():
+    data[np.isinf(data)] = np.nan
 df = pd.DataFrame(data, columns=marker_names)
 
 # 2. Normalize (model_utils.normalization_params, as run_phenotyping.py gates)
@@ -309,34 +320,54 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
     for i, marker in enumerate(list(marker_names)):
         values = df_norm.iloc[:, i].values
         valid = values[np.isfinite(values)]
+        notes = []
+        if n_infinite[i]:
+            notes.append(
+                "%d cell(s) had an infinite value; they are left out of the "
+                "histogram, the normalization and the fits." % int(n_infinite[i])
+            )
 
         if len(valid) < MIN_VALID:
-            logger.warning(
-                "Marker '%s' has too few valid values (%d), skipping",
-                marker,
-                len(valid),
+            notes.append(
+                "only %d cell(s) have a finite value (at least %d are needed), so "
+                "there is no histogram and no automatic threshold."
+                % (len(valid), MIN_VALID)
             )
+            logger.warning("Marker '%s': %s", marker, " ".join(notes))
+            result[marker] = {"skipped": True, "notes": notes}
             continue
 
         # Histogram
         counts, bin_edges = np.histogram(valid, bins=N_BINS)
         thresholds = {}
+        # Every cell has the same value: no threshold can split them, and a
+        # fit to a point mass returns whatever its initialization gave.
+        constant = bool(valid.min() == valid.max())
+        if constant:
+            notes.append(
+                "every cell has the same value (%.6g), so no automatic threshold "
+                "can separate positive from negative cells." % valid.min()
+            )
+
+        def failed(method, e):
+            logger.warning("%s threshold failed for '%s': %s", method, marker, e)
+            notes.append("the %s threshold could not be fitted (%s)." % (method, e))
 
         # Triangle method (skimage)
-        if has_triangle:
+        if has_triangle and not constant:
             logger.info("Marker %d/%d '%s': triangle", i + 1, n_markers, marker)
             try:
                 t = triangle_threshold(valid)
                 t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
                 thresholds["triangle"] = round(t, 4)
             except Exception as e:
-                logger.warning("Triangle threshold failed for '%s': %s", marker, str(e))
+                failed("triangle", e)
 
         # GMM (2-component Gaussian mixture); the threshold is the posterior-equal
         # crossing between the two means, not the mean midpoint. A note says when
         # BIC prefers 1 or 3 components; the gate does not move for it.
         fit = None
-        if has_gmm:
+        if has_gmm and not constant:
             logger.info("Marker %d/%d '%s': Gaussian mixture", i + 1, n_markers, marker)
             try:
                 fit = gmm_fit(valid, max_iter=GMM_MAX_ITER)
@@ -348,10 +379,10 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
                 t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
                 thresholds["gmm"] = round(t, 4)
             except Exception as e:
-                logger.warning("GMM threshold failed for '%s': %s", marker, str(e))
+                failed("GMM", e)
 
         # Gamma mixture (GammaGateR-inspired)
-        if has_gamma:
+        if has_gamma and not constant:
             logger.info("Marker %d/%d '%s': gamma", i + 1, n_markers, marker)
             try:
                 # Shift values to be strictly positive for gamma fitting
@@ -370,7 +401,7 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
                 t = max(float(bin_edges[0]), min(float(bin_edges[-1]), t))
                 thresholds["gamma"] = round(t, 4)
             except Exception as e:
-                logger.warning("Gamma threshold failed for '%s': %s", marker, str(e))
+                failed("gamma", e)
 
         result[marker] = {
             "counts": [int(c) for c in counts],
@@ -389,12 +420,14 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
         }
         if fit is not None:
             result[marker]["gmm"] = fit
+        if notes:
+            result[marker]["notes"] = notes
 
         if (i + 1) % 5 == 0:
             task.update("Computing thresholds... (%d/%d markers)" % (i + 1, n_markers))
 
 # 4. Package outputs
 task.update("Packaging threshold results...")
-task.outputs["histograms_json"] = json.dumps(result)
+task.outputs["histograms_json"] = json.dumps(finite_json(result))
 
 logger.info("Threshold computation complete for %d markers", len(result))

@@ -180,6 +180,111 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   smallest valid value (0.1, or 2 for perplexity). Saved configurations, preferences, batch files
   and scripts keep the same numbers (-1, or 0 for perplexity), so a saved configuration reopens
   with the box ticked and means what it meant.
+- **Spatial warnings that went only to the log now reach the results window.** A statistic
+  skipped because it would not fit in memory, neighborhood enrichment or co-occurrence that
+  failed, a figure that could not be saved, areas whose neighbor count was reduced to fit their
+  size (spatial graph, smoothing, BANKSY), BANKSY areas too small for a neighbor graph, and the
+  cellular-neighborhood heatmaps and adjacency table that could not be produced are now listed
+  with the results. The notes from spatial smoothing and BANKSY were also being cleared before
+  the results were assembled. If the connected-component count fails, every cell is no longer
+  put in component 0 for the `QPCAT component:` measurements, which read as one connected
+  piece of tissue.
+- **No invented lengths when every cell sits at one position.** With a radius graph on its
+  automatic radius, cells that were all at the same position (or one cell per area) got a
+  radius of 50 in whatever unit the coordinates were in, and co-occurrence fell back to distance
+  bins cut from the bounding box. Both now stop with a message saying why and what to change
+  (set the radius by hand, or use the k-nearest-neighbor graph); in a clustering run the
+  results window says that no spatial statistic was computed and why, where before only the log
+  did. Threshold, validation and autoencoder outputs can no longer carry a bare NaN, which is
+  not valid JSON.
+- **Spatial statistics on existing classes: the results window now says what was left out and
+  why.** Every note this workflow wrote (a statistic that did not run, measurements that could
+  not be tested) went only to the QuPath log; they now appear under "Not produced in this run".
+  Measurements that do not vary across the cells of an area were dropped from Moran's I and
+  Geary's C without a word, and when all of them were dropped the run said "no measurements
+  were selected to test", which was false; the note now names them. Since 0.25.0 a single cell
+  missing a value for any candidate measurement silently switched Moran's I and Geary's C off
+  for the whole area (the measurement table came back one row per complete cell, which no
+  longer matched the cell positions, and was ignored); now only the measurements with missing
+  or infinite values are left out, and they are named.
+- **Ripley's L no longer draws a "random" curve for a cluster too small to measure.** A
+  cluster with one or two cells (a rare imported label, a small area) gave an L curve and a
+  simulated-random band of zero, which the chart and the PNG center to the flat line that
+  reads as "spatially random". Clusters with fewer than 5 cells, or whose cells lie on one line
+  or at one point, now get no curve, and the results window names them. When Ripley's L
+  produces nothing at all, or produces nothing for some areas of a per-area run, the results
+  window now says so and why instead of only the log; per-area notes name their area. Earlier
+  Ripley charts showed such clusters as random.
+- **Two measurements with the same name are refused, and a figure that cannot be drawn says
+  why.** A batch file or an imported AnnData can list the same measurement name twice (or two
+  names that differ only in case or surrounding spaces). Results are listed by name, so the
+  second column's fold change, gate or threshold replaced the first's, and the dot plot,
+  matrix plot and stacked violin were refused by the plotting library with the error in the log
+  only. Every analysis now stops at the start with a message naming the clashing names. Any
+  clustering figure that fails for another reason (dot plot, matrix plot, PAGA graph, stacked
+  violin, embedding, neighborhood enrichment heatmap, spatial scatter) is now listed under "Not
+  produced in this run" with the reason, instead of being silently absent.
+- **A measurement named `cluster` no longer breaks a clustering run.** Clustering stored its
+  labels in a column called `cluster` next to the measurements, so a measurement of that name
+  (from a CSV import, for example) was overwritten and the run failed with a shape error after
+  the embedding and the clustering had already run, and the plots would have refused the name
+  as ambiguous. The labels are now kept apart from the measurements and the run, its plots and
+  its statistics treat `cluster` like any other measurement name.
+- **No made-up fold changes for measurements with negative values.** The marker rankings'
+  log2 fold change is a ratio of mean raw values, and negative values were silently set to 0
+  first, so a signed measurement (an imported z-score, a PCA axis, a background-subtracted
+  intensity, skewness) showed a fold change of 0 or about +-30 that meant nothing. Such a
+  measurement now has no fold change: the Marker Fingerprints bar and label show its Wilcoxon
+  score, its tooltip says the fold change is not available, and the results window names the
+  measurements. Fold changes from any earlier version for a measurement with negative values
+  were wrong.
+- **Cellular neighborhoods: no more empty neighborhoods reported as real.** When the windows
+  held fewer distinct cell-type mixtures than the number of neighborhoods asked for (two cell
+  types and a window of 5 give at most 6, against the default 10), k-means formed fewer groups,
+  but the results still listed the requested number: the extra neighborhoods had no cells, a
+  composition of zero and an enrichment of about -19 for every cell type, and that -19 set the
+  heatmap's color range so the real neighborhoods looked almost white. The neighborhoods found
+  are now numbered without gaps, the count reported is the count found, and the dialog says how
+  many were found against how many were requested. Earlier runs where this happened listed
+  empty neighborhoods and washed-out heatmaps; the labels on the cells were correct.
+- **Moran's I and Geary's C: a measurement with no statistic no longer gets the strongest
+  p-value in the table.** A measurement that is constant over the cells tested (common in a
+  small area, or a marker no cell expresses) has no Moran's I or Geary's C, yet its row showed
+  an empty statistic beside a p-value of about 0.0015 at 1,000 permutations, the permutation
+  floor. Its NaN also made the library's corrected z-score p-values NaN for every other
+  measurement, so the whole table fell back to the floor-bound permutation p-values, and the
+  caption could name a p-value column some rows did not use. Such a row now has no value and
+  no p-value, a note in the results window names the measurements, and the Benjamini-Hochberg
+  correction is redone over the measurements that do have a statistic, from one column whose
+  name the caption gives for every row. A Geary's C run or chart that fails now says so in the
+  results window instead of only in the log, and the post-hoc spatial CSV no longer loses every
+  Moran's I row when one of them is empty. Spatial autocorrelation tables from earlier versions
+  that included a constant measurement reported a false p-value for it, and floor-bound
+  p-values for the rest.
+- **Values too large for the arithmetic are refused, naming the measurement.** A measurement
+  holding a value around 1e154 or larger (often a "missing" placeholder such as 1e300 written by
+  another program) made its z-score spread infinite, so every cell normalized to 0 and the
+  marker silently dropped out of the clustering, the phenotyping gate and the threshold preview;
+  min-max and percentile scaling did the same for a range wider than about 1.8e308. Such a run
+  now stops with a message naming the measurement and its largest value. Values above about
+  3.4e38 likewise stop BANKSY, the GPU graph and the autoencoder at the point where they are
+  converted to 32-bit numbers, instead of becoming infinite (the autoencoder trained on NaN and
+  reported a NaN loss). Any earlier result on data with such values ignored that measurement.
+- **An infinite measurement value is now missing, everywhere.** A value of Infinity (a CSV
+  `Infinity` cell, a script that divides by zero) used to count as present: the missing-values
+  badge and the run's missing-values note ignored it, "Exclude objects" kept the object, and the
+  clustering then quietly replaced the value with the column median. Infinite values are now
+  counted, badged and handled by the missing-values choice exactly like absent ones, and the
+  dialog and the result say "missing or infinite". Phenotyping was worse: one infinite value
+  under z-score made every other value of that marker minus infinity, so the marker called no
+  cell positive (or every cell, for minus infinity), and min-max scaled every cell to 0.
+  Normalization statistics now ignore infinite values, phenotyping gates such a cell negative
+  for that marker and says so in the results window, and Compute Thresholds no longer drops a
+  marker with an infinite value: it is fitted on the finite values, and a note under the
+  histogram says what was left out, or why a marker has no histogram or threshold at all (too
+  few finite values, every cell the same value, a method that could not be fitted). Phenotypes
+  and thresholds from any earlier version on data holding an infinite value were wrong for that
+  marker; clustering results were imputed without notice.
 - **Dark theme:** the missing-values choices were pale gray on the amber box, and the saved-data
   strip cut its sentence to "..." at the default dialog width with three buttons; both now read in
   full (found from dark-theme screenshots, 2026-11-22).

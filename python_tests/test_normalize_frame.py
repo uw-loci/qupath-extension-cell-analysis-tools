@@ -18,12 +18,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conftest import SCRIPTS_DIR, load_script_symbol
+from conftest import SCRIPTS_DIR, normalization_functions
 
-normalization_params = load_script_symbol("model_utils.py", "normalization_params")
-normalize_frame = load_script_symbol(
-    "model_utils.py", "normalize_frame", {"normalization_params": normalization_params}
-)
+normalization_params, normalize_frame = normalization_functions()
 
 METHODS = ["zscore", "minmax", "percentile", "none"]
 

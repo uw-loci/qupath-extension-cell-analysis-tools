@@ -81,6 +81,7 @@ def _graph_builder(logger=None, block_builder=None):
         "_build_graph_block": block_builder or _fully_connected_block,
         "_auto_radius": lambda coords, slices: 42.0,
     }
+    ns["note_for_user"] = lambda message, detail=None: ns["logger"].warning(message)
     return load_script_symbol(SCRIPT, "build_spatial_graph", ns)
 
 
@@ -350,7 +351,12 @@ def _smoothing_sklearn():
     return load_script_symbol(
         SCRIPT,
         "build_smoothing_adjacency_sklearn",
-        {"np": np, "logger": _Logger(), "area_slices": _pure("area_slices")},
+        {
+            "np": np,
+            "logger": _Logger(),
+            "area_slices": _pure("area_slices"),
+            "note_for_user": lambda message, detail=None: None,
+        },
     )
 
 
@@ -420,6 +426,7 @@ def _real_builder():
     }
     ns["_build_graph_block"] = load_script_symbol(SCRIPT, "_build_graph_block", ns)
     ns["_auto_radius"] = load_script_symbol(SCRIPT, "_auto_radius", ns)
+    ns["note_for_user"] = lambda message, detail=None: ns["logger"].warning(message)
     return load_script_symbol(SCRIPT, "build_spatial_graph", ns)
 
 

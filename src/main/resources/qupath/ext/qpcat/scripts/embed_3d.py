@@ -33,6 +33,7 @@ from appose import NDArray as PyNDArray
 
 # ---- inputs -------------------------------------------------------------
 # UMAP/PCA reject NaN/Inf; impute per-column median (see model_utils).
+refuse_duplicate_names(marker_names)
 data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 logger.info("VEST embed_3d: %d cells x %d markers", n_cells, n_markers)

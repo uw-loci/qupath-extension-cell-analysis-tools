@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from conftest import load_script_symbol, requires
+from conftest import load_script_symbol, normalization_functions, requires
 
-params = load_script_symbol("model_utils.py", "normalization_params")
+params, normalize_frame = normalization_functions()
 
 
 def frame():
@@ -15,11 +15,6 @@ def frame():
     df = pd.DataFrame({"a": rng.normal(5, 2, 500), "b": rng.gamma(2, 3, 500)})
     df.iloc[3, 0] = np.nan
     return df
-
-
-normalize_frame = load_script_symbol(
-    "model_utils.py", "normalize_frame", {"normalization_params": params}
-)
 
 
 @pytest.mark.parametrize("normalization", ["zscore", "minmax", "percentile", "none"])

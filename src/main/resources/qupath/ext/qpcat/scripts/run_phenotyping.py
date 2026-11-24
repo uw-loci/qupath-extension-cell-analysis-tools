@@ -246,6 +246,26 @@ def build_phenotype_counts(labels, phenotype_names):
     return counts
 
 
+def nonfinite_gating_note(data, marker_names, max_named=6):
+    """One sentence naming the markers with missing or infinite values, or None.
+
+    Such a value is gated negative for its marker and is left out of the
+    normalization statistics.
+    """
+    bad = ~np.isfinite(data)
+    per = bad.sum(axis=0)
+    if not per.any():
+        return None
+    named = ["%s (%d)" % (marker_names[j], int(per[j])) for j in np.nonzero(per)[0]]
+    more = len(named) - max_named
+    shown = ", ".join(named[:max_named]) + (" and %d more" % more if more > 0 else "")
+    return (
+        "%d cell(s) had a missing or infinite value for at least one marker: %s. "
+        "Such a cell is gated NEGATIVE for that marker (it is not imputed), and the "
+        "normalization ignores the value." % (int(bad.any(axis=1).sum()), shown)
+    )
+
+
 # Plain-text problems with the user's data or rules, returned to the caller in
 # task.outputs["warnings"] and shown by the dialog and the batch. Never only logged.
 phenotype_warnings = []
@@ -260,21 +280,19 @@ task.update("Loading measurements...")
 data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
+refuse_duplicate_names(marker_names)
 
 # Deliberately NOT imputed. Gating asks "is this marker above threshold for
 # this cell", and a cell whose marker QuPath could not compute has no defensible
 # answer -- imputing the column median would invent a value and could call the
-# cell positive. pandas skips NaN when computing the normalization statistics,
-# and `NaN > threshold` is False, so such a cell is gated negative for that
-# marker. That is the intended behavior; warn so it is not silent.
-n_nonfinite = int(np.count_nonzero(~np.isfinite(data)))
-if n_nonfinite > 0:
-    logger.warning(
-        "%d non-finite measurement value(s) present. Normalization statistics "
-        "ignore them, and any cell with a missing marker is gated NEGATIVE for "
-        "that marker (not imputed). Check for measurements absent on some cells.",
-        n_nonfinite,
-    )
+# cell positive. An infinite value is treated the same way: it becomes NaN here,
+# so it neither moves the normalization nor passes a gate (+Inf would otherwise
+# pass every "pos" gate). `NaN >= threshold` is False, so such a cell is gated
+# negative for that marker.
+nonfinite_note = nonfinite_gating_note(data, marker_names)
+if nonfinite_note:
+    data[~np.isfinite(data)] = np.nan
+    phenotype_warnings.append(nonfinite_note)
 
 df = pd.DataFrame(data, columns=marker_names)
 
@@ -439,5 +457,7 @@ task.outputs["n_phenotypes"] = n_phenotypes
 task.outputs["phenotype_counts"] = json.dumps(counts)
 task.outputs["unknown_breakdown"] = json.dumps(unknown_breakdown)
 task.outputs["warnings"] = json.dumps(phenotype_warnings)
+for _w in phenotype_warnings:
+    logger.warning("Phenotyping: %s", _w)
 
 logger.info("Phenotyping results packaged")

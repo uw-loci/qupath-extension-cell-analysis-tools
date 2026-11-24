@@ -42,6 +42,7 @@ import math
 import os
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger("qpcat.spatial_stats")
 
@@ -168,12 +169,9 @@ def _refuse_if_too_big(what, predicted_gb, remedy):
                 ram,
             )
         return False
-    logger.warning(
-        "SKIPPING %s: it needs about %.0f GB but this machine has %.0f GB. %s",
-        what,
-        predicted_gb,
-        ram,
-        remedy,
+    note_for_user(
+        "Skipped %s: it needs about %.0f GB but this machine has %.0f GB. %s"
+        % (what, predicted_gb, ram, remedy)
     )
     return True
 
@@ -220,7 +218,11 @@ def _should_persist(plot_dir, persist_plots):
     try:
         os.makedirs(plot_dir, exist_ok=True)
     except Exception as e:
-        logger.warning("spatial-stats plot dir not writable: %s (%s)", plot_dir, e)
+        note_for_user(
+            "The spatial statistics figures were not saved: the folder %s cannot "
+            "be written to." % plot_dir,
+            detail="%s: %s" % (type(e).__name__, e),
+        )
         return False
     return True
 
@@ -381,7 +383,14 @@ def _auto_radius(coords, slices):
         if d is not None and d > 0:
             nn.append(d)
     if not nn:
-        return 50.0
+        # 50 in whatever unit the coordinates are in was the old answer here,
+        # an invented length that set every neighborhood the statistics used.
+        raise ValueError(
+            "the radius graph's automatic radius comes from the distance between "
+            "neighboring cells, and no area has two cells at different positions "
+            "(each area has one cell, or all its cells share one position). Set "
+            "the radius by hand, or choose the k-nearest-neighbor graph."
+        )
     return float(np.median(nn) * 5.0)
 
 
@@ -440,14 +449,10 @@ def build_spatial_graph(
         # One line with a count, not one per area: a 55-core TMA with several
         # sparse cores would otherwise bury the log.
         smallest = min(reduced_k, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "Spatial graph: %d area(s) had k reduced below %d to fit the area "
-            "size (smallest: area %d, %d cells, k=%d)",
-            len(reduced_k),
-            int(k),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "size (smallest: area %d, %d cells, k=%d)."
+            % (len(reduced_k), int(k), smallest[0], smallest[1], smallest[2])
         )
 
     if len(slices) == 1:
@@ -729,6 +734,7 @@ def run_per_area(
     """
     results = {}
     skipped = []
+    area_notes = []
     slices = area_slices(area_ids, adata.shape[0])
 
     # Every helper writes its PNG to one fixed filename (the names are a public
@@ -753,34 +759,108 @@ def run_per_area(
             # sliced to match or it would measure this area's clusters against
             # the whole cohort's geometry.
             per_area_kwargs["spatial_data"] = np.asarray(pooled_spatial)[idx]
+        notes_before = len(SPATIAL_NOTES)
         try:
             fn(sub, capture, cluster_key=cluster_key, **per_area_kwargs)
         except Exception as e:
             logger.warning("Area '%s': %s failed (%s)", label, output_key, e)
             skipped.append((label, str(e)))
             continue
+        finally:
+            # A helper's note is about this area only; say which.
+            area_notes.extend(
+                "Area '%s': %s" % (label, n) for n in SPATIAL_NOTES[notes_before:]
+            )
+            del SPATIAL_NOTES[notes_before:]
         if output_key in capture.outputs:
             results[label] = capture.outputs[output_key]
         else:
             skipped.append((label, "produced no result"))
+    # A 55-core TMA must not bury the results window: the first few per-area
+    # notes are shown, the rest counted (all of them are in the log).
+    for n in area_notes[:PER_AREA_NOTES_SHOWN]:
+        SPATIAL_NOTES.append(n)
+    if len(area_notes) > PER_AREA_NOTES_SHOWN:
+        for n in area_notes[PER_AREA_NOTES_SHOWN:]:
+            logger.warning("Spatial: %s", n)
+        SPATIAL_NOTES.append(
+            "%s: %d more per-area note(s) like these; the QuPath log lists them."
+            % (
+                PER_AREA_STAT_NAMES.get(output_key, output_key),
+                len(area_notes) - PER_AREA_NOTES_SHOWN,
+            )
+        )
     if skipped:
-        # Name the count, not every area: a 55-core TMA would otherwise bury
-        # the log. Silence here would read as "all areas measured".
-        logger.warning(
-            "%s: %d of %d area(s) produced no result (first: %s -- %s)",
-            output_key,
-            len(skipped),
-            len(slices),
-            skipped[0][0],
-            skipped[0][1],
+        # Name the count and the first, not every area. Silence here would read
+        # as "all areas measured".
+        note_for_user(
+            "%s: %d of %d area(s) produced no result (first: %s -- %s)."
+            % (
+                PER_AREA_STAT_NAMES.get(output_key, output_key),
+                len(skipped),
+                len(slices),
+                skipped[0][0],
+                skipped[0][1],
+            )
         )
     return results, skipped
+
+
+# How many per-area notes a statistic adds to the results window before the
+# rest are only counted.
+PER_AREA_NOTES_SHOWN = 5
+
+# run_per_area output keys as the results window names them.
+PER_AREA_STAT_NAMES = {
+    "ripley": "Ripley's L",
+    "co_occurrence_pairwise": "Co-occurrence (pairwise)",
+    "co_occurrence_one_vs_rest": "Co-occurrence (one vs rest)",
+}
 
 
 # CSR realisations per cluster for the Ripley envelope. 99 gives a 2.5/97.5 band
 # with a resolution of about one percentile, and costs well under a second for a
 # few thousand points.
 RIPLEY_ENVELOPE_SIMS = 99
+
+# Fewer cells than this in a cluster and its L curve is not drawn. With 1-2
+# cells the estimator returns zeros and so does the envelope, which centers to
+# the flat "random" line: a curve that looks like a finding and is not one.
+RIPLEY_MIN_CELLS = 5
+
+
+def _ripley_failed(task, msg):
+    """Record why Ripley's L produced nothing: the error output and a user note."""
+    logger.error(msg)
+    task.outputs["ripley_error"] = msg
+    SPATIAL_NOTES.append(msg)
+
+
+def ripley_skip_reason(coords):
+    """Why a cluster gets no Ripley L curve, or None when it gets one."""
+    from scipy.spatial import ConvexHull
+
+    coords = np.asarray(coords, dtype=float)
+    n = coords.shape[0]
+    if n < RIPLEY_MIN_CELLS:
+        return "%d cell(s); at least %d are needed" % (n, RIPLEY_MIN_CELLS)
+    try:
+        if float(ConvexHull(coords).volume) > 0:
+            return None
+    except Exception:
+        pass
+    return "its %d cells lie on one line or at one point" % n
+
+
+def ripley_skipped_note(skipped):
+    """The results-window note for the clusters left out of Ripley's L."""
+    shown = "; ".join("%s (%s)" % (name, why) for name, why in skipped[:8])
+    if len(skipped) > 8:
+        shown += "; and %d more" % (len(skipped) - 8)
+    return (
+        "Ripley's L has no curve for %d cluster(s), because the estimate needs cells "
+        "spread over an area: %s." % (len(skipped), shown)
+    )
 
 
 def ripley_l_observed(coords, radii):
@@ -1064,8 +1144,7 @@ def run_ripley(
                     observed_keys,
                 )
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         try:
@@ -1180,8 +1259,7 @@ def run_ripley(
                 "complete spatial randomness."
                 % (getattr(sq, "__version__", "?"), type(l_data).__name__, observed)
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         # Pad the OTHER curve set only. K is genuinely optional on builds that
@@ -1205,9 +1283,16 @@ def run_ripley(
             radii_arr = _np.asarray(radii, dtype=float)
             labels_all = [str(c) for c in adata.obs[cluster_key].values]
             recomputed = []
-            for cname in cluster_names:
+            kept = []
+            skipped = []
+            for idx, cname in enumerate(cluster_names):
                 mask = _np.array([lab == cname for lab in labels_all], dtype=bool)
                 pts_c = coords_all[mask]
+                why = ripley_skip_reason(pts_c)
+                if why is not None:
+                    skipped.append((cname, why))
+                    continue
+                kept.append(idx)
                 recomputed.append(
                     [float(v) for v in ripley_l_observed(pts_c, radii_arr)]
                 )
@@ -1222,6 +1307,21 @@ def run_ripley(
                 envelope_median.append([float(v) for v in med])
                 envelope_high.append([float(v) for v in hi])
             l_curves = recomputed
+            if skipped:
+                note_for_user(ripley_skipped_note(skipped))
+                k_curves = [k_curves[i] for i in kept if i < len(k_curves)]
+                kept_names = [cluster_names[i] for i in kept]
+                p_value_curves = {
+                    k: v for k, v in p_value_curves.items() if k in kept_names
+                }
+                cluster_names = kept_names
+            if not cluster_names:
+                msg = (
+                    "Ripley's L has no cluster with enough cells spread over an area "
+                    "(at least %d), so there is no Ripley tab." % RIPLEY_MIN_CELLS
+                )
+                _ripley_failed(task, msg)
+                return
             logger.info(
                 "Ripley L recomputed per cluster with its own intensity, plus a "
                 "%d-run CSR envelope per cluster",
@@ -1235,8 +1335,7 @@ def run_ripley(
                 "squidpy's own L is normalized by the total cell count rather "
                 "than each cluster's, so it cannot be read against any null." % e
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         # Kept for the payload's shape; the envelope is what the chart compares
@@ -1276,6 +1375,9 @@ def run_ripley(
             # reads exactly like a real "no clustering at any radius" result --
             # so the consumer must be told rather than left to plot it.
             "k_unavailable": not k_available,
+            # Clusters with no curve and why ({"name", "reason"}); see
+            # RIPLEY_MIN_CELLS. Their names are absent from cluster_names.
+            "skipped_clusters": [{"name": n, "reason": w} for n, w in skipped],
         }
         task.outputs["ripley"] = json.dumps(payload)
         logger.info(
@@ -1431,9 +1533,17 @@ def run_ripley(
                 plt.close(fig)
                 logger.info("Saved Ripley L PNG: %s", out_path)
             except Exception as e:
-                logger.warning("Ripley L plot failed: %s", e)
+                note_for_user(
+                    "The Ripley's L figure could not be saved; the chart in the "
+                    "results window has the curves.",
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
-        logger.warning("Ripley L failed: %s", e)
+        note_for_user(
+            "Ripley's L did not run, so there is no Ripley tab. The QuPath log has "
+            "the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def centre_on_median(curve, median):
@@ -1557,23 +1667,66 @@ def _json_number(v):
     return f if math.isfinite(f) else None
 
 
-def pick_p_column(row, preference):
-    """First finite p-value in `preference` that `row` actually has.
+def choose_p_column(df, defined, preference):
+    """The one p-value column a table reports for every row.
 
-    :param row: one row of the sq.gr.spatial_autocorr DataFrame
+    The first column in `preference` that is finite on every row whose
+    statistic is defined; failing that, the first finite on any of them. One
+    column for the whole table, so the caption naming it describes every row.
+
+    :param df: the sq.gr.spatial_autocorr DataFrame
+    :param defined: boolean per row, True where the statistic is finite
     :param preference: column names, best first
-    :return: (value, column_name), or (nan, None) when none is usable
+    :return: the column name, or None when no column has a usable value
     """
+    defined = np.asarray(defined, dtype=bool)
+    if not defined.any():
+        return None
+    fallback = None
     for col in preference:
-        if col not in row:
+        if col not in df.columns:
             continue
-        try:
-            val = float(row[col])
-        except (TypeError, ValueError):
-            continue
-        if not math.isnan(val):
-            return val, col
-    return float("nan"), None
+        vals = np.asarray(pd.to_numeric(df[col], errors="coerce"), dtype=np.float64)[
+            defined
+        ]
+        finite = np.isfinite(vals)
+        if finite.all():
+            return col
+        if fallback is None and finite.any():
+            fallback = col
+    return fallback
+
+
+def benjamini_hochberg(p):
+    """Benjamini-Hochberg adjusted p-values (statsmodels' fdr_bh); NaN stays NaN."""
+    p = np.asarray(p, dtype=np.float64)
+    out = np.full(p.shape, np.nan)
+    ok = np.isfinite(p)
+    m = int(ok.sum())
+    if m == 0:
+        return out
+    vals = p[ok]
+    order = np.argsort(vals)
+    ranked = vals[order] * m / np.arange(1, m + 1)
+    ranked = np.minimum.accumulate(ranked[::-1])[::-1]
+    adj = np.empty(m)
+    adj[order] = np.minimum(ranked, 1.0)
+    out[ok] = adj
+    return out
+
+
+def undefined_note(statistic, markers, max_named=6):
+    """The note for measurements whose statistic is undefined, or None when there are none."""
+    if not markers:
+        return None
+    shown = ", ".join(markers[:max_named])
+    if len(markers) > max_named:
+        shown += " and %d more" % (len(markers) - max_named)
+    return (
+        "%s is undefined for %d measurement(s) whose values do not vary across the "
+        "cells tested (constant, or missing): %s. Their rows show no value and no "
+        "p-value." % (statistic, len(markers), shown)
+    )
 
 
 def autocorr_passes(value, mode, threshold=AUTOCORR_DEFAULT_THRESHOLD):
@@ -1686,8 +1839,10 @@ def compute_autocorr(
     :param area_ids: per-cell independent-area id, for the consistency count
     :param threshold: effect-size cut, see autocorr_passes
     :return: dict with "stats" (marker -> {value, p, p_raw, areas_above,
-             n_areas}), "p_method", "per_area" (marker -> {area: value}),
-             "n_areas" (areas evaluated), "skipped_areas", "threshold"
+             n_areas}; p and p_raw NaN where the value is), "p_method" (the
+             one column every p comes from), "per_area" (marker -> {area:
+             value}), "n_areas" (areas evaluated), "skipped_areas",
+             "threshold", "undefined" (markers with no finite value)
     :raises ValueError: when `measurements` is empty
     """
     genes = [str(m) for m in (measurements or [])]
@@ -1702,15 +1857,40 @@ def compute_autocorr(
         adata, mode, genes, area_ids, area_names, value_key=value_key
     )
 
+    key = value_key if value_key in df.columns else "I"
+    values = np.asarray(pd.to_numeric(df[key], errors="coerce"), dtype=np.float64)
+    defined = np.isfinite(values)
+    # A constant or NaN-bearing column has no statistic; squidpy still fills
+    # pval_sim with 1 / (perms + 1), the strongest p in the table, and its NaN
+    # turns every other row's pval_z_sim_fdr_bh and pval_norm_fdr_bh into NaN.
+    # Such a row gets no p at all, and the correction is redone over the
+    # measurements that have a statistic.
+    p_raw_col = choose_p_column(df, defined, AUTOCORR_P_RAW_PREFERENCE)
+    raw = (
+        np.asarray(pd.to_numeric(df[p_raw_col], errors="coerce"), dtype=np.float64)
+        if p_raw_col
+        else np.full(len(df), np.nan)
+    )
+    if defined.all():
+        p_method = choose_p_column(df, defined, AUTOCORR_P_PREFERENCE)
+        corrected = (
+            np.asarray(pd.to_numeric(df[p_method], errors="coerce"), dtype=np.float64)
+            if p_method
+            else np.full(len(df), np.nan)
+        )
+    else:
+        p_method = p_raw_col + "_fdr_bh" if p_raw_col else None
+        corrected = np.full(len(df), np.nan)
+        corrected[defined] = benjamini_hochberg(raw[defined])
     stats = {}
-    p_method = None
-    for marker in df.index:
-        row = df.loc[marker]
-        value = float(row.get(value_key, row.get("I", float("nan"))))
-        p_val, p_col = pick_p_column(row, AUTOCORR_P_PREFERENCE)
-        p_raw, _ = pick_p_column(row, AUTOCORR_P_RAW_PREFERENCE)
-        if p_col is not None and p_method is None:
-            p_method = p_col
+    undefined = []
+    for i, marker in enumerate(df.index):
+        value = float(values[i])
+        if defined[i]:
+            p_val, p_raw = float(corrected[i]), float(raw[i])
+        else:
+            p_val = p_raw = float("nan")
+            undefined.append(str(marker))
         areas_above = sum(
             1
             for v in per_area.get(str(marker), {}).values()
@@ -1730,6 +1910,7 @@ def compute_autocorr(
         "n_areas": int(n_areas),
         "skipped_areas": skipped,
         "threshold": float(threshold),
+        "undefined": undefined,
     }
 
 
@@ -1790,7 +1971,9 @@ def describe_nhood_null(n_permutations, n_areas):
     return "%d permutations; cluster labels shuffled across all cells" % n_permutations
 
 
-def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
+def run_nhood_enrichment(
+    adata, task, n_permutations, area_ids=None, cluster_key="cluster"
+):
     """Neighborhood enrichment z-scores and edge counts into task.outputs.
 
     Writes nhood_enrichment (z), nhood_counts (edges from a row-cluster cell
@@ -1800,6 +1983,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
 
     :param n_permutations: label shuffles forming the null
     :param area_ids: per-cell independent-area id, or None
+    :param cluster_key: the obs column holding the labels
     :return: True when the outputs were written
     """
     import squidpy as sq
@@ -1811,7 +1995,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
         # dropped it must fail here, not silently shuffle across areas.
         sq.gr.nhood_enrichment(
             adata,
-            cluster_key="cluster",
+            cluster_key=cluster_key,
             library_key=library_key,
             n_perms=n_permutations,
             **_safe_kwargs(
@@ -1822,7 +2006,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
                 seed=0,
             ),
         )
-        data = adata.uns["cluster_nhood_enrichment"]
+        data = adata.uns[cluster_key + "_nhood_enrichment"]
         for key, values in (
             ("nhood_enrichment", data["zscore"]),
             ("nhood_counts", data["count"]),
@@ -1831,7 +2015,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
             np.copyto(nd.ndarray(), np.asarray(values, dtype=np.float64))
             task.outputs[key] = nd
         task.outputs["nhood_cluster_names"] = json.dumps(
-            list(adata.obs["cluster"].cat.categories)
+            list(adata.obs[cluster_key].cat.categories)
         )
         n_areas = 1 if library_key is None else len(set(area_ids))
         task.outputs["nhood_null"] = describe_nhood_null(n_permutations, n_areas)
@@ -1843,7 +2027,11 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
         )
         return True
     except Exception as e:
-        logger.warning("Neighborhood enrichment failed: %s", e)
+        note_for_user(
+            "Neighborhood enrichment did not run, so there is no enrichment "
+            "heatmap or table. The QuPath log has the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
         return False
 
 
@@ -1896,13 +2084,16 @@ def run_moran_i(
         # row per key. Everything else travels as its own output.
         task.outputs[output_key] = json.dumps(payload)
         task.outputs[output_key + "_p_method"] = describe_p_method(
-            res["p_method"], len(stats), n_permutations
+            res["p_method"], len(stats) - len(res["undefined"]), n_permutations
         )
         task.outputs[output_key + "_per_area"] = json.dumps(res["per_area"])
         task.outputs[output_key + "_threshold"] = float(res["threshold"])
         task.outputs[output_key + "_areas"] = describe_areas(
             res["n_areas"], res["skipped_areas"]
         )
+        note = undefined_note("Moran's I", res["undefined"])
+        if note:
+            note_for_user(note)
         logger.info(
             "Moran's I computed for %d markers (p from %s; %d area(s) compared)",
             len(stats),
@@ -1993,10 +2184,13 @@ def run_geary_c(
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
             "p_value_method": describe_p_method(
-                p_method, len(marker_stats), n_permutations
+                p_method, len(marker_stats) - len(res["undefined"]), n_permutations
             ),
         }
         task.outputs["geary_c"] = json.dumps(payload)
+        note = undefined_note("Geary's C", res["undefined"])
+        if note:
+            note_for_user(note)
         logger.info(
             "Geary's C computed for %d markers (%d perms, p from %s; %d area(s) compared)",
             len(marker_stats),
@@ -2066,9 +2260,16 @@ def run_geary_c(
                 plt.close(fig)
                 logger.info("Saved Geary's C PNG: %s", out_path)
             except Exception as e:
-                logger.warning("Geary's C plot failed: %s", e)
+                note_for_user(
+                    "The Geary's C chart could not be drawn; the table has the values.",
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
-        logger.warning("Geary's C failed: %s", e)
+        note_for_user(
+            "Geary's C did not run, so there is no Geary's C tab. Everything else in "
+            "this result stands. The QuPath log has the error.",
+            detail="%s: %s" % (type(e).__name__, e) if str(e) else type(e).__name__,
+        )
 
 
 # Panels in the curves figure. Past this the grid is taller than it is useful
@@ -2237,7 +2438,10 @@ def _save_co_occurrence_curves(
         plt.close(fig)
         logger.info("Saved co-occurrence curves PNG: %s", out_path)
     except Exception as e:
-        logger.warning("Co-occurrence curves plot failed: %s", e)
+        note_for_user(
+            "The co-occurrence curves figure could not be saved.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def run_co_occurrence(
@@ -2319,9 +2523,13 @@ def run_co_occurrence(
                 r_min = med_nn
                 r_max = min(med_nn * 20.0, max(med_nn * 2.0, diag * 0.5))
             else:
-                # Fallback: the old bbox-diagonal heuristic.
-                r_min = max(1.0, diag * 0.001)
-                r_max = diag * 0.1
+                # No two cells at different positions: no length scale exists,
+                # and a fraction of the bounding box (or 1 in any unit) would
+                # invent one.
+                raise ValueError(
+                    "its distance bins come from the distance between neighboring "
+                    "cells, and these cells all share one position"
+                )
             kwargs["interval"] = np.linspace(r_min, r_max, int(n_intervals))
 
         # Force serial execution (avoids the numba/joblib deadlock on Windows).
@@ -2336,7 +2544,10 @@ def run_co_occurrence(
         cluster_names = [str(c) for c in adata.obs[cluster_key].cat.categories]
 
         if ratio is None or intervals is None:
-            logger.warning("Co-occurrence returned no data")
+            note_for_user(
+                "Co-occurrence (%s) produced no result; the library returned no "
+                "data for these cells." % mode
+            )
             return
 
         ratio_np = np.asarray(ratio, dtype=np.float64)
@@ -2509,9 +2720,20 @@ def run_co_occurrence(
                         plot_dpi,
                     )
             except Exception as e:
-                logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
+                note_for_user(
+                    "The co-occurrence (%s) figure could not be saved." % mode,
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
-        logger.warning("Co-occurrence (%s) failed: %s", mode, e)
+        note_for_user(
+            (
+                "Co-occurrence (%s) did not run: %s." % (mode, e)
+                if isinstance(e, ValueError)
+                else "Co-occurrence (%s) did not run; the QuPath log has the error."
+                % mode
+            ),
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def node_distance_scale(coord_unit, pixel_size_um):
@@ -2649,7 +2871,7 @@ def compute_spatial_node_measurements(
     triangle_areas = None
     if graph_type == "delaunay" and coords is not None and n_cells >= 3:
         try:
-            from scipy.spatial import Delaunay, qhull
+            from scipy.spatial import Delaunay
 
             tri = Delaunay(np.asarray(coords, dtype=np.float64))
             simplices = tri.simplices  # shape (n_tri, 3)
@@ -2683,13 +2905,15 @@ def compute_spatial_node_measurements(
             mean_areas = mean_areas * area_scale
             max_areas = max_areas * area_scale
             triangle_areas = np.column_stack([mean_areas, max_areas])
-        except qhull.QhullError as e:
-            logger.warning(
-                "spatial-stats Delaunay triangle areas skipped (QhullError): %s", e
-            )
-            triangle_areas = None
         except Exception as e:
-            logger.warning("spatial-stats Delaunay triangle areas failed: %s", e)
+            # QhullError included: collinear or coincident cells have no
+            # triangulation to measure.
+            note_for_user(
+                "The Delaunay triangle-area measurements were not written: the "
+                "cell positions do not form triangles (for example, all on one "
+                "line).",
+                detail="%s: %s" % (type(e).__name__, e),
+            )
             triangle_areas = None
 
     # Connected components on the undirected adjacency.
@@ -2700,8 +2924,14 @@ def compute_spatial_node_measurements(
         component_labels = component_labels.astype(np.int32, copy=False)
         logger.info("spatial-stats connected components: %d", n_components)
     except Exception as e:
-        logger.warning("spatial-stats connected_components failed: %s", e)
-        component_labels = np.zeros(n_cells, dtype=np.int32)
+        # Not written at all: a component of 0 for every cell would read as
+        # "one connected piece of tissue", a result nobody measured.
+        note_for_user(
+            "The connected-component measurement was not written; the QuPath log "
+            "has the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
+        component_labels = None
 
     return {
         "row": row_kept,
@@ -2921,22 +3151,17 @@ def build_banksy_weights(
 
     if reduced:
         smallest = min(reduced, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "BANKSY: %d area(s) had k_geom reduced below %d to fit the area size "
-            "(smallest: area %d, %d cells, k_geom=%d)",
-            len(reduced),
-            int(k_geom),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "(smallest: area %d, %d cells, k_geom=%d)."
+            % (len(reduced), int(k_geom), smallest[0], smallest[1], smallest[2])
         )
     if degenerate:
-        logger.warning(
+        note_for_user(
             "BANKSY: %d area(s) have too few cells for a neighbor graph and were "
             "clustered on their own expression only (smallest has %d cell(s)); "
-            "their results are not spatially informed",
-            len(degenerate),
-            min(d[1] for d in degenerate),
+            "their results are not spatially informed."
+            % (len(degenerate), min(d[1] for d in degenerate))
         )
 
     concatenated = np.concatenate(order) if order else np.zeros(0, dtype=np.int64)
@@ -3000,14 +3225,10 @@ def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
 
     if reduced:
         smallest = min(reduced, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "Spatial smoothing: %d area(s) had k reduced below %d to fit the "
-            "area size (smallest: area %d, %d cells, k=%d)",
-            len(reduced),
-            int(k),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "area size (smallest: area %d, %d cells, k=%d)."
+            % (len(reduced), int(k), smallest[0], smallest[1], smallest[2])
         )
 
     if rows:
