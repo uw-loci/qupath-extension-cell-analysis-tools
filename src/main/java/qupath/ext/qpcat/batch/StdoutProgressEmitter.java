@@ -3,6 +3,7 @@ package qupath.ext.qpcat.batch;
 import java.io.PrintStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -77,12 +78,43 @@ public final class StdoutProgressEmitter implements ProgressEmitter {
         return sb.toString();
     }
 
-    private static String formatValue(Object v) {
+    /**
+     * A field value as it appears after {@code key=}: bare when it holds no whitespace,
+     * quote, backslash or control character, else in double quotes with {@code \\},
+     * {@code \"}, {@code \n}, {@code \r}, {@code \t} and {@code \\uXXXX} escapes, so
+     * the fields of every row stay on one parseable line. The message after them is free text
+     * and may continue on indented lines (a refusal that lists reasons).
+     */
+    static String formatValue(Object v) {
         if (v == null) return "null";
         String s = v.toString();
-        if (s.contains(" ")) {
-            return "\"" + s + "\"";
+        boolean bare = !s.isEmpty();
+        for (int i = 0; i < s.length() && bare; i++) {
+            char c = s.charAt(i);
+            bare = c > ' ' && c != '"' && c != '\\' && c != 0x7F;
         }
-        return s;
+        if (bare) return s;
+        StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
+        for (int i = 0; i < s.length(); i++) {
+            appendEscaped(sb, s.charAt(i));
+        }
+        return sb.append('"').toString();
+    }
+
+    private static void appendEscaped(StringBuilder sb, char c) {
+        switch (c) {
+            case '"' -> sb.append("\\\"");
+            case '\\' -> sb.append("\\\\");
+            case '\n' -> sb.append("\\n");
+            case '\r' -> sb.append("\\r");
+            case '\t' -> sb.append("\\t");
+            default -> {
+                if (c < ' ' || c == 0x7F) {
+                    sb.append(String.format(Locale.ROOT, "\\u%04X", (int) c));
+                } else {
+                    sb.append(c);
+                }
+            }
+        }
     }
 }

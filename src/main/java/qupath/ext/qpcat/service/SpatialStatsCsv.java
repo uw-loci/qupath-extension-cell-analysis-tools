@@ -283,12 +283,13 @@ public final class SpatialStatsCsv {
      *
      * @param result       the result holding the matrix
      * @param nameResolver maps a stored cluster key to its display name, or null for the key
-     * @return rows in matrix order; empty when the result has no matrix
+     * @return rows in matrix order; empty when the result has no matrix or it is not square
+     *         ({@link #nhoodShapeProblem} says why)
      */
     public static List<NhoodRow> nhoodRows(ClusteringResult result, UnaryOperator<String> nameResolver) {
         List<NhoodRow> rows = new java.util.ArrayList<>();
         double[][] z = result == null ? null : result.getNhoodEnrichment();
-        if (z == null) {
+        if (z == null || nhoodShapeProblem(z) != null) {
             return rows;
         }
         double[][] counts = result.getNhoodCounts();
@@ -302,6 +303,25 @@ public final class SpatialStatsCsv {
             }
         }
         return rows;
+    }
+
+    /**
+     * Why a neighborhood-enrichment matrix cannot be read as cluster x cluster, or null when it
+     * is square. squidpy always writes a square one; a ragged one comes from a hand-edited file.
+     *
+     * @param z the matrix, rows first
+     */
+    public static String nhoodShapeProblem(double[][] z) {
+        if (z == null) return null;
+        for (int i = 0; i < z.length; i++) {
+            int cols = z[i] == null ? 0 : z[i].length;
+            if (cols != z.length) {
+                return "The neighborhood enrichment matrix in this result is not square (row " + (i + 1)
+                        + " has " + cols + " values for " + z.length + " clusters), so it is not shown. "
+                        + "squidpy always writes a square one; the saved result was probably edited by hand.";
+            }
+        }
+        return null;
     }
 
     /**

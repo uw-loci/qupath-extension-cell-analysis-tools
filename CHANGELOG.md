@@ -190,6 +190,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Batch progress rows stay one line (H57).** A field value holding a quote, a backslash, a
+  line break or another control character (an image named `slide "A"`, or one with a newline)
+  broke the one-line `[qpcat-batch] ... image="..."` row that log parsers read. Values with
+  whitespace, `"`, `\` or control characters are now quoted with `\"`, `\\`, `\n`, `\r`, `\t`
+  and `\uXXXX` escapes. The message after the fields is unchanged (a refusal still lists its
+  reasons on indented lines).
+- **A hand-edited neighborhood-enrichment matrix that is not square is refused (H57).** The
+  Neighborhood Enrichment tab threw an index error on a ragged matrix; it now says which row is
+  short and shows nothing else, and the CSV exports leave the matrix out.
 - **The Cluster Explainer finds the JSON array however the reply wraps it (H44).** A reply with
   a bracket before the array ("Here is my answer [1]:") or an unmatched bracket inside a
   rationale ("cf. 12]") was read as having no JSON array, a false "unexpected response shape".
