@@ -1051,11 +1051,18 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 Consumer<String> progress = msg ->
                         Platform.runLater(() -> logger.info("AnnData export: {}", msg));
                 // exportAnnData already logs to OperationLogger internally
-                workflow.exportAnnData(null, outputFile.getAbsolutePath(), progress);
+                String note = workflow.exportAnnData(null, outputFile.getAbsolutePath(), progress);
 
-                Platform.runLater(() ->
-                        Dialogs.showInfoNotification(EXTENSION_NAME,
-                                "AnnData exported to " + outputFile.getName()));
+                String done = "AnnData exported to " + outputFile.getName()
+                        + (note != null ? "\n" + note : "");
+                boolean gaps = note != null && note.contains("NaN");
+                Platform.runLater(() -> {
+                    if (gaps) {
+                        Dialogs.showWarningNotification(EXTENSION_NAME, done);
+                    } else {
+                        Dialogs.showInfoNotification(EXTENSION_NAME, done);
+                    }
+                });
             } catch (Exception e) {
                 logger.error("AnnData export failed", e);
                 OperationLogger.getInstance().logFailure("EXPORT ANNDATA",

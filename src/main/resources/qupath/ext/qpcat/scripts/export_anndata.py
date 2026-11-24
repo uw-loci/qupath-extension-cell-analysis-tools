@@ -51,6 +51,9 @@ logger.info("Exporting %d cells x %d markers to AnnData", n_cells, n_markers)
 # the user knows to handle it downstream (scanpy rejects NaN in most tools).
 n_nonfinite = int(np.count_nonzero(~np.isfinite(data)))
 if n_nonfinite > 0:
+    # Infinity is a missing value as everywhere else in QP-CAT, and the message
+    # below promises NaN: make it so rather than leave +/-inf in the file.
+    data[~np.isfinite(data)] = np.nan
     logger.warning(
         "Exporting %d non-finite value(s) as NaN. They are preserved rather "
         "than imputed; most scanpy tools reject NaN, so filter or impute in "
