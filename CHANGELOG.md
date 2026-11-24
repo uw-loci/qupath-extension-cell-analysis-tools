@@ -158,6 +158,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **No made-up fold changes for measurements with negative values.** The marker rankings'
+  log2 fold change is a ratio of mean raw values, and negative values were silently set to 0
+  first, so a signed measurement (an imported z-score, a PCA axis, a background-subtracted
+  intensity, skewness) showed a fold change of 0 or about +-30 that meant nothing. Such a
+  measurement now has no fold change: the Marker Fingerprints bar and label show its Wilcoxon
+  score, its tooltip says the fold change is not available, and the results window names the
+  measurements. Fold changes from any earlier version for a measurement with negative values
+  were wrong.
 - **Cellular neighborhoods: no more empty neighborhoods reported as real.** When the windows
   held fewer distinct cell-type mixtures than the number of neighborhoods asked for (two cell
   types and a window of 5 give at most 6, against the default 10), k-means formed fewer groups,

@@ -714,6 +714,8 @@ public class MarkerFingerprintPanel extends BorderPane {
         if (!Double.isNaN(lfc)) {
             tip.append("\nlog2FC: ").append(FoldChanges.format(lfc, "%+.2f"));
             if (FoldChanges.atLimit(lfc)) tip.append(" (one side's mean is about zero)");
+        } else {
+            tip.append("\nlog2FC: not available (see the run's notes); the bar shows the Wilcoxon score");
         }
         if (!Double.isNaN(score)) tip.append(String.format("%nWilcoxon score: %.2f", score));
         // Labeled by where it came from, not by what it would mean if the clusters

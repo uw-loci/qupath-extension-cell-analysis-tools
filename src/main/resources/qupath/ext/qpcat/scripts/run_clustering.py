@@ -3158,6 +3158,30 @@ def cluster_quality_warnings(labels, algorithm, marker_names=None):
     return out
 
 
+def fold_change_input(raw):
+    """(raw values for log2 fold changes, per-column True where a value is negative).
+
+    The returned matrix equals ``raw`` on every column without a negative
+    value; the signed columns' fold changes are discarded by the caller.
+    """
+    raw = np.asarray(raw, dtype=np.float64)
+    signed = (raw < 0).any(axis=0)
+    return np.clip(raw, 0.0, None), signed
+
+
+def signed_fold_change_note(marker_names, signed, max_named=6):
+    """The note naming the measurements that get no fold change."""
+    names = [str(m) for m, s in zip(marker_names, signed) if s]
+    shown = ", ".join(names[:max_named])
+    if len(names) > max_named:
+        shown += " and %d more" % (len(names) - max_named)
+    return (
+        "No log2 fold change for %d measurement(s) with negative values: %s. A ratio "
+        "of means needs values that are zero or above (intensities); the marker "
+        "rankings show the Wilcoxon score for these instead." % (len(names), shown)
+    )
+
+
 # 5. Compute cluster statistics (per-cluster marker means on normalized data)
 task.update("Computing cluster statistics...", current=3, maximum=6)
 
@@ -3471,9 +3495,14 @@ if can_analyze:
 
         # Per-cluster log2 fold-change of MEAN RAW intensity (cluster vs rest).
         # df holds the raw (NaN-imputed) intensities, row-aligned with
-        # labels_shifted. Clip negatives (rare, e.g. background-subtracted) so
-        # the ratio is well-defined; a small epsilon guards zero-mean markers.
-        _raw = np.clip(df.to_numpy(dtype=float), 0.0, None)
+        # labels_shifted; a small epsilon guards zero-mean markers. A ratio of
+        # means is meaningless for a signed column (an imported z-score, a PCA
+        # axis, a background-subtracted intensity, skewness): such a column gets
+        # no fold change, and a note says which. Clipping its negatives to 0
+        # used to give log2(eps/eps) = 0 or +-30 with no word of warning.
+        _raw, _signed = fold_change_input(df.to_numpy(dtype=float))
+        if _signed.any():
+            _analysis_notes.append(signed_fold_change_note(marker_names, _signed))
         _eps = 1e-9
         _labels_arr = np.asarray(labels_shifted)
         _logfc_by_cluster = {}
@@ -3485,6 +3514,7 @@ if can_analyze:
             _mean_in = _raw[_in].mean(axis=0)
             _mean_rest = _raw[~_in].mean(axis=0)
             _lfc = np.log2((_mean_in + _eps) / (_mean_rest + _eps))
+            _lfc[_signed] = np.nan
             _logfc_by_cluster[str(_cid)] = {
                 str(marker_names[j]): float(_lfc[j]) for j in range(len(marker_names))
             }
