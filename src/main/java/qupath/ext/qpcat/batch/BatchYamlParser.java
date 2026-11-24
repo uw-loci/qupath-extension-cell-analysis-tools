@@ -68,7 +68,7 @@ public final class BatchYamlParser {
             "umap_metric", "tsne_perplexity", "tsne_learning_rate",
             "tsne_iterations", "tsne_early_exaggeration", "embedding_seed",
             "embedding_execution_mode",
-            "random_seed", "result_name",
+            "random_seed", "result_name", "overwrite_existing",
             "measurements", "spatial_smoothing", "pca_precursor", "batch_correction",
             "n_clusters", "min_cluster_size", "linkage",
             "banksy_lambda", "banksy_k_geom", "joint",
@@ -295,6 +295,8 @@ public final class BatchYamlParser {
                 case "embedding_execution_mode" -> c.setEmbeddingExecutionMode(textValue(value, path, issues));
                 case "random_seed" -> c.setRandomSeed(intValue(value, path, issues));
                 case "result_name" -> c.setResultName(nameValue(value, path, issues));
+                case "overwrite_existing" -> c.setOverwriteExisting(
+                        Boolean.TRUE.equals(boolValue(value, path, issues)));
                 case "measurements" -> c.setMeasurements(
                         noDuplicates(nameList(value, path, issues), path, issues));
                 case "spatial_smoothing" -> c.setSpatialSmoothing(boolValue(value, path, issues));

@@ -427,9 +427,9 @@ public final class GateActionBar {
                     summary + " (no project open, so the geometry was not written)");
             return null;
         }
-        Path file = dir.toPath().resolve(GateStore.fileNameFor(
-                className + "_" + STAMP.format(LocalDateTime.now())));
         try {
+            Path file = GateStore.newFileIn(dir.toPath(),
+                    className + "_" + STAMP.format(LocalDateTime.now()));
             GateStore.write(file, set);
             OperationLogger.getInstance().logEvent("GATE ASSIGNED",
                     summary + "; geometry in " + file);

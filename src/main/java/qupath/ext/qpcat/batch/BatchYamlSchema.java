@@ -150,6 +150,8 @@ public final class BatchYamlSchema {
         // model_utils.resolve_umap_execution.
         private String embeddingExecutionMode;
         private String resultName;
+        // Replace a saved result of the same name; false refuses the save (and the run).
+        private boolean overwriteExisting = false;
         private List<String> measurements;
         private Boolean spatialSmoothing;
         private Boolean pcaPrecursor;
@@ -270,6 +272,11 @@ public final class BatchYamlSchema {
 
         public String getResultName() { return resultName; }
         public void setResultName(String resultName) { this.resultName = resultName; }
+
+        public boolean isOverwriteExisting() { return overwriteExisting; }
+        public void setOverwriteExisting(boolean overwriteExisting) {
+            this.overwriteExisting = overwriteExisting;
+        }
 
         public List<String> getMeasurements() { return measurements; }
         public void setMeasurements(List<String> measurements) { this.measurements = measurements; }

@@ -3838,10 +3838,19 @@ public class ClusteringDialog {
         if (result.isEmpty() || result.get().trim().isEmpty()) return;
 
         try {
-            String configName = result.get().trim();
-            ClusteringConfigManager.saveConfig(project, configName, config);
-            Dialogs.showInfoNotification("QPCAT",
-                    "Config saved: " + configName);
+            String requested = result.get().trim();
+            var ifExists = FilenameSanitizer.IfExists.REFUSE;
+            String taken = ClusteringConfigManager.takenConfigName(project, requested);
+            if (taken != null) {
+                var choice = SaveConflictPrompt.ask(owner, "Replace Saved Config",
+                        "A saved configuration", taken,
+                        ClusteringConfigManager.freeConfigName(project, requested));
+                if (choice.isEmpty()) return;
+                ifExists = choice.get();
+            }
+            String configName = ClusteringConfigManager.saveConfig(project, requested, config,
+                    ifExists);
+            Dialogs.showInfoNotification("QPCAT", "Config saved as '" + configName + "'");
             OperationLogger.getInstance().logEvent("CONFIG SAVED",
                     "Saved clustering config '" + configName + "' ("
                     + config.getAlgorithm().getDisplayName() + ", "
@@ -5923,14 +5932,25 @@ public class ClusteringDialog {
             if (nameResult.isEmpty() || nameResult.get().trim().isEmpty()) return;
 
             try {
-                ClusteringResultManager.saveResult(qp.getProject(),
-                        nameResult.get().trim(), result, algo, norm, emb);
-                Dialogs.showInfoNotification("QPCAT",
-                        "Results saved: " + nameResult.get().trim());
+                String requested = nameResult.get().trim();
+                var ifExists = FilenameSanitizer.IfExists.REFUSE;
+                String taken = ClusteringResultManager.takenResultName(qp.getProject(), requested);
+                if (taken != null) {
+                    var choice = SaveConflictPrompt.ask(saveBtn.getScene().getWindow(),
+                            "Replace Saved Result", "A saved result", taken,
+                            ClusteringResultManager.freeResultName(qp.getProject(), requested));
+                    if (choice.isEmpty()) return;
+                    ifExists = choice.get();
+                }
+                String savedAs = ClusteringResultManager.saveResult(qp.getProject(),
+                        requested, result, algo, norm, emb, ifExists);
+                Dialogs.showInfoNotification("QPCAT", "Results saved as '" + savedAs + "'"
+                        + (savedAs.equals(requested) ? "" : " (file name for '" + requested + "')"));
                 OperationLogger.getInstance().logEvent("RESULTS SAVED",
-                        "Saved '" + nameResult.get().trim() + "' ("
+                        "Saved '" + savedAs + "' ("
                         + result.clusterCountText() + ", "
-                        + result.getNCells() + " cells)");
+                        + result.getNCells() + " cells"
+                        + (ifExists == FilenameSanitizer.IfExists.REPLACE ? ", replaced" : "") + ")");
             } catch (Exception ex) {
                 logger.error("Failed to save results", ex);
                 UserErrors.notify(logger, "QPCAT",

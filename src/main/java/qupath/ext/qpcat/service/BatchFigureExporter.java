@@ -7,7 +7,6 @@ import qupath.ext.qpcat.model.ExportResult;
 import qupath.ext.qpcat.model.OutputFormat;
 import qupath.ext.qpcat.model.PlotKind;
 import qupath.ext.qpcat.model.SavedClusteringResult;
-import qupath.lib.common.GeneralTools;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
@@ -229,10 +228,8 @@ public final class BatchFigureExporter {
             }
             List<String> names = ClusteringResultManager.listResults(project);
             // Prefer a result whose name matches the image
-            String imgSafe = GeneralTools.stripInvalidFilenameChars(entry.getImageName());
             for (String n : names) {
-                if (n.equals(imgSafe) || n.startsWith(imgSafe + "_")
-                        || n.contains(entry.getImageName())) {
+                if (namedAfterImage(n, entry.getImageName())) {
                     return ClusteringResultManager.loadSavedResult(project, n);
                 }
             }
@@ -669,14 +666,22 @@ public final class BatchFigureExporter {
                                                    String imageName, String preferred) {
         if (savedNames == null || savedNames.isEmpty()) return null;
         if (preferred != null && savedNames.contains(preferred)) return preferred;
-        String imgSafe = GeneralTools.stripInvalidFilenameChars(imageName);
         for (String n : savedNames) {
-            if (n.equals(imgSafe) || n.startsWith(imgSafe + "_")
-                    || n.contains(imageName)) {
+            if (namedAfterImage(n, imageName)) {
                 return n;
             }
         }
         return savedNames.get(0);  // fall back to most-recent
+    }
+
+    /** True when a saved result's file name is the image's name, under either file-name rule. */
+    static boolean namedAfterImage(String savedName, String imageName) {
+        if (imageName == null) return false;
+        if (savedName.contains(imageName)) return true;
+        for (String s : FilenameSanitizer.spellingsOnDisk(imageName, FilenameSanitizer.EMPTY_FALLBACK)) {
+            if (savedName.equals(s) || savedName.startsWith(s + "_")) return true;
+        }
+        return false;
     }
 
     // No instances; placate spotbugs.

@@ -9,7 +9,6 @@ import com.google.gson.ToNumberPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.ClusteringConfig;
-import qupath.lib.common.GeneralTools;
 import qupath.lib.projects.Project;
 
 import java.io.IOException;
@@ -134,48 +133,80 @@ public class ClusteringConfigManager {
         return names;
     }
 
+    private static final String CONFIG_FALLBACK = "config";
+
     /**
-     * Save a clustering config to the project with the given name.
+     * The base name a save of {@code name} would write over, or null when free.
+     *
+     * @param project the project
+     * @param name    the requested name
+     * @return the base name already on disk, or null
+     * @throws IOException if the configs directory cannot be created
      */
-    public static void saveConfig(Project<?> project, String name,
-                                  ClusteringConfig config) throws IOException {
-        if (name == null || name.trim().isEmpty()) {
-            throw new IOException("Config name cannot be empty");
-        }
-
-        Path configsDir = getConfigsDirectory(project);
-        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
-        if (safeName.isEmpty()) {
-            safeName = "config";
-        }
-        Path file = configsDir.resolve(safeName + JSON_EXT);
-
-        String json = GSON.toJson(config);
-        // Atomic write: a mid-write failure must not truncate an existing config.
-        Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
-        Files.writeString(tmp, json);
-        try {
-            Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING);
-        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
-        }
-        logger.info("Saved clustering config '{}' to {}", name, file);
+    public static String takenConfigName(Project<?> project, String name) throws IOException {
+        String stem = FilenameSanitizer.sanitize(name.trim(), CONFIG_FALLBACK);
+        return FilenameSanitizer.stemTaken(getConfigsDirectory(project), stem, JSON_EXT)
+                ? stem : null;
     }
 
     /**
-     * Load a clustering config by name from the project.
+     * The base name {@link FilenameSanitizer.IfExists#NEW_NAME} would save {@code name} under.
+     *
+     * @param project the project
+     * @param name    the requested name
+     * @return the first free base name
+     * @throws IOException if the configs directory cannot be created
+     */
+    public static String freeConfigName(Project<?> project, String name) throws IOException {
+        return FilenameSanitizer.reserveStem(getConfigsDirectory(project),
+                FilenameSanitizer.sanitize(name.trim(), CONFIG_FALLBACK),
+                FilenameSanitizer.IfExists.NEW_NAME, "A saved configuration", JSON_EXT);
+    }
+
+    /**
+     * Save a clustering config to the project with the given name.
+     *
+     * @param ifExists what to do when a config of that name exists
+     * @return the base name written on disk
+     * @throws FilenameSanitizer.FileExistsException when refused because the name is taken
+     * @throws IOException when the name is empty, a number is not finite, or the write fails
+     */
+    public static String saveConfig(Project<?> project, String name, ClusteringConfig config,
+                                    FilenameSanitizer.IfExists ifExists) throws IOException {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IOException("Config name cannot be empty");
+        }
+        JsonFiles.requireFinite(config, "The configuration");
+
+        Path configsDir = getConfigsDirectory(project);
+        String safeName = FilenameSanitizer.reserveStem(configsDir,
+                FilenameSanitizer.sanitize(name.trim(), CONFIG_FALLBACK), ifExists,
+                "A saved configuration", JSON_EXT);
+        Path file = configsDir.resolve(safeName + JSON_EXT);
+        // Atomic write: a mid-write failure must not truncate an existing config.
+        JsonFiles.writeAtomic(file, GSON.toJson(config));
+        logger.info("Saved clustering config '{}' to {}", name, file);
+        return safeName;
+    }
+
+    /**
+     * Load a clustering config by name from the project. A typed name also finds
+     * a file saved before 0.26.0 under its old spelling.
      */
     public static ClusteringConfig loadConfig(Project<?> project, String name) throws IOException {
         Path configsDir = getConfigsDirectory(project);
         Path file = configsDir.resolve(name + JSON_EXT);
-
         if (!Files.exists(file)) {
-            throw new IOException("Config file not found: " + file);
+            for (String s : FilenameSanitizer.spellingsOnDisk(name, CONFIG_FALLBACK)) {
+                Path candidate = configsDir.resolve(s + JSON_EXT);
+                if (configsDir.equals(candidate.getParent()) && Files.exists(candidate)) {
+                    file = candidate;
+                    break;
+                }
+            }
         }
-
-        String json = Files.readString(file);
-        ClusteringConfig config = GSON.fromJson(json, ClusteringConfig.class);
+        ClusteringConfig config = JsonFiles.readObject(file, GSON, ClusteringConfig.class,
+                "a clustering configuration");
         logger.info("Loaded clustering config '{}' from {}", name, file);
         return config;
     }

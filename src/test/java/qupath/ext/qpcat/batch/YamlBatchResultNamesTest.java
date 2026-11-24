@@ -59,8 +59,30 @@ class YamlBatchResultNamesTest {
 
     @Test
     void safeResultNameIsTheNameASaveUses() {
-        assertThat(ClusteringResultManager.safeResultName("yaml_A:B")).isEqualTo("yaml_AB");
+        assertThat(ClusteringResultManager.safeResultName("yaml_A:B")).isEqualTo("yaml_A_B");
         assertThat(ClusteringResultManager.safeResultName("  plain  ")).isEqualTo("plain");
         assertThat(ClusteringResultManager.safeResultName(":")).isEqualTo("result");
+    }
+
+    @Test
+    void aRunWhoseResultExistsIsRefusedUnlessOverwriteIsSet(@org.junit.jupiter.api.io.TempDir Path dir)
+            throws Exception {
+        var project = qupath.lib.projects.Projects.createProject(dir.toFile(), BufferedImage.class);
+        java.nio.file.Files.writeString(ClusteringResultManager.getResultsDirectory(project)
+                .resolve("yaml_A_B.json"), "{}");
+        var rp = new ScopeResolver.ResolvedProject(dir.resolve("project.qpproj"), project, List.of());
+
+        var refuse = schema("clustering: { type: leiden }\n").getClustering();
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> YamlBatchOrchestrator.refuseExistingResult(rp, "yaml_A:B", refuse))
+                .hasMessageContaining("'yaml_A_B' already exists")
+                .hasMessageContaining("clustering.overwrite_existing: true");
+        // A free name passes.
+        YamlBatchOrchestrator.refuseExistingResult(rp, "yaml_C", refuse);
+
+        var overwrite = schema("clustering: { type: leiden, overwrite_existing: true }\n")
+                .getClustering();
+        assertThat(overwrite.isOverwriteExisting()).isTrue();
+        YamlBatchOrchestrator.refuseExistingResult(rp, "yaml_A:B", overwrite);
     }
 }

@@ -373,12 +373,23 @@ public class ClusterCompositionPanel extends BorderPane {
         File dir = chooser.showDialog(getScene() != null ? getScene().getWindow() : null);
         if (dir == null) return;
 
-        String base = "composition_by_" + figure.getDimension().toLowerCase(Locale.ROOT);
+        String base = FilenameSanitizer.sanitize(
+                "composition_by_" + figure.getDimension().toLowerCase(Locale.ROOT), "composition");
         // Cluster colors come from the live "Cluster N" (or renamed) classes, so
         // an edit in the Results window is already reflected in every file here.
         java.util.function.IntUnaryOperator colors = figure::defaultColorRgb;
         try {
             Path root = dir.toPath();
+            String[] parts3 = {".png", ".csv", "_panels"};
+            if (FilenameSanitizer.stemTaken(root, base, parts3)) {
+                String free = FilenameSanitizer.reserveStem(root, base,
+                        FilenameSanitizer.IfExists.NEW_NAME, "A composition export", parts3);
+                var choice = SaveConflictPrompt.ask(
+                        getScene() != null ? getScene().getWindow() : null,
+                        "Replace Composition Export", "A composition export", base, free);
+                if (choice.isEmpty()) return;
+                if (choice.get() == FilenameSanitizer.IfExists.NEW_NAME) base = free;
+            }
             ImageIO.write(figure.render(2.0, colors), "PNG",
                     root.resolve(base + ".png").toFile());
             Files.writeString(root.resolve(base + ".csv"), figure.toCsv(),
@@ -393,12 +404,15 @@ public class ClusterCompositionPanel extends BorderPane {
             Files.createDirectories(parts);
             ImageIO.write(figure.renderLegend(2.0, colors), "PNG",
                     parts.resolve("legend.png").toFile());
+            // Unique per export, so two groups whose names differ only in characters
+            // a file name cannot hold (or in case, on Windows) keep separate pies.
+            java.util.Set<String> used = new java.util.HashSet<>(java.util.Set.of("legend.png"));
             int n = 0;
             for (String group : groups()) {
-                String safe = FilenameSanitizer.sanitize(group);
-                if (safe.isBlank()) safe = "group_" + n;
+                String file = FilenameSanitizer.uniqueIn(used,
+                        FilenameSanitizer.sanitize(group, "group_" + n) + ".png");
                 ImageIO.write(figure.renderSingle(group, 2.0, colors), "PNG",
-                        parts.resolve(safe + ".png").toFile());
+                        parts.resolve(file).toFile());
                 n++;
             }
 

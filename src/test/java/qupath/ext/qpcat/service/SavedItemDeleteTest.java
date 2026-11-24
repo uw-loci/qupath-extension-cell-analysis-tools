@@ -26,8 +26,10 @@ class SavedItemDeleteTest {
     @Test
     void deletingAConfigRemovesTheFileAndTheListEntry(@TempDir Path dir) throws Exception {
         Project<?> project = projectAt(dir);
-        ClusteringConfigManager.saveConfig(project, "keep", new ClusteringConfig());
-        ClusteringConfigManager.saveConfig(project, "drop", new ClusteringConfig());
+        ClusteringConfigManager.saveConfig(project, "keep", new ClusteringConfig(),
+                FilenameSanitizer.IfExists.REFUSE);
+        ClusteringConfigManager.saveConfig(project, "drop", new ClusteringConfig(),
+                FilenameSanitizer.IfExists.REFUSE);
         Path file = ClusteringConfigManager.getConfigsDirectory(project).resolve("drop.json");
         assertThat(file).exists();
 
@@ -40,7 +42,8 @@ class SavedItemDeleteTest {
     @Test
     void deletingAMissingConfigReturnsFalseWithoutThrowing(@TempDir Path dir) throws Exception {
         Project<?> project = projectAt(dir);
-        ClusteringConfigManager.saveConfig(project, "keep", new ClusteringConfig());
+        ClusteringConfigManager.saveConfig(project, "keep", new ClusteringConfig(),
+                FilenameSanitizer.IfExists.REFUSE);
 
         assertThat(ClusteringConfigManager.deleteConfig(project, "never-saved")).isFalse();
         assertThat(ClusteringConfigManager.deleteConfig(project, "keep")).isTrue();
@@ -63,8 +66,10 @@ class SavedItemDeleteTest {
     @Test
     void deletingARuleSetRemovesTheFileAndTheListEntry(@TempDir Path dir) throws Exception {
         Project<?> project = projectAt(dir);
-        PhenotypeRuleSetManager.saveRuleSet(project, new PhenotypeRuleSet("keep"));
-        PhenotypeRuleSetManager.saveRuleSet(project, new PhenotypeRuleSet("drop"));
+        PhenotypeRuleSetManager.saveRuleSet(project, new PhenotypeRuleSet("keep"),
+                FilenameSanitizer.IfExists.REFUSE);
+        PhenotypeRuleSetManager.saveRuleSet(project, new PhenotypeRuleSet("drop"),
+                FilenameSanitizer.IfExists.REFUSE);
         Path file = PhenotypeRuleSetManager.getRulesDirectory(project).resolve("drop.json");
         assertThat(file).exists();
 

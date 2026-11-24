@@ -16,6 +16,7 @@ import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellMatcher;
 import qupath.ext.qpcat.service.DetectionSelector;
@@ -271,7 +272,9 @@ public class PostHocSpatialWorkflow {
             Path dir = project.getPath().getParent().resolve(QpcatPaths.SPATIAL_STATS);
             Files.createDirectories(dir);
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-            String base = "spatial_" + stamp;
+            String base = FilenameSanitizer.reserveStem(dir, "spatial_" + stamp,
+                    FilenameSanitizer.IfExists.NEW_NAME, "A spatial statistics export",
+                    ".csv", ".json");
 
             Files.writeString(dir.resolve(base + ".csv"), buildCsv(results));
 

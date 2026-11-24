@@ -13,6 +13,7 @@ import qupath.ext.qpcat.model.PlotKind;
 import qupath.ext.qpcat.scripting.FigureExportScripts;
 import qupath.ext.qpcat.scripting.SpatialGraphScripts;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -418,7 +419,11 @@ public final class YamlBatchOrchestrator {
                         name = names.get(0);
                     }
                     clustering = ClusteringResultManager.loadResult(rp.getProject(), name);
-                    resultName = name;
+                    // The name on disk, which later steps look up (a pre-0.26.0 file
+                    // may be spelled differently from what the YAML says).
+                    String onDisk = ClusteringResultManager.existingResultName(
+                            rp.getProject(), name);
+                    resultName = onDisk != null ? onDisk : name;
                     emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                             ProgressEmitter.fields("image", entry.getImageName(),
                                     "step", "clustering", "clusters", clustering.getNClusters()),
@@ -440,18 +445,21 @@ public final class YamlBatchOrchestrator {
                                 "type", config.getAlgorithm().getId()),
                         "starting");
                 try {
+                    String requested = cc.getResultName() != null
+                            ? cc.getResultName()
+                            : ("yaml_" + entry.getImageName());
+                    // Checked before the run, so a refused name costs no clustering time.
+                    refuseExistingResult(rp, requested, cc);
                     HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
                     clustering = hw.runClustering(List.of(entry), config, null);
                     // Persist the saved result so spatial_stats / figure_export
                     // can pick it up, under the name saveResult actually used.
-                    String requested = cc.getResultName() != null
-                            ? cc.getResultName()
-                            : ("yaml_" + entry.getImageName());
                     resultName = ClusteringResultManager.saveResult(
                             rp.getProject(), requested, clustering,
                             config.getAlgorithm().getId(),
                             config.getNormalization().getId(),
-                            config.getEmbeddingMethod().getId());
+                            config.getEmbeddingMethod().getId(),
+                            ifExists(cc));
                     emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                             ProgressEmitter.fields("image", entry.getImageName(),
                                     "step", "clustering",
@@ -691,14 +699,16 @@ public final class YamlBatchOrchestrator {
             ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats(),
                     plan.getClusteringMeasurements());
             config.setClusterEntireProject(true);
+            String requested = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
+            refuseExistingResult(rp, requested, cc);
             HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
             ClusteringResult clustering = hw.runClustering(rp.getImages(), config, null);
-            String requested = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
             String resultName = ClusteringResultManager.saveResult(rp.getProject(), requested,
                     clustering,
                     config.getAlgorithm().getId(),
                     config.getNormalization().getId(),
-                    config.getEmbeddingMethod().getId());
+                    config.getEmbeddingMethod().getId(),
+                    ifExists(cc));
             emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
                     + clustering.clusterCountText() + ", " + clustering.getNCells()
                     + " cells across " + n + " image(s); saved as '" + resultName + "'");
@@ -713,6 +723,34 @@ public final class YamlBatchOrchestrator {
             }
             return null;
         }
+    }
+
+    /** The save policy {@code clustering.overwrite_existing} asks for. */
+    private static FilenameSanitizer.IfExists ifExists(BatchYamlSchema.ClusteringBlock cc) {
+        return cc.isOverwriteExisting()
+                ? FilenameSanitizer.IfExists.REPLACE : FilenameSanitizer.IfExists.REFUSE;
+    }
+
+    /**
+     * Refuse a run whose result would replace a saved one, unless
+     * {@code clustering.overwrite_existing} is set.
+     *
+     * @throws IOException naming the result and both ways out
+     */
+    static void refuseExistingResult(ScopeResolver.ResolvedProject rp, String requested,
+                                     BatchYamlSchema.ClusteringBlock cc) throws IOException {
+        if (cc.isOverwriteExisting()) return;
+        String taken = ClusteringResultManager.takenResultName(rp.getProject(), requested);
+        if (taken != null) {
+            throw new IOException(existingResultMessage(taken));
+        }
+    }
+
+    /** The refusal text for a result name already on disk. */
+    static String existingResultMessage(String taken) {
+        return "a saved result named '" + taken + "' already exists in this project; set "
+                + "clustering.overwrite_existing: true to replace it, or choose another "
+                + "clustering.result_name";
     }
 
     private static void emitDryRunDescription(BatchYamlSchema schema,
@@ -1015,8 +1053,11 @@ public final class YamlBatchOrchestrator {
         // loaded for the image, else the name a per-image batch run saves under.
         String rn = fe.getResultName();
         if (rn == null || rn.isEmpty()) {
+            String perImage = "yaml_" + entry.getImageName();
+            String onDisk = runResultName != null ? null
+                    : ClusteringResultManager.existingResultName(rp.getProject(), perImage);
             rn = runResultName != null ? runResultName
-                    : ClusteringResultManager.safeResultName("yaml_" + entry.getImageName());
+                    : onDisk != null ? onDisk : ClusteringResultManager.safeResultName(perImage);
         }
         opts.put("resultName", rn);
 

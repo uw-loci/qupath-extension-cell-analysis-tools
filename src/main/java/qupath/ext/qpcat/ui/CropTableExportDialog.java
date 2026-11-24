@@ -119,6 +119,9 @@ public final class CropTableExportDialog {
 
         TextField dirField = new TextField();
         dirField.setPrefColumnCount(32);
+        dirField.setTooltip(Tooltips.of(
+                "Each export goes into a new crop_table_<date>_<time> subfolder of this\n"
+                + "folder, so an earlier export is never overwritten."));
         File seeded = ExportLocation.qpcatDir(qupath, QpcatPaths.CROP_TABLES);
         if (seeded != null) dirField.setText(seeded.getAbsolutePath());
         Button browse = UiLabels.whole(new Button("Browse..."));
@@ -179,8 +182,11 @@ public final class CropTableExportDialog {
                             cropsCheck.isSelected() ? String.format(" and %,d PNG crop(s)", n) : ""));
             coverage.setText(coverageWarning(dets, chosen));
 
-            Path dir = dirField.getText() == null || dirField.getText().isBlank()
-                    ? Path.of("<output folder>") : Path.of(dirField.getText());
+            Path dir = (dirField.getText() == null || dirField.getText().isBlank()
+                    ? Path.of("OUTPUT_FOLDER") : Path.of(dirField.getText()))
+                    // '<' and '>' are not allowed in a Windows path, so a placeholder
+                    // must be plain text.
+                    .resolve(CropTableExporter.BUNDLE_PREFIX + "DATE_TIME");
             CropTableExporter.Header header = CropTableExporter.buildHeader(
                     chosen, classColCheck.isSelected(), imageColCheck.isSelected());
             command.setText(tsvCheck.isSelected()

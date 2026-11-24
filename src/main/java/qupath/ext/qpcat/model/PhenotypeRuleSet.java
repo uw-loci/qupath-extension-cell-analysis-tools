@@ -135,6 +135,25 @@ public class PhenotypeRuleSet {
     public Map<String, Double> getGates() { return gates; }
     public void setGates(Map<String, Double> gates) { this.gates = gates; }
 
+    /**
+     * Why a gate map cannot be saved or sent to Python, or null when every gate
+     * is a finite number (or absent).
+     *
+     * @param gates marker -> threshold; may be null
+     * @return a message naming the first marker whose gate is NaN or infinite
+     */
+    public static String nonFiniteGateMessage(Map<String, Double> gates) {
+        if (gates == null) return null;
+        for (Map.Entry<String, Double> e : gates.entrySet()) {
+            Double v = e.getValue();
+            if (v != null && !Double.isFinite(v)) {
+                return "The gate for marker '" + e.getKey() + "' is " + v
+                        + ", not a number a threshold can be. Type a threshold for it and try again.";
+            }
+        }
+        return null;
+    }
+
     public List<RuleEntry> getRules() { return rules; }
     public void setRules(List<RuleEntry> rules) { this.rules = rules; }
 

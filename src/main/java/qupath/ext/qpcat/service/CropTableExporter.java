@@ -115,7 +115,11 @@ public final class CropTableExporter {
 
     /** What to export. */
     public static final class Options {
-        /** Bundle root; receives {@code images/}, the table(s) and a README. */
+        /**
+         * The folder chosen by the user. Each export writes into a new
+         * {@code crop_table_<date>_<time>} subfolder of it, so a second export never
+         * overwrites the first or mixes its crops with stale ones.
+         */
         public Path outputDir;
         /** Measurement names to write as feature columns, in order. */
         public List<String> measurements = List.of();
@@ -496,17 +500,18 @@ public final class CropTableExporter {
 
         Header header = buildHeader(opts.measurements,
                 opts.includeClassification, opts.includeImageName);
-        Path imagesDir = opts.outputDir.resolve("images");
+        Path bundleDir = newBundleDir(opts.outputDir, java.time.LocalDateTime.now());
+        Path imagesDir = bundleDir.resolve("images");
         if (opts.writeCrops) {
             Files.createDirectories(imagesDir);
         } else {
-            Files.createDirectories(opts.outputDir);
+            Files.createDirectories(bundleDir);
         }
 
         List<Row> rows = new ArrayList<>(selected.size());
         int crops = 0;
         report(progress, "Writing " + selected.size() + " cell(s) to "
-                + opts.outputDir + " ...");
+                + bundleDir + " ...");
         try (CellCropService cropService = new CellCropService(qupath)) {
             for (int i = 0; i < selected.size(); i++) {
                 if (cancelled != null && cancelled.getAsBoolean()) {
@@ -552,25 +557,47 @@ public final class CropTableExporter {
 
         List<Path> tables = new ArrayList<>();
         for (Format format : opts.formats) {
-            Path file = opts.outputDir.resolve("features." + format.getExtension());
+            Path file = bundleDir.resolve("features." + format.getExtension());
             writeTable(file, format, header, rows);
             tables.add(file);
         }
 
-        Path readme = opts.outputDir.resolve("README.txt");
+        Path readme = bundleDir.resolve("README.txt");
         writeReadme(readme, opts, header, classNames, sizes, rows.size(), crops,
                 gathered, notSampled, imagesDir, tables);
 
         logger.info("Crop/table export: {} cells ({} crops) across {} image(s), "
                         + "{} classification(s) -> {}",
-                rows.size(), crops, gathered.imagesUsed, classNames.size(), opts.outputDir);
+                rows.size(), crops, gathered.imagesUsed, classNames.size(), bundleDir);
         OperationLogger.getInstance().logEvent("CROP TABLE EXPORT",
                 "Exported " + rows.size() + " cell(s) (" + crops + " crops, "
                 + opts.measurements.size() + " measurements) across " + gathered.imagesUsed
-                + " image(s) to " + opts.outputDir);
+                + " image(s) to " + bundleDir);
 
         return new Result(rows.size(), crops, gathered.skippedMissing, notSampled,
-                gathered.imagesUsed, classNames, opts.outputDir, tables);
+                gathered.imagesUsed, classNames, bundleDir, tables);
+    }
+
+    /** Prefix of the subfolder each export writes into. */
+    public static final String BUNDLE_PREFIX = "crop_table_";
+
+    private static final java.time.format.DateTimeFormatter BUNDLE_STAMP =
+            java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.ROOT);
+
+    /**
+     * A new, empty subfolder of {@code parent} for one export:
+     * {@code crop_table_<yyyyMMdd_HHmmss>}, with {@code _2}, {@code _3}, ... when
+     * two exports start within one second.
+     *
+     * @param parent the folder the user chose
+     * @param when   the export's start time
+     * @return the subfolder (not yet created)
+     * @throws IOException never in practice; declared by the reservation
+     */
+    static Path newBundleDir(Path parent, java.time.LocalDateTime when) throws IOException {
+        String stem = FilenameSanitizer.reserveStem(parent, BUNDLE_PREFIX + BUNDLE_STAMP.format(when),
+                FilenameSanitizer.IfExists.NEW_NAME, "An export folder", "");
+        return parent.resolve(stem);
     }
 
     // ==================== gathering ====================

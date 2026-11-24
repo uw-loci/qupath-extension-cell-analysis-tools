@@ -179,30 +179,89 @@ public class ClusteringResultManager {
         return summaries;
     }
 
+    /** Fallback base name for a result whose name sanitizes to nothing. */
+    private static final String RESULT_FALLBACK = "result";
+
+    /** The files one saved result occupies, as suffixes of its base name. */
+    private static final String[] RESULT_FILES = {
+            JSON_EXT, PLOTS_SUFFIX, CONFIG_SIDECAR_SUFFIX, "_RUN_INFO.txt"
+    };
+
     /**
-     * The base file name {@link #saveResult} stores a result under, and so the
-     * name to load it by.
+     * The base file name {@link #saveResult} stores a NEW result under.
      *
      * @param name the requested result name, not blank
-     * @return the name with characters invalid in file names removed
+     * @return the name made safe by {@link FilenameSanitizer}
      */
     public static String safeResultName(String name) {
-        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
-        return safeName.isEmpty() ? "result" : safeName;
+        return FilenameSanitizer.sanitize(name.trim(), RESULT_FALLBACK);
+    }
+
+    /**
+     * The saved result a typed name refers to: the name as given, its spelling
+     * under today's file-name rule, or its spelling before 0.26.0 (characters
+     * deleted rather than replaced), whichever exists first.
+     *
+     * @param project the project
+     * @param name    the typed or listed name
+     * @return the base name on disk, or null when none exists
+     * @throws IOException if the results directory cannot be created
+     */
+    public static String existingResultName(Project<?> project, String name) throws IOException {
+        if (name == null || name.isBlank()) return null;
+        Path dir = getResultsDirectory(project);
+        if (isSafeResultName(name) && Files.exists(dir.resolve(name + JSON_EXT))) return name;
+        for (String candidate : FilenameSanitizer.spellingsOnDisk(name, RESULT_FALLBACK)) {
+            if (isSafeResultName(candidate) && Files.exists(dir.resolve(candidate + JSON_EXT))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The base name a save of {@code name} would write over, or null when the
+     * name is free. Lets the GUI ask before it overwrites.
+     *
+     * @param project the project
+     * @param name    the requested name
+     * @return the base name already taken on disk, or null
+     * @throws IOException if the results directory cannot be created
+     */
+    public static String takenResultName(Project<?> project, String name) throws IOException {
+        String stem = safeResultName(name);
+        return FilenameSanitizer.stemTaken(getResultsDirectory(project), stem, RESULT_FILES)
+                ? stem : null;
+    }
+
+    /**
+     * The base name {@link FilenameSanitizer.IfExists#NEW_NAME} would save {@code name} under.
+     *
+     * @param project the project
+     * @param name    the requested name
+     * @return the first free base name
+     * @throws IOException if the results directory cannot be created
+     */
+    public static String freeResultName(Project<?> project, String name) throws IOException {
+        return FilenameSanitizer.reserveStem(getResultsDirectory(project), safeResultName(name),
+                FilenameSanitizer.IfExists.NEW_NAME, "A saved result", RESULT_FILES);
     }
 
     /**
      * Save a clustering result to the project (user-named, no scope metadata).
      * Copies plot images into the project directory so they persist.
      *
+     * @param ifExists what to do when a result of that name exists
      * @return the sanitized base name actually used on disk
+     * @throws FilenameSanitizer.FileExistsException when refused because the name is taken
      */
     public static String saveResult(Project<?> project, String name,
                                      ClusteringResult result,
                                      String algorithm, String normalization,
-                                     String embeddingMethod) throws IOException {
+                                     String embeddingMethod,
+                                     FilenameSanitizer.IfExists ifExists) throws IOException {
         return saveResult(project, name, result, algorithm, normalization, embeddingMethod,
-                null, null, false);
+                null, null, false, ifExists);
     }
 
     /**
@@ -214,20 +273,24 @@ public class ClusteringResultManager {
      *                   project-wide runs (may be null on older callers)
      * @param scopeLabel human-readable scope (image name or "Entire project")
      * @param autoSaved  true when persisted automatically at end of run
+     * @param ifExists   what to do when a result of that name exists
      * @return the sanitized base name actually used on disk
+     * @throws FilenameSanitizer.FileExistsException when refused because the name is taken
      */
     public static String saveResult(Project<?> project, String name,
                                      ClusteringResult result,
                                      String algorithm, String normalization,
                                      String embeddingMethod,
                                      String scopeKey, String scopeLabel,
-                                     boolean autoSaved) throws IOException {
+                                     boolean autoSaved,
+                                     FilenameSanitizer.IfExists ifExists) throws IOException {
         if (name == null || name.trim().isEmpty()) {
             throw new IOException("Result name cannot be empty");
         }
 
         Path resultsDir = getResultsDirectory(project);
-        String safeName = safeResultName(name);
+        String safeName = FilenameSanitizer.reserveStem(resultsDir, safeResultName(name),
+                ifExists, "A saved result", RESULT_FILES);
 
         // Copy plot images to project directory
         Map<String, String> persistedPlots = null;
@@ -236,14 +299,15 @@ public class ClusteringResultManager {
             if (!Files.exists(plotsDir)) Files.createDirectories(plotsDir);
 
             persistedPlots = new LinkedHashMap<>();
+            Set<String> usedPlotNames = new HashSet<>();
             for (Map.Entry<String, String> entry : result.getPlotPaths().entrySet()) {
                 Path srcPath = Path.of(entry.getValue());
                 if (Files.exists(srcPath)) {
-                    // Sanitize the FILENAME (keep the map key as-is): per-image spatial keys
-                    // like "spatial_scatter::Image 1" contain ':' which is illegal in Windows
-                    // filenames. The key still round-trips; only the on-disk name is cleaned.
-                    String plotFilename = GeneralTools.stripInvalidFilenameChars(entry.getKey())
-                            + getFileExtension(srcPath);
+                    // The map key stays the display label ("spatial_scatter::Image 1"); the
+                    // file name is sanitized and made unique, so two images whose names differ
+                    // only in characters a file name cannot hold never share one PNG.
+                    String plotFilename = plotFileName(usedPlotNames, entry.getKey(),
+                            getFileExtension(srcPath));
                     Path destPath = plotsDir.resolve(plotFilename);
                     Files.copy(srcPath, destPath, StandardCopyOption.REPLACE_EXISTING);
                     // Store relative path from results directory
@@ -278,6 +342,19 @@ public class ClusteringResultManager {
                 name, file, result.getNClusters(), result.getNCells(),
                 autoSaved ? "auto" : "named");
         return safeName;
+    }
+
+    /**
+     * A file name for one plot of a result, unique within {@code used}
+     * (case-insensitive, as on Windows).
+     *
+     * @param used    names already given in this plots folder, lower-cased; updated
+     * @param plotKey the plot's key, e.g. {@code spatial_scatter::Image 1}
+     * @param ext     the extension with its dot
+     * @return the file name to write
+     */
+    static String plotFileName(Set<String> used, String plotKey, String ext) {
+        return FilenameSanitizer.uniqueIn(used, FilenameSanitizer.sanitize(plotKey, "plot") + ext);
     }
 
     /**
@@ -383,8 +460,9 @@ public class ClusteringResultManager {
                 : algorithm.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "");
         if (algoTag.isEmpty()) algoTag = "result";
         String name = "auto_" + LocalDateTime.now().format(AUTO_NAME_FMT) + "_" + algoTag;
+        // Two runs finishing in the same second get _2 rather than one replacing the other.
         return saveResult(project, name, result, algorithm, normalization, embeddingMethod,
-                scopeKey, scopeLabel, true);
+                scopeKey, scopeLabel, true, FilenameSanitizer.IfExists.NEW_NAME);
     }
 
     /**
@@ -409,15 +487,13 @@ public class ClusteringResultManager {
         }
         SavedClusteringResult saved = loadSavedResult(project, sourceName);  // fresh load; never mutated on disk
         Path resultsDir = getResultsDirectory(project);
-        String safeName = GeneralTools.stripInvalidFilenameChars(newName.trim());
-        if (safeName.isEmpty()) safeName = "result";
+        String safeName = safeResultName(newName);
         if (safeName.equals(sourceName)) {
             throw new IOException("The copy name must differ from the original ('" + sourceName + "').");
         }
+        FilenameSanitizer.reserveStem(resultsDir, safeName, FilenameSanitizer.IfExists.REFUSE,
+                "A saved result", RESULT_FILES);
         Path targetJson = resultsDir.resolve(safeName + JSON_EXT);
-        if (Files.exists(targetJson)) {
-            throw new IOException("A saved result named '" + safeName + "' already exists.");
-        }
 
         // Snapshot the pre-edit names before they are replaced; the run record
         // reports what changed, and after setClusterNames the old ones are gone.
@@ -498,12 +574,9 @@ public class ClusteringResultManager {
             throw new IOException("Result name cannot be empty");
         }
         Path resultsDir = getResultsDirectory(project);
-        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
-        if (safeName.isEmpty()) safeName = "result";
+        String safeName = FilenameSanitizer.reserveStem(resultsDir, safeResultName(name),
+                FilenameSanitizer.IfExists.REFUSE, "A saved result", RESULT_FILES);
         Path file = resultsDir.resolve(safeName + JSON_EXT);
-        if (Files.exists(file)) {
-            throw new IOException("A saved result named '" + safeName + "' already exists.");
-        }
 
         SavedClusteringResult saved = new SavedClusteringResult();
         saved.setName(name);
@@ -734,6 +807,8 @@ public class ClusteringResultManager {
      * Resolves relative plot paths back to absolute paths.
      */
     public static ClusteringResult loadResult(Project<?> project, String name) throws IOException {
+        String onDisk = existingResultName(project, name);
+        if (onDisk != null) name = onDisk;
         SavedClusteringResult saved = loadSavedResult(project, name);
         Path resultsDir = getResultsDirectory(project);
 
@@ -911,12 +986,15 @@ public class ClusteringResultManager {
     }
 
     /**
-     * Load the raw saved result (with metadata) without path resolution.
+     * Load the raw saved result (with metadata) without path resolution. A typed
+     * name is matched as {@link #existingResultName} does, so a result saved
+     * before 0.26.0 under its old spelling still loads.
      */
     public static SavedClusteringResult loadSavedResult(Project<?> project,
                                                          String name) throws IOException {
         Path resultsDir = getResultsDirectory(project);
-        Path file = resultsDir.resolve(name + JSON_EXT);
+        String onDisk = existingResultName(project, name);
+        Path file = resultsDir.resolve((onDisk != null ? onDisk : name) + JSON_EXT);
 
         if (!Files.exists(file)) {
             throw new IOException("Result file not found: " + file);
