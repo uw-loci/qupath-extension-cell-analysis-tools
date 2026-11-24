@@ -24,14 +24,16 @@ import java.util.regex.Pattern;
 /**
  * Semantic validator for the v1 QP-CAT batch YAML schema.
  *
- * <p>Each rule maps to a stable error code (E001-E021) or warning
- * code (W001-W004). The validator accumulates issues; the orchestrator
+ * <p>Each rule maps to a stable error code (E001-E025) or warning
+ * code (W001-W013). The validator accumulates issues; the orchestrator
  * decides whether to dispatch based on {@link ValidationResult#hasErrors()}.</p>
  *
- * <p>Semantic checks NOT performed here (deferred to orchestrator at
- * dispatch time): E008 (image-not-found) needs an open project, E010
- * (marker-not-found) needs a loaded image, E013-E014 (project-resolution)
- * happen as part of scope expansion.</p>
+ * <p>Semantic checks NOT performed here (done by the orchestrator before any
+ * work, in the dry run too): E008 / E024 (image not found, duplicate image
+ * names) need an open project, E010 (measurement or rule marker that does not
+ * resolve against the images, see {@link BatchMeasurements}) needs the images'
+ * measurements, E013-E014 (project resolution) happen as part of scope
+ * expansion.</p>
  *
  * <p>The filename-slug shorthand {@code "ripley"} is expanded here for
  * {@link BatchYamlSchema.FigureExportBlock#getFigures()} (the YAML allows
@@ -48,8 +50,9 @@ public final class BatchYamlValidator {
             "agglomerative", "minibatch_kmeans", "minibatchkmeans",
             "gmm", "banksy", "none", "existing"));
 
-    private static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
-            "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"));
+    /** Every spelling here must resolve in {@code YamlBatchOrchestrator.parseNormalization}. */
+    static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
+            "none", "percentile_99", "percentile", "zscore", "minmax"));
     private static final Set<String> MISSING_VALUES = Set.of(
             "exclude_objects", "exclude_measurements", "impute");
     private static final Set<String> GRAPH_BACKENDS = Set.of("cpu", "gpu");
@@ -234,14 +237,21 @@ public final class BatchYamlValidator {
             }
         }
         if (c.getNormalization() != null
+                && "log1p".equals(c.getNormalization().toLowerCase(Locale.ROOT))) {
+            // Used to be accepted and run as z-score, for clustering and phenotyping alike.
+            r.add(ValidationIssue.error("E005", "clustering.normalization",
+                    "'log1p' is not implemented (QP-CAT has no log transform); use one of "
+                    + NORMALIZATIONS));
+        } else if (c.getNormalization() != null
                 && !NORMALIZATIONS.contains(c.getNormalization().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.normalization",
                     "'" + asciiSafe(c.getNormalization()) + "' is not one of " + NORMALIZATIONS));
         }
-        if (c.getMissingValues() != null
-                && !MISSING_VALUES.contains(c.getMissingValues().toLowerCase(Locale.ROOT))) {
-            r.add(ValidationIssue.error("E005", "clustering.missing_values",
-                    "'" + asciiSafe(c.getMissingValues()) + "' is not one of " + MISSING_VALUES));
+        validateMissingValues(c.getMissingValues(), "clustering.missing_values", r);
+        if ("louvain".equalsIgnoreCase(type) && !reuseSaved) {
+            r.add(ValidationIssue.warning("W013", "clustering.type",
+                    "'louvain' is not implemented; this run uses Leiden. Write type: leiden "
+                    + "to make that explicit."));
         }
         if (c.getGraphBackend() != null
                 && !GRAPH_BACKENDS.contains(c.getGraphBackend().toLowerCase(Locale.ROOT))) {
@@ -359,7 +369,7 @@ public final class BatchYamlValidator {
      * Configs on the defaults never trip this: every threshold is 1.0, so every
      * marker resolves to one value regardless of rule or direction.
      */
-    private static void validateGateConsistency(
+    static void validateGateConsistency(
             List<BatchYamlSchema.PhenotypeRuleEntry> rules, ValidationResult r) {
         // marker -> gate value -> the rules that asked for it
         Map<String, Map<Double, List<String>>> byMarker = new LinkedHashMap<>();
@@ -395,9 +405,18 @@ public final class BatchYamlValidator {
         }
     }
 
+    /** E005 unless {@code value} is null or one of {@link #MISSING_VALUES}. */
+    private static void validateMissingValues(String value, String path, ValidationResult r) {
+        if (value != null && !MISSING_VALUES.contains(value.toLowerCase(Locale.ROOT))) {
+            r.add(ValidationIssue.error("E005", path,
+                    "'" + asciiSafe(value) + "' is not one of " + MISSING_VALUES));
+        }
+    }
+
     private static void validatePhenotyping(BatchYamlSchema s, ValidationResult r) {
         BatchYamlSchema.PhenotypingBlock p = s.getPhenotyping();
         if (p == null) return;
+        validateMissingValues(p.getMissingValues(), "phenotyping.missing_values", r);
         if (p.isEnabled()
                 && (p.getRules() == null || p.getRules().isEmpty())
                 && (p.getLlmExplainer() == null || !p.getLlmExplainer().isEnabled())) {
@@ -447,6 +466,9 @@ public final class BatchYamlValidator {
         }
         BatchYamlSchema.LlmExplainerBlock llm = p.getLlmExplainer();
         if (llm != null && llm.isEnabled()) {
+            r.add(ValidationIssue.warning("W012", "phenotyping.llm_explainer.enabled",
+                    "the batch checks this block but never runs the Cluster Explainer; it runs "
+                    + "only from the Results window. No explanations will be produced."));
             if (llm.getProvider() == null || llm.getProvider().isEmpty()) {
                 r.add(ValidationIssue.error("E001",
                         "phenotyping.llm_explainer.provider",
@@ -491,6 +513,17 @@ public final class BatchYamlValidator {
         BatchYamlSchema.SpatialStatsBlock ss = s.getSpatialStats();
         if (ss == null) return;
         if (!ss.isEnabled()) return;
+        BatchYamlSchema.ClusteringBlock c = s.getClustering();
+        boolean clusters = c != null && !"reuse_saved".equalsIgnoreCase(c.getMode())
+                && !"skip".equalsIgnoreCase(c.getType());
+        if (!clusters) {
+            r.add(ValidationIssue.warning("W011", "spatial_stats",
+                    "will NOT run: spatial statistics are computed only during a clustering "
+                    + "run (clustering.mode: run), and this file "
+                    + (c == null ? "has no clustering block" : "does not cluster")
+                    + ". Run clustering again with this block, or use Spatial statistics on "
+                    + "existing clusters in the GUI."));
+        }
 
         BatchYamlSchema.GraphConstructor g = ss.getGraph();
         if (g == null) {
@@ -526,8 +559,10 @@ public final class BatchYamlValidator {
         }
         // permutations type / range
         Object perms = ss.getPermutations();
-        if (perms != null && !(perms instanceof String)) {
-            int pn = BatchYamlParser.asInt(perms, -1);
+        // The parser stores a whole number as Integer and has already refused
+        // (E003) anything else that is not text.
+        if (perms instanceof Number n) {
+            int pn = n.intValue();
             if (pn <= 0 || pn > 10000) {
                 r.add(ValidationIssue.error("E004", "spatial_stats.permutations",
                         "must be 'auto' or integer in (0, 10000]; got " + perms));

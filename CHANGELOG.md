@@ -198,6 +198,86 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - **The results window opens taller (840 px scene, under 900 px as a window) where the screen
   allows it**, shorter on a small screen. At 650 px the 3D View's class list showed five rows
   above 12 classes, two with the cell preview open.
+- **A phenotyping rule whose marker is not in the data no longer claims cells.** A `pos` or
+  `neg` marker that was not a measurement of the cells (renamed since the rule set was saved, or
+  absent from the images) was skipped with a log line, so "CD3 pos, CD8 neg" ran as "CD3 pos"
+  and labeled cells the rule was never meant to. Such a rule now matches no cells, and every
+  missing marker is reported: a notification and a **Warnings** section in the Phenotyping
+  results, and a WARN row in a batch run. Phenotyping runs from earlier versions that applied a
+  saved rule set to images missing one of its markers could have labeled too many cells with
+  that rule.
+- **Batch files: a value of the wrong type is refused, never replaced or retyped.** A number
+  written `0,5` silently became the default (`require_min_zscore: 0,5` gated at 1.0, `resolution:
+  0,5` ran at the default resolution), `k: 2.7` ran as 2, `pca_n_components: 010` as 8 and
+  `random_seed: 1:30` as 90 (YAML 1.1 octal and base-60). An unquoted `- Nucleus: Area` became the
+  name `{Nucleus=Area}` and was dropped, `- yes` became `true`, a repeated key kept its last value,
+  and an unreadable switch fell back to its default. Each is now refused with the key and value
+  named (E003; E022 for a repeated key, E023 for a name listed twice), and names such as `yes` or
+  `010` stay as typed. `qpcat_batch.groovy` refuses an unknown option with exit code 2: a mistyped
+  `--dryrun` used to run the whole batch for real and write results, and `--workers=abc` was
+  ignored. Batch runs from earlier versions whose files used a decimal comma, a leading zero, a
+  `:` in a number, a fraction for a whole-number key or a repeated key ran with values other
+  than the ones written. The YAML reference now says to quote names containing `: `.
+- **Batch phenotyping now normalizes the way the batch file says.** Phenotyping took
+  `clustering.normalization` exactly as typed, and the phenotyping task recognizes only `zscore`,
+  `minmax` and `percentile`, so `ZSCORE`, `Percentile` or `percentile_99` (all accepted by the
+  validator) gated the raw intensities against the z-score default with no normalization at
+  all. Phenotyping now resolves the name the same way clustering does. `log1p`, which was
+  accepted and then run as z-score, is refused (E005) for clustering and phenotyping alike.
+  Batch phenotyping runs from earlier versions with any spelling other than lower-case
+  `zscore`, `minmax` or `percentile` labeled cells on unnormalized values; batch runs with
+  `log1p` were z-scored.
+- **Batch files: `scope.images: <one name>` runs that image only.** Any single string other
+  than `all` selected every image in the project, so `images: slide_01.tif` (or a typo, or
+  `none`) ran the whole project. A single string is now one image name, and a name the project
+  does not have is refused (E008). Two images sharing a name in the scope are refused too
+  (E024): only the last one could be selected by name, and their saved results and figures
+  would overwrite each other. Batch runs from earlier versions with a single string under
+  `scope.images` processed (and wrote results to) every image in the project.
+- **Batch figure export reads the result the run saved.** Figure export looked the result up
+  by the raw `yaml_<image>` name, while the result had been saved under that name with the
+  characters a file name cannot hold removed, so an image named with `:` or `/` failed with
+  "Result file not found"; after a `joint: true` run it looked for `yaml_<image>` rather than
+  the `yaml_joint` result just saved, and could export an older result of that image. It now
+  uses the name the save returned. Per-image clustering of several images under one
+  `clustering.result_name` is refused (E025): each image replaced the previous one's saved
+  result, so earlier batch runs kept only the last image's result. Batch figure exports from
+  earlier `joint: true` runs without `figure_export.result_name` may have come from an older
+  saved result.
+- **Batch files: rule markers and measurement names are checked against the images before the
+  run.** A rule marker was passed to phenotyping exactly as written, and the YAML reference's own
+  examples wrote short names (`CD3`) where the measurements are `Cell: CD3 mean`, so the condition
+  was skipped and the first such rule labeled every remaining cell, with an OK row and exit code
+  0. Every name in a rule and in `clustering.measurements` is now resolved against the images'
+  measurements (exactly, or by the short name the Phenotyping dialog shows when that is unique,
+  printed as it resolves); a name that is missing, ambiguous (a bare `CD3` names every compartment
+  and statistic, which are listed), or a rule marker some images lack, is refused (E010), in the
+  dry run too. A clustering measurement some images lack warns (W010). Phenotyping now reads only
+  the measurements its rules name, so a gap in an unrelated measurement no longer excludes cells,
+  and headless phenotyping no longer fails after writing labels when `clustering.measurements` is
+  not set. The YAML reference examples now use full measurement names. Batch phenotyping runs
+  from earlier versions whose rules named a marker that was not an exact measurement name labeled
+  cells as if that condition were not there.
+- **Batch clustering with `measurements` left out uses the documented default.** It clustered on
+  every measurement of the cells, centroids, areas, shape and QP-CAT's own outputs from an
+  earlier run (`QPCAT UMAP1`, `QPCAT spatial: ...`) included, although the reference said "all
+  Mean measurements". It now uses every "mean" measurement QP-CAT did not write that is present
+  in every image, and prints the list at the start of the run and in the dry run. Batch
+  clustering runs from earlier versions without `clustering.measurements` clustered on position,
+  size and earlier results as well as intensities.
+- **Batch runs report what did not run, and a phenotyping failure fails the run.** A
+  `spatial_stats` block without a clustering run (`mode: reuse_saved`, `type: skip`, or no
+  `clustering` block) computed nothing and said "deferred" at INFO; an enabled
+  `llm_explainer` was checked and never run, without a word; `type: louvain` ran Leiden with a
+  log line only. Each now warns in the validator and the dry run (W011, W012, W013) and
+  spatial rows say `NOT RUN`. A phenotyping failure printed an ERROR and still exited 0 and
+  ignored `on_error: stop`; it now fails the project's images (exit 1, or 3 and a stop under
+  `on_error: stop`). `phenotyping.missing_values` is checked before anything runs, as
+  `clustering.missing_values` is. Phenotyping now runs after every image of the project is
+  clustered, as the reference says: it used to run before per-image clustering, whose cluster
+  labels then replaced the phenotype labels. Batch runs from earlier versions that clustered
+  each image on its own and phenotyped in the same file left the cells with cluster labels, not
+  phenotypes, although phenotyping reported success.
 
 ## [0.25.0] - 2026-11-19
 

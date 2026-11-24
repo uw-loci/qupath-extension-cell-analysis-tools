@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import pytest
 
-from conftest import load_script_symbol
+from conftest import SCRIPTS_DIR, load_script_symbol
 
 # The shipped script logs through a module-level `logger` that Appose provides;
 # the AST loader lifts the function out without it, so inject a real one. Kept a
@@ -36,6 +36,8 @@ for _name in (
     "has_class_condition",
     "class_condition_mask",
     "evaluate_rule",
+    "missing_rule_markers",
+    "missing_marker_warnings",
 ):
     SCRIPT_GLOBALS[_name] = load_script_symbol(
         "run_phenotyping.py", _name, extra_globals=SCRIPT_GLOBALS
@@ -44,6 +46,8 @@ class_components = SCRIPT_GLOBALS["class_components"]
 has_class_condition = SCRIPT_GLOBALS["has_class_condition"]
 class_condition_mask = SCRIPT_GLOBALS["class_condition_mask"]
 evaluate_rule = SCRIPT_GLOBALS["evaluate_rule"]
+missing_rule_markers = SCRIPT_GLOBALS["missing_rule_markers"]
+missing_marker_warnings = SCRIPT_GLOBALS["missing_marker_warnings"]
 
 # cells x markers, values already normalized to [0, 1]; gate is 0.5 throughout.
 #            CD3   CD8   CD68  CD163
@@ -109,10 +113,55 @@ def test_an_any_group_of_missing_markers_matches_nothing():
     assert has is True, "the rule did specify a criterion; it just cannot be met"
 
 
-def test_missing_marker_in_a_pos_condition_is_skipped_not_fatal():
+def test_missing_marker_in_a_pos_condition_matches_nothing():
+    # Skipping the condition would turn "CD3 pos, Ghost pos" into "CD3 pos"
+    # and claim cells the rule was never meant to (H01).
     got, has = run({"cellType": "T", "CD3": "pos", "Ghost": "pos"})
-    assert got == {0, 1}
+    assert got == set()
     assert has is True
+
+
+def test_missing_marker_in_a_neg_condition_matches_nothing():
+    # "CD3 pos, CD8 neg" after CD8 was renamed must not become "CD3 pos".
+    got, has = run({"cellType": "T", "CD3": "pos", "CD8 renamed": "neg"})
+    assert got == set()
+    assert has is True
+
+
+def test_a_missing_member_of_an_any_group_leaves_the_rest_of_the_group():
+    got, _ = run({"cellType": "Mac", "CD68": "anypos", "Ghost": "anypos"})
+    assert got == {2, 4}
+
+
+def test_missing_rule_markers_lists_each_absent_tested_marker():
+    rule = {
+        "cellType": "T",
+        "CD3": "pos",
+        "Ghost": "neg",
+        "Other": "anypos",
+        "Junk": "maybe",
+        "classIs": ["Tumor"],
+    }
+    assert missing_rule_markers(rule, IDX) == [("Ghost", "neg"), ("Other", "anypos")]
+
+
+def test_missing_marker_warnings_name_the_rule_marker_and_effect():
+    rules = [
+        {"cellType": "T", "CD3": "pos", "CD8 renamed": "neg"},
+        {"cellType": "Mac", "CD68": "anypos", "Ghost": "anypos"},
+        {"cellType": "B", "CD3": "pos"},
+    ]
+    warnings = missing_marker_warnings(rules, IDX)
+    assert len(warnings) == 2
+    assert "'T'" in warnings[0] and "'CD8 renamed'" in warnings[0]
+    assert "matches no cells" in warnings[0]
+    assert "'Mac'" in warnings[1] and "'Ghost'" in warnings[1]
+    assert "any-of group" in warnings[1]
+    assert all(w.isascii() for w in warnings)
+
+
+def test_no_warnings_when_every_marker_is_present():
+    assert missing_marker_warnings([{"cellType": "T", "CD3": "pos"}], IDX) == []
 
 
 @pytest.mark.parametrize("junk", ["POS", "positive", "maybe", "any"])
@@ -272,3 +321,11 @@ def test_counts_equal_a_direct_count_over_the_derived_classes():
     )
     assert mask.sum() > 0
     np.testing.assert_array_equal(mask, expected)
+
+
+def test_the_script_returns_its_warnings_to_the_caller():
+    # Logging alone never reaches the dialog or the batch: the warnings must be
+    # in task.outputs, which both read.
+    source = (SCRIPTS_DIR / "run_phenotyping.py").read_text(encoding="utf-8")
+    assert "phenotype_warnings.append(w)" in source
+    assert 'task.outputs["warnings"] = json.dumps(phenotype_warnings)' in source

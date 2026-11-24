@@ -1021,16 +1021,26 @@ public class PhenotypingDialog {
                             progress);
                 }
 
+                @SuppressWarnings("unchecked")
+                List<String> warnings = result.get("warnings") instanceof List<?> w
+                        ? (List<String>) w : List.of();
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
                     int nPhenotypes = (Integer) result.get("n_phenotypes");
-                    statusLabel.setText("Complete: " + nPhenotypes + " phenotypes assigned");
+                    statusLabel.setText("Complete: " + nPhenotypes + " phenotypes assigned"
+                            + (warnings.isEmpty() ? "" : " (" + warnings.size()
+                                    + " warning" + (warnings.size() == 1 ? "" : "s")
+                                    + ", see the results)"));
                     runButton.setDisable(false);
                     setBusy(false, null, null);
                     Dialogs.showInfoNotification("QPCAT",
                             "Phenotyping complete: " + nPhenotypes + " phenotypes assigned.");
+                    if (!warnings.isEmpty()) {
+                        Dialogs.showWarningNotification("QPCAT",
+                                "Phenotyping: " + String.join("\n", warnings));
+                    }
                     showResultsSummary((String) result.get("phenotype_counts"),
-                            (String) result.get("unknown_breakdown"));
+                            (String) result.get("unknown_breakdown"), warnings);
                 });
             } catch (Exception e) {
                 logger.error("Phenotyping failed", e);
@@ -1597,7 +1607,8 @@ public class PhenotypingDialog {
 
     // ========== Results Display ==========
 
-    private void showResultsSummary(String phenotypeCountsJson, String unknownBreakdownJson) {
+    private void showResultsSummary(String phenotypeCountsJson, String unknownBreakdownJson,
+                                    List<String> warnings) {
         if (phenotypeCountsJson == null) return;
 
         try {
@@ -1619,6 +1630,7 @@ public class PhenotypingDialog {
             sb.append(String.format("%-30s %10d%n", "Total", total));
 
             appendUnknownBreakdown(sb, unknownBreakdownJson, gson);
+            appendWarnings(sb, warnings);
 
             Dialog<ButtonType> resultsDialog = new Dialog<>();
             resultsDialog.initOwner(owner);
@@ -1638,6 +1650,22 @@ public class PhenotypingDialog {
             resultsDialog.show();
         } catch (Exception e) {
             logger.warn("Failed to show phenotyping results: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Append the run's warnings (rule markers missing from the data, and other
+     * problems the phenotyping task reported) under a "Warnings" heading.
+     *
+     * @param sb       the summary being built
+     * @param warnings the task's warnings; null or empty appends nothing
+     */
+    static void appendWarnings(StringBuilder sb, List<String> warnings) {
+        if (warnings == null || warnings.isEmpty()) return;
+        sb.append("\nWarnings\n");
+        sb.append("-".repeat(42)).append("\n");
+        for (String w : warnings) {
+            sb.append("- ").append(w).append("\n");
         }
     }
 

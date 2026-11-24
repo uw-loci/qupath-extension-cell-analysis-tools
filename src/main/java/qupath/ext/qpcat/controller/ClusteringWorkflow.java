@@ -1373,7 +1373,8 @@ public class ClusteringWorkflow {
      * @param gatesJson            JSON string of per-marker gate thresholds
      * @param progressCallback     optional callback for progress messages
      * @return map with "labels" (int[]), "phenotype_names" (String[]),
-     *         "n_phenotypes" (Integer), "phenotype_counts" (String JSON)
+     *         "n_phenotypes" (Integer), "phenotype_counts" (String JSON),
+     *         "warnings" (List of String, never null)
      * @throws IOException if phenotyping fails
      */
     public Map<String, Object> runPhenotyping(
@@ -1450,10 +1451,10 @@ public class ClusteringWorkflow {
         OperationLogger.getInstance().logOperation("PHENOTYPING",
                 OperationLogger.phenotypingParams(
                         normalization,
-                        selectedMeasurements.size(),
+                        extraction.getNMeasurements(),
                         ruleCount,
                         extraction.getNCells(),
-                        selectedMeasurements),
+                        List.of(extraction.getMeasurementNames())),
                 completeMsg, elapsed);
 
         return resultMap;
@@ -1567,8 +1568,8 @@ public class ClusteringWorkflow {
         long elapsed = System.currentTimeMillis() - startTime;
         OperationLogger.getInstance().logOperation("PHENOTYPING (project)",
                 OperationLogger.phenotypingParams(
-                        normalization, selectedMeasurements.size(), ruleCount,
-                        extraction.getNCells(), selectedMeasurements),
+                        normalization, extraction.getNMeasurements(), ruleCount,
+                        extraction.getNCells(), List.of(extraction.getMeasurementNames())),
                 completeMsg, elapsed);
 
         return resultMap;
@@ -1824,6 +1825,14 @@ public class ClusteringWorkflow {
             if (task.outputs.containsKey("unknown_breakdown")) {
                 result.put("unknown_breakdown", task.outputs.get("unknown_breakdown"));
             }
+            List<String> warnings = new ArrayList<>();
+            if (task.outputs.containsKey("warnings")) {
+                List<String> w = gson.fromJson((String) task.outputs.get("warnings"),
+                        new TypeToken<List<String>>(){}.getType());
+                if (w != null) warnings.addAll(w);
+            }
+            for (String w : warnings) logger.warn("Phenotyping: {}", w);
+            result.put("warnings", warnings);
 
             return result;
         } finally {

@@ -24,6 +24,26 @@ workers: 1
 
 > **Note:** Unknown top-level keys are reported as validation errors (E002), not silently ignored. This prevents typo'd block names (`clusterng:`) from being skipped without a warning.
 
+### Writing values
+
+A value of the wrong type is refused with the key and the value named (E003). It is never
+replaced by the default, rounded, or read as some other number.
+
+- **Put a name that contains `: ` in quotes.** QuPath measurement names do (`Cell: CD3 mean`),
+  and unquoted, `- Nucleus: Area` is read as a key and a value, not a name. Quote it:
+  `- "Nucleus: Area"` or `['Cell: CD3 mean', 'Cell: CD8 mean']`. An unquoted one is E003 with
+  the quoted form in the message.
+- **Numbers are plain decimals** with `.` as the decimal point: `0.5`, `15`, `1e3`. `0,5`, `abc`,
+  `2.7` for a whole-number key, `010`, `1:30`, `1_000` and `0x10` are E003. (Plain YAML 1.1 would
+  read `010` as 8 and `1:30` as 90; QP-CAT does not.) A quoted plain number (`'15'`) is accepted.
+- **Switches** take `true` / `false`; `yes` / `no`, `on` / `off` and `1` / `0` are also
+  accepted. Anything else is E003.
+- **Names are kept as typed.** `yes`, `010` or a date in a name position stay that text. A name
+  YAML reads as a number or as true/false (`- 2`, `- true`, `name: 1.0`) is E003: quote it.
+- **Each key once per block, each name once per list.** A repeated key is E022 (YAML would keep
+  only the last); a name listed twice in `measurements`, a rule's marker list or `scope.images`
+  is E023.
+
 ## Stability promise
 
 The YAML schema is part of QP-CAT's public surface; a breaking change will be listed in the changelog. The `version` field gates future migrations. A `version` of 2 or higher is rejected (E007).
@@ -85,12 +105,17 @@ The `images` field is a union:
 
 | YAML value | Behavior |
 |---|---|
-| `all` | Every `ProjectImageEntry` in every project. |
-| `[name1, name2, ...]` | Each entry matched against `entry.getImageName()`. Missing names hard-fail (E008) unless `skip_missing: true`. |
+| `all` | Every `ProjectImageEntry` in every project (any case). |
+| `name` | Any other single string is one image name, matched like a list entry: `images: slide_01.tif` is `images: [slide_01.tif]`. A name not in the project hard-fails (E008). |
+| `[name1, name2, ...]` | Each entry matched against `entry.getImageName()`, exactly and case-sensitively. Missing names hard-fail (E008) unless `skip_missing: true`. |
 | `{glob: "<pattern>"}` | Shell-style glob (`*`, `?`, `[abc]`). Zero matches warns (W003). |
 | `{regex: "<pattern>"}` | Java regex (anchored implicitly by `Matcher.matches()`). |
 
 `glob` and `regex` are mutually exclusive (E006). Mixing list and map shape errors (E015).
+
+Two images in the resolved scope of one project may not share a name (E024): batch results
+(`yaml_<image>`) and figure files are named after the image, so they would overwrite each
+other. Rename one in QuPath's Project tab, or leave it out of `scope.images`.
 
 > **Note:** `scope.images` names are project-relative. If two projects each have an image named `Patient03_ROI1`, both are processed. For per-project image lists, write two YAMLs.
 
@@ -102,7 +127,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (logged as a warning). An unrecognized value is an error. |
+| `type` (alias `algorithm`) | string | -- (required unless `mode: reuse_saved`) | One of `leiden`, `kmeans`, `hdbscan`, `agglomerative`, `minibatch_kmeans`, `gmm`, `banksy`, `none`, `skip`. Case-insensitive. `louvain` is accepted but runs **Leiden** (warning W013). An unrecognized value is an error. |
 | `mode` | string | `run` | `run` (run a new clustering) or `reuse_saved` (skip clustering; attach `saved_result_name`). |
 | `saved_result_name` | string | -- | Required when `mode: reuse_saved`. |
 | `resolution` | double | `1.0` | Leiden / Louvain only. Range `(0, 10]`. |
@@ -114,7 +139,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `banksy_k_geom` | int | `15` | BANKSY only. |
 | `missing_values` | string | `exclude_objects` | What to do with an object lacking a value for a selected measurement: `exclude_objects` (left out, stays unclassified, counted), `exclude_measurements` (the measurements with a gap are left out, every object stays) or `impute` (the column median, the pre-0.25.0 behavior). See [clustering.md](clustering.md#objects-with-missing-measurements). |
 | `graph_backend` | string | `cpu` | Leiden only. `gpu` builds the neighbor graph and runs Leiden in the RAPIDS process set up in [Setup](setup.md#neighbor-graph-and-leiden-on-the-gpu); the **GPU graph and Leiden: Python** preference must be set on the machine running the batch, or the run falls back to `cpu` with the reason in the log. |
-| `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99`. `log1p` is accepted but **not implemented** -- it runs z-score and logs a warning; there is no log transform. |
+| `normalization` | string | `zscore` | `none`, `zscore`, `minmax`, `percentile`, `percentile_99` (the same as `percentile`), any case. Also used by `phenotyping`. `log1p` is refused (E005): there is no log transform. |
 | `embedding` | string | `umap` | `none`, `umap`, `pca`, `tsne`. |
 | `umap_n_neighbors` | int | `15` | UMAP only. Range `[2, 200]`. |
 | `umap_min_dist` | double | `0.1` | UMAP only. |
@@ -127,8 +152,8 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `embedding_seed` | int | `42` | Random seed for the embedding (UMAP / t-SNE / PCA). Mirrors the GUI **Random seed** spinner in the Clustering Algorithm section, which drives both the embedding and the stochastic algorithms. |
 | `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). Recorded in the audit log. |
 | `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
-| `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per-image. |
-| `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
+| `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per image (`yaml_joint` with `joint: true`); characters a file name cannot hold are removed, and later steps read the result under that cleaned name. Set with per-image clustering of more than one image, it is refused (E025): each image would replace the last. |
+| `measurements` | list[string] | -- (every "mean" measurement QP-CAT did not write, present in every image) | Measurements to cluster on, resolved as described in [Measurement and marker names](#measurement-and-marker-names). Left out, the run uses every measurement whose name contains "mean" (any case) and is present in every image of the project, leaving out QP-CAT's own outputs (`QPCAT UMAP1`, `QPCAT spatial: ...`); centroids, areas and shape measurements are not included. The list is printed at the start of the run and in the dry run. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
 | `pca_precursor` | boolean | `false` | Reduce features to principal components before embedding + clustering (the scanpy flow). Only engages when the feature count exceeds the component count (`PCA Precursor Components` preference, default 50); BANKSY is always exempt. Omitted means off, so a YAML written before this option existed keeps producing the clusters it always did. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. With only one batch in scope nothing is corrected: the run warns and its record reads `requested, NOT applied`. |
@@ -207,7 +232,9 @@ clustering:
 
 ## `phenotyping` (optional, object)
 
-Runs after clustering. Skipped entirely if omitted or `enabled: false`.
+Runs once per project after every image is clustered, so its labels are the ones the cells
+keep. Skipped entirely if omitted or `enabled: false`. If it fails, every image of the project
+is counted as failed (exit code 1, or 3 with `on_error: stop`, which also stops the run).
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -215,8 +242,8 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `missing_values` | string | `exclude_objects` | As for `clustering.missing_values`: an object lacking a value for a rule's marker is left out (`exclude_objects`, no phenotype), the gapped measurements are left out (`exclude_measurements`) or the gap takes the median (`impute`). |
 | `rules` | list[object] | `[]` | Rule list; each rule has the fields below. |
 | `rules[].name` | string | required | Phenotype label (e.g. `T_cell`). |
-| `rules[].require_markers` | list[string] | `[]` (required >=1) | Markers required positive. |
-| `rules[].exclude_markers` | list[string] | `[]` | Markers required negative. |
+| `rules[].require_markers` | list[string] | `[]` (required >=1) | Measurements required positive (for example `"Cell: CD3 mean"`; see [Measurement and marker names](#measurement-and-marker-names)). |
+| `rules[].exclude_markers` | list[string] | `[]` | Measurements required negative. |
 | `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
 | `rules[].class_is` | list[string] | `[]` | The cell's class at run time (from a classifier applied beforehand, or an earlier run) must be one of these. ANDed with the marker conditions; full-name match. |
 | `rules[].class_is_not` | list[string] | `[]` | The cell's class at run time must not be any of these. |
@@ -236,13 +263,36 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 > **Phenotyping runs once per project, not per image.** The gates are z-scores,
 > which are only comparable across images when the cells are normalized
 > together, so all resolved images are phenotyped in a single pass and each is
-> saved with its labels. `clustering.normalization` and
-> `clustering.measurements` supply the panel; `zscore` is used if absent.
+> saved with its labels. `clustering.normalization` sets the normalization
+> (`zscore` if absent). Phenotyping reads exactly the measurements its rules
+> name, so `missing_values` acts on those alone; rules with class conditions
+> only read the clustering measurements.
+
+### Measurement and marker names
+
+Every name in `clustering.measurements` and in a rule's `require_markers`,
+`exclude_markers` and `any_markers` is checked against the measurements of the
+images in scope before anything runs, in the dry run too:
+
+1. A name equal to a measurement is that measurement. Write it in quotes, since
+   QuPath names contain `: ` (`"Cell: CD3 mean"`).
+2. Otherwise a name equal to the short name the Phenotyping dialog shows for
+   exactly one measurement (`Nucleus CD3 mean` for `Nucleus: CD3 mean`) is that
+   measurement, and the run prints what it resolved to.
+3. Anything else is refused (E010), with the measurements it could mean. A bare
+   marker such as `CD3` names a dozen measurements (each compartment and
+   statistic), so it is refused with that list; pick the one to gate on.
+
+A rule marker missing from some images in scope is refused too (E010): the
+rule could not be tested on those images. A clustering measurement missing
+from some images warns (W010); clustering leaves it out of any run that
+includes those images.
 
 ### `phenotyping.llm_explainer` (optional, object)
 
-**Validated but not run.** The batch checks this block (including E018 for an inline key)
-and then ignores it; the Cluster Explainer runs only from the Results window.
+**Validated but not run.** The batch checks this block (including E018 for an inline key),
+warns that it will not run (W012), and then ignores it; the Cluster Explainer runs only from
+the Results window.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -258,7 +308,7 @@ and then ignores it; the Cluster Explainer runs only from the Results window.
 
 ## `spatial_stats` (optional, object)
 
-Runs as part of clustering when `clustering.mode: run`. With `reuse_saved`, statistics cannot be re-run without re-clustering. Spatial permutations are seeded and need no key.
+Runs as part of clustering when `clustering.mode: run`. Without a clustering run (`reuse_saved`, `type: skip`, or no `clustering` block) the statistics are **not computed**: the validator warns (W011) and each image's row says `NOT RUN`. Spatial permutations are seeded and need no key.
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
@@ -294,7 +344,7 @@ Dispatches into `BatchFigureExporter`. Skipped entirely if omitted or `enabled: 
 | `formats` | list[string] | `[png]` | One or more of `png`, `tiff`. |
 | `dpi` | int | `300` | Range `[72, 1200]`. |
 | `filename_pattern` | string | `{image}_{plot}.{ext}` | Tokens: `{image}`, `{plot}`, `{result_name}`, `{date}`, `{ext}`. Must contain `{image}`, `{plot}`, `{ext}` (E012). |
-| `result_name` | string | -- (falls back to `clustering.result_name`) | Saved-result key to export from. |
+| `result_name` | string | -- (the result this run saved or loaded) | Saved-result key to export from. Left out: the result the clustering step just saved (or loaded with `reuse_saved`) for the image, else `yaml_<image>`. |
 | `overwrite_existing` | boolean | `false` | If `false`, fails on first existing file. |
 | `skip_missing_plots` | boolean | `true` | If `true`, missing plots are recorded as failures but the export continues. |
 
@@ -395,14 +445,14 @@ clustering:
 phenotyping:
   rules:
     - name: T_cell
-      require_markers: [CD3]
+      require_markers: ['Cell: CD3 mean']
       require_min_zscore: 1.0
     - name: B_cell
-      require_markers: [CD19, CD20]
+      require_markers: ['Cell: CD19 mean', 'Cell: CD20 mean']
       require_min_zscore: 1.0
     - name: Macrophage
-      require_markers: [CD68]
-      exclude_markers: [CD3, CD19]
+      require_markers: ['Cell: CD68 mean']
+      exclude_markers: ['Cell: CD3 mean', 'Cell: CD19 mean']
       require_min_zscore: 1.0
 spatial_stats:
   enabled: true
@@ -477,7 +527,7 @@ clustering:
 phenotyping:
   rules:
     - name: T_cell
-      require_markers: [CD3]
+      require_markers: ['Cell: CD3 mean']
   llm_explainer:
     enabled: true
     provider: anthropic
@@ -501,14 +551,14 @@ figure_export:
 - E000 YAML parse error
 - E001 Missing required field (e.g. `version`, `scope.projects`, `clustering.type`)
 - E002 Unknown field at a known block (typo)
-- E003 Type mismatch (e.g. `dpi: "300"` instead of `300`)
+- E003 Type mismatch: a number that is not a plain decimal (`0,5`, `010`, `1:30`), a fraction for a whole-number key (`k: 2.7`), a switch that is not true/false, a name YAML read as a mapping (an unquoted `Nucleus: Area`), a number or true/false
 - E004 Value out of range
 - E005 Enum mismatch
 - E006 Mutually exclusive fields set (e.g. `glob` + `regex`)
 - E007 Schema major version unsupported
 - E008 Image listed in `scope.images` not found in any project
 - E009 Unknown statistic slug
-- E010 Marker not found (reserved; not emitted yet)
+- E010 A measurement or rule marker that does not resolve against the images in scope (missing, ambiguous, or a rule marker some images lack); also `measurements` left out with no "mean" measurement to default to
 - E011 JavaFX-only plot kind requested (not exportable headlessly)
 - E012 Filename pattern missing required token
 - E013 Project resolution failed (reserved; not emitted yet)
@@ -519,6 +569,10 @@ figure_export:
 - E019 Output directory not writable
 - E020 Invalid override block in `per_image_overrides`
 - E021 Marker gated at more than one threshold across phenotyping rules
+- E022 A key repeated in the same block
+- E023 A name listed more than once in one list
+- E024 Two images in the resolved scope of one project share a name
+- E025 `clustering.result_name` set for per-image clustering of several images
 
 Warnings (non-fatal):
 
@@ -532,6 +586,10 @@ Warnings (non-fatal):
 - W007 `audit.log_dir` has no effect
 - W008 `audit.log_level` has no effect
 - W009 `audit.capture_prompts` has no effect
+- W010 A clustering measurement missing from some images in scope
+- W011 `spatial_stats` requested but no clustering runs to compute it
+- W012 `phenotyping.llm_explainer.enabled` is never run by the batch
+- W013 `clustering.type: louvain` runs Leiden
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
 
@@ -543,7 +601,6 @@ scope:
   projects: [/data/panel-a/project.qpproj]
 clustering:
   type: LEIDEN
-  n_neighbors: 50
   resolution: 0.5
   graph_backend: gpu        # needs the GPU graph and Leiden: Python preference on this machine
 phenotyping:
@@ -554,5 +611,5 @@ phenotyping:
       class_lacks: [Ki67]
     - name: Tumor
       class_is: [Tumor]
-      require_markers: [PanCK]
+      require_markers: ['Cell: PanCK mean']
 ```

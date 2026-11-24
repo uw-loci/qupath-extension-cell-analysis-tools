@@ -180,6 +180,18 @@ public class ClusteringResultManager {
     }
 
     /**
+     * The base file name {@link #saveResult} stores a result under, and so the
+     * name to load it by.
+     *
+     * @param name the requested result name, not blank
+     * @return the name with characters invalid in file names removed
+     */
+    public static String safeResultName(String name) {
+        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
+        return safeName.isEmpty() ? "result" : safeName;
+    }
+
+    /**
      * Save a clustering result to the project (user-named, no scope metadata).
      * Copies plot images into the project directory so they persist.
      *
@@ -215,8 +227,7 @@ public class ClusteringResultManager {
         }
 
         Path resultsDir = getResultsDirectory(project);
-        String safeName = GeneralTools.stripInvalidFilenameChars(name.trim());
-        if (safeName.isEmpty()) safeName = "result";
+        String safeName = safeResultName(name);
 
         // Copy plot images to project directory
         Map<String, String> persistedPlots = null;

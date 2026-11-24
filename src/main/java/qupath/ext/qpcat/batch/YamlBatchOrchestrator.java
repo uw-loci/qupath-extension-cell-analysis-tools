@@ -57,6 +57,10 @@ public final class YamlBatchOrchestrator {
 
     private YamlBatchOrchestrator() {}
 
+    /** Row text when spatial_stats is requested but no clustering runs to compute it. */
+    static final String SPATIAL_NOT_RUN = "NOT RUN: spatial statistics are computed only "
+            + "during a clustering run (clustering.mode: run); this run does not cluster";
+
     /** Per-image outcome row. */
     public static final class ImageOutcome {
         private final String imageName;
@@ -183,6 +187,27 @@ public final class YamlBatchOrchestrator {
         emitter.emit(ProgressEmitter.Level.INFO,
                 "Resolved scope: " + resolved.getProjects().size()
                         + " project(s), " + totalImages + " image(s)");
+        List<ValidationIssue> nameIssues = sharedResultNameIssues(schema, resolved);
+        if (!nameIssues.isEmpty()) {
+            for (ValidationIssue issue : nameIssues) {
+                emitter.emit(ProgressEmitter.Level.ERROR, issue.format());
+            }
+            emitter.emit(ProgressEmitter.Level.ERROR, "Run aborted before any work dispatched.");
+            outcome.setExitCode(2);
+            outcome.setTotalElapsedMs(System.currentTimeMillis() - t0);
+            return outcome;
+        }
+
+        // Resolve measurement and rule-marker names against the images (E010),
+        // in the dry run too, and print what each block will use.
+        Map<ScopeResolver.ResolvedProject, BatchMeasurements.Plan> plans =
+                planMeasurements(schema, resolved, emitter);
+        if (plans == null) {
+            emitter.emit(ProgressEmitter.Level.ERROR, "Run aborted before any work dispatched.");
+            outcome.setExitCode(2);
+            outcome.setTotalElapsedMs(System.currentTimeMillis() - t0);
+            return outcome;
+        }
 
         if (totalImages == 0) {
             emitter.emit(ProgressEmitter.Level.WARN, "Scope resolved to zero images");
@@ -216,14 +241,16 @@ public final class YamlBatchOrchestrator {
             OperationLogger.getInstance().setProject(rp.getProject());
 
             // One joint clustering run per project, before the per-image steps.
+            String jointResultName = null;
             if (jointClustering) {
                 if (options.isDryRun()) {
                     emitter.emit(ProgressEmitter.Level.INFO, "WOULD-RUN joint clustering across "
                             + rp.getImages().size() + " image(s) of project "
                             + rp.getProjectPath());
                 } else {
-                    boolean ok = runJointClustering(schema, rp, emitter, outcome);
-                    if (!ok) {
+                    jointResultName = runJointClustering(schema, rp, plans.get(rp), emitter,
+                            outcome);
+                    if (jointResultName == null) {
                         // Failures were recorded per image inside runJointClustering.
                         if (stopOnError) {
                             stopRequested = true;
@@ -236,13 +263,10 @@ public final class YamlBatchOrchestrator {
                 }
             }
 
-            if (!options.isDryRun()) {
-                runProjectPhenotyping(schema, rp, emitter);
-            }
-
             // Cluster-composition figures describe the result as a whole, so
             // they are written once for the run, not once per image.
             Set<String> emittedComposition = new LinkedHashSet<>();
+            List<ImageOutcome> projectOutcomes = new ArrayList<>();
             for (ProjectImageEntry<BufferedImage> entry : rp.getImages()) {
                 processed++;
                 ImageOutcome out = new ImageOutcome(entry.getImageName());
@@ -257,8 +281,9 @@ public final class YamlBatchOrchestrator {
                 while (!done) {
                     attempt++;
                     try {
-                        runOneImage(schema, options, rp, entry, processed, totalImages,
-                                emitter, outcome, out, jointClustering, emittedComposition);
+                        runOneImage(schema, options, rp, plans.get(rp), entry, processed,
+                                totalImages, emitter, outcome, out, jointClustering,
+                                jointResultName, emittedComposition);
                         done = true;
                     } catch (Exception e) {
                         String msg = BatchYamlParser.asciiSafe(e.getMessage());
@@ -280,6 +305,7 @@ public final class YamlBatchOrchestrator {
 
                 out.setElapsed(System.currentTimeMillis() - imgStart);
                 outcome.getImages().add(out);
+                projectOutcomes.add(out);
 
                 if (out.isSuccess()) {
                     emitter.emitRow(ProgressEmitter.Level.OK, processed, totalImages,
@@ -292,6 +318,20 @@ public final class YamlBatchOrchestrator {
                 }
             }
             if (stopRequested) break;
+
+            // Phenotyping runs once per project AFTER clustering, as documented: run
+            // before the per-image clustering, its labels were overwritten by the
+            // cluster labels. A failure fails the project's images and honors stop.
+            if (!options.isDryRun()) {
+                String phenotypingError = runProjectPhenotyping(schema, rp, plans.get(rp), emitter);
+                if (phenotypingError != null) {
+                    failImages(projectOutcomes, "phenotyping", phenotypingError);
+                    if (stopOnError) {
+                        stopRequested = true;
+                        break;
+                    }
+                }
+            }
         }
 
         outcome.setTotalElapsedMs(System.currentTimeMillis() - t0);
@@ -304,18 +344,29 @@ public final class YamlBatchOrchestrator {
                 yamlBatchEndParams(outcome, options.isDryRun()),
                 "completed", outcome.getTotalElapsedMs());
 
-        // Exit code per design section 6
-        if (options.isDryRun()) {
-            outcome.setExitCode(0);
-        } else if (stopRequested) {
-            outcome.setExitCode(3);
-        } else if (outcome.failed() > 0) {
-            outcome.setExitCode(1);
-        } else {
-            outcome.setExitCode(0);
-        }
+        outcome.setExitCode(exitCode(options.isDryRun(), stopRequested, outcome));
         emitter.emit(ProgressEmitter.Level.OK, "Exit code: " + outcome.getExitCode());
         return outcome;
+    }
+
+    /**
+     * Exit code per design section 6: 0 success or dry run, 3 stopped by
+     * {@code on_error: stop}, 1 when any image failed.
+     */
+    static int exitCode(boolean dryRun, boolean stopRequested, BatchOutcome outcome) {
+        if (dryRun) return 0;
+        if (stopRequested) return 3;
+        return outcome.failed() > 0 ? 1 : 0;
+    }
+
+    /**
+     * Mark every image that has not already failed as failed at {@code step}, so a
+     * project-level failure (phenotyping) counts against the exit code.
+     */
+    static void failImages(List<ImageOutcome> outcomes, String step, String error) {
+        for (ImageOutcome o : outcomes) {
+            if (o.isSuccess()) o.markFailure(step, error);
+        }
     }
 
     // ---------------- Per-image dispatch ----------------
@@ -323,18 +374,23 @@ public final class YamlBatchOrchestrator {
     private static void runOneImage(BatchYamlSchema schema,
                                      BatchRunOptions options,
                                      ScopeResolver.ResolvedProject rp,
+                                     BatchMeasurements.Plan plan,
                                      ProjectImageEntry<BufferedImage> entry,
                                      int index, int total,
                                      ProgressEmitter emitter,
                                      BatchOutcome outcome,
                                      ImageOutcome out,
                                      boolean skipClustering,
+                                     String jointResultName,
                                      Set<String> emittedComposition) throws IOException {
         if (options.isDryRun()) {
             emitDryRunDescription(schema, entry, index, total, emitter, skipClustering);
             return;
         }
         ClusteringResult clustering = null;
+        // The saved result this image's later steps read: the name a save
+        // returned (sanitized for the file system), or the one reuse_saved loaded.
+        String resultName = jointResultName;
 
         // ---- Clustering ----
         // Skipped per-image when the run clustered all images jointly already
@@ -362,6 +418,7 @@ public final class YamlBatchOrchestrator {
                         name = names.get(0);
                     }
                     clustering = ClusteringResultManager.loadResult(rp.getProject(), name);
+                    resultName = name;
                     emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                             ProgressEmitter.fields("image", entry.getImageName(),
                                     "step", "clustering", "clusters", clustering.getNClusters()),
@@ -375,7 +432,8 @@ public final class YamlBatchOrchestrator {
                     return;
                 }
             } else {
-                ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats());
+                ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats(),
+                        plan.getClusteringMeasurements());
                 emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
                         ProgressEmitter.fields("image", entry.getImageName(),
                                 "step", "clustering",
@@ -385,12 +443,12 @@ public final class YamlBatchOrchestrator {
                     HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
                     clustering = hw.runClustering(List.of(entry), config, null);
                     // Persist the saved result so spatial_stats / figure_export
-                    // can pick it up.
-                    String resultName = cc.getResultName() != null
+                    // can pick it up, under the name saveResult actually used.
+                    String requested = cc.getResultName() != null
                             ? cc.getResultName()
                             : ("yaml_" + entry.getImageName());
-                    ClusteringResultManager.saveResult(
-                            rp.getProject(), resultName, clustering,
+                    resultName = ClusteringResultManager.saveResult(
+                            rp.getProject(), requested, clustering,
                             config.getAlgorithm().getId(),
                             config.getNormalization().getId(),
                             config.getEmbeddingMethod().getId());
@@ -412,35 +470,31 @@ public final class YamlBatchOrchestrator {
         }
 
         // ---- Phenotyping ----
-        // Runs ONCE per project, not per image -- see runProjectPhenotyping. The
-        // rules are z-score gates, and z-scores are only comparable across images
-        // if the cells are normalized together, so a per-image loop would silently
-        // give each image its own thresholds.
+        // Runs ONCE per project, after every image is clustered -- see
+        // runProjectPhenotyping. The rules are z-score gates, and z-scores are only
+        // comparable across images if the cells are normalized together.
 
         // ---- Spatial stats ----
-        // The existing pipeline runs spatial stats AS PART OF clustering when
-        // ClusteringConfig flags are set (see ClusteringWorkflow line 706+).
-        // For reuse_saved we cannot re-run spatial stats without re-running
-        // clustering -- this is a v1 limitation surfaced as a WARN. Real-run
-        // spatial-stats is implicitly handled via the clustering config below.
+        // Spatial statistics are computed AS PART OF a clustering run (ClusteringConfig
+        // flags). Without one (reuse_saved, type: skip, no clustering block) they do
+        // not run; the validator warns (W011) and this row says so at WARN.
         if (schema.getSpatialStats() != null && schema.getSpatialStats().isEnabled()) {
             BatchYamlSchema.SpatialStatsBlock ss = schema.getSpatialStats();
-            emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
+            boolean ran = isRealClusteringRun(schema);
+            emitter.emitRow(ran ? ProgressEmitter.Level.INFO : ProgressEmitter.Level.WARN,
+                    index, total,
                     ProgressEmitter.fields("image", entry.getImageName(),
                             "step", "spatial_stats",
                             "graph", ss.getGraph().getType(),
                             "stats", ss.getStatistics().size()),
-                    schema.getClustering() != null
-                            && !"reuse_saved".equalsIgnoreCase(schema.getClustering().getMode())
-                            ? "ran inline with clustering"
-                            : "deferred (reuse_saved cannot re-run spatial stats without re-clustering)");
+                    ran ? "ran inline with clustering" : SPATIAL_NOT_RUN);
         }
 
         // ---- Figure export ----
         if (schema.getFigureExport() != null && schema.getFigureExport().isEnabled()) {
             BatchYamlSchema.FigureExportBlock fe = schema.getFigureExport();
             try {
-                ExportResult er = runFigureExport(fe, rp, entry, schema.getClustering(),
+                ExportResult er = runFigureExport(fe, rp, entry, resultName,
                         emittedComposition);
                 outcome.addFiguresWritten(er.getFilesWritten());
                 emitter.emitRow(ProgressEmitter.Level.OK, index, total,
@@ -469,34 +523,36 @@ public final class YamlBatchOrchestrator {
      * in each one. This matches the GUI's all-images scope, which normalizes
      * jointly for the same reason.
      * <p>
-     * Non-fatal: phenotyping failure is reported and the run continues, because
-     * clustering results for the project are already saved by this point.
+     * A failure is reported as an ERROR row and returned; the caller fails the
+     * project's images (exit code 1, or 3 under {@code on_error: stop}).
+     *
+     * @return null on success or when there is nothing to run, else the error message
      */
-    private static void runProjectPhenotyping(BatchYamlSchema schema,
+    private static String runProjectPhenotyping(BatchYamlSchema schema,
                                               ScopeResolver.ResolvedProject rp,
+                                              BatchMeasurements.Plan plan,
                                               ProgressEmitter emitter) {
         BatchYamlSchema.PhenotypingBlock pb = schema.getPhenotyping();
-        if (pb == null || !pb.isEnabled()) return;
-        if (pb.getRules() == null || pb.getRules().isEmpty()) return;  // llm-only block
+        if (pb == null || !pb.isEnabled()) return null;
+        if (pb.getRules() == null || pb.getRules().isEmpty()) return null;  // llm-only block
+        if (rp.getImages().isEmpty()) return null;
 
         int nImages = rp.getImages().size();
         emitter.emit(ProgressEmitter.Level.INFO, "Phenotyping across " + nImages
                 + " image(s): " + pb.getRules().size() + " rule(s)");
         try {
-            // Normalization follows the clustering block when present, so gates
-            // mean the same thing as the clustering that produced the panel.
-            String normalization = (schema.getClustering() != null
-                    && schema.getClustering().getNormalization() != null)
-                    ? schema.getClustering().getNormalization() : "zscore";
-            List<String> measurements = (schema.getClustering() != null)
-                    ? schema.getClustering().getMeasurements() : null;
+            String normalization = phenotypingNormalization(schema);
+            // Exactly the measurements the rules name, resolved against the images,
+            // so an unrelated gap cannot exclude cells under missing_values.
+            List<String> measurements = plan.getPhenotypingMeasurements();
 
             HeadlessPhenotypingWorkflow hw = new HeadlessPhenotypingWorkflow();
             qupath.ext.qpcat.model.MissingPolicy missingPolicy = pb.getMissingValues() == null
                     ? qupath.ext.qpcat.model.MissingPolicy.EXCLUDE_OBJECTS
                     : qupath.ext.qpcat.model.MissingPolicy.fromId(pb.getMissingValues());
             HeadlessPhenotypingWorkflow.Outcome res = hw.runPhenotyping(
-                    rp.getImages(), pb.getRules(), normalization, measurements, missingPolicy, null);
+                    rp.getImages(), plan.getRules(), normalization, measurements, missingPolicy,
+                    null);
 
             for (String w : res.getWarnings()) {
                 emitter.emit(ProgressEmitter.Level.WARN, "phenotyping: " + w);
@@ -504,10 +560,104 @@ public final class YamlBatchOrchestrator {
             emitter.emit(ProgressEmitter.Level.OK, "Phenotyping complete: "
                     + res.getNPhenotypes() + " phenotype(s) assigned to "
                     + res.getNCells() + " cells across " + nImages + " image(s)");
+            return null;
         } catch (Exception e) {
-            emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed: "
-                    + BatchYamlParser.asciiSafe(e.getMessage()));
+            String msg = BatchYamlParser.asciiSafe(e.getMessage());
+            emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed for project "
+                    + rp.getProjectPath() + ": " + msg);
+            return msg == null || msg.isEmpty() ? e.getClass().getSimpleName() : msg;
         }
+    }
+
+    /**
+     * The normalization id phenotyping runs with: the clustering block's, resolved
+     * exactly as the clustering path resolves it, so the gates mean the same thing;
+     * {@code zscore} when the file sets none. Passing the YAML spelling through
+     * unresolved ran {@code ZSCORE}, {@code Percentile} or {@code percentile_99}
+     * with no normalization at all.
+     *
+     * @param schema the validated batch file
+     * @return a {@link ClusteringConfig.Normalization} id
+     */
+    static String phenotypingNormalization(BatchYamlSchema schema) {
+        String yaml = schema.getClustering() == null ? null
+                : schema.getClustering().getNormalization();
+        return yaml == null ? ClusteringConfig.Normalization.ZSCORE.getId()
+                : parseNormalization(yaml).getId();
+    }
+
+    /**
+     * Read each project's measurement names and resolve the batch file's
+     * measurements and rule markers against them, emitting the notes, W010
+     * warnings and E010 errors.
+     *
+     * @return the plan per project, or null when an error must stop the run
+     */
+    private static Map<ScopeResolver.ResolvedProject, BatchMeasurements.Plan> planMeasurements(
+            BatchYamlSchema schema, ScopeResolver.ResolvedScope resolved,
+            ProgressEmitter emitter) {
+        Map<ScopeResolver.ResolvedProject, BatchMeasurements.Plan> plans = new LinkedHashMap<>();
+        boolean clusters = isRealClusteringRun(schema);
+        BatchYamlSchema.PhenotypingBlock pb = schema.getPhenotyping();
+        boolean phenotypes = pb != null && pb.isEnabled()
+                && pb.getRules() != null && !pb.getRules().isEmpty();
+        boolean failed = false;
+        for (ScopeResolver.ResolvedProject rp : resolved.getProjects()) {
+            if ((!clusters && !phenotypes) || rp.getImages().isEmpty()) {
+                plans.put(rp, new BatchMeasurements.Plan());
+                continue;
+            }
+            emitter.emit(ProgressEmitter.Level.INFO, "Reading measurement names of "
+                    + rp.getImages().size() + " image(s) of project " + rp.getProjectPath());
+            BatchMeasurements catalog = BatchMeasurements.read(rp.getImages());
+            for (String u : catalog.getUnreadable()) {
+                emitter.emit(ProgressEmitter.Level.WARN, "could not read image " + u);
+            }
+            BatchMeasurements.Plan plan = catalog.plan(schema, clusters,
+                    String.valueOf(rp.getProjectPath()));
+            for (String note : plan.getNotes()) {
+                emitter.emit(ProgressEmitter.Level.INFO, note);
+            }
+            for (ValidationIssue issue : plan.getIssues()) {
+                emitter.emit(issue.getSeverity() == ValidationIssue.Severity.ERROR
+                        ? ProgressEmitter.Level.ERROR : ProgressEmitter.Level.WARN,
+                        issue.format());
+            }
+            failed |= plan.hasErrors();
+            plans.put(rp, plan);
+        }
+        return failed ? null : plans;
+    }
+
+    /**
+     * E025 when per-image clustering would save several images of one project
+     * under the same {@code clustering.result_name}: each save replaced the last,
+     * so only the final image's result was kept.
+     *
+     * @param schema   the validated batch file
+     * @param resolved the resolved scope
+     * @return the errors; empty when the names cannot collide
+     */
+    static List<ValidationIssue> sharedResultNameIssues(BatchYamlSchema schema,
+                                                        ScopeResolver.ResolvedScope resolved) {
+        List<ValidationIssue> issues = new ArrayList<>();
+        if (!isRealClusteringRun(schema) || schema.getClustering().isJoint()
+                || schema.getClustering().getResultName() == null) {
+            return issues;
+        }
+        for (ScopeResolver.ResolvedProject rp : resolved.getProjects()) {
+            if (rp.getImages().size() > 1) {
+                issues.add(ValidationIssue.error("E025", "clustering.result_name",
+                        "every one of the " + rp.getImages().size() + " images of project '"
+                        + BatchYamlParser.asciiSafe(String.valueOf(rp.getProjectPath()))
+                        + "' is clustered on its own and would be saved as '"
+                        + BatchYamlParser.asciiSafe(schema.getClustering().getResultName())
+                        + "', each replacing the last. Remove result_name (each image is then "
+                        + "saved as yaml_<image>) or set joint: true to cluster them together "
+                        + "under that name."));
+            }
+        }
+        return issues;
     }
 
     /** True when the schema asks for an actual clustering run (not reuse_saved / skip). */
@@ -524,11 +674,13 @@ public final class YamlBatchOrchestrator {
      * (clustering.joint: true). Delegates to the same project-clustering path the
      * GUI uses, so labels are globally consistent and each image is saved with a
      * scope-aware Workflow record. Saves the combined result under the configured
-     * {@code result_name} so figure_export can pick it up. Returns true on success;
-     * on failure marks every image of the project as a clustering failure.
+     * {@code result_name} so figure_export can pick it up. Returns the name the
+     * result was saved under, or null on failure, when every image of the project
+     * is marked as a clustering failure.
      */
-    private static boolean runJointClustering(BatchYamlSchema schema,
+    private static String runJointClustering(BatchYamlSchema schema,
                                               ScopeResolver.ResolvedProject rp,
+                                              BatchMeasurements.Plan plan,
                                               ProgressEmitter emitter,
                                               BatchOutcome outcome) {
         BatchYamlSchema.ClusteringBlock cc = schema.getClustering();
@@ -536,19 +688,21 @@ public final class YamlBatchOrchestrator {
         emitter.emit(ProgressEmitter.Level.INFO, "Joint clustering across " + n
                 + " image(s): " + (cc.getType() == null ? "leiden" : cc.getType()));
         try {
-            ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats());
+            ClusteringConfig config = buildClusteringConfig(cc, schema.getSpatialStats(),
+                    plan.getClusteringMeasurements());
             config.setClusterEntireProject(true);
             HeadlessClusteringWorkflow hw = new HeadlessClusteringWorkflow();
             ClusteringResult clustering = hw.runClustering(rp.getImages(), config, null);
-            String resultName = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
-            ClusteringResultManager.saveResult(rp.getProject(), resultName, clustering,
+            String requested = cc.getResultName() != null ? cc.getResultName() : "yaml_joint";
+            String resultName = ClusteringResultManager.saveResult(rp.getProject(), requested,
+                    clustering,
                     config.getAlgorithm().getId(),
                     config.getNormalization().getId(),
                     config.getEmbeddingMethod().getId());
             emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
                     + clustering.clusterCountText() + ", " + clustering.getNCells()
                     + " cells across " + n + " image(s); saved as '" + resultName + "'");
-            return true;
+            return resultName;
         } catch (Exception e) {
             String msg = BatchYamlParser.asciiSafe(e.getMessage());
             emitter.emit(ProgressEmitter.Level.ERROR, "Joint clustering failed: " + msg);
@@ -557,7 +711,7 @@ public final class YamlBatchOrchestrator {
                 o.markFailure("clustering", msg);
                 outcome.getImages().add(o);
             }
-            return false;
+            return null;
         }
     }
 
@@ -594,11 +748,13 @@ public final class YamlBatchOrchestrator {
         }
         if (schema.getSpatialStats() != null && schema.getSpatialStats().isEnabled()) {
             BatchYamlSchema.SpatialStatsBlock ss = schema.getSpatialStats();
-            emitter.emitRow(ProgressEmitter.Level.INFO, index, total,
+            boolean runs = isRealClusteringRun(schema);
+            emitter.emitRow(runs ? ProgressEmitter.Level.INFO : ProgressEmitter.Level.WARN,
+                    index, total,
                     ProgressEmitter.fields("step", "spatial_stats",
                             "graph", ss.getGraph().getType(),
                             "stats", ss.getStatistics()),
-                    null);
+                    runs ? null : SPATIAL_NOT_RUN);
         }
         if (schema.getFigureExport() != null && schema.getFigureExport().isEnabled()) {
             BatchYamlSchema.FigureExportBlock fe = schema.getFigureExport();
@@ -616,7 +772,8 @@ public final class YamlBatchOrchestrator {
 
     private static ClusteringConfig buildClusteringConfig(
             BatchYamlSchema.ClusteringBlock cc,
-            BatchYamlSchema.SpatialStatsBlock ss) {
+            BatchYamlSchema.SpatialStatsBlock ss,
+            List<String> measurements) {
         ClusteringConfig config = new ClusteringConfig();
         // Algorithm
         String type = cc.getType() == null ? "leiden" : cc.getType().toLowerCase(Locale.ROOT);
@@ -673,8 +830,9 @@ public final class YamlBatchOrchestrator {
             config.setEmbeddingExecutionMode(cc.getEmbeddingExecutionMode());
         }
 
-        // Measurements
-        config.setSelectedMeasurements(cc.getMeasurements());
+        // Measurements, resolved against the images (BatchMeasurements.plan); never
+        // empty, so the extractor never falls back to every measurement.
+        config.setSelectedMeasurements(measurements);
         // Multi-image friendly default
         config.setClusterEntireProject(false);
         // Toggles
@@ -775,31 +933,22 @@ public final class YamlBatchOrchestrator {
     }
 
     /**
-     * Resolve a YAML {@code clustering.normalization}.
+     * Resolve a YAML {@code clustering.normalization}, case-insensitively. Used
+     * for clustering and phenotyping alike.
      *
      * @param id the YAML value
      * @return the matching normalization
      * @throws IllegalArgumentException if it is not recognized
      */
-    private static ClusteringConfig.Normalization parseNormalization(String id) {
+    static ClusteringConfig.Normalization parseNormalization(String id) {
         for (ClusteringConfig.Normalization n : ClusteringConfig.Normalization.values()) {
             if (n.getId().equalsIgnoreCase(id)) return n;
         }
         // Alias for the same thing: PERCENTILE is p1-p99.
         if ("percentile_99".equalsIgnoreCase(id)) return ClusteringConfig.Normalization.PERCENTILE;
-        if ("log1p".equalsIgnoreCase(id)) {
-            // A real substitution, not an alias: no log transform exists. Say so
-            // -- a run silently z-scored when the user asked for log1p produces
-            // different clusters and different marker means, and nothing else
-            // would tell them.
-            logger.warn("clustering.normalization 'log1p' is NOT implemented; this run uses "
-                    + "z-score instead. Results are z-scored, not log-transformed. "
-                    + "Set normalization: zscore to make that explicit.");
-            return ClusteringConfig.Normalization.ZSCORE;
-        }
         throw new IllegalArgumentException(
                 "Unknown clustering.normalization '" + id
-                + "'. Accepted: zscore, minmax, percentile, percentile_99, none, log1p.");
+                + "'. Accepted: zscore, minmax, percentile, percentile_99, none.");
     }
 
     /**
@@ -822,7 +971,7 @@ public final class YamlBatchOrchestrator {
     private static ExportResult runFigureExport(BatchYamlSchema.FigureExportBlock fe,
                                                   ScopeResolver.ResolvedProject rp,
                                                   ProjectImageEntry<BufferedImage> entry,
-                                                  BatchYamlSchema.ClusteringBlock cc,
+                                                  String runResultName,
                                                   Set<String> emittedComposition)
             throws IOException {
         Map<String, Object> opts = new LinkedHashMap<>();
@@ -862,15 +1011,12 @@ public final class YamlBatchOrchestrator {
                 return er;
             }
         }
-        // Result name: explicit > clustering.result_name (per design Q6)
+        // Result name: figure_export.result_name, else the result this run saved or
+        // loaded for the image, else the name a per-image batch run saves under.
         String rn = fe.getResultName();
-        if ((rn == null || rn.isEmpty()) && cc != null) {
-            rn = cc.getResultName() != null ? cc.getResultName()
-                    : cc.getSavedResultName();
-        }
         if (rn == null || rn.isEmpty()) {
-            // fall back to the auto-saved-result name used by clustering above
-            rn = "yaml_" + entry.getImageName();
+            rn = runResultName != null ? runResultName
+                    : ClusteringResultManager.safeResultName("yaml_" + entry.getImageName());
         }
         opts.put("resultName", rn);
 
@@ -906,13 +1052,9 @@ public final class YamlBatchOrchestrator {
                                                          Set<String> emittedComposition)
             throws IOException {
         ExportResult result = new ExportResult();
-        // Resolve saved result
+        // Throws when the result is missing or unreadable; the caller marks the image failed.
         var saved = qupath.ext.qpcat.service.ClusteringResultManager.loadSavedResult(
                 rp.getProject(), options.getResultName());
-        if (saved == null) {
-            result.addFailure(entry.getImageName() + ": no saved result '" + options.getResultName() + "'");
-            return result;
-        }
         Set<PlotKind> kinds = options.getPlotKinds();
         if (kinds == null || kinds.isEmpty()) {
             kinds = FigureExportScripts.matplotlibKinds();
