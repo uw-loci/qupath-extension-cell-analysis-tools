@@ -69,6 +69,20 @@ Finding cell populations from marker measurements. This is the main QP-CAT tool.
 A line above the Run button says what this run trades -- reproducibility,
 comparability, or nothing. See [Reproducibility and run cost](reproducibility.md).
 
+### Typing numbers
+
+This holds in every QP-CAT dialog. A number typed into a box counts once you click or tab
+elsewhere; Enter is not needed. Either `.` or `,` works as the decimal separator, so `0.5`
+and `0,5` are both one half on any system, and an exponent such as `1e-4` is read too; the
+box then shows the number with your system's separator. A number that could be read two
+ways is refused, not guessed: one with a thousands separator (`1,000.5`), one separator
+followed by exactly three digits (`1,000` is one thousand on some systems and one on
+others: type `1000`, or `1.0000` for one), or text after the number (`1.5abc`). A refused
+or emptied box goes back to its last value and gets a red border; hover over it for the
+reason. A number outside the box's range is set to the nearest end of the range and marked
+the same way. Where QP-CAT can choose a value itself, an **Auto** (or **No limit**) tick
+box sits beside the number instead of a special value such as -1.
+
 ### Before it runs
 
 **Pre-flight scale check.** An amber box means the run will work but may be slow or
@@ -308,7 +322,9 @@ Either way:
    with its ground-truth types.
 4. Optional, Leiden only: **tick Compare Leiden resolutions** and edit the list beside it
    (default `0.1, 0.2, 0.4, 0.6, 0.8, 1, 1.5, 2`). The run's own graph is partitioned at each
-   one, so each costs one Leiden pass and nothing else.
+   one, so each costs one Leiden pass and nothing else. Separate values with `;`, spaces, or
+   a comma and a space, and use `.` for decimals: a comma between two digits (`1,5`) turns
+   the box red instead of being read as two values.
 5. **Run Clustering.** A **Validation** tab appears in the results, for example "6 runs: seed 42
    plus 5 others. Adjusted Rand index between every pair of runs: mean 1.000, lowest 1.000".
    See [Validation](results.md#validation-tab). With resolutions compared, select one in the

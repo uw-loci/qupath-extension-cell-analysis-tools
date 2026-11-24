@@ -158,6 +158,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Typed decimals could be misread on decimal-comma systems.** Before this release, on a
+  system set to a decimal comma (German, French and most of Europe), a number typed with a
+  point was cut at the point: UMAP `min_dist` typed as `0.5` ran as 0, and `2.5` ran as 2. On
+  any system `1e3` was read as 1 and `1.5abc` as 1.5, and `1,000` as 1 on an English system.
+  The wrong number was clamped into range and shown, with no warning. Most decimal boxes also
+  rounded to two decimals and wrote the rounded value back the next time focus left them
+  (Autoencoder noise 0.005 became 0.01, a raw-units default gate 0.0045 became 0, a Leiden
+  resolution 0.015 became 0.01). Every number box in QP-CAT now takes `.` or `,` as the decimal
+  separator, reads exponents, keeps what was typed (up to four decimals shown, more when four
+  would change the value), and refuses anything that could be read two ways (`1,000.5`,
+  `1.000,5`, `1,000`) or has text after the number: the box goes back to its last value and gets a red
+  border whose tooltip says why. A number outside a box's range is clamped and marked the same
+  way. The Autoencoder learning rate no longer turns unreadable text into 0.001. **Compare
+  Leiden resolutions** split `1,5; 2,5` into the resolutions 1, 2 and 5; a comma between two
+  digits is now refused with a message to separate values with `;` or spaces and use `.` for
+  decimals.
+- **Radius, Delaunay max edge, matrix radius and VEST perplexity have an Auto / No limit tick
+  box** instead of a -1 or 0 typed into the number box, which also let through values that were
+  neither (a radius of -0.5 or 0, a perplexity of 0.3). The number box now starts at the
+  smallest valid value (0.1, or 2 for perplexity). Saved configurations, preferences, batch files
+  and scripts keep the same numbers (-1, or 0 for perplexity), so a saved configuration reopens
+  with the box ticked and means what it meant.
 - **Dark theme:** the missing-values choices were pale gray on the amber box, and the saved-data
   strip cut its sentence to "..." at the default dialog width with three buttons; both now read in
   full (found from dark-theme screenshots, 2026-11-22).

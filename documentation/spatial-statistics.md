@@ -283,7 +283,7 @@ When **Edit > Preferences > QP-CAT: Run Clustering > Spatial Stats: Save Matplot
   complete-spatial-randomness median the in-app Ripley L tab uses, so the exported figure
   matches the chart.
 - `geary_c.png` -- per-marker bar chart with C = 1 null reference line
-- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap **at one named radius** (set by *Matrix radius*, 0 = about five median nearest-neighbor distances; the title states what it used -- [why not an average](results.md#co-occurrence-tabs))
+- `co_occurrence_pairwise.png` -- square cluster x cluster heatmap **at one named radius** (set by *Matrix radius*; **Auto** = about five median nearest-neighbor distances; the title states what it used -- [why not an average](results.md#co-occurrence-tabs))
 - `co_occurrence_curves.png` -- score against distance, one panel per cluster, the presentation `squidpy.pl.co_occurrence` uses
 - `co_occurrence_one_vs_rest.png` -- cluster x radius heatmap
 
@@ -379,7 +379,8 @@ To configure:
 (e.g. `Ignore*`, `Necrosis`) to drop cells inside those regions per image.
 
 **Graph + statistics.** Pick the neighbor graph (kNN / radius / Delaunay) and its
-parameter, the permutation count (0 = adaptive), and which statistics to run:
+parameter (tick **Auto** beside the radius, or **No limit** beside the Delaunay max edge,
+to leave it to QP-CAT), the permutation count (0 = adaptive), and which statistics to run:
 - **Ripley L**, **Co-occurrence** (pairwise / one-vs-rest), **Neighborhood
   enrichment** -- from the labels + positions.
 - **Geary's C**, **Moran's I** -- from the cells' marker measurements (coordinate /

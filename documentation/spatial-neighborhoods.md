@@ -262,7 +262,7 @@ At the bottom of the **Spatial statistics** section of **Find cell populations (
 
 - **Push graph edges to viewer** (default on) -- top-level toggle. When on, the graph is materialized as `PathObjectConnections` after every clustering run with spatial statistics.
 - **Prompt above N edges** (default 250000) -- when the graph has more than this many undirected edges, QP-CAT prompts before pushing.
-- **Delaunay max edge (microns)** -- shown only when the current image has a pixel-size calibration. For an uncalibrated image the dialog shows **Delaunay max edge (px):** in the Graph constructor rows above instead.
+- **Delaunay max edge (um)** -- shown only when the current image has a pixel-size calibration. For an uncalibrated image the dialog shows **Delaunay max edge (px):** in the Graph constructor rows above instead. Tick **No limit** beside either one to keep every edge.
 - **Write per-cell node measurements** (default on) -- writes `QPCAT spatial:` columns to every cell.
 - **Write component cluster measurements** (default off) -- writes `QPCAT component:` columns for each graph-connected component.
 - **Limit edges to same class (post-hoc filter)** (default off) -- hides cross-class edges in the overlay.

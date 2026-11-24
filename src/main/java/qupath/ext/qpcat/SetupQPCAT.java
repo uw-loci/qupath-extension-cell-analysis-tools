@@ -46,7 +46,7 @@ import qupath.ext.qpcat.ui.PhenotypingDialog;
 import qupath.ext.qpcat.ui.PlotAndGateDialog;
 import qupath.ext.qpcat.ui.PythonConsoleWindow;
 import qupath.ext.qpcat.ui.SetupEnvironmentDialog;
-import qupath.ext.qpcat.ui.SpinnerUtils;
+import qupath.ext.qpcat.ui.SentinelSpinner;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.common.GeneralTools;
 import qupath.lib.common.Version;
@@ -879,14 +879,14 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
                 ? QpcatPreferences.getSpatialDelaunayMaxEdgeUm()
                 : QpcatPreferences.getSpatialGraphDelaunayMaxEdge();
 
-        Spinner<Double> maxEdgeSpinner = new Spinner<>(-1.0, 1_000_000.0, prefValue, 1.0);
-        maxEdgeSpinner.setEditable(true);
-        SpinnerUtils.commitOnFocusLoss(maxEdgeSpinner);
-        maxEdgeSpinner.setPrefWidth(110);
+        // -1 stays the stored "no pruning"; a max edge of 0 or less prunes nothing.
+        SentinelSpinner maxEdgeSpinner = new SentinelSpinner("No limit", -1.0, v -> v <= 0,
+                0.1, 1_000_000.0, 50.0, 1.0, 90, prefValue);
         Tooltip maxEdgeTip = Tooltips.of(
                 "Maximum Delaunay edge length in " + unit + "; longer edges are pruned.\n"
-                + "Useful for tissues with large gaps. Leave at -1 to skip pruning.");
-        maxEdgeSpinner.setTooltip(maxEdgeTip);
+                + "Useful for tissues with large gaps. Tick No limit to skip pruning.");
+        maxEdgeSpinner.spinner().setTooltip(maxEdgeTip);
+        maxEdgeSpinner.checkBox().setTooltip(Tooltips.of("Keep every Delaunay edge, however long."));
 
         CheckBox limitClass = new CheckBox("Limit edges to same class");
         limitClass.setSelected(QpcatPreferences.isSpatialLimitEdgesBySameClass());
@@ -900,7 +900,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
         grid.setVgap(8);
         grid.setPadding(new javafx.geometry.Insets(15));
         grid.add(new Label("Distance threshold (" + unit + "):"), 0, 0);
-        grid.add(maxEdgeSpinner, 1, 0);
+        grid.add(maxEdgeSpinner.node(), 1, 0);
         grid.add(limitClass, 0, 1, 2, 1);
         dialog.getDialogPane().setContent(grid);
 

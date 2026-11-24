@@ -190,22 +190,29 @@ public class SpatialStatsDialog {
         graphType.setValue(safeGraphType(QpcatPreferences.getSpatialGraphType()));
 
         Spinner<Integer> kSpin = SpinnerUtils.intSpinner(2, 200, Math.max(2, QpcatPreferences.getSpatialGraphK()), 1, 110);
-        Spinner<Double> radiusSpin = SpinnerUtils.doubleSpinner(-1, 100000, QpcatPreferences.getSpatialGraphRadius(), 5, 110);
-        Spinner<Double> delaunaySpin = SpinnerUtils.doubleSpinner(-1, 100000,
-                QpcatPreferences.getSpatialGraphDelaunayMaxEdge(), 5, 110);
+        // -1 stays the stored "auto" / "keep all"; the analysis reads a radius
+        // below 0 as auto and a max edge of 0 or less as no pruning.
+        SentinelSpinner radiusSpin = new SentinelSpinner("Auto", -1.0, v -> v < 0,
+                0.1, 100000, 50.0, 5, 90, QpcatPreferences.getSpatialGraphRadius());
+        radiusSpin.checkBox().setTooltip(Tooltips.of(
+                "Auto: about five median nearest-neighbor distances."));
+        SentinelSpinner delaunaySpin = new SentinelSpinner("No limit", -1.0, v -> v <= 0,
+                0.1, 100000, 50.0, 5, 90, QpcatPreferences.getSpatialGraphDelaunayMaxEdge());
+        delaunaySpin.checkBox().setTooltip(Tooltips.of(
+                "No limit: keep every Delaunay edge, however long."));
         Spinner<Integer> permSpin = SpinnerUtils.intSpinner(0, 100000, Math.max(0, QpcatPreferences.getSpatialPermutations()), 1, 110);
 
         Label kLbl = UiLabels.whole(new Label("kNN neighbors (k):"));
-        Label rLbl = UiLabels.whole(new Label("Radius (um, -1 = auto):"));
-        Label dLbl = UiLabels.whole(new Label("Delaunay max edge (um, -1 = keep all):"));
+        Label rLbl = UiLabels.whole(new Label("Radius (um):"));
+        Label dLbl = UiLabels.whole(new Label("Delaunay max edge (um):"));
         Runnable syncGraph = () -> {
             String g = graphType.getValue();
             boolean knn = "knn".equals(g);
             boolean radius = "radius".equals(g);
             boolean del = "delaunay".equals(g);
             kSpin.setDisable(!knn);
-            radiusSpin.setDisable(!radius);
-            delaunaySpin.setDisable(!del);
+            radiusSpin.node().setDisable(!radius);
+            delaunaySpin.node().setDisable(!del);
         };
         graphType.valueProperty().addListener((o, a, b) -> syncGraph.run());
         syncGraph.run();
@@ -241,8 +248,8 @@ public class SpatialStatsDialog {
         graph.add(new Label("Graph type:"), 0, r);
         graph.add(graphType, 1, r++);
         graph.add(kLbl, 0, r); graph.add(kSpin, 1, r++);
-        graph.add(rLbl, 0, r); graph.add(radiusSpin, 1, r++);
-        graph.add(dLbl, 0, r); graph.add(delaunaySpin, 1, r++);
+        graph.add(rLbl, 0, r); graph.add(radiusSpin.node(), 1, r++);
+        graph.add(dLbl, 0, r); graph.add(delaunaySpin.node(), 1, r++);
         graph.add(new Label("Permutations (0 = adaptive):"), 0, r);
         graph.add(permSpin, 1, r++);
 

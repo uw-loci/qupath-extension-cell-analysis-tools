@@ -865,7 +865,7 @@ Two consequences:
   instead, named in its title.
 
 **Which radius the matrix uses.** *Spatial statistics > Matrix radius* in Run Clustering,
-in microns (pixels only if an image in the run has no pixel size). Left at **0** it picks about five median nearest-neighbour distances
+in microns (pixels only if an image in the run has no pixel size). With **Auto** ticked (the default) it picks about five median nearest-neighbor distances
 -- the near end of the profile, where the ratio still discriminates. The figure title
 always states the radius and bin it used, so the number can be quoted the way a published
 co-occurrence value is.

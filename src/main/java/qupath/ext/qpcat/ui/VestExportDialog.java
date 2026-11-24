@@ -156,8 +156,13 @@ public final class VestExportDialog {
         Spinner<Integer> seedSpinner = SpinnerUtils.intSpinner(0, Integer.MAX_VALUE, 42, 1, 110);
         Spinner<Integer> neighborsSpinner = SpinnerUtils.intSpinner(2, 200, 15, 1, 110);
         Spinner<Double> minDistSpinner = SpinnerUtils.doubleSpinner(0.0, 1.0, 0.1, 0.05, 110);
-        Spinner<Double> perplexitySpinner = SpinnerUtils.doubleSpinner(0.0, 200.0, 0.0, 5.0, 110);
-        perplexitySpinner.setTooltip(Tooltips.of("t-SNE perplexity. 0 = auto from cell count."));
+        // 0 stays the stored "auto"; the worker reads 0 or less as auto and never
+        // uses a perplexity below 2.
+        SentinelSpinner perplexitySpinner = new SentinelSpinner("Auto", 0.0, v -> v <= 0,
+                2.0, 200.0, 30.0, 5.0, 70, 0.0);
+        perplexitySpinner.spinner().setTooltip(Tooltips.of("t-SNE perplexity, 2 to 200."));
+        perplexitySpinner.checkBox().setTooltip(Tooltips.of(
+                "Auto: chosen from the cell count (30 at most)."));
         Spinner<Double> pctLowSpinner = SpinnerUtils.doubleSpinner(0.0, 0.5, 0.01, 0.01, 110);
         Spinner<Double> pctHighSpinner = SpinnerUtils.doubleSpinner(0.5, 1.0, 0.99, 0.01, 110);
 
@@ -169,7 +174,7 @@ public final class VestExportDialog {
         adv.addRow(r++, new Label("Random seed:"), seedSpinner);
         adv.addRow(r++, new Label("UMAP neighbors:"), neighborsSpinner);
         adv.addRow(r++, new Label("UMAP min_dist:"), minDistSpinner);
-        adv.addRow(r++, new Label("t-SNE perplexity (0=auto):"), perplexitySpinner);
+        adv.addRow(r++, new Label("t-SNE perplexity:"), perplexitySpinner.node());
         adv.addRow(r++, new Label("Percentile clip low:"), pctLowSpinner);
         adv.addRow(r++, new Label("Percentile clip high:"), pctHighSpinner);
         TitledPane advanced = new TitledPane("Advanced (embedding parameters)", adv);

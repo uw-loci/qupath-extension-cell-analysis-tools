@@ -197,7 +197,7 @@ public class HistogramPanel extends VBox {
         double clamped = Math.max(min, Math.min(max, value));
         thresholdSpinner.setValueFactory(
                 new SpinnerValueFactory.DoubleSpinnerValueFactory(min, max, clamped, step));
-        SpinnerUtils.showFourDecimals(thresholdSpinner);
+        // commitOnFocusLoss reinstalls the strict converter on the new factory.
     }
 
     /** Map a method display name to its JSON key, or null for "Manual"/unknown. */

@@ -532,7 +532,6 @@ public class PhenotypingDialog {
 
             Spinner<Double> gateSpinner = new Spinner<>(bounds[0], bounds[1], defaultGate, bounds[3]);
             gateSpinner.setEditable(true);
-            SpinnerUtils.showFourDecimals(gateSpinner);
             SpinnerUtils.commitOnFocusLoss(gateSpinner);
             gateSpinner.setPrefWidth(85);
             gateSpinner.setMaxWidth(85);

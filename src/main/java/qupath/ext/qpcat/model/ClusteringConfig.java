@@ -483,24 +483,49 @@ public class ClusteringConfig {
                 : new ArrayList<>(new java.util.TreeSet<>(v));
     }
 
+    /** A comma between two digits: a decimal comma ("1,5") or a list typed without spaces. */
+    private static final java.util.regex.Pattern COMMA_BETWEEN_DIGITS =
+            java.util.regex.Pattern.compile("\\d,\\d");
+
+    /** One resolution: '.' as the decimal point, optional exponent. */
+    private static final java.util.regex.Pattern RESOLUTION =
+            java.util.regex.Pattern.compile("[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?");
+
+    private static final String RESOLUTION_SYNTAX =
+            "Separate values with ';' or spaces and use '.' for decimals, e.g. 0.5; 1.5; 2.";
+
     /**
-     * Read a typed list of resolutions such as "0.2, 0.5, 1, 2".
+     * Read a typed list of resolutions such as "0.2; 0.5; 1; 2" or "0.2, 0.5, 1, 2".
+     * A comma between two digits ("1,5") is refused rather than split, because it
+     * may be a decimal comma.
      *
-     * @param text comma- or space-separated numbers
+     * @param text numbers separated by ';', spaces, or a comma followed by a space
      * @return the resolutions, ascending and distinct
      * @throws IllegalArgumentException naming the entry that is not a positive number,
      *         or when there are more than {@link #MAX_COMPARE_RESOLUTIONS}
      */
     public static List<Double> parseResolutions(String text) {
+        String all = text == null ? "" : text;
+        java.util.regex.Matcher comma = COMMA_BETWEEN_DIGITS.matcher(all);
+        if (comma.find()) {
+            int from = comma.start();
+            int to = comma.end();
+            while (from > 0 && !Character.isWhitespace(all.charAt(from - 1))
+                    && all.charAt(from - 1) != ';') from--;
+            while (to < all.length() && !Character.isWhitespace(all.charAt(to))
+                    && all.charAt(to) != ';') to++;
+            throw new IllegalArgumentException("'" + all.substring(from, to)
+                    + "' has a comma between digits, which may be a decimal comma. "
+                    + RESOLUTION_SYNTAX);
+        }
         java.util.TreeSet<Double> out = new java.util.TreeSet<>();
-        for (String part : (text == null ? "" : text).split("[,;\\s]+")) {
+        for (String part : all.split("[,;\\s]+")) {
             if (part.isEmpty()) continue;
-            double r;
-            try {
-                r = Double.parseDouble(part);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("'" + part + "' is not a number.");
+            if (!RESOLUTION.matcher(part).matches()) {
+                throw new IllegalArgumentException("'" + part + "' is not a number. "
+                        + RESOLUTION_SYNTAX);
             }
+            double r = Double.parseDouble(part);
             if (!(r > 0) || Double.isInfinite(r)) {
                 throw new IllegalArgumentException(
                         "A resolution must be above 0; got " + part + ".");

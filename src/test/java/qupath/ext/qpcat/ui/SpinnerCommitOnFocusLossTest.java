@@ -1,11 +1,10 @@
 package qupath.ext.qpcat.ui;
 
-import javafx.scene.Node;
 import javafx.scene.control.Spinner;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Method;
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -25,17 +24,8 @@ class SpinnerCommitOnFocusLossTest {
         assumeTrue(FxHarness.available(), "no display: FX tests skipped");
     }
 
-    /** Type {@code text} into the focused editor, then move focus away. */
     private static void typeAndLeave(Spinner<?> spinner, String text) {
-        try {
-            Method setFocused = Node.class.getDeclaredMethod("setFocused", boolean.class);
-            setFocused.setAccessible(true);
-            setFocused.invoke(spinner, true);
-            spinner.getEditor().setText(text);
-            setFocused.invoke(spinner, false);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
+        FxHarness.typeAndLeave(spinner, text);
     }
 
     @Test
@@ -72,7 +62,7 @@ class SpinnerCommitOnFocusLossTest {
 
     @Test
     void invalidTextRevertsToTheLastValueWithoutThrowing() {
-        Object[] out = FxHarness.onFxGet(() -> {
+        Object[] out = FxHarness.withLocale(Locale.US, () -> FxHarness.onFxGet(() -> {
             Spinner<Integer> ints = SpinnerUtils.intSpinner(2, 200, 15, 1, 110);
             typeAndLeave(ints, "abc");
             Spinner<Double> doubles = SpinnerUtils.doubleSpinner(0.0, 1.0, 0.25, 0.05, 110);
@@ -81,7 +71,7 @@ class SpinnerCommitOnFocusLossTest {
                 ints.getValue(), ints.getEditor().getText(),
                 doubles.getValue(), doubles.getEditor().getText()
             };
-        });
+        }));
         assertThat(out[0]).isEqualTo(15);
         assertThat(out[1]).isEqualTo("15");
         assertThat(out[2]).isEqualTo(0.25);

@@ -281,20 +281,23 @@ public class ClusteringDialog {
     // Spatial Statistics Expansion (v1) controls
     private ComboBox<String> spatialGraphTypeCombo;
     private Spinner<Integer> spatialGraphKSpinner;
-    private Spinner<Double> spatialGraphRadiusSpinner;
-    private Spinner<Double> spatialGraphDelaunayMaxEdgeSpinner;
+    /** Radius graph distance; Auto stores -1. */
+    private SentinelSpinner spatialGraphRadiusSpinner;
+    /** Delaunay max edge in pixels; No limit stores -1. */
+    private SentinelSpinner spatialGraphDelaunayMaxEdgeSpinner;
     private CheckBox enableRipleyCheck;
     private CheckBox enableGearyCheck;
     private CheckBox enableCoOccPairwiseCheck;
     private CheckBox enableCoOccOneVsRestCheck;
-    /** Radius the pairwise co-occurrence matrix figure is drawn at; 0 = auto. */
-    private Spinner<Double> coOccMatrixRadiusSpinner;
+    /** Radius the pairwise co-occurrence matrix figure is drawn at; Auto stores -1. */
+    private SentinelSpinner coOccMatrixRadiusSpinner;
     private Label permutationLabel;
 
     // Spatial graph overlay controls
     private CheckBox pushConnectionsCheck;
     private Spinner<Integer> connectionsPromptThresholdSpinner;
-    private Spinner<Double> spatialGraphDelaunayMaxEdgeUmSpinner;
+    /** Delaunay max edge in microns; No limit stores -1. */
+    private SentinelSpinner spatialGraphDelaunayMaxEdgeUmSpinner;
     private HBox delaunayMaxEdgePxRow;
     private HBox delaunayMaxEdgeUmRow;
     private CheckBox writeNodeMeasurementsCheck;
@@ -2014,10 +2017,11 @@ public class ClusteringDialog {
                 + "Leiden only."));
         compareResolutionsField = new TextField(DEFAULT_COMPARE_RESOLUTIONS);
         compareResolutionsField.setPrefColumnCount(22);
-        compareResolutionsField.setTooltip(Tooltips.of(
-                "Resolutions separated by commas, at most "
+        Tooltip resolutionsTip = Tooltips.of(
+                "Resolutions separated by ';' or spaces, with '.' for decimals, at most "
                 + ClusteringConfig.MAX_COMPARE_RESOLUTIONS + ". The run's own resolution\n"
-                + "is computed anyway; list it to see it in the table."));
+                + "is computed anyway; list it to see it in the table.");
+        compareResolutionsField.setTooltip(resolutionsTip);
         compareResolutionsField.disableProperty().bind(compareResolutionsCheck.selectedProperty()
                 .not().or(compareResolutionsCheck.disableProperty()));
         Runnable refreshResolutionsGate = () -> {
@@ -2029,14 +2033,14 @@ public class ClusteringDialog {
         refreshResolutionsGate.run();
         compareResolutionsCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         compareResolutionsField.textProperty().addListener((o, ov, nv) -> {
-            boolean ok;
+            String problem = null;
             try {
                 ClusteringConfig.parseResolutions(nv);
-                ok = true;
             } catch (IllegalArgumentException ex) {
-                ok = false;
+                problem = ex.getMessage();
             }
-            compareResolutionsField.setStyle(ok ? "" : "-fx-border-color: #d9534f;");
+            compareResolutionsField.setStyle(problem == null ? "" : "-fx-border-color: #d9534f;");
+            compareResolutionsField.setTooltip(problem == null ? resolutionsTip : Tooltips.of(problem));
             refreshRunCostLabel();
         });
         FlowPane resolutionsRow = UiLabels.flowRow(8, compareResolutionsCheck, compareResolutionsField);
@@ -2107,40 +2111,42 @@ public class ClusteringDialog {
         spatialGraphKSpinner.setAccessibleText(
                 "Number of nearest neighbors k for kNN graph");
 
-        spatialGraphRadiusSpinner = new Spinner<>(-1.0, 1.0e6,
-                QpcatPreferences.getSpatialGraphRadius(),
-                5.0);
-        spatialGraphRadiusSpinner.setEditable(true);
-        SpinnerUtils.commitOnFocusLoss(spatialGraphRadiusSpinner);
-        spatialGraphRadiusSpinner.setPrefWidth(100);
-        spatialGraphRadiusSpinner.setTooltip(Tooltips.of(
+        // -1 stays the stored "auto": the analysis reads any radius below 0 as auto.
+        spatialGraphRadiusSpinner = new SentinelSpinner("Auto", -1.0, v -> v < 0,
+                0.1, 1.0e6, 50.0, 5.0, 90, QpcatPreferences.getSpatialGraphRadius());
+        spatialGraphRadiusSpinner.spinner().setTooltip(Tooltips.of(
                 "Maximum distance for two cells to be neighbors (Radius graph only).\n"
                 + "In microns when every image in the run has a pixel size, otherwise\n"
-                + "in pixels. Leave at -1 to auto-derive (median nearest-neighbor\n"
+                + "in pixels. Tick Auto to derive it (median nearest-neighbor\n"
                 + "distance x 5)."));
-        spatialGraphRadiusSpinner.setAccessibleText(
-                "Maximum neighbor distance for Radius graph, in microns; -1 for auto");
+        spatialGraphRadiusSpinner.spinner().setAccessibleText(
+                "Maximum neighbor distance for Radius graph, in microns");
+        spatialGraphRadiusSpinner.checkBox().setTooltip(Tooltips.of(
+                "Auto: median nearest-neighbor distance x 5."));
+        spatialGraphRadiusSpinner.checkBox().setAccessibleText(
+                "Derive the Radius graph distance automatically");
 
-        spatialGraphDelaunayMaxEdgeSpinner = new Spinner<>(-1.0, 1.0e6,
-                QpcatPreferences.getSpatialGraphDelaunayMaxEdge(),
-                5.0);
-        spatialGraphDelaunayMaxEdgeSpinner.setEditable(true);
-        SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeSpinner);
-        spatialGraphDelaunayMaxEdgeSpinner.setPrefWidth(100);
-        spatialGraphDelaunayMaxEdgeSpinner.setTooltip(Tooltips.of(
+        // -1 stays the stored "no pruning": a max edge of 0 or less prunes nothing.
+        spatialGraphDelaunayMaxEdgeSpinner = new SentinelSpinner("No limit", -1.0, v -> v <= 0,
+                0.1, 1.0e6, 100.0, 5.0, 90, QpcatPreferences.getSpatialGraphDelaunayMaxEdge());
+        spatialGraphDelaunayMaxEdgeSpinner.spinner().setTooltip(Tooltips.of(
                 "Maximum allowed edge length after Delaunay triangulation;\n"
-                + "longer edges are pruned (Delaunay graph only). Leave at -1\n"
+                + "longer edges are pruned (Delaunay graph only). Tick No limit\n"
                 + "to skip pruning. Useful for tissues with large gaps."));
-        spatialGraphDelaunayMaxEdgeSpinner.setAccessibleText(
-                "Maximum Delaunay edge length in pixels; -1 to skip pruning");
+        spatialGraphDelaunayMaxEdgeSpinner.spinner().setAccessibleText(
+                "Maximum Delaunay edge length in pixels");
+        spatialGraphDelaunayMaxEdgeSpinner.checkBox().setTooltip(Tooltips.of(
+                "No limit: keep every Delaunay edge, however long."));
+        spatialGraphDelaunayMaxEdgeSpinner.checkBox().setAccessibleText(
+                "Keep every Delaunay edge");
 
         // Gate enable/disable on selected graph type so users see what each
         // type uses without losing the values when switching back.
         Runnable updateSpinnerEnablement = () -> {
             String t = spatialGraphTypeCombo.getValue();
             spatialGraphKSpinner.setDisable(!"kNN".equals(t));
-            spatialGraphRadiusSpinner.setDisable(!"Radius".equals(t));
-            spatialGraphDelaunayMaxEdgeSpinner.setDisable(!"Delaunay".equals(t));
+            spatialGraphRadiusSpinner.node().setDisable(!"Radius".equals(t));
+            spatialGraphDelaunayMaxEdgeSpinner.node().setDisable(!"Delaunay".equals(t));
         };
         spatialGraphTypeCombo.valueProperty().addListener((obs, oldV, newV) ->
                 updateSpinnerEnablement.run());
@@ -2153,11 +2159,12 @@ public class ClusteringDialog {
                 tipLabel("k:", spatialGraphKSpinner), spatialGraphKSpinner);
         kRow.setAlignment(Pos.CENTER_LEFT);
         HBox radiusRow = new HBox(8,
-                tipLabel("Radius (um):", spatialGraphRadiusSpinner), spatialGraphRadiusSpinner);
+                tipLabel("Radius (um):", spatialGraphRadiusSpinner.spinner()),
+                spatialGraphRadiusSpinner.node());
         radiusRow.setAlignment(Pos.CENTER_LEFT);
         delaunayMaxEdgePxRow = new HBox(8,
-                tipLabel("Delaunay max edge (px):", spatialGraphDelaunayMaxEdgeSpinner),
-                spatialGraphDelaunayMaxEdgeSpinner);
+                tipLabel("Delaunay max edge (px):", spatialGraphDelaunayMaxEdgeSpinner.spinner()),
+                spatialGraphDelaunayMaxEdgeSpinner.node());
         delaunayMaxEdgePxRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox graphBox = new VBox(4,
@@ -2209,22 +2216,23 @@ public class ClusteringDialog {
         // bins are cumulative discs, so averaging them is dominated by the large
         // radii where the ratio has already decayed toward 1.0. The table and the
         // CSV are unaffected -- they keep every bin.
-        coOccMatrixRadiusSpinner = new Spinner<>(0.0, 100000.0, 0.0, 5.0);
-        coOccMatrixRadiusSpinner.setEditable(true);
-        coOccMatrixRadiusSpinner.setPrefWidth(110);
-        SpinnerUtils.commitOnFocusLoss(coOccMatrixRadiusSpinner);
-        coOccMatrixRadiusSpinner.setTooltip(Tooltips.of(
+        // -1 is the stored "auto" (as before); the analysis reads 0 or less as auto.
+        coOccMatrixRadiusSpinner = new SentinelSpinner("Auto", -1.0, v -> v <= 0,
+                0.1, 100000.0, 50.0, 5.0, 90, -1.0);
+        coOccMatrixRadiusSpinner.spinner().setTooltip(Tooltips.of(
                 "Radius the pairwise co-occurrence MATRIX is drawn at, in microns\n"
                 + "(pixels only if an image in the run has no pixel size).\n\n"
-                + "0 = auto: about five median nearest-neighbor distances, which keeps\n"
+                + "Auto: about five median nearest-neighbor distances, which keeps\n"
                 + "the figure in the short-range part of the profile where the statistic\n"
                 + "discriminates. The figure title always states the radius it used.\n\n"
                 + "Affects the matrix figure only. The Co-occurrence tables, the CSV and\n"
                 + "the curves figure keep every radius bin."));
-        coOccMatrixRadiusSpinner.disableProperty().bind(
+        coOccMatrixRadiusSpinner.checkBox().setTooltip(Tooltips.of(
+                "Auto: about five median nearest-neighbor distances."));
+        coOccMatrixRadiusSpinner.node().disableProperty().bind(
                 enableCoOccPairwiseCheck.selectedProperty().not());
         HBox matrixRadiusRow = new HBox(8,
-                new Label("Matrix radius (um, 0 = auto):"), coOccMatrixRadiusSpinner);
+                new Label("Matrix radius (um):"), coOccMatrixRadiusSpinner.node());
         matrixRadiusRow.setAlignment(Pos.CENTER_LEFT);
 
         VBox statsBox = new VBox(4,
@@ -2306,24 +2314,24 @@ public class ClusteringDialog {
         promptThresholdRow.setAlignment(Pos.CENTER_LEFT);
 
         // Decide-once micron spinner (mirrors the pixel spinner in graphBox).
-        spatialGraphDelaunayMaxEdgeUmSpinner = new Spinner<>(-1.0, 1.0e6,
-                QpcatPreferences.getSpatialDelaunayMaxEdgeUm(),
-                1.0);
-        spatialGraphDelaunayMaxEdgeUmSpinner.setEditable(true);
-        SpinnerUtils.commitOnFocusLoss(spatialGraphDelaunayMaxEdgeUmSpinner);
-        spatialGraphDelaunayMaxEdgeUmSpinner.setPrefWidth(100);
-        spatialGraphDelaunayMaxEdgeUmSpinner.setTooltip(Tooltips.of(
+        // -1 stays the stored "no pruning": a max edge of 0 or less prunes nothing.
+        spatialGraphDelaunayMaxEdgeUmSpinner = new SentinelSpinner("No limit", -1.0, v -> v <= 0,
+                0.1, 1.0e6, 50.0, 1.0, 90, QpcatPreferences.getSpatialDelaunayMaxEdgeUm());
+        spatialGraphDelaunayMaxEdgeUmSpinner.spinner().setTooltip(Tooltips.of(
                 "Maximum allowed edge length after Delaunay triangulation, "
                 + "in microns; longer edges are pruned. Useful for tissues "
-                + "with large gaps. Leave at -1 to skip pruning. Shown when "
+                + "with large gaps. Tick No limit to skip pruning. Shown when "
                 + "the current image has a pixel-size calibration."));
-        spatialGraphDelaunayMaxEdgeUmSpinner.setAccessibleText(
-                "Maximum Delaunay edge length in microns; -1 to skip pruning");
+        spatialGraphDelaunayMaxEdgeUmSpinner.spinner().setAccessibleText(
+                "Maximum Delaunay edge length in microns");
+        spatialGraphDelaunayMaxEdgeUmSpinner.checkBox().setTooltip(Tooltips.of(
+                "No limit: keep every Delaunay edge, however long."));
+        spatialGraphDelaunayMaxEdgeUmSpinner.checkBox().setAccessibleText(
+                "Keep every Delaunay edge");
         delaunayMaxEdgeUmRow = new HBox(8,
-                tipLabel("Delaunay max edge (microns):",
-                        spatialGraphDelaunayMaxEdgeUmSpinner),
-                spatialGraphDelaunayMaxEdgeUmSpinner,
-                new Label("um"));
+                tipLabel("Delaunay max edge (um):",
+                        spatialGraphDelaunayMaxEdgeUmSpinner.spinner()),
+                spatialGraphDelaunayMaxEdgeUmSpinner.node());
         delaunayMaxEdgeUmRow.setAlignment(Pos.CENTER_LEFT);
 
         // Decide-once visibility swap (pixel vs micron) based on current
@@ -2412,12 +2420,12 @@ public class ClusteringDialog {
         // only the visible one is interactive at any time.
         Runnable updateDelaunayEnable = () -> {
             boolean isDelaunay = "Delaunay".equals(spatialGraphTypeCombo.getValue());
-            spatialGraphDelaunayMaxEdgeUmSpinner.setDisable(!isDelaunay);
+            spatialGraphDelaunayMaxEdgeUmSpinner.node().setDisable(!isDelaunay);
             // The pixel spinner enablement is already maintained by the
             // existing updateSpinnerEnablement runnable in
             // createSpatialStatsPane(); we redundantly set it here for
             // safety.
-            spatialGraphDelaunayMaxEdgeSpinner.setDisable(!isDelaunay);
+            spatialGraphDelaunayMaxEdgeSpinner.node().setDisable(!isDelaunay);
         };
         spatialGraphTypeCombo.valueProperty().addListener((obs, oldV, newV) ->
                 updateDelaunayEnable.run());
@@ -3601,11 +3609,7 @@ public class ClusteringDialog {
         config.setSpatialGraphDelaunayMaxEdge(
                 spatialGraphDelaunayMaxEdgeSpinner.getValue());
         config.setEnableRipley(enableRipleyCheck.isSelected());
-        // 0 in the UI means "pick one"; the config says that with -1 so a value of
-        // zero cannot be mistaken for a radius of zero.
-        double matrixRadius = coOccMatrixRadiusSpinner.getValue() == null
-                ? 0.0 : coOccMatrixRadiusSpinner.getValue();
-        config.setCoOccurrenceMatrixRadius(matrixRadius > 0 ? matrixRadius : -1.0);
+        config.setCoOccurrenceMatrixRadius(coOccMatrixRadiusSpinner.getValue());
         config.setEnableGeary(enableGearyCheck.isSelected());
         config.setEnableCoOccurrencePairwise(enableCoOccPairwiseCheck.isSelected());
         config.setEnableCoOccurrenceOneVsRest(enableCoOccOneVsRestCheck.isSelected());
@@ -4066,9 +4070,7 @@ public class ClusteringDialog {
         generatePlotsCheck.setSelected(config.isGeneratePlots());
         spatialAnalysisCheck.setSelected(config.isEnableSpatialAnalysis());
         if (coOccMatrixRadiusSpinner != null) {
-            double saved = config.getCoOccurrenceMatrixRadius();
-            coOccMatrixRadiusSpinner.getValueFactory()
-                    .setValue(saved > 0 ? saved : 0.0);
+            coOccMatrixRadiusSpinner.setValue(config.getCoOccurrenceMatrixRadius());
         }
         spatialSmoothingCheck.setSelected(config.isEnableSpatialSmoothing());
         smoothingIterationsSpinner.getValueFactory().setValue(config.getSpatialSmoothingIterations());
@@ -4118,9 +4120,8 @@ public class ClusteringDialog {
             spatialGraphTypeCombo.setValue("kNN");
         }
         spatialGraphKSpinner.getValueFactory().setValue(config.getSpatialGraphK());
-        spatialGraphRadiusSpinner.getValueFactory().setValue(config.getSpatialGraphRadius());
-        spatialGraphDelaunayMaxEdgeSpinner.getValueFactory().setValue(
-                config.getSpatialGraphDelaunayMaxEdge());
+        spatialGraphRadiusSpinner.setValue(config.getSpatialGraphRadius());
+        spatialGraphDelaunayMaxEdgeSpinner.setValue(config.getSpatialGraphDelaunayMaxEdge());
         enableRipleyCheck.setSelected(config.isEnableRipley());
         enableGearyCheck.setSelected(config.isEnableGeary());
         enableCoOccPairwiseCheck.setSelected(config.isEnableCoOccurrencePairwise());
@@ -4132,8 +4133,7 @@ public class ClusteringDialog {
             connectionsPromptThresholdSpinner.getValueFactory().setValue(
                     config.getConnectionsPromptThreshold());
         }
-        spatialGraphDelaunayMaxEdgeUmSpinner.getValueFactory().setValue(
-                config.getDelaunayMaxEdgeUm());
+        spatialGraphDelaunayMaxEdgeUmSpinner.setValue(config.getDelaunayMaxEdgeUm());
         writeNodeMeasurementsCheck.setSelected(config.isWriteNodeMeasurements());
         writeComponentMeasurementsCheck.setSelected(config.isWriteComponentMeasurements());
         limitEdgesBySameClassCheck.setSelected(config.isLimitEdgesBySameClass());

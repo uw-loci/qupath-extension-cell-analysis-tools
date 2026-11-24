@@ -8,6 +8,8 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -92,6 +94,38 @@ final class FxHarness {
         AtomicReference<T> out = new AtomicReference<>();
         onFx(() -> out.set(work.get()));
         return out.get();
+    }
+
+    /**
+     * Focus a spinner, type {@code text} into its editor, then move focus away,
+     * through {@code Node.setFocused} (what the scene calls); no window needed.
+     * Call on the FX thread.
+     */
+    static void typeAndLeave(javafx.scene.control.Spinner<?> spinner, String text) {
+        try {
+            Method setFocused = javafx.scene.Node.class.getDeclaredMethod("setFocused", boolean.class);
+            setFocused.setAccessible(true);
+            setFocused.invoke(spinner, true);
+            spinner.getEditor().setText(text);
+            setFocused.invoke(spinner, false);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    /** Run {@code work} with every default-locale category set to {@code locale}, then restore. */
+    static <T> T withLocale(Locale locale, Supplier<T> work) {
+        Locale all = Locale.getDefault();
+        Locale format = Locale.getDefault(Locale.Category.FORMAT);
+        Locale display = Locale.getDefault(Locale.Category.DISPLAY);
+        Locale.setDefault(locale);
+        try {
+            return work.get();
+        } finally {
+            Locale.setDefault(all);
+            Locale.setDefault(Locale.Category.FORMAT, format);
+            Locale.setDefault(Locale.Category.DISPLAY, display);
+        }
     }
 
     /**

@@ -657,19 +657,10 @@ public class AutoencoderDialog {
         epochsSpinner.setPrefWidth(80);
         epochsSpinner.setTooltip(Tooltips.of("Max training epochs (default: 100). Early stopping may stop sooner."));
 
-        var lrFactory = new SpinnerValueFactory.DoubleSpinnerValueFactory(
-                0.00001, 0.1, QpcatPreferences.getAeLearningRate(), 0.0001);
-        lrFactory.setConverter(new javafx.util.StringConverter<>() {
-            @Override public String toString(Double v) { return v == null ? "0.001" : String.format(Locale.ROOT, "%.5f", v); }
-            @Override public Double fromString(String s) {
-                try { return Double.parseDouble(s.trim()); } catch (NumberFormatException e) { return 0.001; }
-            }
-        });
-        learningRateSpinner = new Spinner<>();
-        learningRateSpinner.setValueFactory(lrFactory);
-        learningRateSpinner.setEditable(true);
-        SpinnerUtils.commitOnFocusLoss(learningRateSpinner);
-        learningRateSpinner.setPrefWidth(100);
+        // The shared strict converter shows 0.00001 in full (more than four
+        // decimals are kept when four would round it away).
+        learningRateSpinner = SpinnerUtils.doubleSpinner(
+                0.00001, 0.1, QpcatPreferences.getAeLearningRate(), 0.0001, 100);
         learningRateSpinner.setTooltip(Tooltips.of("AdamW learning rate (default: 0.001). OneCycleLR adjusts automatically."));
 
         batchSizeSpinner = new Spinner<>(16, 1024, QpcatPreferences.getAeBatchSize(), 32);

@@ -25,10 +25,37 @@ class CompareResolutionsConfigTest {
                 .hasMessageContaining("above 0");
         StringBuilder many = new StringBuilder();
         for (int i = 1; i <= ClusteringConfig.MAX_COMPARE_RESOLUTIONS + 1; i++) {
-            many.append(i).append(',');
+            many.append(i).append("; ");
         }
         assertThatThrownBy(() -> ClusteringConfig.parseResolutions(many.toString()))
                 .hasMessageContaining("At most");
+    }
+
+    @Test
+    void aDecimalCommaIsRefusedNotSplit() {
+        // "1,5; 2,5" used to run resolutions 1, 2 and 5, none of which was typed.
+        for (String typed : new String[] {"1,5; 2,5", "0,5", "0.2 1,5 2", "1,2,3"}) {
+            assertThatThrownBy(() -> ClusteringConfig.parseResolutions(typed))
+                    .as(typed)
+                    .hasMessageContaining("comma between digits")
+                    .hasMessageContaining("Separate values with ';' or spaces")
+                    .hasMessageContaining("'.' for decimals");
+        }
+        assertThatThrownBy(() -> ClusteringConfig.parseResolutions("0.2 1,5 2"))
+                .hasMessageContaining("'1,5'");
+    }
+
+    @Test
+    void separatorsThatCannotBeADecimalCommaAreAccepted() {
+        assertThat(ClusteringConfig.parseResolutions("0.5; 1.5; 2"))
+                .containsExactly(0.5, 1.5, 2.0);
+        assertThat(ClusteringConfig.parseResolutions("0.5, 1.5, 2"))
+                .containsExactly(0.5, 1.5, 2.0);
+        assertThat(ClusteringConfig.parseResolutions("5e-1 1e0")).containsExactly(0.5, 1.0);
+        assertThatThrownBy(() -> ClusteringConfig.parseResolutions("0.5 1.5abc"))
+                .hasMessageContaining("'1.5abc' is not a number");
+        assertThatThrownBy(() -> ClusteringConfig.parseResolutions("1d NaN"))
+                .hasMessageContaining("is not a number");
     }
 
     @Test
