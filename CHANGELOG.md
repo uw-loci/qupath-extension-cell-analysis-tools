@@ -184,6 +184,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   results, and a WARN row in a batch run. Phenotyping runs from earlier versions that applied a
   saved rule set to images missing one of its markers could have labeled too many cells with
   that rule.
+- **Batch files: a value of the wrong type is refused, never replaced or retyped.** A number
+  written `0,5` silently became the default (`require_min_zscore: 0,5` gated at 1.0, `resolution:
+  0,5` ran at the default resolution), `k: 2.7` ran as 2, `pca_n_components: 010` as 8 and
+  `random_seed: 1:30` as 90 (YAML 1.1 octal and base-60). An unquoted `- Nucleus: Area` became the
+  name `{Nucleus=Area}` and was dropped, `- yes` became `true`, a repeated key kept its last value,
+  and an unreadable switch fell back to its default. Each is now refused with the key and value
+  named (E003; E022 for a repeated key, E023 for a name listed twice), and names such as `yes` or
+  `010` stay as typed. `qpcat_batch.groovy` refuses an unknown option with exit code 2: a mistyped
+  `--dryrun` used to run the whole batch for real and write results, and `--workers=abc` was
+  ignored. Batch runs from earlier versions whose files used a decimal comma, a leading zero, a
+  `:` in a number, a fraction for a whole-number key or a repeated key ran with values other
+  than the ones written. The YAML reference now says to quote names containing `: `.
 
 ## [0.25.0] - 2026-11-19
 

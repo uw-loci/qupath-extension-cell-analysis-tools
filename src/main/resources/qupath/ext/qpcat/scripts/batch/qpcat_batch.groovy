@@ -19,6 +19,7 @@
 // ASCII-only output by policy. Cite OpenIMC for the schema shape; the
 // QuPath script-mode launcher hosts the runtime.
 
+import qupath.ext.qpcat.batch.BatchCliArgs
 import qupath.ext.qpcat.batch.BatchYamlParser
 import qupath.ext.qpcat.batch.BatchYamlValidator
 import qupath.ext.qpcat.batch.StdoutProgressEmitter
@@ -31,44 +32,25 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 // Parse arguments. The Groovy 'args' binding is the picocli --args list.
-def argList = args == null ? [] : (args as List)
-String yamlPath = null
-Map<String, String> overrides = [:]
-boolean stdin = false
-
-for (String a : argList) {
-    if (a == null) continue
-    if (yamlPath == null && !a.startsWith("--")) {
-        yamlPath = a
-    } else if (a == "-") {
-        stdin = true
-        yamlPath = "-"
-    } else if (a.startsWith("--")) {
-        def stripped = a.substring(2)
-        def eq = stripped.indexOf("=")
-        if (eq < 0) {
-            overrides[stripped] = "true"
-        } else {
-            overrides[stripped.substring(0, eq)] = stripped.substring(eq + 1)
-        }
-    } else {
-        System.err.println("[qpcat-batch] unexpected positional argument: " + a)
-        System.exit(2)
+// An unknown --flag is refused (exit 2): a mistyped --dryrun must not run for real.
+BatchCliArgs cli = BatchCliArgs.parse(args == null ? [] : (args as List<String>))
+if (!cli.getErrors().isEmpty()) {
+    for (String e : cli.getErrors()) {
+        System.err.println("[qpcat-batch] " + e)
     }
-}
-
-if (yamlPath == null) {
     System.err.println("[qpcat-batch] usage: --args=<path-to-yaml-or-->")
     System.err.println("[qpcat-batch]   --dry-run                          validate without dispatching")
     System.err.println("[qpcat-batch]   --on-error=<continue|stop|retry:N>")
     System.err.println("[qpcat-batch]   --log-level=<DEBUG|INFO|WARN|ERROR>")
     System.err.println("[qpcat-batch]   --run-name=<name>")
+    System.err.println("[qpcat-batch]   --workers=<N>")
     System.exit(2)
 }
-
-boolean dryRun = overrides.containsKey("dry-run") || overrides.containsKey("dryRun")
-boolean debug = ("DEBUG".equalsIgnoreCase(overrides.get("log-level"))
-        || "DEBUG".equalsIgnoreCase(overrides.get("log_level")))
+String yamlPath = cli.getYamlPath()
+boolean stdin = cli.isStdin()
+Map<String, String> overrides = cli.getOverrides()
+boolean dryRun = cli.isDryRun()
+boolean debug = "DEBUG".equalsIgnoreCase(overrides.get("log-level"))
 
 ProgressEmitter emitter = new StdoutProgressEmitter(System.out, System.err, debug)
 
@@ -105,10 +87,8 @@ if (overrides.containsKey("run-name") && schema.getAudit() != null) {
 if (overrides.containsKey("log-level") && schema.getAudit() != null) {
     schema.getAudit().setLogLevel(overrides.get("log-level"))
 }
-if (overrides.containsKey("workers")) {
-    try {
-        schema.setWorkers(Integer.parseInt(overrides.get("workers").trim()))
-    } catch (NumberFormatException ignore) {}
+if (cli.getWorkers() != null) {
+    schema.setWorkers(cli.getWorkers())
 }
 
 // Emit parse issues

@@ -24,6 +24,26 @@ workers: 1
 
 > **Note:** Unknown top-level keys are reported as validation errors (E002), not silently ignored. This prevents typo'd block names (`clusterng:`) from being skipped without a warning.
 
+### Writing values
+
+A value of the wrong type is refused with the key and the value named (E003). It is never
+replaced by the default, rounded, or read as some other number.
+
+- **Put a name that contains `: ` in quotes.** QuPath measurement names do (`Cell: CD3 mean`),
+  and unquoted, `- Nucleus: Area` is read as a key and a value, not a name. Quote it:
+  `- "Nucleus: Area"` or `['Cell: CD3 mean', 'Cell: CD8 mean']`. An unquoted one is E003 with
+  the quoted form in the message.
+- **Numbers are plain decimals** with `.` as the decimal point: `0.5`, `15`, `1e3`. `0,5`, `abc`,
+  `2.7` for a whole-number key, `010`, `1:30`, `1_000` and `0x10` are E003. (Plain YAML 1.1 would
+  read `010` as 8 and `1:30` as 90; QP-CAT does not.) A quoted plain number (`'15'`) is accepted.
+- **Switches** take `true` / `false`; `yes` / `no`, `on` / `off` and `1` / `0` are also
+  accepted. Anything else is E003.
+- **Names are kept as typed.** `yes`, `010` or a date in a name position stay that text. A name
+  YAML reads as a number or as true/false (`- 2`, `- true`, `name: 1.0`) is E003: quote it.
+- **Each key once per block, each name once per list.** A repeated key is E022 (YAML would keep
+  only the last); a name listed twice in `measurements`, a rule's marker list or `scope.images`
+  is E023.
+
 ## Stability promise
 
 The YAML schema is part of QP-CAT's public surface; a breaking change will be listed in the changelog. The `version` field gates future migrations. A `version` of 2 or higher is rejected (E007).
@@ -86,7 +106,7 @@ The `images` field is a union:
 | YAML value | Behavior |
 |---|---|
 | `all` | Every `ProjectImageEntry` in every project. |
-| `[name1, name2, ...]` | Each entry matched against `entry.getImageName()`. Missing names hard-fail (E008) unless `skip_missing: true`. |
+| `[name1, name2, ...]` | Each entry matched against `entry.getImageName()`, exactly and case-sensitively. Missing names hard-fail (E008) unless `skip_missing: true`. |
 | `{glob: "<pattern>"}` | Shell-style glob (`*`, `?`, `[abc]`). Zero matches warns (W003). |
 | `{regex: "<pattern>"}` | Java regex (anchored implicitly by `Matcher.matches()`). |
 
@@ -501,7 +521,7 @@ figure_export:
 - E000 YAML parse error
 - E001 Missing required field (e.g. `version`, `scope.projects`, `clustering.type`)
 - E002 Unknown field at a known block (typo)
-- E003 Type mismatch (e.g. `dpi: "300"` instead of `300`)
+- E003 Type mismatch: a number that is not a plain decimal (`0,5`, `010`, `1:30`), a fraction for a whole-number key (`k: 2.7`), a switch that is not true/false, a name YAML read as a mapping (an unquoted `Nucleus: Area`), a number or true/false
 - E004 Value out of range
 - E005 Enum mismatch
 - E006 Mutually exclusive fields set (e.g. `glob` + `regex`)
@@ -519,6 +539,8 @@ figure_export:
 - E019 Output directory not writable
 - E020 Invalid override block in `per_image_overrides`
 - E021 Marker gated at more than one threshold across phenotyping rules
+- E022 A key repeated in the same block
+- E023 A name listed more than once in one list
 
 Warnings (non-fatal):
 
@@ -543,7 +565,6 @@ scope:
   projects: [/data/panel-a/project.qpproj]
 clustering:
   type: LEIDEN
-  n_neighbors: 50
   resolution: 0.5
   graph_backend: gpu        # needs the GPU graph and Leiden: Python preference on this machine
 phenotyping:

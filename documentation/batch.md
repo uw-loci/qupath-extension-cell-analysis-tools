@@ -169,7 +169,7 @@ Exit codes (POSIX):
 |---|---|
 | 0 | Success (also dry-run success) |
 | 1 | Partial failure (`on_error: continue` and >=1 image failed) |
-| 2 | Fatal validation error |
+| 2 | Fatal validation error, or an unknown or malformed option (`--dryrun`, `--workers=abc`); nothing runs |
 | 3 | Fatal runtime error (`on_error: stop` triggered) |
 
 ### Debugging a failed run

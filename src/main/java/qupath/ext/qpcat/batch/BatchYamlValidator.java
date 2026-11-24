@@ -526,8 +526,10 @@ public final class BatchYamlValidator {
         }
         // permutations type / range
         Object perms = ss.getPermutations();
-        if (perms != null && !(perms instanceof String)) {
-            int pn = BatchYamlParser.asInt(perms, -1);
+        // The parser stores a whole number as Integer and has already refused
+        // (E003) anything else that is not text.
+        if (perms instanceof Number n) {
+            int pn = n.intValue();
             if (pn <= 0 || pn > 10000) {
                 r.add(ValidationIssue.error("E004", "spatial_stats.permutations",
                         "must be 'auto' or integer in (0, 10000]; got " + perms));

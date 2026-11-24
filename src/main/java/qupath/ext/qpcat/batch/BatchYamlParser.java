@@ -3,9 +3,14 @@ package qupath.ext.qpcat.batch;
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.model.ClassConditionKind;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.DuplicateKeyException;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.representer.Representer;
+import org.yaml.snakeyaml.resolver.Resolver;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -16,10 +21,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * SnakeYAML-backed parser for the v1 QP-CAT batch YAML schema.
@@ -32,13 +39,14 @@ import java.util.Set;
  *       top-level / per-block key the schema doesn't recognize.</li>
  * </ol>
  *
- * <p>Type-mismatch and value-range errors are <em>not</em> reported here;
- * those are deferred to {@link BatchYamlValidator}. The parser's job is
- * to surface structural problems (unknown keys, malformed YAML).</p>
+ * <p>The parser reports structural problems (unknown keys E002, malformed
+ * YAML E000, repeated keys E022) and type problems (E003: a number that is not
+ * a plain decimal, a name YAML read as a number, true/false or a mapping) and
+ * repeated names in a list (E023). A value of the wrong type is never replaced
+ * by a default. Value ranges and choices are checked by
+ * {@link BatchYamlValidator}.</p>
  */
 public final class BatchYamlParser {
-
-    private static final Logger logger = LoggerFactory.getLogger(BatchYamlParser.class);
 
     // Recognized top-level keys -- anything else triggers E002.
     private static final Set<String> KNOWN_TOP_LEVEL = new HashSet<>(Arrays.asList(
@@ -134,14 +142,12 @@ public final class BatchYamlParser {
         List<ValidationIssue> issues = new ArrayList<>();
         BatchYamlSchema schema = new BatchYamlSchema();
 
-        // SafeConstructor: a batch YAML file may come from another user / CI, so refuse
-        // global tags (!!java...) that would instantiate arbitrary classes on the
-        // classpath. We only ever read plain maps/lists/scalars here anyway.
-        Yaml yaml = new Yaml(new org.yaml.snakeyaml.constructor.SafeConstructor(
-                new org.yaml.snakeyaml.LoaderOptions()));
         Object root;
         try {
-            root = yaml.load(reader);
+            root = newYaml().load(reader);
+        } catch (DuplicateKeyException e) {
+            issues.add(ValidationIssue.error("E022", "<yaml>", duplicateKeyMessage(e)));
+            return new ParseOutcome(schema, issues);
         } catch (RuntimeException e) {
             issues.add(ValidationIssue.error("E000", "<yaml>",
                     "YAML parse error: " + asciiSafe(e.getMessage())));
@@ -169,7 +175,7 @@ public final class BatchYamlParser {
                 continue;
             }
             switch (key) {
-                case "version" -> schema.setVersion(asString(value));
+                case "version" -> schema.setVersion(textValue(value, key, issues));
                 case "audit" -> schema.setAudit(parseAudit(asMap(value, "audit", issues), issues));
                 case "scope" -> schema.setScope(parseScope(asMap(value, "scope", issues), issues));
                 case "clustering" -> schema.setClustering(parseClustering(
@@ -180,8 +186,11 @@ public final class BatchYamlParser {
                         asMap(value, "spatial_stats", issues), issues));
                 case "figure_export" -> schema.setFigureExport(parseFigureExport(
                         asMap(value, "figure_export", issues), issues));
-                case "on_error" -> schema.setOnError(asString(value));
-                case "workers" -> schema.setWorkers(asInt(value, schema.getWorkers()));
+                case "on_error" -> schema.setOnError(textValue(value, key, issues));
+                case "workers" -> {
+                    Integer w = intValue(value, key, issues);
+                    if (w != null) schema.setWorkers(w);
+                }
                 default -> {}
             }
         }
@@ -204,10 +213,10 @@ public final class BatchYamlParser {
                 continue;
             }
             switch (key) {
-                case "log_dir", "log_path" -> audit.setLogDir(asString(value));
-                case "log_level" -> audit.setLogLevel(asString(value));
-                case "run_name" -> audit.setRunName(asString(value));
-                case "capture_prompts" -> audit.setCapturePrompts(asBool(value, false));
+                case "log_dir", "log_path" -> audit.setLogDir(textValue(value, "audit." + key, issues));
+                case "log_level" -> audit.setLogLevel(textValue(value, "audit." + key, issues));
+                case "run_name" -> audit.setRunName(nameValue(value, "audit." + key, issues));
+                case "capture_prompts" -> audit.setCapturePrompts(boolValue(value, "audit." + key, issues));
                 case "record_yaml_hash" -> {} // accepted, default true; nothing to set here
                 default -> {}
             }
@@ -229,9 +238,10 @@ public final class BatchYamlParser {
                 continue;
             }
             switch (key) {
-                case "projects" -> scope.setProjects(asStringList(value));
-                case "images" -> scope.setImages(value);
-                case "skip_missing" -> scope.setSkipMissing(asBool(value, false));
+                case "projects" -> scope.setProjects(nameList(value, "scope." + key, issues));
+                case "images" -> scope.setImages(parseImages(value, issues));
+                case "skip_missing" -> scope.setSkipMissing(
+                        Boolean.TRUE.equals(boolValue(value, "scope." + key, issues)));
                 case "per_image_overrides" -> {
                     if (value instanceof List<?> list) {
                         List<Map<String, Object>> outList = new ArrayList<>();
@@ -249,6 +259,7 @@ public final class BatchYamlParser {
         return scope;
     }
 
+    @SuppressWarnings("unchecked")
     private static BatchYamlSchema.ClusteringBlock parseClustering(
             Map<String, Object> map, List<ValidationIssue> issues) {
         if (map == null) return null;
@@ -261,40 +272,42 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_CLUSTERING) + "'?"));
                 continue;
             }
+            String path = "clustering." + key;
             switch (key) {
-                case "type", "algorithm" -> c.setType(asString(value));
-                case "mode" -> c.setMode(asString(value));
-                case "saved_result_name" -> c.setSavedResultName(asString(value));
-                case "resolution" -> c.setResolution(asDoubleObj(value));
-                case "k" -> c.setK(asIntObj(value));
-                case "normalization" -> c.setNormalization(asString(value));
-                case "missing_values" -> c.setMissingValues(asString(value));
-                case "graph_backend" -> c.setGraphBackend(asString(value));
-                case "embedding" -> c.setEmbedding(asString(value));
-                case "pca_n_components" -> c.setPcaNComponents(asIntObj(value));
-                case "umap_n_neighbors" -> c.setUmapNNeighbors(asIntObj(value));
-                case "umap_min_dist" -> c.setUmapMinDist(asDoubleObj(value));
-                case "umap_metric" -> c.setUmapMetric(asString(value));
-                case "tsne_perplexity" -> c.setTsnePerplexity(asIntObj(value));
-                case "tsne_learning_rate" -> c.setTsneLearningRate(asDoubleObj(value));
-                case "tsne_iterations" -> c.setTsneIterations(asIntObj(value));
-                case "tsne_early_exaggeration" -> c.setTsneEarlyExaggeration(asDoubleObj(value));
-                case "embedding_seed" -> c.setEmbeddingSeed(asIntObj(value));
-                case "embedding_execution_mode" -> c.setEmbeddingExecutionMode(asString(value));
-                case "random_seed" -> c.setRandomSeed(asIntObj(value));
-                case "result_name" -> c.setResultName(asString(value));
-                case "measurements" -> c.setMeasurements(asStringList(value));
-                case "spatial_smoothing" -> c.setSpatialSmoothing(asBool(value, false));
-                case "pca_precursor" -> c.setPcaPrecursor(asBool(value, false));
-                case "batch_correction" -> c.setBatchCorrection(asBool(value, false));
-                case "n_clusters" -> c.setNClusters(asIntObj(value));
-                case "min_cluster_size" -> c.setMinClusterSize(asIntObj(value));
-                case "linkage" -> c.setLinkage(asString(value));
-                case "banksy_lambda" -> c.setBanksyLambda(asDoubleObj(value));
-                case "banksy_k_geom" -> c.setBanksyKGeom(asIntObj(value));
-                case "joint" -> c.setJoint(asBool(value, false));
-                case "batch_key" -> c.setBatchKey(asString(value));
-                case "harmony_version" -> c.setHarmonyVersion(asString(value));
+                case "type", "algorithm" -> c.setType(textValue(value, path, issues));
+                case "mode" -> c.setMode(textValue(value, path, issues));
+                case "saved_result_name" -> c.setSavedResultName(nameValue(value, path, issues));
+                case "resolution" -> c.setResolution(doubleValue(value, path, issues));
+                case "k" -> c.setK(intValue(value, path, issues));
+                case "normalization" -> c.setNormalization(textValue(value, path, issues));
+                case "missing_values" -> c.setMissingValues(textValue(value, path, issues));
+                case "graph_backend" -> c.setGraphBackend(textValue(value, path, issues));
+                case "embedding" -> c.setEmbedding(textValue(value, path, issues));
+                case "pca_n_components" -> c.setPcaNComponents(intValue(value, path, issues));
+                case "umap_n_neighbors" -> c.setUmapNNeighbors(intValue(value, path, issues));
+                case "umap_min_dist" -> c.setUmapMinDist(doubleValue(value, path, issues));
+                case "umap_metric" -> c.setUmapMetric(textValue(value, path, issues));
+                case "tsne_perplexity" -> c.setTsnePerplexity(intValue(value, path, issues));
+                case "tsne_learning_rate" -> c.setTsneLearningRate(doubleValue(value, path, issues));
+                case "tsne_iterations" -> c.setTsneIterations(intValue(value, path, issues));
+                case "tsne_early_exaggeration" -> c.setTsneEarlyExaggeration(doubleValue(value, path, issues));
+                case "embedding_seed" -> c.setEmbeddingSeed(intValue(value, path, issues));
+                case "embedding_execution_mode" -> c.setEmbeddingExecutionMode(textValue(value, path, issues));
+                case "random_seed" -> c.setRandomSeed(intValue(value, path, issues));
+                case "result_name" -> c.setResultName(nameValue(value, path, issues));
+                case "measurements" -> c.setMeasurements(
+                        noDuplicates(nameList(value, path, issues), path, issues));
+                case "spatial_smoothing" -> c.setSpatialSmoothing(boolValue(value, path, issues));
+                case "pca_precursor" -> c.setPcaPrecursor(boolValue(value, path, issues));
+                case "batch_correction" -> c.setBatchCorrection(boolValue(value, path, issues));
+                case "n_clusters" -> c.setNClusters(intValue(value, path, issues));
+                case "min_cluster_size" -> c.setMinClusterSize(intValue(value, path, issues));
+                case "linkage" -> c.setLinkage(textValue(value, path, issues));
+                case "banksy_lambda" -> c.setBanksyLambda(doubleValue(value, path, issues));
+                case "banksy_k_geom" -> c.setBanksyKGeom(intValue(value, path, issues));
+                case "joint" -> c.setJoint(Boolean.TRUE.equals(boolValue(value, path, issues)));
+                case "batch_key" -> c.setBatchKey(textValue(value, path, issues));
+                case "harmony_version" -> c.setHarmonyVersion(textValue(value, path, issues));
                 case "area_levels" -> {
                     if (value instanceof List<?> list) {
                         List<AreaLevelSpec> levels = new ArrayList<>();
@@ -335,8 +348,10 @@ public final class BatchYamlParser {
                 continue;
             }
             switch (key) {
-                case "enabled" -> p.setEnabled(asBool(value, true));
-                case "missing_values" -> p.setMissingValues(asString(value));
+                case "enabled" -> p.setEnabled(!Boolean.FALSE.equals(
+                        boolValue(value, "phenotyping." + key, issues)));
+                case "missing_values" -> p.setMissingValues(
+                        textValue(value, "phenotyping." + key, issues));
                 case "rules" -> {
                     if (value instanceof List<?> list) {
                         List<BatchYamlSchema.PhenotypeRuleEntry> rules = new ArrayList<>();
@@ -386,7 +401,7 @@ public final class BatchYamlParser {
             switch (key) {
                 case "level" -> {
                     sawLevel = true;
-                    String raw = asString(value);
+                    String raw = textValue(value, base + ".level", issues);
                     if ("tma_cores".equalsIgnoreCase(raw)) {
                         spec.setLevel(AreaLevel.TMA_CORES);
                     } else if ("annotations".equalsIgnoreCase(raw)) {
@@ -400,7 +415,8 @@ public final class BatchYamlParser {
                                 "expected one of [tma_cores, annotations], got '" + raw + "'"));
                     }
                 }
-                case "annotation_classes" -> spec.setAnnotationClasses(asStringList(value));
+                case "annotation_classes" -> spec.setAnnotationClasses(
+                        nameList(value, base + "." + key, issues));
                 default -> { }
             }
         }
@@ -423,18 +439,28 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_PHENO_RULE) + "'?"));
                 continue;
             }
+            String path = "phenotyping.rules[" + index + "]." + key;
             ClassConditionKind classKind = ClassConditionKind.fromYamlKey(key);
             if (classKind != null) {
-                rule.setClassCondition(classKind, asStringList(value));
+                rule.setClassCondition(classKind, nameList(value, path, issues));
                 continue;
             }
             switch (key) {
-                case "name" -> rule.setName(asString(value));
-                case "require_markers" -> rule.setRequireMarkers(asStringList(value));
-                case "exclude_markers" -> rule.setExcludeMarkers(asStringList(value));
-                case "any_markers" -> rule.setAnyMarkers(asStringList(value));
-                case "require_min_zscore" -> rule.setRequireMinZscore(asDouble(value, 1.0));
-                case "exclude_max_zscore" -> rule.setExcludeMaxZscore(asDouble(value, 1.0));
+                case "name" -> rule.setName(nameValue(value, path, issues));
+                case "require_markers" -> rule.setRequireMarkers(
+                        noDuplicates(nameList(value, path, issues), path, issues));
+                case "exclude_markers" -> rule.setExcludeMarkers(
+                        noDuplicates(nameList(value, path, issues), path, issues));
+                case "any_markers" -> rule.setAnyMarkers(
+                        noDuplicates(nameList(value, path, issues), path, issues));
+                case "require_min_zscore" -> {
+                    Double z = doubleValue(value, path, issues);
+                    if (z != null) rule.setRequireMinZscore(z);
+                }
+                case "exclude_max_zscore" -> {
+                    Double z = doubleValue(value, path, issues);
+                    if (z != null) rule.setExcludeMaxZscore(z);
+                }
                 default -> {}
             }
         }
@@ -454,15 +480,19 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_LLM) + "'?"));
                 continue;
             }
+            String path = "phenotyping.llm_explainer." + key;
             switch (key) {
-                case "enabled" -> llm.setEnabled(asBool(value, false));
-                case "provider" -> llm.setProvider(asString(value));
-                case "model" -> llm.setModel(asString(value));
-                case "key_from_env" -> llm.setKeyFromEnv(asString(value));
-                case "api_key_env" -> llm.setApiKeyEnv(asString(value));
-                case "ollama_url" -> llm.setOllamaUrl(asString(value));
-                case "timeout_seconds" -> llm.setTimeoutSeconds(asInt(value, 60));
-                case "prompt_template_version" -> llm.setPromptTemplateVersion(asString(value));
+                case "enabled" -> llm.setEnabled(Boolean.TRUE.equals(boolValue(value, path, issues)));
+                case "provider" -> llm.setProvider(textValue(value, path, issues));
+                case "model" -> llm.setModel(textValue(value, path, issues));
+                case "key_from_env" -> llm.setKeyFromEnv(textValue(value, path, issues));
+                case "api_key_env" -> llm.setApiKeyEnv(textValue(value, path, issues));
+                case "ollama_url" -> llm.setOllamaUrl(textValue(value, path, issues));
+                case "timeout_seconds" -> {
+                    Integer t = intValue(value, path, issues);
+                    if (t != null) llm.setTimeoutSeconds(t);
+                }
+                case "prompt_template_version" -> llm.setPromptTemplateVersion(textValue(value, path, issues));
                 default -> {}
             }
         }
@@ -481,12 +511,15 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_SPATIAL) + "'?"));
                 continue;
             }
+            String path = "spatial_stats." + key;
             switch (key) {
-                case "enabled" -> ss.setEnabled(asBool(value, true));
+                case "enabled" -> ss.setEnabled(!Boolean.FALSE.equals(boolValue(value, path, issues)));
                 case "graph" -> ss.setGraph(parseGraph(asMap(value, "spatial_stats.graph", issues), issues));
-                case "statistics" -> ss.setStatistics(asStringList(value));
-                case "permutations" -> ss.setPermutations(value);
-                case "persist_plots" -> ss.setPersistPlots(asBool(value, true));
+                case "statistics" -> ss.setStatistics(nameList(value, path, issues));
+                // 'auto' stays text for the validator; anything else must be a whole number.
+                case "permutations" -> ss.setPermutations(value instanceof String
+                        ? value : intValue(value, path, issues));
+                case "persist_plots" -> ss.setPersistPlots(boolValue(value, path, issues));
                 default -> {}
             }
         }
@@ -506,11 +539,21 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_GRAPH) + "'?"));
                 continue;
             }
+            String path = "spatial_stats.graph." + key;
             switch (key) {
-                case "type" -> g.setType(asString(value));
-                case "k" -> g.setK(asInt(value, 15));
-                case "radius" -> g.setRadius(asDouble(value, -1.0));
-                case "max_edge" -> g.setMaxEdge(asDouble(value, -1.0));
+                case "type" -> g.setType(textValue(value, path, issues));
+                case "k" -> {
+                    Integer k = intValue(value, path, issues);
+                    if (k != null) g.setK(k);
+                }
+                case "radius" -> {
+                    Double r = doubleValue(value, path, issues);
+                    if (r != null) g.setRadius(r);
+                }
+                case "max_edge" -> {
+                    Double m = doubleValue(value, path, issues);
+                    if (m != null) g.setMaxEdge(m);
+                }
                 default -> {}
             }
         }
@@ -529,96 +572,294 @@ public final class BatchYamlParser {
                         "unknown field. Did you mean '" + suggest(key, KNOWN_FIGURE_EXPORT) + "'?"));
                 continue;
             }
+            String path = "figure_export." + key;
             switch (key) {
-                case "enabled" -> fe.setEnabled(asBool(value, true));
-                case "output_dir" -> fe.setOutputDir(asString(value));
-                case "formats" -> fe.setFormats(asStringList(value));
-                case "dpi" -> fe.setDpi(asInt(value, 300));
-                case "figures" -> fe.setFigures(value);
-                case "filename_pattern" -> fe.setFilenamePattern(asString(value));
-                case "result_name" -> fe.setResultName(asString(value));
-                case "overwrite_existing" -> fe.setOverwriteExisting(asBool(value, false));
-                case "skip_missing_plots" -> fe.setSkipMissingPlots(asBool(value, true));
+                case "enabled" -> fe.setEnabled(!Boolean.FALSE.equals(boolValue(value, path, issues)));
+                case "output_dir" -> fe.setOutputDir(textValue(value, path, issues));
+                case "formats" -> fe.setFormats(nameList(value, path, issues));
+                case "dpi" -> {
+                    Integer d = intValue(value, path, issues);
+                    if (d != null) fe.setDpi(d);
+                }
+                case "figures" -> fe.setFigures(value instanceof List<?>
+                        ? nameList(value, path, issues) : value);
+                case "filename_pattern" -> fe.setFilenamePattern(textValue(value, path, issues));
+                case "result_name" -> fe.setResultName(nameValue(value, path, issues));
+                case "overwrite_existing" -> fe.setOverwriteExisting(
+                        Boolean.TRUE.equals(boolValue(value, path, issues)));
+                case "skip_missing_plots" -> fe.setSkipMissingPlots(
+                        !Boolean.FALSE.equals(boolValue(value, path, issues)));
                 default -> {}
             }
         }
         return fe;
     }
 
+    // ---------------- Scalar resolution ----------------
+
+    /**
+     * Plain-scalar typing without YAML 1.1's surprises. Only decimal numbers
+     * become numbers ({@code 010} is not octal 8, {@code 1:30} is not 90,
+     * {@code 1_000} and {@code 0x10} are not numbers), only true/false become
+     * booleans ({@code yes}, {@code on} stay text) and dates stay text. A value
+     * that is not a plain decimal reaches the numeric keys as text and is
+     * refused there (E003) instead of being read as some other number.
+     */
+    static final class StrictResolver extends Resolver {
+        static final Pattern BOOL_TF = Pattern.compile("^(?:true|True|TRUE|false|False|FALSE)$");
+        static final Pattern INT_DECIMAL = Pattern.compile("^[-+]?(?:0|[1-9][0-9]*)$");
+        static final Pattern FLOAT_DECIMAL = Pattern.compile(
+                "^[-+]?(?:(?:0|[1-9][0-9]*)(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][-+]?[0-9]+)?$");
+
+        @Override
+        protected void addImplicitResolvers() {
+            addImplicitResolver(Tag.BOOL, BOOL_TF, "tTfF");
+            addImplicitResolver(Tag.INT, INT_DECIMAL, "-+0123456789");
+            addImplicitResolver(Tag.FLOAT, FLOAT_DECIMAL, "-+0123456789.");
+            addImplicitResolver(Tag.MERGE, MERGE, "<");
+            addImplicitResolver(Tag.NULL, NULL, "~nN\0");
+            addImplicitResolver(Tag.NULL, EMPTY, null);
+        }
+    }
+
+    private static Yaml newYaml() {
+        LoaderOptions options = new LoaderOptions();
+        // A repeated key would otherwise keep only its last value, silently.
+        options.setAllowDuplicateKeys(false);
+        DumperOptions dumper = new DumperOptions();
+        // SafeConstructor: a batch YAML file may come from another user / CI, so refuse
+        // global tags (!!java...) that would instantiate arbitrary classes on the
+        // classpath. We only ever read plain maps/lists/scalars here anyway.
+        return new Yaml(new SafeConstructor(options), new Representer(dumper), dumper, options,
+                new StrictResolver());
+    }
+
+    private static String duplicateKeyMessage(DuplicateKeyException e) {
+        String problem = e.getProblem() == null ? "" : e.getProblem();
+        String key = problem.startsWith("found duplicate key ")
+                ? problem.substring("found duplicate key ".length()) : problem;
+        String line = e.getProblemMark() == null ? ""
+                : "line " + (e.getProblemMark().getLine() + 1) + ": ";
+        return line + "key '" + asciiSafe(key) + "' appears more than once in the same block; "
+                + "YAML would keep only the last value. Remove the extra one.";
+    }
+
     // ---------------- Coercion helpers ----------------
 
-    static String asString(Object o) {
+    /**
+     * A whole number. A non-integral number ({@code 2.7}) or text that is not a
+     * plain decimal ({@code "0,5"}, {@code "010"}, {@code "1:30"}) is E003 and
+     * gives null, never a default or a truncated value.
+     */
+    static Integer intValue(Object o, String path, List<ValidationIssue> issues) {
         if (o == null) return null;
-        return o.toString();
-    }
-
-    static int asInt(Object o, int dflt) {
-        if (o == null) return dflt;
-        if (o instanceof Number n) return n.intValue();
-        try { return Integer.parseInt(o.toString().trim()); }
-        catch (NumberFormatException e) { return dflt; }
-    }
-
-    static Integer asIntObj(Object o) {
-        if (o == null) return null;
-        if (o instanceof Number n) return n.intValue();
-        try { return Integer.parseInt(o.toString().trim()); }
-        catch (NumberFormatException e) {
-            // Present but not an integer (e.g. `resolution: true`). Returning null
-            // makes downstream treat it as absent and skip range validation, so at
-            // least log it rather than dropping it completely silently.
-            logger.warn("Batch YAML: expected an integer but got '{}' -- ignoring.", o);
+        if (o instanceof Boolean || o instanceof Map<?, ?> || o instanceof List<?>) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a whole number, got " + describe(o)));
             return null;
         }
-    }
-
-    static double asDouble(Object o, double dflt) {
-        if (o == null) return dflt;
-        if (o instanceof Number n) return n.doubleValue();
-        try { return Double.parseDouble(o.toString().trim()); }
-        catch (NumberFormatException e) { return dflt; }
-    }
-
-    static Double asDoubleObj(Object o) {
-        if (o == null) return null;
-        if (o instanceof Number n) return n.doubleValue();
-        try { return Double.parseDouble(o.toString().trim()); }
-        catch (NumberFormatException e) {
-            logger.warn("Batch YAML: expected a number but got '{}' -- ignoring.", o);
+        Double d = parseDecimal(o);
+        if (d == null) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a whole number, got '" + asciiSafe(o.toString()) + "'"
+                    + numberHint(o.toString())));
             return null;
         }
+        if (d != Math.rint(d) || Double.isInfinite(d)) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a whole number, got " + asciiSafe(o.toString())
+                    + " (not rounded or truncated; write a whole number)"));
+            return null;
+        }
+        if (d > Integer.MAX_VALUE || d < Integer.MIN_VALUE) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "number " + asciiSafe(o.toString()) + " is too large"));
+            return null;
+        }
+        return d.intValue();
     }
 
-    static boolean asBool(Object o, boolean dflt) {
-        if (o == null) return dflt;
+    /** A number. Text that is not a plain decimal is E003 and gives null. */
+    static Double doubleValue(Object o, String path, List<ValidationIssue> issues) {
+        if (o == null) return null;
+        if (o instanceof Boolean || o instanceof Map<?, ?> || o instanceof List<?>) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a number, got " + describe(o)));
+            return null;
+        }
+        Double d = parseDecimal(o);
+        if (d == null || d.isInfinite() || d.isNaN()) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a number, got '" + asciiSafe(o.toString()) + "'"
+                    + numberHint(o.toString())));
+            return null;
+        }
+        return d;
+    }
+
+    /** The value of a YAML number, or of text written as a plain decimal; else null. */
+    private static Double parseDecimal(Object o) {
+        if (o instanceof Number n) return n.doubleValue();
+        String t = o.toString().trim();
+        if (StrictResolver.INT_DECIMAL.matcher(t).matches()
+                || StrictResolver.FLOAT_DECIMAL.matcher(t).matches()) {
+            try {
+                return Double.parseDouble(t);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static String numberHint(String text) {
+        String t = text.trim();
+        if (t.contains(",")) return " (use '.' as the decimal point; a comma is not accepted)";
+        if (t.contains(":")) return " (a ':' is not part of a number; YAML 1.1 would read "
+                + "'1:30' as 90)";
+        if (t.contains("_")) return " (write the digits without '_')";
+        if (t.matches("[-+]?0[0-9]+(\\.[0-9]*)?")) return " (leading zeros are not accepted; "
+                + "YAML 1.1 would read '010' as the octal number 8)";
+        if (t.matches("[-+]?0[xXoObB].*")) return " (write the number in decimal)";
+        return "";
+    }
+
+    /**
+     * true / false. Also accepts yes/no, on/off, y/n and 1/0 (any case), which
+     * have only one reading; anything else is E003 and gives null.
+     */
+    static Boolean boolValue(Object o, String path, List<ValidationIssue> issues) {
+        if (o == null) return null;
         if (o instanceof Boolean b) return b;
+        if (o instanceof Map<?, ?> || o instanceof List<?>) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected true or false, got " + describe(o)));
+            return null;
+        }
         String s = o.toString().trim().toLowerCase(Locale.ROOT);
         return switch (s) {
             case "true", "yes", "y", "on", "1" -> true;
             case "false", "no", "n", "off", "0" -> false;
             default -> {
-                // Unrecognized boolean-position string (e.g. a typo): falling back to
-                // the default can silently flip an `enabled` flag, so log it.
-                logger.warn("Batch YAML: expected a boolean but got '{}' -- using "
-                        + "default {}.", o, dflt);
-                yield dflt;
+                issues.add(ValidationIssue.error("E003", path,
+                        "expected true or false, got '" + asciiSafe(o.toString()) + "'"));
+                yield null;
             }
         };
     }
 
-    static List<String> asStringList(Object o) {
-        if (o == null) return new ArrayList<>();
-        if (o instanceof List<?> list) {
-            List<String> out = new ArrayList<>(list.size());
-            for (Object x : list) {
-                if (x != null) out.add(x.toString());
-            }
+    /**
+     * A free-text or choice value (an id the validator checks, a path, a
+     * pattern). Numbers and booleans become their text; a mapping or list is E003.
+     */
+    static String textValue(Object o, String path, List<ValidationIssue> issues) {
+        if (o == null) return null;
+        if (o instanceof Map<?, ?> || o instanceof List<?>) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a single value, got " + describe(o)
+                    + (o instanceof Map<?, ?> ? COLON_HINT : "")));
+            return null;
+        }
+        return o.toString();
+    }
+
+    /**
+     * A name (a rule name, a result name, a run name). Must be text: a value
+     * YAML read as a number, true/false or a mapping is E003, because its text
+     * would not be what was typed.
+     */
+    static String nameValue(Object o, String path, List<ValidationIssue> issues) {
+        if (o == null) return null;
+        if (o instanceof String s) return s;
+        issues.add(ValidationIssue.error("E003", path, notANameMessage(o)));
+        return null;
+    }
+
+    /**
+     * A list of names (measurements, markers, classes, paths, slugs). A single
+     * text value is a one-entry list. An entry YAML did not read as text (a
+     * mapping from an unquoted {@code Nucleus: Area}, a number, true/false or an
+     * empty entry) is E003 and left out.
+     */
+    static List<String> nameList(Object o, String path, List<ValidationIssue> issues) {
+        List<String> out = new ArrayList<>();
+        if (o == null) return out;
+        if (o instanceof String s) {
+            out.add(s);
             return out;
         }
-        // Single string -> single-entry list
-        List<String> out = new ArrayList<>();
-        out.add(o.toString());
+        if (!(o instanceof List<?> list)) {
+            issues.add(ValidationIssue.error("E003", path,
+                    "expected a list of names, got " + describe(o)
+                    + (o instanceof Map<?, ?> ? COLON_HINT : "")));
+            return out;
+        }
+        for (int i = 0; i < list.size(); i++) {
+            Object x = list.get(i);
+            if (x instanceof String s) {
+                out.add(s);
+            } else {
+                issues.add(ValidationIssue.error("E003", path + "[" + i + "]",
+                        x == null ? "empty entry; remove it or write the name"
+                                : notANameMessage(x)));
+            }
+        }
         return out;
+    }
+
+    /** E023 for every name listed more than once; returns the list unchanged. */
+    static List<String> noDuplicates(List<String> names, String path,
+                                     List<ValidationIssue> issues) {
+        Set<String> seen = new HashSet<>();
+        Set<String> reported = new LinkedHashSet<>();
+        for (String n : names) {
+            if (!seen.add(n) && reported.add(n)) {
+                issues.add(ValidationIssue.error("E023", path,
+                        "'" + asciiSafe(n) + "' is listed more than once; list each name once"));
+            }
+        }
+        return names;
+    }
+
+    /**
+     * {@code scope.images}: a list of names is checked like any name list; a
+     * list holding a mapping is left for the validator's mixed-shape check (E015),
+     * and the other shapes are passed on as they are.
+     */
+    private static Object parseImages(Object value, List<ValidationIssue> issues) {
+        if (value instanceof List<?> list && list.stream().noneMatch(x -> x instanceof Map<?, ?>)) {
+            return noDuplicates(nameList(value, "scope.images", issues), "scope.images", issues);
+        }
+        return value;
+    }
+
+    private static final String COLON_HINT = " (an unquoted ': ' makes a key and value; "
+            + "put a name that contains ': ' in quotes, e.g. \"Nucleus: Area\")";
+
+    private static String notANameMessage(Object o) {
+        if (o instanceof Map<?, ?> m) {
+            String typed = m.size() == 1
+                    ? m.keySet().iterator().next() + ": " + m.values().iterator().next()
+                    : m.toString();
+            return "'" + asciiSafe(typed) + "' was read as a key and value, not a name, "
+                    + "because of the ': '. Put the name in quotes: \"" + asciiSafe(typed) + "\"";
+        }
+        if (o instanceof Boolean b) {
+            return "'" + b + "' was read as true/false, not a name. Put the name in quotes: \""
+                    + b + "\"";
+        }
+        if (o instanceof Number n) {
+            return "'" + n + "' was read as a number, not a name. Put the name in quotes, "
+                    + "exactly as it is spelled";
+        }
+        return "expected a name, got " + describe(o);
+    }
+
+    private static String describe(Object o) {
+        if (o instanceof Map<?, ?>) return "a mapping";
+        if (o instanceof List<?>) return "a list";
+        if (o instanceof Boolean b) return "'" + b + "'";
+        return safeTypeName(o);
     }
 
     @SuppressWarnings("unchecked")
