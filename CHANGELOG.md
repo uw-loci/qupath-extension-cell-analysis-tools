@@ -158,6 +158,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Spatial statistics on existing classes: the results window now says what was left out and
+  why.** Every note this workflow wrote (a statistic that did not run, measurements that could
+  not be tested) went only to the QuPath log; they now appear under "Not produced in this run".
+  Measurements that do not vary across the cells of an area were dropped from Moran's I and
+  Geary's C without a word, and when all of them were dropped the run said "no measurements
+  were selected to test", which was false; the note now names them. Since 0.25.0 a single cell
+  missing a value for any candidate measurement silently switched Moran's I and Geary's C off
+  for the whole area (the measurement table came back one row per complete cell, which no
+  longer matched the cell positions, and was ignored); now only the measurements with missing
+  or infinite values are left out, and they are named.
 - **Ripley's L no longer draws a "random" curve for a cluster too small to measure.** A
   cluster with one or two cells (a rare imported label, a small area) gave an L curve and a
   simulated-random band of zero, which the chart and the PNG center to the flat line that

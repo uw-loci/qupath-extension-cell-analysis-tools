@@ -13,6 +13,7 @@ import qupath.ext.qpcat.model.ClusteringResult;
 import qupath.ext.qpcat.model.GearyCResult;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.AreaLevelSpec;
+import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.AreaResolver;
@@ -591,6 +592,7 @@ public class PostHocSpatialWorkflow {
 
         double[][] featureMatrix = null;
         String[] markerNames = null;
+        List<String> featureNotes = new ArrayList<>();
         if (opts.needsFeatures()) {
             // Geary's C / Moran's I autocorrelate marker expression -- select only
             // plausible marker measurements and drop coordinate / geometry / derived
@@ -598,13 +600,26 @@ public class PostHocSpatialWorkflow {
             List<String> measNames = selectAutocorrMeasurements(
                     MeasurementExtractor.getAllMeasurements(cells));
             if (!measNames.isEmpty()) {
-                MeasurementExtractor.ExtractionResult ex =
-                        new MeasurementExtractor().extract(cells, measNames);
-                featureMatrix = ex.getData();
-                markerNames = ex.getMeasurementNames();
+                // One row per cell, aligned with the coordinates and labels: a
+                // measurement missing or infinite on any cell is left out instead
+                // of the cell (EXCLUDE_OBJECTS shortened the matrix, and the
+                // worker then ignored every measurement without saying so).
+                try {
+                    MeasurementExtractor.ExtractionResult ex =
+                            new MeasurementExtractor(MissingPolicy.EXCLUDE_MEASUREMENTS)
+                                    .extract(cells, measNames);
+                    featureMatrix = ex.getData();
+                    markerNames = ex.getMeasurementNames();
+                    if (!ex.getExcludedMeasurements().isEmpty()) {
+                        featureNotes.add(excludedFeaturesNote(ex.getExcludedMeasurements()));
+                    }
+                } catch (IllegalArgumentException e) {
+                    featureNotes.add("Moran's I and Geary's C have no measurement to test: every "
+                            + "candidate measurement is missing or infinite on at least one cell.");
+                }
             } else {
-                logger.warn("Geary/Moran requested but no suitable marker measurements "
-                        + "remained after filtering coordinate/derived columns.");
+                featureNotes.add("Moran's I and Geary's C have no measurement to test: none is "
+                        + "left after leaving out coordinates, shape and earlier QP-CAT outputs.");
             }
         }
 
@@ -614,7 +629,7 @@ public class PostHocSpatialWorkflow {
             final String coordUnit = wr.unit;
             Map<String, Object> outputs = ApposeClusteringService.withExtensionClassLoader(() ->
                     runTask(coords, labels, classNames, fFeat, fMarkers, opts, coordUnit, progress));
-            wr.result = buildResult(labels, classNames, outputs);
+            wr.result = buildResult(labels, classNames, outputs, featureNotes);
             wr.result.setSpatialUnit(wr.unit);
             wr.statsRun = statsRunLabel(wr.result, opts);
         } catch (Exception e) {
@@ -782,9 +797,23 @@ public class PostHocSpatialWorkflow {
         }
     }
 
-    /** Populate a ClusteringResult's spatial fields from the task outputs. */
+    /** The note naming measurements left out of the autocorrelation for a missing or infinite value. */
+    static String excludedFeaturesNote(List<String> excluded) {
+        int shown = Math.min(6, excluded.size());
+        String names = String.join(", ", excluded.subList(0, shown))
+                + (excluded.size() > shown ? " and " + (excluded.size() - shown) + " more" : "");
+        return excluded.size() + " measurement(s) left out of Moran's I and Geary's C, because "
+                + "they are missing or infinite on some cells: " + names + ".";
+    }
+
+    /**
+     * Populate a ClusteringResult's spatial fields from the task outputs.
+     *
+     * @param featureNotes what the extraction said about the measurements, shown with the
+     *                     worker's own notes in the results window
+     */
     private ClusteringResult buildResult(int[] labels, List<String> classNames,
-                                         Map<String, Object> outputs) {
+                                         Map<String, Object> outputs, List<String> featureNotes) {
         int nClasses = classNames.size();
         ClusteringResult result = new ClusteringResult(labels, nClasses, null, null,
                 classNames.toArray(new String[0]));
@@ -835,19 +864,25 @@ public class PostHocSpatialWorkflow {
             }
             ClusteringWorkflow.readAutocorrConsistency(result, outputs);
         }
-        // Why a requested statistic is missing. statsRunLabel already says THAT
-        // one is; this says why, and it is the only place that can.
+        // Why a requested statistic is missing, and what was left out of it.
+        // statsRunLabel already says THAT one is; these say why, and they reach
+        // the results window's "Not produced" banner, not only the log.
+        List<String> notes = new ArrayList<>(featureNotes);
         if (outputs.containsKey("spatial_notes")) {
             try {
-                List<String> notes = gson.fromJson(
+                List<String> fromWorker = gson.fromJson(
                         String.valueOf(outputs.get("spatial_notes")),
                         new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
-                for (String note : notes) {
-                    logger.warn("Spatial: {}", note);
-                }
+                if (fromWorker != null) notes.addAll(fromWorker);
             } catch (Exception e) {
-                logger.debug("Could not read spatial notes: {}", e.getMessage());
+                logger.warn("Could not read spatial notes: {}", e.getMessage());
             }
+        }
+        for (String note : notes) {
+            logger.warn("Spatial: {}", note);
+        }
+        if (!notes.isEmpty()) {
+            result.setOmittedOutputs(notes);
         }
         return result;
     }
