@@ -119,8 +119,9 @@ public final class CellMatcher {
                                             boolean useObjectIds) {
         if (index == null || !index.hasRepeats()) return null;
         String what = useObjectIds ? "object id" : "position";
-        return imageName + ": not changed. " + index.repeats() + " detection(s) repeat another "
-                + "detection's " + what + " (" + index.sharedKeys() + " shared), usually the "
+        return imageName + ": not changed. " + InputChecks.count(index.repeats())
+                + " detection(s) repeat another detection's " + what + " ("
+                + InputChecks.count(index.sharedKeys()) + " shared), usually the "
                 + "same objects imported twice, so QP-CAT cannot tell which copy a saved cell "
                 + "means. " + (useObjectIds ? InputChecks.REPEATED_ID_FIX : "Remove the repeated "
                 + "objects and try again.");

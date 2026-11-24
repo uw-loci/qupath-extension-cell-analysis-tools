@@ -32,6 +32,24 @@ tools/qp-harness/bin/qp-gui \
     qupath-extension-cell-analysis-tools /path/to/project-dir
 ```
 
+## `QpcatImportedIdentityScenario`
+
+Imported data that repeats identities, on a COPY of a real project (only `project.qpproj` and
+`data/` are copied; the image URIs are absolute). One image's detections are exported to
+GeoJSON and imported again (QuPath keeps the ids, so every id repeats), and a second entry
+is added with another image's name. Checks: the import keeps ids; the input audit refuses
+clustering with the count; `runProjectClustering` itself refuses before any work (no Python
+needed); applying a saved result leaves the image unchanged and says why; the batch dry run
+prints E027; a run over the two same-named entries says so and counts them apart; the batch
+refuses that scope (E024). Run on 2026-11-24 against `qupath-work/bina-clustered`
+(tme_00.tif, 1530 detections imported twice): passed.
+
+```bash
+env -u WAYLAND_DISPLAY DISPLAY=:99 tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatImportedIdentityScenario.java \
+    qupath-extension-cell-analysis-tools /path/to/project-dir /path/to/work-dir
+```
+
 ## `QpcatTicksReopenScenario`
 
 Reopens the Clustering dialog after a stored "All project images" run and checks the
