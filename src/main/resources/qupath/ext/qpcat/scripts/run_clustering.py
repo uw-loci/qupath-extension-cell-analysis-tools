@@ -15,11 +15,11 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
     (NAME1/NAME2/NAME3) for downstream 3D viewers.
   graph_backend: str ("cpu" | "gpu", default "cpu")
     Where Leiden's neighbor graph and partition run. "gpu" starts a separate
-    process in a user-installed RAPIDS environment (gpu_graph_leiden.py: cuML
-    for the neighbor search, cuGraph for Leiden, the same fuzzy connectivities
-    on top) and hands the matrix over as a file; on Windows the process runs
-    inside WSL2 through wsl.exe. Falls back to "cpu" with a logged reason when
-    the process cannot run.
+    process in a user-installed RAPIDS environment (gpu_graph_leiden.py: the
+    neighbor search on the GPU, the same fuzzy connectivities on top, then
+    cuGraph Leiden in a second process) and hands the matrix over as a file; on
+    Windows the process runs inside WSL2 through wsl.exe. Falls back to "cpu"
+    with a logged reason when the process cannot run.
   gpu_python: str -- the RAPIDS environment's python (a WSL path on Windows); "" = none
   gpu_scratch_dir: str -- folder for the hand-over files; "" = $TMPDIR, else beside the
     environment (never the home directory or the project; see gpu_bridge_run)
@@ -1765,7 +1765,7 @@ def _trim_failed_job(job):
     """Drop the bulky hand-over files of a failed job, keeping run.log, result.json
     and params.json so the failure can still be read."""
     for name in os.listdir(job) if os.path.isdir(job) else []:
-        if name in ("matrix.npy", "graph.npz") or name.startswith("labels_"):
+        if name in ("matrix.npy", "connectivities.npz") or name.startswith("labels_"):
             try:
                 os.remove(os.path.join(job, name))
             except OSError:
@@ -1809,7 +1809,9 @@ def gpu_bridge_run(
 
     Writes matrix.npy, params.json and gpu_graph_leiden.py into a job folder,
     runs the RAPIDS environment's python on it (through wsl.exe on Windows, so
-    the folder lives inside WSL), and reads graph.npz and the labels back. The
+    the folder lives inside WSL), and reads connectivities.npz and the labels
+    back. That script runs the graph and Leiden stages in separate processes and
+    retries an out-of-memory Leiden with managed memory on native Linux. The
     child's output goes to run.log in the job folder, never to this process's
     stdout (the Appose channel). Every duration is logged.
 
@@ -1948,7 +1950,7 @@ def gpu_bridge_run(
             )
         )
     t0 = time.monotonic()
-    conn = sp.load_npz(os.path.join(job, "graph.npz")).tocsr()
+    conn = sp.load_npz(os.path.join(job, "connectivities.npz")).tocsr()
     labels_by_res = {}
     degenerate = []
     for row in result["resolutions"]:
@@ -1961,12 +1963,17 @@ def gpu_bridge_run(
     seconds.update({"gpu_" + k: v for k, v in result.get("seconds", {}).items()})
     seconds["total"] = round(time.monotonic() - t_all, 3)
     versions = result.get("versions", {})
-    note = "gpu (%s on %s; cuML %s, cuGraph %s; %s search)" % (
-        versions.get("gpu", "GPU"),
-        "WSL2" if windows else "Linux",
-        versions.get("cuml", "?"),
-        versions.get("cugraph", "?"),
-        result.get("algorithm", "?"),
+    note = (
+        "gpu (%s on %s; cuML %s, cuGraph %s, rapids-singlecell %s; %s search; %s)"
+        % (
+            versions.get("gpu", "GPU"),
+            "WSL2" if windows else "Linux",
+            versions.get("cuml", "?"),
+            versions.get("cugraph", "?"),
+            versions.get("rapids_singlecell", "?"),
+            result.get("algorithm", "?"),
+            gpu_memory_note(result),
+        )
     )
     if degenerate:
         note += (
@@ -1979,8 +1986,24 @@ def gpu_bridge_run(
         note,
         json.dumps(seconds, sort_keys=True),
     )
+    for row in result["resolutions"]:
+        logger.info(
+            "GPU Leiden at resolution %g: %d clusters, modularity %.6f (cuGraph), "
+            "%.6f (recomputed on the graph)",
+            row["resolution"],
+            row["n_clusters"],
+            row["modularity"],
+            row.get("modularity_check", float("nan")),
+        )
     shutil.rmtree(job, ignore_errors=True)
     return conn, labels_by_res, note, seconds
+
+
+def gpu_memory_note(result):
+    """How Leiden's card memory was allocated, for the run summary."""
+    if result.get("memory") == "managed":
+        return "managed memory, after the card ran out with device memory"
+    return "%s memory" % result.get("memory", "device")
 
 
 def _tail(path, n=600):

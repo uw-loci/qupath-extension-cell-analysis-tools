@@ -48,6 +48,7 @@ def _symbols():
         "gpu_scratch_default",
         "gpu_cuda_path",
         "_gpu_child_env",
+        "gpu_memory_note",
         "gpu_bridge_run",
         "fit_seeded",
     ]:

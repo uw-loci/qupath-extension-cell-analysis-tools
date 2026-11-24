@@ -10,38 +10,68 @@ import textwrap
 import numpy as np
 import pytest
 
-from conftest import load_script_symbol
+from conftest import SCRIPTS_DIR, load_script_symbol
 
 sc = pytest.importorskip("scanpy")
 ig = pytest.importorskip("igraph")
 
-# A stand-in for gpu_graph_leiden.py that needs no GPU: same files in, same files out,
-# graph built with scanpy. "FAIL" in the job name makes it report an error; "DEGEN"
-# marks the last resolution degenerate.
-STUB = textwrap.dedent("""
-    import json, os, sys
-    import numpy as np
-    from scipy import sparse as sp
-    import anndata as ad, scanpy as sc
-    job = sys.argv[1]
-    params = json.load(open(os.path.join(job, "params.json")))
-    x = np.load(os.path.join(job, "matrix.npy"))
-    if "FAIL" in job:
-        json.dump({"ok": False, "error": "boom", "versions": {"gpu": "none"}}, open(os.path.join(job, "result.json"), "w"))
-        sys.exit(1)
-    a = ad.AnnData(X=x); sc.pp.neighbors(a, n_neighbors=params["n_neighbors"], use_rep="X", random_state=params["seed"])
-    conn = sp.csr_matrix(a.obsp["connectivities"]); sp.save_npz(os.path.join(job, "graph.npz"), conn, compressed=False)
-    rows = []
-    for i, res in enumerate(params["resolutions"]):
-        sc.tl.leiden(a, resolution=res, flavor="igraph", n_iterations=-1, random_state=params["seed"], key_added="l")
-        lab = a.obs["l"].astype(int).to_numpy().astype(np.int32)
-        degenerate = "DEGEN" in job and i == len(params["resolutions"]) - 1
-        np.save(os.path.join(job, "labels_%d.npy" % i), lab)
-        rows.append({"resolution": res, "file": "labels_%d.npy" % i, "n_clusters": int(len(set(lab))), "modularity": 0.5, "degenerate": degenerate})
-    json.dump({"ok": True, "n_cells": int(x.shape[0]), "nnz": int(conn.nnz), "algorithm": "stub",
-               "versions": {"gpu": "stub GPU", "cuml": "0", "cugraph": "0"}, "resolutions": rows, "seconds": {"total": 0.1}},
-              open(os.path.join(job, "result.json"), "w"))
-    """)
+# The shipped gpu_graph_leiden.py with its GPU calls replaced, so the driver, both
+# stage processes, the hand-over files and the retry run for real without a GPU:
+# the graph is a symmetrized sklearn kNN graph, Leiden is igraph's. Markers in the scratch folder's name
+# steer it: GRAPHFAIL fails the graph stage, KILLED kills it without a report,
+# OOM makes the device-memory Leiden stage run out of card memory, WSL makes the
+# driver think it runs inside WSL2, LEIDENFAIL fails Leiden for another reason,
+# DEGEN marks resolution 0.5 degenerate.
+_STAND_INS = textwrap.dedent("""
+    def versions():
+        return {"gpu": "stub GPU", "cuml": "0", "cugraph": "0", "rapids_singlecell": "0"}
+
+    def is_wsl():
+        return "WSL" in os.getcwd()
+
+    def use_managed_memory():
+        print("stub: managed memory", flush=True)
+
+    def knn_graph_gpu(matrix, n_neighbors, seed, brute_force_cells):
+        from sklearn.neighbors import kneighbors_graph
+        if "GRAPHFAIL" in os.getcwd():
+            raise RuntimeError("boom")
+        if "KILLED" in os.getcwd():
+            os.kill(os.getpid(), 9)
+        g = kneighbors_graph(np.asarray(matrix), n_neighbors - 1)
+        conn = sp.csr_matrix((g + g.T) > 0, dtype=np.float32)
+        return conn, "stub", {"knn": 0.0, "fuzzy": 0.0}
+
+    def cugraph_graph(csr):
+        return csr
+
+    def leiden_gpu(graph, n_cells, resolution, seed):
+        import random
+        import igraph as ig
+        if "OOM" in os.getcwd() and sys.argv[-1] == "device":
+            raise MemoryError("std::bad_alloc: out_of_memory: CUDA error at: rmm")
+        if "LEIDENFAIL" in os.getcwd():
+            raise ValueError("not a memory problem")
+        up = sp.triu(graph, k=1).tocoo()
+        g = ig.Graph(n=n_cells, edges=list(zip(up.row.tolist(), up.col.tolist())))
+        random.seed(seed)
+        part = g.community_leiden(objective_function="modularity", weights=up.data.tolist(),
+                                  resolution=resolution, n_iterations=-1)
+        lab = np.asarray(part.membership, dtype=np.int32)
+        degenerate = "DEGEN" in os.getcwd() and resolution == 0.5
+        return lab, 0.5, int(len(set(lab))), degenerate
+
+""")
+
+
+def _stub_source():
+    src = (SCRIPTS_DIR / "gpu_graph_leiden.py").read_text(encoding="utf-8")
+    marker = '\nif __name__ == "__main__":'
+    assert src.count(marker) == 1
+    return src.replace(marker, "\n" + _STAND_INS + marker)
+
+
+STUB = _stub_source()
 
 
 def _symbols():
@@ -71,6 +101,7 @@ def _symbols():
         "_check_wsl_path",
         "_trim_failed_job",
         "_tail",
+        "gpu_memory_note",
         "gpu_bridge_run",
     ]:
         g[n] = load_script_symbol("run_clustering.py", n, g)
@@ -143,19 +174,21 @@ def test_bridge_round_trip_with_a_stub_process(tmp_path):
     )
     assert conn.shape == (x.shape[0], x.shape[0]) and conn.nnz > 0
     assert set(labels) == {1.0, 0.5} and len(labels[1.0]) == x.shape[0]
-    assert note.startswith("gpu (stub GPU on Linux")
+    assert note.startswith("gpu (stub GPU on Linux") and note.endswith("device memory)")
     assert seconds["write"] >= 0 and seconds["read"] >= 0 and "total" in seconds
+    # two stage processes, each timed
+    assert seconds["gpu_graph_process"] > 0 and seconds["gpu_leiden_process"] > 0
     assert list(tmp_path.iterdir()) == []  # the job folder is removed on success
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
 def test_bridge_failure_raises_with_the_reason_and_keeps_the_log(tmp_path):
     s = _symbols()
-    scratch = tmp_path / "FAIL"
+    scratch = tmp_path / "GRAPHFAIL"
     scratch.mkdir()
     with pytest.raises(s["GpuBridgeError"]) as e:
         s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
-    assert "boom" in str(e.value) and "none" in str(e.value)
+    assert "boom" in str(e.value) and "stub GPU" in str(e.value)
     assert any(p.is_dir() for p in scratch.iterdir())  # kept for diagnosis
 
 
@@ -236,7 +269,7 @@ def test_a_failed_job_keeps_only_the_small_files(tmp_path):
     s = _symbols()
     for name in (
         "matrix.npy",
-        "graph.npz",
+        "connectivities.npz",
         "labels_0.npy",
         "run.log",
         "params.json",
@@ -254,10 +287,57 @@ def test_a_failed_job_keeps_only_the_small_files(tmp_path):
 @pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
 def test_a_failing_gpu_process_leaves_no_matrix_behind(tmp_path):
     s = _symbols()
-    scratch = tmp_path / "FAIL"
+    scratch = tmp_path / "GRAPHFAIL"
     with pytest.raises(s["GpuBridgeError"]):
         s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
     jobs = list(scratch.glob("job_*"))
     assert len(jobs) == 1
     left = sorted(p.name for p in jobs[0].iterdir())
     assert "matrix.npy" not in left and "run.log" in left
+
+
+def _job(scratch):
+    jobs = list(scratch.glob("job_*"))
+    assert len(jobs) == 1
+    return jobs[0]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_out_of_memory_leiden_is_retried_once_with_managed_memory(tmp_path):
+    s = _symbols()
+    x = _blobs()
+    conn, labels, note, seconds = s["gpu_bridge_run"](
+        x, 10, 42, [1.0], sys.executable, str(tmp_path / "OOM"), STUB
+    )
+    assert set(labels) == {1.0} and len(labels[1.0]) == x.shape[0]
+    assert "managed memory, after the card ran out with device memory" in note
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_out_of_memory_leiden_on_wsl2_falls_back_without_a_retry(tmp_path):
+    s = _symbols()
+    scratch = tmp_path / "OOM_WSL"
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
+    assert "WSL2 does not support the managed-memory retry" in str(e.value)
+    log = (_job(scratch) / "run.log").read_text()
+    assert "stub: managed memory" not in log and "out_of_memory" in log
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_a_leiden_failure_that_is_not_memory_is_not_retried(tmp_path):
+    s = _symbols()
+    scratch = tmp_path / "LEIDENFAIL"
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
+    assert "not a memory problem" in str(e.value)
+    assert "retrying" not in (_job(scratch) / "run.log").read_text()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the Linux hand-over path")
+def test_a_graph_stage_killed_without_a_report_is_named(tmp_path):
+    s = _symbols()
+    scratch = tmp_path / "KILLED"
+    with pytest.raises(s["GpuBridgeError"]) as e:
+        s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
+    assert "graph stage was killed by signal 9" in str(e.value)
