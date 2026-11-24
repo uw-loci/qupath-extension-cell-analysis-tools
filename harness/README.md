@@ -17,6 +17,21 @@ tools/qp-harness/bin/qp-gui \
     /tmp/qph/project /tmp/qph/out
 ```
 
+## `QpcatBatchDryRunScenario`
+
+Batch dry runs against a real project, read only (nothing is written): a phenotyping rule that
+names a bare marker stops the dry run with E010 listing that marker's measurements, an omitted
+`clustering.measurements` prints the default list (every "mean" measurement QP-CAT did not
+write, present in every image), and `images: <one name>` selects that image only. Run on
+2026-11-24 against `qupath-work/bina-clustered` (synthetic TME, 24 default measurements):
+passed.
+
+```bash
+tools/qp-harness/bin/qp-gui \
+    qupath-extension-cell-analysis-tools/harness/QpcatBatchDryRunScenario.java \
+    qupath-extension-cell-analysis-tools /path/to/project-dir
+```
+
 ## `QpcatTicksReopenScenario`
 
 Reopens the Clustering dialog after a stored "All project images" run and checks the
