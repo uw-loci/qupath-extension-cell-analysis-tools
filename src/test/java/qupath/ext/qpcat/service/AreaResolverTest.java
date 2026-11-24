@@ -425,6 +425,48 @@ class AreaResolverTest {
         assertThat(second.getAreaNames()).isEqualTo(first.getAreaNames());
     }
 
+    /**
+     * H40: two Tissue annotations that overlap. The cells in both are counted and
+     * reported, and each lands in the smaller (inner) one, not the one whose id
+     * happens to sort first.
+     */
+    @Test
+    void overlappingRegionsOfOneLevelAreCountedAndTheInnerOneWins() {
+        Slide s = new Slide();
+        PathObject outer = s.annotation(TISSUE, 0, 0, 400);
+        PathObject inner = s.annotation(TISSUE, 100, 100, 100);
+        s.cellsIn(100, 100, 100, 6);   // inside both
+        s.cellsIn(250, 250, 100, 4);   // inside the outer only
+
+        AreaResolver.AreaAssignment areas =
+                s.resolve(new AreaLevelSpec(AreaLevel.ANNOTATIONS, List.of("Tissue")));
+
+        assertThat(areas.getOverlapCells()).isEqualTo(6);
+        assertThat(areas.describe()).contains("6 cell(s) inside overlapping regions");
+        assertThat(areas.overlapNote("slide.svs"))
+                .startsWith("6 cell(s) in slide.svs lie inside two or more overlapping regions")
+                .contains("smallest");
+        int[] ids = areas.getAreaIds();
+        assertThat(ids[0]).isNotEqualTo(ids[6]);
+        assertThat(areas.getAreaSizes()[ids[0]]).isEqualTo(6);
+        assertThat(areas.getAreaSizes()[ids[6]]).isEqualTo(4);
+        assertThat(inner.getROI().getArea()).isLessThan(outer.getROI().getArea());
+        assertThat(AreaResolver.AreaAssignment.withOverlapNote(List.of("a"), areas, null))
+                .hasSize(2).first().isEqualTo("a");
+    }
+
+    @Test
+    void noOverlapNoNote() {
+        Slide s = twoCoreSlide(3, 2);
+        AreaResolver.AreaAssignment areas =
+                s.resolve(new AreaLevelSpec(AreaLevel.ANNOTATIONS, List.of("Tumor", "Stroma")));
+        assertThat(areas.getOverlapCells()).isZero();
+        assertThat(areas.overlapNote(null)).isNull();
+        assertThat(areas.describe()).doesNotContain("overlapping");
+        assertThat(AreaResolver.AreaAssignment.withOverlapNote(List.of("a"), areas, null))
+                .containsExactly("a");
+    }
+
     @Test
     void resolvingDoesNotModifyTheHierarchy() {
         // QP-CAT must never reshape a user's project as a side effect of

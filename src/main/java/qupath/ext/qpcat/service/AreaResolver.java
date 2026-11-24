@@ -14,9 +14,12 @@ import qupath.lib.roi.interfaces.ROI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Assigns every cell to an independent analysis <b>area</b>, derived from the
@@ -71,10 +74,11 @@ public final class AreaResolver {
         private final int[] areaSizes;
         private final boolean[] areaIsUnassigned;
         private final int missingCoresSkipped;
+        private final int overlapCells;
 
         AreaAssignment(int[] areaIds, List<String> areaNames, List<String> areaImageNames,
                        List<String> areaTypes, int[] areaSizes, boolean[] areaIsUnassigned,
-                       int missingCoresSkipped) {
+                       int missingCoresSkipped, int overlapCells) {
             this.areaIds = areaIds;
             this.areaNames = areaNames;
             this.areaImageNames = areaImageNames;
@@ -82,6 +86,7 @@ public final class AreaResolver {
             this.areaSizes = areaSizes;
             this.areaIsUnassigned = areaIsUnassigned;
             this.missingCoresSkipped = missingCoresSkipped;
+            this.overlapCells = overlapCells;
         }
 
         /** Dense area id per cell, aligned to the input detection order. */
@@ -116,6 +121,37 @@ public final class AreaResolver {
         public int getMissingCoresSkipped() { return missingCoresSkipped; }
 
         public int getAreaCount() { return areaNames.size(); }
+
+        /**
+         * Cells inside more than one region of the same level (overlapping annotations
+         * of an allowed class), each placed in the smallest of them.
+         */
+        public int getOverlapCells() { return overlapCells; }
+
+        /**
+         * The sentence a run's notes carry when cells lie inside overlapping regions
+         * of one level, else null.
+         *
+         * @param imageLabel the image the assignment covers, or null for a cohort
+         */
+        public String overlapNote(String imageLabel) {
+            if (overlapCells == 0) return null;
+            return String.format(Locale.ROOT, "%,d cell(s)%s lie inside two or more overlapping "
+                    + "regions of one area level; each was placed in the smallest of them (the "
+                    + "inner one when they nest). Merge or remove the overlapping annotations if "
+                    + "they should be one area.", overlapCells,
+                    imageLabel == null ? "" : " in " + imageLabel);
+        }
+
+        /** {@code notes} with {@link #overlapNote} appended when there is one. */
+        public static List<String> withOverlapNote(List<String> notes, AreaAssignment areas,
+                                                   String imageLabel) {
+            String note = areas == null ? null : areas.overlapNote(imageLabel);
+            if (note == null) return notes;
+            List<String> all = new ArrayList<>(notes);
+            all.add(note);
+            return all;
+        }
 
         /** True when this area holds cells that resolved no ancestor at some level. */
         public boolean isUnassignedArea(int areaId) { return areaIsUnassigned[areaId]; }
@@ -160,6 +196,10 @@ public final class AreaResolver {
             if (missingCoresSkipped > 0) {
                 sb.append(String.format("; %,d core(s) flagged missing skipped",
                         missingCoresSkipped));
+            }
+            if (overlapCells > 0) {
+                sb.append(String.format(Locale.ROOT, "; %,d cell(s) inside overlapping regions of one "
+                        + "level, each placed in the smallest", overlapCells));
             }
             return sb.toString();
         }
@@ -208,8 +248,9 @@ public final class AreaResolver {
         // One containment map per (image, level). Built by asking the hierarchy
         // which detections fall inside each candidate region -- NOT by walking
         // parent links. See the class javadoc for why.
+        Set<PathObject> overlapping = new HashSet<>();
         List<List<Map<PathObject, PathObject>>> byImageAndLevel =
-                buildContainmentMaps(hierarchies, subLevels);
+                buildContainmentMaps(hierarchies, subLevels, overlapping);
         int missingCores = countMissingCores(hierarchies, subLevels);
 
         for (int i = 0; i < n; i++) {
@@ -270,8 +311,13 @@ public final class AreaResolver {
             unassigned[i] = areaUnassigned.get(i);
         }
 
+        int overlapCells = 0;
+        for (int i = 0; i < n; i++) {
+            if (overlapping.contains(detections.get(i))) overlapCells++;
+        }
         AreaAssignment assignment = new AreaAssignment(
-                areaIds, areaNames, areaImageNames, areaTypes, sizes, unassigned, missingCores);
+                areaIds, areaNames, areaImageNames, areaTypes, sizes, unassigned, missingCores,
+                overlapCells);
 
         if (missingCores > 0) {
             logger.info("Skipped {} TMA core(s) flagged missing; any detections inside them are "
@@ -324,7 +370,8 @@ public final class AreaResolver {
      * shaped the way they left it.
      */
     private static List<List<Map<PathObject, PathObject>>> buildContainmentMaps(
-            List<PathObjectHierarchy> hierarchies, List<AreaLevelSpec> subLevels) {
+            List<PathObjectHierarchy> hierarchies, List<AreaLevelSpec> subLevels,
+            Set<PathObject> overlapping) {
         List<List<Map<PathObject, PathObject>>> out = new ArrayList<>();
         if (hierarchies == null || subLevels.isEmpty()) {
             return out;
@@ -332,7 +379,7 @@ public final class AreaResolver {
         for (PathObjectHierarchy hierarchy : hierarchies) {
             List<Map<PathObject, PathObject>> perLevel = new ArrayList<>();
             for (AreaLevelSpec row : subLevels) {
-                perLevel.add(containmentForLevel(hierarchy, row));
+                perLevel.add(containmentForLevel(hierarchy, row, overlapping));
             }
             out.add(perLevel);
         }
@@ -358,9 +405,14 @@ public final class AreaResolver {
         return row.getLevel().getDisplayName();
     }
 
-    /** detection -> containing region, for one level of one image. */
+    /**
+     * detection -> containing region, for one level of one image. A cell inside two
+     * regions of the level goes to the smaller (the inner one when they nest; the
+     * earlier in {@link #candidateRegions} order on a tie) and is added to
+     * {@code overlapping}.
+     */
     private static Map<PathObject, PathObject> containmentForLevel(
-            PathObjectHierarchy hierarchy, AreaLevelSpec row) {
+            PathObjectHierarchy hierarchy, AreaLevelSpec row, Set<PathObject> overlapping) {
         Map<PathObject, PathObject> map = new HashMap<>();
         if (hierarchy == null) {
             return map;
@@ -371,10 +423,13 @@ public final class AreaResolver {
                 continue;
             }
             for (PathObject det : hierarchy.getAllDetectionsForROI(roi)) {
-                // First match wins. Candidates are in a deterministic order, so
-                // a cell inside two overlapping regions of the same level lands
-                // in the same one on every run.
-                map.putIfAbsent(det, region);
+                PathObject earlier = map.putIfAbsent(det, region);
+                if (earlier != null) {
+                    overlapping.add(det);
+                    if (roi.getArea() < earlier.getROI().getArea()) {
+                        map.put(det, region);
+                    }
+                }
             }
         }
         return map;

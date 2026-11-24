@@ -2237,7 +2237,8 @@ public class ClusteringWorkflow {
                 result.setMissingNote(extraction.missingSummary());
                 result.setExcludedObjects(extraction.getExcludedObjects());
             }
-            result.setInputNotes(input.notices());
+            result.setInputNotes(
+                    AreaResolver.AreaAssignment.withOverlapNote(input.notices(), areas, null));
             result.setInputNotesShown(noticesShown);
 
             // Noise is a row of clusterStats but not a cluster -- carry the index

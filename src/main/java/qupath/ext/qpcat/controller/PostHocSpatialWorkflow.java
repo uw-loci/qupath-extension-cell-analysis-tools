@@ -88,6 +88,8 @@ public class PostHocSpatialWorkflow {
     private Map<String, CellMatcher.KeyIndex<Integer>> savedLabelMap;
     /** The input audit's notices for the last run. */
     private List<String> lastInputNotes = List.of();
+    /** Overlapping-area notes from the images of the current run, one per image that has any. */
+    private final List<String> areaNotes = new ArrayList<>();
     /** True when savedLabelMap is keyed by object id rather than by centroid. */
     private boolean savedLabelsById;
     // Absolute path of the persisted results folder from the last run, or null.
@@ -212,6 +214,7 @@ public class PostHocSpatialWorkflow {
         }
         try {
             List<Window> windows = new ArrayList<>();
+            areaNotes.clear();
             for (Target t : targets) {
                 windows.addAll(buildWindows(t, opts));
             }
@@ -219,7 +222,9 @@ public class PostHocSpatialWorkflow {
                 throw new IOException("No analysis areas matched the chosen area settings "
                         + "(no annotations of that class, or no cells inside them).");
             }
-            lastInputNotes = auditWindows(targets, windows).notices();
+            List<String> notes = new ArrayList<>(auditWindows(targets, windows).notices());
+            notes.addAll(areaNotes);
+            lastInputNotes = List.copyOf(notes);
 
             List<WindowResult> results = new ArrayList<>();
             int idx = 0;
@@ -509,6 +514,8 @@ public class PostHocSpatialWorkflow {
             AreaResolver.AreaAssignment areas = AreaResolver.resolve(
                     cells, (int[]) null, List.of(t.imageName),
                     List.of(hierarchy), opts.areaLevels);
+            String overlap = areas.overlapNote(t.imageName);
+            if (overlap != null) areaNotes.add(overlap);
 
             List<List<PathObject>> byArea = new ArrayList<>();
             for (int i = 0; i < areas.getAreaCount(); i++) {

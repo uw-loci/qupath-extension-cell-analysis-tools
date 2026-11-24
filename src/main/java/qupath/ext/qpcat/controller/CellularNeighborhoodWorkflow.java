@@ -677,7 +677,8 @@ public class CellularNeighborhoodWorkflow {
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
                 adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
                 divergenceWarning, runId, paramsHash)
-                .withNotes(withInputNotes(input, notesOf(resultMap)));
+                .withNotes(AreaResolver.AreaAssignment.withOverlapNote(
+                        withInputNotes(input, notesOf(resultMap)), cohortAreas, null));
         } finally {
             // Close every ImageData we read ourselves; leave the live open image alone.
             closeLoaded(loaded);

@@ -190,6 +190,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Cells inside overlapping annotations of one area level are counted, and go to the inner
+  one (H40).** With independent areas by annotation, a cell inside two annotations of an
+  allowed class (two overlapping `Tissue` regions, or one drawn inside another) was put in
+  whichever annotation's id sorted first, and nothing said so. It now goes to the smaller
+  region, and the count appears in the area preview, in the notes of the clustering result,
+  the cellular-neighborhood summary and the spatial-statistics summary, and in the log.
 - **A real class called "Unclassified" is kept apart in two more places.** The input line of
   a clustering run (results window, run record, Workflow-tab record, audit log) counted
   selected annotations without a class and annotations of a real class named `Unclassified`
