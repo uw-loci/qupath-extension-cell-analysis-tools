@@ -573,6 +573,12 @@ if use_tiles:
 else:
     data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
     data = data.astype(np.float32)
+    require_finite(
+        data,
+        "The float32 conversion of the measurements",
+        list(marker_names),
+        reason=FLOAT32_RANGE_REASON,
+    )
     n_cells, n_markers = data.shape
     raw_tiles = None
     img_channels = 0
@@ -873,6 +879,11 @@ if use_tiles:
                 tile_measurements.ndarray(), context="tile measurement"
             )
             tile_meas_data = tile_meas_data.astype(np.float32)
+            require_finite(
+                tile_meas_data,
+                "The float32 conversion of the tile measurements",
+                reason=FLOAT32_RANGE_REASON,
+            )
             n_tile_measurements = tile_meas_data.shape[1]
             tile_meas_mean = tile_meas_data.mean(axis=0)
             tile_meas_std = tile_meas_data.std(axis=0)

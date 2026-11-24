@@ -57,14 +57,37 @@ def load_script_symbol(script_name, symbol, extra_globals=None):
     raise LookupError("No top-level function or class %r in %s" % (symbol, path.name))
 
 
+def load_script_constant(script_name, name):
+    """The value of a top-level ``NAME = <literal>`` assignment in a script."""
+    path = SCRIPTS_DIR / script_name
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == name
+        ):
+            return ast.literal_eval(node.value)
+    raise LookupError("No top-level constant %r in %s" % (name, path.name))
+
+
 def worker_globals():
     """What ApposeClusteringService's init puts in every task's global scope from
     model_utils.py, for tests that exec a whole script the way the worker does.
     Grows as scripts come to rely on more of model_utils."""
     import contextlib
 
+    import numpy as np
+
     normalization_params, normalize_frame = normalization_functions()
     return {
+        "require_finite": load_script_symbol(
+            "model_utils.py", "require_finite", {"np": np}
+        ),
+        "FLOAT32_RANGE_REASON": load_script_constant(
+            "model_utils.py", "FLOAT32_RANGE_REASON"
+        ),
         "single_threaded": load_script_symbol(
             "model_utils.py", "single_threaded", {"contextlib": contextlib}
         ),
@@ -78,8 +101,13 @@ def normalization_functions():
     """model_utils (normalization_params, normalize_frame), wired as the worker wires them."""
     import numpy as np
 
+    require_finite_scale = load_script_symbol(
+        "model_utils.py", "require_finite_scale", {"np": np}
+    )
     normalization_params = load_script_symbol(
-        "model_utils.py", "normalization_params", {"np": np}
+        "model_utils.py",
+        "normalization_params",
+        {"np": np, "require_finite_scale": require_finite_scale},
     )
     normalize_frame = load_script_symbol(
         "model_utils.py",

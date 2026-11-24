@@ -82,6 +82,11 @@ def normalization_params(df, method, pct_low=0.01, pct_high=0.99):
     method: "zscore", "minmax", "percentile" (clip to the pct_low and pct_high
     quantiles, given as fractions in either order, then rescale to [0, 1]);
     anything else leaves the values as they are.
+
+    Raises ValueError naming the measurement when a statistic of its finite
+    values overflows double precision (magnitudes near 1e154 under "zscore",
+    or a range wider than about 1.8e308), since every value would then
+    normalize to the same number.
     """
     if method not in ("zscore", "minmax", "percentile"):
         zeros = df.count() * 0.0
@@ -100,7 +105,83 @@ def normalization_params(df, method, pct_low=0.01, pct_high=0.99):
         low = df.quantile(lo)
         high = df.quantile(hi)
         offset, scale = low, (high - low).replace(0, 1).fillna(1)
+    require_finite_scale(df, method, offset, scale)
     return offset, scale, low, high
+
+
+# Why a float32 cast of the user's values can produce Inf, for require_finite.
+FLOAT32_RANGE_REASON = (
+    "Values that large cannot be held in the float32 numbers this step works in "
+    "(the limit is about 3.4e38). A value that large is usually a placeholder for a "
+    "missing value written by the software that produced the data: replace such "
+    "values with NaN, or leave the measurement out."
+)
+
+
+def require_finite(matrix, step, column_names=None, max_named=6, reason=None):
+    """Fail with a useful message when a step has produced NaN or Inf.
+
+    Without this the first thing to notice is the embedding, which reports
+    "ValueError: Input contains NaN" from deep inside sklearn -- naming neither the
+    step that introduced it nor the columns affected, and leaving the user to guess
+    which option to turn off.
+
+    Args:
+        matrix: 2-D array to check.
+        step: what just ran, named in the error.
+        column_names: optional per-column names, used to name the offenders.
+        max_named: how many column names to list before summarizing.
+        reason: what the user should know and do; the default says the step
+            itself is at fault. FLOAT32_RANGE_REASON for a float32 cast.
+
+    Raises:
+        ValueError: naming the step and the affected columns.
+    """
+    arr = np.asarray(matrix, dtype=np.float64)
+    bad = ~np.isfinite(arr)
+    if not bad.any():
+        return
+    cols = np.unique(np.nonzero(bad)[1]) if arr.ndim == 2 else np.array([])
+    if column_names is not None and arr.ndim == 2:
+        named = [
+            str(column_names[c]) for c in cols[:max_named] if c < len(column_names)
+        ]
+    else:
+        named = [str(int(c)) for c in cols[:max_named]]
+    more = "" if len(cols) <= max_named else " (and %d more)" % (len(cols) - max_named)
+    if reason is None:
+        reason = (
+            "This is a QP-CAT defect rather than a problem with your data; the run was "
+            "stopped here so the cause is named instead of surfacing later as "
+            "'Input contains NaN' from inside the embedding."
+        )
+    raise ValueError(
+        "%s produced %d non-finite value(s) in %d column(s): %s%s. %s"
+        % (step, int(bad.sum()), len(cols), ", ".join(named), more, reason)
+    )
+
+
+def require_finite_scale(df, method, offset, scale):
+    """Refuse when a column with finite values got a non-finite offset or scale."""
+    has_values = df.notna().any().to_numpy()
+    bad = has_values & ~(
+        np.isfinite(offset.to_numpy(dtype=np.float64))
+        & np.isfinite(scale.to_numpy(dtype=np.float64))
+    )
+    if not bad.any():
+        return
+    names = []
+    for j in np.nonzero(bad)[0]:
+        col = df.iloc[:, j]
+        names.append("'%s' (largest magnitude %.3g)" % (df.columns[j], col.abs().max()))
+    raise ValueError(
+        "Cannot normalize (%s) measurement(s) %s: the values are too large for "
+        "their mean, spread or range to be computed in double precision, so every "
+        "cell would get the same normalized value. A value near 1e300 is usually a "
+        "placeholder for a missing value written by the software that produced the "
+        "data: replace such values with NaN, or leave the measurement out."
+        % (method, ", ".join(names))
+    )
 
 
 def normalize_frame(df, method, pct_low=0.01, pct_high=0.99):

@@ -158,6 +158,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Values too large for the arithmetic are refused, naming the measurement.** A measurement
+  holding a value around 1e154 or larger (often a "missing" placeholder such as 1e300 written by
+  another program) made its z-score spread infinite, so every cell normalized to 0 and the
+  marker silently dropped out of the clustering, the phenotyping gate and the threshold preview;
+  min-max and percentile scaling did the same for a range wider than about 1.8e308. Such a run
+  now stops with a message naming the measurement and its largest value. Values above about
+  3.4e38 likewise stop BANKSY, the GPU graph and the autoencoder at the point where they are
+  converted to 32-bit numbers, instead of becoming infinite (the autoencoder trained on NaN and
+  reported a NaN loss). Any earlier result on data with such values ignored that measurement.
 - **An infinite measurement value is now missing, everywhere.** A value of Infinity (a CSV
   `Infinity` cell, a script that divides by zero) used to count as present: the missing-values
   badge and the run's missing-values note ignored it, "Exclude objects" kept the object, and the

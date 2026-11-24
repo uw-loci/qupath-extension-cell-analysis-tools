@@ -454,44 +454,6 @@ except NameError:
     pref_spatial_persist_plots = True
 
 
-def require_finite(matrix, step, column_names=None, max_named=6):
-    """Fail with a useful message when a step has produced NaN or Inf.
-
-    Without this the first thing to notice is the embedding, which reports
-    "ValueError: Input contains NaN" from deep inside sklearn -- naming neither the
-    step that introduced it nor the columns affected, and leaving the user to guess
-    which option to turn off.
-
-    Args:
-        matrix: 2-D array to check.
-        step: what just ran, named in the error.
-        column_names: optional per-column names, used to name the offenders.
-        max_named: how many column names to list before summarizing.
-
-    Raises:
-        ValueError: naming the step and the affected columns.
-    """
-    arr = np.asarray(matrix, dtype=np.float64)
-    bad = ~np.isfinite(arr)
-    if not bad.any():
-        return
-    cols = np.unique(np.nonzero(bad)[1]) if arr.ndim == 2 else np.array([])
-    if column_names is not None and arr.ndim == 2:
-        named = [
-            str(column_names[c]) for c in cols[:max_named] if c < len(column_names)
-        ]
-    else:
-        named = [str(int(c)) for c in cols[:max_named]]
-    more = "" if len(cols) <= max_named else " (and %d more)" % (len(cols) - max_named)
-    raise ValueError(
-        "%s produced %d non-finite value(s) in %d column(s): %s%s. "
-        "This is a QP-CAT defect rather than a problem with your data; the run was "
-        "stopped here so the cause is named instead of surfacing later as "
-        "'Input contains NaN' from inside the embedding."
-        % (step, int(bad.sum()), len(cols), ", ".join(named), more)
-    )
-
-
 # 2. Normalize
 _progress(
     0.05, "Normalizing measurements (%d cells x %d markers)..." % (n_cells, n_markers)
@@ -2348,11 +2310,21 @@ if algorithm == "leiden":
     # The GPU process reads float32, so rows are compared in float32 when it
     # is asked for: two rows distinct only beyond float32 precision would reach
     # cuML as duplicates, the hub case unique_rows exists to prevent.
-    _unique_matrix, _row_of_cell, _duplicate_cells = unique_rows(
-        np.ascontiguousarray(cluster_matrix, dtype=np.float32)
-        if pref_graph_backend == "gpu"
-        else cluster_matrix
-    )
+    if pref_graph_backend == "gpu":
+        _dedupe_matrix = np.ascontiguousarray(cluster_matrix, dtype=np.float32)
+        require_finite(
+            _dedupe_matrix,
+            "The float32 hand-over to the GPU graph",
+            (
+                list(df_norm.columns)
+                if cluster_matrix.shape[1] == df_norm.shape[1]
+                else None
+            ),
+            reason=FLOAT32_RANGE_REASON,
+        )
+    else:
+        _dedupe_matrix = cluster_matrix
+    _unique_matrix, _row_of_cell, _duplicate_cells = unique_rows(_dedupe_matrix)
     task.outputs["duplicate_rows"] = int(_duplicate_cells)
     task.outputs["unique_rows"] = int(_unique_matrix.shape[0])
     if _duplicate_cells:
@@ -2674,7 +2646,14 @@ elif algorithm == "banksy":
     # read from here any more -- build_banksy_weights owns the neighbor graph
     # and hands back the same {decay: {"weights": ...}} structure
     # initialize_banksy would have produced.
-    adata_banksy = ad.AnnData(X=df_norm.values.astype(np.float32))
+    _banksy_x = df_norm.values.astype(np.float32)
+    require_finite(
+        _banksy_x,
+        "The float32 conversion for BANKSY",
+        list(df_norm.columns),
+        reason=FLOAT32_RANGE_REASON,
+    )
+    adata_banksy = ad.AnnData(X=_banksy_x)
     adata_banksy.var_names = pd.Index(list(marker_names))
     adata_banksy.obsm["spatial"] = spatial_data
     adata_banksy.obs["x"] = spatial_data[:, 0]
