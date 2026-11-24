@@ -236,6 +236,7 @@ task.update("Loading measurements...")
 data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
+refuse_duplicate_names(marker_names)
 
 # Deliberately NOT imputed. Gating asks "is this marker above threshold for
 # this cell", and a cell whose marker QuPath could not compute has no defensible

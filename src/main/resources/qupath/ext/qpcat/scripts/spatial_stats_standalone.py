@@ -114,6 +114,7 @@ try:
     mnames = list(marker_names)
 except NameError:
     mnames = None
+refuse_duplicate_names(mnames)
 
 # Drop zero-variance feature columns: Geary's C / Moran's I are undefined (0/0)
 # on a constant vector, which is common in small windows or when one class

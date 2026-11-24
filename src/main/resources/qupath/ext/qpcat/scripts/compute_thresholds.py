@@ -239,6 +239,7 @@ task.update("Loading measurements for threshold computation...")
 # HERE before any arithmetic. Doing the maths in float32 would change
 # results -- normalization and the distribution fits below are sensitive
 # to it -- which is exactly the regression this upcast exists to prevent.
+refuse_duplicate_names(marker_names)
 data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Computing thresholds for %d cells x %d markers", n_cells, n_markers)

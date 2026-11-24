@@ -152,6 +152,7 @@ def _progress(frac, message, phase=None):
 # what made BANKSY fail with "Input contains NaN"). impute_nonfinite keeps every
 # cell so rows stay aligned with the spatial coordinates -- BANKSY indexes cells
 # by row, so dropping rows would misalign the spatial graph.
+refuse_duplicate_names(marker_names)
 data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 logger.info("Received %d cells x %d markers", n_cells, n_markers)
@@ -3158,6 +3159,18 @@ def cluster_quality_warnings(labels, algorithm, marker_names=None):
     return out
 
 
+def figure_failed_note(figure, error):
+    """The results-window line for a figure that could not be drawn."""
+    detail = str(error).strip()
+    if len(detail) > 160:
+        detail = detail[:157] + "..."
+    return "%s: not drawn (%s%s). Everything else in this result stands." % (
+        figure,
+        type(error).__name__,
+        ": " + detail if detail else "",
+    )
+
+
 def internal_cluster_key(marker_names, preferred="cluster"):
     """An AnnData obs key for the labels that no measurement name equals."""
     taken = {str(m) for m in marker_names}
@@ -3462,6 +3475,8 @@ _analysis_notes = []
 # the quality warnings: those say the RESULT is suspect, these say a figure or
 # tab is missing and the result stands. They render in different banners.
 _omitted_outputs = []
+# Why the PAGA connectivity could not be computed, for the PAGA figure's note.
+_paga_error = None
 if _batch_skip_note is not None:
     _analysis_notes.append(_batch_skip_note)
 if _harmony_device_note is not None:
@@ -3589,6 +3604,7 @@ if can_analyze:
     except Exception as e:
         if pref_compute_paga:
             logger.warning("PAGA computation failed: %s", e)
+            _paga_error = "%s: %s" % (type(e).__name__, e)
         else:
             logger.info("PAGA skipped: %s", e)
 else:
@@ -4039,6 +4055,7 @@ if do_plots and plot_dir and can_analyze:
     # expressing" and its meaning moves with the Normalization setting. No
     # cutoff is invented per mode; what happens instead is that the figure says
     # what the size means, and is not drawn at all when the size says nothing.
+    _dot_unreadable = False
     try:
         _dot_cutoff = 0.0
         _dot_fractions = dot_size_fractions(
@@ -4047,6 +4064,7 @@ if do_plots and plot_dir and can_analyze:
         if not dot_size_is_readable(_dot_fractions):
             _lo = min(_dot_fractions) if _dot_fractions else float("nan")
             _hi = max(_dot_fractions) if _dot_fractions else float("nan")
+            _dot_unreadable = True
             _omitted_outputs.append(
                 "Dotplot: not drawn. Under %s normalization the fraction of "
                 "cells above the cutoff is %.2f to %.2f for every cluster and "
@@ -4091,6 +4109,8 @@ if do_plots and plot_dir and can_analyze:
         logger.info("Saved dotplot: %s", dotplot_path)
     except Exception as e:
         logger.warning("Failed to generate dotplot: %s", e)
+        if not _dot_unreadable:
+            _omitted_outputs.append(figure_failed_note("Dotplot", e))
 
     # Matrix plot -- mean expression heatmap per cluster
     try:
@@ -4119,11 +4139,17 @@ if do_plots and plot_dir and can_analyze:
         logger.info("Saved matrixplot: %s", matrixplot_path)
     except Exception as e:
         logger.warning("Failed to generate matrixplot: %s", e)
+        _omitted_outputs.append(figure_failed_note("Matrix Plot", e))
 
     # PAGA graph -- cluster connectivity / trajectory. Nothing to draw when the
     # connectivity graph was not requested.
     if not pref_compute_paga:
         logger.info("PAGA plot skipped: the connectivity graph was not requested")
+    elif _paga_error is not None:
+        _omitted_outputs.append(
+            "PAGA graph: not drawn, because the cluster connectivity could not be "
+            "computed (%s). Everything else in this result stands." % _paga_error
+        )
     else:
         try:
             # Drop the weakest edges. scanpy's own default (0.01) keeps very nearly
@@ -4139,6 +4165,7 @@ if do_plots and plot_dir and can_analyze:
             logger.info("Saved PAGA graph: %s", paga_path)
         except Exception as e:
             logger.warning("Failed to generate PAGA graph: %s", e)
+            _omitted_outputs.append(figure_failed_note("PAGA graph", e))
 
     # Stacked violin plot -- expression distribution per cluster
     if n_clusters_found > 1:
@@ -4179,6 +4206,7 @@ if do_plots and plot_dir and can_analyze:
             logger.info("Saved stacked violin: %s", violin_path)
         except Exception as e:
             logger.warning("Failed to generate stacked violin: %s", e)
+            _omitted_outputs.append(figure_failed_note("Stacked violin", e))
 
     # Embedding scatter colored by cluster (if embedding was computed)
     if embedding_result is not None:
@@ -4197,6 +4225,7 @@ if do_plots and plot_dir and can_analyze:
             logger.info("Saved embedding plot: %s", embed_path)
         except Exception as e:
             logger.warning("Failed to generate embedding plot: %s", e)
+            _omitted_outputs.append(figure_failed_note("Embedding plot", e))
 
     # Spatial plots (if spatial coordinates were provided)
     if has_spatial:
@@ -4222,6 +4251,9 @@ if do_plots and plot_dir and can_analyze:
                 logger.info("Saved neighborhood enrichment heatmap: %s", nhood_path)
             except Exception as e:
                 logger.warning("Failed to generate nhood enrichment plot: %s", e)
+                _omitted_outputs.append(
+                    figure_failed_note("Neighborhood enrichment heatmap", e)
+                )
 
         # Spatial scatter colored by cluster. For multi-image runs produce ONE plot PER
         # IMAGE -- cells from different images share no coordinate frame, so overlaying
@@ -4310,6 +4342,7 @@ if do_plots and plot_dir and can_analyze:
             plt.close("all")
         except Exception as e:
             logger.warning("Failed to generate spatial scatter plot: %s", e)
+            _omitted_outputs.append(figure_failed_note("Spatial scatter", e))
 
     if plot_paths:
         task.outputs["plot_paths"] = json.dumps(plot_paths)

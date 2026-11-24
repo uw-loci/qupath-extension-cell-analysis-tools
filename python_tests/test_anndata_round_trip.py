@@ -13,7 +13,7 @@ import uuid
 import numpy as np
 import pytest
 
-from conftest import SCRIPTS_DIR, load_script_symbol, requires
+from conftest import SCRIPTS_DIR, load_script_symbol, requires, worker_globals
 
 
 class _Task:
@@ -43,7 +43,7 @@ def appose_stub(monkeypatch):
 
 def run(script, **inputs):
     task = _Task()
-    namespace = {"task": task, **inputs}
+    namespace = {"task": task, **worker_globals(), **inputs}
     source = (SCRIPTS_DIR / script).read_text(encoding="utf-8")
     exec(compile(source, script, "exec"), namespace)
     return task.outputs

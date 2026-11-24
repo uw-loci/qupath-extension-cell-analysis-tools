@@ -182,6 +182,7 @@ def _gs_gap(
 # ---------------------------------------------------------------------------
 # Task body
 # ---------------------------------------------------------------------------
+refuse_duplicate_names(marker_names)
 data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 n_cells, n_markers = data.shape
 # cluster_labels arrives as an int32 NDArray (shared memory); tolerate a plain list too.

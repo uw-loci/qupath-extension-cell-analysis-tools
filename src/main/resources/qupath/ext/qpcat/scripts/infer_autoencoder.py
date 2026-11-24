@@ -204,6 +204,7 @@ if use_tiles:
 
     data_norm = None  # tiles normalized per-batch in encode loop
 else:
+    refuse_duplicate_names(marker_names)
     raw_data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
     raw_data = raw_data.astype(np.float32)
     require_finite(

@@ -43,6 +43,7 @@ try:
 except Exception:
     pass
 
+refuse_duplicate_names(marker_names)
 data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
 coords = spatial_coords.ndarray().copy()
 n_cells, n_markers = data.shape

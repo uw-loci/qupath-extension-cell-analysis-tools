@@ -571,6 +571,7 @@ if use_tiles:
     data = None
     n_markers = 0
 else:
+    refuse_duplicate_names(marker_names)
     data, _ = impute_nonfinite(measurements.ndarray(), context="measurement")
     data = data.astype(np.float32)
     require_finite(

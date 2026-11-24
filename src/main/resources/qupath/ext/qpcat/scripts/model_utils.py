@@ -161,6 +161,32 @@ def require_finite(matrix, step, column_names=None, max_named=6, reason=None):
     )
 
 
+def refuse_duplicate_names(names):
+    """Raise when two measurement names are equal, or equal after trimming and case folding.
+
+    Results are keyed by name (marker rankings, gates, thresholds, the AnnData
+    var names), so a second column of the same name overwrites the first, and
+    two names that differ only in case or surrounding spaces read as one.
+    """
+    if names is None:
+        return
+    seen = {}
+    clashes = []
+    for name in names:
+        key = str(name).strip().casefold()
+        if key in seen:
+            clashes.append("'%s' and '%s'" % (seen[key], name))
+        else:
+            seen[key] = name
+    if clashes:
+        raise ValueError(
+            "Two selected measurements have the same name (ignoring case and "
+            "surrounding spaces): %s. Results are listed by name, so one would hide "
+            "or overwrite the other. Leave one of each pair out, or rename it."
+            % "; ".join(clashes)
+        )
+
+
 def require_finite_scale(df, method, offset, scale):
     """Refuse when a column with finite values got a non-finite offset or scale."""
     has_values = df.notna().any().to_numpy()

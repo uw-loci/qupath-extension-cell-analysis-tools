@@ -158,6 +158,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Two measurements with the same name are refused, and a figure that cannot be drawn says
+  why.** A batch file or an imported AnnData can list the same measurement name twice (or two
+  names that differ only in case or surrounding spaces). Results are listed by name, so the
+  second column's fold change, gate or threshold replaced the first's, and the dot plot,
+  matrix plot and stacked violin were refused by the plotting library with the error in the log
+  only. Every analysis now stops at the start with a message naming the clashing names. Any
+  clustering figure that fails for another reason (dot plot, matrix plot, PAGA graph, stacked
+  violin, embedding, neighborhood enrichment heatmap, spatial scatter) is now listed under "Not
+  produced in this run" with the reason, instead of being silently absent.
 - **A measurement named `cluster` no longer breaks a clustering run.** Clustering stored its
   labels in a column called `cluster` next to the measurements, so a measurement of that name
   (from a CSV import, for example) was overwritten and the run failed with a shape error after

@@ -40,6 +40,7 @@ task.update("Building AnnData object...")
 # HERE before any arithmetic. Doing the maths in float32 would change
 # results -- normalization and the distribution fits below are sensitive
 # to it -- which is exactly the regression this upcast exists to prevent.
+refuse_duplicate_names(marker_names)
 data = np.array(measurements.ndarray(), dtype=np.float64, copy=True)
 n_cells, n_markers = data.shape
 logger.info("Exporting %d cells x %d markers to AnnData", n_cells, n_markers)
