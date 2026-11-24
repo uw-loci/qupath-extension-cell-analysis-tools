@@ -10,9 +10,11 @@ import javafx.scene.layout.VBox;
 import org.controlsfx.control.CheckComboBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import qupath.fx.dialogs.Dialogs;
 import qupath.ext.qpcat.model.AreaLevel;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.service.AreaResolver;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -119,6 +121,12 @@ public final class IndependentAreasSection extends VBox {
         private final CheckComboBox<String> classPicker = new CheckComboBox<>();
         private final Label classLabel;
         private final Label emptyClassesLabel;
+        private final Button addClassButton = new Button("Add class...");
+        /**
+         * Classes typed in, or loaded from a saved configuration, that neither the open
+         * image nor the project class list holds: a class only on images that are not open.
+         */
+        private final Set<String> extraClasses = new LinkedHashSet<>();
 
         LevelRow(AreaLevel initial) {
             levelCombo.getItems().addAll(ADDABLE);
@@ -143,6 +151,11 @@ public final class IndependentAreasSection extends VBox {
                     + "'Tissue' annotations are three areas, not one."));
 
             classLabel = new Label("classes:");
+            addClassButton.setTooltip(Tooltips.of(
+                    "Type an annotation class that is only on images that are not open (the "
+                    + "list shows the open image's annotation classes and the project's class "
+                    + "list)."));
+            addClassButton.setOnAction(e -> addTypedClass());
             emptyClassesLabel = new Label("(none in this image or project)");
             emptyClassesLabel.setStyle("-fx-text-fill: derive(-fx-text-base-color, 40%);");
 
@@ -155,7 +168,7 @@ public final class IndependentAreasSection extends VBox {
             });
 
             node = new HBox(8, new Label(), levelCombo, classLabel, classPicker,
-                    emptyClassesLabel, remove);
+                    emptyClassesLabel, addClassButton, remove);
             node.setAlignment(Pos.CENTER_LEFT);
 
             refreshClasses();
@@ -188,6 +201,7 @@ public final class IndependentAreasSection extends VBox {
             boolean empty = classPicker.getItems().isEmpty();
             setShown(classLabel, show);
             setShown(classPicker, show && !empty);
+            setShown(addClassButton, show);
             // An empty dropdown next to "Annotations" reads as a broken control.
             // Say why it is empty instead.
             setShown(emptyClassesLabel, show && empty);
@@ -204,7 +218,7 @@ public final class IndependentAreasSection extends VBox {
          */
         void refreshClasses() {
             List<String> checked = new ArrayList<>(classPicker.getCheckModel().getCheckedItems());
-            List<String> available = annotationClassesInScope();
+            List<String> available = AnnotationClasses.withExtra(annotationClassesInScope(), extraClasses);
             if (!available.equals(classPicker.getItems())) {
                 classPicker.getCheckModel().clearChecks();
                 classPicker.getItems().setAll(available);
@@ -215,6 +229,23 @@ public final class IndependentAreasSection extends VBox {
                 }
             }
             updateClassPickerVisibility();
+        }
+
+        /** Asks for an annotation class by name and ticks it. */
+        private void addTypedClass() {
+            String raw = Dialogs.showInputDialog("QP-CAT - Independent areas - add annotation class",
+                    "Annotation class, as QuPath shows it (for example Tissue):", "");
+            if (raw == null || raw.isBlank()) return;
+            String name;
+            try {
+                name = CellClasses.canonicalName(raw, "Annotation class");
+            } catch (CellClasses.ClassNameException e) {
+                UserErrors.notify(logger, "QP-CAT - Independent areas", e.getMessage());
+                return;
+            }
+            extraClasses.add(name);
+            refreshClasses();
+            classPicker.getCheckModel().check(name);
         }
 
         void setIndexLabel(int oneBased) {
@@ -232,6 +263,9 @@ public final class IndependentAreasSection extends VBox {
 
         void applySpec(AreaLevelSpec spec) {
             levelCombo.setValue(spec.getLevel());
+            // A saved class need not be on the open image or in the class list; it was
+            // dropped silently before.
+            extraClasses.addAll(spec.getAnnotationClasses());
             refreshClasses();
             classPicker.getCheckModel().clearChecks();
             for (String cls : spec.getAnnotationClasses()) {

@@ -190,6 +190,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **An independent-areas class that only other images carry can be chosen (H48).** The class
+  picker offered the open image's annotation classes and the project's class list, so a class
+  present only on images that were not open (imported GeoJSON) could not be picked, and a
+  saved configuration naming such a class lost it on load without a word. **Add class...**
+  beside the picker takes a typed class name (checked like every other class name), and a
+  loaded configuration keeps its classes.
 - **AnnData import reports what it could not place, and refuses a blank class (H54).** Rows
   with no image id while no image was open, and rows whose image id was missing in the file
   (read as the text `nan`), were reported as "cells in image(s) not in this project". The

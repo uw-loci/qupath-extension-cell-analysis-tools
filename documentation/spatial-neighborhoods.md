@@ -87,7 +87,10 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
 **How to configure:**
 1. Expand the **Independent areas** section in the dialog.
 2. Click **Add level** to define one or more partitioning levels (e.g., `Tissue`
-   annotations to separate cores or sections).
+   annotations to separate cores or sections). The class list shows the open image's
+   annotation classes and the project's class list; for a class that only images that
+   are not open carry (imported GeoJSON, say), click **Add class...** and type it. A
+   loaded configuration keeps its classes even when the open image has none of them.
 3. The preview shows how many areas were found and if any cells lack an
    assignment. Empty areas are skipped; sparse areas are handled (spatial graph
    parameters are capped per area so one small core does not reduce k for the rest).
