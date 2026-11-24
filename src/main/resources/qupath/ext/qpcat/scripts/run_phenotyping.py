@@ -18,6 +18,7 @@ Outputs (via task.outputs):
   phenotype_names: str (JSON list) -- phenotype name per index
   n_phenotypes: int
   phenotype_counts: str (JSON) -- {phenotype_name: count}
+  warnings: str (JSON list) -- problems with the data or rules, for the user
 """
 
 import logging
@@ -118,6 +119,12 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
     `anypos` on markers absent from the data matches nothing. Silently treating
     the second as "no constraint" would match every cell.
 
+    A ``pos`` or ``neg`` marker that is not a column of the data makes the
+    rule match nothing: the condition cannot be tested, and skipping it would
+    widen the rule ("CD3 pos, CD8 neg" read as "CD3 pos") so it claimed cells
+    it was never meant to. ``missing_rule_markers`` names such markers so the
+    caller can report them.
+
     Returns (matches, has_criteria). Unknown condition words are warned and
     skipped rather than failing the run -- a rule set is user input, and one
     typo should not lose the other twenty rules.
@@ -159,7 +166,8 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
         has_criteria = True
 
         if marker not in marker_idx:
-            logger.warning("Marker '%s' not found in data, skipping", marker)
+            if condition in ("pos", "neg"):
+                matches &= False
             continue
 
         values = norm_data[:, marker_idx[marker]]
@@ -179,6 +187,42 @@ def evaluate_rule(rule, norm_data, marker_idx, gates, default_gate, cell_classes
     if has_anyneg:
         matches &= anyneg
     return matches, has_criteria
+
+
+def missing_rule_markers(rule, marker_idx):
+    """The (marker, condition) pairs of one rule whose marker is not in the data.
+
+    Only the conditions ``evaluate_rule`` tests are listed; an unknown
+    condition word is reported by it separately.
+    """
+    return [
+        (marker, condition)
+        for marker, condition in rule.items()
+        if marker not in RULE_META_KEYS
+        and condition in ("pos", "neg", "anypos", "anyneg")
+        and marker not in marker_idx
+    ]
+
+
+def missing_marker_warnings(rules, marker_idx):
+    """One plain-text warning per rule marker that is not a measurement in the data.
+
+    A missing ``pos``/``neg`` marker makes its rule match no cells; a missing
+    member of an any-group is left out of that group.
+    """
+    warnings = []
+    for rule in rules:
+        cell_type = rule.get("cellType", "Unknown")
+        for marker, condition in missing_rule_markers(rule, marker_idx):
+            if condition in ("pos", "neg"):
+                effect = "so the rule matches no cells"
+            else:
+                effect = "so it is left out of the rule's any-of group"
+            warnings.append(
+                "Rule '%s': marker '%s' (%s) is not a measurement in the data, %s"
+                % (cell_type, marker, condition, effect)
+            )
+    return warnings
 
 
 def build_phenotype_counts(labels, phenotype_names):
@@ -201,6 +245,10 @@ def build_phenotype_counts(labels, phenotype_names):
             counts[name] = counts.get(name, 0) + c
     return counts
 
+
+# Plain-text problems with the user's data or rules, returned to the caller in
+# task.outputs["warnings"] and shown by the dialog and the batch. Never only logged.
+phenotype_warnings = []
 
 # 1. Load data
 task.update("Loading measurements...")
@@ -288,6 +336,12 @@ if cell_classes is not None and any(has_class_condition(r) for r in rules):
             "Rules use class conditions but no cell in scope has a class; "
             "apply a classifier first"
         )
+
+# Rule markers absent from the data: their rules cannot be evaluated as written.
+# Reported back to the caller, never only logged.
+for w in missing_marker_warnings(rules, marker_idx):
+    logger.warning(w)
+    phenotype_warnings.append(w)
 
 # 4. Evaluate rules (first-match-wins priority)
 labels = np.full(n_cells, -1, dtype=np.int32)
@@ -384,5 +438,6 @@ task.outputs["phenotype_names"] = json.dumps(phenotype_names)
 task.outputs["n_phenotypes"] = n_phenotypes
 task.outputs["phenotype_counts"] = json.dumps(counts)
 task.outputs["unknown_breakdown"] = json.dumps(unknown_breakdown)
+task.outputs["warnings"] = json.dumps(phenotype_warnings)
 
 logger.info("Phenotyping results packaged")

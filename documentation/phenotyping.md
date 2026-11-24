@@ -83,6 +83,12 @@ your gates, because the audit log records how many rules ran, not what they were
 lists the rule sets saved in the project; select one and click **Delete** to remove it (it asks
 first, and the file cannot be brought back).
 
+**A rule whose marker is not in the data matches no cells.** If a `pos` or `neg` marker is
+not a measurement of the cells in scope (renamed since the rule set was saved, or absent from
+these images), the rule cannot be tested as written, so it labels nothing rather than running
+without that condition. A missing member of an any-of group is left out of the group. Each
+case is listed under **Warnings** in the results window and in a notification.
+
 ### Step by step
 
 1. **Extensions > QP-CAT > Classify cells > Label cells by marker rules (phenotyping)...**

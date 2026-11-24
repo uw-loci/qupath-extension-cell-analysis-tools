@@ -52,7 +52,10 @@ public final class HeadlessPhenotypingWorkflow {
 
         public int getNPhenotypes() { return nPhenotypes; }
         public int getNCells() { return nCells; }
-        /** Non-fatal problems (e.g. conflicting per-marker gates). Never null. */
+        /**
+         * Non-fatal problems: conflicting per-marker gates, and the warnings the
+         * phenotyping task reported (e.g. a rule marker missing from the data). Never null.
+         */
         public List<String> getWarnings() { return warnings; }
     }
 
@@ -109,6 +112,11 @@ public final class HeadlessPhenotypingWorkflow {
         Map<String, Object> result = inner.runPhenotypingProject(
                 imageEntries, selected, normalization, rulesJson, gatesJson, missingPolicy, progress);
 
+        if (result.get("warnings") instanceof List<?> taskWarnings) {
+            for (Object w : taskWarnings) {
+                if (w != null) warnings.add(w.toString());
+            }
+        }
         int nPhenotypes = asInt(result.get("n_phenotypes"));
         int[] labels = (int[]) result.get("labels");
         return new Outcome(nPhenotypes, labels == null ? 0 : labels.length, warnings);

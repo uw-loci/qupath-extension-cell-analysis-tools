@@ -176,6 +176,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 - **The results window opens taller (840 px scene, under 900 px as a window) where the screen
   allows it**, shorter on a small screen. At 650 px the 3D View's class list showed five rows
   above 12 classes, two with the cell preview open.
+- **A phenotyping rule whose marker is not in the data no longer claims cells.** A `pos` or
+  `neg` marker that was not a measurement of the cells (renamed since the rule set was saved, or
+  absent from the images) was skipped with a log line, so "CD3 pos, CD8 neg" ran as "CD3 pos"
+  and labeled cells the rule was never meant to. Such a rule now matches no cells, and every
+  missing marker is reported: a notification and a **Warnings** section in the Phenotyping
+  results, and a WARN row in a batch run. Phenotyping runs from earlier versions that applied a
+  saved rule set to images missing one of its markers could have labeled too many cells with
+  that rule.
 
 ## [0.25.0] - 2026-11-19
 
