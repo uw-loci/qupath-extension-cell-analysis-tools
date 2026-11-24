@@ -138,6 +138,7 @@ with a clustering result (results window, run record).
 | Tiles (from **Create tiles** or a pixel classifier) among the analyzed objects | | every tool |
 | Several images in the run with the same name | | every tool; QP-CAT keeps them apart by their project entry, and adds the entry id where it shows the name |
 | Some images with a pixel size and some without, in a run that measures distances | (clustering micron outputs, and cellular neighborhoods with a radius, refuse as before) | spatial runs: which images stay in pixels |
+| Pixel width and height that differ by more than 1 % | | runs that measure distances: the images and both sizes; distances use the average of the two, as QuPath's own measurements do |
 | Measurement names with a space at either end, a control character, or that differ only in case or spaces | | every tool that reads measurements |
 | A measurement named like a column the AnnData file adds (`cluster`, `phenotype`, `qupath_image_id`, `qupath_image`) | | AnnData export |
 | A real class spelled like the word QP-CAT shows for "no class" (`Unclassified`, `Unknown`) | | every tool |

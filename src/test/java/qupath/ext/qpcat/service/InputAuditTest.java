@@ -1,12 +1,16 @@
 package qupath.ext.qpcat.service;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import qupath.lib.images.servers.ImageServer;
+import qupath.lib.images.servers.PixelCalibration;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjects;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.ROIs;
 
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -218,6 +222,33 @@ class InputAuditTest {
         List<String> notes = audit.report().notices();
         assertThat(notes).anySatisfy(n -> assertThat(n).contains("2 tiles"));
         assertThat(notes).anySatisfy(n -> assertThat(n).startsWith("1 of 2 objects lack"));
+    }
+
+    private static ImageServer<BufferedImage> serverWithPixels(double widthUm, double heightUm) {
+        @SuppressWarnings("unchecked")
+        ImageServer<BufferedImage> server = Mockito.mock(ImageServer.class);
+        Mockito.when(server.getPixelCalibration()).thenReturn(
+                new PixelCalibration.Builder().pixelSizeMicrons(widthUm, heightUm).build());
+        return server;
+    }
+
+    @Test
+    void nonSquarePixelsAreNotedWithBothSizesInSpatialRunsOnly() {
+        InputAudit spatial = InputAudit.of(InputAudit.Workflow.CELLULAR_NEIGHBORHOODS).spatial(true);
+        spatial.addImage("1", "wide.tif", cells(3), serverWithPixels(0.5, 0.65));
+        spatial.addImage("2", "square.tif", cells(3), serverWithPixels(0.5, 0.5));
+        spatial.addImage("3", "nearly.tif", cells(3), serverWithPixels(0.5, 0.504));
+        List<String> notices = spatial.report().notices();
+        assertThat(notices).hasSize(1);
+        assertThat(notices.get(0))
+                .contains("wide.tif (0.5 x 0.65 um)")
+                .contains("average")
+                .doesNotContain("square.tif")
+                .doesNotContain("nearly.tif");
+
+        InputAudit plain = InputAudit.of(InputAudit.Workflow.PHENOTYPING);
+        plain.addImage("1", "wide.tif", cells(3), serverWithPixels(0.5, 0.65));
+        assertThat(plain.report().notices()).isEmpty(); // no distances, nothing to say
     }
 
     @Test

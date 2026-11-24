@@ -70,7 +70,8 @@ import org.slf4j.LoggerFactory;
  *       order (fastest first) differs from {@code nvidia-smi}'s (PCI bus).</li>
  *   <li>Isolates every worker, CPU or GPU, from Python and native libraries
  *       QuPath's own environment points at ({@code ~/.local} site-packages,
- *       {@code PYTHONPATH}, {@code LD_LIBRARY_PATH}); see
+ *       {@code PYTHONPATH}, {@code LD_LIBRARY_PATH}), and runs it in Python's
+ *       UTF-8 mode so text defaults are the same on every host; see
  *       {@link #isolationVariables}.</li>
  *   <li>Respects a scheduler: when QuPath was started with
  *       {@code CUDA_VISIBLE_DEVICES} already set (SLURM and most cluster
@@ -407,6 +408,14 @@ public final class ApposeGpu {
      *       the locked version inside the worker.</li>
      *   <li>{@code PYTHONPATH} and {@code PYTHONHOME} emptied (Python treats empty as
      *       unset) when QuPath was started with them.</li>
+     *   <li>{@code PYTHONUTF8=1} unless QuPath was started with {@code PYTHONUTF8} set:
+     *       on Windows, Python otherwise decodes its pipes and {@code open()} text
+     *       files with the ANSI code page (cp1252), while Appose's Java side writes
+     *       UTF-8 and Linux and macOS workers already run in UTF-8. The Appose
+     *       protocol itself escapes non-ASCII as JSON escape sequences in both directions,
+     *       so this covers the worker's own text I/O (files it writes or reads with
+     *       no explicit encoding, paths, stderr) and any Appose that stops
+     *       escaping.</li>
      *   <li>Linux, with a known prefix: {@code LD_LIBRARY_PATH} becomes the
      *       environment's {@code lib} folder, then only the inherited folders that
      *       hold the NVIDIA driver ({@code libcuda.so.1}; {@code /.singularity.d/libs}
@@ -432,6 +441,12 @@ public final class ApposeGpu {
                 logger.info("Not passing {}={} to the Python worker", name, value);
                 vars.put(name, "");
             }
+        }
+        String utf8 = inherited.get("PYTHONUTF8");
+        if (utf8 == null) {
+            vars.put("PYTHONUTF8", "1");
+        } else {
+            logger.info("QuPath was started with PYTHONUTF8={}; the Python worker keeps it", utf8);
         }
         if (linux && envPrefix != null) {
             List<String> kept = new ArrayList<>();

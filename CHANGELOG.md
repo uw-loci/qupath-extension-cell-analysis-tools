@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Non-square pixels are reported in runs that measure distances.** Cellular neighborhoods,
+  spatial statistics and clustering with spatial smoothing, BANKSY or spatial analysis note the
+  images whose pixel width and height differ by more than 1 %, with both sizes, and say that
+  distances use the average of the two (QuPath's own convention); nothing changes in the numbers.
+
 - **Every run checks the data it reads before any work (input audit).** Clustering (dialog,
   presets, sub-clustering, existing labels, batch), phenotyping (dialog and batch), cellular
   neighborhoods, spatial statistics, AnnData export and import, VEST export and crop/table
@@ -189,6 +194,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   under *Cells with identical measurements* in `clustering.md`.
 
 ### Fixed
+
+- **Python workers run in UTF-8 mode on every host.** The worker now starts with `PYTHONUTF8=1`
+  (unless QuPath was started with `PYTHONUTF8` set), so on Windows the files it reads and writes
+  without an explicit encoding, its paths and its error output use UTF-8 like the Linux and macOS
+  workers, instead of the ANSI code page. The Appose task protocol itself already escapes
+  non-ASCII text in both directions, so a measurement name such as `Area um^2` with a real micro
+  sign reached Python intact before; this makes the rest of the worker's text handling match.
+  Shared Appose plumbing, so the DL Pixel Classifier, cellAPpose, PPM and Fiber Analysis
+  extensions carry the same change.
 
 - **The same objects imported twice no longer get labels by whichever copy came first (H11).**
   QuPath's GeoJSON import keeps object ids, so a repeated import repeats them. Applying a saved

@@ -158,6 +158,30 @@ class ApposeGpuTest {
     }
 
     @Test
+    void theWorkerRunsInUtf8ModeUnlessQuPathChoseOtherwise() {
+        Map<String, String> vars = ApposeGpu.isolationVariables(Map.of(), null, false, dir -> false);
+        assertEquals("1", vars.get("PYTHONUTF8"));
+        Map<String, String> kept = ApposeGpu.isolationVariables(
+                Map.of("PYTHONUTF8", "0"), null, false, dir -> false);
+        assertTrue(!kept.containsKey("PYTHONUTF8"), "a value QuPath was started with is inherited as is");
+    }
+
+    /**
+     * Why PYTHONUTF8 is a second line of defense and not the first: the Appose protocol
+     * escapes every non-ASCII character, so a worker reading its pipe with a legacy code
+     * page still gets the right string. If an Appose upgrade stops escaping, this fails
+     * and the worker's UTF-8 mode becomes the only thing keeping names intact on Windows.
+     */
+    @Test
+    void theApposeProtocolCarriesOnlyAscii() {
+        String json = org.apposed.appose.util.Messages.encode(
+                Map.of("name", "Nucleus: Area \u00b5m^2 / J\u00fcrgen / \u7d30\u80de"));
+        assertTrue(json.chars().allMatch(c -> c < 128), json);
+        assertEquals("Nucleus: Area \u00b5m^2 / J\u00fcrgen / \u7d30\u80de",
+                org.apposed.appose.util.Messages.decode(json).get("name"));
+    }
+
+    @Test
     void withNothingInheritedTheEnvironmentsLibComesFirst() {
         Map<String, String> vars = ApposeGpu.isolationVariables(Map.of(), PREFIX, true, dir -> false);
         assertEquals(PREFIX.resolve("lib").toString(), vars.get("LD_LIBRARY_PATH"));

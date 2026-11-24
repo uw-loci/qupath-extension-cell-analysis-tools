@@ -5,6 +5,8 @@ import qupath.lib.images.servers.PixelCalibration;
 import qupath.lib.objects.PathObject;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -89,7 +91,14 @@ public final class InputAudit {
     }
 
     private record ImageTally(String id, String name, InputChecks.Tally tally,
-                              double pixelSizeUm, double anisotropy) {}
+                              double pixelSizeUm, double pixelWidthUm, double pixelHeightUm) {
+        double anisotropy() {
+            return InputChecks.pixelAnisotropy(pixelWidthUm, pixelHeightUm);
+        }
+    }
+
+    /** Pixels whose width and height differ by more than this fraction are reported. */
+    static final double ANISOTROPY_NOTICE = 0.01;
 
     private final Workflow workflow;
     private List<String> measurements = List.of();
@@ -169,8 +178,7 @@ public final class InputAudit {
                 // An unreadable calibration is no calibration (PixelSizes.umOrNaN).
             }
         }
-        images.add(new ImageTally(imageId, imageName, tally, um,
-                InputChecks.pixelAnisotropy(w, h)));
+        images.add(new ImageTally(imageId, imageName, tally, um, w, h));
     }
 
     /** The refusals and notices for every image added so far. */
@@ -188,6 +196,7 @@ public final class InputAudit {
         Set<String> classNames = new LinkedHashSet<>();
         List<MeasurementExtractor.MissingReport> missing = new ArrayList<>();
         List<PixelSizes.NamedPixelSize> sizes = new ArrayList<>();
+        List<String> nonSquare = new ArrayList<>();
         int cells = 0;
         int tiles = 0;
         int other = 0;
@@ -205,6 +214,10 @@ public final class InputAudit {
             classNames.addAll(tally.classNames());
             missing.add(tally.missing());
             sizes.add(new PixelSizes.NamedPixelSize(label, t.pixelSizeUm()));
+            if (t.anisotropy() > ANISOTROPY_NOTICE) {
+                nonSquare.add(label + " (" + um(t.pixelWidthUm()) + " x " + um(t.pixelHeightUm())
+                        + " um)");
+            }
         }
 
         String outlines = InputChecks.noOutlineRefusal(noOutline);
@@ -232,6 +245,12 @@ public final class InputAudit {
                 notices.add("No pixel size on " + InputChecks.listed(px) + ": distances there "
                         + "are in pixels.");
             }
+            // Non-square pixels: distances use one pixel size, the average of width and
+            // height, as QuPath's own measurements do. Said once so the rounding is known.
+            if (!nonSquare.isEmpty()) {
+                notices.add("Pixel width and height differ on " + InputChecks.listed(nonSquare)
+                        + ": distances use their average, as QuPath's own measurements do.");
+            }
         }
 
         add(notices, InputChecks.tileNotice(cells, tiles, other));
@@ -242,13 +261,15 @@ public final class InputAudit {
         if (reportMissing) {
             add(notices, InputChecks.missingNotice(InputChecks.merge(missing)));
         }
-        // Non-square pixels: ImageTally.anisotropy is measured for every image but not yet
-        // reported; the warning belongs here when it is added.
-
         String scope = workflow.label() + " on " + InputChecks.count(objects) + " object(s) in "
                 + images.size() + " image(s)" + (images.isEmpty() ? "" : ": "
                 + InputChecks.listed(names));
         return new InputReport(workflow, refusals, notices, scope);
+    }
+
+    /** A pixel size to four significant digits, no trailing zeros: 0.5, 0.65, 0.3245. */
+    private static String um(double value) {
+        return new BigDecimal(value).round(new MathContext(4)).stripTrailingZeros().toPlainString();
     }
 
     private static void add(List<String> list, String message) {
