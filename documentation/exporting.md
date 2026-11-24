@@ -7,6 +7,7 @@ Figures, tables, and the data itself.
 - [AnnData for Python](#anndata-for-python)
 - [Importing from AnnData](#importing-from-anndata)
 - [VEST 3D export](#vest-3d-export)
+- [Files QP-CAT writes](#files-qp-cat-writes)
 
 ## When to batch-export
 
@@ -215,8 +216,12 @@ Export data for use with external single-cell tools (Scanpy, Seurat, cellxgene).
    - Expression matrix (all measurements) as `adata.X`, with the measurement names as `adata.var_names`
    - Cluster labels (if cells are classified as "Cluster N") as `adata.obs["cluster"]`
    - Phenotype labels (if cells have other classifications) as `adata.obs["phenotype"]`
-   - Embedding coordinates (QPCAT UMAP1/UMAP2, etc., if present) as `adata.obsm["X_umap"]`; that
-     key is used whichever embedding method made them
+   - Embedding coordinates as `adata.obsm["X_umap"]`, `["X_pca"]` or `["X_tsne"]`, from QP-CAT's
+     own `QPCAT UMAP1/2`, `QPCAT PCA1/2` or `QPCAT tSNE1/2` measurements, or from the unmarked
+     `UMAP1/2` (and so on) a result from before QP-CAT marked its columns wrote. A cell without
+     the pair is written as NaN, and the notification at the end says how many there were.
+     Before 0.26.0 the export looked only for the unmarked names, so QP-CAT's own embedding was
+     left out, and cells without one were written at (0, 0)
    - Spatial coordinates (cell centroids, in pixels) as `adata.obsm["spatial"]`
    - Each cell's QuPath object id as its name, `adata.obs_names`, and the project image
      as `adata.obs["qupath_image_id"]` and `adata.obs["qupath_image"]`. These are what
@@ -335,5 +340,45 @@ Two ways, from the "export complete" dialog:
   back into QuPath. (For clicking a point and jumping to that cell *inside* QuPath, use the
   interactive results plots / 3D view instead.)
 - Color-map by the `cluster` column in VEST's controls to see cluster structure.
+
+---
+<a name="files-qp-cat-writes"></a>
+## Files QP-CAT writes
+
+**Tables (CSV and TSV).** Every table QP-CAT writes for a spreadsheet -- the crop/feature
+table, the spatial statistics CSVs (Save CSV in the results window, the post-hoc summary, the
+per-area tables beside a result), the composition table and the cellular-neighborhood tables --
+follows one set of rules:
+
+| | CSV | TSV |
+|---|---|---|
+| Separator | comma | tab |
+| Decimal point | period, in every locale | period, in every locale |
+| Encoding | UTF-8 **with** a byte-order mark, so Excel reads non-ASCII names correctly | UTF-8 **without** one (TraitHorizon rejects it) |
+| Line ends | LF | LF |
+| Text holding a comma, quote or line break | quoted (`"a, b"`, quotes doubled) | tab and line breaks become a space |
+| Text starting with `=` `+` `-` `@` | written with a leading `'`, so the spreadsheet shows it as text instead of running it as a formula; a plain number such as `-1.5` keeps its sign | same |
+
+A spreadsheet set to a decimal comma (most of continental Europe) opens a comma-separated file
+as one column: use **Data > From Text/CSV** and choose comma as the separator and period as the
+decimal point. Copy CSV puts the same text on the clipboard without the byte-order mark.
+
+**File names.** A file named after a result, configuration, rule set, model, image or class
+has every character Windows cannot hold (`\ / : * ? " < > |`) replaced with `_`, control
+characters removed, and trailing dots and spaces trimmed, so `CD3/CD8` and `CD3CD8` stay two
+files. Before 0.26.0 those characters were deleted and the two shared one file; files saved
+then keep their names and still load, also when you type the original name (for example
+`saved_result_name: CD3/CD8` in a batch file finds `CD3CD8.json`).
+
+**Nothing is overwritten without asking.**
+
+| What | When the name is taken |
+|---|---|
+| Save a named copy (results window), Save Config, Save Rule Set, Save Model (autoencoder), composition export | asks: **Replace**, or **Save as '<name>_2'**, or Cancel |
+| Automatic result save at the end of a run, gate geometry recorded on assignment | a second save within the same second gets `_2` |
+| Crop/feature table export | always a new `crop_table_<date>_<time>` folder |
+| Batch clustering (`yaml_<image>` or `clustering.result_name`) | refused before the run, unless `clustering.overwrite_existing: true` |
+| Batch figure export | refused per file, unless `figure_export.overwrite_existing: true` |
+| Save CSV..., Save gates..., AnnData export (a file you pick) | your system's save dialog asks |
 
 ---
