@@ -9,7 +9,6 @@ heatmap's color range so the real rows read as white.
 import json
 
 import numpy as np
-import pytest
 
 from conftest import SCRIPTS_DIR, load_script_symbol, requires, worker_globals
 

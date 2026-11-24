@@ -487,6 +487,10 @@ def _save_heatmap(
         return path
     except Exception as e:
         logger.warning("Failed to render heatmap %s: %s", fname, e)
+        cn_notes.append(
+            "The heatmap %s could not be drawn (%s); the tables have the numbers."
+            % (fname, type(e).__name__)
+        )
         return ""
 
 
@@ -747,6 +751,10 @@ try:
         )
 except Exception as e:
     logger.warning("Neighborhood adjacency failed: %s", e)
+    cn_notes.append(
+        "The neighborhood adjacency table could not be computed (%s: %s)."
+        % (type(e).__name__, e)
+    )
 
 # 8. Package outputs.
 report_progress(task, "Packaging results...")

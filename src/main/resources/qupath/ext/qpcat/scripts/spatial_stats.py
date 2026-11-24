@@ -169,12 +169,9 @@ def _refuse_if_too_big(what, predicted_gb, remedy):
                 ram,
             )
         return False
-    logger.warning(
-        "SKIPPING %s: it needs about %.0f GB but this machine has %.0f GB. %s",
-        what,
-        predicted_gb,
-        ram,
-        remedy,
+    note_for_user(
+        "Skipped %s: it needs about %.0f GB but this machine has %.0f GB. %s"
+        % (what, predicted_gb, ram, remedy)
     )
     return True
 
@@ -221,7 +218,11 @@ def _should_persist(plot_dir, persist_plots):
     try:
         os.makedirs(plot_dir, exist_ok=True)
     except Exception as e:
-        logger.warning("spatial-stats plot dir not writable: %s (%s)", plot_dir, e)
+        note_for_user(
+            "The spatial statistics figures were not saved: the folder %s cannot "
+            "be written to." % plot_dir,
+            detail="%s: %s" % (type(e).__name__, e),
+        )
         return False
     return True
 
@@ -448,14 +449,10 @@ def build_spatial_graph(
         # One line with a count, not one per area: a 55-core TMA with several
         # sparse cores would otherwise bury the log.
         smallest = min(reduced_k, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "Spatial graph: %d area(s) had k reduced below %d to fit the area "
-            "size (smallest: area %d, %d cells, k=%d)",
-            len(reduced_k),
-            int(k),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "size (smallest: area %d, %d cells, k=%d)."
+            % (len(reduced_k), int(k), smallest[0], smallest[1], smallest[2])
         )
 
     if len(slices) == 1:
@@ -1536,9 +1533,17 @@ def run_ripley(
                 plt.close(fig)
                 logger.info("Saved Ripley L PNG: %s", out_path)
             except Exception as e:
-                logger.warning("Ripley L plot failed: %s", e)
+                note_for_user(
+                    "The Ripley's L figure could not be saved; the chart in the "
+                    "results window has the curves.",
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
-        logger.warning("Ripley L failed: %s", e)
+        note_for_user(
+            "Ripley's L did not run, so there is no Ripley tab. The QuPath log has "
+            "the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def centre_on_median(curve, median):
@@ -2022,7 +2027,11 @@ def run_nhood_enrichment(
         )
         return True
     except Exception as e:
-        logger.warning("Neighborhood enrichment failed: %s", e)
+        note_for_user(
+            "Neighborhood enrichment did not run, so there is no enrichment "
+            "heatmap or table. The QuPath log has the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
         return False
 
 
@@ -2429,7 +2438,10 @@ def _save_co_occurrence_curves(
         plt.close(fig)
         logger.info("Saved co-occurrence curves PNG: %s", out_path)
     except Exception as e:
-        logger.warning("Co-occurrence curves plot failed: %s", e)
+        note_for_user(
+            "The co-occurrence curves figure could not be saved.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def run_co_occurrence(
@@ -2532,7 +2544,10 @@ def run_co_occurrence(
         cluster_names = [str(c) for c in adata.obs[cluster_key].cat.categories]
 
         if ratio is None or intervals is None:
-            logger.warning("Co-occurrence returned no data")
+            note_for_user(
+                "Co-occurrence (%s) produced no result; the library returned no "
+                "data for these cells." % mode
+            )
             return
 
         ratio_np = np.asarray(ratio, dtype=np.float64)
@@ -2705,7 +2720,10 @@ def run_co_occurrence(
                         plot_dpi,
                     )
             except Exception as e:
-                logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
+                note_for_user(
+                    "The co-occurrence (%s) figure could not be saved." % mode,
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
         note_for_user(
             (
@@ -2853,7 +2871,7 @@ def compute_spatial_node_measurements(
     triangle_areas = None
     if graph_type == "delaunay" and coords is not None and n_cells >= 3:
         try:
-            from scipy.spatial import Delaunay, qhull
+            from scipy.spatial import Delaunay
 
             tri = Delaunay(np.asarray(coords, dtype=np.float64))
             simplices = tri.simplices  # shape (n_tri, 3)
@@ -2887,13 +2905,15 @@ def compute_spatial_node_measurements(
             mean_areas = mean_areas * area_scale
             max_areas = max_areas * area_scale
             triangle_areas = np.column_stack([mean_areas, max_areas])
-        except qhull.QhullError as e:
-            logger.warning(
-                "spatial-stats Delaunay triangle areas skipped (QhullError): %s", e
-            )
-            triangle_areas = None
         except Exception as e:
-            logger.warning("spatial-stats Delaunay triangle areas failed: %s", e)
+            # QhullError included: collinear or coincident cells have no
+            # triangulation to measure.
+            note_for_user(
+                "The Delaunay triangle-area measurements were not written: the "
+                "cell positions do not form triangles (for example, all on one "
+                "line).",
+                detail="%s: %s" % (type(e).__name__, e),
+            )
             triangle_areas = None
 
     # Connected components on the undirected adjacency.
@@ -2904,8 +2924,14 @@ def compute_spatial_node_measurements(
         component_labels = component_labels.astype(np.int32, copy=False)
         logger.info("spatial-stats connected components: %d", n_components)
     except Exception as e:
-        logger.warning("spatial-stats connected_components failed: %s", e)
-        component_labels = np.zeros(n_cells, dtype=np.int32)
+        # Not written at all: a component of 0 for every cell would read as
+        # "one connected piece of tissue", a result nobody measured.
+        note_for_user(
+            "The connected-component measurement was not written; the QuPath log "
+            "has the error.",
+            detail="%s: %s" % (type(e).__name__, e),
+        )
+        component_labels = None
 
     return {
         "row": row_kept,
@@ -3125,22 +3151,17 @@ def build_banksy_weights(
 
     if reduced:
         smallest = min(reduced, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "BANKSY: %d area(s) had k_geom reduced below %d to fit the area size "
-            "(smallest: area %d, %d cells, k_geom=%d)",
-            len(reduced),
-            int(k_geom),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "(smallest: area %d, %d cells, k_geom=%d)."
+            % (len(reduced), int(k_geom), smallest[0], smallest[1], smallest[2])
         )
     if degenerate:
-        logger.warning(
+        note_for_user(
             "BANKSY: %d area(s) have too few cells for a neighbor graph and were "
             "clustered on their own expression only (smallest has %d cell(s)); "
-            "their results are not spatially informed",
-            len(degenerate),
-            min(d[1] for d in degenerate),
+            "their results are not spatially informed."
+            % (len(degenerate), min(d[1] for d in degenerate))
         )
 
     concatenated = np.concatenate(order) if order else np.zeros(0, dtype=np.int64)
@@ -3204,14 +3225,10 @@ def build_smoothing_adjacency_sklearn(spatial_data, k=15, area_ids=None):
 
     if reduced:
         smallest = min(reduced, key=lambda r: r[2])
-        logger.warning(
+        note_for_user(
             "Spatial smoothing: %d area(s) had k reduced below %d to fit the "
-            "area size (smallest: area %d, %d cells, k=%d)",
-            len(reduced),
-            int(k),
-            smallest[0],
-            smallest[1],
-            smallest[2],
+            "area size (smallest: area %d, %d cells, k=%d)."
+            % (len(reduced), int(k), smallest[0], smallest[1], smallest[2])
         )
 
     if rows:

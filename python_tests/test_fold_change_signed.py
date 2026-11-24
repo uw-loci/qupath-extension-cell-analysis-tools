@@ -7,7 +7,6 @@ imported z-score or a PCA axis showed log2(eps/eps) = 0 or +-30 with no warning.
 import json
 
 import numpy as np
-import pytest
 
 from conftest import SCRIPTS_DIR, load_script_symbol, requires
 from test_clean_data_bit_identical import fixed_matrix, run_full_clustering

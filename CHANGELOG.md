@@ -158,6 +158,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Spatial warnings that went only to the log now reach the results window.** A statistic
+  skipped because it would not fit in memory, neighborhood enrichment or co-occurrence that
+  failed, a figure that could not be saved, areas whose neighbor count was reduced to fit their
+  size (spatial graph, smoothing, BANKSY), BANKSY areas too small for a neighbor graph, and the
+  cellular-neighborhood heatmaps and adjacency table that could not be produced are now listed
+  with the results. The notes from spatial smoothing and BANKSY were also being cleared before
+  the results were assembled. If the connected-component count fails, every cell is no longer
+  put in component 0 for the `QPCAT component:` measurements, which read as one connected
+  piece of tissue.
 - **No invented lengths when every cell sits at one position.** With a radius graph on its
   automatic radius, cells that were all at the same position (or one cell per area) got a
   radius of 50 in whatever unit the coordinates were in, and co-occurrence fell back to distance

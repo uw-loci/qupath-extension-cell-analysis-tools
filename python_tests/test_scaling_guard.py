@@ -157,6 +157,7 @@ def test_refusal_is_relative_to_the_machine():
             "logger": _NullLogger(),
             "_total_ram_gb": lambda: 16.0,
             "_BLOCK_RAM_FRACTION": 0.85,
+            "note_for_user": lambda message, detail=None: None,
         },
     )
     assert refuse("x", 2.0, "remedy") is False  # comfortably under
@@ -173,6 +174,7 @@ def test_a_big_machine_admits_what_a_laptop_refuses():
                 "logger": _NullLogger(),
                 "_total_ram_gb": lambda: ram,
                 "_BLOCK_RAM_FRACTION": 0.85,
+                "note_for_user": lambda message, detail=None: None,
             },
         )
         assert refuse("co-occurrence", 75.0, "remedy") is expect
@@ -193,6 +195,7 @@ def test_an_unreadable_machine_never_skips():
             "logger": logged,
             "_total_ram_gb": lambda: None,
             "_BLOCK_RAM_FRACTION": 0.85,
+            "note_for_user": lambda message, detail=None: None,
         },
     )
     # Even an absurd prediction proceeds when we cannot judge it.

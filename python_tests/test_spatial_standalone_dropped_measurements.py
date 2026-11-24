@@ -9,7 +9,6 @@ import json
 import sys
 
 import numpy as np
-import pytest
 
 from conftest import SCRIPTS_DIR, load_script_symbol, requires, worker_globals
 

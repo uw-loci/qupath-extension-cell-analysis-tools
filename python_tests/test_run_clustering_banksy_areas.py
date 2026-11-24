@@ -50,6 +50,7 @@ def _resolve(logger=None):
         "area_slices": load_script_symbol(SCRIPT, "area_slices", {"np": np}),
         "banksy_k_cap": load_script_symbol(SCRIPT, "banksy_k_cap", {"np": np}),
     }
+    ns["note_for_user"] = lambda message, detail=None: ns["logger"].warning(message)
     return load_script_symbol(SCRIPT, "build_banksy_weights", ns)
 
 

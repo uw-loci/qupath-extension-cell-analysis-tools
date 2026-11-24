@@ -160,6 +160,15 @@ logger.info("Received %d cells x %d markers", n_cells, n_markers)
 
 df = pd.DataFrame(data, columns=marker_names)
 
+# Long-lived worker: clear the spatial notes a previous run left in this
+# process now, before spatial smoothing or BANKSY can add this run's own.
+try:
+    import spatial_stats as _qpcat_spatial
+
+    _qpcat_spatial.reset_notes()
+except ImportError:
+    pass
+
 # Read optional spatial coordinates early (needed by BANKSY and spatial analysis)
 try:
     spatial_data = spatial_coords.ndarray().copy()
@@ -3623,9 +3632,6 @@ if has_spatial and n_clusters_found > 1:
     # __file__ and the sibling scripts are not on sys.path.
     try:
         import spatial_stats as _qpcat_spatial
-
-        # Long-lived worker: clear notes left by a previous run in this process.
-        _qpcat_spatial.reset_notes()
     except ImportError as _e:
         raise RuntimeError(
             "spatial_stats module is not available -- the QP-CAT analysis "
