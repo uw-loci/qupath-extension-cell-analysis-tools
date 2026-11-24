@@ -28,10 +28,12 @@ import java.util.regex.Pattern;
  * code (W001-W004). The validator accumulates issues; the orchestrator
  * decides whether to dispatch based on {@link ValidationResult#hasErrors()}.</p>
  *
- * <p>Semantic checks NOT performed here (deferred to orchestrator at
- * dispatch time): E008 (image-not-found) needs an open project, E010
- * (marker-not-found) needs a loaded image, E013-E014 (project-resolution)
- * happen as part of scope expansion.</p>
+ * <p>Semantic checks NOT performed here (done by the orchestrator before any
+ * work, in the dry run too): E008 / E024 (image not found, duplicate image
+ * names) need an open project, E010 (measurement or rule marker that does not
+ * resolve against the images, see {@link BatchMeasurements}) needs the images'
+ * measurements, E013-E014 (project resolution) happen as part of scope
+ * expansion.</p>
  *
  * <p>The filename-slug shorthand {@code "ripley"} is expanded here for
  * {@link BatchYamlSchema.FigureExportBlock#getFigures()} (the YAML allows
@@ -366,7 +368,7 @@ public final class BatchYamlValidator {
      * Configs on the defaults never trip this: every threshold is 1.0, so every
      * marker resolves to one value regardless of rule or direction.
      */
-    private static void validateGateConsistency(
+    static void validateGateConsistency(
             List<BatchYamlSchema.PhenotypeRuleEntry> rules, ValidationResult r) {
         // marker -> gate value -> the rules that asked for it
         Map<String, Map<Double, List<String>>> byMarker = new LinkedHashMap<>();

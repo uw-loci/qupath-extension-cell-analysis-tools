@@ -394,6 +394,30 @@ public final class BatchYamlSchema {
         public void setClassCondition(ClassConditionKind kind, List<String> names) {
             classConditions.put(kind, names == null ? new ArrayList<>() : new ArrayList<>(names));
         }
+
+        /**
+         * A copy with every marker name passed through {@code rename}; the name,
+         * gates and class conditions are kept.
+         *
+         * @param rename maps a marker as written to the name to use
+         * @return the copy
+         */
+        public PhenotypeRuleEntry withMarkers(java.util.function.UnaryOperator<String> rename) {
+            PhenotypeRuleEntry copy = new PhenotypeRuleEntry();
+            copy.name = name;
+            copy.requireMarkers = requireMarkers.stream().map(rename).collect(
+                    java.util.stream.Collectors.toCollection(ArrayList::new));
+            copy.excludeMarkers = excludeMarkers.stream().map(rename).collect(
+                    java.util.stream.Collectors.toCollection(ArrayList::new));
+            copy.anyMarkers = anyMarkers.stream().map(rename).collect(
+                    java.util.stream.Collectors.toCollection(ArrayList::new));
+            copy.requireMinZscore = requireMinZscore;
+            copy.excludeMaxZscore = excludeMaxZscore;
+            for (Map.Entry<ClassConditionKind, List<String>> e : classConditions.entrySet()) {
+                copy.setClassCondition(e.getKey(), e.getValue());
+            }
+            return copy;
+        }
     }
 
     /** Optional LLM explainer sub-block. */

@@ -222,6 +222,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   result, so earlier batch runs kept only the last image's result. Batch figure exports from
   earlier `joint: true` runs without `figure_export.result_name` may have come from an older
   saved result.
+- **Batch files: rule markers and measurement names are checked against the images before the
+  run.** A rule marker was passed to phenotyping exactly as written, and the YAML reference's own
+  examples wrote short names (`CD3`) where the measurements are `Cell: CD3 mean`, so the condition
+  was skipped and the first such rule labeled every remaining cell, with an OK row and exit code
+  0. Every name in a rule and in `clustering.measurements` is now resolved against the images'
+  measurements (exactly, or by the short name the Phenotyping dialog shows when that is unique,
+  printed as it resolves); a name that is missing, ambiguous (a bare `CD3` names every compartment
+  and statistic, which are listed), or a rule marker some images lack, is refused (E010), in the
+  dry run too. A clustering measurement some images lack warns (W010). Phenotyping now reads only
+  the measurements its rules name, so a gap in an unrelated measurement no longer excludes cells,
+  and headless phenotyping no longer fails after writing labels when `clustering.measurements` is
+  not set. The YAML reference examples now use full measurement names. Batch phenotyping runs
+  from earlier versions whose rules named a marker that was not an exact measurement name labeled
+  cells as if that condition were not there.
+- **Batch clustering with `measurements` left out uses the documented default.** It clustered on
+  every measurement of the cells, centroids, areas, shape and QP-CAT's own outputs from an
+  earlier run (`QPCAT UMAP1`, `QPCAT spatial: ...`) included, although the reference said "all
+  Mean measurements". It now uses every "mean" measurement QP-CAT did not write that is present
+  in every image, and prints the list at the start of the run and in the dry run. Batch
+  clustering runs from earlier versions without `clustering.measurements` clustered on position,
+  size and earlier results as well as intensities.
 
 ## [0.25.0] - 2026-11-19
 

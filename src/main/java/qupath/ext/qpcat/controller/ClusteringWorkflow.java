@@ -1451,10 +1451,10 @@ public class ClusteringWorkflow {
         OperationLogger.getInstance().logOperation("PHENOTYPING",
                 OperationLogger.phenotypingParams(
                         normalization,
-                        selectedMeasurements.size(),
+                        extraction.getNMeasurements(),
                         ruleCount,
                         extraction.getNCells(),
-                        selectedMeasurements),
+                        List.of(extraction.getMeasurementNames())),
                 completeMsg, elapsed);
 
         return resultMap;
@@ -1568,8 +1568,8 @@ public class ClusteringWorkflow {
         long elapsed = System.currentTimeMillis() - startTime;
         OperationLogger.getInstance().logOperation("PHENOTYPING (project)",
                 OperationLogger.phenotypingParams(
-                        normalization, selectedMeasurements.size(), ruleCount,
-                        extraction.getNCells(), selectedMeasurements),
+                        normalization, extraction.getNMeasurements(), ruleCount,
+                        extraction.getNCells(), List.of(extraction.getMeasurementNames())),
                 completeMsg, elapsed);
 
         return resultMap;

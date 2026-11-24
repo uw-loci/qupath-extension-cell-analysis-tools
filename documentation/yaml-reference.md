@@ -153,7 +153,7 @@ When `clustering` is omitted entirely, the batch skips clustering and expects ev
 | `embedding_execution_mode` | `auto` \| `reproducible` \| `fast` | `auto` | Whether UMAP may use every CPU core. umap-learn disables all parallelism when a seed is set, so a seeded run is 6-8x slower. `auto` = seeded below 200,000 cells, all cores above; `reproducible` = always seeded (identical output, one core); `fast` = always all cores (same clusters, layout varies per run). Recorded in the audit log. |
 | `random_seed` | int | `42` | Reproducibility seed for the clustering algorithm. -1 = nondeterministic. |
 | `result_name` | string | -- (auto-named) | Saved-result key under `<project>/qpcat/cluster_results/`. Defaults to `yaml_<image>` per image (`yaml_joint` with `joint: true`); characters a file name cannot hold are removed, and later steps read the result under that cleaned name. Set with per-image clustering of more than one image, it is refused (E025): each image would replace the last. |
-| `measurements` | list[string] | -- (all "Mean" measurements) | Marker set to cluster on. |
+| `measurements` | list[string] | -- (every "mean" measurement QP-CAT did not write, present in every image) | Measurements to cluster on, resolved as described in [Measurement and marker names](#measurement-and-marker-names). Left out, the run uses every measurement whose name contains "mean" (any case) and is present in every image of the project, leaving out QP-CAT's own outputs (`QPCAT UMAP1`, `QPCAT spatial: ...`); centroids, areas and shape measurements are not included. The list is printed at the start of the run and in the dry run. |
 | `spatial_smoothing` | boolean | `false` | Run the graph-convolution pre-step. |
 | `pca_precursor` | boolean | `false` | Reduce features to principal components before embedding + clustering (the scanpy flow). Only engages when the feature count exceeds the component count (`PCA Precursor Components` preference, default 50); BANKSY is always exempt. Omitted means off, so a YAML written before this option existed keeps producing the clusters it always did. |
 | `batch_correction` | boolean | `false` | Apply Harmony. Requires shared marker panel across projects. With only one batch in scope nothing is corrected: the run warns and its record reads `requested, NOT applied`. |
@@ -240,8 +240,8 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 | `missing_values` | string | `exclude_objects` | As for `clustering.missing_values`: an object lacking a value for a rule's marker is left out (`exclude_objects`, no phenotype), the gapped measurements are left out (`exclude_measurements`) or the gap takes the median (`impute`). |
 | `rules` | list[object] | `[]` | Rule list; each rule has the fields below. |
 | `rules[].name` | string | required | Phenotype label (e.g. `T_cell`). |
-| `rules[].require_markers` | list[string] | `[]` (required >=1) | Markers required positive. |
-| `rules[].exclude_markers` | list[string] | `[]` | Markers required negative. |
+| `rules[].require_markers` | list[string] | `[]` (required >=1) | Measurements required positive (for example `"Cell: CD3 mean"`; see [Measurement and marker names](#measurement-and-marker-names)). |
+| `rules[].exclude_markers` | list[string] | `[]` | Measurements required negative. |
 | `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
 | `rules[].class_is` | list[string] | `[]` | The cell's class at run time (from a classifier applied beforehand, or an earlier run) must be one of these. ANDed with the marker conditions; full-name match. |
 | `rules[].class_is_not` | list[string] | `[]` | The cell's class at run time must not be any of these. |
@@ -261,8 +261,30 @@ Runs after clustering. Skipped entirely if omitted or `enabled: false`.
 > **Phenotyping runs once per project, not per image.** The gates are z-scores,
 > which are only comparable across images when the cells are normalized
 > together, so all resolved images are phenotyped in a single pass and each is
-> saved with its labels. `clustering.normalization` and
-> `clustering.measurements` supply the panel; `zscore` is used if absent.
+> saved with its labels. `clustering.normalization` sets the normalization
+> (`zscore` if absent). Phenotyping reads exactly the measurements its rules
+> name, so `missing_values` acts on those alone; rules with class conditions
+> only read the clustering measurements.
+
+### Measurement and marker names
+
+Every name in `clustering.measurements` and in a rule's `require_markers`,
+`exclude_markers` and `any_markers` is checked against the measurements of the
+images in scope before anything runs, in the dry run too:
+
+1. A name equal to a measurement is that measurement. Write it in quotes, since
+   QuPath names contain `: ` (`"Cell: CD3 mean"`).
+2. Otherwise a name equal to the short name the Phenotyping dialog shows for
+   exactly one measurement (`Nucleus CD3 mean` for `Nucleus: CD3 mean`) is that
+   measurement, and the run prints what it resolved to.
+3. Anything else is refused (E010), with the measurements it could mean. A bare
+   marker such as `CD3` names a dozen measurements (each compartment and
+   statistic), so it is refused with that list; pick the one to gate on.
+
+A rule marker missing from some images in scope is refused too (E010): the
+rule could not be tested on those images. A clustering measurement missing
+from some images warns (W010); clustering leaves it out of any run that
+includes those images.
 
 ### `phenotyping.llm_explainer` (optional, object)
 
@@ -420,14 +442,14 @@ clustering:
 phenotyping:
   rules:
     - name: T_cell
-      require_markers: [CD3]
+      require_markers: ['Cell: CD3 mean']
       require_min_zscore: 1.0
     - name: B_cell
-      require_markers: [CD19, CD20]
+      require_markers: ['Cell: CD19 mean', 'Cell: CD20 mean']
       require_min_zscore: 1.0
     - name: Macrophage
-      require_markers: [CD68]
-      exclude_markers: [CD3, CD19]
+      require_markers: ['Cell: CD68 mean']
+      exclude_markers: ['Cell: CD3 mean', 'Cell: CD19 mean']
       require_min_zscore: 1.0
 spatial_stats:
   enabled: true
@@ -502,7 +524,7 @@ clustering:
 phenotyping:
   rules:
     - name: T_cell
-      require_markers: [CD3]
+      require_markers: ['Cell: CD3 mean']
   llm_explainer:
     enabled: true
     provider: anthropic
@@ -533,7 +555,7 @@ figure_export:
 - E007 Schema major version unsupported
 - E008 Image listed in `scope.images` not found in any project
 - E009 Unknown statistic slug
-- E010 Marker not found (reserved; not emitted yet)
+- E010 A measurement or rule marker that does not resolve against the images in scope (missing, ambiguous, or a rule marker some images lack); also `measurements` left out with no "mean" measurement to default to
 - E011 JavaFX-only plot kind requested (not exportable headlessly)
 - E012 Filename pattern missing required token
 - E013 Project resolution failed (reserved; not emitted yet)
@@ -561,6 +583,7 @@ Warnings (non-fatal):
 - W007 `audit.log_dir` has no effect
 - W008 `audit.log_level` has no effect
 - W009 `audit.capture_prompts` has no effect
+- W010 A clustering measurement missing from some images in scope
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
 
@@ -582,5 +605,5 @@ phenotyping:
       class_lacks: [Ki67]
     - name: Tumor
       class_is: [Tumor]
-      require_markers: [PanCK]
+      require_markers: ['Cell: PanCK mean']
 ```
