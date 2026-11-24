@@ -29,25 +29,35 @@ import java.util.Set;
  */
 public final class InputAudit {
 
+    /** What a workflow does about objects without an outline (a null or empty ROI). */
+    public enum Outlines {
+        /** Refuse the run: every object must have a position (cell references, distances). */
+        REFUSE,
+        /** The workflow leaves them out; the audit says how many. */
+        EXCLUDE,
+        /** Positions are not used; nothing to say. */
+        IGNORE
+    }
+
     /** The workflows that audit their input, and how strict each is. */
     public enum Workflow {
-        CLUSTERING("Clustering", true, true),
-        PHENOTYPING("Phenotyping", false, true),
-        CELLULAR_NEIGHBORHOODS("Cellular neighborhoods", true, true),
-        SPATIAL_STATISTICS("Spatial statistics", true, true),
-        ANNDATA_EXPORT("AnnData export", true, true),
-        ANNDATA_IMPORT("AnnData import", true, false),
-        VEST_EXPORT("VEST export", false, true),
-        CROP_TABLE_EXPORT("Crop and table export", false, true);
+        CLUSTERING("Clustering", true, Outlines.REFUSE),
+        PHENOTYPING("Phenotyping", false, Outlines.IGNORE),
+        CELLULAR_NEIGHBORHOODS("Cellular neighborhoods", true, Outlines.REFUSE),
+        SPATIAL_STATISTICS("Spatial statistics", true, Outlines.REFUSE),
+        ANNDATA_EXPORT("AnnData export", true, Outlines.REFUSE),
+        ANNDATA_IMPORT("AnnData import", true, Outlines.IGNORE),
+        VEST_EXPORT("VEST export", false, Outlines.EXCLUDE),
+        CROP_TABLE_EXPORT("Crop and table export", false, Outlines.EXCLUDE);
 
         private final String label;
         private final boolean refusesRepeatedIds;
-        private final boolean needsOutlines;
+        private final Outlines outlines;
 
-        Workflow(String label, boolean refusesRepeatedIds, boolean needsOutlines) {
+        Workflow(String label, boolean refusesRepeatedIds, Outlines outlines) {
             this.label = label;
             this.refusesRepeatedIds = refusesRepeatedIds;
-            this.needsOutlines = needsOutlines;
+            this.outlines = outlines;
         }
 
         /** The name used in messages. */
@@ -60,8 +70,13 @@ public final class InputAudit {
          */
         public boolean refusesRepeatedIds() { return refusesRepeatedIds; }
 
-        /** Whether every object needs a position (all but the AnnData import, which matches by id). */
-        public boolean needsOutlines() { return needsOutlines; }
+        /**
+         * What objects without an outline do: refuse a run that records or measures
+         * positions (a clustering result's cell references, distances, the AnnData
+         * file's spatial coordinates); the two crop exports leave them out with a
+         * notice; phenotyping and the import never use a position.
+         */
+        public Outlines outlines() { return outlines; }
     }
 
     /** A run refused by the audit; the message is for the user. */
@@ -80,7 +95,6 @@ public final class InputAudit {
     private List<String> measurements = List.of();
     private boolean reportMissing;
     private boolean spatial;
-    private String pixelSizeNeed;
     private Collection<String> reservedColumns = List.of();
     private String reservedOutput;
     private final List<ImageTally> images = new ArrayList<>();
@@ -114,16 +128,6 @@ public final class InputAudit {
     /** Whether the run measures distances between cells (refuses across planes). */
     public InputAudit spatial(boolean spatial) {
         this.spatial = spatial;
-        return this;
-    }
-
-    /**
-     * Refuse the run when an image has no pixel size.
-     *
-     * @param need what needs it, as the start of a sentence (see {@link PixelSizes#refusalMessage})
-     */
-    public InputAudit requirePixelSize(String need) {
-        this.pixelSizeNeed = need;
         return this;
     }
 
@@ -189,8 +193,7 @@ public final class InputAudit {
         int other = 0;
         int objects = 0;
         for (ImageTally t : images) {
-            String label = dupNames.containsKey(t.name()) && t.id() != null
-                    ? t.name() + " [entry " + t.id() + "]" : t.name();
+            String label = InputChecks.imageLabel(t.name(), t.id(), dupNames);
             InputChecks.Tally tally = t.tally();
             objects += tally.objects();
             cells += tally.cells();
@@ -204,8 +207,11 @@ public final class InputAudit {
             sizes.add(new PixelSizes.NamedPixelSize(label, t.pixelSizeUm()));
         }
 
-        if (workflow.needsOutlines()) {
-            add(refusals, InputChecks.noOutlineRefusal(noOutline));
+        String outlines = InputChecks.noOutlineRefusal(noOutline);
+        if (outlines != null && workflow.outlines() == Outlines.REFUSE) {
+            refusals.add(outlines + " " + InputChecks.NO_OUTLINE_FIX);
+        } else if (outlines != null && workflow.outlines() == Outlines.EXCLUDE) {
+            notices.add(outlines + " They are left out.");
         }
         String rep = InputChecks.repeatedIdMessage(repeated);
         if (rep != null) {
@@ -217,9 +223,10 @@ public final class InputAudit {
         }
         add(spatial ? refusals : notices,
                 InputChecks.planeMessage(InputChecks.multiPlaneImages(planes), spatial));
-        if (pixelSizeNeed != null) {
-            add(refusals, PixelSizes.refusalMessage(pixelSizeNeed, PixelSizes.uncalibrated(sizes)));
-        } else if (spatial) {
+        // A workflow whose distances must be in microns refuses an uncalibrated image
+        // itself, before loading (PixelSizes.refusalMessage); here a spatial run that
+        // goes ahead in pixels on some images says so.
+        if (spatial) {
             List<String> px = PixelSizes.uncalibrated(sizes);
             if (!px.isEmpty() && px.size() < sizes.size()) {
                 notices.add("No pixel size on " + InputChecks.listed(px) + ": distances there "

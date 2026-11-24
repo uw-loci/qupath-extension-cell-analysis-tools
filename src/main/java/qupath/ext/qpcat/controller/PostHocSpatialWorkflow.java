@@ -21,6 +21,7 @@ import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellMatcher;
 import qupath.ext.qpcat.service.DetectionSelector;
+import qupath.ext.qpcat.service.InputAudit;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.SavedResultApplier;
@@ -85,6 +86,8 @@ public class PostHocSpatialWorkflow {
     // imageId -> (quantized centroid key -> cluster label), built from a saved
     // result when it is used as the label source (see Options.savedLabelSource).
     private Map<String, CellMatcher.KeyIndex<Integer>> savedLabelMap;
+    /** The input audit's notices for the last run. */
+    private List<String> lastInputNotes = List.of();
     /** True when savedLabelMap is keyed by object id rather than by centroid. */
     private boolean savedLabelsById;
     // Absolute path of the persisted results folder from the last run, or null.
@@ -216,6 +219,7 @@ public class PostHocSpatialWorkflow {
                 throw new IOException("No analysis areas matched the chosen area settings "
                         + "(no annotations of that class, or no cells inside them).");
             }
+            lastInputNotes = auditWindows(targets, windows).notices();
 
             List<WindowResult> results = new ArrayList<>();
             int idx = 0;
@@ -224,7 +228,9 @@ public class PostHocSpatialWorkflow {
                 idx++;
                 report(progress, String.format("Area %d/%d: %s / %s (%d cells)...",
                         idx, windows.size(), w.imageName, w.regionLabel, w.detections.size()));
-                results.add(runWindow(w, opts, progress));
+                WindowResult wr = runWindow(w, opts, progress);
+                if (wr.result != null) wr.result.setInputNotes(lastInputNotes);
+                results.add(wr);
             }
 
             // Persist the run linked to its source + per-window ROI identity (Alex's
@@ -253,6 +259,33 @@ public class PostHocSpatialWorkflow {
                 }
             }
         }
+    }
+
+    /**
+     * The input audit over every window's cells, per image: positions become
+     * distances, so cells without an outline, repeated ids or several planes refuse.
+     */
+    private static InputAudit.InputReport auditWindows(List<Target> targets, List<Window> windows)
+            throws IOException {
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.SPATIAL_STATISTICS).spatial(true);
+        for (Target t : targets) {
+            Set<PathObject> cells = new LinkedHashSet<>();
+            for (Window w : windows) {
+                if (w.imageId != null ? w.imageId.equals(t.entryId)
+                        : w.imageName.equals(t.imageName)) {
+                    cells.addAll(w.detections);
+                }
+            }
+            if (!cells.isEmpty()) {
+                audit.addImage(t.entryId, t.imageName, cells, t.imageData.getServer());
+            }
+        }
+        return audit.report().requireAccepted();
+    }
+
+    /** What the input audit noted in the last run; empty when nothing. */
+    public List<String> getLastInputNotes() {
+        return lastInputNotes;
     }
 
     /** Folder the last run's CSV + JSON were written to, or null. */
@@ -288,6 +321,7 @@ public class PostHocSpatialWorkflow {
             meta.put("graphRadius", opts.graphRadius);
             meta.put("graphDelaunayMaxEdge", opts.graphDelaunayMaxEdge);
             meta.put("permutations", opts.permutations);
+            meta.put("inputNotes", lastInputNotes);
             List<Map<String, Object>> windows = new ArrayList<>();
             for (WindowResult wr : results) {
                 Map<String, Object> w = new java.util.LinkedHashMap<>();

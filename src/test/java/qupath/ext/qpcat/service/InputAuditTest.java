@@ -163,13 +163,16 @@ class InputAuditTest {
     }
 
     @Test
-    void objectsWithoutAnOutlineRefuseEveryWorkflowButTheImport() {
+    void objectsWithoutAnOutlineRefuseRunsThatUsePositionsAndAreNotedByExports() {
         List<PathObject> objs = cells(2);
         objs.add(PathObjects.createDetectionObject(ROIs.createEmptyROI()));
         for (InputAudit.Workflow w : InputAudit.Workflow.values()) {
             InputAudit audit = InputAudit.of(w);
             audit.addImage("1", "a.tif", objs, null);
-            assertThat(audit.report().isRefused()).as(w.name()).isEqualTo(w.needsOutlines());
+            InputAudit.InputReport r = audit.report();
+            assertThat(r.isRefused()).as(w.name()).isEqualTo(w.outlines() == InputAudit.Outlines.REFUSE);
+            assertThat(r.notices().stream().anyMatch(n -> n.contains("left out"))).as(w.name())
+                    .isEqualTo(w.outlines() == InputAudit.Outlines.EXCLUDE);
         }
         InputAudit cn = InputAudit.of(InputAudit.Workflow.CELLULAR_NEIGHBORHOODS);
         cn.addImage("1", "a.tif", objs, null);
@@ -218,12 +221,9 @@ class InputAuditTest {
     }
 
     @Test
-    void aRequiredPixelSizeRefusesUncalibratedImages() {
-        InputAudit audit = InputAudit.of(InputAudit.Workflow.CELLULAR_NEIGHBORHOODS)
-                .requirePixelSize("A radius window is in microns, so it");
+    void aSpatialRunSaysWhichImagesStayInPixels() {
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.SPATIAL_STATISTICS).spatial(true);
         audit.addImage("1", "a.tif", cells(3), null);
-        assertThat(audit.report().refusalMessage())
-                .contains("A radius window is in microns, so it needs a pixel size")
-                .contains("a.tif");
+        assertThat(audit.report().notices()).isEmpty(); // every image in pixels: the unit says so
     }
 }

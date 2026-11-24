@@ -30,6 +30,7 @@ import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ExistingLabelReader;
+import qupath.ext.qpcat.service.InputAudit;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.QpcatPaths;
@@ -165,6 +166,17 @@ public class ClusteringWorkflow {
     public void setSpatialEstimateDecider(
             java.util.function.Function<Double, SpatialDecision> decider) {
         this.spatialEstimateDecider = decider;
+    }
+
+    /**
+     * Optional decider shown the input audit's notices (on the calling/background
+     * thread) before any work; false cancels the run. Null = note them in the
+     * result without asking (the headless batch prints them).
+     */
+    private java.util.function.Predicate<List<String>> inputNoticeDecider;
+
+    public void setInputNoticeDecider(java.util.function.Predicate<List<String>> decider) {
+        this.inputNoticeDecider = decider;
     }
 
     private volatile Task currentTask;
@@ -1778,6 +1790,10 @@ public class ClusteringWorkflow {
             String gatesJson,
             Consumer<String> progressCallback) throws IOException {
 
+        // The one point both phenotyping scopes (and the batch) reach.
+        InputAudit.InputReport input = auditInput(InputAudit.Workflow.PHENOTYPING, extraction,
+                false);
+
         int nCells = extraction.getNCells();
         int nMeasurements = extraction.getNMeasurements();
         double[][] data = extraction.getData();
@@ -1839,6 +1855,7 @@ public class ClusteringWorkflow {
             }
             for (String w : warnings) logger.warn("Phenotyping: {}", w);
             result.put("warnings", warnings);
+            result.put("input_notes", input.notices());
 
             return result;
         } finally {
@@ -2097,6 +2114,11 @@ public class ClusteringWorkflow {
             int[] suppliedLabels,
             Consumer<String> progressCallback) throws IOException {
 
+        // The data as it will be analyzed, checked once for every entry point.
+        InputAudit.InputReport input = auditInput(InputAudit.Workflow.CLUSTERING, extraction,
+                usesSpatialCoords(config));
+        boolean noticesShown = inputNoticeDecider != null && !input.notices().isEmpty();
+
         int nCells = extraction.getNCells();
         int nMeasurements = extraction.getNMeasurements();
 
@@ -2214,6 +2236,8 @@ public class ClusteringWorkflow {
                 result.setMissingNote(extraction.missingSummary());
                 result.setExcludedObjects(extraction.getExcludedObjects());
             }
+            result.setInputNotes(input.notices());
+            result.setInputNotesShown(noticesShown);
 
             // Noise is a row of clusterStats but not a cluster -- carry the index
             // so every label downstream says so, instead of naming a population
@@ -3549,7 +3573,20 @@ public class ClusteringWorkflow {
             selectedMeasurements = MeasurementExtractor.getAllMeasurements(detections);
         }
 
-        MeasurementExtractor extractor = new MeasurementExtractor();
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.ANNDATA_EXPORT)
+                .measurements(selectedMeasurements, true)
+                .reservedColumns(ANNDATA_OBS_COLUMNS, "the AnnData file");
+        var project = currentProject();
+        var entry = project == null ? null : project.getEntry(imageData);
+        audit.addImage(entry == null ? null : entry.getID(),
+                entry == null ? imageData.getServer().getMetadata().getName()
+                        : entry.getImageName(), detections, imageData.getServer());
+        InputAudit.InputReport input = audit.report().requireAccepted();
+
+        // Every cell is exported: a missing value travels as NaN (export_anndata.py
+        // never imputes). Excluding objects here dropped every cell that lacked any
+        // one of the measurements, without a word.
+        MeasurementExtractor extractor = new MeasurementExtractor(MissingPolicy.IMPUTE);
         MeasurementExtractor.ExtractionResult extraction =
                 extractor.extract(detections, selectedMeasurements);
 
@@ -3580,12 +3617,16 @@ public class ClusteringWorkflow {
                 elapsed);
 
         report(progressCallback, "AnnData exported to " + outputPath);
-        String note = AnnDataEmbedding.note(embedding, extraction.getNCells());
-        if (note != null) {
-            report(progressCallback, note);
-        }
-        return note;
+        List<String> notes = new ArrayList<>(input.notices());
+        String embeddingNote = AnnDataEmbedding.note(embedding, extraction.getNCells());
+        if (embeddingNote != null) notes.add(embeddingNote);
+        for (String n : notes) report(progressCallback, n);
+        return notes.isEmpty() ? null : String.join("\n", notes);
     }
+
+    /** The obs columns export_anndata.py writes; a measurement of the same name is noted. */
+    private static final List<String> ANNDATA_OBS_COLUMNS =
+            List.of("cluster", "phenotype", "qupath_image_id", "qupath_image");
 
     /**
      * Executes the AnnData export task via Appose. Must be called with TCCL set.
@@ -5308,8 +5349,57 @@ public class ClusteringWorkflow {
         return SpatialFrame.of(sizes, starts, names, ids);
     }
 
+    /**
+     * Run the input audit on what a run is about to analyze: refuse with its
+     * message, or show its notices to the decider and cancel when told to.
+     * Missing values are left to the run's missing-values policy, which reports them.
+     *
+     * @param workflow   clustering or phenotyping
+     * @param extraction the cells and measurements, by image segment
+     * @param spatial    whether positions become distances between cells
+     * @return the report, whose notices the result keeps
+     * @throws IOException when the audit refuses the run or the user cancels
+     */
+    private InputAudit.InputReport auditInput(InputAudit.Workflow workflow,
+                                              MeasurementExtractor.ExtractionResult extraction,
+                                              boolean spatial) throws IOException {
+        InputAudit audit = InputAudit.of(workflow)
+                .measurements(List.of(extraction.getMeasurementNames()), false)
+                .spatial(spatial);
+        ImageData<BufferedImage> open = qupath == null ? null : qupath.getImageData();
+        List<PathObject> dets = extraction.getDetections();
+        for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
+            String id = null;
+            String name;
+            Object data = seg.getImageData();
+            if (seg.getImageEntry() instanceof ProjectImageEntry<?> e) {
+                id = e.getID();
+                name = e.getImageName();
+            } else {
+                data = data != null ? data : open;
+                var project = currentProject();
+                var entry = project != null && open != null ? project.getEntry(open) : null;
+                id = entry != null ? entry.getID() : null;
+                name = entry != null ? entry.getImageName()
+                        : open != null ? open.getServer().getMetadata().getName() : "image";
+            }
+            audit.addImage(id, name, dets.subList(seg.getStartIndex(), seg.getEndIndex()),
+                    data instanceof ImageData<?> d ? d.getServer() : null);
+        }
+        InputAudit.InputReport report = audit.report();
+        logger.info("Input: {}", report.scope());
+        report.requireAccepted();
+        for (String note : report.notices()) logger.warn("Input: {}", note);
+        if (!report.notices().isEmpty() && inputNoticeDecider != null
+                && !inputNoticeDecider.test(report.notices())) {
+            cancelled = true;
+            throw new IOException(workflow.label() + " canceled before results were applied.");
+        }
+        return report;
+    }
+
     /** Whether the run hands cell positions to Python, which then builds the spatial graph. */
-    static boolean usesSpatialCoords(ClusteringConfig config) {
+    public static boolean usesSpatialCoords(ClusteringConfig config) {
         return config.isEnableSpatialAnalysis()
                 || config.isEnableSpatialSmoothing()
                 || config.isAnySpatialStatEnabled()

@@ -341,8 +341,13 @@ public class SpatialStatsDialog {
                     java.util.List<PostHocSpatialWorkflow.WindowResult> results =
                             workflow.runWindows(opts, msg -> Platform.runLater(() -> status.setText(msg)));
                     String savedPath = workflow.getLastSavedPath();
+                    java.util.List<String> inputNotes = workflow.getLastInputNotes();
                     Platform.runLater(() -> {
                         resetRun(runBtn, progressBar, content);
+                        if (!inputNotes.isEmpty()) {
+                            Dialogs.showWarningNotification("QP-CAT", "About the input data: "
+                                    + String.join(" ", inputNotes));
+                        }
                         presentResults(results, savedPath, status);
                     });
                 } catch (Exception ex) {

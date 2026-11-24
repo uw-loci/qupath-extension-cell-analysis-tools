@@ -144,7 +144,7 @@ public final class InputChecks {
     }
 
     /**
-     * The refusal for objects without an outline.
+     * The sentence for objects without an outline; the caller adds the consequence.
      *
      * @param perImage image name to the count of objects with a null or empty ROI
      * @return the message, or null when there are none
@@ -154,7 +154,7 @@ public final class InputChecks {
         if (hits.isEmpty()) return null;
         int total = hits.values().stream().mapToInt(Integer::intValue).sum();
         return count(total) + " object(s) have no outline (an empty or missing ROI), so QP-CAT "
-                + "cannot place them: " + listCounts(hits) + ". " + NO_OUTLINE_FIX;
+                + "cannot place them: " + listCounts(hits) + ".";
     }
 
     /**

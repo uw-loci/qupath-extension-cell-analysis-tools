@@ -128,6 +128,8 @@ public class SavedClusteringResult {
     private String missingNote;
     private int excludedObjects;
     private int duplicateRows;
+    // InputAudit notices about the data the run read; absent on saves before 0.26.0.
+    private List<String> inputNotes;
     private InputSelection inputSelection;
     private String areaResolutionSummary;
     // The per-area tables, also written beside the result as CSV files.
@@ -390,6 +392,9 @@ public class SavedClusteringResult {
     public String getPcaPrecursor() { return pcaPrecursor; }
     public String getBatchCorrection() { return batchCorrection; }
     public String getMissingNote() { return missingNote; }
+
+    /** InputAudit notices about the data the run read, or null when there were none. */
+    public List<String> getInputNotes() { return inputNotes; }
     public int getExcludedObjects() { return excludedObjects; }
     public int getDuplicateRows() { return duplicateRows; }
     public InputSelection getInputSelection() { return inputSelection; }
@@ -487,6 +492,7 @@ public class SavedClusteringResult {
         saved.pcaPrecursor = result.getPcaPrecursor();
         saved.batchCorrection = result.getBatchCorrection();
         saved.missingNote = result.getMissingNote();
+        saved.inputNotes = result.getInputNotes().isEmpty() ? null : result.getInputNotes();
         saved.excludedObjects = result.getExcludedObjects();
         saved.duplicateRows = result.getDuplicateRows();
         saved.inputSelection = result.getInputSelection();
@@ -649,6 +655,7 @@ public class SavedClusteringResult {
         result.setPcaPrecursor(pcaPrecursor);
         result.setBatchCorrection(batchCorrection);
         result.setMissingNote(missingNote);
+        result.setInputNotes(inputNotes);
         result.setExcludedObjects(excludedObjects);
         result.setDuplicateRows(duplicateRows);
         result.setInputSelection(inputSelection);

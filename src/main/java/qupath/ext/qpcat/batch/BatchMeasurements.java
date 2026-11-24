@@ -2,6 +2,7 @@ package qupath.ext.qpcat.batch;
 
 import qupath.ext.qpcat.model.MeasurementNames;
 import qupath.ext.qpcat.service.DetectionSelector;
+import qupath.ext.qpcat.service.InputAudit;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.lib.objects.PathObject;
 import qupath.lib.projects.ProjectImageEntry;
@@ -46,9 +47,11 @@ public final class BatchMeasurements {
      * {@link #getUnreadable()}.
      *
      * @param entries the images of one project in the run
+     * @param audit   the input audit to add each image's cells to, in the same pass; may be null
      * @return the names per image
      */
-    public static BatchMeasurements read(List<ProjectImageEntry<BufferedImage>> entries) {
+    public static BatchMeasurements read(List<ProjectImageEntry<BufferedImage>> entries,
+                                         InputAudit audit) {
         Map<String, Set<String>> byImage = new LinkedHashMap<>();
         List<String> unreadable = new ArrayList<>();
         for (ProjectImageEntry<BufferedImage> entry : entries) {
@@ -62,9 +65,13 @@ public final class BatchMeasurements {
             }
             if (detections.isEmpty()) continue;
             Set<String> names = new LinkedHashSet<>();
-            for (PathObject p : DetectionSelector.filterToCellsWhenPresent(
-                    detections, entry.getImageName())) {
+            List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
+                    detections, entry.getImageName());
+            for (PathObject p : cells) {
                 names.addAll(p.getMeasurements().keySet());
+            }
+            if (audit != null) {
+                audit.addImage(entry.getID(), entry.getImageName(), cells, null);
             }
             byImage.put(entry.getImageName(), names);
         }

@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Added
 
+- **Every run checks the data it reads before any work (input audit).** Clustering (dialog,
+  presets, sub-clustering, existing labels, batch), phenotyping (dialog and batch), cellular
+  neighborhoods, spatial statistics, AnnData export and import, VEST export and crop/table
+  export all make one check of the loaded objects: objects without an outline, detections that
+  repeat an object id, cells on several z-slices or time points, tiles among the cells,
+  same-named images, look-alike or reserved measurement names and class names spelled like
+  "no class". What would change a result stops the run with one message; the rest is shown
+  (a **QP-CAT - Clustering - About the input data** box before clustering, the completion
+  message or results summary elsewhere), printed as `W014` by the batch, and saved with a
+  clustering result (`inputNotes`, results window, run record). The batch dry run makes the same
+  check (`E027` refuses, `W014` notes). The table is in Troubleshooting, "What QP-CAT checks
+  before a run".
+
 - **Saved clustering configurations and phenotype rule sets can be deleted.** **Load Config...**
   (Clustering) and **Load Rules...** (Phenotyping) now open a list of the saved names instead of
   a drop-down, with a **Delete** button beside it. Select a name, click Delete, and confirm
@@ -176,6 +189,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   under *Cells with identical measurements* in `clustering.md`.
 
 ### Fixed
+
+- **The same objects imported twice no longer get labels by whichever copy came first (H11).**
+  QuPath's GeoJSON import keeps object ids, so a repeated import repeats them. Applying a saved
+  result, a rename or a gate labeled the first copy, never the second, and still reported every
+  cell as applied (a result listing a cell twice counted it twice); the AnnData import wrote the
+  last copy only; gates and the post-hoc label source disagreed on which copy won. Every lookup
+  by id now sees a repeated id and matches neither copy; an image with repeated ids is left
+  unchanged with a message that counts them and gives a script to remove them, and the input
+  audit refuses analyses on such images.
+- **A gated cell that carries an id is never matched to a neighbor (H38).** When a gated cell's
+  id was no longer in the image (re-segmented), **Assign class** still searched by position and
+  could classify the cell next to it; a cell with an id is now found by that id alone, as saved
+  results already were.
+- **Images with the same name are told apart (H23, H15, H14).** Two project entries can share a
+  name. Pixel sizes (`pixelSizeUmByImageId`, saved beside the old name-keyed map), the cell
+  counts per image, the channel check and the cellular-neighborhood class check were keyed by
+  name, so one image's value replaced the other's; a "Specific images" scope restored both
+  (`scopeImageIds` is now stored); crops, gates and plot-click navigation for the other image
+  were read from the open one at the wrong cell's coordinates; and **Batch Figure Export** used
+  a result for an image by name, falling back to the newest result of any image, so an image
+  without a result of its own got another run's figures. It now uses only a result whose scope
+  or cells are that image, and records a failure otherwise. The image picker shows same-named
+  entries with their id.
+- **Objects without an outline no longer crash a run or share the position (0, 0) (H26).** A
+  GeoJSON feature with no geometry gave a NullPointerException naming no object in six places,
+  and an empty outline's NaN centroid matched every other at (0, 0) in position lookups. Runs
+  that need positions now refuse with a count and a removal script; the exports leave them out
+  and say how many.
+- **z-stacks and time series (H19).** Cells on different z-slices or time points were pooled in
+  x and y: neighbors across planes in every spatial statistic, collisions in position lookups,
+  and crops and navigation at the default plane. Cell references now carry the plane (saved as
+  `cellZ`/`cellT` when any cell is off the default plane), position lookups, crops and
+  navigation use it, spatial runs across planes are refused, and other runs say the planes were
+  pooled. A full plane-by-plane analysis is not offered yet.
+- **Tiles were analyzed as cells without a word (H39).** An image whose only detections are
+  tiles is still analyzed, and the run now says how many of the objects are tiles.
+- **AnnData export left out every cell that lacked any one measurement.** The export read the
+  cells with "exclude objects" while the file is meant to carry gaps as NaN; every cell is now
+  exported and the notice counts the gaps.
 
 - **A name with `:` became a different class than the one shown, and a second rename did
   nothing.** Before this release a typed or imported name such as `CD8:T` was handed to QuPath

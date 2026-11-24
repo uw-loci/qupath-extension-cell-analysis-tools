@@ -44,11 +44,13 @@ public final class HeadlessPhenotypingWorkflow {
         private final int nPhenotypes;
         private final int nCells;
         private final List<String> warnings;
+        private final List<String> inputNotes;
 
-        Outcome(int nPhenotypes, int nCells, List<String> warnings) {
+        Outcome(int nPhenotypes, int nCells, List<String> warnings, List<String> inputNotes) {
             this.nPhenotypes = nPhenotypes;
             this.nCells = nCells;
             this.warnings = warnings;
+            this.inputNotes = inputNotes == null ? List.of() : List.copyOf(inputNotes);
         }
 
         public int getNPhenotypes() { return nPhenotypes; }
@@ -58,6 +60,9 @@ public final class HeadlessPhenotypingWorkflow {
          * phenotyping task reported (e.g. a rule marker missing from the data). Never null.
          */
         public List<String> getWarnings() { return warnings; }
+
+        /** What the input audit noted about the cells read; never null. */
+        public List<String> getInputNotes() { return inputNotes; }
     }
 
     private final ClusteringWorkflow inner;
@@ -120,7 +125,10 @@ public final class HeadlessPhenotypingWorkflow {
         }
         int nPhenotypes = asInt(result.get("n_phenotypes"));
         int[] labels = (int[]) result.get("labels");
-        return new Outcome(nPhenotypes, labels == null ? 0 : labels.length, warnings);
+        @SuppressWarnings("unchecked")
+        List<String> inputNotes = result.get("input_notes") instanceof List<?> l
+                ? (List<String>) l : List.of();
+        return new Outcome(nPhenotypes, labels == null ? 0 : labels.length, warnings, inputNotes);
     }
 
     private static int asInt(Object o) {

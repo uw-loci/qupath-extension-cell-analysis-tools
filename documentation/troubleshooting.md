@@ -120,6 +120,33 @@ OpenMP thread**, on by default there). On an older version, set the user environ
 report, with the last "Marker i/n" line from the log: together they say which libraries the
 worker loaded, how many threads each has, and which step never returned.
 
+## What QP-CAT checks before a run
+
+Data imported from other tools (GeoJSON, AnnData, scripts) can be shaped in ways QuPath
+accepts but an analysis cannot use as it stands. Every QP-CAT run checks the objects it is
+about to analyze, once, before any work. A problem that would change the result without
+anyone noticing either **stops the run** with one message saying what to fix, or is
+**reported**: in a box before a clustering run (Continue or Cancel run), in the completion
+message or results summary of the other tools, as `W014` lines in a batch run, and saved
+with a clustering result (results window, run record).
+
+| Check | Stops the run | Reported only |
+|---|---|---|
+| Objects without an outline (an empty or missing ROI, as a GeoJSON feature with no geometry gives) | clustering, cellular neighborhoods, spatial statistics, AnnData export | crop/table and VEST export (left out, counted); phenotyping and AnnData import do not use positions |
+| Detections in one image that share an object id (the same objects imported twice) | clustering, cellular neighborhoods, spatial statistics, AnnData export and import; applying a saved result, a rename or a gate leaves such an image unchanged | phenotyping, crop/table and VEST export (one row per copy) |
+| Cells on more than one z-slice or time point of one image | runs that measure distances: cellular neighborhoods, spatial statistics, clustering with spatial smoothing, BANKSY or spatial analysis | everything else: cells from all planes are pooled |
+| Tiles (from **Create tiles** or a pixel classifier) among the analyzed objects | | every tool |
+| Several images in the run with the same name | | every tool; QP-CAT keeps them apart by their project entry, and adds the entry id where it shows the name |
+| Some images with a pixel size and some without, in a run that measures distances | (clustering micron outputs, and cellular neighborhoods with a radius, refuse as before) | spatial runs: which images stay in pixels |
+| Measurement names with a space at either end, a control character, or that differ only in case or spaces | | every tool that reads measurements |
+| A measurement named like a column the AnnData file adds (`cluster`, `phenotype`, `qupath_image_id`, `qupath_image`) | | AnnData export |
+| A real class spelled like the word QP-CAT shows for "no class" (`Unclassified`, `Unknown`) | | every tool |
+| Missing or infinite measurement values | (clustering and phenotyping: the **Missing values** choice decides) | AnnData export: every cell is exported, the gaps as NaN |
+
+The message for repeated ids includes a one-line script that removes the repeats (keeping
+the first copy of each), or gives the copies new ids if they are different cells. The batch
+dry run (`--dry-run`) makes the same check, so `E027` and `W014` appear before any work.
+
 ## Messages you may see
 
 | Message | Where | Cause | Fix |

@@ -575,6 +575,7 @@ figure_export:
 - E024 Two images in the resolved scope of one project share a name
 - E025 `clustering.result_name` set for per-image clustering of several images
 - E026 A phenotyping rule name that cannot be a class name (contains `:`, a line break or tab, is `Unknown` / `Unclassified`, or differs from another rule's name only in case)
+- E027 The data in a project's images would make the run refuse: objects without an outline, detections that repeat an object id within an image (usually the same GeoJSON imported twice), or cells on more than one z-slice or time point when the run measures distances. Reported in the dry run too, from the same check the run makes; see [What QP-CAT checks before a run](troubleshooting.md#what-qp-cat-checks-before-a-run)
 
 Warnings (non-fatal):
 
@@ -592,6 +593,7 @@ Warnings (non-fatal):
 - W011 `spatial_stats` requested but no clustering runs to compute it
 - W012 `phenotyping.llm_explainer.enabled` is never run by the batch
 - W013 `clustering.type: louvain` runs Leiden
+- W014 A note about the data the run reads (tiles analyzed as cells, cells pooled across z-slices or time points, measurement names that differ only in case or spaces, a class spelled like "Unclassified", ...). Printed in the dry run, and again by the run after each clustering and phenotyping step (`W014 clustering: ...`, `W014 phenotyping: ...`); the clustering notes are also saved with the result
 
 > **Note:** Every validation error includes the YAML field path and an `E0xx` / `W0xx` code so CI scripts can grep deterministically.
 

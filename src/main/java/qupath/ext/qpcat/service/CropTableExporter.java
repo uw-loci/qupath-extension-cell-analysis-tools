@@ -151,10 +151,13 @@ public final class CropTableExporter {
         public final List<String> classNames;
         public final Path outputDir;
         public final List<Path> tables;
+        /** What the input audit noted about the cells read; never null. */
+        public final List<String> inputNotes;
 
         Result(int cellsWritten, int cropsWritten, int cellsSkippedMissingValues,
                int cellsSkippedNotSampled, int imagesUsed, List<String> classNames,
-               Path outputDir, List<Path> tables) {
+               Path outputDir, List<Path> tables, List<String> inputNotes) {
+            this.inputNotes = List.copyOf(inputNotes);
             this.cellsWritten = cellsWritten;
             this.cropsWritten = cropsWritten;
             this.cellsSkippedMissingValues = cellsSkippedMissingValues;
@@ -458,6 +461,7 @@ public final class CropTableExporter {
 
         report(progress, "Reading cells...");
         Gathered gathered = gather(qupath, entries, opts, progress);
+        InputAudit.InputReport input = gathered.audit.report().requireAccepted();
         if (gathered.cells.isEmpty()) {
             throw new IOException("No cell carried every chosen measurement. "
                     + gathered.missingSummary());
@@ -549,7 +553,7 @@ public final class CropTableExporter {
 
         Path readme = bundleDir.resolve("README.txt");
         writeReadme(readme, opts, header, classNames, sizes, rows.size(), crops,
-                gathered, notSampled, imagesDir, tables);
+                gathered, notSampled, imagesDir, tables, input.notices());
 
         logger.info("Crop/table export: {} cells ({} crops) across {} image(s), "
                         + "{} classification(s) -> {}",
@@ -560,7 +564,7 @@ public final class CropTableExporter {
                 + " image(s) to " + bundleDir);
 
         return new Result(rows.size(), crops, gathered.skippedMissing, notSampled,
-                gathered.imagesUsed, classNames, bundleDir, tables);
+                gathered.imagesUsed, classNames, bundleDir, tables, input.notices());
     }
 
     /** Prefix of the subfolder each export writes into. */
@@ -613,6 +617,8 @@ public final class CropTableExporter {
         /** Cells carrying a finite value, per measurement, summed over the scope. */
         int[] present;
         List<String> measurements = List.of();
+        /** Every image's cells as read; coverage is reported by the README, not the audit. */
+        final InputAudit audit = InputAudit.of(InputAudit.Workflow.CROP_TABLE_EXPORT);
 
         String missingSummary() {
             return coverageSummary(measurements, present, examined);
@@ -666,8 +672,10 @@ public final class CropTableExporter {
 
     private static void collect(ImageData<BufferedImage> data, String imageId, String imageName,
                                 Options opts, Gathered g) {
-        for (PathObject det : DetectionSelector.filterToCellsWhenPresent(
-                data.getHierarchy().getDetectionObjects(), imageName)) {
+        List<PathObject> cells = DetectionSelector.filterToCellsWhenPresent(
+                data.getHierarchy().getDetectionObjects(), imageName);
+        g.audit.addImage(imageId, imageName, cells, data.getServer());
+        for (PathObject det : cells) {
             g.examined++;
             var ml = det.getMeasurements();
             for (int i = 0; i < opts.measurements.size(); i++) {
@@ -675,7 +683,7 @@ public final class CropTableExporter {
                 if (v != null && Double.isFinite(v.doubleValue())) g.present[i]++;
             }
             ROI roi = det.getROI();
-            if (roi == null) {
+            if (roi == null || roi.isEmpty()) {
                 g.skippedNoRoi++;
                 continue;
             }
@@ -700,7 +708,8 @@ public final class CropTableExporter {
     private static void writeReadme(Path file, Options opts, Header header,
                                     List<String> classNames, int[] sizes, int rowsWritten,
                                     int crops, Gathered g, int notSampled, Path imagesDir,
-                                    List<Path> tables) throws IOException {
+                                    List<Path> tables, List<String> inputNotes)
+            throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("QP-CAT: cell crops + feature table\n");
         sb.append("==================================\n\n");
@@ -754,6 +763,11 @@ public final class CropTableExporter {
         }
         sb.append("\n");
 
+        if (!inputNotes.isEmpty()) {
+            sb.append("About the input data\n--------------------\n");
+            for (String n : inputNotes) sb.append("  - ").append(n).append("\n");
+            sb.append("\n");
+        }
         sb.append("What was left out, and why\n--------------------------\n");
         sb.append("  cells scanned in scope:            ").append(g.examined).append("\n");
         sb.append("  rows written:                      ").append(rowsWritten).append("\n");

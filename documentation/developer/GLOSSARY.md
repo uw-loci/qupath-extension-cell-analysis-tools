@@ -35,7 +35,10 @@ never for the spelling alone. Nothing in the last section is ever renamed.
 | measurement | a QuPath measurement column (UI side) |
 | marker | the same column inside the analysis matrix and in results |
 | cell matching, saved result (`CellMatcher`) | finds a saved result's cells in the image by object ID first; the centroid is used only for results saved before 0.21.0, with an exact key rounded to 0.5 px |
-| cell matching, gates (`GateApplier`) | same order (object ID, then centroid for pre-0.21.0 results), but a tolerant whole-pixel key probed at +-1 px (then the nearest cell within 2 px); deliberately different from `CellMatcher`'s, not to be merged |
+| cell matching, gates (`GateApplier`) | same order (object ID alone for a ref that has one; centroid only for refs without, from pre-0.21.0 results), but a tolerant whole-pixel key on the ref's plane probed at +-1 px (then the nearest cell within 2 px); deliberately different from `CellMatcher`'s, not to be merged |
+| repeated key (`CellMatcher.KeyIndex`) | a key two detections share (the same objects imported twice); it resolves to no cell, and an image with one is not written to |
+| image identity | the project entry id (`ProjectImageEntry.getID()`); a name is for display, and is followed by `[entry <id>]` where two images in one output share it (`InputChecks.imageLabel`) |
+| input audit (`InputAudit`, `InputReport`) | the one check of the loaded objects every workflow makes before work; *refusals* stop the run, *notices* are shown once and saved (`inputNotes`) |
 
 ## Never change
 
@@ -44,8 +47,9 @@ or script. Add to them, do not rename or remove.
 
 - Appose input and output keys (`measurements`, `marker_names`, `seed`, `random_seed`, every
   `inputs.put(...)` key and every `task.outputs[...]` key).
-- Saved JSON fields: `SavedClusteringResult` (`clusterNames`, `pixelSizeUmByImage`, `scopeKey`,
-  `scopeImageNames`, `nhood*`, `markerStats`, ...), `GateSet`, `PhenotypeRuleSet`,
+- Saved JSON fields: `SavedClusteringResult` (`clusterNames`, `pixelSizeUmByImage`,
+  `pixelSizeUmByImageId`, `cellZ`, `cellT`, `inputNotes`, `scopeKey`, `nhood*`, `markerStats`,
+  ...), `ClusteringConfig` (`scopeImageNames`, `scopeImageIds`), `GateSet`, `PhenotypeRuleSet`,
   `ClusteringRunRecord`, `SpatialStatsBundle`.
 - Preference keys (`qpcat.*` in `QpcatPreferences`), including the Delaunay edge key.
 - YAML batch schema keys (`BatchYamlSchema`, documented in `documentation/yaml-reference.md`).

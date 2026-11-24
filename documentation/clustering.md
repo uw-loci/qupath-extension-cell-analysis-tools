@@ -105,6 +105,14 @@ run, and the dialog says how many keep their classification. For a project scope
 states the consequence without a count, since counting would mean opening every image to
 write a dialog; with a restriction it names the restriction.
 
+**The data itself.** Once the cells are loaded, and before any work, QP-CAT checks them:
+objects without an outline, detections that repeat an object id, cells on several z-slices
+or time points, tiles among the cells, same-named images and look-alike measurement names.
+Some of these stop the run with a message saying what to fix; the rest are listed in a
+**QP-CAT - Clustering - About the input data** box (Continue or Cancel run) and saved with
+the result. The full list is in
+[What QP-CAT checks before a run](troubleshooting.md#what-qp-cat-checks-before-a-run).
+
 **Back up first.** The first time you open any tool that can change classifications, a
 one-time modal says so. Duplicate the project folder before continuing. Re-arm it from
 **Edit > Preferences > QP-CAT > "Backup Warning Acknowledged"**. Read-only tools

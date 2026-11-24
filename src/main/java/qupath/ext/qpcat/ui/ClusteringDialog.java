@@ -4529,6 +4529,7 @@ public class ClusteringDialog {
                 // Spatial-stats time estimate + skip/cancel prompt (single-image
                 // path). Runs the probe, then asks the user what to do.
                 workflow.setSpatialEstimateDecider(est -> askSpatialEstimate(est));
+                workflow.setInputNoticeDecider(this::askInputNotices);
                 ClusteringResult result;
                 // The clustered image scope, threaded to the results dialog so the
                 // "3D View" tab reads exactly those images (no picker). null == the
@@ -4834,6 +4835,62 @@ public class ClusteringDialog {
 
     /** How long the prompt waits before proceeding on its own. */
     private static final int SPATIAL_PROMPT_TIMEOUT_SECONDS = 60;
+
+    /**
+     * Show what the input audit noticed about the data before any work, and ask
+     * whether to go on. Runs on the worker thread and waits for the FX answer;
+     * proceeds after {@link #SPATIAL_PROMPT_TIMEOUT_SECONDS} without one, because
+     * the notices are kept in the result either way.
+     *
+     * @param notices the audit's notices, one sentence each
+     * @return true to continue, false to cancel the run
+     */
+    private boolean askInputNotices(List<String> notices) {
+        java.util.concurrent.CompletableFuture<Boolean> fut =
+                new java.util.concurrent.CompletableFuture<>();
+        Platform.runLater(() -> {
+            try {
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.initOwner(owner);
+                alert.setTitle("QP-CAT - Clustering - About the input data");
+                alert.setHeaderText("Before clustering: notes about the data");
+                String body = "- " + String.join("\n- ", notices) + "\n\nThese notes are saved "
+                        + "with the result.\n";
+                alert.setContentText(body + countdownLine(SPATIAL_PROMPT_TIMEOUT_SECONDS));
+                ButtonType go = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
+                ButtonType stop = new ButtonType("Cancel run", ButtonBar.ButtonData.CANCEL_CLOSE);
+                alert.getButtonTypes().setAll(go, stop);
+                alert.getDialogPane().setPrefWidth(620);
+                final int[] remaining = {SPATIAL_PROMPT_TIMEOUT_SECONDS};
+                Timeline ticker = new Timeline(new KeyFrame(Duration.seconds(1), ev -> {
+                    remaining[0]--;
+                    if (remaining[0] > 0) {
+                        alert.setContentText(body + countdownLine(remaining[0]));
+                        return;
+                    }
+                    logger.info("Input notes prompt timed out with no answer -- continuing.");
+                    fut.complete(true);
+                    alert.setResult(go);
+                    alert.close();
+                }));
+                ticker.setCycleCount(SPATIAL_PROMPT_TIMEOUT_SECONDS);
+                ticker.play();
+                var choice = alert.showAndWait();
+                ticker.stop();
+                if (!fut.isDone()) {
+                    fut.complete(choice.isPresent() && choice.get() == go);
+                }
+            } catch (Exception ex) {
+                logger.warn("Could not show the input notes: {}", ex.getMessage());
+                fut.complete(true);
+            }
+        });
+        try {
+            return fut.get();
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     private static String countdownLine(int seconds) {
         return "No answer needed: spatial statistics will start on their own in "
@@ -6035,6 +6092,14 @@ public class ClusteringDialog {
         // calmer banner rather than the amber one above.
         Node omittedBanner = buildOmittedBanner(result);
         if (omittedBanner != null) mainContent.getChildren().add(omittedBanner);
+        // What the input audit noted, unless it was already shown before the run.
+        if (!result.getInputNotes().isEmpty() && !result.isInputNotesShown()) {
+            Label inputNotes = new Label("About the input data: "
+                    + String.join(" ", result.getInputNotes()));
+            inputNotes.setWrapText(true);
+            WrapHeight.bind(inputNotes);
+            mainContent.getChildren().add(inputNotes);
+        }
         // What the run reported when it finished, so a reopened result says it too.
         if (!result.runNotes().isEmpty()) {
             Label runNotes = new Label(String.join(" ", result.runNotes()));

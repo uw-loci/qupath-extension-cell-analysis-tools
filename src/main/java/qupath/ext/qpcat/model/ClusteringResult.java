@@ -90,6 +90,14 @@ public class ClusteringResult {
     private String missingNote;
     private int excludedObjects;
 
+    // What the input audit noted about the data before the run (InputAudit notices):
+    // tiles analyzed as cells, cells pooled across planes, same-named images, and so
+    // on. Empty when the input was clean.
+    private java.util.List<String> inputNotes = java.util.List.of();
+    // True once the notices were shown before the run, so the live results window
+    // does not repeat them; a reopened result shows them.
+    private transient boolean inputNotesShown;
+
     // Where the Leiden graph and partition ran, as the worker reported it: "cpu",
     // "gpu (...)" or "cpu (gpu requested; <reason>)"; null for other algorithms.
     private String graphBackend;
@@ -181,6 +189,16 @@ public class ClusteringResult {
     /** The missing-values sentence for this run, or null when nothing was missing. */
     public String getMissingNote() { return missingNote; }
     public void setMissingNote(String note) { this.missingNote = note; }
+
+    /** What the input audit noted before the run; empty when nothing. */
+    public java.util.List<String> getInputNotes() { return inputNotes == null ? java.util.List.of() : inputNotes; }
+    public void setInputNotes(java.util.List<String> notes) {
+        this.inputNotes = notes == null ? java.util.List.of() : java.util.List.copyOf(notes);
+    }
+
+    /** @see #inputNotesShown */
+    public boolean isInputNotesShown() { return inputNotesShown; }
+    public void setInputNotesShown(boolean shown) { this.inputNotesShown = shown; }
 
     /** Objects left out of the run because a selected measurement was missing. */
     public int getExcludedObjects() { return excludedObjects; }

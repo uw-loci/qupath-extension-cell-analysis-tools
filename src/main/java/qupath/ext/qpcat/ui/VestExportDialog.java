@@ -307,7 +307,9 @@ public final class VestExportDialog {
                 + "small VEST environment the first time (one-time ~165 MB download) and then "
                 + "starts the viewer. Use QP-CAT > Stop VEST viewer when you are done.\n\n"
                 + "(Or run it yourself: pip install vision-embedding-space-travelling, then in "
-                + "this folder: vest embedding.csv --image-path ./images. See README.txt.)");
+                + "this folder: vest embedding.csv --image-path ./images. See README.txt.)"
+                + (res.inputNotes.isEmpty() ? "" : "\n\nAbout the input data:\n- "
+                        + String.join("\n- ", res.inputNotes)));
         ta.setEditable(false);
         ta.setWrapText(true);
         ta.setPrefRowCount(9);

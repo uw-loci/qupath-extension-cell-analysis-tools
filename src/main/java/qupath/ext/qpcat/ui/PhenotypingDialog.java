@@ -1036,9 +1036,14 @@ public class PhenotypingDialog {
                             progress);
                 }
 
-                @SuppressWarnings("unchecked")
-                List<String> warnings = result.get("warnings") instanceof List<?> w
-                        ? (List<String>) w : List.of();
+                // The input audit's notes come first, then the task's warnings.
+                List<String> warnings = new ArrayList<>();
+                if (result.get("input_notes") instanceof List<?> notes) {
+                    for (Object n : notes) warnings.add("About the input data: " + n);
+                }
+                if (result.get("warnings") instanceof List<?> w) {
+                    for (Object x : w) warnings.add(String.valueOf(x));
+                }
                 Platform.runLater(() -> {
                     progressBar.setProgress(1.0);
                     int nPhenotypes = (Integer) result.get("n_phenotypes");

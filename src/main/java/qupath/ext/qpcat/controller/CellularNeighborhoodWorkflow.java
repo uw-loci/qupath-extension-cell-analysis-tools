@@ -12,6 +12,8 @@ import qupath.ext.qpcat.service.CsvText;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
+import qupath.ext.qpcat.service.InputAudit;
+import qupath.ext.qpcat.service.InputChecks;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.PixelSizes;
@@ -238,6 +240,10 @@ public class CellularNeighborhoodWorkflow {
         if (detections.isEmpty()) {
             throw new IOException("No detection objects found. Run cell detection first.");
         }
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.CELLULAR_NEIGHBORHOODS).spatial(true);
+        audit.addImage(openEntryId(imageData), imageNameOf(imageData), detections,
+                imageData.getServer());
+        InputAudit.InputReport input = audit.report().requireAccepted();
 
         // Read the existing categorical column from detection classifications.
         report(progress, "Reading cell types...");
@@ -336,7 +342,7 @@ public class CellularNeighborhoodWorkflow {
                 completeMsg, elapsed);
 
         return new CnResult(true, actualCn, nCells, countsJson, heatmapPath, runId, paramsHash)
-                .withNotes(notesOf(resultMap));
+                .withNotes(withInputNotes(input, notesOf(resultMap)));
     }
 
     /** A project image loaded for a joint CN run: entry, data, detections. */
@@ -460,6 +466,16 @@ public class CellularNeighborhoodWorkflow {
         }
         try {
 
+        // The cells as loaded, checked once before any work.
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.CELLULAR_NEIGHBORHOODS).spatial(true);
+        for (LoadedImage li : loaded) {
+            audit.addImage(li.entry.getID(), li.entry.getImageName(), li.detections,
+                    li.imageData.getServer());
+        }
+        InputAudit.InputReport input = audit.report().requireAccepted();
+        Map<String, Integer> dupNames = InputChecks.duplicateNames(
+                loaded.stream().map(li -> li.entry.getImageName()).toList());
+
         // 2. Union the cell-type class set across all images; flag divergence.
         report(progress, "Unifying cell-type classes across images...");
         // Keyed by class name with null for "no class", which no real class can
@@ -471,7 +487,8 @@ public class CellularNeighborhoodWorkflow {
             for (PathObject det : li.detections) {
                 here.add(CellClasses.nameOf(det));
             }
-            perImageKeys.put(li.entry.getImageName(), here);
+            perImageKeys.put(InputChecks.imageLabel(li.entry.getImageName(), li.entry.getID(),
+                    dupNames), here);
             globalKeys.addAll(here);
         }
         List<String> classKeys = new ArrayList<>(globalKeys);
@@ -638,7 +655,7 @@ public class CellularNeighborhoodWorkflow {
         // 8. Write the cohort tables + a run-info file next to the heatmaps.
         writeCohortTables(resultsDir, perSampleJson, groupJson, adjacencyJson, runId, paramsHash,
                 window, nNeighborhoods, actualCn, totalCells, loaded.size(),
-                classNames, groupMetadataKey, divergenceWarning);
+                classNames, groupMetadataKey, divergenceWarning, input.notices());
 
         long elapsed = System.currentTimeMillis() - startTime;
         String completeMsg = "Joint cellular neighborhoods complete: " + actualCn
@@ -659,11 +676,26 @@ public class CellularNeighborhoodWorkflow {
         return new CnProjectResult(true, actualCn, totalCells, loaded.size(),
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
                 adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
-                divergenceWarning, runId, paramsHash).withNotes(notesOf(resultMap));
+                divergenceWarning, runId, paramsHash)
+                .withNotes(withInputNotes(input, notesOf(resultMap)));
         } finally {
             // Close every ImageData we read ourselves; leave the live open image alone.
             closeLoaded(loaded);
         }
+    }
+
+    /** The audit's notices first, then the worker's notes. */
+    private static List<String> withInputNotes(InputAudit.InputReport input, List<String> notes) {
+        List<String> all = new ArrayList<>(input.notices());
+        all.addAll(notes);
+        return all;
+    }
+
+    /** The open image's project entry id, or null. */
+    private String openEntryId(ImageData<BufferedImage> imageData) {
+        var project = qupath.getProject();
+        var entry = project == null ? null : project.getEntry(imageData);
+        return entry == null ? null : entry.getID();
     }
 
     @SuppressWarnings("unchecked")
@@ -1061,7 +1093,8 @@ public class CellularNeighborhoodWorkflow {
                                    CnWindow window,
                                    int nNeighborhoods, int actualCn,
                                    int totalCells, int nImages, List<String> classNames,
-                                   String groupMetadataKey, String divergenceWarning) {
+                                   String groupMetadataKey, String divergenceWarning,
+                                   List<String> inputNotes) {
         if (resultsDir == null) return;
         try {
             // The row header follows what the rows ACTUALLY are. Partitioned by
@@ -1101,6 +1134,9 @@ public class CellularNeighborhoodWorkflow {
             info.append("grouped by metadata key: ")
                     .append(groupMetadataKey == null || groupMetadataKey.isBlank()
                             ? "(none)" : groupMetadataKey).append('\n');
+            for (String note : inputNotes) {
+                info.append("\nINPUT: ").append(note).append('\n');
+            }
             if (divergenceWarning != null) {
                 info.append("\nNOTE: ").append(divergenceWarning).append('\n');
             }

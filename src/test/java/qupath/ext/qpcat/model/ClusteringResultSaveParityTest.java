@@ -37,6 +37,8 @@ class ClusteringResultSaveParityTest {
             Map.entry("savedSizeBytes", "auto-save bookkeeping, set by the workflow after the save"),
             Map.entry("savedScopeCount", "auto-save bookkeeping, set by the workflow after the save"),
             Map.entry("savedScopeLabel", "auto-save bookkeeping, set by the workflow after the save"),
+            Map.entry("inputNotesShown", "whether the live run showed the input notes before it ran; "
+                    + "a reopened result shows them"),
             Map.entry("spatialGraphPayload", "edge list and per-cell arrays, too large for JSON; "
                     + "written to the cells and the viewer instead"));
 

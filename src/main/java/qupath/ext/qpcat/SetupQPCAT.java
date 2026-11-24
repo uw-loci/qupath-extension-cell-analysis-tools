@@ -1055,7 +1055,7 @@ public class SetupQPCAT implements QuPathExtension, GitHubProject {
 
                 String done = "AnnData exported to " + outputFile.getName()
                         + (note != null ? "\n" + note : "");
-                boolean gaps = note != null && note.contains("NaN");
+                boolean gaps = note != null;
                 Platform.runLater(() -> {
                     if (gaps) {
                         Dialogs.showWarningNotification(EXTENSION_NAME, done);

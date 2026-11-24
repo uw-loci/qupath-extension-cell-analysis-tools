@@ -14,6 +14,8 @@ import qupath.ext.qpcat.scripting.FigureExportScripts;
 import qupath.ext.qpcat.scripting.SpatialGraphScripts;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.FilenameSanitizer;
+import qupath.ext.qpcat.service.InputAudit;
+import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -460,6 +462,7 @@ public final class YamlBatchOrchestrator {
                             config.getNormalization().getId(),
                             config.getEmbeddingMethod().getId(),
                             ifExists(cc));
+                    emitInputNotes(emitter, "clustering", clustering.getInputNotes());
                     emitter.emitRow(ProgressEmitter.Level.OK, index, total,
                             ProgressEmitter.fields("image", entry.getImageName(),
                                     "step", "clustering",
@@ -562,6 +565,7 @@ public final class YamlBatchOrchestrator {
                     rp.getImages(), plan.getRules(), normalization, measurements, missingPolicy,
                     null);
 
+            emitInputNotes(emitter, "phenotyping", res.getInputNotes());
             for (String w : res.getWarnings()) {
                 emitter.emit(ProgressEmitter.Level.WARN, "phenotyping: " + w);
             }
@@ -617,9 +621,23 @@ public final class YamlBatchOrchestrator {
             }
             emitter.emit(ProgressEmitter.Level.INFO, "Reading measurement names of "
                     + rp.getImages().size() + " image(s) of project " + rp.getProjectPath());
-            BatchMeasurements catalog = BatchMeasurements.read(rp.getImages());
+            // The input audit the run will make, made here too so the dry run shows it.
+            InputAudit audit = clusters
+                    ? InputAudit.of(InputAudit.Workflow.CLUSTERING).spatial(
+                            ClusteringWorkflow.usesSpatialCoords(buildClusteringConfig(
+                                    schema.getClustering(), schema.getSpatialStats(), List.of())))
+                    : InputAudit.of(InputAudit.Workflow.PHENOTYPING);
+            BatchMeasurements catalog = BatchMeasurements.read(rp.getImages(), audit);
             for (String u : catalog.getUnreadable()) {
                 emitter.emit(ProgressEmitter.Level.WARN, "could not read image " + u);
+            }
+            List<ValidationIssue> inputIssues = inputIssues(audit.report(),
+                    String.valueOf(rp.getProjectPath()));
+            for (ValidationIssue issue : inputIssues) {
+                emitter.emit(issue.getSeverity() == ValidationIssue.Severity.ERROR
+                        ? ProgressEmitter.Level.ERROR : ProgressEmitter.Level.WARN,
+                        issue.format());
+                failed |= issue.getSeverity() == ValidationIssue.Severity.ERROR;
             }
             BatchMeasurements.Plan plan = catalog.plan(schema, clusters,
                     String.valueOf(rp.getProjectPath()));
@@ -635,6 +653,34 @@ public final class YamlBatchOrchestrator {
             plans.put(rp, plan);
         }
         return failed ? null : plans;
+    }
+
+    /**
+     * The input audit's findings as batch issues: E027 for a refusal (the run would
+     * refuse it, so it stops before any work), W014 for a notice.
+     *
+     * @param report       the audit of one project's images
+     * @param projectLabel the project, for the field path
+     * @return the issues, refusals first
+     */
+    static List<ValidationIssue> inputIssues(InputAudit.InputReport report, String projectLabel) {
+        List<ValidationIssue> out = new ArrayList<>();
+        String field = "scope.projects['" + BatchYamlParser.asciiSafe(projectLabel) + "']";
+        for (String r : report.refusals()) {
+            out.add(ValidationIssue.error("E027", field, BatchYamlParser.asciiSafe(r)));
+        }
+        for (String n : report.notices()) {
+            out.add(ValidationIssue.warning("W014", field, BatchYamlParser.asciiSafe(n)));
+        }
+        return out;
+    }
+
+    /** One W014 row per input notice a run reported. */
+    private static void emitInputNotes(ProgressEmitter emitter, String step, List<String> notes) {
+        for (String note : notes) {
+            emitter.emit(ProgressEmitter.Level.WARN,
+                    "W014 " + step + ": " + BatchYamlParser.asciiSafe(note));
+        }
     }
 
     /**
@@ -709,6 +755,7 @@ public final class YamlBatchOrchestrator {
                     config.getNormalization().getId(),
                     config.getEmbeddingMethod().getId(),
                     ifExists(cc));
+            emitInputNotes(emitter, "clustering", clustering.getInputNotes());
             emitter.emit(ProgressEmitter.Level.OK, "Joint clustering complete: "
                     + clustering.clusterCountText() + ", " + clustering.getNCells()
                     + " cells across " + n + " image(s); saved as '" + resultName + "'");

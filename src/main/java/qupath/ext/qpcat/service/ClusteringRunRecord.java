@@ -243,6 +243,9 @@ public final class ClusteringRunRecord {
             if (result.getMissingNote() != null) {
                 sb.append("Missing     : ").append(result.getMissingNote()).append('\n');
             }
+            for (String note : result.getInputNotes()) {
+                sb.append("Input       : ").append(note).append('\n');
+            }
             if (result.getDuplicateRows() > 0) {
                 sb.append("Identical   : ").append(result.getDuplicateRows())
                         .append(" cells shared their measurement row with another cell; each "

@@ -83,10 +83,13 @@ public final class VestExporter {
         public final int cells;
         public final int clusters;
         public final Path outputDir;
-        public Result(int cells, int clusters, Path outputDir) {
+        /** What the input audit noted about the exported cells; never null. */
+        public final List<String> inputNotes;
+        public Result(int cells, int clusters, Path outputDir, List<String> inputNotes) {
             this.cells = cells;
             this.clusters = clusters;
             this.outputDir = outputDir;
+            this.inputNotes = inputNotes == null ? List.of() : List.copyOf(inputNotes);
         }
     }
 
@@ -120,12 +123,15 @@ public final class VestExporter {
         }
 
         Map<Integer, List<PathObject>> byCluster = new LinkedHashMap<>();
+        List<PathObject> clustered = new ArrayList<>();
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
             PathClass pc = det.getPathClass();
             if (pc == null) continue;
             var label = ClusterNaming.labelOf(pc.toString());
             if (label.isEmpty()) continue;
-            if (det.getROI() == null) continue;
+            clustered.add(det);
+            // No outline, no crop: left out, and the audit below says how many.
+            if (det.getROI() == null || det.getROI().isEmpty()) continue;
             int cid = label.getAsInt();
             byCluster.computeIfAbsent(cid, k -> new ArrayList<>()).add(det);
         }
@@ -133,6 +139,10 @@ public final class VestExporter {
             throw new IOException("No cells with a \"Cluster N\" class were found on the "
                     + "open image. Run (or apply) clustering first.");
         }
+        InputAudit audit = InputAudit.of(InputAudit.Workflow.VEST_EXPORT);
+        audit.addImage(imageId, imageName != null ? imageName
+                : imageData.getServer().getMetadata().getName(), clustered, imageData.getServer());
+        InputAudit.InputReport input = audit.report().requireAccepted();
 
         // 2. Choose which cells to export + their 3D coordinates, per sampling mode.
         List<Integer> clusterIds = new ArrayList<>(byCluster.keySet());
@@ -236,14 +246,14 @@ public final class VestExporter {
         }
 
         writeCsv(opts.outputDir.resolve("embedding.csv"), csvRows);
-        writeReadme(opts.outputDir, n, byCluster.size());
+        writeReadme(opts.outputDir, n, byCluster.size(), input.notices());
 
         logger.info("VEST export: {} cells ({} crops) across {} clusters -> {}",
                 n, written, byCluster.size(), opts.outputDir);
         OperationLogger.getInstance().logEvent("VEST EXPORT",
                 "Exported " + n + " cells (" + written + " crops) across " + byCluster.size()
                 + " clusters to " + opts.outputDir);
-        return new Result(n, byCluster.size(), opts.outputDir);
+        return new Result(n, byCluster.size(), opts.outputDir, input.notices());
     }
 
     /**
@@ -436,7 +446,8 @@ public final class VestExporter {
         }
     }
 
-    private static void writeReadme(Path dir, int cells, int clusters) throws IOException {
+    private static void writeReadme(Path dir, int cells, int clusters, List<String> inputNotes)
+            throws IOException {
         String txt = "QP-CAT export for the VEST 3D viewer (https://github.com/scads/vest)\n\n"
                 + cells + " cells across " + clusters + " clusters.\n\n"
                 + "This folder contains:\n"
@@ -449,6 +460,9 @@ public final class VestExporter {
                 + "Color-map by cluster using the 'cluster' column in the VEST controls.\n"
                 + "Note: VEST runs standalone in the browser; it does not navigate back into\n"
                 + "QuPath. An in-QuPath 3D navigator with click-to-cell is a separate tool.\n";
+        if (!inputNotes.isEmpty()) {
+            txt += "\nAbout the input data:\n  - " + String.join("\n  - ", inputNotes) + "\n";
+        }
         Files.writeString(dir.resolve("README.txt"), txt);
     }
 

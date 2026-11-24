@@ -414,6 +414,7 @@ public final class CropTableExportDialog {
                     res.cellsSkippedNotSampled));
         }
         sb.append(" See README.txt for the command to open it.");
+        for (String n : res.inputNotes) sb.append("\nAbout the input data: ").append(n);
         return sb.toString();
     }
 }
