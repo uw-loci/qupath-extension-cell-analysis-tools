@@ -211,6 +211,69 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   replaced is now refused, in the dialogs before the run and in batch and scripted runs before
   anything is written; re-running under the same name still asks before overwriting.
 
+- **Saves could overwrite earlier work without a word.** Before this release:
+  - **Save a named copy**, **Save Config** and **Save Rule Set** wrote over an existing file of
+    the same name. Because characters Windows cannot hold were deleted from the name, `A:B` and
+    `AB`, or `CD3/CD8` and `CD3CD8`, were one file, and so (on Windows) were `Tumor` and
+    `tumor`; the notification named what you typed, not the file written. The autoencoder
+    **Save Model** turned every character other than letters, digits, `-` and `_` into `_`
+    (`model v1`, `model_v1` and `model/v1` were one model) and also wrote over it.
+  - Two runs that finished within the same second auto-saved under one name, and two gates
+    assigned to one class within a second wrote one gate file; the second replaced the first.
+  - A batch run replaced a saved result of the same name (`yaml_<image>` from an earlier run
+    of the same file) silently.
+  - **Export cell crops + feature table** wrote straight into `qpcat/crop_tables`, so a second
+    export overwrote the first's table, README and crops and left stale crops from a larger
+    earlier export beside the new table.
+  - The per-image spatial scatter plots of two images whose names differed only in those
+    characters (`Slide:1`, `Slide/1`) were saved as one PNG, so the results showed one image
+    with the other's plot.
+  - The composition export's per-group pies collided the same way.
+
+  Now every save names its file with one rule (illegal characters replaced with `_`, control
+  characters removed, trailing dots and spaces trimmed) and checks before it writes. The dialogs
+  ask **Replace** or **Save as '<name>_2'**; automatic saves take the next free name; each crop
+  export writes a new `crop_table_<date>_<time>` folder; per-image plots get unique file names; a
+  batch run refuses before clustering unless `clustering.overwrite_existing: true` (new key). Files
+  saved before keep their names and still load, also by the name you typed. See [Files QP-CAT
+  writes](documentation/exporting.md#files-qp-cat-writes).
+- **NaN gates and empty files.** A rule set whose gate spinner held NaN (a threshold computed from
+  a marker with no spread) failed to save with Gson's own message, "NaN is not a valid double value
+  as per JSON specification", naming no marker; running phenotyping with it failed the same way. A
+  config or gate set with NaN or Infinity did the same. Saves now refuse with the marker or field
+  named (`gates > CD3`). An empty or `null` rule set file crashed loading with a
+  NullPointerException, and an empty config loaded as nothing; both now say the file is empty.
+- **Tables could break or run as formulas in a spreadsheet.** A cluster, class or area name
+  containing a line break (common in imported GeoJSON) split its row in two in the per-area Ripley
+  and co-occurrence CSVs, and in the post-hoc spatial CSV, which also left a name with a line break
+  unquoted; the composition CSV left a bare carriage return unquoted. A text cell starting with `=`,
+  `+`, `-` or `@` (an annotation named `=HYPERLINK(...)`) ran as a formula when the CSV or TSV was
+  opened in Excel, LibreOffice or Google Sheets. Every CSV and TSV now quotes line breaks, and such
+  text gets a leading apostrophe (numbers keep their sign). The spatial statistics, composition,
+  post-hoc and cellular-neighborhood CSVs now start with a UTF-8 byte-order mark like the crop
+  table's CSV, so Excel no longer mangles non-ASCII names; the per-area summary no longer writes
+  two columns with one header when two clusters share a name or one is named `Noise`.
+- **The crop/feature table rounded measurements to 6 significant digits** while its README said
+  they were unchanged (123.456789 was written as 123.457). They are now written at full precision.
+- **The autoencoder model's metadata broke on a quote or backslash.** It was written by hand
+  with names pasted between quotes and read back by pattern matching, so a class or measurement
+  name holding `"` or `\` produced a damaged file and "Apply to project" fed the model the wrong
+  measurement list, and a downsample of `1.0E-4` read back as 1.0. It is now real JSON both ways;
+  files from earlier versions without those characters read as before, and a damaged one says so.
+- **The AnnData export left out QP-CAT's own embedding.** It looked only for `UMAP1/UMAP2`,
+  `PCA1/PCA2` and `tSNE1/tSNE2`, which QP-CAT has not written since it marked its columns `QPCAT
+  UMAP1`; a foreign `UMAP1` column was exported instead, always under `X_umap`, and cells without
+  the pair were written at (0, 0), which put them at the origin of every plot. The export now takes
+  QP-CAT's columns first (the unmarked ones as a fallback), files PCA and t-SNE under `X_pca` and
+  `X_tsne`, writes NaN for a cell without the pair and says how many there were. Infinity in the
+  matrix is written as NaN, as the export's own message already said.
+- **Pasted scripts could break or run more than the name.** The sub-cluster script in a run's
+  `_RUN_INFO.txt` and the replay step of "push spatial connections" put class and result names
+  between double quotes, so a name with `"`, `\` or `$` broke the script or was interpolated, and
+  a name with a line break in a Workflow-tab comment turned the rest of the name into code. Names
+  are now single-quoted and escaped, and comments are kept to one line. A batch config passed to
+  `YamlBatchScripts` as text that started with a `# comment` was taken for a file path; any text
+  with a line break is now read as YAML.
 - **Typed decimals could be misread on decimal-comma systems.** Before this release, on a
   system set to a decimal comma (German, French and most of Europe), a number typed with a
   point was cut at the point: UMAP `min_dist` typed as `0.5` ran as 0, and `2.5` ran as 2. On

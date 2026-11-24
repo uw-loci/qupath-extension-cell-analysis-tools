@@ -496,14 +496,18 @@ work on it.
 **Menu: Extensions > QP-CAT > Export > "Export cell crops + feature table (TraitHorizon / CSV)..."**
 
 Writes one small PNG per cell plus a table whose first column names that PNG and
-whose other columns are the cell's measurements:
+whose other columns are the cell's measurements, into a new
+`crop_table_<date>_<time>` folder inside the folder you pick (`qpcat/crop_tables`
+by default), so a second export never overwrites the first or mixes its crops with
+an earlier one's:
 
 ```
-images/cell_000000.png
-images/cell_000001.png
-features.tsv
-features.csv          (optional)
-README.txt
+crop_table_20261124_093005/
+  images/cell_000000.png
+  images/cell_000001.png
+  features.tsv
+  features.csv          (optional)
+  README.txt
 ```
 
 Two reasons to want it.
@@ -527,7 +531,7 @@ measurement table for Excel, R or pandas, with the classification as a column.
 | Column | What it is |
 |---|---|
 | `filename` | the crop in `images/`. TraitHorizon requires this first, and it must name a file that is really there |
-| *measurement* | the QuPath measurement of that name, unchanged |
+| *measurement* | the QuPath measurement of that name, unchanged: written at full precision, so it reads back as exactly the stored value (before 0.26.0 it was rounded to 6 significant digits) |
 | `class_index` | 0-based index into the classification list in `README.txt` |
 | `classification` | the classification name. Text, so not an axis |
 | `image` | the source image name. Text, so not an axis |
@@ -571,7 +575,8 @@ was left out and why.
 - The TSV is written as UTF-8 **without** a byte-order mark and the CSV **with**
   one. A BOM would rename TraitHorizon's required
   `filename` column to something it does not recognize, and Excel without one
-  mangles the non-ASCII characters ordinary QuPath measurement names carry.
+  mangles the non-ASCII characters ordinary QuPath measurement names carry. The
+  rest of the conventions are in [Files QP-CAT writes](exporting.md#files-qp-cat-writes).
 - TraitHorizon links each object out to an external viewer by URL. QP-CAT does not
   write that column, because [clicking a point](#embedding-scatter-plot) already
   navigates straight into the QuPath viewer.

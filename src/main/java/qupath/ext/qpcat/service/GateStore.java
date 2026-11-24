@@ -62,12 +62,19 @@ public final class GateStore {
      *
      * @param file destination; its folder is created
      * @param set  the gates
-     * @throws IOException on a write failure
+     * @throws IOException on a write failure, or naming the gate when a vertex is not finite
      */
     public static void write(Path file, GateSet set) throws IOException {
-        Path parent = file.getParent();
-        if (parent != null) Files.createDirectories(parent);
-        Files.writeString(file, GSON.toJson(set), StandardCharsets.UTF_8);
+        for (GateSet.Gate g : set.getGates()) {
+            for (double[] v : g.getVertices()) {
+                if (v != null && (v.length < 2 || !Double.isFinite(v[0]) || !Double.isFinite(v[1]))) {
+                    throw new IOException("Gate '" + g.getLabel() + "' has a vertex that is not "
+                            + "a finite number, so it cannot be saved. Redraw the gate.");
+                }
+            }
+        }
+        JsonFiles.requireFinite(set, "The gate set");
+        JsonFiles.writeAtomic(file, GSON.toJson(set));
         logger.info("Wrote {} gate(s) to {}", set.getGates().size(), file);
     }
 
@@ -210,8 +217,27 @@ public final class GateStore {
      * @return the name with {@link #EXTENSION} appended
      */
     public static String fileNameFor(String name) {
-        String base = FilenameSanitizer.sanitize(name == null || name.isBlank() ? "gates" : name);
-        return base.endsWith(EXTENSION) ? base : base + EXTENSION;
+        return stemFor(name) + EXTENSION;
+    }
+
+    /**
+     * A free path for a gate set recorded automatically: never an existing file,
+     * so two gates assigned to one class within a second keep both files.
+     *
+     * @param dir  the gates folder
+     * @param name the base name (class and time stamp)
+     * @return the path to write
+     * @throws IOException never in practice; declared by the reservation
+     */
+    public static Path newFileIn(Path dir, String name) throws IOException {
+        return FilenameSanitizer.reserve(dir, stemFor(name), EXTENSION,
+                FilenameSanitizer.IfExists.NEW_NAME, "A gate file");
+    }
+
+    private static String stemFor(String name) {
+        String base = FilenameSanitizer.sanitize(name == null || name.isBlank() ? "gates" : name,
+                "gates");
+        return base.endsWith(EXTENSION) ? base.substring(0, base.length() - EXTENSION.length()) : base;
     }
 
     private static boolean eq(String a, String b) {

@@ -337,6 +337,9 @@ One image failed; `on_error: stop` aborted the batch at that point. Already-proc
    - **Measurement missing** -- a marker listed in `clustering.measurements` is absent on this image's detections.
    - **Appose worker died** -- check QuPath stderr for Python tracebacks.
 3. Fix the root cause and re-run with the same YAML. There is no resume-from-checkpoint.
+   The images that did finish already have a saved result (`yaml_<image>`), so the re-run
+   refuses them (see *A saved result named ... already exists* below) unless you set
+   `clustering.overwrite_existing: true` or narrow `scope.images` to the failed ones.
 4. To skip the one problem image and continue, switch to `on_error: continue` or narrow `scope.images`.
 
 </details>
@@ -368,7 +371,26 @@ One or more images failed; the batch skipped them and continued. The process exi
        - Patient05_ROI1
    ```
 
-   Re-running overwrites previously-clustered results on the listed images; to avoid that, switch `clustering.mode: reuse_saved` for the re-run.
+   Re-running writes new classifications onto the listed images; to avoid that, switch `clustering.mode: reuse_saved` for the re-run. The saved results from the first run are not replaced unless `clustering.overwrite_existing: true` is set.
+
+</details>
+
+<details>
+<summary><b>A saved result named ... already exists</b></summary>
+
+**What you see:**
+
+```
+[qpcat-batch] ... ERROR [1/3] image=Patient05_ROI1 step=clustering failed: a saved result named 'yaml_Patient05_ROI1' already exists in this project; set clustering.overwrite_existing: true to replace it, or choose another clustering.result_name
+```
+
+**What it means:** an earlier run (usually of the same file) saved a result under the name this
+run would use. Before 0.26.0 the new result replaced it without a word; now the image is refused
+before its clustering runs, so nothing is computed or lost.
+
+**What to do:** set `clustering.overwrite_existing: true` to replace the earlier result, give
+`clustering.result_name` a new name (for joint runs), or delete the old result in **Manage Saved
+Results**.
 
 </details>
 

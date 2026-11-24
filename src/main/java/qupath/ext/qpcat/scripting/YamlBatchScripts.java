@@ -34,8 +34,8 @@ import java.util.Map;
  * <p>Recognized option keys:</p>
  * <ul>
  *   <li>{@code config} -- {@link java.nio.file.Path} or {@link String}
- *       (path to YAML file) or {@link String} starting with whitespace +
- *       'version:' (inline YAML content).</li>
+ *       (path to YAML file) or {@link String} of inline YAML content: any
+ *       text with a line break, or one line starting 'version:'.</li>
  *   <li>{@code dryRun} -- boolean, default false. Validate + describe
  *       without dispatching.</li>
  *   <li>{@code emitter} -- optional {@link ProgressEmitter}; default
@@ -110,6 +110,15 @@ public final class YamlBatchScripts {
         String yamlContent;
     }
 
+    /**
+     * True when a string config is YAML text rather than a file path: any line
+     * break (a path never holds one, and YAML that starts with a comment does
+     * not start with {@code version:}), or a single line starting {@code version:}.
+     */
+    static boolean isInlineYaml(String s) {
+        return s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0 || s.trim().startsWith("version:");
+    }
+
     private static BatchYamlOrchestratorInput parseInput(Object config) throws IOException {
         BatchYamlOrchestratorInput out = new BatchYamlOrchestratorInput();
         if (config instanceof Path p) {
@@ -120,9 +129,7 @@ public final class YamlBatchScripts {
             return out;
         }
         if (config instanceof String s) {
-            // Heuristic: if string contains a colon-newline pattern OR a 'version:' fragment, treat as inline YAML.
-            if (s.contains("\nversion:") || s.startsWith("version:")
-                    || s.trim().startsWith("version:")) {
+            if (isInlineYaml(s)) {
                 BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(s);
                 out.schema = po.getSchema();
                 out.parseIssues = po.getIssues();
@@ -130,10 +137,17 @@ public final class YamlBatchScripts {
                 return out;
             }
             // Otherwise treat as path
-            BatchYamlParser.ParseOutcome po = BatchYamlParser.parse(Path.of(s));
+            Path path;
+            try {
+                path = Path.of(s.trim());
+            } catch (java.nio.file.InvalidPathException e) {
+                throw new IOException("The batch config is neither YAML text nor a file path: "
+                        + e.getMessage());
+            }
+            BatchYamlParser.ParseOutcome po = BatchYamlParser.parse(path);
             out.schema = po.getSchema();
             out.parseIssues = po.getIssues();
-            out.yamlPath = s;
+            out.yamlPath = path.toString();
             return out;
         }
         if (config instanceof Map<?, ?>) {

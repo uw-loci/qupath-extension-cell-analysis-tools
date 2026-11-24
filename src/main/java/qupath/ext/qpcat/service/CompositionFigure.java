@@ -205,11 +205,9 @@ public final class CompositionFigure {
         return total > 0 ? 100.0 * count / total : 0.0;
     }
 
-    /** Quote a CSV field when it contains a comma, quote or newline. */
+    /** Group and cluster names are user text: quoted (CR and LF included) and formula-guarded. */
     private static String csvCell(String v) {
-        String s = v == null ? "" : v;
-        if (s.indexOf(',') < 0 && s.indexOf('"') < 0 && s.indexOf('\n') < 0) return s;
-        return '"' + s.replace("\"", "\"\"") + '"';
+        return CsvText.cell(v);
     }
 
     // ---- Figure ----

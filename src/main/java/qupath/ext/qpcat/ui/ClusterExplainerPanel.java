@@ -1238,7 +1238,7 @@ public class ClusterExplainerPanel {
 
     private static String safeTsv(String s) {
         if (s == null) return "";
-        return s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ');
+        return qupath.ext.qpcat.service.CsvText.tsvCell(s);
     }
 
     private static String safeStr(String s) {

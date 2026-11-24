@@ -4,6 +4,9 @@ import javafx.application.Platform;
 import org.apposed.appose.NDArray;
 import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.ApposeArrays;
+import qupath.ext.qpcat.service.CsvText;
+import qupath.ext.qpcat.service.GroovyText;
+import qupath.ext.qpcat.service.AnnDataEmbedding;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
 import org.slf4j.Logger;
@@ -1268,7 +1271,7 @@ public class ClusteringWorkflow {
         }
         Path target = dir.resolve(fileName);
         try {
-            Files.writeString(target, content, StandardCharsets.UTF_8);
+            CsvText.writeCsvFile(target, content);
             logger.info("Wrote per-area table {}", target);
         } catch (IOException e) {
             logger.warn("Could not write per-area table {}: {}", target, e.getMessage());
@@ -1361,7 +1364,8 @@ public class ClusteringWorkflow {
                     + result.clusterCountText()
                     + (crossImage ? ", " + nImages + " images" : "") + ")";
             imageData.getHistoryWorkflow().addStep(
-                    new DefaultScriptableWorkflowStep(stepName, String.join("\n", lines)));
+                    new DefaultScriptableWorkflowStep(stepName, String.join("\n",
+                            lines.stream().map(GroovyText::commentSafe).toList())));
         } catch (Exception e) {
             logger.warn("Failed to record clustering workflow step: {}", e.getMessage());
         }
@@ -3520,9 +3524,11 @@ public class ClusteringWorkflow {
      * @param selectedMeasurements measurements to include (null for all)
      * @param outputPath           path to write the .h5ad file
      * @param progressCallback     optional callback for progress messages
+     * @return a note for the user about the embedding (which one, cells without it),
+     *         or null when none was exported
      * @throws IOException if export fails
      */
-    public void exportAnnData(
+    public String exportAnnData(
             List<String> selectedMeasurements,
             String outputPath,
             Consumer<String> progressCallback) throws IOException {
@@ -3553,9 +3559,10 @@ public class ClusteringWorkflow {
         report(progressCallback, "Exporting " + extraction.getNCells() + " cells x "
                 + extraction.getNMeasurements() + " markers...");
 
+        AnnDataEmbedding.Pick embedding = AnnDataEmbedding.pick(extraction.getDetections());
         try {
             ApposeClusteringService.withExtensionClassLoader(() -> {
-                executeAnnDataExport(extraction, outputPath, progressCallback);
+                executeAnnDataExport(extraction, embedding, outputPath, progressCallback);
                 return null;
             });
         } catch (IOException e) {
@@ -3576,6 +3583,11 @@ public class ClusteringWorkflow {
                 elapsed);
 
         report(progressCallback, "AnnData exported to " + outputPath);
+        String note = AnnDataEmbedding.note(embedding, extraction.getNCells());
+        if (note != null) {
+            report(progressCallback, note);
+        }
+        return note;
     }
 
     /**
@@ -3583,6 +3595,7 @@ public class ClusteringWorkflow {
      */
     private void executeAnnDataExport(
             MeasurementExtractor.ExtractionResult extraction,
+            AnnDataEmbedding.Pick embedding,
             String outputPath,
             Consumer<String> progressCallback) throws IOException {
 
@@ -3641,17 +3654,21 @@ public class ClusteringWorkflow {
             inputs.put("phenotype_labels", phenotypeLabels);
         }
 
-        // Extract embedding coordinates if present
-        double[][] embedding = extractExistingEmbedding(extraction.getDetections());
+        // The embedding QP-CAT (or an older run) wrote, NaN where a cell has none.
         NDArray embNd = null;
         if (embedding != null) {
             NDArray.Shape embShape = new NDArray.Shape(NDArray.Shape.Order.C_ORDER, nCells, 2);
             embNd = new NDArray(NDArray.DType.FLOAT64, embShape);
             var embBuf = embNd.buffer().asDoubleBuffer();
             for (int i = 0; i < nCells; i++) {
-                embBuf.put(embedding[i]);
+                embBuf.put(embedding.coords()[i]);
             }
             inputs.put("embedding", embNd);
+            inputs.put("embedding_name", embedding.obsmKey());
+            if (embedding.missing() > 0) {
+                logger.warn("Embedding {}/{} is missing on {} of {} cells; written as NaN",
+                        embedding.columnX(), embedding.columnY(), embedding.missing(), nCells);
+            }
         }
 
         // Extract spatial coordinates (centroids)
@@ -3681,51 +3698,6 @@ public class ClusteringWorkflow {
             if (embNd != null) embNd.close();
             spatialNd.close();
         }
-    }
-
-    /**
-     * Extracts existing embedding coordinates (UMAP1/UMAP2 or PCA1/PCA2 or tSNE1/tSNE2)
-     * from detection measurements. Returns null if no embedding found.
-     */
-    private double[][] extractExistingEmbedding(List<PathObject> detections) {
-        if (detections == null || detections.isEmpty()) return null;
-        // Try UMAP, PCA, tSNE in order.
-        String[][] prefixes = {{"UMAP1", "UMAP2"}, {"PCA1", "PCA2"}, {"tSNE1", "tSNE2"}};
-
-        for (String[] pair : prefixes) {
-            // Decide presence by scanning for ANY detection that carries the pair,
-            // not just detections.get(0) -- a heterogeneous set (e.g. first cell
-            // lacks the columns) would otherwise be misdetected either way.
-            boolean anyPresent = false;
-            for (PathObject det : detections) {
-                var ml = det.getMeasurements();
-                if (ml.containsKey(pair[0]) && ml.containsKey(pair[1])) {
-                    anyPresent = true;
-                    break;
-                }
-            }
-            if (!anyPresent) continue;
-
-            double[][] emb = new double[detections.size()][2];
-            int missing = 0;
-            for (int i = 0; i < detections.size(); i++) {
-                var ml = detections.get(i).getMeasurements();
-                if (!ml.containsKey(pair[0]) || !ml.containsKey(pair[1])) missing++;
-                emb[i][0] = ml.getOrDefault(pair[0], 0.0).doubleValue();
-                emb[i][1] = ml.getOrDefault(pair[1], 0.0).doubleValue();
-            }
-            if (missing > 0) {
-                // Zero-filled cells would sit at the origin of the scatter and skew
-                // any embedding-space distance -- surface it instead of hiding it.
-                logger.warn("Existing embedding {}/{} is missing on {} of {} cells; "
-                        + "those cells were zero-filled (embedding may be unreliable).",
-                        pair[0], pair[1], missing, detections.size());
-            } else {
-                logger.info("Found existing embedding: {}/{}", pair[0], pair[1]);
-            }
-            return emb;
-        }
-        return null;
     }
 
     // ==================== Shared Tile Reading ====================

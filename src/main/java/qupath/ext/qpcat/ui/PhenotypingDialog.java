@@ -33,6 +33,7 @@ import qupath.ext.qpcat.service.ChannelValidator;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.PhenotypeRuleSetManager;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.fx.dialogs.Dialogs;
 import javafx.scene.layout.VBox;
 import qupath.lib.objects.PathObject;
@@ -994,6 +995,11 @@ public class PhenotypingDialog {
             }
         }
 
+        String gateProblem = PhenotypeRuleSet.nonFiniteGateMessage(getMarkerGates());
+        if (gateProblem != null) {
+            UserErrors.notify(logger, "QPCAT", gateProblem);
+            return;
+        }
         String rulesJson = buildRulesJson();
         String gatesJson = buildGatesJson();
 
@@ -1104,6 +1110,12 @@ public class PhenotypingDialog {
 
         String name = result.get().trim();
 
+        String gateProblem = PhenotypeRuleSet.nonFiniteGateMessage(getMarkerGates());
+        if (gateProblem != null) {
+            UserErrors.notify(logger, "QPCAT", "Rule set not saved. " + gateProblem);
+            return;
+        }
+
         PhenotypeRuleSet ruleSet = new PhenotypeRuleSet(name);
         ruleSet.setNormalization(normalizationCombo.getValue().getId());
         ruleSet.setMarkers(new ArrayList<>(currentMarkers));
@@ -1125,10 +1137,20 @@ public class PhenotypingDialog {
         ruleSet.setRules(entries);
 
         try {
-            PhenotypeRuleSetManager.saveRuleSet(project, ruleSet);
-            Dialogs.showInfoNotification("QPCAT", "Rule set '" + name + "' saved.");
+            var ifExists = FilenameSanitizer.IfExists.REFUSE;
+            String taken = PhenotypeRuleSetManager.takenRuleSetName(project, name);
+            if (taken != null) {
+                var choice = SaveConflictPrompt.ask(owner, "Replace Saved Rule Set",
+                        "A saved rule set", taken,
+                        PhenotypeRuleSetManager.freeRuleSetName(project, name));
+                if (choice.isEmpty()) return;
+                ifExists = choice.get();
+            }
+            String savedAs = PhenotypeRuleSetManager.saveRuleSet(project, ruleSet, ifExists);
+            Dialogs.showInfoNotification("QPCAT", "Rule set '" + name + "' saved"
+                    + (savedAs.equals(name) ? "." : " as '" + savedAs + "'."));
             OperationLogger.getInstance().logEvent("RULE SET SAVED",
-                    "Saved phenotype rule set '" + name + "' ("
+                    "Saved phenotype rule set '" + name + "' as '" + savedAs + "' ("
                     + rulesList.size() + " rules, " + currentMarkers.size() + " markers)");
         } catch (Exception e) {
             logger.error("Failed to save rule set", e);

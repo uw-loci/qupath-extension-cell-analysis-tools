@@ -71,4 +71,17 @@ class PostHocNhoodCsvTest {
             Locale.setDefault(previous);
         }
     }
+
+    /** H34, H49: an annotation name with a line break or a leading '=' stays one text cell. */
+    @Test
+    void anAreaNameWithALineBreakOrAFormulaStaysOneTextCell() {
+        PostHocSpatialWorkflow.WindowResult wr = new PostHocSpatialWorkflow.WindowResult();
+        wr.imageName = "=HYPERLINK(\"x\")";
+        wr.regionLabel = "core\nA-1";
+        wr.skipReason = "too few cells";
+
+        String csv = PostHocSpatialWorkflow.buildCsv(List.of(wr));
+
+        assertThat(csv).contains("\"'=HYPERLINK(\"\"x\"\")\",\"core\nA-1\",");
+    }
 }

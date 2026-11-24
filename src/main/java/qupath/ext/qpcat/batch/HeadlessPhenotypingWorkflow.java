@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.controller.ClusteringWorkflow;
 import qupath.ext.qpcat.model.ClassConditionKind;
+import qupath.ext.qpcat.model.PhenotypeRuleSet;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -188,6 +189,10 @@ public final class HeadlessPhenotypingWorkflow {
                     record(gates, conflicted, marker, r.getExcludeMaxZscore(), warnings, r.getName());
                 }
             }
+        }
+        String problem = PhenotypeRuleSet.nonFiniteGateMessage(gates);
+        if (problem != null) {
+            throw new IllegalArgumentException(problem);
         }
         return new Gson().toJson(gates);
     }

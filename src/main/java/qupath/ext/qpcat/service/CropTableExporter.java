@@ -72,12 +72,6 @@ public final class CropTableExporter {
     /** Appended to a measurement whose name collides with a column we add. */
     private static final String COLLISION_SUFFIX = "_measurement";
 
-    /**
-     * UTF-8 byte-order mark, written as an escape because this source stays ASCII.
-     * Excel needs it to read a CSV as UTF-8; TraitHorizon's TSV must NOT have it.
-     */
-    private static final char BOM = '\uFEFF';
-
     /** Delimiter and quoting of the written table. */
     public enum Format {
 
@@ -115,7 +109,11 @@ public final class CropTableExporter {
 
     /** What to export. */
     public static final class Options {
-        /** Bundle root; receives {@code images/}, the table(s) and a README. */
+        /**
+         * The folder chosen by the user. Each export writes into a new
+         * {@code crop_table_<date>_<time>} subfolder of it, so a second export never
+         * overwrites the first or mixes its crops with stale ones.
+         */
         public Path outputDir;
         /** Measurement names to write as feature columns, in order. */
         public List<String> measurements = List.of();
@@ -381,7 +379,7 @@ public final class CropTableExporter {
         if (parent != null) Files.createDirectories(parent);
         try (BufferedWriter w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
             if (format.hasBom()) {
-                w.write(BOM);
+                w.write(CsvText.BOM);
             }
             writeLine(w, format, header.columns());
             for (Row row : rows) {
@@ -408,35 +406,26 @@ public final class CropTableExporter {
     }
 
     /**
-     * Make one cell safe for the format.
-     *
-     * <p>TSV has no quoting, so a tab or newline inside a value would create a
-     * column or a row: they are replaced with a space. CSV quotes instead, so
-     * nothing is lost.
+     * Make one text cell safe for the format, by the shared rules in {@link CsvText}:
+     * TSV replaces tab, CR and LF with a space, CSV quotes, and both guard a
+     * leading formula character.
      */
     static String escape(String raw, Format format) {
-        String s = raw == null ? "" : raw;
-        if (format == Format.TSV) {
-            return s.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ');
-        }
-        if (s.indexOf(',') < 0 && s.indexOf('"') < 0
-                && s.indexOf('\n') < 0 && s.indexOf('\r') < 0) {
-            return s;
-        }
-        return '"' + s.replace("\"", "\"\"") + '"';
+        return format == Format.TSV ? CsvText.tsvCell(raw) : CsvText.cell(raw);
     }
 
     /**
      * Format a measurement for a table TraitHorizon parses with
      * {@code d3.autoType}: plain decimal or scientific notation, no grouping
      * separators, and a locale-independent decimal point (a comma would split
-     * the CSV row and is not a number to d3).
+     * the CSV row and is not a number to d3). Full precision: the shortest text
+     * that reads back as exactly the same double.
      */
     static String formatNumber(double v) {
         if (v == Math.rint(v) && Math.abs(v) < 1e15) {
             return Long.toString((long) v);
         }
-        return String.format(Locale.US, "%.6g", v);
+        return Double.toString(v);
     }
 
     // ==================== the export ====================
@@ -496,17 +485,18 @@ public final class CropTableExporter {
 
         Header header = buildHeader(opts.measurements,
                 opts.includeClassification, opts.includeImageName);
-        Path imagesDir = opts.outputDir.resolve("images");
+        Path bundleDir = newBundleDir(opts.outputDir, java.time.LocalDateTime.now());
+        Path imagesDir = bundleDir.resolve("images");
         if (opts.writeCrops) {
             Files.createDirectories(imagesDir);
         } else {
-            Files.createDirectories(opts.outputDir);
+            Files.createDirectories(bundleDir);
         }
 
         List<Row> rows = new ArrayList<>(selected.size());
         int crops = 0;
         report(progress, "Writing " + selected.size() + " cell(s) to "
-                + opts.outputDir + " ...");
+                + bundleDir + " ...");
         try (CellCropService cropService = new CellCropService(qupath)) {
             for (int i = 0; i < selected.size(); i++) {
                 if (cancelled != null && cancelled.getAsBoolean()) {
@@ -552,25 +542,47 @@ public final class CropTableExporter {
 
         List<Path> tables = new ArrayList<>();
         for (Format format : opts.formats) {
-            Path file = opts.outputDir.resolve("features." + format.getExtension());
+            Path file = bundleDir.resolve("features." + format.getExtension());
             writeTable(file, format, header, rows);
             tables.add(file);
         }
 
-        Path readme = opts.outputDir.resolve("README.txt");
+        Path readme = bundleDir.resolve("README.txt");
         writeReadme(readme, opts, header, classNames, sizes, rows.size(), crops,
                 gathered, notSampled, imagesDir, tables);
 
         logger.info("Crop/table export: {} cells ({} crops) across {} image(s), "
                         + "{} classification(s) -> {}",
-                rows.size(), crops, gathered.imagesUsed, classNames.size(), opts.outputDir);
+                rows.size(), crops, gathered.imagesUsed, classNames.size(), bundleDir);
         OperationLogger.getInstance().logEvent("CROP TABLE EXPORT",
                 "Exported " + rows.size() + " cell(s) (" + crops + " crops, "
                 + opts.measurements.size() + " measurements) across " + gathered.imagesUsed
-                + " image(s) to " + opts.outputDir);
+                + " image(s) to " + bundleDir);
 
         return new Result(rows.size(), crops, gathered.skippedMissing, notSampled,
-                gathered.imagesUsed, classNames, opts.outputDir, tables);
+                gathered.imagesUsed, classNames, bundleDir, tables);
+    }
+
+    /** Prefix of the subfolder each export writes into. */
+    public static final String BUNDLE_PREFIX = "crop_table_";
+
+    private static final java.time.format.DateTimeFormatter BUNDLE_STAMP =
+            java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss", Locale.ROOT);
+
+    /**
+     * A new, empty subfolder of {@code parent} for one export:
+     * {@code crop_table_<yyyyMMdd_HHmmss>}, with {@code _2}, {@code _3}, ... when
+     * two exports start within one second.
+     *
+     * @param parent the folder the user chose
+     * @param when   the export's start time
+     * @return the subfolder (not yet created)
+     * @throws IOException never in practice; declared by the reservation
+     */
+    static Path newBundleDir(Path parent, java.time.LocalDateTime when) throws IOException {
+        String stem = FilenameSanitizer.reserveStem(parent, BUNDLE_PREFIX + BUNDLE_STAMP.format(when),
+                FilenameSanitizer.IfExists.NEW_NAME, "An export folder", "");
+        return parent.resolve(stem);
     }
 
     // ==================== gathering ====================
@@ -728,7 +740,8 @@ public final class CropTableExporter {
 
         sb.append("What the columns mean\n---------------------\n");
         sb.append("  filename      the crop in images/; TraitHorizon requires this first\n");
-        sb.append("  <measurement> the QuPath measurement of that name, unchanged\n");
+        sb.append("  <measurement> the QuPath measurement of that name, unchanged (written at\n");
+        sb.append("                full precision; reads back as exactly the stored value)\n");
         sb.append("  class_index   index into the classification list below; -1 is unused\n");
         if (opts.includeClassification) {
             sb.append("  classification  the classification name (text, not an axis)\n");
@@ -770,6 +783,16 @@ public final class CropTableExporter {
                 .append(" per\nclassification, so the same settings write the same file twice ")
                 .append("and a rare\npopulation does not sample away. It is NOT the whole ")
                 .append("dataset: counts read off\nthis table are counts of the sample.\n\n");
+
+        sb.append("File format\n-----------\n");
+        sb.append("features.tsv: tab-separated, UTF-8 without a byte-order mark (TraitHorizon\n");
+        sb.append("rejects one). features.csv: comma-separated, UTF-8 with a byte-order mark\n");
+        sb.append("so Excel reads it as UTF-8. Both use a period as the decimal point in every\n");
+        sb.append("locale: in a spreadsheet set to a decimal comma, open the CSV through\n");
+        sb.append("Data > From Text and choose comma and period. A text cell starting with\n");
+        sb.append("= + - or @ is written with a leading apostrophe so it is not run as a\n");
+        sb.append("formula. Each export writes its own folder; an earlier one is never\n");
+        sb.append("overwritten.\n\n");
 
         sb.append("Reading it back\n---------------\n");
         sb.append("The crops are rendered with the viewer's current brightness, contrast and\n");

@@ -113,17 +113,37 @@ class CropTableExporterTest {
         assertThat(CropTableExporter.formatNumber(42)).isEqualTo("42");
         assertThat(CropTableExporter.formatNumber(-7)).isEqualTo("-7");
         assertThat(CropTableExporter.formatNumber(1234567)).isEqualTo("1234567");
-        assertThat(CropTableExporter.formatNumber(0.5)).isEqualTo("0.500000");
-        assertThat(CropTableExporter.formatNumber(-0.125)).isEqualTo("-0.125000");
-        for (double v : new double[] {0, 42, -7, 1234567, 0.5, -0.125, 1.0e-9, 3.25e12}) {
+        assertThat(CropTableExporter.formatNumber(0.5)).isEqualTo("0.5");
+        assertThat(CropTableExporter.formatNumber(-0.125)).isEqualTo("-0.125");
+        assertThat(CropTableExporter.formatNumber(1.0e-4)).isEqualTo("1.0E-4");
+        // Full precision (H55): every value reads back as exactly the same double,
+        // which "%.6g" did not (123.456789 came back as 123.457).
+        for (double v : new double[] {0, 42, -7, 1234567, 0.5, -0.125, 1.0e-9, 3.25e12,
+                123.456789, Math.PI, -2.0 / 3.0}) {
             String s = CropTableExporter.formatNumber(v);
             assertThat(s).doesNotContain(",");
-            assertThat(Double.parseDouble(s)).isCloseTo(v, within(Math.abs(v) * 1e-5 + 1e-12));
+            assertThat(Double.parseDouble(s)).isEqualTo(v);
         }
     }
 
-    private static org.assertj.core.data.Offset<Double> within(double eps) {
-        return org.assertj.core.data.Offset.offset(eps);
+    @Test
+    void eachExportGetsItsOwnFolder(@TempDir Path dir) throws IOException {
+        java.time.LocalDateTime when = java.time.LocalDateTime.of(2026, 11, 24, 9, 30, 5);
+        Path first = CropTableExporter.newBundleDir(dir, when);
+        assertThat(first.getFileName().toString()).isEqualTo("crop_table_20261124_093005");
+        Files.createDirectories(first);
+        // A second export in the same second does not reuse (and overwrite) the first folder.
+        assertThat(CropTableExporter.newBundleDir(dir, when).getFileName().toString())
+                .isEqualTo("crop_table_20261124_093005_2");
+    }
+
+    @Test
+    void textCellsThatLookLikeFormulasAreGuarded() {
+        assertThat(CropTableExporter.escape("=HYPERLINK(\"x\")", Format.CSV))
+                .isEqualTo("\"'=HYPERLINK(\"\"x\"\")\"");
+        assertThat(CropTableExporter.escape("@SUM(A1)", Format.TSV)).isEqualTo("'@SUM(A1)");
+        assertThat(CropTableExporter.escape("-1.5", Format.CSV)).isEqualTo("-1.5");
+        assertThat(CropTableExporter.escape("CD8+", Format.CSV)).isEqualTo("CD8+");
     }
 
     // ---- escaping ----
@@ -169,7 +189,7 @@ class CropTableExporterTest {
         assertThat(lines.get(0).split("\t", -1)).containsExactly(
                 "filename", "CD3", "CD8", "class_index", "classification", "image");
         assertThat(lines.get(1).split("\t", -1)).containsExactly(
-                "cell_000000.png", "1.50000", "2", "0", "Cluster 1", "slide A");
+                "cell_000000.png", "1.5", "2", "0", "Cluster 1", "slide A");
         // Every row has exactly as many cells as the header has columns -- a
         // short row is how "no missing values" fails in practice.
         for (String line : lines) {

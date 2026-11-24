@@ -392,7 +392,7 @@ public final class SavedResultApplier {
         try {
             String script = String.join("\n",
                     "// QP-CAT: " + actionLabel + " from saved clustering result '"
-                            + saved.getName() + "'",
+                            + GroovyText.commentSafe(saved.getName()) + "'",
                     "// " + saved.clusterCountText() + "; " + applied
                             + " detections relabelled"
                             + (unmatched > 0
