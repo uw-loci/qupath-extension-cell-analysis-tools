@@ -171,6 +171,9 @@ public class ClusteringResult {
         if (graphBackend != null && graphBackend.startsWith("gpu")) {
             notes.add("Graph and Leiden on the GPU.");
         }
+        if (embeddingExecution != null && embeddingExecution.startsWith("gpu")) {
+            notes.add("UMAP on the GPU.");
+        }
         if (duplicateRows > 0) {
             notes.add(String.format(java.util.Locale.ROOT, "%,d", duplicateRows)
                     + " cells had identical measurements and were clustered once per distinct row.");

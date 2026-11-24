@@ -21,6 +21,7 @@ import qupath.ext.qpcat.model.InputSelection;
 import qupath.ext.qpcat.model.MembershipConfidence;
 import qupath.ext.qpcat.service.QpcatColorMaps;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.model.RunCostSummary;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.ScalingLimits;
 import qupath.ext.qpcat.scripting.SpatialConnectionsScripts;
@@ -2083,6 +2084,14 @@ public class ClusteringWorkflow {
             r.compareResolutions = config.getCompareResolutions().size();
             r.gpuGraph = "gpu".equals(config.getGraphBackend());
         }
+        r.gpuUmap = config.isGpuUmap();
+        if (r.gpuUmap) {
+            Map<String, Object> emb = config.getEmbeddingParams();
+            Object un = emb == null ? null : emb.get("n_neighbors");
+            if (un instanceof Number num && num.intValue() > 0) r.umapNeighbors = num.intValue();
+            r.umapSeeded = RunCostSummary.umapSeeded(
+                    config.getEmbeddingExecutionMode(), nCells);
+        }
         r.ripley = config.isEnableRipley();
         r.coOccurrence = config.isEnableCoOccurrencePairwise()
                 || config.isEnableCoOccurrenceOneVsRest();
@@ -2665,8 +2674,20 @@ public class ClusteringWorkflow {
             // never silently non-reproducible.
             Object execNote = task.outputs.get("embedding_execution");
             if (execNote != null) {
-                result.setEmbeddingExecution(String.valueOf(execNote));
-                logger.info("Embedding execution: {}", execNote);
+                String en = String.valueOf(execNote);
+                result.setEmbeddingExecution(en);
+                logger.info("Embedding execution: {}", en);
+                // A GPU UMAP that fell back says why, once, as the GPU graph does.
+                if (en.startsWith("cpu (gpu requested")) {
+                    logger.warn("UMAP ran on the CPU although the GPU was asked for: {}", en);
+                    if (qupath != null) {
+                        Platform.runLater(() -> Dialogs.showWarningNotification("QPCAT",
+                                "The GPU UMAP was not used; UMAP ran on the CPU. " + en));
+                    }
+                } else if (en.startsWith("gpu")) {
+                    OperationLogger.getInstance().logOperation("GPU UMAP",
+                            Map.of("Execution", en), en, -1);
+                }
             }
 
             // Whether the PCA precursor engaged. It changes cluster labels, so the
@@ -2841,11 +2862,12 @@ public class ClusteringWorkflow {
         inputs.put("embedding_params", config.getEmbeddingParams());
         inputs.put("embedding_execution_mode", config.getEmbeddingExecutionMode());
         inputs.put("reuse_budget_bytes", reuseBudgetBytes());
-        // Leiden's graph on the GPU: a separate RAPIDS process the worker starts
-        // (run_clustering.py gpu_bridge_run); the script travels as text because
+        // Leiden's graph and UMAP on the GPU: separate RAPIDS processes the worker
+        // starts (run_clustering.py _gpu_job_run); the script travels as text because
         // the worker has no file of its own to run.
         inputs.put("graph_backend", config.getGraphBackend());
-        if ("gpu".equals(config.getGraphBackend())) {
+        inputs.put("embedding_backend", config.getEmbeddingBackend());
+        if ("gpu".equals(config.getGraphBackend()) || config.isGpuUmap()) {
             inputs.put("gpu_python", QpcatPreferences.getGpuGraphPython());
             inputs.put("gpu_scratch_dir", QpcatPreferences.getGpuGraphScratchDir());
             try {

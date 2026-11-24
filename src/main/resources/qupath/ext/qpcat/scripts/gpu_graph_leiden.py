@@ -1,30 +1,44 @@
-"""QP-CAT's neighbor graph and Leiden on the GPU, as its own processes in a RAPIDS environment.
+"""QP-CAT's GPU steps as their own processes in a RAPIDS environment: the neighbor
+graph and Leiden, or UMAP.
 
 Usage: python gpu_graph_leiden.py <job dir>
        python gpu_graph_leiden.py --stage graph <job dir>
        python gpu_graph_leiden.py --stage leiden <job dir> <device|managed>
+       python gpu_graph_leiden.py --stage umap <job dir>
 
-The first form is the driver: it runs the graph stage and then the Leiden stage,
-each in a fresh child process of this same script, so the neighbor search's card
-memory is released before Leiden starts. Based on the GPU pipeline benchmarked by
-Clement Cazorla (INSERM).
+The first form is the driver. For the task "graph_leiden" it runs the graph stage and
+then the Leiden stage; for "umap" the UMAP stage. Each stage is a fresh child process
+of this same script, so a stage's card memory is released before the next one starts.
+The graph and Leiden design is based on the GPU pipeline benchmarked by Clement
+Cazorla (INSERM).
 
 Reads from the job folder:
   matrix.npy    cells x features, float32, already normalized by the worker
-  params.json   {"n_neighbors": int, "seed": int, "resolutions": [float, ...],
-                 "brute_force_cells": int}
+  params.json   {"task": "graph_leiden", "n_neighbors": int, "seed": int,
+                 "resolutions": [float, ...], "brute_force_cells": int}
+                or {"task": "umap", "n_neighbors": int, "n_components": int,
+                 "min_dist": float, "metric": str, "seed": int or null}
 Writes there:
   connectivities.npz  the cells x cells connectivities (scipy CSR, int32 indices,
                       float32 weights), the graph Leiden partitioned
   graph_meta.json     the graph stage's report
   leiden_meta.json    the Leiden stage's report (the last attempt)
   labels_<i>.npy      one int32 label per cell for resolutions[i]
+  embedding.npy       cells x n_components float32 (task "umap")
+  umap_meta.json      the UMAP stage's report
   result.json   {"ok": true, "n_cells", "nnz", "algorithm", "memory", "attempts",
                  "versions", "resolutions": [...], "seconds": {...}}
+                or, for "umap", {"ok": true, "n_cells", "build_algo", "seeded",
+                 "versions", "seconds": {...}}
                 or {"ok": false, "error": "...", "versions": {...}}
 
-This is not an Appose script: run_clustering.py (gpu_bridge_run) starts the driver
+This is not an Appose script: run_clustering.py (_gpu_job_run) starts the driver
 with stdout and stderr sent to run.log in the job folder; the stages inherit them.
+
+UMAP: cuML's UMAP. With a seed the layout repeats run to run on one card (cuML then
+searches neighbors exactly and optimizes deterministically); without one, cuML's
+NN-descent above 50,000 cells, and the layout differs between runs. Any failure is
+reported, and the worker runs umap-learn instead.
 
 Graph: the neighbor search runs on the GPU (cuML's exact brute force up to
 brute_force_cells, cuVS NN-descent above, both through rapids-singlecell's
@@ -66,7 +80,9 @@ def is_cuda_oom(text):
     return bool(_OOM.search(text or ""))
 
 
-def versions():
+def versions(libraries=("cuml", "cugraph", "rapids_singlecell")):
+    """The Python, CUDA, card and library versions this stage sees (each library is
+    imported to read its version: cuGraph and rapids-singlecell cost seconds)."""
     out = {"python": sys.version.split()[0]}
     try:
         import cupy
@@ -83,7 +99,7 @@ def versions():
         out["gpu_total_mib"] = int(props["totalGlobalMem"] // 2**20)
     except Exception as e:  # reported, not fatal: the error that follows names it
         out["cupy_error"] = "%s: %s" % (type(e).__name__, e)
-    for name in ("cuml", "cugraph", "rapids_singlecell"):
+    for name in libraries:
         try:
             out[name] = __import__(name).__version__
         except Exception as e:
@@ -168,6 +184,57 @@ def knn_graph_gpu(matrix, n_neighbors, seed, brute_force_cells):
     conn.indices = conn.indices.astype(np.int32, copy=False)
     seconds["fuzzy"] = round(time.monotonic() - t0, 3)
     return conn, algorithm, seconds
+
+
+# Unseeded, cuML 26.10 searches exactly up to this many cells (its own "auto").
+UMAP_BRUTE_FORCE_CELLS = 50_000
+# The metrics cuML's NN-descent supports for dense input; the others search exactly.
+UMAP_NN_DESCENT_METRICS = ("euclidean", "l2", "sqeuclidean", "cosine")
+
+
+def umap_build_algo(n_cells, metric, seeded):
+    """cuML's neighbor search for this UMAP: exact when seeded (as cuML's "auto" does,
+    so the layout repeats), for small inputs, and for metrics NN-descent lacks."""
+    if (
+        seeded
+        or n_cells <= UMAP_BRUTE_FORCE_CELLS
+        or str(metric).lower() not in UMAP_NN_DESCENT_METRICS
+    ):
+        return "brute_force_knn"
+    return "nn_descent"
+
+
+def umap_gpu(matrix, n_neighbors, n_components, min_dist, metric, seed):
+    """cuML UMAP of the matrix.
+
+    :param seed: int for the seeded layout, None for the unseeded one
+    :return: (float32 embedding, cuML build_algo, seconds dict)
+    :raises ValueError: when the embedding has the wrong shape or non-finite values
+    """
+    from cuml.manifold import UMAP
+
+    n_cells = int(matrix.shape[0])
+    build_algo = umap_build_algo(n_cells, metric, seed is not None)
+    t0 = time.monotonic()
+    emb = UMAP(
+        n_neighbors=int(n_neighbors),
+        n_components=int(n_components),
+        min_dist=float(min_dist),
+        metric=str(metric),
+        random_state=seed,
+        build_algo=build_algo,
+        output_type="numpy",
+    ).fit_transform(np.ascontiguousarray(matrix, dtype=np.float32))
+    emb = np.asarray(emb, dtype=np.float32)
+    seconds = {"umap": round(time.monotonic() - t0, 3)}
+    if emb.shape != (n_cells, int(n_components)):
+        raise ValueError(
+            "cuML UMAP returned shape %s, expected (%d, %d)"
+            % (emb.shape, n_cells, int(n_components))
+        )
+    if not np.isfinite(emb).all():
+        raise ValueError("cuML UMAP returned non-finite coordinates")
+    return emb, build_algo, seconds
 
 
 def modularity(csr, labels, resolution):
@@ -373,6 +440,47 @@ def leiden_stage(job, memory):
     return 0 if meta["ok"] else 1
 
 
+def umap_stage(job):
+    """cuML UMAP; writes embedding.npy and umap_meta.json."""
+    meta = {"ok": False, "versions": versions(("cuml",)), "seconds": {}}
+    try:
+        params = json.load(open(os.path.join(job, "params.json")))
+        t0 = time.monotonic()
+        matrix = np.load(os.path.join(job, "matrix.npy"))
+        meta["seconds"]["load"] = round(time.monotonic() - t0, 3)
+        seed = params.get("seed")
+        emb, build_algo, secs = umap_gpu(
+            matrix,
+            int(params["n_neighbors"]),
+            int(params["n_components"]),
+            float(params["min_dist"]),
+            str(params["metric"]),
+            None if seed is None else int(seed),
+        )
+        meta["seconds"].update(secs)
+        t0 = time.monotonic()
+        np.save(os.path.join(job, "embedding.npy"), emb)
+        meta["seconds"]["save_embedding"] = round(time.monotonic() - t0, 3)
+        meta.update(
+            {
+                "ok": True,
+                "n_cells": int(emb.shape[0]),
+                "build_algo": build_algo,
+                "seeded": seed is not None,
+            }
+        )
+        print(
+            "umap stage: %d cells, %s, seeded %s, seconds %s"
+            % (emb.shape[0], build_algo, seed is not None, json.dumps(meta["seconds"])),
+            flush=True,
+        )
+    except Exception:
+        meta["error"] = traceback.format_exc()
+        print(meta["error"], file=sys.stderr, flush=True)
+    _write_json(os.path.join(job, "umap_meta.json"), meta)
+    return 0 if meta["ok"] else 1
+
+
 def _run_stage(job, stage, *extra):
     """One stage in a fresh process of this script; its output joins this one's log.
 
@@ -410,58 +518,87 @@ def _stage_failure(stage, code, meta):
     return "the %s stage failed: %s" % (stage, str(meta.get("error", ""))[-800:])
 
 
+def _umap_task(job, result):
+    """The UMAP stage in its own process; fills ``result``."""
+    code, secs = _run_stage(job, "umap")
+    result["seconds"]["umap_process"] = secs
+    umap_meta = _read_meta(job, "umap_meta.json")
+    if umap_meta is not None:
+        result["versions"] = umap_meta.get("versions", {})
+        result["seconds"].update(umap_meta.get("seconds", {}))
+    if code != 0 or umap_meta is None or not umap_meta.get("ok"):
+        raise RuntimeError(_stage_failure("UMAP", code, umap_meta))
+    result.update(
+        {
+            "ok": True,
+            "n_cells": umap_meta["n_cells"],
+            "build_algo": umap_meta["build_algo"],
+            "seeded": umap_meta["seeded"],
+        }
+    )
+
+
+def _graph_leiden_task(job, result):
+    """The graph stage, then the Leiden stage (retried once with managed memory on
+    native Linux when it runs out of card memory); fills ``result``."""
+    code, secs = _run_stage(job, "graph")
+    result["seconds"]["graph_process"] = secs
+    graph = _read_meta(job, "graph_meta.json")
+    if graph is not None:
+        result["versions"] = graph.get("versions", {})
+        result["seconds"].update(graph.get("seconds", {}))
+    if code != 0 or graph is None or not graph.get("ok"):
+        raise RuntimeError(_stage_failure("graph", code, graph))
+    attempts = []
+    for memory in ("device", "managed"):
+        code, secs = _run_stage(job, "leiden", memory)
+        leiden = _read_meta(job, "leiden_meta.json")
+        ok = code == 0 and leiden is not None and leiden.get("ok")
+        attempts.append({"memory": memory, "exit": code, "seconds": secs})
+        if ok:
+            break
+        failure = _stage_failure("Leiden", code, leiden)
+        if not (leiden or {}).get("oom"):
+            raise RuntimeError(failure)
+        if memory == "managed":
+            raise RuntimeError("out of GPU memory with managed memory too: " + failure)
+        if is_wsl():
+            raise RuntimeError(
+                "Leiden ran out of GPU memory, and WSL2 does not support the "
+                "managed-memory retry: " + failure
+            )
+        print(
+            "Leiden ran out of GPU memory; retrying once with RMM managed memory",
+            flush=True,
+        )
+    result["attempts"] = attempts
+    result["seconds"]["leiden_process"] = round(sum(a["seconds"] for a in attempts), 3)
+    result["seconds"].update(leiden.get("seconds", {}))
+    result.update(
+        {
+            "ok": True,
+            "n_cells": graph["n_cells"],
+            "nnz": graph["nnz"],
+            "algorithm": graph["algorithm"],
+            "memory": leiden["memory"],
+            "resolutions": leiden["resolutions"],
+        }
+    )
+
+
 def main(job):
-    """Run the graph stage, then the Leiden stage, and write result.json."""
+    """Run the stages of the job's task (params.json "task") and write result.json."""
     t_start = time.monotonic()
     result = {"ok": False, "versions": {}, "seconds": {}}
     try:
-        code, secs = _run_stage(job, "graph")
-        result["seconds"]["graph_process"] = secs
-        graph = _read_meta(job, "graph_meta.json")
-        if graph is not None:
-            result["versions"] = graph.get("versions", {})
-            result["seconds"].update(graph.get("seconds", {}))
-        if code != 0 or graph is None or not graph.get("ok"):
-            raise RuntimeError(_stage_failure("graph", code, graph))
-        attempts = []
-        for memory in ("device", "managed"):
-            code, secs = _run_stage(job, "leiden", memory)
-            leiden = _read_meta(job, "leiden_meta.json")
-            ok = code == 0 and leiden is not None and leiden.get("ok")
-            attempts.append({"memory": memory, "exit": code, "seconds": secs})
-            if ok:
-                break
-            failure = _stage_failure("Leiden", code, leiden)
-            if not (leiden or {}).get("oom"):
-                raise RuntimeError(failure)
-            if memory == "managed":
-                raise RuntimeError(
-                    "out of GPU memory with managed memory too: " + failure
-                )
-            if is_wsl():
-                raise RuntimeError(
-                    "Leiden ran out of GPU memory, and WSL2 does not support the "
-                    "managed-memory retry: " + failure
-                )
-            print(
-                "Leiden ran out of GPU memory; retrying once with RMM managed memory",
-                flush=True,
-            )
-        result["attempts"] = attempts
-        result["seconds"]["leiden_process"] = round(
-            sum(a["seconds"] for a in attempts), 3
-        )
-        result["seconds"].update(leiden.get("seconds", {}))
-        result.update(
-            {
-                "ok": True,
-                "n_cells": graph["n_cells"],
-                "nnz": graph["nnz"],
-                "algorithm": graph["algorithm"],
-                "memory": leiden["memory"],
-                "resolutions": leiden["resolutions"],
-            }
-        )
+        with open(os.path.join(job, "params.json")) as f:
+            task = json.load(f).get("task", "graph_leiden")
+        if task == "umap":
+            _umap_task(job, result)
+        elif task == "graph_leiden":
+            _graph_leiden_task(job, result)
+        else:
+            raise RuntimeError("unknown task %r in params.json" % task)
     except Exception as e:
         result["error"] = (
             str(e) if isinstance(e, RuntimeError) else traceback.format_exc()
@@ -479,5 +616,7 @@ if __name__ == "__main__":
     if len(sys.argv) >= 4 and sys.argv[1] == "--stage":
         if sys.argv[2] == "graph":
             sys.exit(graph_stage(sys.argv[3]))
+        if sys.argv[2] == "umap":
+            sys.exit(umap_stage(sys.argv[3]))
         sys.exit(leiden_stage(sys.argv[3], sys.argv[4]))
     sys.exit(main(sys.argv[1]))

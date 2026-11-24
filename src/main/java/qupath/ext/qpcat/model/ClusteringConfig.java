@@ -111,6 +111,7 @@ public class ClusteringConfig {
     private Normalization normalization = Normalization.ZSCORE;
     private MissingPolicy missingPolicy = MissingPolicy.EXCLUDE_OBJECTS;
     private String graphBackend = "cpu";
+    private String embeddingBackend = "cpu";
     private EmbeddingMethod embeddingMethod = EmbeddingMethod.UMAP;
     private Map<String, Object> embeddingParams = new HashMap<>();
     private List<String> selectedMeasurements;
@@ -319,6 +320,23 @@ public class ClusteringConfig {
     public String getGraphBackend() { return graphBackend; }
     public void setGraphBackend(String backend) {
         this.graphBackend = "gpu".equalsIgnoreCase(backend == null ? "" : backend.trim()) ? "gpu" : "cpu";
+    }
+
+    /**
+     * Where UMAP runs: "cpu" (default, umap-learn) or "gpu" (cuML in the same RAPIDS
+     * process as the GPU graph). Other embedding methods ignore it.
+     */
+    public String getEmbeddingBackend() {
+        // Configs saved before this field existed load it as null.
+        return embeddingBackend == null ? "cpu" : embeddingBackend;
+    }
+    public void setEmbeddingBackend(String backend) {
+        this.embeddingBackend = "gpu".equalsIgnoreCase(backend == null ? "" : backend.trim()) ? "gpu" : "cpu";
+    }
+
+    /** Whether this run asks for UMAP on the GPU. */
+    public boolean isGpuUmap() {
+        return embeddingMethod == EmbeddingMethod.UMAP && "gpu".equals(getEmbeddingBackend());
     }
 
     /** What the run does with an object lacking a value for a selected measurement (issue #29). */

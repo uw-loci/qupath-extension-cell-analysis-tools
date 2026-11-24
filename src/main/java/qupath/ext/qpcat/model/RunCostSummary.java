@@ -34,6 +34,16 @@ public final class RunCostSummary {
 
     private RunCostSummary() {}
 
+    /**
+     * Whether UMAP runs seeded for this mode and cell count, on the CPU and the GPU alike
+     * (model_utils.resolve_umap_execution).
+     */
+    public static boolean umapSeeded(String mode, long nCells) {
+        if ("reproducible".equalsIgnoreCase(mode)) return true;
+        if ("fast".equalsIgnoreCase(mode)) return false;
+        return nCells < EMBEDDING_FAST_MODE_CELLS;
+    }
+
     /** What this run gives up, one entry per active non-free option; empty when none are. */
     public static List<String> describe(ClusteringConfig config) {
         List<String> costs = new ArrayList<>();
@@ -48,6 +58,9 @@ public final class RunCostSummary {
         } else if (umap && "auto".equalsIgnoreCase(mode)) {
             costs.add("UMAP layout is not reproducible above "
                     + String.format("%,d", EMBEDDING_FAST_MODE_CELLS) + " cells");
+        }
+        if (config.isGpuUmap()) {
+            costs.add("UMAP on the GPU -- its layout is not comparable to a CPU UMAP of the same settings");
         }
 
         if (config.isPcaPrecursor()) {

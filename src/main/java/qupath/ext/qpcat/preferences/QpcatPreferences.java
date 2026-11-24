@@ -66,9 +66,9 @@ public final class QpcatPreferences {
             "qpcat.env.workerSingleOpenMpThread", GeneralTools.isWindows());
 
     /**
-     * The RAPIDS environment's Python for the GPU neighbor graph and Leiden; "" = none.
+     * The RAPIDS environment's Python for the GPU neighbor graph, Leiden and UMAP; "" = none.
      * On Windows a path inside WSL2 ("/home/you/rapids/.pixi/envs/default/bin/python").
-     * Read by the worker at run time (gpu_bridge_run in run_clustering.py).
+     * Read by the worker at run time (_gpu_job_run in run_clustering.py).
      */
     private static final StringProperty gpuGraphPython = PathPrefs.createPersistentPreference(
             "qpcat.env.gpuGraphPython", "");
@@ -80,6 +80,10 @@ public final class QpcatPreferences {
     /** The Clustering dialog's "on the GPU" tick for Leiden; off until the user turns it on. */
     private static final BooleanProperty gpuGraph = PathPrefs.createPersistentPreference(
             "qpcat.cluster.gpuGraph", false);
+
+    /** The "UMAP on the GPU" tick of the Clustering and Embedding dialogs; off by default. */
+    private static final BooleanProperty gpuUmap = PathPrefs.createPersistentPreference(
+            "qpcat.cluster.gpuUmap", false);
 
     /**
      * Default for the PAGA cluster-connectivity graph.
@@ -578,6 +582,9 @@ public final class QpcatPreferences {
     /** @see #gpuGraph */
     public static boolean isGpuGraph() { return gpuGraph.get(); }
     public static void setGpuGraph(boolean v) { gpuGraph.set(v); }
+    /** @see #gpuUmap */
+    public static boolean isGpuUmap() { return gpuUmap.get(); }
+    public static void setGpuUmap(boolean v) { gpuUmap.set(v); }
 
     /** @see #workerSingleOpenMpThread */
     public static boolean isWorkerSingleOpenMpThread() { return workerSingleOpenMpThread.get(); }
@@ -1044,14 +1051,15 @@ public final class QpcatPreferences {
                 .build());
 
         items.add(new PropertyItemBuilder<>(gpuGraphPython, String.class)
-                .name("GPU graph and Leiden: Python")
+                .name("GPU (RAPIDS): Python")
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(
                         "The Python of a RAPIDS environment you installed yourself (cuML, cuGraph, "
                         + "rapids-singlecell, cupy, umap-learn, scipy, numpy; the manifest ships in "
                         + "the documentation). "
                         + "With it set, the Clustering dialog offers 'Neighbor graph and Leiden on the "
-                        + "GPU' for Leiden runs.\n\n"
+                        + "GPU' for Leiden runs, and the Clustering and Embedding dialogs offer 'UMAP "
+                        + "on the GPU'.\n\n"
                         + "On Windows this is a path inside WSL2, for example "
                         + "/home/you/rapids/.pixi/envs/default/bin/python; QP-CAT starts it through "
                         + "wsl.exe and hands the matrix over as a file. On Linux it is a local path. "
@@ -1059,11 +1067,11 @@ public final class QpcatPreferences {
                 .build());
 
         items.add(new PropertyItemBuilder<>(gpuGraphScratchDir, String.class)
-                .name("GPU graph and Leiden: scratch folder")
+                .name("GPU (RAPIDS): scratch folder")
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(
-                        "Where the hand-over files go (the matrix in, the graph and labels out; "
-                        + "three files, removed after the run). Blank: on Linux, $TMPDIR when the "
+                        "Where the hand-over files go (the matrix in; the graph and labels, or the "
+                        + "UMAP coordinates, out; removed after the run). Blank: on Linux, $TMPDIR when the "
                         + "scheduler sets one, else a folder beside the RAPIDS environment; on Windows, "
                         + "~/.cache/qpcat-gpu inside WSL2. On a networked home directory, point this at "
                         + "scratch. On Windows this is a path inside WSL2."))

@@ -20,9 +20,14 @@ Inputs (injected by Appose 0.10.0 -- accessed as variables, NOT task.inputs):
     cuGraph Leiden in a second process) and hands the matrix over as a file; on
     Windows the process runs inside WSL2 through wsl.exe. Falls back to "cpu"
     with a logged reason when the process cannot run.
+  embedding_backend: str ("cpu" | "gpu", default "cpu")
+    Where UMAP runs. "gpu" runs cuML's UMAP in the same RAPIDS environment, as its
+    own job of gpu_graph_leiden.py, on the distinct rows of the matrix the CPU UMAP
+    would get; falls back to umap-learn with the reason in embedding_execution.
+    Other embedding methods ignore it.
   gpu_python: str -- the RAPIDS environment's python (a WSL path on Windows); "" = none
   gpu_scratch_dir: str -- folder for the hand-over files; "" = $TMPDIR, else beside the
-    environment (never the home directory or the project; see gpu_bridge_run)
+    environment (never the home directory or the project; see _gpu_job_run)
   gpu_script_source: str -- the text of gpu_graph_leiden.py, written into the job folder
   embedding_execution_mode: str ("auto" | "reproducible" | "fast", default "auto")
     Reproducibility-vs-speed policy for UMAP. umap-learn forces single-threaded
@@ -76,7 +81,9 @@ Outputs (via task.outputs):
   embedding: NDArray (N_cells x embedding_n_components) float64
     (if embedding_method != "none"; second dim is 2 or 3)
   cluster_stats: NDArray (n_clusters x N_markers) float64 -- per-cluster marker means
-  embedding_execution: str -- how UMAP was run (parallelism + init), for the audit log
+  embedding_execution: str -- how UMAP was run, for the audit log: on the CPU its
+    parallelism and init; "gpu (<card> on Linux|WSL2; cuML <v>; seeded|unseeded, ...)"
+    on the GPU; "cpu (gpu requested; <reason>); ..." when the GPU UMAP fell back
   graph_backend: str -- where the Leiden graph and partition ran ("cpu", "gpu ...",
     or "cpu (gpu requested; ...)" when the GPU backend was asked for but unavailable)
   duplicate_rows: int -- Leiden only: cells whose measurement row another cell
@@ -347,6 +354,16 @@ if pref_graph_backend not in ("cpu", "gpu"):
         "graph_backend %r is not 'cpu' or 'gpu'; using cpu", pref_graph_backend
     )
     pref_graph_backend = "cpu"
+# Where UMAP runs; "cpu" unless asked otherwise.
+try:
+    pref_embedding_backend = str(embedding_backend).strip().lower()
+except NameError:
+    pref_embedding_backend = "cpu"
+if pref_embedding_backend not in ("cpu", "gpu"):
+    logger.warning(
+        "embedding_backend %r is not 'cpu' or 'gpu'; using cpu", pref_embedding_backend
+    )
+    pref_embedding_backend = "cpu"
 try:
     pref_gpu_python = str(gpu_python).strip()
 except NameError:
@@ -1142,6 +1159,695 @@ if resolve_pca_precursor(
 # step that changes cluster_matrix belongs above this line; anything the sweep
 # does not need belongs below it.
 
+# ---- GPU hand-over (RAPIDS process) ---------------------------------------
+# Defined here, above the embedding, because the GPU UMAP below uses it as well
+# as Leiden; a def after its module-level call site would not exist yet.
+
+
+def unique_rows(matrix):
+    """The distinct rows of ``matrix``, so the neighbor search sees each row once.
+
+    Cells with identical measurements break both searches Leiden can use. The
+    approximate search (pynndescent, what scanpy runs) splits them off into
+    islands: 2,903 synthetic cells sharing 56 rows gave a graph of 37 connected
+    components and 65-83 Leiden clusters for 8 cell types at every resolution
+    (ARI 0.60 at best); the same rows searched once give 8 components and the 8
+    types at resolution 0.1-0.2 (ARI 0.92). The exact search (the GPU path)
+    joins them into hubs of degree in the thousands, on which cuGraph Leiden
+    returns every cell as its own cluster. Searching and partitioning the
+    distinct rows, then giving every cell the label of its row, avoids both.
+    A block of identical cells is then one node, so at a given resolution the
+    partition is finer than the hub graph gave. Rows are compared byte for byte, so only
+    bitwise identical rows count (0.8 s at 1,000,000 x 25 float32 with 30%
+    duplicates). With no duplicates ``matrix`` itself comes back, so the graph
+    is the one built before this existed.
+
+    :param matrix: cells x features
+    :return: (rows, row_of_cell, shared): the distinct rows, the index of each
+        cell's row in them (``rows[row_of_cell]`` rebuilds ``matrix``), and the
+        number of cells whose row another cell shares (0 when none)
+    """
+    arr = np.ascontiguousarray(matrix)
+    n = arr.shape[0]
+    if arr.ndim != 2 or n < 2 or arr.shape[1] == 0:
+        return arr, np.arange(n), 0
+    as_bytes = arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
+    _, first, row_of_cell, counts = np.unique(
+        as_bytes.ravel(), return_index=True, return_inverse=True, return_counts=True
+    )
+    row_of_cell = np.asarray(row_of_cell).ravel()
+    if first.shape[0] == n:
+        return arr, np.arange(n), 0
+    shared = int((counts[row_of_cell] > 1).sum())
+    return arr[first], row_of_cell, shared
+
+
+class GpuBridgeError(Exception):
+    """The RAPIDS process could not run or did not deliver; the message says why."""
+
+
+def gpu_bridge_available(backend, python_cmd):
+    """Whether the GPU path can be tried, and why not.
+
+    :param backend: "cpu" or "gpu"
+    :param python_cmd: the RAPIDS environment's python, "" when none is configured
+    :return: ("cpu", None), ("gpu", None), or ("cpu", reason)
+    """
+    if backend != "gpu":
+        return "cpu", None
+    if not python_cmd:
+        return "cpu", (
+            "no RAPIDS Python configured (Edit > Preferences > QP-CAT: Python "
+            "environment > GPU (RAPIDS): Python)"
+        )
+    return "gpu", None
+
+
+def gpu_scratch_default(python_cmd):
+    """Where the hand-over files go when no folder is configured: $TMPDIR when the
+    scheduler sets one, else a folder beside the RAPIDS environment (its pixi
+    root), else the system temp folder. Never the home directory or the project:
+    on a networked home every file costs."""
+    tmpdir = os.environ.get("TMPDIR")
+    if tmpdir:
+        return os.path.join(tmpdir, "qpcat-gpu")
+    parts = python_cmd.replace("\\", "/").split("/")
+    if ".pixi" in parts:
+        root = "/".join(parts[: parts.index(".pixi")])
+        if root:
+            return root + "/qpcat-gpu-scratch"
+    import tempfile
+
+    return os.path.join(tempfile.gettempdir(), "qpcat-gpu")
+
+
+def _gpu_child_env(python_cmd):
+    """The isolated environment the RAPIDS process gets (not os.environ as is):
+    no user site-packages, no PYTHONPATH, and LD_LIBRARY_PATH rebuilt as the
+    environment's lib plus only inherited folders that hold libcuda.so.1."""
+    env = {}
+    for k in (
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "CUDA_VISIBLE_DEVICES",
+        "SystemRoot",
+        "TEMP",
+        "TMP",
+    ):
+        if k in os.environ:
+            env[k] = os.environ[k]
+    env["PYTHONNOUSERSITE"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+    prefix = os.path.dirname(os.path.dirname(python_cmd))
+    # What `pixi run` would activate, minus the shell: the environment's bin first,
+    # and CUDA_PATH for cupy's kernel compiler (pixi sets neither CUDA_PATH nor
+    # CUDA_HOME; without it cupy stops with "Failed to find CUDA headers").
+    env["CONDA_PREFIX"] = prefix
+    env["PATH"] = os.path.join(prefix, "bin") + os.pathsep + env.get("PATH", "")
+    env["CUDA_PATH"] = gpu_cuda_path(prefix)
+    env_lib = os.path.join(prefix, "lib")
+    keep = [env_lib] if os.path.isdir(env_lib) else []
+    for d in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+        if d and os.path.exists(os.path.join(d, "libcuda.so.1")) and d not in keep:
+            keep.append(d)
+    if keep:
+        env["LD_LIBRARY_PATH"] = os.pathsep.join(keep)
+    return env
+
+
+def gpu_cuda_path(prefix):
+    """CUDA_PATH for a conda-forge CUDA environment: its targets folder when present."""
+    targets = os.path.join(prefix, "targets", "x86_64-linux")
+    return targets if os.path.isdir(targets) else prefix
+
+
+def _wsl_run(args, timeout=60):
+    """Run a command inside WSL from Windows; returns its stdout text.
+
+    wsl.exe joins its arguments with spaces and hands the line to the WSL
+    user's login shell, which parses it AGAIN: quotes, "$VAR" and "~" are
+    interpreted once more than a subprocess list suggests. Pass plain words
+    (paths without metacharacters) and put any real shell logic in a script
+    file, as gpu_bridge_run does.
+    """
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            ["wsl.exe", "--"] + args,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout,
+        )
+    except FileNotFoundError:
+        raise GpuBridgeError(
+            "wsl.exe was not found: Windows Subsystem for Linux is not installed on "
+            "this computer (or not on PATH). The GPU graph needs WSL2 with a Linux "
+            "distribution and a RAPIDS environment inside it; see Setup > Neighbor "
+            "graph and Leiden on the GPU, or untick the GPU option"
+        )
+    except subprocess.TimeoutExpired:
+        raise GpuBridgeError(
+            "wsl.exe did not answer within %d s (is the Linux distribution able to "
+            "start? try 'wsl.exe -- echo ok' in a terminal)" % timeout
+        )
+    if r.returncode != 0:
+        msg = (r.stdout + r.stderr).replace("\x00", "").strip()
+        if not msg:
+            msg = "exit code %d with no message" % r.returncode
+        if (
+            "no installed distributions" in msg.lower()
+            or "wsl_e_default_distro" in msg.lower()
+        ):
+            msg += (
+                " (WSL is installed but has no Linux distribution; install one, "
+                "for example 'wsl --install -d Ubuntu', then the RAPIDS environment)"
+            )
+        if "elevation" in msg.lower():
+            msg += (
+                " (Windows refuses to start WSL from an unelevated program; a "
+                "'Run as administrator' compatibility flag on wsl.exe does this. "
+                "Check Properties > Compatibility of C:\\Program Files\\WSL\\wsl.exe.)"
+            )
+        raise GpuBridgeError("wsl.exe failed: " + msg[:400])
+    return r.stdout.replace("\x00", "")
+
+
+def _check_wsl_path(path, preference):
+    """Refuse a path that would not survive wsl.exe's re-parse (see _wsl_run).
+
+    :raises GpuBridgeError: naming the preference when the path is not an
+        absolute Linux path or carries whitespace or shell metacharacters
+    """
+    bad = re.compile(r"[\s$`\"'\;&|<>(){}*?]")
+    if not path or not path.startswith("/") or bad.search(path):
+        raise GpuBridgeError(
+            "'%s' must be a path inside WSL2 that starts with '/' and has no spaces "
+            "or shell characters (got %r)" % (preference, (path or "")[:120])
+        )
+
+
+def _trim_failed_job(job):
+    """Drop the bulky hand-over files of a failed job, keeping run.log, result.json
+    and params.json so the failure can still be read."""
+    for name in os.listdir(job) if os.path.isdir(job) else []:
+        if name in (
+            "matrix.npy",
+            "connectivities.npz",
+            "embedding.npy",
+        ) or name.startswith("labels_"):
+            try:
+                os.remove(os.path.join(job, name))
+            except OSError:
+                pass
+
+
+def _wsl_run_script(linux_job, python_cmd):
+    """The bash script that runs gpu_graph_leiden.py inside WSL.
+
+    Written into the job folder and started as ``bash <path>``, so the
+    environment set-up lives in a file with ordinary quoting instead of on a
+    wsl.exe command line (see _wsl_run). Mirrors _gpu_child_env.
+    """
+    return (
+        "#!/bin/bash\n"
+        "# Written by QP-CAT for one run; see run_clustering.py gpu_bridge_run.\n"
+        'cd "%(job)s" || exit 3\n'
+        'QPCAT_PY="%(py)s"\n'
+        '[ -x "$QPCAT_PY" ] || { echo "python not found or not executable: $QPCAT_PY" > run.log; exit 4; }\n'
+        'PREFIX="$(dirname "$(dirname "$QPCAT_PY")")"\n'
+        'CUDA_PATH="$PREFIX/targets/x86_64-linux"\n'
+        '[ -d "$CUDA_PATH" ] || CUDA_PATH="$PREFIX"\n'
+        'export PATH="$PREFIX/bin:$PATH" CONDA_PREFIX="$PREFIX" CUDA_PATH\n'
+        "export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1\n"
+        "unset PYTHONPATH\n"
+        'exec "$QPCAT_PY" gpu_graph_leiden.py "%(job)s" > run.log 2>&1\n'
+    ) % {"job": linux_job, "py": python_cmd}
+
+
+def _gpu_job_run(matrix, params, python_cmd, scratch_dir, script_source, what):
+    """One job of gpu_graph_leiden.py in the RAPIDS environment, up to its result.
+
+    Writes matrix.npy, params.json and the script into a job folder, runs the
+    environment's python on it (through wsl.exe on Windows, so the folder lives
+    inside WSL), and reads result.json. The child's output goes to run.log in the
+    job folder, never to this process's stdout (the Appose channel).
+
+    :param params: params.json; its "task" picks the stages the driver runs
+    :param what: the step's name for the log ("GPU graph", "GPU UMAP")
+    :return: (job folder as this process sees it, result dict, seconds dict, windows)
+    :raises GpuBridgeError: with the reason, when anything fails; a failed job keeps
+        its log and small files, the bulky ones are removed
+    """
+    import json
+    import subprocess
+
+    if not script_source:
+        raise GpuBridgeError("gpu_graph_leiden.py was not handed to the worker")
+    windows = sys.platform == "win32"
+    job_name = "job_%d_%d_%s" % (os.getpid(), int(time.time()), params["task"])
+    if windows:
+        # Three plain commands, no quoting to survive the re-parse (see _wsl_run):
+        # the home folder (an unquoted ~ is expanded by the login shell), mkdir,
+        # and the Windows spelling of the folder for the file writes below.
+        linux_scratch = scratch_dir.strip().replace("\\", "/") if scratch_dir else ""
+        _check_wsl_path(python_cmd, "GPU (RAPIDS): Python")
+        if linux_scratch:
+            _check_wsl_path(linux_scratch, "GPU (RAPIDS): scratch folder")
+        if not linux_scratch:
+            home = _wsl_run(["echo", "~"]).strip()
+            if not home.startswith("/"):
+                raise GpuBridgeError(
+                    "could not find the WSL home folder (got %r)" % home[:100]
+                )
+            linux_scratch = home + "/.cache/qpcat-gpu"
+        linux_job = linux_scratch.rstrip("/") + "/" + job_name
+        _wsl_run(["mkdir", "-p", linux_job])
+        job = _wsl_run(["wslpath", "-w", linux_job]).strip()
+        if not job or not os.path.isdir(job):
+            raise GpuBridgeError(
+                "the job folder %s inside WSL is not reachable from Windows as %r"
+                % (linux_job, job[:200])
+            )
+    else:
+        job = os.path.join(scratch_dir or gpu_scratch_default(python_cmd), job_name)
+        try:
+            os.makedirs(job, exist_ok=True)
+        except OSError as e:
+            raise GpuBridgeError(
+                "cannot create the scratch folder %s (%s); set 'GPU (RAPIDS): "
+                "scratch folder' to a writable place" % (job, e)
+            )
+        linux_job = job
+    t0 = time.monotonic()
+    try:
+        np.save(
+            os.path.join(job, "matrix.npy"),
+            np.ascontiguousarray(matrix, dtype=np.float32),
+        )
+        with open(os.path.join(job, "params.json"), "w") as f:
+            json.dump(params, f)
+        with open(
+            os.path.join(job, "gpu_graph_leiden.py"),
+            "w",
+            encoding="utf-8",
+            newline="\n",
+        ) as f:
+            f.write(script_source)
+        if windows:
+            with open(
+                os.path.join(job, "run.sh"), "w", encoding="utf-8", newline="\n"
+            ) as f:
+                f.write(_wsl_run_script(linux_job, python_cmd))
+    except OSError as e:
+        raise GpuBridgeError("cannot write the hand-over files to %s (%s)" % (job, e))
+    seconds = {"write": round(time.monotonic() - t0, 3)}
+    logger.info(
+        "%s: %d cells x %d features written to %s in %.1f s",
+        what,
+        matrix.shape[0],
+        matrix.shape[1],
+        job,
+        seconds["write"],
+    )
+    t0 = time.monotonic()
+    try:
+        if windows:
+            cmd = ["wsl.exe", "--", "bash", linux_job + "/run.sh"]
+            r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+            tail = (r.stdout + r.stderr).replace("\x00", "")
+        else:
+            with open(os.path.join(job, "run.log"), "w") as log:
+                r = subprocess.run(
+                    [python_cmd, os.path.join(job, "gpu_graph_leiden.py"), job],
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    env=_gpu_child_env(python_cmd),
+                    cwd=job,
+                )
+            tail = ""
+    except FileNotFoundError as e:
+        raise GpuBridgeError("could not start the GPU process: %s" % e)
+    seconds["process"] = round(time.monotonic() - t0, 3)
+    result_path = os.path.join(job, "result.json")
+    if not os.path.exists(result_path):
+        _trim_failed_job(job)
+        log_tail = _tail(os.path.join(job, "run.log")) or tail
+        raise GpuBridgeError(
+            "the GPU process wrote no result (exit %s); its log %s ends with: %s"
+            % (r.returncode, os.path.join(job, "run.log"), log_tail[-600:])
+        )
+    with open(result_path) as f:
+        result = json.load(f)
+    if not result.get("ok"):
+        _trim_failed_job(job)
+        err = str(result.get("error", ""))[-800:]
+        versions = result.get("versions", {})
+        raise GpuBridgeError(
+            "the GPU process failed (%s; CUDA driver %s, runtime %s): %s"
+            % (
+                ", ".join(
+                    "%s %s" % (k, v)
+                    for k, v in versions.items()
+                    if k in ("gpu", "cuml", "cugraph")
+                ),
+                versions.get("cuda_driver", "?"),
+                versions.get("cuda_runtime", "?"),
+                err,
+            )
+        )
+    seconds.update({"gpu_" + k: v for k, v in result.get("seconds", {}).items()})
+    return job, result, seconds, windows
+
+
+def gpu_bridge_run(
+    matrix,
+    n_neighbors,
+    seed,
+    resolutions,
+    python_cmd,
+    scratch_dir,
+    script_source,
+    progress=None,
+):
+    """Build the graph and partition it on the GPU in a separate process.
+
+    The job (see _gpu_job_run) runs the graph and Leiden stages in separate
+    processes and retries an out-of-memory Leiden with managed memory on native
+    Linux; the connectivities and the labels come back as files.
+
+    :param resolutions: Leiden resolutions to partition at, the run's first
+    :return: (connectivities CSR, {resolution: labels}, note, seconds dict)
+    :raises GpuBridgeError: with the reason, when anything fails; the caller
+        falls back to the CPU
+    """
+    import json
+    import shutil
+    from scipy import sparse as sp
+
+    t_all = time.monotonic()
+    if progress:
+        progress("Neighbor graph and Leiden on the GPU...")
+    job, result, seconds, windows = _gpu_job_run(
+        matrix,
+        {
+            "task": "graph_leiden",
+            "n_neighbors": int(n_neighbors),
+            "seed": int(seed),
+            "resolutions": [float(r) for r in resolutions],
+            "brute_force_cells": GPU_BRUTE_FORCE_CELLS,
+        },
+        python_cmd,
+        scratch_dir,
+        script_source,
+        "GPU graph",
+    )
+    t0 = time.monotonic()
+    conn = sp.load_npz(os.path.join(job, "connectivities.npz")).tocsr()
+    labels_by_res = {}
+    degenerate = []
+    for row in result["resolutions"]:
+        lab = np.load(os.path.join(job, row["file"])).astype(np.int64)
+        if row.get("degenerate"):
+            degenerate.append(row["resolution"])
+        else:
+            labels_by_res[float(row["resolution"])] = lab
+    seconds["read"] = round(time.monotonic() - t0, 3)
+    seconds["total"] = round(time.monotonic() - t_all, 3)
+    versions = result.get("versions", {})
+    note = "gpu (%s on %s; cuML %s, cuGraph %s, rapids-singlecell %s; %s; %s)" % (
+        versions.get("gpu", "GPU"),
+        "WSL2" if windows else "Linux",
+        versions.get("cuml", "?"),
+        versions.get("cugraph", "?"),
+        versions.get("rapids_singlecell", "?"),
+        gpu_search_note(result.get("algorithm", "?")),
+        gpu_memory_note(result),
+    )
+    if degenerate:
+        note += (
+            "; cuGraph returned every cell as its own cluster at resolution %s, partitioned with igraph instead"
+            % (", ".join("%g" % r for r in degenerate))
+        )
+    logger.info(
+        "GPU graph: nnz=%d, %s; seconds %s",
+        conn.nnz,
+        note,
+        json.dumps(seconds, sort_keys=True),
+    )
+    for row in result["resolutions"]:
+        logger.info(
+            "GPU Leiden at resolution %g: %d clusters, modularity %.6f (cuGraph), "
+            "%.6f (recomputed on the graph)",
+            row["resolution"],
+            row["n_clusters"],
+            row["modularity"],
+            row.get("modularity_check", float("nan")),
+        )
+    shutil.rmtree(job, ignore_errors=True)
+    return conn, labels_by_res, note, seconds
+
+
+def gpu_umap_run(
+    matrix,
+    n_neighbors,
+    n_components,
+    min_dist,
+    metric,
+    seed,
+    python_cmd,
+    scratch_dir,
+    script_source,
+):
+    """cuML UMAP of ``matrix`` in a separate process (see _gpu_job_run).
+
+    :param seed: an int for the seeded layout (exact neighbor search, repeats run to
+        run on one card), None for the faster one that does not repeat
+    :return: (cells x n_components float64 embedding, note, seconds dict)
+    :raises GpuBridgeError: with the reason, when anything fails; the caller
+        falls back to the CPU UMAP
+    """
+    import json
+    import shutil
+
+    t_all = time.monotonic()
+    job, result, seconds, windows = _gpu_job_run(
+        matrix,
+        {
+            "task": "umap",
+            "n_neighbors": int(n_neighbors),
+            "n_components": int(n_components),
+            "min_dist": float(min_dist),
+            "metric": str(metric),
+            "seed": None if seed is None else int(seed),
+        },
+        python_cmd,
+        scratch_dir,
+        script_source,
+        "GPU UMAP",
+    )
+    t0 = time.monotonic()
+    emb = np.load(os.path.join(job, "embedding.npy")).astype(np.float64)
+    seconds["read"] = round(time.monotonic() - t0, 3)
+    seconds["total"] = round(time.monotonic() - t_all, 3)
+    if emb.shape != (matrix.shape[0], int(n_components)) or not np.isfinite(emb).all():
+        _trim_failed_job(job)
+        raise GpuBridgeError(
+            "the GPU UMAP returned an embedding of shape %s, expected %d x %d of "
+            "finite values" % (emb.shape, matrix.shape[0], int(n_components))
+        )
+    versions = result.get("versions", {})
+    note = "gpu (%s on %s; cuML %s; %s)" % (
+        versions.get("gpu", "GPU"),
+        "WSL2" if windows else "Linux",
+        versions.get("cuml", "?"),
+        gpu_umap_note(result.get("build_algo", "?"), seed is not None),
+    )
+    logger.info("GPU UMAP: %s; seconds %s", note, json.dumps(seconds, sort_keys=True))
+    shutil.rmtree(job, ignore_errors=True)
+    return emb, note, seconds
+
+
+def gpu_umap_note(build_algo, seeded):
+    """How the GPU UMAP ran and whether a repeat run gives the same layout."""
+    search = {
+        "brute_force_knn": "exact neighbor search",
+        "nn_descent": "NN-descent neighbor search",
+    }.get(build_algo, "%s neighbor search" % build_algo)
+    if seeded:
+        return "seeded, %s, repeats run to run on one card" % search
+    return "unseeded, %s, layout not bit-reproducible" % search
+
+
+def umap_on_gpu(
+    matrix,
+    n_neighbors,
+    n_components,
+    min_dist,
+    metric,
+    seed,
+    python_cmd,
+    scratch_dir,
+    script_source,
+):
+    """GPU UMAP of the distinct rows of ``matrix``; every cell gets its row's point.
+
+    Identical rows are embedded once, as the GPU graph does (see unique_rows): an
+    exact search over many copies of one row builds hubs, not neighborhoods.
+
+    :param matrix: cells x features, float32, finite (the caller checks)
+    :param seed: int for the seeded layout, None for the unseeded one
+    :return: (cells x n_components float64 embedding, note)
+    :raises GpuBridgeError: when the GPU UMAP cannot run or returns nothing usable
+    """
+    rows, row_of_cell, shared = unique_rows(matrix)
+    if rows.shape[0] <= int(n_neighbors):
+        raise GpuBridgeError(
+            "only %d distinct measurement rows, not more than n_neighbors %d"
+            % (rows.shape[0], int(n_neighbors))
+        )
+    emb, note, _seconds = gpu_umap_run(
+        rows,
+        n_neighbors,
+        n_components,
+        min_dist,
+        metric,
+        seed,
+        python_cmd,
+        scratch_dir,
+        script_source,
+    )
+    if shared:
+        logger.info(
+            "GPU UMAP: %d of %d cells share a measurement row with another cell "
+            "(%d distinct rows); each row was embedded once",
+            shared,
+            matrix.shape[0],
+            rows.shape[0],
+        )
+        note += "; %d cells that shared a row placed at that row's point" % shared
+    return emb[row_of_cell], note
+
+
+def umap_embedding(
+    matrix,
+    n_neighbors,
+    min_dist,
+    metric,
+    n_components,
+    seed,
+    mode,
+    backend,
+    python_cmd,
+    scratch_dir,
+    script_source,
+    column_names=None,
+    progress=None,
+):
+    """UMAP of ``matrix`` on the GPU when asked and possible, else with umap-learn.
+
+    The "UMAP speed vs reproducibility" setting (resolve_umap_execution) decides the
+    seed on both: a seeded run repeats exactly, on the CPU single-threaded, on the
+    GPU on one card and RAPIDS version (measured 2026-11-24).
+
+    :param backend: "cpu" or "gpu"
+    :param column_names: names for the float32 hand-over check, None when the
+        matrix is not the measurements (PCA precursor)
+    :return: (embedding, note, reproducible, backend that ran, reason the GPU was
+        asked for and not used, or None)
+    """
+    exec_kwargs, reproducible, note = resolve_umap_execution(
+        matrix.shape[0], seed, mode
+    )
+    ran, reason = gpu_bridge_available(backend, python_cmd)
+    if ran == "gpu":
+        if progress:
+            progress("Computing UMAP on %d cells on the GPU..." % matrix.shape[0])
+        try:
+            hand_over = np.ascontiguousarray(matrix, dtype=np.float32)
+            require_finite(
+                hand_over,
+                "The float32 hand-over to the GPU UMAP",
+                column_names,
+                reason=FLOAT32_RANGE_REASON,
+            )
+            emb, gpu_note = umap_on_gpu(
+                hand_over,
+                n_neighbors,
+                n_components,
+                min_dist,
+                metric,
+                int(seed) if reproducible else None,
+                python_cmd,
+                scratch_dir,
+                script_source,
+            )
+            if str(mode).lower() == "auto":
+                gpu_note += " [auto at %d cells]" % matrix.shape[0]
+            return emb, gpu_note, reproducible, "gpu", None
+        except GpuBridgeError as e:
+            reason = str(e)
+        except Exception as e:  # anything else is still no reason to lose the run
+            reason = "%s: %s" % (type(e).__name__, e)
+            logger.warning("GPU UMAP failed unexpectedly", exc_info=True)
+        logger.warning("GPU UMAP failed (%s); running UMAP on the CPU", reason)
+    import umap
+
+    if not reproducible and progress:
+        progress(
+            "Computing UMAP on %d cells using all CPU cores "
+            "(layout not bit-reproducible)..." % matrix.shape[0]
+        )
+    emb = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        metric=metric,
+        n_components=n_components,
+        **exec_kwargs,
+    ).fit_transform(matrix)
+    return emb, note, reproducible, "cpu", reason
+
+
+def gpu_search_note(algorithm):
+    """Which neighbor search ran and whether a repeat run gives the same graph."""
+    if algorithm == "brute":
+        return "exact brute-force search, repeatable"
+    if algorithm == "nn_descent":
+        return "approximate NN-descent search, varies from run to run"
+    return "%s search" % algorithm
+
+
+def gpu_memory_note(result):
+    """How Leiden's card memory was allocated, for the run summary."""
+    if result.get("memory") == "managed":
+        return "managed memory, after the card ran out with device memory"
+    return "%s memory" % result.get("memory", "device")
+
+
+def _tail(path, n=600):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - n))
+            return f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+# Up to this many cells the GPU neighbor search is cuML's exact brute force, above
+# it cuVS NN-descent. Measured 2026-11-24 (RTX 5060 Ti, k=50): brute is the faster
+# of the two up to 400,000 cells (0.9 s vs 2.2 s at 200k, 4.4 s vs 5.0 s at 400k)
+# and repeats exactly, where NN-descent changes a third of the neighbor lists from
+# run to run (ARI 0.83 between two runs on the synthetic ground-truth set).
+GPU_BRUTE_FORCE_CELLS = 400_000
+
+
 _progress(
     0.15,
     "Computing %s embedding (%d cells) -- this can take a while..."
@@ -1169,8 +1875,14 @@ elif knn_cache is not None:
 embedding_result = None
 _emb_key = None
 _emb_reused = False
-if _reuse_on and embedding_method in ("umap", "pca", "tsne"):
-    _emb_key = knn_cache.make_key(
+# Where UMAP runs is part of what identifies the layout. A GPU run that fell back
+# is stored under "cpu" (see the put below), so the next GPU run tries the GPU again.
+_emb_backend_wanted = pref_embedding_backend if embedding_method == "umap" else "cpu"
+_emb_backend_ran = _emb_backend_wanted
+
+
+def _embedding_key(backend):
+    return knn_cache.make_key(
         _matrix_digest,
         method=embedding_method,
         params=embedding_params,
@@ -1178,7 +1890,12 @@ if _reuse_on and embedding_method in ("umap", "pca", "tsne"):
         seed=embedding_seed,
         mode=embedding_mode,
         tsne_perplexity_default=pref_tsne_perplexity,
+        backend=backend,
     )
+
+
+if _reuse_on and embedding_method in ("umap", "pca", "tsne"):
+    _emb_key = _embedding_key(_emb_backend_wanted)
     _emb_hit = knn_cache.get("embedding", _emb_key)
     if _emb_hit is not None:
         embedding_result = np.array(_emb_hit[0])
@@ -1197,44 +1914,54 @@ if _reuse_on and embedding_method in ("umap", "pca", "tsne"):
 if embedding_result is not None:
     pass
 elif embedding_method == "umap":
-    import umap
-
     n_neighbors = embedding_params.get("n_neighbors", 15)
     min_dist = embedding_params.get("min_dist", 0.1)
     metric = embedding_params.get("metric", "euclidean")
-
-    exec_kwargs, exec_reproducible, exec_note = resolve_umap_execution(
-        n_cells, embedding_seed, embedding_mode
-    )
     logger.info(
-        "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, n_components=%d, seed=%d",
+        "UMAP: n_neighbors=%d, min_dist=%.2f, metric=%s, n_components=%d, seed=%d, "
+        "backend=%s",
         n_neighbors,
         min_dist,
         metric,
         embedding_n_components,
         embedding_seed,
+        _emb_backend_wanted,
+    )
+    (
+        embedding_result,
+        exec_note,
+        exec_reproducible,
+        _emb_backend_ran,
+        _gpu_umap_reason,
+    ) = umap_embedding(
+        cluster_matrix,
+        n_neighbors,
+        min_dist,
+        metric,
+        embedding_n_components,
+        embedding_seed,
+        embedding_mode,
+        _emb_backend_wanted,
+        pref_gpu_python,
+        pref_gpu_scratch_dir,
+        pref_gpu_script_source,
+        column_names=(
+            list(df_norm.columns)
+            if cluster_matrix.shape[1] == df_norm.shape[1]
+            else None
+        ),
+        progress=lambda m: _progress(0.15, m),
     )
     logger.info("UMAP execution: %s", exec_note)
     # Surface the resolved choice so the Java audit log can record exactly how
     # this embedding was produced -- a non-reproducible layout must be traceable.
-    task.outputs["embedding_execution"] = exec_note
-    task.outputs["embedding_reproducible"] = bool(exec_reproducible)
-
-    if not exec_reproducible:
-        _progress(
-            0.15,
-            "Computing UMAP on %d cells using all CPU cores "
-            "(layout not bit-reproducible)..." % n_cells,
-        )
-
-    reducer = umap.UMAP(
-        n_neighbors=n_neighbors,
-        min_dist=min_dist,
-        metric=metric,
-        n_components=embedding_n_components,
-        **exec_kwargs,
+    # A GPU run that fell back says so first; the reused copy keeps only exec_note.
+    task.outputs["embedding_execution"] = (
+        "cpu (gpu requested; %s); %s" % (_gpu_umap_reason, exec_note)
+        if _gpu_umap_reason
+        else exec_note
     )
-    embedding_result = reducer.fit_transform(cluster_matrix)
+    task.outputs["embedding_reproducible"] = bool(exec_reproducible)
 
 elif embedding_method == "pca":
     from sklearn.decomposition import PCA
@@ -1293,16 +2020,21 @@ elif embedding_method != "none":
     logger.warning("Unknown embedding method: %s, skipping", embedding_method)
 
 if _emb_key is not None and embedding_result is not None and not _emb_reused:
+    _emb_meta = {
+        k: task.outputs[k]
+        for k in ("embedding_execution", "embedding_reproducible")
+        if k in task.outputs
+    }
+    if embedding_method == "umap":
+        # Without a fallback's "gpu requested" prefix: the copy is stored under the
+        # backend that ran, and a later run on that backend asked for nothing else.
+        _emb_meta["embedding_execution"] = exec_note
     knn_cache.put(
         "embedding",
         embedding_result,
-        _emb_key,
+        _embedding_key(_emb_backend_ran),
         pref_reuse_budget_bytes,
-        meta={
-            k: task.outputs[k]
-            for k in ("embedding_execution", "embedding_reproducible")
-            if k in task.outputs
-        },
+        meta=_emb_meta,
         copy=True,
     )
 
@@ -1571,464 +2303,6 @@ def knn_graph(matrix, n_neighbors, seed):
     adata = ad.AnnData(X=matrix)
     sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X", random_state=seed)
     return adata.obsp["connectivities"]
-
-
-def unique_rows(matrix):
-    """The distinct rows of ``matrix``, so the neighbor search sees each row once.
-
-    Cells with identical measurements break both searches Leiden can use. The
-    approximate search (pynndescent, what scanpy runs) splits them off into
-    islands: 2,903 synthetic cells sharing 56 rows gave a graph of 37 connected
-    components and 65-83 Leiden clusters for 8 cell types at every resolution
-    (ARI 0.60 at best); the same rows searched once give 8 components and the 8
-    types at resolution 0.1-0.2 (ARI 0.92). The exact search (the GPU path)
-    joins them into hubs of degree in the thousands, on which cuGraph Leiden
-    returns every cell as its own cluster. Searching and partitioning the
-    distinct rows, then giving every cell the label of its row, avoids both.
-    A block of identical cells is then one node, so at a given resolution the
-    partition is finer than the hub graph gave. Rows are compared byte for byte, so only
-    bitwise identical rows count (0.8 s at 1,000,000 x 25 float32 with 30%
-    duplicates). With no duplicates ``matrix`` itself comes back, so the graph
-    is the one built before this existed.
-
-    :param matrix: cells x features
-    :return: (rows, row_of_cell, shared): the distinct rows, the index of each
-        cell's row in them (``rows[row_of_cell]`` rebuilds ``matrix``), and the
-        number of cells whose row another cell shares (0 when none)
-    """
-    arr = np.ascontiguousarray(matrix)
-    n = arr.shape[0]
-    if arr.ndim != 2 or n < 2 or arr.shape[1] == 0:
-        return arr, np.arange(n), 0
-    as_bytes = arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
-    _, first, row_of_cell, counts = np.unique(
-        as_bytes.ravel(), return_index=True, return_inverse=True, return_counts=True
-    )
-    row_of_cell = np.asarray(row_of_cell).ravel()
-    if first.shape[0] == n:
-        return arr, np.arange(n), 0
-    shared = int((counts[row_of_cell] > 1).sum())
-    return arr[first], row_of_cell, shared
-
-
-class GpuBridgeError(Exception):
-    """The RAPIDS process could not run or did not deliver; the message says why."""
-
-
-def gpu_bridge_available(backend, python_cmd):
-    """Whether the GPU path can be tried, and why not.
-
-    :param backend: "cpu" or "gpu"
-    :param python_cmd: the RAPIDS environment's python, "" when none is configured
-    :return: ("cpu", None), ("gpu", None), or ("cpu", reason)
-    """
-    if backend != "gpu":
-        return "cpu", None
-    if not python_cmd:
-        return "cpu", (
-            "no RAPIDS Python configured (Edit > Preferences > QP-CAT: Python "
-            "environment > GPU graph and Leiden: Python)"
-        )
-    return "gpu", None
-
-
-def gpu_scratch_default(python_cmd):
-    """Where the hand-over files go when no folder is configured: $TMPDIR when the
-    scheduler sets one, else a folder beside the RAPIDS environment (its pixi
-    root), else the system temp folder. Never the home directory or the project:
-    on a networked home every file costs."""
-    tmpdir = os.environ.get("TMPDIR")
-    if tmpdir:
-        return os.path.join(tmpdir, "qpcat-gpu")
-    parts = python_cmd.replace("\\", "/").split("/")
-    if ".pixi" in parts:
-        root = "/".join(parts[: parts.index(".pixi")])
-        if root:
-            return root + "/qpcat-gpu-scratch"
-    import tempfile
-
-    return os.path.join(tempfile.gettempdir(), "qpcat-gpu")
-
-
-def _gpu_child_env(python_cmd):
-    """The isolated environment the RAPIDS process gets (not os.environ as is):
-    no user site-packages, no PYTHONPATH, and LD_LIBRARY_PATH rebuilt as the
-    environment's lib plus only inherited folders that hold libcuda.so.1."""
-    env = {}
-    for k in (
-        "PATH",
-        "HOME",
-        "USER",
-        "LANG",
-        "LC_ALL",
-        "TMPDIR",
-        "CUDA_VISIBLE_DEVICES",
-        "SystemRoot",
-        "TEMP",
-        "TMP",
-    ):
-        if k in os.environ:
-            env[k] = os.environ[k]
-    env["PYTHONNOUSERSITE"] = "1"
-    env["PYTHONUNBUFFERED"] = "1"
-    prefix = os.path.dirname(os.path.dirname(python_cmd))
-    # What `pixi run` would activate, minus the shell: the environment's bin first,
-    # and CUDA_PATH for cupy's kernel compiler (pixi sets neither CUDA_PATH nor
-    # CUDA_HOME; without it cupy stops with "Failed to find CUDA headers").
-    env["CONDA_PREFIX"] = prefix
-    env["PATH"] = os.path.join(prefix, "bin") + os.pathsep + env.get("PATH", "")
-    env["CUDA_PATH"] = gpu_cuda_path(prefix)
-    env_lib = os.path.join(prefix, "lib")
-    keep = [env_lib] if os.path.isdir(env_lib) else []
-    for d in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep):
-        if d and os.path.exists(os.path.join(d, "libcuda.so.1")) and d not in keep:
-            keep.append(d)
-    if keep:
-        env["LD_LIBRARY_PATH"] = os.pathsep.join(keep)
-    return env
-
-
-def gpu_cuda_path(prefix):
-    """CUDA_PATH for a conda-forge CUDA environment: its targets folder when present."""
-    targets = os.path.join(prefix, "targets", "x86_64-linux")
-    return targets if os.path.isdir(targets) else prefix
-
-
-def _wsl_run(args, timeout=60):
-    """Run a command inside WSL from Windows; returns its stdout text.
-
-    wsl.exe joins its arguments with spaces and hands the line to the WSL
-    user's login shell, which parses it AGAIN: quotes, "$VAR" and "~" are
-    interpreted once more than a subprocess list suggests. Pass plain words
-    (paths without metacharacters) and put any real shell logic in a script
-    file, as gpu_bridge_run does.
-    """
-    import subprocess
-
-    try:
-        r = subprocess.run(
-            ["wsl.exe", "--"] + args,
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=timeout,
-        )
-    except FileNotFoundError:
-        raise GpuBridgeError(
-            "wsl.exe was not found: Windows Subsystem for Linux is not installed on "
-            "this computer (or not on PATH). The GPU graph needs WSL2 with a Linux "
-            "distribution and a RAPIDS environment inside it; see Setup > Neighbor "
-            "graph and Leiden on the GPU, or untick the GPU option"
-        )
-    except subprocess.TimeoutExpired:
-        raise GpuBridgeError(
-            "wsl.exe did not answer within %d s (is the Linux distribution able to "
-            "start? try 'wsl.exe -- echo ok' in a terminal)" % timeout
-        )
-    if r.returncode != 0:
-        msg = (r.stdout + r.stderr).replace("\x00", "").strip()
-        if not msg:
-            msg = "exit code %d with no message" % r.returncode
-        if (
-            "no installed distributions" in msg.lower()
-            or "wsl_e_default_distro" in msg.lower()
-        ):
-            msg += (
-                " (WSL is installed but has no Linux distribution; install one, "
-                "for example 'wsl --install -d Ubuntu', then the RAPIDS environment)"
-            )
-        if "elevation" in msg.lower():
-            msg += (
-                " (Windows refuses to start WSL from an unelevated program; a "
-                "'Run as administrator' compatibility flag on wsl.exe does this. "
-                "Check Properties > Compatibility of C:\\Program Files\\WSL\\wsl.exe.)"
-            )
-        raise GpuBridgeError("wsl.exe failed: " + msg[:400])
-    return r.stdout.replace("\x00", "")
-
-
-def _check_wsl_path(path, preference):
-    """Refuse a path that would not survive wsl.exe's re-parse (see _wsl_run).
-
-    :raises GpuBridgeError: naming the preference when the path is not an
-        absolute Linux path or carries whitespace or shell metacharacters
-    """
-    bad = re.compile(r"[\s$`\"'\;&|<>(){}*?]")
-    if not path or not path.startswith("/") or bad.search(path):
-        raise GpuBridgeError(
-            "'%s' must be a path inside WSL2 that starts with '/' and has no spaces "
-            "or shell characters (got %r)" % (preference, (path or "")[:120])
-        )
-
-
-def _trim_failed_job(job):
-    """Drop the bulky hand-over files of a failed job, keeping run.log, result.json
-    and params.json so the failure can still be read."""
-    for name in os.listdir(job) if os.path.isdir(job) else []:
-        if name in ("matrix.npy", "connectivities.npz") or name.startswith("labels_"):
-            try:
-                os.remove(os.path.join(job, name))
-            except OSError:
-                pass
-
-
-def _wsl_run_script(linux_job, python_cmd):
-    """The bash script that runs gpu_graph_leiden.py inside WSL.
-
-    Written into the job folder and started as ``bash <path>``, so the
-    environment set-up lives in a file with ordinary quoting instead of on a
-    wsl.exe command line (see _wsl_run). Mirrors _gpu_child_env.
-    """
-    return (
-        "#!/bin/bash\n"
-        "# Written by QP-CAT for one run; see run_clustering.py gpu_bridge_run.\n"
-        'cd "%(job)s" || exit 3\n'
-        'QPCAT_PY="%(py)s"\n'
-        '[ -x "$QPCAT_PY" ] || { echo "python not found or not executable: $QPCAT_PY" > run.log; exit 4; }\n'
-        'PREFIX="$(dirname "$(dirname "$QPCAT_PY")")"\n'
-        'CUDA_PATH="$PREFIX/targets/x86_64-linux"\n'
-        '[ -d "$CUDA_PATH" ] || CUDA_PATH="$PREFIX"\n'
-        'export PATH="$PREFIX/bin:$PATH" CONDA_PREFIX="$PREFIX" CUDA_PATH\n'
-        "export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1\n"
-        "unset PYTHONPATH\n"
-        'exec "$QPCAT_PY" gpu_graph_leiden.py "%(job)s" > run.log 2>&1\n'
-    ) % {"job": linux_job, "py": python_cmd}
-
-
-def gpu_bridge_run(
-    matrix,
-    n_neighbors,
-    seed,
-    resolutions,
-    python_cmd,
-    scratch_dir,
-    script_source,
-    progress=None,
-):
-    """Build the graph and partition it on the GPU in a separate process.
-
-    Writes matrix.npy, params.json and gpu_graph_leiden.py into a job folder,
-    runs the RAPIDS environment's python on it (through wsl.exe on Windows, so
-    the folder lives inside WSL), and reads connectivities.npz and the labels
-    back. That script runs the graph and Leiden stages in separate processes and
-    retries an out-of-memory Leiden with managed memory on native Linux. The
-    child's output goes to run.log in the job folder, never to this process's
-    stdout (the Appose channel). Every duration is logged.
-
-    :param resolutions: Leiden resolutions to partition at, the run's first
-    :return: (connectivities CSR, {resolution: labels}, note, seconds dict)
-    :raises GpuBridgeError: with the reason, when anything fails; the caller
-        falls back to the CPU
-    """
-    import json
-    import shutil
-    import subprocess
-    from scipy import sparse as sp
-
-    if not script_source:
-        raise GpuBridgeError("gpu_graph_leiden.py was not handed to the worker")
-    windows = sys.platform == "win32"
-    t_all = time.monotonic()
-    job_name = "job_%d_%d" % (os.getpid(), int(time.time()))
-    if windows:
-        # Three plain commands, no quoting to survive the re-parse (see _wsl_run):
-        # the home folder (an unquoted ~ is expanded by the login shell), mkdir,
-        # and the Windows spelling of the folder for the file writes below.
-        linux_scratch = scratch_dir.strip().replace("\\", "/") if scratch_dir else ""
-        _check_wsl_path(python_cmd, "GPU graph and Leiden: Python")
-        if linux_scratch:
-            _check_wsl_path(linux_scratch, "GPU graph and Leiden: scratch folder")
-        if not linux_scratch:
-            home = _wsl_run(["echo", "~"]).strip()
-            if not home.startswith("/"):
-                raise GpuBridgeError(
-                    "could not find the WSL home folder (got %r)" % home[:100]
-                )
-            linux_scratch = home + "/.cache/qpcat-gpu"
-        linux_job = linux_scratch.rstrip("/") + "/" + job_name
-        _wsl_run(["mkdir", "-p", linux_job])
-        job = _wsl_run(["wslpath", "-w", linux_job]).strip()
-        if not job or not os.path.isdir(job):
-            raise GpuBridgeError(
-                "the job folder %s inside WSL is not reachable from Windows as %r"
-                % (linux_job, job[:200])
-            )
-    else:
-        job = os.path.join(scratch_dir or gpu_scratch_default(python_cmd), job_name)
-        try:
-            os.makedirs(job, exist_ok=True)
-        except OSError as e:
-            raise GpuBridgeError(
-                "cannot create the scratch folder %s (%s); set 'GPU graph and Leiden: "
-                "scratch folder' to a writable place" % (job, e)
-            )
-        linux_job = job
-    t0 = time.monotonic()
-    try:
-        np.save(
-            os.path.join(job, "matrix.npy"),
-            np.ascontiguousarray(matrix, dtype=np.float32),
-        )
-        with open(os.path.join(job, "params.json"), "w") as f:
-            json.dump(
-                {
-                    "n_neighbors": int(n_neighbors),
-                    "seed": int(seed),
-                    "resolutions": [float(r) for r in resolutions],
-                    "brute_force_cells": GPU_BRUTE_FORCE_CELLS,
-                },
-                f,
-            )
-        with open(
-            os.path.join(job, "gpu_graph_leiden.py"),
-            "w",
-            encoding="utf-8",
-            newline="\n",
-        ) as f:
-            f.write(script_source)
-        if windows:
-            with open(
-                os.path.join(job, "run.sh"), "w", encoding="utf-8", newline="\n"
-            ) as f:
-                f.write(_wsl_run_script(linux_job, python_cmd))
-    except OSError as e:
-        raise GpuBridgeError("cannot write the hand-over files to %s (%s)" % (job, e))
-    seconds = {"write": round(time.monotonic() - t0, 3)}
-    logger.info(
-        "GPU graph: %d cells x %d features written to %s in %.1f s",
-        matrix.shape[0],
-        matrix.shape[1],
-        job,
-        seconds["write"],
-    )
-    if progress:
-        progress("Neighbor graph and Leiden on the GPU...")
-    t0 = time.monotonic()
-    try:
-        if windows:
-            cmd = ["wsl.exe", "--", "bash", linux_job + "/run.sh"]
-            r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-            tail = (r.stdout + r.stderr).replace("\x00", "")
-        else:
-            with open(os.path.join(job, "run.log"), "w") as log:
-                r = subprocess.run(
-                    [python_cmd, os.path.join(job, "gpu_graph_leiden.py"), job],
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    env=_gpu_child_env(python_cmd),
-                    cwd=job,
-                )
-            tail = ""
-    except FileNotFoundError as e:
-        raise GpuBridgeError("could not start the GPU process: %s" % e)
-    seconds["process"] = round(time.monotonic() - t0, 3)
-    result_path = os.path.join(job, "result.json")
-    if not os.path.exists(result_path):
-        _trim_failed_job(job)
-        log_tail = _tail(os.path.join(job, "run.log")) or tail
-        raise GpuBridgeError(
-            "the GPU process wrote no result (exit %s); its log %s ends with: %s"
-            % (r.returncode, os.path.join(job, "run.log"), log_tail[-600:])
-        )
-    with open(result_path) as f:
-        result = json.load(f)
-    if not result.get("ok"):
-        _trim_failed_job(job)
-        err = str(result.get("error", ""))[-800:]
-        versions = result.get("versions", {})
-        raise GpuBridgeError(
-            "the GPU process failed (%s; CUDA driver %s, runtime %s): %s"
-            % (
-                ", ".join(
-                    "%s %s" % (k, v)
-                    for k, v in versions.items()
-                    if k in ("gpu", "cuml", "cugraph")
-                ),
-                versions.get("cuda_driver", "?"),
-                versions.get("cuda_runtime", "?"),
-                err,
-            )
-        )
-    t0 = time.monotonic()
-    conn = sp.load_npz(os.path.join(job, "connectivities.npz")).tocsr()
-    labels_by_res = {}
-    degenerate = []
-    for row in result["resolutions"]:
-        lab = np.load(os.path.join(job, row["file"])).astype(np.int64)
-        if row.get("degenerate"):
-            degenerate.append(row["resolution"])
-        else:
-            labels_by_res[float(row["resolution"])] = lab
-    seconds["read"] = round(time.monotonic() - t0, 3)
-    seconds.update({"gpu_" + k: v for k, v in result.get("seconds", {}).items()})
-    seconds["total"] = round(time.monotonic() - t_all, 3)
-    versions = result.get("versions", {})
-    note = "gpu (%s on %s; cuML %s, cuGraph %s, rapids-singlecell %s; %s; %s)" % (
-        versions.get("gpu", "GPU"),
-        "WSL2" if windows else "Linux",
-        versions.get("cuml", "?"),
-        versions.get("cugraph", "?"),
-        versions.get("rapids_singlecell", "?"),
-        gpu_search_note(result.get("algorithm", "?")),
-        gpu_memory_note(result),
-    )
-    if degenerate:
-        note += (
-            "; cuGraph returned every cell as its own cluster at resolution %s, partitioned with igraph instead"
-            % (", ".join("%g" % r for r in degenerate))
-        )
-    logger.info(
-        "GPU graph: nnz=%d, %s; seconds %s",
-        conn.nnz,
-        note,
-        json.dumps(seconds, sort_keys=True),
-    )
-    for row in result["resolutions"]:
-        logger.info(
-            "GPU Leiden at resolution %g: %d clusters, modularity %.6f (cuGraph), "
-            "%.6f (recomputed on the graph)",
-            row["resolution"],
-            row["n_clusters"],
-            row["modularity"],
-            row.get("modularity_check", float("nan")),
-        )
-    shutil.rmtree(job, ignore_errors=True)
-    return conn, labels_by_res, note, seconds
-
-
-def gpu_search_note(algorithm):
-    """Which neighbor search ran and whether a repeat run gives the same graph."""
-    if algorithm == "brute":
-        return "exact brute-force search, repeatable"
-    if algorithm == "nn_descent":
-        return "approximate NN-descent search, varies from run to run"
-    return "%s search" % algorithm
-
-
-def gpu_memory_note(result):
-    """How Leiden's card memory was allocated, for the run summary."""
-    if result.get("memory") == "managed":
-        return "managed memory, after the card ran out with device memory"
-    return "%s memory" % result.get("memory", "device")
-
-
-def _tail(path, n=600):
-    try:
-        with open(path, "rb") as f:
-            f.seek(0, 2)
-            size = f.tell()
-            f.seek(max(0, size - n))
-            return f.read().decode("utf-8", "replace")
-    except OSError:
-        return ""
-
-
-# Up to this many cells the GPU neighbor search is cuML's exact brute force, above
-# it cuVS NN-descent. Measured 2026-11-24 (RTX 5060 Ti, k=50): brute is the faster
-# of the two up to 400,000 cells (0.9 s vs 2.2 s at 200k, 4.4 s vs 5.0 s at 400k)
-# and repeats exactly, where NN-descent changes a third of the neighbor lists from
-# run to run (ARI 0.83 between two runs on the synthetic ground-truth set).
-GPU_BRUTE_FORCE_CELLS = 400_000
 
 
 def leiden_igraph(connectivities):

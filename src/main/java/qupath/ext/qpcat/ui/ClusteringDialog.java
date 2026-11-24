@@ -232,6 +232,7 @@ public class ClusteringDialog {
     private CheckBox generatePlotsCheck;
     private CheckBox pagaCheck;
     private CheckBox gpuGraphCheck;
+    private CheckBox gpuUmapCheck;
     private SavedDataBanner savedDataBanner;
     private CheckBox stabilityCheck;
     private Spinner<Integer> stabilityRepeatsSpinner;
@@ -498,6 +499,7 @@ public class ClusteringDialog {
         pcaPrecursorCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         spatialSmoothingCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         spatialAnalysisCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
+        gpuUmapCheck.selectedProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         embeddingModeCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         embeddingCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
         algorithmCombo.valueProperty().addListener((o, ov, nv) -> refreshRunCostLabel());
@@ -742,6 +744,9 @@ public class ClusteringDialog {
                 + "Fast: always use all cores. Roughly 6-8x quicker; the layout differs\n"
                 + "  slightly between runs (clusters are the same, their arrangement on\n"
                 + "  the plot is not).\n\n"
+                + "With 'UMAP on the GPU' ticked the same rule decides the GPU's seed. There a\n"
+                + "  seeded layout repeats on the same card and costs little (35 s against 28 s\n"
+                + "  at 1 million cells), but it is not the CPU's layout.\n\n"
                 + "The mode actually used is recorded in the audit log."));
 
         // Measurement name (prefix NAME1/NAME2). Defaults to the method; change
@@ -784,6 +789,11 @@ public class ClusteringDialog {
                 tipLabel("n_neighbors:", umapNeighborsSpinner), umapNeighborsSpinner,
                 tipLabel("min_dist:", umapMinDistSpinner), umapMinDistSpinner);
         umapRow.setAlignment(Pos.CENTER_LEFT);
+        // Its own tick, not the Leiden one: UMAP runs for every algorithm, and the
+        // two GPU steps fail and fall back independently.
+        gpuUmapCheck = GpuUmapOption.create(this::updatePreflight);
+        HBox gpuUmapRow = new HBox(10, gpuUmapCheck);
+        gpuUmapRow.setAlignment(Pos.CENTER_LEFT);
         HBox tsneRow = new HBox(10,
                 tipLabel("perplexity:", tsnePerplexitySpinner), tsnePerplexitySpinner);
         tsneRow.setAlignment(Pos.CENTER_LEFT);
@@ -820,6 +830,8 @@ public class ClusteringDialog {
             // Dimensionality is meaningless with no embedding; disable for None.
             embeddingDimCombo.setDisable(m == EmbeddingMethod.NONE);
             setRowShown(umapRow, isUmap);
+            setRowShown(gpuUmapRow, isUmap && GpuUmapOption.available());
+            gpuUmapCheck.setVisible(isUmap && GpuUmapOption.available());
             setRowShown(tsneRow, isTsne);
             setRowShown(umapAdvRow, isUmap);
             setRowShown(tsneAdvRow, isTsne);
@@ -864,7 +876,7 @@ public class ClusteringDialog {
         embeddingUseNote.setMinHeight(Region.USE_PREF_SIZE);
         embeddingUseNote.setStyle("-fx-font-size: 11px; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
-        VBox box = new VBox(5, embRow, umapRow, tsneRow, advancedPane, embeddingUseNote);
+        VBox box = new VBox(5, embRow, umapRow, gpuUmapRow, tsneRow, advancedPane, embeddingUseNote);
         TitledPane pane = new TitledPane("Dimensionality Reduction", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -3150,14 +3162,14 @@ public class ClusteringDialog {
                         gpuGraphCheck.setSelected(QpcatPreferences.isGpuGraph());
                         gpuGraphCheck.setTooltip(Tooltips.of(
                                 "Build the neighbor graph and run Leiden in the RAPIDS environment set "
-                                + "under Edit > Preferences > QP-CAT: Python environment > GPU graph and "
-                                + "Leiden: Python (on Windows inside WSL2, through wsl.exe). The matrix "
+                                + "under Edit > Preferences > QP-CAT: Python environment > GPU (RAPIDS): "
+                                + "Python (on Windows inside WSL2, through wsl.exe). The matrix "
                                 + "crosses as a file; the graph and labels come back the same way.\n\n"
-                                + "The graph is built by an exact search (IVF-flat above 200,000 cells) "
-                                + "instead of scanpy's approximate one; a GPU run differs from a CPU run of "
+                                + "The graph is built by an exact search up to 400,000 cells (NN-descent "
+                                + "above) instead of scanpy's approximate one; a GPU run differs from a CPU run of "
                                 + "the same settings about as much as two seeds differ (ARI 0.91-0.94 against "
-                                + "0.93-0.94 on our ground-truth set). Repeat it with the same seed below "
-                                + "200,000 cells for the same answer. If the process cannot run, Leiden runs "
+                                + "0.93-0.94 on our ground-truth set). Repeat it with the same seed up to "
+                                + "400,000 cells for the same answer. If the process cannot run, Leiden runs "
                                 + "on the CPU and a notification says why. The run summary records which ran."));
                         gpuGraphCheck.selectedProperty().addListener((o, a, b) -> {
                             QpcatPreferences.setGpuGraph(b);
@@ -3648,6 +3660,7 @@ public class ClusteringDialog {
         config.setGraphBackend(algorithmCombo.getValue() == Algorithm.LEIDEN
                 && gpuGraphCheck != null && gpuGraphCheck.isSelected()
                 && !QpcatPreferences.getGpuGraphPython().isEmpty() ? "gpu" : "cpu");
+        config.setEmbeddingBackend(GpuUmapOption.backend(gpuUmapCheck));
 
         // Embedding
         EmbeddingMethod embMethod = embeddingCombo.getValue();

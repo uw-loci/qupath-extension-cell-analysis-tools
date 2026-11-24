@@ -147,6 +147,12 @@ public final class ScalingLimits {
         /** Leiden resolutions compared on the run's graph; 0 when it is off. */
         public int compareResolutions = 0;
         public boolean gpuGraph = false;
+        /** UMAP on the GPU was asked for (and the embedding is UMAP). */
+        public boolean gpuUmap = false;
+        /** UMAP's n_neighbors, for the GPU UMAP estimate. */
+        public int umapNeighbors = 15;
+        /** Whether the GPU UMAP runs seeded (exact neighbor search) or unseeded (NN-descent). */
+        public boolean umapSeeded = true;
         /** Physical RAM budget in GB; <= 0 asks this machine. */
         public double availableRamGb = 0;
         /** What the Python worker keeps from earlier runs for reuse, in GB. */
@@ -306,6 +312,29 @@ public final class ScalingLimits {
 
     /** GPU memory above which the GPU graph is flagged: most cards in use have 16 GB or less. */
     public static final double GPU_GRAPH_WARN_GB = 14.0;
+
+    /**
+     * Card memory of the GPU UMAP process (cuML 26.10): 0.3 GB plus about 950 bytes per
+     * cell at n_neighbors 15, the seeded run's peak (the unseeded one is lower). Measured
+     * 2026-11-24 on an RTX 5060 Ti, 8 synthetic blobs x 25 features: +0.69 / 1.04 / 1.8 /
+     * 2.8 / 4.05 GB at 0.5 / 1 / 2 / 3 / 4 million cells. The per-cell part is scaled
+     * with n_neighbors, which was not varied.
+     */
+    public static double gpuUmapGb(long nCells, int nNeighbors) {
+        return 0.3 + nCells * 950.0 * (Math.max(nNeighbors, 2) / 15.0) / GB;
+    }
+
+    /**
+     * Host RAM of the GPU UMAP process. Seeded (exact search): about 1.5 GB plus 550 bytes
+     * per cell (2.1-3.7 GB measured at 2-4 million cells). Unseeded, cuML's NN-descent
+     * builds its graph in host memory: about 1 GB plus 2,200 bytes per cell (2.2 / 3.0 /
+     * 4.8 / 6.7 / 9.6 GB at 0.5 / 1 / 2 / 3 / 4 million cells). Same run as
+     * {@link #gpuUmapGb}; the worker's own copy of the matrix is counted elsewhere.
+     */
+    public static double gpuUmapHostGb(long nCells, int nNeighbors, boolean seeded) {
+        double k = Math.max(nNeighbors, 2) / 15.0;
+        return seeded ? 1.5 + nCells * 550.0 * k / GB : 1.0 + nCells * 2200.0 * k / GB;
+    }
 
     public static double leidenPeakGb(long nCells, int nNeighbors) {
         return 0.72 + (double) nCells * nNeighbors * 1.52e-7;
@@ -571,6 +600,31 @@ public final class ScalingLimits {
                         + " GB); on Windows this is the memory WSL2 is allowed, not the machine's",
                         "Lower n_neighbors, cluster fewer cells, close other programs, or raise "
                         + "WSL2's memory limit in .wslconfig.",
+                        hostGb, 0));
+            }
+        }
+        if (r.gpuUmap) {
+            double cardGb = gpuUmapGb(r.nCells, r.umapNeighbors);
+            if (cardGb > GPU_GRAPH_WARN_GB) {
+                out.add(new Finding(Severity.WARN, "GPU UMAP",
+                        "needs more GPU memory than a 16 GB card has; the run may fall back to "
+                        + "the CPU UMAP, or on Windows slow several-fold as the driver spills into "
+                        + "host RAM",
+                        "Lower UMAP's n_neighbors, embed fewer cells, or untick UMAP on the GPU.",
+                        cardGb, 0));
+            }
+            double hostGb = gpuUmapHostGb(r.nCells, r.umapNeighbors, r.umapSeeded);
+            OptionalDouble ramNow = r.availableRamGb > 0
+                    ? OptionalDouble.of(r.availableRamGb) : detectRamGb();
+            if (ramNow.isPresent() && hostGb > ramNow.getAsDouble() * 0.8) {
+                out.add(new Finding(Severity.WARN, "GPU UMAP: host memory",
+                        "the GPU UMAP process also needs host RAM"
+                        + (r.umapSeeded ? "" : " (its approximate neighbor search builds in host memory)")
+                        + ", and that estimate is close to or above what is free now ("
+                        + String.format(java.util.Locale.ROOT, "%.0f", ramNow.getAsDouble())
+                        + " GB); on Windows this is the memory WSL2 is allowed, not the machine's",
+                        "Embed fewer cells, close other programs, or raise WSL2's memory limit in "
+                        + ".wslconfig.",
                         hostGb, 0));
             }
         }

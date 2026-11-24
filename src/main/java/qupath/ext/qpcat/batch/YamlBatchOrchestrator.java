@@ -894,6 +894,9 @@ public final class YamlBatchOrchestrator {
         if (cc.getGraphBackend() != null) {
             config.setGraphBackend(cc.getGraphBackend());
         }
+        if (cc.getEmbeddingBackend() != null) {
+            config.setEmbeddingBackend(cc.getEmbeddingBackend());
+        }
         // Embedding
         if (cc.getEmbedding() != null) {
             config.setEmbeddingMethod(parseEmbedding(cc.getEmbedding()));

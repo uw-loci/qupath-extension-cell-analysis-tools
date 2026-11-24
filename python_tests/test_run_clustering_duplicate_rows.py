@@ -50,6 +50,11 @@ def _symbols():
         "_gpu_child_env",
         "gpu_search_note",
         "gpu_memory_note",
+        "_wsl_run",
+        "_check_wsl_path",
+        "_trim_failed_job",
+        "_wsl_run_script",
+        "_gpu_job_run",
         "gpu_bridge_run",
         "fit_seeded",
     ]:

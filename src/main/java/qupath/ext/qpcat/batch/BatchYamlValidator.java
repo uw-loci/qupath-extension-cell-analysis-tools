@@ -259,6 +259,18 @@ public final class BatchYamlValidator {
             r.add(ValidationIssue.error("E005", "clustering.graph_backend",
                     "'" + asciiSafe(c.getGraphBackend()) + "' is not one of " + GRAPH_BACKENDS));
         }
+        if (c.getEmbeddingBackend() != null) {
+            String eb = c.getEmbeddingBackend().toLowerCase(Locale.ROOT);
+            if (!GRAPH_BACKENDS.contains(eb)) {
+                r.add(ValidationIssue.error("E005", "clustering.embedding_backend",
+                        "'" + asciiSafe(c.getEmbeddingBackend()) + "' is not one of " + GRAPH_BACKENDS));
+            } else if ("gpu".equals(eb) && c.getEmbedding() != null
+                    && !"umap".equalsIgnoreCase(c.getEmbedding())) {
+                r.add(ValidationIssue.warning("W015", "clustering.embedding_backend",
+                        "embedding_backend: gpu applies to UMAP only; this run's "
+                        + asciiSafe(c.getEmbedding()) + " embedding runs on the CPU."));
+            }
+        }
         if (c.getEmbedding() != null
                 && !EMBEDDINGS.contains(c.getEmbedding().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.embedding",

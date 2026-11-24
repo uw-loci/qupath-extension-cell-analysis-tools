@@ -103,6 +103,8 @@ def _symbols():
         "_tail",
         "gpu_search_note",
         "gpu_memory_note",
+        "_wsl_run_script",
+        "_gpu_job_run",
         "gpu_bridge_run",
     ]:
         g[n] = load_script_symbol("run_clustering.py", n, g)
@@ -262,8 +264,8 @@ def test_windows_paths_must_be_plain_absolute_linux_paths():
         "relative/path",
     ):
         with pytest.raises(s["GpuBridgeError"]) as e:
-            s["_check_wsl_path"](bad, "GPU graph and Leiden: scratch folder")
-        assert "GPU graph and Leiden: scratch folder" in str(e.value)
+            s["_check_wsl_path"](bad, "GPU (RAPIDS): scratch folder")
+        assert "GPU (RAPIDS): scratch folder" in str(e.value)
 
 
 def test_a_failed_job_keeps_only_the_small_files(tmp_path):

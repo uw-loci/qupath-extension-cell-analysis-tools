@@ -43,6 +43,7 @@ public class EmbeddingDialog {
     private TextField embeddingNameField;
     private Spinner<Integer> umapNeighborsSpinner;
     private Spinner<Double> umapMinDistSpinner;
+    private CheckBox gpuUmapCheck;
     private Label statusLabel;
     private ProgressBar progressBar;
     private Button runButton;
@@ -179,10 +180,23 @@ public class EmbeddingDialog {
                 tipLabel("min_dist:", umapMinDistSpinner), umapMinDistSpinner);
         paramsRow.setAlignment(Pos.CENTER_LEFT);
 
+        // Offered only while a RAPIDS Python is configured (see GpuUmapOption).
+        gpuUmapCheck = GpuUmapOption.create(null);
+        HBox gpuRow = new HBox(10, gpuUmapCheck);
+        gpuRow.setAlignment(Pos.CENTER_LEFT);
+        boolean gpuShown = GpuUmapOption.available();
+        gpuRow.setVisible(gpuShown);
+        gpuRow.setManaged(gpuShown);
+        gpuUmapCheck.setVisible(gpuShown);
+
         embeddingCombo.setOnAction(e -> {
             boolean isUmap = embeddingCombo.getValue() == EmbeddingMethod.UMAP;
             paramsRow.setVisible(isUmap);
             paramsRow.setManaged(isUmap);
+            boolean gpu = isUmap && GpuUmapOption.available();
+            gpuRow.setVisible(gpu);
+            gpuRow.setManaged(gpu);
+            gpuUmapCheck.setVisible(gpu);
             // Keep the name in step with the method until the user customizes it.
             if (!nameEdited[0]) {
                 embeddingNameField.setText(ResultApplier.legacyEmbeddingPrefix(
@@ -199,7 +213,7 @@ public class EmbeddingDialog {
         WrapHeight.bind(infoLabel);
         infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: derive(-fx-text-base-color, 25%);");
 
-        VBox box = new VBox(5, methodRow, paramsRow, infoLabel);
+        VBox box = new VBox(5, methodRow, paramsRow, gpuRow, infoLabel);
         TitledPane pane = new TitledPane("Dimensionality Reduction", box);
         pane.setExpanded(true);
         pane.setCollapsible(true);
@@ -253,6 +267,7 @@ public class EmbeddingDialog {
         config.setNormalization(normalizationCombo.getValue());
         config.setMissingPolicy(measurementPane.getMissingPolicy());
         config.setEmbeddingMethod(embeddingCombo.getValue());
+        config.setEmbeddingBackend(GpuUmapOption.backend(gpuUmapCheck));
         config.setGeneratePlots(false);
 
         Map<String, Object> embeddingParams = new HashMap<>();

@@ -133,6 +133,7 @@ public final class BatchYamlSchema {
         private String normalization;
         private String missingValues;
         private String graphBackend;
+        private String embeddingBackend;
         private String embedding;
         private Integer pcaNComponents;
         private Integer umapNNeighbors;
@@ -217,6 +218,9 @@ public final class BatchYamlSchema {
         /** {@code graph_backend}: cpu (default) or gpu (Leiden's graph in a RAPIDS process). */
         public String getGraphBackend() { return graphBackend; }
         public void setGraphBackend(String v) { this.graphBackend = v; }
+        /** {@code embedding_backend}: cpu (default) or gpu (UMAP with cuML in a RAPIDS process). */
+        public String getEmbeddingBackend() { return embeddingBackend; }
+        public void setEmbeddingBackend(String v) { this.embeddingBackend = v; }
 
         public String getEmbedding() { return embedding; }
         public void setEmbedding(String embedding) { this.embedding = embedding; }
