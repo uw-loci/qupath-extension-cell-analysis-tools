@@ -29,7 +29,7 @@ with stdout and stderr sent to run.log in the job folder; the stages inherit the
 Graph: the neighbor search runs on the GPU (cuML's exact brute force up to
 brute_force_cells, cuVS NN-descent above, both through rapids-singlecell's
 KNN_ALGORITHMS); umap-learn turns the neighbors into the fuzzy connectivities scanpy
-would have made, on the CPU. Leiden: the CSR goes to cuGraph as an adjacency list.
+would have made, on the CPU. Leiden: the CSR goes to cuGraph (pylibcugraph) as CSR.
 A Leiden stage that runs out of card memory is retried once with RMM managed memory
 on native Linux; WSL2 does not support managed oversubscription, so there the run
 fails with the reason and the worker runs Leiden on the CPU. cuGraph 26.10 returns
@@ -174,6 +174,9 @@ def modularity(csr, labels, resolution):
     """Newman modularity of a partition, recomputed on the CSR (both directions stored).
 
     An independent check on cuGraph's own value, in float64, 20,000 rows at a time.
+    cuGraph 26.10 sometimes reports more than its returned partition has (0.962
+    against 0.901 on the synthetic set, k=50, resolution 1.0), whichever way the
+    graph was built.
     """
     _, ids = np.unique(np.asarray(labels), return_inverse=True)
     ids = ids.ravel()
@@ -193,42 +196,52 @@ def modularity(csr, labels, resolution):
 
 
 def cugraph_graph(csr):
-    """The CSR as a cuGraph undirected graph, handed over as an adjacency list."""
-    import cudf
-    import cugraph
-    import cupy as cp
+    """The CSR as a cuGraph undirected graph, built straight from its three arrays.
 
-    n_cells = csr.shape[0]
-    offsets = cudf.Series(cp.asarray(csr.indptr, dtype=cp.int32))
-    indices = cudf.Series(cp.asarray(csr.indices, dtype=cp.int32))
-    weights = cudf.Series(cp.asarray(csr.data, dtype=cp.float32))
-    graph = cugraph.Graph(directed=False)
-    graph.from_cudf_adjlist(
+    pylibcugraph copies the arrays into the graph, so they are freed here. Through
+    cugraph.Graph.from_cudf_adjlist the same graph kept the adjacency list alive
+    beside it: 57 B per nonzero at the Leiden peak against 37 B this way (2M cells,
+    k=50, 2026-11-24).
+
+    :return: (resource handle, pylibcugraph SGGraph)
+    """
+    import cupy as cp
+    import pylibcugraph as plc
+
+    handle = plc.ResourceHandle()
+    offsets = cp.asarray(csr.indptr, dtype=cp.int32)
+    indices = cp.asarray(csr.indices, dtype=cp.int32)
+    weights = cp.asarray(csr.data, dtype=cp.float32)
+    graph = plc.SGGraph(
+        handle,
+        plc.GraphProperties(is_symmetric=True, is_multigraph=False),
         offsets,
         indices,
-        weights,
-        renumber=False,
+        weight_array=weights,
         store_transposed=False,
-        symmetrize=False,
+        renumber=False,
+        do_expensive_check=False,
+        input_array_format="CSR",
     )
-    if graph.number_of_vertices() != n_cells:
-        raise ValueError(
-            "cuGraph holds %d vertices for a %d-cell graph"
-            % (graph.number_of_vertices(), n_cells)
-        )
     del offsets, indices, weights
     cp.get_default_memory_pool().free_all_blocks()
-    return graph
+    return handle, graph
 
 
 def leiden_gpu(graph, n_cells, resolution, seed):
-    import cugraph
+    """cuGraph Leiden (what cugraph.leiden calls, max_iter 100, theta 1.0).
 
-    parts, q_native = cugraph.leiden(
-        graph, max_iter=100, resolution=resolution, random_state=int(seed)
+    :param graph: (handle, SGGraph) from cugraph_graph
+    :return: (int32 labels, cuGraph's modularity, cluster count, degenerate)
+    """
+    import cupy as cp
+    import pylibcugraph as plc
+
+    handle, sg = graph
+    vertex, partition, q_native = plc.leiden(
+        handle, int(seed), sg, 100, float(resolution), 1.0, False
     )
-    parts = parts.to_pandas()
-    vertex = parts["vertex"].to_numpy().astype(np.int64, copy=False)
+    vertex = cp.asnumpy(vertex).astype(np.int64, copy=False)
     if (
         vertex.size != n_cells
         or np.unique(vertex).size != n_cells
@@ -239,7 +252,7 @@ def leiden_gpu(graph, n_cells, resolution, seed):
             "cuGraph Leiden labeled %d of %d vertices" % (vertex.size, n_cells)
         )
     labels = np.empty(n_cells, dtype=np.int32)
-    labels[vertex] = parts["partition"].to_numpy()
+    labels[vertex] = cp.asnumpy(partition)
     n_clusters = int(np.unique(labels).size)
     degenerate = n_clusters >= n_cells or q_native < 0
     return labels, float(q_native), n_clusters, degenerate

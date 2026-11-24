@@ -1048,7 +1048,8 @@ public final class QpcatPreferences {
                 .category(CATEGORY_ENV)
                 .description(Tooltips.wrap(
                         "The Python of a RAPIDS environment you installed yourself (cuML, cuGraph, "
-                        + "cupy, umap-learn, scipy, numpy; the manifest ships in the documentation). "
+                        + "rapids-singlecell, cupy, umap-learn, scipy, numpy; the manifest ships in "
+                        + "the documentation). "
                         + "With it set, the Clustering dialog offers 'Neighbor graph and Leiden on the "
                         + "GPU' for Leiden runs.\n\n"
                         + "On Windows this is a path inside WSL2, for example "

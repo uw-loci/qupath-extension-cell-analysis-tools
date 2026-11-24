@@ -48,16 +48,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   polled. Asked for after a working-group member removed cells with a script run for the
   project and the dialog, reading the viewer, still counted them.
 - **Neighbor graph and Leiden on the GPU (RAPIDS), optional.** A Leiden run can build its
-  neighbor graph with cuML and partition it with cuGraph in a separate RAPIDS environment you
+  neighbor graph on the GPU and partition it with cuGraph in a separate RAPIDS environment you
   install from the shipped manifest (`documentation/gpu-graph/`), on Linux or inside WSL2 from a
   Windows QuPath; the matrix, the graph and the labels cross as files. Two new preferences under
   QP-CAT: Python environment (the environment's Python and a scratch folder), a tick in the
   Clustering dialog that appears once the Python is set, `graph_backend: gpu` in batch files, a
   card-memory estimate in the pre-run check, and a CPU fallback with the reason in a
-  notification and the run summary. Measured: 1 million cells x 25 markers in 43 s end to end
-  from a Windows QuPath on a 16 GB card. Details and limits in Setup.
+  notification and the run summary. Details, measurements and limits in Setup.
 
 ### Changed
+
+- **The GPU graph and Leiden now run as two processes, with NN-descent above 400,000 cells.**
+  Based on the GPU pipeline benchmarked by Clement Cazorla (INSERM): the neighbor graph and
+  Leiden each run in a fresh process, so the search's card memory is free before Leiden starts;
+  above 400,000 cells the search is NN-descent (cuVS, through rapids-singlecell) instead of
+  IVF-flat, with his checks on the result; the graph reaches cuGraph as a sparse matrix (CSR)
+  rather than an edge list; and on native Linux a Leiden step that runs out of card memory is
+  retried once with CUDA managed memory (WSL2 cannot do that, so there the run falls back to
+  the CPU with the reason). Each partition's modularity is also recomputed from the graph and
+  logged beside cuGraph's own figure, which can be higher than the partition really has. Two
+  deliberate departures from his version, both measured on a 16 GB card at k=50: the CSR is
+  handed to pylibcugraph directly rather than through `cugraph.Graph.from_cudf_adjlist`,
+  which kept a second copy of the graph on the card (37 against 57 bytes per nonzero at the
+  Leiden peak, 2 million cells, same partitions); and the exact brute-force search is kept up
+  to 400,000 cells (it was 200,000), because there it is the faster of the two and repeatable.
+  **NN-descent is not repeatable:** two runs above 400,000 cells share about two thirds of
+  their neighbor lists, and on the 11,306-cell synthetic ground-truth set two NN-descent runs
+  agree at ARI 0.83 where the exact search agrees at 1.0. The run summary's graph note now
+  names the search and whether it repeats, and the memory mode. The pre-run check's card
+  estimate drops from 60 to 45 bytes per nonzero and its host-RAM estimate rises from 40 to
+  47, both from a new measurement of this path at 0.5-3 million cells; under WSL2 host RAM is
+  the practical ceiling (near 4 million cells at k=50 on a 19 GB WSL2). With nothing else
+  running (measured on the version with the adjacency-list hand-over, otherwise the same):
+  55 s at 1 million cells and 2.6 min at 3 million, against 70 s and 5.3 min before.
 
 - **Every class name QP-CAT writes passes one check.** A name you type (a rename or merge in
   Modify cell populations, a gate's class, a phenotype cell type, an answer in the

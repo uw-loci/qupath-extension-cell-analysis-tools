@@ -81,7 +81,7 @@ def _symbols():
         "re": re,
         "sys": sys,
         "logger": logging.getLogger("test"),
-        "GPU_BRUTE_FORCE_CELLS": 200_000,
+        "GPU_BRUTE_FORCE_CELLS": 400_000,
     }
     import time
 
@@ -101,6 +101,7 @@ def _symbols():
         "_check_wsl_path",
         "_trim_failed_job",
         "_tail",
+        "gpu_search_note",
         "gpu_memory_note",
         "gpu_bridge_run",
     ]:
@@ -341,3 +342,11 @@ def test_a_graph_stage_killed_without_a_report_is_named(tmp_path):
     with pytest.raises(s["GpuBridgeError"]) as e:
         s["gpu_bridge_run"](_blobs(), 10, 42, [1.0], sys.executable, str(scratch), STUB)
     assert "graph stage was killed by signal 9" in str(e.value)
+
+
+def test_the_note_says_which_search_ran_and_whether_it_repeats():
+    s = _symbols()
+    assert s["gpu_search_note"]("brute") == "exact brute-force search, repeatable"
+    assert "varies from run to run" in s["gpu_search_note"]("nn_descent")
+    assert s["gpu_memory_note"]({"memory": "device"}) == "device memory"
+    assert "after the card ran out" in s["gpu_memory_note"]({"memory": "managed"})

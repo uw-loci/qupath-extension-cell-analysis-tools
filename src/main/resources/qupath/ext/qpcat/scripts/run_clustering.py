@@ -1963,17 +1963,14 @@ def gpu_bridge_run(
     seconds.update({"gpu_" + k: v for k, v in result.get("seconds", {}).items()})
     seconds["total"] = round(time.monotonic() - t_all, 3)
     versions = result.get("versions", {})
-    note = (
-        "gpu (%s on %s; cuML %s, cuGraph %s, rapids-singlecell %s; %s search; %s)"
-        % (
-            versions.get("gpu", "GPU"),
-            "WSL2" if windows else "Linux",
-            versions.get("cuml", "?"),
-            versions.get("cugraph", "?"),
-            versions.get("rapids_singlecell", "?"),
-            result.get("algorithm", "?"),
-            gpu_memory_note(result),
-        )
+    note = "gpu (%s on %s; cuML %s, cuGraph %s, rapids-singlecell %s; %s; %s)" % (
+        versions.get("gpu", "GPU"),
+        "WSL2" if windows else "Linux",
+        versions.get("cuml", "?"),
+        versions.get("cugraph", "?"),
+        versions.get("rapids_singlecell", "?"),
+        gpu_search_note(result.get("algorithm", "?")),
+        gpu_memory_note(result),
     )
     if degenerate:
         note += (
@@ -1999,6 +1996,15 @@ def gpu_bridge_run(
     return conn, labels_by_res, note, seconds
 
 
+def gpu_search_note(algorithm):
+    """Which neighbor search ran and whether a repeat run gives the same graph."""
+    if algorithm == "brute":
+        return "exact brute-force search, repeatable"
+    if algorithm == "nn_descent":
+        return "approximate NN-descent search, varies from run to run"
+    return "%s search" % algorithm
+
+
 def gpu_memory_note(result):
     """How Leiden's card memory was allocated, for the run summary."""
     if result.get("memory") == "managed":
@@ -2017,9 +2023,12 @@ def _tail(path, n=600):
         return ""
 
 
-# Above this many cells the GPU neighbor search is approximate (IVF-flat),
-# as scanpy's is above 4,096; below it cuML's exact brute force is fast enough.
-GPU_BRUTE_FORCE_CELLS = 200_000
+# Up to this many cells the GPU neighbor search is cuML's exact brute force, above
+# it cuVS NN-descent. Measured 2026-11-24 (RTX 5060 Ti, k=50): brute is the faster
+# of the two up to 400,000 cells (0.9 s vs 2.2 s at 200k, 4.4 s vs 5.0 s at 400k)
+# and repeats exactly, where NN-descent changes a third of the neighbor lists from
+# run to run (ARI 0.83 between two runs on the synthetic ground-truth set).
+GPU_BRUTE_FORCE_CELLS = 400_000
 
 
 def leiden_igraph(connectivities):

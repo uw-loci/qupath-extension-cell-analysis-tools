@@ -284,24 +284,24 @@ public final class ScalingLimits {
      * streamed, 5.05 GB through scanpy.
      */
     /**
-     * GPU memory the RAPIDS graph-and-Leiden process needs: about 60 bytes per CSR
-     * nonzero, with nonzeros about 1.44 x cells x k after symmetrization. Fitted to a
-     * working-group member's 6M and 9M-cell runs (62 and 64 B) and confirmed on our own
-     * path 2026-11-21 (RTX 5060 Ti 16 GB, k=50: 58-61 B at 500k, 2M and 4M cells; 4M
-     * cells filled the card and spilled 6 GB into host RAM, 2.4x the 3M time). A 16 GB
-     * card holds about 280M nonzeros before the Windows driver spills instead of failing.
+     * GPU memory the RAPIDS graph-and-Leiden process needs: about 45 bytes per CSR
+     * nonzero, with nonzeros about 1.44 x cells x k after symmetrization (1.64 on
+     * synthetic blobs). The peak is the Leiden stage; the neighbor search stage uses
+     * a quarter of it. Measured 2026-11-24 on the two-process path (RTX 5060 Ti 16 GB,
+     * WSL2, k=50): 36-44 B dedicated at 1M, 2M and 3M cells (10.7 GB at 3M). The
+     * single-process path it replaced needed about 60 B.
      */
     public static double gpuGraphGb(long nCells, int nNeighbors) {
-        return nCells * 1.44 * nNeighbors * 60.0 / GB;
+        return nCells * 1.44 * nNeighbors * 45.0 / GB;
     }
 
     /**
      * Host RAM the same process needs while it builds the fuzzy connectivities on the
-     * CPU: about 40 bytes per nonzero (35-42 B measured at 2M, 3M and 4M cells). The
-     * 4M run left 0.5 GB of a 19 GB WSL2 free.
+     * CPU, the graph stage: about 47 bytes per nonzero (45-47 B measured at 1M, 2M and
+     * 3M cells, 11.5 GB at 3M). On a 19 GB WSL2 that puts the ceiling near 4M x 50.
      */
     public static double gpuGraphHostGb(long nCells, int nNeighbors) {
-        return nCells * 1.44 * nNeighbors * 40.0 / GB;
+        return nCells * 1.44 * nNeighbors * 47.0 / GB;
     }
 
     /** GPU memory above which the GPU graph is flagged: most cards in use have 16 GB or less. */
@@ -555,7 +555,8 @@ public final class ScalingLimits {
             if (gpuGb > GPU_GRAPH_WARN_GB) {
                 out.add(new Finding(Severity.WARN, "GPU graph and Leiden",
                         "needs more GPU memory than a 16 GB card has; on Windows the driver then "
-                        + "spills into host RAM and the run slows several-fold rather than failing",
+                        + "spills into host RAM and the run slows several-fold rather than failing, "
+                        + "and on Linux Leiden is retried with managed memory, also slower",
                         "Lower n_neighbors, cluster fewer cells, or run on the CPU.",
                         gpuGb, 0));
             }

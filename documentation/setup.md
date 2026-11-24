@@ -80,12 +80,20 @@ scheduler that sets `CUDA_VISIBLE_DEVICES`, `auto` keeps that allocation.
 ### Neighbor graph and Leiden on the GPU
 
 For a Leiden run, QP-CAT can build the neighbor graph and run Leiden in a separate RAPIDS
-process: the neighbor search on cuML (exact up to 200,000 cells, IVF-flat above), the same
-fuzzy connectivities scanpy would compute on top, and cuGraph's Leiden at every resolution the
-run asks for. A working-group member measured 6 million cells by 25 markers, k=50, at two
-resolutions in 26 minutes on a 16 GB card under Windows 11 and WSL2, against about 47 hours
-for a CPU pipeline on 4 million cells. QP-CAT's own measurement: 1 million cells by 25 markers
-in 43 s end to end from a Windows QuPath, 29 s of it the neighbor search.
+environment, in two steps that each get a fresh process, so the first one's card memory is
+free before the second starts:
+
+1. **Graph.** The neighbor search runs on the GPU: an exact brute-force search up to 400,000
+   cells, NN-descent (cuVS, through rapids-singlecell) above. The fuzzy connectivities scanpy
+   would compute are then built on top, on the CPU.
+2. **Leiden.** The graph goes to cuGraph as a sparse matrix and is partitioned at every
+   resolution the run asks for. The modularity of each partition is computed again from the
+   graph and logged beside cuGraph's own value, which is sometimes higher than the partition
+   it returns actually has.
+
+The design follows the GPU pipeline that Clement Cazorla (INSERM) built and benchmarked for the
+working group: 6 million cells by 25 markers, k=50, two resolutions, in 26 minutes on a 16 GB
+card under Windows 11 and WSL2, against about 47 hours for a CPU pipeline on 4 million cells.
 
 RAPIDS runs on Linux only. On Windows the process runs inside WSL2 and QuPath starts it
 through `wsl.exe`; the matrix crosses as one file written into the WSL file system, the graph
@@ -112,27 +120,52 @@ and the labels come back the same way (about a second each way at 1 million cell
 
 #### What to expect
 
-- The pre-run check estimates the card memory at about 60 bytes per graph nonzero, with
-  nonzeros about 1.44 x cells x k: a 16 GB card holds about 280M nonzeros, near 4 million
-  cells at k=50 or 13 million at k=15. Above that, the Windows driver spills into host RAM over
-  PCIe and the run slows several-fold rather than failing; the check warns. Measured on our
-  16 GB card at k=50 (synthetic cells, 2026-11-21): 500k cells 33 s, 1M 70 s, 2M 3.0 min, 3M
-  5.3 min, and 4M cells 12.6 min with the card full and 6 GB spilled. The process also needs
-  host RAM for the connectivities, about 40 bytes per nonzero (11.5 GB at 4M x 50); the check
-  warns when that is close to what is free, which on Windows is the memory WSL2 is allowed.
-- A GPU run differs from a CPU run of the same settings the way two seeds differ, although
-  the graph comes from a different neighbor search (exact below 200,000 cells, IVF-flat above).
-  Measured on the 11,306-cell synthetic ground-truth set at HEAD (`n_neighbors` 15 and 50,
-  resolutions 0.5 and 1.0, seed 42): CPU path against GPU path ARI 0.91-0.94, CPU seed 42
-  against seed 7 ARI 0.93-0.94, and each path against the truth within 0.03 of the other
-  (`qupath-work/rapids-test/path_vs_path.json`). Below 200,000 cells the GPU search is exact and a run
-  repeats with its own seed; above, the IVF-flat index is trained without a seed, so repeat runs
-  can differ slightly. The run summary ends with "Graph and Leiden on the GPU." when it ran there.
+- **Two memory limits, card and host.** A graph has about 1.44 x cells x k nonzeros on real
+  data (1.64 on synthetic blobs). The card's peak is the Leiden step, about 45 bytes per
+  nonzero; the graph step uses about a quarter of that. Host RAM peaks in the graph step,
+  where the connectivities are built on the CPU: about 47 bytes per nonzero. The pre-run
+  check warns when the card estimate is above 14 GB or the host estimate is close to what is
+  free, which on Windows is the memory WSL2 is allowed, not the machine's. In practice host
+  RAM is the ceiling under WSL2: a 19 GB WSL2 tops out near 4 million cells at k=50.
+- **Measured** on a 16 GB RTX 5060 Ti under WSL2, synthetic 8-blob cells by 25 features, k=50,
+  one resolution (2026-11-24):
+
+  | Cells | Nonzeros | Card, Leiden step | Host RAM, graph step | Time, quiet machine | Time, shared machine |
+  |---|---|---|---|---|---|
+  | 500,000 | 41M | 1.8 GB | 2.3 GB | 32 s | 84 s |
+  | 1,000,000 | 81M | 2.9 GB | 3.7 GB | 55 s | 87 s |
+  | 2,000,000 | 163M | 5.9 GB | 7.5 GB | 1.7 min | 1.9 min |
+  | 3,000,000 | 245M | 10.7 GB | 11.5 GB | 2.6 min | 3.0 min |
+
+  The memory and the shared-machine times are from the shipped code, measured while other
+  CPU-heavy jobs ran (the CPU part of the graph step is what slows). The quiet-machine times
+  are from an earlier run the same day that differed only in how the graph reached cuGraph (that
+  version needed 40-54 bytes per nonzero on the card, against 36-44 now). For comparison,
+  the single-process version this replaced took 70 s, 3.0 min and 5.3 min at 1, 2 and 3
+  million cells. Larger sizes did not fit in the host RAM free on that WSL2.
+- **When the card runs out.** On native Linux a Leiden step that runs out of card memory is
+  retried once with CUDA managed memory, which can borrow host RAM and is slower. WSL2 does not
+  support that, so there the run falls back to the CPU with the reason; the Windows driver may
+  instead spill into host RAM on its own, and the run then slows several-fold. The run summary
+  says which memory mode ran ("device memory", or "managed memory, after the card ran out
+  with device memory").
+- **Reproducibility.** Up to 400,000 cells the exact search gives the same graph every time,
+  and a repeat run with the same seed gives the same labels. Above 400,000 cells NN-descent
+  is approximate and not repeatable: two runs share about two thirds of their neighbor lists,
+  and on the 11,306-cell synthetic ground-truth set two NN-descent runs agree at ARI 0.83
+  where the exact search agrees at 1.0. Its neighbors are 98-99 % of the exact ones. The
+  run summary records which search ran ("exact brute-force search, repeatable" or
+  "approximate NN-descent search, varies from run to run").
+- A GPU run differs from a CPU run of the same settings about as two seeds differ. Measured
+  on the 11,306-cell synthetic ground-truth set (`n_neighbors` 15 and 50, resolutions 0.5
+  and 1.0, seed 42, exact search): CPU path against GPU path ARI 0.91-0.94, CPU seed 42
+  against seed 7 ARI 0.93-0.94, and each path against the truth within 0.03 of the other.
+  The run summary ends with "Graph and Leiden on the GPU." when it ran there.
 - If the process cannot run (no Python set, WSL refusing to start, a library missing, a driver
   too old for the build), Leiden runs on the CPU, a notification says why, and the run
   summary records "cpu (gpu requested; ...)". A successful run records the card, the library
-  versions and the search used. The process's own log is `run.log` in the job folder, kept
-  when it fails.
+  versions, the search and the memory mode. The process's own log is `run.log` in the job
+  folder (both steps write to it), kept when it fails.
 - One Windows wrinkle: a "Run as administrator" compatibility flag on
   `C:\Program Files\WSL\wsl.exe` stops any unelevated program, QuPath included, from starting
   WSL ("The requested operation requires elevation"). Clear it under the file's Properties >

@@ -254,8 +254,10 @@ part-way.
 The autoencoder, and Harmony batch correction when its cells fit in GPU memory, use the GPU
 today. Leiden's neighbor graph and partition can also run on a GPU, in a separate RAPIDS
 environment you install yourself (see [Neighbor graph and Leiden on the GPU](setup.md#neighbor-graph-and-leiden-on-the-gpu)).
-The GPU path builds a different graph from the CPU path: an exact search below 200,000 cells,
-which repeats with the same seed, and an unseeded IVF-flat index above, which may not. Other
+The GPU path builds a different graph from the CPU path: an exact search up to 400,000 cells,
+which repeats with the same seed, and NN-descent above, which does not (two runs on the
+synthetic ground-truth set agree at ARI 0.83). The run summary's graph note says which search
+ran and whether it repeats. Other
 clustering and spatial statistics do not use a GPU, so the GPU environment variant costs a
 several-GB download and buys nothing for those workflows. See [Setup](setup.md#cpu-or-gpu).
 

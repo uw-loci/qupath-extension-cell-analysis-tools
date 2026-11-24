@@ -34,7 +34,7 @@ def _symbols():
         "sys": sys,
         "time": time,
         "logger": logging.getLogger("test"),
-        "GPU_BRUTE_FORCE_CELLS": 200_000,
+        "GPU_BRUTE_FORCE_CELLS": 400_000,
     }
     for n in [
         "knn_graph",
@@ -48,6 +48,7 @@ def _symbols():
         "gpu_scratch_default",
         "gpu_cuda_path",
         "_gpu_child_env",
+        "gpu_search_note",
         "gpu_memory_note",
         "gpu_bridge_run",
         "fit_seeded",

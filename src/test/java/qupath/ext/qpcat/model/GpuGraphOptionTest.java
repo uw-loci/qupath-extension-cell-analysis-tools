@@ -23,9 +23,12 @@ class GpuGraphOptionTest {
 
     @Test
     void estimateFollowsTheMeasuredRule() {
-        // The member's 6M-cell, k=50 run: 430.8M nonzeros at about 62 B each.
+        // 6M cells x 50 x 1.44 = 432M nonzeros (the member's run had 430.8M) at 45 B each.
         double gb = ScalingLimits.gpuGraphGb(6_000_000, 50);
-        assertTrue(gb > 24 && gb < 26, "6M x 50 x 1.44 x 60 B is about 25 GB, got " + gb);
+        assertTrue(gb > 17 && gb < 20, "6M x 50 x 1.44 x 45 B is about 18 GiB, got " + gb);
+        // 3M x 50 needed 10.7 GB of card memory on 245M nonzeros (2026-11-24).
+        double three = ScalingLimits.gpuGraphGb(3_000_000, 50);
+        assertTrue(three > 8.5 && three < 10.5, "3M x 50 is about 9 GiB, got " + three);
         assertTrue(ScalingLimits.gpuGraphGb(1_000_000, 15) < 2.0);
     }
 
@@ -47,8 +50,8 @@ class GpuGraphOptionTest {
 
     @Test
     void hostMemoryOfTheGpuProcessIsChecked() {
-        // 4M cells x 50 needs about 11 GB of host RAM for the connectivities (measured
-        // 2026-11-21); a 12 GB WSL2 is too close for comfort, 64 GB is fine.
+        // 4M cells x 50 needs about 12.6 GiB of host RAM for the connectivities (47 B per
+        // nonzero, measured 2026-11-24); a 12 GB WSL2 is too small, 64 GB is fine.
         ScalingLimits.Request r = new ScalingLimits.Request(ClusteringConfig.Algorithm.LEIDEN, 4_000_000, 25);
         r.nNeighbors = 50;
         r.gpuGraph = true;
@@ -56,6 +59,6 @@ class GpuGraphOptionTest {
         assertTrue(ScalingLimits.check(r).stream().anyMatch(x -> x.subject().equals("GPU graph: host memory")));
         r.availableRamGb = 64;
         assertTrue(ScalingLimits.check(r).stream().noneMatch(x -> x.subject().equals("GPU graph: host memory")));
-        assertTrue(ScalingLimits.gpuGraphHostGb(4_000_000, 50) > 10 && ScalingLimits.gpuGraphHostGb(4_000_000, 50) < 12);
+        assertTrue(ScalingLimits.gpuGraphHostGb(4_000_000, 50) > 12 && ScalingLimits.gpuGraphHostGb(4_000_000, 50) < 13.5);
     }
 }
