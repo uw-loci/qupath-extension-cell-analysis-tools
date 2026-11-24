@@ -63,8 +63,10 @@ def test_characters_mathtext_would_redraw_are_swapped_for_look_alikes():
 
 
 def test_leaves_names_mathtext_would_misread_alone():
-    for name in ("Cell: $CD3 mean", "Cell: a^b mean", "Cell: x{y} mean", ""):
+    for name in ("Cell: a^b mean", "Cell: x{y} mean", ""):
         assert bold(name) == name
+    # Drawn with parse_math=True, so a dollar sign is escaped to stay literal.
+    assert bold("Cell: $CD3 mean $x") == r"Cell: \$CD3 mean \$x"
 
 
 @requires("matplotlib")

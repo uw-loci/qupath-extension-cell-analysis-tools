@@ -147,6 +147,14 @@ The message for repeated ids includes a one-line script that removes the repeats
 the first copy of each), or gives the copies new ids if they are different cells. The batch
 dry run (`--dry-run`) makes the same check, so `E027` and `W014` appear before any work.
 
+### Names in figures
+
+Class, cluster, marker and image names are drawn in figures as written, a `$` included (a
+name such as `slide $a^{b$` used to be read as a formula and the figure went missing).
+Names in Chinese, Japanese or Korean script draw as empty boxes in the figures, because the
+font the figures use (DejaVu Sans) has no characters for them; the names in QuPath, in the
+results window and in CSV files are unaffected.
+
 ## Messages you may see
 
 | Message | Where | Cause | Fix |

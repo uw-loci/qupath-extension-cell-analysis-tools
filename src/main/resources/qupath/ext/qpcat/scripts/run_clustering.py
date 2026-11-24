@@ -2932,6 +2932,7 @@ def angle_marker_labels(plot_obj, rotation=45):
         rotation=rotation,
         ha="right",
         rotation_mode="anchor",
+        parse_math=True,
     )
 
 

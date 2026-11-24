@@ -190,6 +190,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **A name with `$` in it no longer makes a figure go missing (H52).** A class, cluster,
+  marker or image name holding two `$` with `^` or `{` between them was read as a matplotlib
+  formula, `savefig` raised, and the figure was reported as "plot failed". The worker now
+  draws text literally; the bold marker labels still draw bold and show a `$` as written.
+  Troubleshooting, *Names in figures*, also notes that names in Chinese, Japanese or Korean
+  script draw as empty boxes in figures.
 - **Batch progress rows stay one line (H57).** A field value holding a quote, a backslash, a
   line break or another control character (an image named `slide "A"`, or one with a newline)
   broke the one-line `[qpcat-batch] ... image="..."` row that log parsers read. Values with
