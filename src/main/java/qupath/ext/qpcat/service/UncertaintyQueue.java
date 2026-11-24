@@ -54,7 +54,7 @@ public final class UncertaintyQueue {
                 continue;
             }
             PathClass pc = det.getPathClass();
-            String predicted = (pc == null || pc == PathClass.getNullClass())
+            String predicted = CellClasses.isUnclassified(pc)
                     ? TrainingLabels.UNCLASSIFIED : pc.toString();
             var roi = det.getROI();
             out.add(new Candidate(imageId, imageName, roi.getCentroidX(), roi.getCentroidY(),

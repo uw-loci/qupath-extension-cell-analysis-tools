@@ -490,8 +490,8 @@ public final class CompositionFigure {
      */
     public int defaultColorRgb(int cluster) {
         try {
-            Integer rgb = PathClass.fromString(
-                    ClusterNaming.defaultName(cluster, clusterDigits)).getColor();
+            Integer rgb = CellClasses.colorOf(
+                    ClusterNaming.defaultName(cluster, clusterDigits));
             if (rgb != null) return rgb;
         } catch (Exception e) {
             // No PathClass registry available (unit tests / headless) -- palette.

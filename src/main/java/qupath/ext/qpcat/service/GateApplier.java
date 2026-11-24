@@ -87,14 +87,15 @@ public final class GateApplier {
      * Assign {@code className} to every gated cell across all of its source
      * images, saving each project image. The open image's hierarchy event is
      * fired on the FX thread so the viewer recolors immediately. Must be called
-     * OFF the FX thread (it performs image IO).
+     * OFF the FX thread (it performs image IO). {@code className} is a typed name and
+     * is checked by {@link CellClasses#forTypedName}, which throws when it is refused.
      */
     public static Result assignClass(QuPathGUI qupath, CellRef[] refs, int[] gatedIndices,
                                      String className) {
         if (qupath == null || refs == null || gatedIndices == null || className == null) {
             return new Result(0, 0, 0);
         }
-        PathClass pathClass = PathClass.fromString(className);
+        PathClass pathClass = CellClasses.forTypedName(className, "Class name");
         Project<BufferedImage> project = qupath.getProject();
 
         // Group gated refs by source image (id preferred, name fallback).

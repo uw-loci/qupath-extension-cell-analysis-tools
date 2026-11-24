@@ -7,6 +7,7 @@ import qupath.lib.common.GeneralTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.PlotKind;
+import qupath.ext.qpcat.service.CellClasses;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -424,6 +425,7 @@ public final class BatchYamlValidator {
                     "required when phenotyping.enabled is true (or enable llm_explainer)"));
         }
         if (p.getRules() != null) {
+            java.util.Map<String, String> foldedRuleNames = new java.util.HashMap<>();
             for (int i = 0; i < p.getRules().size(); i++) {
                 BatchYamlSchema.PhenotypeRuleEntry rule = p.getRules().get(i);
                 // A component condition naming a whole composite class can never match:
@@ -444,6 +446,24 @@ public final class BatchYamlValidator {
                 String base = "phenotyping.rules[" + i + "]";
                 if (rule.getName() == null || rule.getName().isEmpty()) {
                     r.add(ValidationIssue.error("E001", base + ".name", "required field missing"));
+                } else {
+                    // The name becomes the cells' class: the run checks it the same
+                    // way (ClusteringWorkflow.checkedPhenotypeRules); the dry run
+                    // reports it first.
+                    try {
+                        String name = CellClasses.typedName(rule.getName(), "Rule name");
+                        String other = foldedRuleNames.putIfAbsent(
+                                name.toLowerCase(java.util.Locale.ROOT), name);
+                        if (other != null && !other.equals(name)) {
+                            r.add(ValidationIssue.error("E026", base + ".name", "'"
+                                    + asciiSafe(name) + "' and '" + asciiSafe(other)
+                                    + "' differ only in case; QuPath would make them two "
+                                    + "classes. Use one spelling."));
+                        }
+                    } catch (CellClasses.ClassNameException e) {
+                        r.add(ValidationIssue.error("E026", base + ".name",
+                                asciiSafe(e.getMessage())));
+                    }
                 }
                 // A rule needs at least one POSITIVE criterion, but it may be an
                 // OR group: "Macrophage = any of CD68/CD163/CD206" is a valid

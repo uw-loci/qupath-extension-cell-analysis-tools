@@ -107,7 +107,9 @@ public class ResultApplier {
      * colors and a merged class takes the color of its first constituent; a later
      * {@link #applyClusterColors} pass restores any user-customized colors.
      *
-     * @param namer maps a non-negative label to its PathClass name (never null/blank)
+     * @param namer maps a non-negative label to its PathClass name (never null/blank);
+     *              read through {@link CellClasses#forName}, so a name with ":" is a
+     *              derived class and an unusable name throws before any cell changes
      */
     public void applyClusterLabelsNamed(List<PathObject> detections, int[] labels,
                                         java.util.function.IntFunction<String> namer) {
@@ -128,8 +130,18 @@ public class ResultApplier {
                     detections.size(), String.join(", ", replaced));
         }
 
+        // Resolved before the first write, so a name the gate refuses leaves every
+        // cell as it was instead of half the image relabelled.
         Map<Integer, PathClass> byLabel = new HashMap<>();
         Set<String> seeded = new HashSet<>();
+        for (int label : labels) {
+            if (label < 0 || byLabel.containsKey(label)) continue;
+            PathClass pc = CellClasses.forName(namer.apply(label), "Cluster name");
+            if (seeded.add(pc.toString())) {
+                pc.setColor(ClusterPalette.rgbFor(label));
+            }
+            byLabel.put(label, pc);
+        }
         for (int i = 0; i < detections.size(); i++) {
             PathObject det = detections.get(i);
             int label = labels[i];
@@ -143,16 +155,7 @@ public class ResultApplier {
                 det.resetPathClass();
                 continue;
             }
-            PathClass pc = byLabel.get(label);
-            if (pc == null) {
-                String name = namer.apply(label);
-                pc = PathClass.fromString(name);
-                if (seeded.add(name)) {
-                    pc.setColor(ClusterPalette.rgbFor(label));
-                }
-                byLabel.put(label, pc);
-            }
-            setClassification(det, pc);
+            setClassification(det, byLabel.get(label));
         }
     }
 
@@ -276,8 +279,12 @@ public class ResultApplier {
         for (var e : clusterColors.entrySet()) {
             if (e.getKey() == null || e.getValue() == null) continue;
             String name = ns == null ? e.getKey() : ns + ": " + e.getKey();
-            PathClass.fromString(name).setColor(e.getValue());
-            n++;
+            try {
+                CellClasses.forName(name, "Cluster name").setColor(e.getValue());
+                n++;
+            } catch (CellClasses.ClassNameException ex) {
+                logger.warn("Saved color not restored: {}", ex.getMessage());
+            }
         }
         logger.info("Restored {} saved cluster colors{}", n,
                 ns != null ? " (namespace '" + ns + "')" : "");
@@ -411,37 +418,50 @@ public class ResultApplier {
      * Applies phenotype labels to detections as PathClass classifications.
      * <p>
      * Each detection is assigned a classification matching the phenotype name
-     * (e.g., "CD8+ T Cell", "Macrophage", "Unknown").
+     * (e.g., "CD8+ T Cell", "Macrophage", "Unknown"). A label outside
+     * {@code phenotypeNames} leaves the cell with no class rather than a made-up
+     * name a real class could share.
      *
      * @param detections     ordered list of detections (same order as labels)
      * @param labels         phenotype label index for each detection
      * @param phenotypeNames ordered array of phenotype names (index matches label value)
+     * @param noClassName    the name in {@code phenotypeNames} that means "no class"
+     *                       (the classifier's {@link TrainingLabels#UNCLASSIFIED}), or
+     *                       null when every name is a class
      */
     public void applyPhenotypeLabels(List<PathObject> detections, int[] labels,
-                                      String[] phenotypeNames) {
+                                      String[] phenotypeNames, String noClassName) {
         if (detections.size() != labels.length) {
             throw new IllegalArgumentException(
                     "Detection count (" + detections.size()
                     + ") does not match label count (" + labels.length + ")");
         }
 
-        // One PathClass lookup per distinct phenotype, not per cell.
+        // One PathClass lookup per distinct phenotype, not per cell, and all of
+        // them before the first write. A null entry means "no class".
         Map<Integer, PathClass> byLabel = new HashMap<>();
         Set<String> seeded = new HashSet<>();
-        for (int i = 0; i < detections.size(); i++) {
-            PathObject det = detections.get(i);
-            int label = labels[i];
-            PathClass pc = byLabel.get(label);
-            if (pc == null) {
-                String name = (label >= 0 && label < phenotypeNames.length)
-                        ? phenotypeNames[label] : "Unknown";
-                pc = PathClass.fromString(name);
-                if (label >= 0 && seeded.add(name)) {
+        int outOfRange = 0;
+        for (int label : labels) {
+            if (byLabel.containsKey(label)) continue;
+            PathClass pc = null;
+            if (label >= 0 && label < phenotypeNames.length
+                    && !phenotypeNames[label].equals(noClassName)) {
+                pc = CellClasses.forName(phenotypeNames[label], "Phenotype name");
+                if (seeded.add(pc.toString())) {
                     pc.setColor(ClusterPalette.rgbFor(label));
                 }
-                byLabel.put(label, pc);
             }
-            setClassification(det, pc);
+            byLabel.put(label, pc);
+        }
+        for (int i = 0; i < detections.size(); i++) {
+            int label = labels[i];
+            if (label < 0 || label >= phenotypeNames.length) outOfRange++;
+            setClassification(detections.get(i), byLabel.get(label));
+        }
+        if (outOfRange > 0) {
+            logger.warn("{} detection(s) had a phenotype label with no name and were left "
+                    + "with no class", outOfRange);
         }
 
         logger.info("Applied phenotype labels to {} detections", detections.size());
@@ -497,7 +517,7 @@ public class ResultApplier {
             int label = labels[i];
             PathClass pc = byLabel.get(label);
             if (pc == null) {
-                pc = PathClass.fromString(parentClusterName + "." + label);
+                pc = CellClasses.forName(parentClusterName + "." + label, "Sub-cluster name");
                 if (label >= 0) {
                     pc.setColor(ClusterPalette.rgbFor(label));
                 }
@@ -625,7 +645,12 @@ public class ResultApplier {
             PathClass pc = classByLabel.computeIfAbsent(label, l -> {
                 if (l < 0) return null;   // noise keeps no class
                 String name = nameFn.apply(l);
-                return name == null ? null : PathClass.fromString(name);
+                try {
+                    return name == null ? null : CellClasses.forName(name, "Cluster name");
+                } catch (CellClasses.ClassNameException e) {
+                    logger.warn("Cluster {} shown as ungrouped: {}", l, e.getMessage());
+                    return null;
+                }
             });
             if (pc == null) continue;
             byImage.computeIfAbsent(ref.getImageId(), k -> new HashMap<>())

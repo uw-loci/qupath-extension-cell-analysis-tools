@@ -1,8 +1,16 @@
 package qupath.ext.qpcat.service;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
+import qupath.lib.objects.PathObject;
+import qupath.lib.objects.PathObjects;
+import qupath.lib.objects.classes.PathClass;
+import qupath.lib.regions.ImagePlane;
+import qupath.lib.roi.ROIs;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Which PathClass a cluster's cells land on, and which one carries its color.
@@ -53,5 +61,61 @@ class ClusterClassNamingTest {
         // The rename dialog trims; the palette is keyed on the trimmed name. If
         // this did not trim, a stray space would silently create a second class.
         assertThat(ResultApplier.clusterClassName(null, " Tumor ")).isEqualTo("Tumor");
+    }
+
+    // ---- Names from text reach the cells through the gate ----------------------
+
+    private static PathObject cell(String cls) {
+        PathObject det = PathObjects.createDetectionObject(
+                ROIs.createRectangleROI(0, 0, 1, 1, ImagePlane.getDefaultPlane()));
+        if (cls != null) det.setPathClass(PathClass.fromString(cls));
+        return det;
+    }
+
+    @Test
+    void anImportedNameWithAColonIsTheDerivedClassAndTheCellsAgreeWithItsCanonicalName() {
+        // AnnData categories and saved names go through forName: the cells carry
+        // QuPath's spelling, which is the spelling QP-CAT now saves.
+        PathObject a = cell(null);
+        new ResultApplier().applyClusterLabelsNamed(List.of(a), new int[]{0}, l -> "CD8:T");
+        assertThat(a.getPathClass().toString())
+                .isEqualTo(CellClasses.canonicalName("CD8:T", "Cluster name"))
+                .isEqualTo("CD8: T");
+    }
+
+    @Test
+    void anUnusableNameChangesNoCellAtAll() {
+        // Resolved before the first write: one bad name used to throw half-way
+        // through an image, leaving it partly relabelled.
+        PathObject a = cell("Old");
+        PathObject b = cell("Old");
+        assertThatThrownBy(() -> new ResultApplier().applyClusterLabelsNamed(
+                List.of(a, b), new int[]{0, 1}, l -> l == 0 ? "Fine" : "A::B"))
+                .isInstanceOf(CellClasses.ClassNameException.class);
+        assertThat(a.getPathClass().toString()).isEqualTo("Old");
+        assertThat(b.getPathClass().toString()).isEqualTo("Old");
+    }
+
+    @Test
+    void aClassifiersNoClassNameClearsTheClassInsteadOfWritingAClassThatLooksLikeIt() {
+        PathObject a = cell("Tumor");
+        PathObject b = cell("Tumor");
+        new ResultApplier().applyPhenotypeLabels(List.of(a, b), new int[]{0, 1},
+                new String[]{"Stroma", TrainingLabels.UNCLASSIFIED}, TrainingLabels.UNCLASSIFIED);
+        assertThat(a.getPathClass().toString()).isEqualTo("Stroma");
+        assertThat(CellClasses.isUnclassified(b)).isTrue();
+    }
+
+    @Test
+    void aPhenotypeLabelWithNoNameLeavesNoClassRatherThanAnInventedUnknown() {
+        PathObject a = cell("Tumor");
+        new ResultApplier().applyPhenotypeLabels(List.of(a), new int[]{5},
+                new String[]{"CD8 T"}, null);
+        assertThat(CellClasses.isUnclassified(a)).isTrue();
+        // Phenotyping's own "Unknown" entry is still written as a class.
+        PathObject b = cell(null);
+        new ResultApplier().applyPhenotypeLabels(List.of(b), new int[]{1},
+                new String[]{"CD8 T", "Unknown"}, null);
+        assertThat(b.getPathClass().toString()).isEqualTo("Unknown");
     }
 }

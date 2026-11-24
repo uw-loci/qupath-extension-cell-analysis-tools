@@ -97,11 +97,13 @@ public class PhenotypingDialog {
         private final Map<String, String> conditions = new LinkedHashMap<>();
 
         public PhenotypeRule(String cellType) {
-            this.cellType = cellType;
+            setCellType(cellType);
         }
 
         public String getCellType() { return cellType; }
-        public void setCellType(String v) { this.cellType = v; }
+
+        /** Stored trimmed: QuPath strips the spaces from a class name anyway. */
+        public void setCellType(String v) { this.cellType = v == null ? null : v.trim(); }
 
         public String getCondition(String marker) {
             return conditions.getOrDefault(marker, "");
@@ -893,23 +895,25 @@ public class PhenotypingDialog {
 
         Set<String> seenNames = new HashSet<>();
         for (PhenotypeRule rule : rulesList) {
-            if (rule.getCellType() == null || rule.getCellType().trim().isEmpty()) {
+            if (rule.getCellType() == null || rule.getCellType().isEmpty()) {
                 Dialogs.showWarningNotification("QPCAT",
                         "All rules must have a Cell Type name.");
                 return;
             }
-            String name = rule.getCellType().trim();
-            if (seenNames.contains(name)) {
-                Dialogs.showWarningNotification("QPCAT",
-                        "Duplicate cell type name: '" + name + "'. Each rule must have a unique name.");
+            String name;
+            try {
+                name = CellClasses.typedName(rule.getCellType(), "Cell type");
+            } catch (CellClasses.ClassNameException ex) {
+                Dialogs.showWarningNotification("QPCAT", ex.getMessage());
                 return;
             }
-            if ("Unknown".equalsIgnoreCase(name)) {
+            // Case-folded: "CD8" and "cd8" would be two QuPath classes.
+            if (!seenNames.add(name.toLowerCase(Locale.ROOT))) {
                 Dialogs.showWarningNotification("QPCAT",
-                        "'Unknown' is reserved for unmatched cells. Please use a different name.");
+                        "Duplicate cell type name: '" + name + "' (names are compared ignoring "
+                        + "case). Each rule must have a unique name.");
                 return;
             }
-            seenNames.add(name);
 
             boolean hasCondition = currentMarkers.stream()
                     .anyMatch(m -> {

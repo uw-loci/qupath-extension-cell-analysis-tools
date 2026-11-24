@@ -75,7 +75,8 @@ public class ClusterManagementDialog {
     private final Map<Integer, String> seededNames = new LinkedHashMap<>();
 
     // --- Manual working state ---
-    // original class name (as on the live detections) -> current display name.
+    // original class name (as on the live detections) -> staged class name. A null
+    // key or value means "no class", which no class name can equal.
     private final Map<String, String> workingManual = new LinkedHashMap<>();
     private final Map<String, Integer> manualCount = new LinkedHashMap<>();
 
@@ -84,7 +85,7 @@ public class ClusterManagementDialog {
         String displayName;
         int count;
         final List<Integer> labels = new ArrayList<>();   // saved path: constituent labels
-        final List<String> origNames = new ArrayList<>(); // manual path: constituent class names
+        final List<String> origNames = new ArrayList<>(); // manual path: constituent class names, null = no class
         /**
          * Zero-pad width of this result's default names. Held per row because the
          * "has this been renamed?" test below compares against the default, and a
@@ -145,8 +146,21 @@ public class ClusterManagementDialog {
      * @param names label -&gt; proposed name; labels not present keep their own
      */
     public void seedNames(Map<Integer, String> names) {
-        if (names != null) {
-            seededNames.putAll(names);
+        if (names == null) {
+            return;
+        }
+        for (var e : names.entrySet()) {
+            // Proposed by a model, so read like imported data: kept in QuPath's own
+            // spelling, and a reserved word or an unusable name is left out rather
+            // than staged as a class that looks like "no class".
+            if (CellClasses.isReservedName(e.getValue())) {
+                continue;
+            }
+            try {
+                seededNames.put(e.getKey(), CellClasses.canonicalName(e.getValue(), "Cluster name"));
+            } catch (CellClasses.ClassNameException ex) {
+                logger.warn("Suggested name for cluster {} not used: {}", e.getKey(), ex.getMessage());
+            }
         }
     }
 
@@ -716,13 +730,17 @@ public class ClusterManagementDialog {
     }
 
     /**
-     * Row label for cells with no classification, which doubles as the sentinel
-     * meaning "clear the class" in {@link #relabelOne}. Parenthesised so it cannot
-     * collide with a real class: QuPath calls the absence of a class
-     * "Unclassified" too, so an unparenthesised sentinel would make merging into
-     * this row create a genuine PathClass of that name instead of clearing it.
+     * Row label for cells with no classification, and the word to type as a merge
+     * target to clear the class. Only a label: the state behind the row is a null
+     * class name, so a real class spelled the same way keeps its own row (typing it
+     * as a new name is refused, see {@link CellClasses#RESERVED_NAMES}).
      */
-    private static final String UNCLASSIFIED_ROW = "(Unclassified)";
+    static final String UNCLASSIFIED_ROW = "(Unclassified)";
+
+    /** What a manual-path row is called: its class name, or {@link #UNCLASSIFIED_ROW}. */
+    static String manualLabel(String className) {
+        return className == null ? UNCLASSIFIED_ROW : className;
+    }
 
     private void loadManualClusters() {
         applyButton.setDisable(false);
@@ -732,8 +750,7 @@ public class ClusterManagementDialog {
             return;
         }
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            String name = CellClasses.isUnclassified(det)
-                    ? UNCLASSIFIED_ROW : det.getPathClass().toString();
+            String name = CellClasses.nameOf(det);
             manualCount.merge(name, 1, Integer::sum);
             workingManual.putIfAbsent(name, name);
         }
@@ -746,14 +763,15 @@ public class ClusterManagementDialog {
         rows.clear();
         LinkedHashMap<String, ClusterRow> byName = new LinkedHashMap<>();
         List<String> origs = new ArrayList<>(manualCount.keySet());
-        Collections.sort(origs);
+        origs.sort(Comparator.nullsLast(Comparator.naturalOrder()));
         for (String orig : origs) {
             String name = workingManual.getOrDefault(orig, orig);
-            ClusterRow row = byName.computeIfAbsent(name, n -> {
-                ClusterRow r = new ClusterRow();
-                r.displayName = n;
-                return r;
-            });
+            ClusterRow row = byName.get(name);
+            if (row == null) {
+                row = new ClusterRow();
+                row.displayName = manualLabel(name);
+                byName.put(name, row);
+            }
             row.origNames.add(orig);
             row.count += manualCount.getOrDefault(orig, 0);
         }
@@ -803,9 +821,10 @@ public class ClusterManagementDialog {
             return;
         }
         ClusterRow row = selected.get(0);
-        String newName = promptName("Rename Cluster", "Rename '" + row.displayName + "' to:", row.displayName);
-        if (newName == null || newName.equals(row.displayName)) return;
-        applyNameToRow(row, newName);
+        NameChoice choice = promptClassName("Rename Cluster",
+                "Rename '" + row.displayName + "' to:", row.displayName);
+        if (choice == null || manualLabel(choice.name()).equals(row.displayName)) return;
+        applyNameToRow(row, choice.name());
     }
 
     private void mergeSelected() {
@@ -817,11 +836,11 @@ public class ClusterManagementDialog {
         int total = selected.stream().mapToInt(r -> r.count).sum();
         String names = selected.stream().map(r -> r.displayName)
                 .reduce((a, b) -> a + ", " + b).orElse("");
-        String target = promptName("Merge Clusters",
+        NameChoice target = promptClassName("Merge Clusters",
                 "Merging: " + names + "\n(" + total + " cells)\n\nName for the merged cluster:",
                 selected.get(0).displayName);
         if (target == null) return;
-        for (ClusterRow row : selected) applyNameToRow(row, target);
+        for (ClusterRow row : selected) applyNameToRow(row, target.name());
     }
 
     /** Constituents behind a row: labels on the saved path, class names on the manual one. */
@@ -869,9 +888,9 @@ public class ClusterManagementDialog {
             }
         } else {
             List<String> origs = new ArrayList<>(row.origNames);
-            Collections.sort(origs);
+            origs.sort(Comparator.nullsLast(Comparator.naturalOrder()));
             for (String orig : origs) {
-                items.add(orig + "  (" + manualCount.getOrDefault(orig, 0) + " cells)");
+                items.add(manualLabel(orig) + "  (" + manualCount.getOrDefault(orig, 0) + " cells)");
                 restores.add(() -> workingManual.put(orig, orig));
             }
         }
@@ -910,8 +929,33 @@ public class ClusterManagementDialog {
                 + "'. Click Apply to write the change.");
     }
 
+    /**
+     * A class name chosen in a prompt.
+     *
+     * @param name the checked name, or null for "no class" (manual path only)
+     */
+    record NameChoice(String name) {}
+
+    /**
+     * Ask for a cluster or class name and check it with {@link CellClasses#typedName}.
+     * A refused name is explained and asked for again, prefilled with the suggested
+     * spelling. On the manual path, {@link #UNCLASSIFIED_ROW} means "clear the class".
+     *
+     * @return the choice, or null when the user canceled
+     */
+    private NameChoice promptClassName(String title, String header, String seed) {
+        boolean manual = !isSavedPath();
+        String name = ClassNamePrompt.ask(header, seed, "Cluster name",
+                (h, prefill) -> promptName(title, h, prefill),
+                manual ? raw -> raw.equalsIgnoreCase(UNCLASSIFIED_ROW) : null);
+        if (name == null) return null;
+        return new NameChoice(manual && name.equalsIgnoreCase(UNCLASSIFIED_ROW) ? null : name);
+    }
+
+    /** @param newName the staged name; null clears the class (manual path only) */
     private void applyNameToRow(ClusterRow row, String newName) {
         if (isSavedPath()) {
+            if (newName == null) return;
             for (int lab : row.labels) workingName.put(lab, newName);
             rebuildSavedRows();
         } else {
@@ -1032,13 +1076,15 @@ public class ClusterManagementDialog {
             Dialogs.showWarningNotification("QPCAT", "Select a saved result first.");
             return;
         }
-        // Only the labels whose name differs from the default "Cluster N".
-        Map<Integer, String> custom = new LinkedHashMap<>();
-        for (var e : workingName.entrySet()) {
-            if (!e.getValue().equals(
-                    ClusterNaming.defaultName(e.getKey(), activeSaved.clusterNameDigits()))) {
-                custom.put(e.getKey(), e.getValue());
-            }
+        // Only the labels whose name differs from the default "Cluster N", each in
+        // the spelling the cells will carry, so the saved copy and the cells agree
+        // (a name saved by an older version may still read "CD8:T" for "CD8: T").
+        Map<Integer, String> custom;
+        try {
+            custom = customNames(workingName, activeSaved.clusterNameDigits());
+        } catch (CellClasses.ClassNameException ex) {
+            UserErrors.notify(logger, "QPCAT", ex.getMessage());
+            return;
         }
         // Ask whether the staged names differ from the SAVED ones, not from the
         // "Cluster N" defaults. Testing whether `custom` is empty gets both
@@ -1102,11 +1148,29 @@ public class ClusterManagementDialog {
         t.start();
     }
 
+    /**
+     * The staged names that differ from the default "Cluster N", in QuPath's spelling.
+     *
+     * @param working staged label -&gt; name
+     * @param digits  the result's zero-pad width
+     * @return label -&gt; name to write
+     * @throws CellClasses.ClassNameException when a name is not a usable class name
+     */
+    static Map<Integer, String> customNames(Map<Integer, String> working, int digits) {
+        Map<Integer, String> custom = new LinkedHashMap<>();
+        for (var e : working.entrySet()) {
+            if (!e.getValue().equals(ClusterNaming.defaultName(e.getKey(), digits))) {
+                custom.put(e.getKey(), CellClasses.canonicalName(e.getValue(), "Cluster name"));
+            }
+        }
+        return custom;
+    }
+
     private void applyManualPath() {
         Project<BufferedImage> project = qupath.getProject();
         Map<String, String> renames = new LinkedHashMap<>();
         for (var e : workingManual.entrySet()) {
-            if (!e.getValue().equals(e.getKey())) renames.put(e.getKey(), e.getValue());
+            if (!Objects.equals(e.getValue(), e.getKey())) renames.put(e.getKey(), e.getValue());
         }
         if (renames.isEmpty()) {
             Dialogs.showInfoNotification("QPCAT", "No rename/merge edits to apply.");
@@ -1245,31 +1309,50 @@ public class ClusterManagementDialog {
                            List<Integer> snapLabels, List<String> snapImgIds,
                            List<Double> snapX, List<Double> snapY,
                            Map<String, Integer> nameToIndex, String imageId) {
-        int changed = 0;
-        for (PathObject det : data.getHierarchy().getDetectionObjects()) {
-            String orig = CellClasses.isUnclassified(det)
-                    ? UNCLASSIFIED_ROW : det.getPathClass().toString();
-            String finalName = renames.getOrDefault(orig, orig);
-            if (!finalName.equals(orig)) {
-                // resetPathClass() for the unclassified case -- setPathClass(null
-                // class) draws a per-object deprecation WARN from QuPath, once
-                // per cell on a merge-to-unclassified.
-                if (UNCLASSIFIED_ROW.equals(finalName)) det.resetPathClass();
-                else ResultApplier.setClassification(det, PathClass.fromString(finalName));
-                changed++;
-            }
+        return relabel(data.getHierarchy().getDetectionObjects(), renames, (det, finalName) -> {
             if (snapLabels != null) {
-                int label;
-                if (UNCLASSIFIED_ROW.equals(finalName)) {
-                    label = -1;
-                } else {
-                    label = nameToIndex.computeIfAbsent(finalName, n -> nameToIndex.size());
-                }
+                int label = finalName == null
+                        ? -1 : nameToIndex.computeIfAbsent(finalName, n -> nameToIndex.size());
                 snapLabels.add(label);
                 snapImgIds.add(imageId);
                 ROI roi = det.getROI();
                 snapX.add(roi != null ? roi.getCentroidX() : 0);
                 snapY.add(roi != null ? roi.getCentroidY() : 0);
+            }
+        });
+    }
+
+    /**
+     * Apply staged manual renames to detections, matching each by its class's
+     * {@code toString()} -- the spelling QuPath gives it, which is also how the
+     * rows were keyed -- so a class whose name QuPath respelled ("CD8:T" read as
+     * "CD8: T") can be renamed again.
+     *
+     * @param detections cells to relabel
+     * @param renames    class name -&gt; new class name; null on either side is "no class"
+     * @param each       called per cell with its final class name (null for none); may be null
+     * @return the number of cells whose class changed
+     */
+    static int relabel(Collection<PathObject> detections, Map<String, String> renames,
+                       java.util.function.BiConsumer<PathObject, String> each) {
+        int changed = 0;
+        Map<String, PathClass> classes = new HashMap<>();
+        for (PathObject det : detections) {
+            String orig = CellClasses.nameOf(det);
+            String finalName = renames.getOrDefault(orig, orig);
+            if (!Objects.equals(finalName, orig)) {
+                if (finalName == null) {
+                    // resetPathClass(), not the null class: QuPath logs a WARN per
+                    // object for the latter, once per cell on a merge-to-unclassified.
+                    det.resetPathClass();
+                } else {
+                    ResultApplier.setClassification(det, classes.computeIfAbsent(finalName,
+                            n -> CellClasses.forName(n, "Cluster name")));
+                }
+                changed++;
+            }
+            if (each != null) {
+                each.accept(det, finalName);
             }
         }
         return changed;

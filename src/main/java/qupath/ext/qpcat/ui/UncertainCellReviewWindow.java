@@ -33,7 +33,9 @@ import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.ImageDataResources;
+import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.UncertaintyQueue;
 import qupath.ext.qpcat.service.UncertaintyQueue.Candidate;
 import qupath.ext.qpcat.service.ViewerNavigator;
@@ -180,9 +182,16 @@ public final class UncertainCellReviewWindow {
         otherClass.setPrefColumnCount(14);
         Button otherButton = new Button("Use this class");
         otherButton.setOnAction(e -> {
-            String name = otherClass.getText().strip();
-            if (!name.isEmpty()) {
-                answer(name);
+            if (otherClass.getText().isBlank()) {
+                return;
+            }
+            try {
+                answer(CellClasses.typedName(otherClass.getText(), "Class name"));
+            } catch (CellClasses.ClassNameException ex) {
+                status.setText(ex.getMessage());
+                if (ex.suggestion() != null) {
+                    otherClass.setText(ex.suggestion());
+                }
             }
         });
         HBox answerRow = new HBox(8, confirm, undo, otherClass, otherButton);
@@ -243,6 +252,8 @@ public final class UncertainCellReviewWindow {
                     classes.addAll(List.of(trained));
                 }
                 all.forEach(c -> classes.add(c.predicted()));
+                // "No class" is not an answer a point can carry.
+                classes.remove(TrainingLabels.UNCLASSIFIED);
                 List<String> sorted = new ArrayList<>(classes);
                 sorted.sort(UncertainCellReviewWindow::compareNatural);
                 rebuildClassButtons(sorted);
@@ -293,6 +304,18 @@ public final class UncertainCellReviewWindow {
             status.setText("Select a cell first.");
             return;
         }
+        if (TrainingLabels.UNCLASSIFIED.equals(className)) {
+            status.setText("This cell was predicted to have no class, and a point needs a class. "
+                    + "Choose the class it should have.");
+            return;
+        }
+        PathClass pathClass;
+        try {
+            pathClass = CellClasses.forName(className, "Class name");
+        } catch (CellClasses.ClassNameException ex) {
+            status.setText(ex.getMessage());
+            return;
+        }
         Candidate c = row.cell;
         ImageData<BufferedImage> data = qupath.getImageData();
         var project = qupath.getProject();
@@ -310,11 +333,11 @@ public final class UncertainCellReviewWindow {
         }
         PathObject point = PathObjects.createAnnotationObject(
                 ROIs.createPointsROI(c.x(), c.y(), ImagePlane.getPlane(c.z(), c.t())),
-                PathClass.fromString(className));
+                pathClass);
         point.setName(POINT_NAME);
         data.getHierarchy().addObject(point);
         save(data, entry);
-        row.answer.set(className);
+        row.answer.set(pathClass.toString());
         history.push(new Answer(row, point, data, entry));
         answered++;
         updateStatus();

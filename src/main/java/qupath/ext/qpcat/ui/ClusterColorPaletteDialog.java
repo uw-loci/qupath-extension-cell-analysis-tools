@@ -11,6 +11,7 @@ import javafx.scene.shape.Rectangle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.SavedClusteringResult;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.NamedPalettes;
 import qupath.fx.dialogs.Dialogs;
@@ -188,7 +189,7 @@ public final class ClusterColorPaletteDialog {
         var available = qupath.getAvailablePathClasses();
         int digits = resolveClusterDigits(qupath, savedName);
         for (int i = 0; i < n; i++) {
-            PathClass pc = PathClass.fromString(ClusterNaming.defaultName(i, digits));
+            PathClass pc = CellClasses.forName(ClusterNaming.defaultName(i, digits), "Cluster name");
             pc.setColor(colors[i]);
             if (!available.contains(pc)) available.add(pc);
         }

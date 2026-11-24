@@ -1057,6 +1057,7 @@ public class AutoencoderDialog {
                 imagesToScan.add(qupath.getImageData());
             }
 
+            String refusal = null;
             for (ImageData<BufferedImage> imageData : imagesToScan) {
                 var hierarchy = imageData.getHierarchy();
                 List<PathObject> dets = new ArrayList<>(hierarchy.getDetectionObjects());
@@ -1065,8 +1066,14 @@ public class AutoencoderDialog {
                 nImages++;
 
                 // Same rules as training: TrainingLabels.assign.
-                TrainingLabels.Label[] labels = TrainingLabels.assign(hierarchy, dets,
-                        useLocked, usePoints, useDetections, QpcatPreferences.getAePointMatchDistance());
+                TrainingLabels.Label[] labels;
+                try {
+                    labels = TrainingLabels.assign(hierarchy, dets, useLocked, usePoints,
+                            useDetections, QpcatPreferences.getAePointMatchDistance());
+                } catch (IllegalArgumentException e) {
+                    refusal = e.getMessage();
+                    break;
+                }
                 for (TrainingLabels.Label label : labels) {
                     if (label == null) continue;
                     classCounts.merge(label.name(), 1, Integer::sum);
@@ -1085,8 +1092,14 @@ public class AutoencoderDialog {
             final int fTotalCells = totalCells;
             final int fTotalLabeled = totalLabeled;
             final int fNImages = nImages;
+            final String fRefusal = refusal;
             Platform.runLater(() -> {
                 if (generation != classDistGeneration.get() || !dialogShowing) {
+                    return;
+                }
+                if (fRefusal != null) {
+                    labelSummaryLabel.setText(fRefusal);
+                    classDistributionChart.getData().clear();
                     return;
                 }
                 updateChartUI(classCounts, classColors, fTotalCells, fTotalLabeled, fNImages, cellsOnly);

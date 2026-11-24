@@ -5186,7 +5186,7 @@ public class ClusteringDialog {
         if (result.hasCellRefs()) {
             final ClusteringResult colorResult = result;
             java.util.function.IntFunction<Color> clusterColorFn = id -> {
-                Integer rgb = PathClass.fromString(clusterClassName(colorResult, id)).getColor();
+                Integer rgb = CellClasses.colorOf(clusterClassName(colorResult, id));
                 return rgb != null
                         ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
                         : EmbeddingScatterPanel.clusterColorFor(id);
@@ -6980,7 +6980,7 @@ public class ClusteringDialog {
         FlowPane swatches = new FlowPane(14, 10);
         swatches.setPadding(new Insets(10));
         for (int id : ids) {
-            Integer rgb = PathClass.fromString(clusterClassName(result, id)).getColor();
+            Integer rgb = CellClasses.colorOf(clusterClassName(result, id));
             Color init = rgb != null
                     ? Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb))
                     : EmbeddingScatterPanel.clusterColorFor(id);
@@ -7015,8 +7015,8 @@ public class ClusteringDialog {
         // Reseed every picker from the live PathClasses (after a bulk change).
         Runnable reseed = () -> {
             for (Map.Entry<Integer, ColorPicker> en : pickers.entrySet()) {
-                Integer c = PathClass.fromString(
-                        clusterClassName(result, en.getKey())).getColor();
+                Integer c = CellClasses.colorOf(
+                        clusterClassName(result, en.getKey()));
                 if (c != null) {
                     en.getValue().setValue(Color.rgb(
                             ColorTools.red(c), ColorTools.green(c), ColorTools.blue(c)));
@@ -7089,7 +7089,12 @@ public class ClusteringDialog {
                 (int) Math.round(c.getRed() * 255),
                 (int) Math.round(c.getGreen() * 255),
                 (int) Math.round(c.getBlue() * 255));
-        PathClass.fromString(className).setColor(rgb);
+        try {
+            CellClasses.forName(className, "Cluster name").setColor(rgb);
+        } catch (CellClasses.ClassNameException ex) {
+            UserErrors.notify(logger, "QPCAT", ex.getMessage());
+            return;
+        }
         if (qupath != null) {
             try {
                 // "Cluster N" colors are QuPath-wide, so refresh EVERY open viewer, not
@@ -7141,7 +7146,7 @@ public class ClusteringDialog {
         for (int v : result.getClusterLabels()) if (v > maxId) maxId = v;
         java.util.List<String> colors = new java.util.ArrayList<>();
         for (int i = 0; i <= maxId; i++) {
-            Integer rgb = PathClass.fromString(clusterClassName(result, i)).getColor();
+            Integer rgb = CellClasses.colorOf(clusterClassName(result, i));
             colors.add(rgb != null ? ClusterPalette.toHex(rgb) : ClusterPalette.hexFor(i));
         }
 

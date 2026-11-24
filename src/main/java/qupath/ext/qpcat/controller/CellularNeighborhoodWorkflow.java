@@ -20,7 +20,6 @@ import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.images.servers.ImageServer;
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 import qupath.lib.plugins.workflow.DefaultScriptableWorkflowStep;
 import qupath.lib.projects.ProjectImageEntry;
@@ -41,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -240,10 +240,11 @@ public class CellularNeighborhoodWorkflow {
 
         // Read the existing categorical column from detection classifications.
         report(progress, "Reading cell types...");
-        List<String> classNames = new ArrayList<>();
-        int[] typeLabels = readCategoricalLabels(detections, classNames);
-        long distinctRealClasses = classNames.stream()
-                .filter(n -> !"Unclassified".equals(n)).count();
+        List<String> classKeys = new ArrayList<>();
+        int[] typeLabels = readCategoricalLabels(detections, classKeys);
+        long distinctRealClasses = classKeys.stream().filter(Objects::nonNull).count();
+        List<String> classNames = new ArrayList<>(
+                CellClasses.labelsFor(classKeys, CellClasses.UNCLASSIFIED_DISPLAY));
         if (distinctRealClasses < 2) {
             throw new IOException(
                     "Cellular neighborhoods need an existing cell-type column with at "
@@ -460,26 +461,35 @@ public class CellularNeighborhoodWorkflow {
 
         // 2. Union the cell-type class set across all images; flag divergence.
         report(progress, "Unifying cell-type classes across images...");
-        LinkedHashSet<String> globalClasses = new LinkedHashSet<>();
-        Map<String, LinkedHashSet<String>> perImageClasses = new LinkedHashMap<>();
+        // Keyed by class name with null for "no class", which no real class can
+        // equal; the word shown for it is chosen once every name is known.
+        LinkedHashSet<String> globalKeys = new LinkedHashSet<>();
+        Map<String, LinkedHashSet<String>> perImageKeys = new LinkedHashMap<>();
         for (LoadedImage li : loaded) {
             LinkedHashSet<String> here = new LinkedHashSet<>();
             for (PathObject det : li.detections) {
-                PathClass pc = det.getPathClass();
-                here.add((pc == null || pc == PathClass.getNullClass())
-                        ? "Unclassified" : pc.toString());
+                here.add(CellClasses.nameOf(det));
             }
-            perImageClasses.put(li.entry.getImageName(), here);
-            globalClasses.addAll(here);
+            perImageKeys.put(li.entry.getImageName(), here);
+            globalKeys.addAll(here);
         }
-        List<String> classNames = new ArrayList<>(globalClasses);
-        long realClasses = classNames.stream().filter(n -> !"Unclassified".equals(n)).count();
+        List<String> classKeys = new ArrayList<>(globalKeys);
+        List<String> classNames = new ArrayList<>(
+                CellClasses.labelsFor(classKeys, CellClasses.UNCLASSIFIED_DISPLAY));
+        long realClasses = classKeys.stream().filter(Objects::nonNull).count();
         if (realClasses < 2) {
             throw new IOException("Cellular neighborhoods need an existing cell-type column "
                     + "with at least two classes across the selected images.\nFound "
                     + realClasses + ". Run clustering or phenotyping on these images first.");
         }
-        String divergenceWarning = buildDivergenceWarning(perImageClasses, globalClasses);
+        Map<String, LinkedHashSet<String>> perImageClasses = new LinkedHashMap<>();
+        perImageKeys.forEach((image, keys) -> {
+            LinkedHashSet<String> labels = new LinkedHashSet<>();
+            for (String key : keys) labels.add(classNames.get(classKeys.indexOf(key)));
+            perImageClasses.put(image, labels);
+        });
+        String divergenceWarning = buildDivergenceWarning(perImageClasses,
+                new LinkedHashSet<>(classNames));
 
         // 3. Build combined arrays with per-image segment ids.
         int totalCells = loaded.stream().mapToInt(li -> li.detections.size()).sum();
@@ -501,10 +511,7 @@ public class CellularNeighborhoodWorkflow {
                 var roi = det.getROI();
                 coords[pos][0] = roi.getCentroidX();
                 coords[pos][1] = roi.getCentroidY();
-                PathClass pc = det.getPathClass();
-                String name = (pc == null || pc == PathClass.getNullClass())
-                        ? "Unclassified" : pc.toString();
-                typeLabels[pos] = classNames.indexOf(name);
+                typeLabels[pos] = classKeys.indexOf(CellClasses.nameOf(det));
                 imageIds[pos] = imgIdx;
                 pos++;
             }
@@ -757,21 +764,21 @@ public class CellularNeighborhoodWorkflow {
 
     /**
      * Read a categorical label index per detection from its PathClass.
-     * Unclassified cells (null / null-class) become a trailing "Unclassified"
-     * class so every cell contributes to a window. Populates {@code classNames}
-     * with the discovered class names in first-seen order.
+     * Unclassified cells (null / null-class) form a category of their own so every
+     * cell contributes to a window. Populates {@code classKeys} with the class
+     * names in first-seen order, null standing for "no class".
      */
     private static int[] readCategoricalLabels(List<PathObject> detections,
-                                               List<String> classNames) {
+                                               List<String> classKeys) {
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         String[] assigned = new String[detections.size()];
         for (int i = 0; i < detections.size(); i++) {
-            String name = CellClasses.displayNameOf(detections.get(i));
+            String name = CellClasses.nameOf(detections.get(i));
             assigned[i] = name;
             unique.add(name);
         }
-        classNames.addAll(unique);
-        List<String> nameList = new ArrayList<>(classNames);
+        classKeys.addAll(unique);
+        List<String> nameList = new ArrayList<>(classKeys);
         int[] labels = new int[detections.size()];
         for (int i = 0; i < detections.size(); i++) {
             labels[i] = nameList.indexOf(assigned[i]);

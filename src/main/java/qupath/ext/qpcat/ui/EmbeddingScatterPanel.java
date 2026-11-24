@@ -28,6 +28,7 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import javafx.util.Duration;
 import qupath.ext.cluster3d.ui.FigureLegend;
+import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.GateSet;
 import qupath.ext.qpcat.model.MeasurementNames;
@@ -912,7 +913,7 @@ public class EmbeddingScatterPanel extends VBox {
         if (nameResolver != null) {
             String name = nameResolver.apply(cluster);
             if (name != null && !name.isBlank()) {
-                Integer rgb = PathClass.fromString(name).getColor();
+                Integer rgb = CellClasses.colorOf(name);
                 if (rgb != null) {
                     return Color.rgb(ColorTools.red(rgb), ColorTools.green(rgb), ColorTools.blue(rgb));
                 }

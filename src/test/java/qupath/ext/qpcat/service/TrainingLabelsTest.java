@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
@@ -118,5 +119,37 @@ class TrainingLabelsTest {
         h.addObject(point(10, 10, "Cluster 4"));
         assertThat(names(TrainingLabels.assign(h, List.of(a, b), true, true, false, 50)))
                 .containsExactly("Cluster 4", null);
+    }
+
+    @Test
+    void aRealClassSpelledLikeTheNoClassLabelIsRefusedNotMerged() {
+        // An imported class "Unclassified" and cells with no class would otherwise
+        // train as one category, and the model's "Unclassified" would clear classes.
+        PathObjectHierarchy h = new PathObjectHierarchy();
+        PathObject a = cell(10, 10, "Unclassified");
+        h.addObject(a);
+        assertThatThrownBy(() -> TrainingLabels.assign(h, List.of(a), false, false, true, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("real class named 'Unclassified'");
+
+        PathObject b = cell(300, 300, null);
+        h.addObject(b);
+        h.addObject(point(300, 300, "Unclassified"));
+        assertThatThrownBy(() -> TrainingLabels.assign(h, List.of(b), false, true, false, 50))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("point annotation");
+    }
+
+    @Test
+    void aLockedRegionIsSkippedOnlyForQpcatsOwnClusterNames() {
+        PathObjectHierarchy h = new PathObjectHierarchy();
+        PathObject a = cell(10, 10, null);
+        PathObject b = cell(300, 300, null);
+        h.addObjects(List.of(a, b));
+        // "Clustered tumor" used to be skipped by a "starts with Cluster " test.
+        h.addObject(lockedRegion(0, 0, 50, 50, "Clustered tumor"));
+        h.addObject(lockedRegion(250, 250, 100, 100, "Cluster 3.1"));
+        assertThat(names(TrainingLabels.assign(h, List.of(a, b), true, false, false, 50)))
+                .containsExactly("Clustered tumor", null);
     }
 }

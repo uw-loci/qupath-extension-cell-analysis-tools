@@ -29,7 +29,7 @@ import qupath.lib.objects.PathObject;
  * The same applies here and more so: including it would pull every marker mean
  * toward the unlabelled remainder and give {@code rank_genes_groups} a comparison
  * group that means nothing. {@code CellularNeighborhoodWorkflow} keeps such cells
- * as a class called "Unclassified", which is right there -- every cell has to
+ * as a category of their own, which is right there -- every cell has to
  * contribute to a neighborhood window -- and wrong here. The count is returned
  * so the caller can report it rather than let cells vanish silently.
  *

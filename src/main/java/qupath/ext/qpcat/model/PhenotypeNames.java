@@ -43,13 +43,8 @@ public final class PhenotypeNames {
         String s = phenotype.trim();
         // A trailing "(...)" is a qualifier or a hedge; the rationale keeps it.
         s = s.replaceAll("\\s*\\([^)]*\\)\\s*$", "").trim();
-        // A colon makes QuPath read the name as a derived class. A slash reads as
-        // a path in exported filenames. Both become a plain separator.
-        s = s.replace(':', '-').replace('/', '-');
-        // Newlines and tabs would break the legend and every CSV export.
-        s = s.replaceAll("[\\r\\n\\t]+", " ").replaceAll("\\s{2,}", " ").trim();
-        // Strip leftovers from the substitutions above, e.g. a trailing "-".
-        s = s.replaceAll("^[-\\s]+", "").replaceAll("[-\\s]+$", "");
+        // A slash reads as a path in exported filenames.
+        s = plainSeparators(s.replace('/', '-'));
         if (s.isEmpty()) {
             return null;
         }
@@ -60,6 +55,22 @@ public final class PhenotypeNames {
             s = (cut >= MAX_LENGTH / 2 ? s.substring(0, cut) : s.substring(0, MAX_LENGTH)).trim();
         }
         return s.isEmpty() ? null : s;
+    }
+
+    /**
+     * Replace the characters that change what a class name means: {@code :} (a
+     * QuPath derived class) and newlines, tabs and other control characters (they
+     * break the legend and every CSV export). Also the spelling suggested when a
+     * typed class name is refused.
+     *
+     * @param name text to clean; not null
+     * @return the name with those characters replaced, trimmed; may be empty
+     */
+    public static String plainSeparators(String name) {
+        String s = name.replace(':', '-');
+        s = s.replaceAll("\\p{Cntrl}+", " ").replaceAll("\\s{2,}", " ").trim();
+        // Strip leftovers from the substitutions above, e.g. a trailing "-".
+        return s.replaceAll("^[-\\s]+", "").replaceAll("[-\\s]+$", "");
     }
 
     /**

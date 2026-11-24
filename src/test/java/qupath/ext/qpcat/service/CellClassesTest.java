@@ -1,5 +1,8 @@
 package qupath.ext.qpcat.service;
 
+import java.util.Arrays;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.PathObjects;
@@ -8,6 +11,7 @@ import qupath.lib.regions.ImagePlane;
 import qupath.lib.roi.ROIs;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The one definition of "unclassified".
@@ -79,5 +83,105 @@ class CellClassesTest {
         assertThat(CellClasses.nameOf(null)).isNull();
         assertThat(CellClasses.displayNameOf(null))
                 .isEqualTo(CellClasses.UNCLASSIFIED_DISPLAY);
+    }
+
+    // ---- The class-name gate -------------------------------------------------
+
+    @Test
+    void aTypedColonIsRefusedWithTheDerivedSpellingAndACleanSuggestion() {
+        // The premise: QuPath splits on a bare ':' and respells the name.
+        assertThat(PathClass.fromString("CD8:T").toString()).isEqualTo("CD8: T");
+
+        assertThatThrownBy(() -> CellClasses.typedName("CD8:T", "Cluster name"))
+                .isInstanceOf(CellClasses.ClassNameException.class)
+                .hasMessageContaining("derived class")
+                .hasMessageContaining("'CD8: T'")
+                .hasMessageContaining("'CD8-T'")
+                .satisfies(e -> assertThat(((CellClasses.ClassNameException) e).suggestion())
+                        .isEqualTo("CD8-T"));
+    }
+
+    @Test
+    void typedNamesAreTrimmedAndReturnTheirOwnClass() {
+        assertThat(CellClasses.typedName("  CD8 T  ", "Cell type")).isEqualTo("CD8 T");
+        assertThat(CellClasses.forTypedName(" Tumor ", "Cell type").toString()).isEqualTo("Tumor");
+        // Characters QuPath accepts in a class name stay.
+        assertThat(CellClasses.typedName("CD8+/CD4-", "Cell type")).isEqualTo("CD8+/CD4-");
+    }
+
+    @Test
+    void blankAndControlCharactersAreRefusedEverywhere() {
+        for (String bad : new String[]{null, "", "   "}) {
+            assertThatThrownBy(() -> CellClasses.typedName(bad, "Cluster name"))
+                    .isInstanceOf(CellClasses.ClassNameException.class)
+                    .hasMessageContaining("empty");
+            assertThatThrownBy(() -> CellClasses.forName(bad, "Class category"))
+                    .isInstanceOf(CellClasses.ClassNameException.class);
+        }
+        // A newline is refused by QuPath itself; a tab is silently kept by it.
+        for (String bad : new String[]{"CD8\nT", "CD8\tT", "CD8\rT"}) {
+            assertThatThrownBy(() -> CellClasses.typedName(bad, "Cluster name"))
+                    .isInstanceOf(CellClasses.ClassNameException.class)
+                    .hasMessageContaining("control character");
+            assertThatThrownBy(() -> CellClasses.canonicalName(bad, "Class category"))
+                    .isInstanceOf(CellClasses.ClassNameException.class);
+        }
+    }
+
+    @Test
+    void reservedWordsAreRefusedWhenTypedInAnyCase() {
+        for (String word : new String[]{"Unclassified", "unknown", " UNKNOWN ", "(Unclassified)"}) {
+            assertThatThrownBy(() -> CellClasses.typedName(word, "Cell type"))
+                    .isInstanceOf(CellClasses.ClassNameException.class)
+                    .hasMessageContaining("reserved");
+        }
+        // Words that merely contain one are fine.
+        assertThat(CellClasses.typedName("Unknown tumor", "Cell type")).isEqualTo("Unknown tumor");
+    }
+
+    @Test
+    void importedNamesKeepTheDerivedMeaningInQuPathsSpelling() {
+        assertThat(CellClasses.canonicalName("CD8:T", "Class category")).isEqualTo("CD8: T");
+        assertThat(CellClasses.canonicalName("CD8: T", "Class category")).isEqualTo("CD8: T");
+        assertThat(CellClasses.canonicalName("CD8:", "Class category")).isEqualTo("CD8");
+        assertThat(CellClasses.forName("CD8:T", "Class category").isDerivedClass()).isTrue();
+        // A real class from another tool may be called Unclassified or Unknown.
+        assertThat(CellClasses.canonicalName("Unknown", "Class category")).isEqualTo("Unknown");
+    }
+
+    @Test
+    void anEmptyDerivedPartIsRefusedWithAMessageInsteadOfQuPathsThrow() {
+        assertThatThrownBy(() -> CellClasses.forName("A::B", "Class category"))
+                .isInstanceOf(CellClasses.ClassNameException.class)
+                .hasMessageContaining("not a valid QuPath class name");
+    }
+
+    @Test
+    void colorOfAnUnusableNameIsNullNotAnError() {
+        assertThat(CellClasses.colorOf(null)).isNull();
+        assertThat(CellClasses.colorOf("A::B")).isNull();
+        PathClass.fromString("ColorProbe").setColor(0x123456);
+        assertThat(CellClasses.colorOf("ColorProbe")).isEqualTo(0x123456);
+    }
+
+    @Test
+    void theNoClassLabelStepsAsideForARealClassOfTheSameName() {
+        assertThat(CellClasses.noClassLabel(List.of("Tumor"), "Unknown")).isEqualTo("Unknown");
+        assertThat(CellClasses.noClassLabel(List.of("Unknown", "Tumor"), "Unknown"))
+                .isEqualTo("Unknown (no class)");
+        assertThat(CellClasses.noClassLabel(List.of("Unknown", "Unknown (no class)"), "Unknown"))
+                .isEqualTo("Unknown (no class 2)");
+    }
+
+    @Test
+    void labelsForKeepEveryRealNameAndGiveNoClassItsOwnLabel() {
+        // Clean data: the same word as before.
+        assertThat(CellClasses.labelsFor(Arrays.asList("Tumor", null), "Unclassified"))
+                .containsExactly("Tumor", "Unclassified");
+        // A real class called Unclassified (imported) no longer absorbs the cells
+        // with no class.
+        assertThat(CellClasses.labelsFor(Arrays.asList("Unclassified", null, "Tumor"),
+                "Unclassified"))
+                .containsExactly("Unclassified", "Unclassified (no class)", "Tumor");
     }
 }

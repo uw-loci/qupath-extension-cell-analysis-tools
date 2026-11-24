@@ -152,11 +152,13 @@ public final class GateActionBar {
         assignBtn.setOnAction(e -> {
             int[] gated = scatter.getGatedIndices();
             if (gated.length == 0) return;
-            String name = Dialogs.showInputDialog("QPCAT - assign class to gated cells",
+            final String className = ClassNamePrompt.ask(
                     "Classification name for the " + gated.length + " gated cell(s):",
-                    "Gate " + nextGate[0]);
-            if (name == null || name.isBlank()) return;
-            final String className = name.trim();
+                    "Gate " + nextGate[0], "Class name",
+                    (header, prefill) -> Dialogs.showInputDialog(
+                            "QPCAT - assign class to gated cells", header, prefill),
+                    null);
+            if (className == null) return;
             // Capture the geometry BEFORE the assign commits it and resets the
             // active gate -- the record is of what was drawn, not what is left.
             final List<double[]> drawn = scatter.currentGateVertices();

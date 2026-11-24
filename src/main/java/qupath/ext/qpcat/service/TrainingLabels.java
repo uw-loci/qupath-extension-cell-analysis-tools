@@ -19,10 +19,18 @@ import qupath.lib.objects.hierarchy.PathObjectHierarchy;
  * cell, so it overrides a region drawn over many cells and a class written by an earlier
  * clustering or classifier run. Among points on the same cell, the later annotation wins, so
  * a second correction replaces the first.
+ *
+ * <p>Cells with no class form the label {@link #UNCLASSIFIED} when detection classes are a
+ * source, and a trained model's class of that name means "no class" when it is applied
+ * back. A REAL class spelled "Unclassified" (imported, say) would be the same word for a
+ * different thing, so {@link #assign} refuses it rather than merging the two.
  */
 public final class TrainingLabels {
 
-    /** Name given to detections with no class when detection classes are a label source. */
+    /**
+     * Name given to detections with no class when detection classes are a label source,
+     * and the class name that means "no class" in a trained model's class list.
+     */
     public static final String UNCLASSIFIED = "Unclassified";
 
     private static final int UNCLASSIFIED_COLOR = 0x404040;
@@ -37,6 +45,8 @@ public final class TrainingLabels {
      *
      * @param pointMatchDistance a point labels the nearest detection whose centroid lies within
      *                           this many pixels
+     * @throws IllegalArgumentException when a detection, locked region or point carries a real
+     *                                  class named {@link #UNCLASSIFIED}
      */
     public static Label[] assign(PathObjectHierarchy hierarchy, List<PathObject> detections,
                                  boolean useLocked, boolean usePoints, boolean useDetections,
@@ -47,9 +57,9 @@ public final class TrainingLabels {
         if (useDetections) {
             for (int i = 0; i < n; i++) {
                 PathClass pc = detections.get(i).getPathClass();
-                labels[i] = (pc == null || pc == PathClass.getNullClass())
+                labels[i] = CellClasses.isUnclassified(pc)
                         ? new Label(UNCLASSIFIED, UNCLASSIFIED_COLOR)
-                        : new Label(pc.toString(), pc.getColor());
+                        : realLabel(pc, "a detection");
             }
         }
 
@@ -132,9 +142,22 @@ public final class TrainingLabels {
      */
     private static Label annotationLabel(PathObject annotation) {
         PathClass pc = annotation.getPathClass();
-        if (pc == null || pc == PathClass.getNullClass()) {
+        if (CellClasses.isUnclassified(pc)) {
             return null;
         }
-        return new Label(pc.toString(), pc.getColor());
+        return realLabel(pc, annotation.getROI() != null && annotation.getROI().isPoint()
+                ? "a point annotation" : "a locked annotation");
+    }
+
+    /** The label of a real class, refusing one that spells the no-class word. */
+    private static Label realLabel(PathClass pc, String where) {
+        String name = pc.toString();
+        if (UNCLASSIFIED.equals(name)) {
+            throw new IllegalArgumentException("A real class named '" + UNCLASSIFIED + "' is on "
+                    + where + ". The classifier uses that word for cells with no class, so the "
+                    + "two cannot be told apart. Rename the class (Modify cell populations) or "
+                    + "remove it before training.");
+        }
+        return new Label(name, pc.getColor());
     }
 }

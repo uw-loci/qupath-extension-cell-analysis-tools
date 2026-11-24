@@ -210,11 +210,46 @@ public final class AnnDataImporter {
             }
             return new Contents(names.toArray(String[]::new),
                     imageIds == null ? null : imageIds.toArray(String[]::new), codes,
-                    (List<String>) task.outputs.get("class_names"),
+                    canonicalClassNames((List<String>) task.outputs.get("class_names")),
                     (List<String>) task.outputs.get("class_colors"), values, valueNames);
         } finally {
             ApposeArrays.closeQuietly(codesNd, valuesNd);
         }
+    }
+
+    /**
+     * The file's class categories in the spelling QuPath gives them, so the class on
+     * the cells, the import report and any saved result all read the same: a
+     * category "CD8:T" keeps QuPath's derived-class meaning and is "CD8: T".
+     *
+     * @param names categories as read; may be null
+     * @return the canonical names, index-aligned
+     * @throws IOException when a category is not a usable class name, or two
+     *                     categories would become one class
+     */
+    static List<String> canonicalClassNames(List<String> names) throws IOException {
+        if (names == null) {
+            return null;
+        }
+        List<String> out = new ArrayList<>(names.size());
+        Map<String, String> firstRaw = new LinkedHashMap<>();
+        for (String raw : names) {
+            String name;
+            try {
+                name = CellClasses.canonicalName(raw, "Class category");
+            } catch (CellClasses.ClassNameException e) {
+                throw new IOException(e.getMessage() + " Rename it in the file, or choose "
+                        + "another class column.", e);
+            }
+            String earlier = firstRaw.putIfAbsent(name, raw);
+            if (earlier != null) {
+                throw new IOException("Class categories '" + earlier + "' and '" + raw
+                        + "' would both become the QuPath class '" + name + "', merging two "
+                        + "groups of cells. Rename one in the file first.");
+            }
+            out.add(name);
+        }
+        return out;
     }
 
     /**

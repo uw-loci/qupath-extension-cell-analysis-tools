@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
 import qupath.ext.qpcat.model.ChooseKResult;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.ext.qpcat.model.ClusteringConfig;
 import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.ext.qpcat.model.ClusteringResult;
@@ -59,6 +60,7 @@ import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1386,6 +1388,7 @@ public class ClusteringWorkflow {
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
+        final String rulesJson = checkedPhenotypeRules(phenotypeRulesJson);
         report(progressCallback, "Extracting measurements...");
 
         ImageData<BufferedImage> imageData = qupath.getImageData();
@@ -1414,7 +1417,7 @@ public class ClusteringWorkflow {
         try {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     executePhenotypingTask(extraction, normalization,
-                            phenotypeRulesJson, gatesJson, progressCallback));
+                            rulesJson, gatesJson, progressCallback));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -1427,7 +1430,7 @@ public class ClusteringWorkflow {
         String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
 
         ResultApplier applier = new ResultApplier();
-        applier.applyPhenotypeLabels(extraction.getDetections(), labels, phenotypeNames);
+        applier.applyPhenotypeLabels(extraction.getDetections(), labels, phenotypeNames, null);
 
         // Fire hierarchy update on FX thread
         Platform.runLater(() -> {
@@ -1444,7 +1447,7 @@ public class ClusteringWorkflow {
         // Audit trail -- count rules from the JSON (each array element is a rule)
         int ruleCount = 0;
         try {
-            List<?> ruleList = new Gson().fromJson(phenotypeRulesJson, List.class);
+            List<?> ruleList = new Gson().fromJson(rulesJson, List.class);
             ruleCount = ruleList != null ? ruleList.size() : 0;
         } catch (Exception ignored) {}
         long elapsed = System.currentTimeMillis() - startTime;
@@ -1489,6 +1492,7 @@ public class ClusteringWorkflow {
             Consumer<String> progressCallback) throws IOException {
 
         long startTime = System.currentTimeMillis();
+        final String rulesJson = checkedPhenotypeRules(phenotypeRulesJson);
 
         if (imageEntries == null || imageEntries.isEmpty()) {
             throw new IOException("No project images selected for phenotyping.");
@@ -1515,7 +1519,7 @@ public class ClusteringWorkflow {
         try {
             resultMap = ApposeClusteringService.withExtensionClassLoader(() ->
                     executePhenotypingTask(extraction, normalization,
-                            phenotypeRulesJson, gatesJson, progressCallback));
+                            rulesJson, gatesJson, progressCallback));
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -1534,7 +1538,7 @@ public class ClusteringWorkflow {
             List<PathObject> segmentDetections = extraction.getDetections().subList(start, end);
             int[] segmentLabels = new int[end - start];
             System.arraycopy(labels, start, segmentLabels, 0, end - start);
-            applier.applyPhenotypeLabels(segmentDetections, segmentLabels, phenotypeNames);
+            applier.applyPhenotypeLabels(segmentDetections, segmentLabels, phenotypeNames, null);
 
             @SuppressWarnings("unchecked")
             ProjectImageEntry<BufferedImage> entry =
@@ -1562,7 +1566,7 @@ public class ClusteringWorkflow {
 
         int ruleCount = 0;
         try {
-            List<?> ruleList = new Gson().fromJson(phenotypeRulesJson, List.class);
+            List<?> ruleList = new Gson().fromJson(rulesJson, List.class);
             ruleCount = ruleList != null ? ruleList.size() : 0;
         } catch (Exception ignored) {}
         long elapsed = System.currentTimeMillis() - startTime;
@@ -3601,26 +3605,28 @@ public class ClusteringWorkflow {
         boolean hasCluster = false;
         boolean hasPhenotype = false;
 
+        // Cells with no class are written as "Unknown", unless a real class has
+        // that name, in which case they get a label of their own (CellClasses).
+        Set<String> realClassNames = new LinkedHashSet<>();
         for (PathObject det : extraction.getDetections()) {
-            var pc = det.getPathClass();
-            String className = pc != null ? pc.toString() : "";
-
-            if (className.startsWith("Cluster ")) {
-                try {
-                    int label = Integer.parseInt(className.substring("Cluster ".length()).split("\\.")[0]);
-                    clusterLabels.add(label);
-                    hasCluster = true;
-                } catch (NumberFormatException e) {
-                    clusterLabels.add(-1);
-                }
+            String name = CellClasses.nameOf(det);
+            if (name != null) realClassNames.add(name);
+        }
+        String noClass = CellClasses.noClassLabel(realClassNames, CellClasses.UNKNOWN_DISPLAY);
+        for (PathObject det : extraction.getDetections()) {
+            String className = CellClasses.nameOf(det);
+            var own = ClusterNaming.parse(className);
+            if (own.isPresent()) {
+                clusterLabels.add(own.get().label());
+                hasCluster = true;
                 phenotypeLabels.add(className);
-            } else if (!className.isEmpty()) {
+            } else if (className != null) {
                 clusterLabels.add(-1);
                 phenotypeLabels.add(className);
                 hasPhenotype = true;
             } else {
                 clusterLabels.add(-1);
-                phenotypeLabels.add("Unknown");
+                phenotypeLabels.add(noClass);
             }
         }
 
@@ -3902,9 +3908,14 @@ public class ClusteringWorkflow {
                                              List<String> classNames,
                                              boolean useLocked,
                                              boolean usePoints,
-                                             boolean useDetections) {
-        TrainingLabels.Label[] assigned = TrainingLabels.assign(hierarchy, detections,
-                useLocked, usePoints, useDetections, QpcatPreferences.getAePointMatchDistance());
+                                             boolean useDetections) throws IOException {
+        TrainingLabels.Label[] assigned;
+        try {
+            assigned = TrainingLabels.assign(hierarchy, detections,
+                    useLocked, usePoints, useDetections, QpcatPreferences.getAePointMatchDistance());
+        } catch (IllegalArgumentException e) {
+            throw new IOException(e.getMessage(), e);
+        }
         Map<String, Integer> index = new LinkedHashMap<>();
         int[] labels = new int[assigned.length];
         for (int i = 0; i < assigned.length; i++) {
@@ -4255,7 +4266,7 @@ public class ClusteringWorkflow {
                     if (!classNames.isEmpty()) {
                         ResultApplier applier = new ResultApplier();
                         applier.applyPhenotypeLabels(targetDetections,
-                                predLabels, classNames.toArray(new String[0]));
+                                predLabels, classNames.toArray(new String[0]), TrainingLabels.UNCLASSIFIED);
                     }
 
                     resultMap.put("model_state",
@@ -4503,14 +4514,16 @@ public class ClusteringWorkflow {
             // Compare predictions to ground truth
             final int[] gt = groundTruth;
             for (int i = 0; i < nCells; i++) {
-                if (gt[i] < 0) continue; // unlabeled
+                if (gt[i] < 0 || gt[i] >= imgClassNames.size()) continue; // unlabeled
                 totalLabeled++;
 
-                // Map ground truth index to class name (using merged order)
-                String actualClass = gt[i] < imgClassNames.size()
-                        ? imgClassNames.get(gt[i]) : "Unknown";
+                // Map ground truth index to class name (using merged order). A
+                // prediction outside the model's classes is null, never a name: a
+                // shared fallback word would count two such cells, or a real class
+                // of that name, as correct.
+                String actualClass = imgClassNames.get(gt[i]);
                 String predictedClass = predictions[i] >= 0 && predictions[i] < classNames.length
-                        ? classNames[predictions[i]] : "Unknown";
+                        ? classNames[predictions[i]] : null;
 
                 if (actualClass.equals(predictedClass)) {
                     totalCorrect++;
@@ -4523,13 +4536,13 @@ public class ClusteringWorkflow {
                     mis.put("x", det.getROI().getCentroidX());
                     mis.put("y", det.getROI().getCentroidY());
                     mis.put("actual", actualClass);
-                    mis.put("predicted", predictedClass);
+                    mis.put("predicted", predictedClass != null ? predictedClass : "(no prediction)");
                     misclassifications.add(mis);
                 }
 
                 // Update confusion matrix
                 Map<String, Integer> row = confusionMatrix.get(actualClass);
-                if (row != null) {
+                if (row != null && predictedClass != null) {
                     row.merge(predictedClass, 1, Integer::sum);
                 }
             }
@@ -4761,7 +4774,7 @@ public class ClusteringWorkflow {
                             if (classNames != null && classNames.length > 0) {
                                 ResultApplier applier = new ResultApplier();
                                 applier.applyPhenotypeLabels(targetDets,
-                                        predLabels, classNames);
+                                        predLabels, classNames, TrainingLabels.UNCLASSIFIED);
                             }
 
                             return null;
@@ -5981,6 +5994,42 @@ public class ClusteringWorkflow {
                 imageData.getHierarchy().fireHierarchyChangedEvent(ClusteringWorkflow.class);
             }
         });
+    }
+
+    /**
+     * The phenotype rules with every cell type checked as a typed class name and
+     * trimmed: the one check the dialog, the batch runner and scripts all pass.
+     * Two rules may share a cell type (their cells are one phenotype); two names
+     * that differ only in case may not, because QuPath would make two classes.
+     *
+     * @param rulesJson the rules as JSON, a list of objects with a "cellType"
+     * @return the same rules with cleaned cell types
+     * @throws IOException when a cell type is refused
+     */
+    static String checkedPhenotypeRules(String rulesJson) throws IOException {
+        List<Map<String, Object>> rules = new Gson().fromJson(rulesJson,
+                new TypeToken<List<Map<String, Object>>>() {}.getType());
+        if (rules == null) {
+            return rulesJson;
+        }
+        Map<String, String> byFolded = new HashMap<>();
+        for (int i = 0; i < rules.size(); i++) {
+            Map<String, Object> rule = rules.get(i);
+            Object raw = rule == null ? null : rule.get("cellType");
+            String name;
+            try {
+                name = CellClasses.typedName(raw == null ? null : raw.toString(), "Cell type");
+            } catch (CellClasses.ClassNameException e) {
+                throw new IOException("Phenotype rule " + (i + 1) + ": " + e.getMessage(), e);
+            }
+            String other = byFolded.putIfAbsent(name.toLowerCase(Locale.ROOT), name);
+            if (other != null && !other.equals(name)) {
+                throw new IOException("Cell types '" + other + "' and '" + name + "' differ only "
+                        + "in case. QuPath would make them two classes; use one spelling.");
+            }
+            rule.put("cellType", name);
+        }
+        return new Gson().toJson(rules);
     }
 
     /** Optional user-supplied embedding measurement name from the config params. */
