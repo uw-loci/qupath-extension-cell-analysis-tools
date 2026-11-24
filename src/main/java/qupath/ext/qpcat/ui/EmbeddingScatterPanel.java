@@ -1102,8 +1102,7 @@ public class EmbeddingScatterPanel extends VBox {
         // crop preview. Centering may switch the open image (that's intended).
         selectedIndex = idx;
         redraw();
-        ViewerNavigator.navigateToCell(qupath, ref.getImageId(), ref.getImageName(),
-                ref.getX(), ref.getY());
+        ViewerNavigator.navigateToCell(qupath, ref);
         loadPreview(ref);
     }
 

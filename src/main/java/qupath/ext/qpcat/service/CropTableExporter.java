@@ -689,10 +689,8 @@ public final class CropTableExporter {
                 g.skippedMissing++;
                 continue;
             }
-            double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
             g.cells.add(new Candidate(
-                    new CellRef(imageId, imageName, CellRef.idOf(det),
-                            roi.getCentroidX(), roi.getCentroidY(), half),
+                    CellRef.of(imageId, imageName, det),
                     values, CellClasses.displayNameOf(det), imageName));
         }
     }

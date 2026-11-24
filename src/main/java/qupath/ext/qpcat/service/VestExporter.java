@@ -13,7 +13,6 @@ import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
-import qupath.lib.roi.interfaces.ROI;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -216,10 +215,7 @@ public final class VestExporter {
         try (CellCropService crops = new CellCropService(qupath)) {
             for (int i = 0; i < n; i++) {
                 PathObject det = selected.get(i);
-                ROI roi = det.getROI();
-                double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
-                CellRef ref = new CellRef(imageId, imageName, CellRef.idOf(det),
-                        roi.getCentroidX(), roi.getCentroidY(), half);
+                CellRef ref = CellRef.of(imageId, imageName, det);
                 String fname = String.format(Locale.ROOT, "cell_%05d.png", i);
                 try {
                     BufferedImage crop = crops.readCrop(ref, opts.cropScale);

@@ -43,15 +43,31 @@ public final class ViewerNavigator {
      */
     public static void navigateToCell(QuPathGUI qupath, String imageId, String imageName,
                                       double x, double y) {
+        navigateToCell(qupath, imageId, imageName, x, y, -1, -1);
+    }
+
+    /**
+     * Navigate to a cell recorded in a result, on its own z-slice and time point.
+     *
+     * @param qupath the QuPath GUI instance
+     * @param ref    the cell
+     */
+    public static void navigateToCell(QuPathGUI qupath, CellRef ref) {
+        if (ref == null) return;
+        navigateToCell(qupath, ref.getImageId(), ref.getImageName(), ref.getX(), ref.getY(),
+                ref.getZ(), ref.getT());
+    }
+
+    private static void navigateToCell(QuPathGUI qupath, String imageId, String imageName,
+                                       double x, double y, int z, int t) {
         if (qupath == null) return;
 
         var project = qupath.getProject();
 
-        // Already-open check: prefer matching the open ImageData's name.
+        // Already-open check by entry id: two entries can share a name.
         var currentData = qupath.getImageData();
-        String currentName = currentData != null
-                ? currentData.getServer().getMetadata().getName() : null;
-        boolean needsSwitch = imageName == null || !imageName.equals(currentName);
+        boolean needsSwitch = currentData == null
+                || !isOpenImage(project, currentData, imageId, imageName);
 
         if (needsSwitch && project != null) {
             for (var entry : project.getImageList()) {
@@ -63,7 +79,7 @@ public final class ViewerNavigator {
                         try {
                             qupath.openImageEntry(entry);
                             // Center after the image finishes loading.
-                            Platform.runLater(() -> centerAndSelectDetection(qupath, x, y));
+                            Platform.runLater(() -> centerAndSelectDetection(qupath, x, y, z, t));
                         } catch (Exception e) {
                             logger.warn("Failed to open image '{}': {}",
                                     entry.getImageName(), e.getMessage());
@@ -76,24 +92,42 @@ public final class ViewerNavigator {
             return;
         }
 
-        Platform.runLater(() -> centerAndSelectDetection(qupath, x, y));
+        Platform.runLater(() -> centerAndSelectDetection(qupath, x, y, z, t));
     }
 
     /**
-     * Center the viewer on the given full-resolution pixel coordinates and
-     * select the nearest detection in the open image. Must be called on the
-     * FX thread.
+     * Whether {@code data} is the image a cell belongs to: by entry id when the cell
+     * has one, by name only when it has none.
      */
-    public static void centerAndSelectDetection(QuPathGUI qupath, double x, double y) {
+    static boolean isOpenImage(Project<BufferedImage> project, ImageData<BufferedImage> data,
+                               String imageId, String imageName) {
+        if (data == null) return false;
+        if (imageId != null) {
+            ProjectImageEntry<BufferedImage> e = project == null ? null : project.getEntry(data);
+            return e != null && imageId.equals(e.getID());
+        }
+        return imageName != null && imageName.equals(data.getServer().getMetadata().getName());
+    }
+
+    /**
+     * Center the viewer on the given full-resolution pixel coordinates, on the
+     * given plane (a negative z or t keeps the viewer's), and select the nearest
+     * detection on that plane. Must be called on the FX thread.
+     */
+    private static void centerAndSelectDetection(QuPathGUI qupath, double x, double y,
+                                                 int z, int t) {
         QuPathViewer viewer = qupath.getViewer();
         if (viewer == null) return;
 
+        if (z >= 0) viewer.setZPosition(z);
+        if (t >= 0) viewer.setTPosition(t);
         viewer.setCenterPixelLocation(x, y);
 
         ImageData<BufferedImage> imageData = viewer.getImageData();
         if (imageData == null) return;
 
-        PathObject nearest = findNearestDetection(imageData, x, y);
+        PathObject nearest = findNearestDetection(imageData, x, y, viewer.getZPosition(),
+                viewer.getTPosition());
         if (nearest != null) {
             imageData.getHierarchy().getSelectionModel().setSelectedObject(nearest);
         }
@@ -113,31 +147,29 @@ public final class ViewerNavigator {
             ImageData<BufferedImage> imageData = viewer.getImageData();
             if (imageData == null) return;
 
-            String currentName = imageData.getServer().getMetadata().getName();
-            String currentId = null;
-            Project<BufferedImage> project = qupath.getProject();
-            if (project != null) {
-                ProjectImageEntry<BufferedImage> e = project.getEntry(imageData);
-                if (e != null) currentId = e.getID();
+            if (!isOpenImage(qupath.getProject(), imageData, ref.getImageId(),
+                    ref.getImageName())) {
+                return;
             }
-            boolean open = (ref.getImageId() != null && ref.getImageId().equals(currentId))
-                    || (ref.getImageName() != null && ref.getImageName().equals(currentName));
-            if (!open) return;
 
-            PathObject nearest = findNearestDetection(imageData, ref.getX(), ref.getY());
+            PathObject nearest = findNearestDetection(imageData, ref.getX(), ref.getY(),
+                    ref.getZ(), ref.getT());
             if (nearest != null) {
                 imageData.getHierarchy().getSelectionModel().setSelectedObject(nearest);
             }
         });
     }
 
+    /** The detection on plane (z, t) nearest to (x, y); objects without an outline are skipped. */
     private static PathObject findNearestDetection(ImageData<BufferedImage> imageData,
-                                                   double x, double y) {
+                                                   double x, double y, int z, int t) {
         PathObject nearest = null;
         double bestDist = Double.MAX_VALUE;
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            double dx = det.getROI().getCentroidX() - x;
-            double dy = det.getROI().getCentroidY() - y;
+            var roi = det.getROI();
+            if (roi == null || roi.isEmpty() || roi.getZ() != z || roi.getT() != t) continue;
+            double dx = roi.getCentroidX() - x;
+            double dy = roi.getCentroidY() - y;
             double dist = dx * dx + dy * dy;
             if (dist < bestDist) {
                 bestDist = dist;

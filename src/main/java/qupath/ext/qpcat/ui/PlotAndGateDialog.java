@@ -406,9 +406,7 @@ public class PlotAndGateDialog {
             var roi = det.getROI();
             if (roi == null) continue;
             xy.add(new double[]{vx.doubleValue(), vy.doubleValue()});
-            double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
-            refs.add(new CellRef(imageId, imageName, CellRef.idOf(det),
-                    roi.getCentroidX(), roi.getCentroidY(), half));
+            refs.add(CellRef.of(imageId, imageName, det));
             classOf.add(CellClasses.displayNameOf(det));
         }
         return examined;

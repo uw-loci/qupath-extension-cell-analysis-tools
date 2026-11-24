@@ -22,6 +22,8 @@ public class ChannelValidator {
 
     /**
      * Result of validating measurement consistency across project images.
+     * {@code uniqueToImage} is keyed by image name, followed by the entry id when
+     * two images share the name.
      */
     public record ValidationResult(
             List<String> commonMeasurements,
@@ -47,7 +49,10 @@ public class ChannelValidator {
         int imagesChecked = 0;
 
         Set<String> commonSet = null;
+        // Keyed by a label that is unique per entry: two entries may share a name.
         Map<String, Set<String>> perImageMeasurements = new LinkedHashMap<>();
+        Map<String, Integer> dupNames = InputChecks.duplicateNames(
+                imageEntries.stream().map(e -> e.getImageName()).toList());
 
         for (var entry : imageEntries) {
             if (progress != null) {
@@ -68,7 +73,9 @@ public class ChannelValidator {
                 List<String> measurements = MeasurementExtractor.getAllMeasurements(detections);
                 Set<String> measurementSet = new LinkedHashSet<>(measurements);
 
-                perImageMeasurements.put(entry.getImageName(), measurementSet);
+                String label = InputChecks.imageLabel(entry.getImageName(), entry.getID(),
+                        dupNames);
+                perImageMeasurements.put(label, measurementSet);
 
                 if (commonSet == null) {
                     commonSet = new LinkedHashSet<>(measurementSet);

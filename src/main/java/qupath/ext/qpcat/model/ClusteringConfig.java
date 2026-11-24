@@ -123,6 +123,13 @@ public class ClusteringConfig {
     private List<String> scopeImageNames;
 
     /**
+     * Project entry ids of the same subset, index-aligned with {@link #scopeImageNames}:
+     * two entries can share a name, an id cannot. Null in settings saved before 0.26.0,
+     * which are restored by name.
+     */
+    private List<String> scopeImageIds;
+
+    /**
      * Class names the run is restricted to, or null for every cell.
      * <p>
      * Nullable on purpose, like {@link #pcaPrecursor}: a subset CHANGES WHICH
@@ -395,6 +402,8 @@ public class ClusteringConfig {
 
     public List<String> getScopeImageNames() { return scopeImageNames; }
     public void setScopeImageNames(List<String> names) { this.scopeImageNames = names; }
+    public List<String> getScopeImageIds() { return scopeImageIds; }
+    public void setScopeImageIds(List<String> ids) { this.scopeImageIds = ids; }
 
     /** @see #coOccurrenceMatrixRadius */
     public double getCoOccurrenceMatrixRadius() { return coOccurrenceMatrixRadius; }

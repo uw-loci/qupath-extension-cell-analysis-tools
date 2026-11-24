@@ -1375,6 +1375,10 @@ public class ClusterManagementDialog {
         sb.append("Relabelled ").append(report.cellsMatched).append(" cells across ")
                 .append(report.imagesProcessed).append(" image(s).");
         if (report.cellsUnmatched > 0) sb.append("  Unmatched: ").append(report.cellsUnmatched);
+        if (report.imagesRefused > 0) {
+            sb.append("\nLeft unchanged (repeated object ids): ").append(report.imagesRefused)
+                    .append(" image(s).");
+        }
         sb.append("\n\n");
         for (String line : report.perImage) sb.append("  ").append(line).append("\n");
         showTextDialog("QPCAT - Modify Clusters - applied", sb.toString());

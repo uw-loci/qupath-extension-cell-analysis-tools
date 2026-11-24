@@ -74,6 +74,12 @@ public class SavedClusteringResult {
     private double[] cellX;
     private double[] cellY;
     private double[] cellBboxHalf;
+    /**
+     * Per-cell z-slice and time point of the ROI, index-aligned with clusterLabels.
+     * Null when every cell is on the default plane, and on results saved before 0.26.0.
+     */
+    private int[] cellZ;
+    private int[] cellT;
     private String representativesJson;
 
     // Cluster palette snapshot (class-name -> packed 0xRRGGBB). Optional; null on
@@ -276,6 +282,12 @@ public class SavedClusteringResult {
     public void setCellY(double[] v) { this.cellY = v; }
 
     public double[] getCellBboxHalf() { return cellBboxHalf; }
+
+    /** Per-cell z-slice, or null when every cell is on the default plane. */
+    public int[] getCellZ() { return cellZ; }
+
+    /** Per-cell time point, or null when every cell is on the default plane. */
+    public int[] getCellT() { return cellT; }
     public void setCellBboxHalf(double[] v) { this.cellBboxHalf = v; }
 
     public String getRepresentativesJson() { return representativesJson; }
@@ -467,6 +479,7 @@ public class SavedClusteringResult {
         saved.setSpatialAutocorrAreas(result.getSpatialAutocorrAreas());
 
         saved.setPixelSizeUmByImage(result.getPixelSizeUmByImage());
+        saved.pixelSizeUmByImageId = result.getPixelSizeUmByImageId();
 
         saved.embeddingExecution = result.getEmbeddingExecution();
         saved.reuseNote = result.getReuseNote();
@@ -498,7 +511,10 @@ public class SavedClusteringResult {
             double[] xs = new double[refs.length];
             double[] ys = new double[refs.length];
             double[] halves = new double[refs.length];
+            int[] zs = new int[refs.length];
+            int[] ts = new int[refs.length];
             boolean anyObjectId = false;
+            boolean anyPlane = false;
             for (int i = 0; i < refs.length; i++) {
                 CellRef r = refs[i];
                 ids[i] = r != null ? r.getImageId() : null;
@@ -508,6 +524,9 @@ public class SavedClusteringResult {
                 xs[i] = r != null ? r.getX() : 0;
                 ys[i] = r != null ? r.getY() : 0;
                 halves[i] = r != null ? r.getBboxHalf() : 0;
+                zs[i] = r != null ? r.getZ() : 0;
+                ts[i] = r != null ? r.getT() : 0;
+                if (zs[i] != 0 || ts[i] != 0) anyPlane = true;
             }
             saved.setCellImageIds(ids);
             saved.setCellImageNames(names);
@@ -517,6 +536,8 @@ public class SavedClusteringResult {
             saved.setCellX(xs);
             saved.setCellY(ys);
             saved.setCellBboxHalf(halves);
+            saved.cellZ = anyPlane ? zs : null;
+            saved.cellT = anyPlane ? ts : null;
         }
 
         // Per-cell parent-annotation names for the "Composition by annotation"
@@ -607,17 +628,21 @@ public class SavedClusteringResult {
             CellRef[] refs = new CellRef[n];
             boolean haveNames = cellImageNames != null && cellImageNames.length == n;
             boolean haveObjectIds = cellObjectIds != null && cellObjectIds.length == n;
+            boolean havePlanes = cellZ != null && cellT != null
+                    && cellZ.length == n && cellT.length == n;
             for (int i = 0; i < n; i++) {
                 double half = (cellBboxHalf != null && cellBboxHalf.length == n) ? cellBboxHalf[i] : 0;
                 // Image name persisted since v0.x; older saves fall back to
                 // an id lookup at navigate time (null name).
                 String name = haveNames ? cellImageNames[i] : null;
                 String objectId = haveObjectIds ? cellObjectIds[i] : null;
-                refs[i] = new CellRef(cellImageIds[i], name, objectId, cellX[i], cellY[i], half);
+                refs[i] = new CellRef(cellImageIds[i], name, objectId, cellX[i], cellY[i], half,
+                        havePlanes ? cellZ[i] : 0, havePlanes ? cellT[i] : 0);
             }
             result.setCellRefs(refs);
         }
         result.setPixelSizeUmByImage(pixelSizeUmByImage);
+        result.setPixelSizeUmByImageId(pixelSizeUmByImageId);
         result.setEmbeddingExecution(embeddingExecution);
         result.setReuseNote(reuseNote);
         result.setGraphBackend(graphBackend);
@@ -750,6 +775,8 @@ public class SavedClusteringResult {
 
     /** Microns per pixel per image name, so a redrawn spatial scatter can use microns. */
     private java.util.Map<String, Double> pixelSizeUmByImage;
+    /** Microns per pixel by project entry id; null on results saved before 0.26.0. */
+    private java.util.Map<String, Double> pixelSizeUmByImageId;
 
     public java.util.Map<String, Double> getPixelSizeUmByImage() { return pixelSizeUmByImage; }
     public void setPixelSizeUmByImage(java.util.Map<String, Double> v) { this.pixelSizeUmByImage = v; }

@@ -97,7 +97,8 @@ public class CellCropService implements AutoCloseable {
                 ref.getX(), ref.getY(), ref.getBboxHalf(), cropScale);
         try {
             RegionRequest request = RegionRequest.createInstance(
-                    server.getPath(), w.downsample, w.x, w.y, w.side, w.side);
+                    server.getPath(), w.downsample, w.x, w.y, w.side, w.side,
+                    ref.getZ(), ref.getT());
             return applyDisplay(ref, server, server.readRegion(request), channelNames);
         } catch (Exception e) {
             logger.warn("Crop read failed at ({}, {}) side={} ds={}: {}",
@@ -297,7 +298,10 @@ public class CellCropService implements AutoCloseable {
 
     /**
      * Resolve (and cache) an ImageServer for the cell's source image. Reuses
-     * the open viewer's server when the cell belongs to the current image.
+     * the open viewer's server when the cell belongs to the current image: by
+     * entry id, and by name only for a cell recorded without one, because two
+     * project entries can share a name and the other's crops would come from
+     * the open image at the wrong cell's coordinates.
      */
     private ImageServer<BufferedImage> resolveServer(CellRef ref) {
         // 1. Already-open image -- reuse its server (do not cache/close it).
@@ -310,9 +314,10 @@ public class CellCropService implements AutoCloseable {
                 ProjectImageEntry<BufferedImage> e = project.getEntry(currentData);
                 if (e != null) currentId = e.getID();
             }
-            boolean matchesId = ref.getImageId() != null && ref.getImageId().equals(currentId);
-            boolean matchesName = ref.getImageName() != null && ref.getImageName().equals(currentName);
-            if (matchesId || matchesName) {
+            boolean open = ref.getImageId() != null
+                    ? ref.getImageId().equals(currentId)
+                    : ref.getImageName() != null && ref.getImageName().equals(currentName);
+            if (open) {
                 return currentData.getServer();
             }
         }

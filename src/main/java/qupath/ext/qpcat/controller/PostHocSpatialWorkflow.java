@@ -84,7 +84,7 @@ public class PostHocSpatialWorkflow {
     private volatile boolean cancelled;
     // imageId -> (quantized centroid key -> cluster label), built from a saved
     // result when it is used as the label source (see Options.savedLabelSource).
-    private Map<String, Map<String, Integer>> savedLabelMap;
+    private Map<String, CellMatcher.KeyIndex<Integer>> savedLabelMap;
     /** True when savedLabelMap is keyed by object id rather than by centroid. */
     private boolean savedLabelsById;
     // Absolute path of the persisted results folder from the last run, or null.
@@ -541,15 +541,14 @@ public class PostHocSpatialWorkflow {
         // a heterogeneous non-phenotype that would pollute enrichment / co-occurrence;
         // from a saved-result source, a cell with no matching saved cell has no label.
         boolean fromSaved = opts.savedLabelSource != null && savedLabelMap != null;
-        Map<String, Integer> imgMap = fromSaved ? savedLabelMap.get(w.imageId) : null;
+        CellMatcher.KeyIndex<Integer> imgMap = fromSaved ? savedLabelMap.get(w.imageId) : null;
         List<PathObject> cells = new ArrayList<>();
         List<String> cellKeys = new ArrayList<>();
         for (PathObject d : w.detections) {
             if (fromSaved) {
                 if (imgMap == null) break;   // saved result has no cells for this image
-                String key = CellMatcher.liveKey(d, savedLabelsById);
-                if (key == null) continue;
-                Integer id = imgMap.get(key);
+                // A cell the saved result lists twice has no single label: left out.
+                Integer id = imgMap.unique(CellMatcher.liveKey(d, savedLabelsById));
                 if (id == null || id < 0) continue;
                 cells.add(d);
                 // Display name, so a renamed / merged result labels its spatial
@@ -705,24 +704,23 @@ public class PostHocSpatialWorkflow {
     }
 
     /**
-     * Build imageId -&gt; (quantized centroid key -&gt; cluster label) from a saved result,
-     * for using it as an in-memory label source (no PathClass writes). Returns null
+     * Build imageId -&gt; (matching key -&gt; cluster label) from a saved result, for
+     * using it as an in-memory label source (no PathClass writes). Returns null
      * if the result lacks the per-cell references needed to match.
      */
-    private Map<String, Map<String, Integer>> buildSavedLabelMap(SavedClusteringResult saved) {
+    private Map<String, CellMatcher.KeyIndex<Integer>> buildSavedLabelMap(
+            SavedClusteringResult saved) {
         String[] ids = saved.getCellImageIds();
         int[] labels = saved.getClusterLabels();
         if (ids == null || labels == null) return null;
         savedLabelsById = CellMatcher.hasObjectIds(saved);
         if (!savedLabelsById && (saved.getCellX() == null || saved.getCellY() == null)) return null;
         int n = Math.min(ids.length, labels.length);
-        Map<String, Map<String, Integer>> map = new java.util.HashMap<>();
+        Map<String, CellMatcher.KeyIndex<Integer>> map = new java.util.HashMap<>();
         for (int i = 0; i < n; i++) {
             if (ids[i] == null) continue;
-            String key = CellMatcher.savedKey(saved, i, savedLabelsById);
-            if (key == null) continue;
-            map.computeIfAbsent(ids[i], k -> new java.util.HashMap<>())
-                    .putIfAbsent(key, labels[i]);
+            map.computeIfAbsent(ids[i], k -> new CellMatcher.KeyIndex<>())
+                    .add(CellMatcher.savedKey(saved, i, savedLabelsById), labels[i]);
         }
         return map;
     }

@@ -38,7 +38,7 @@ class SpatialPixelSizeRuleTest {
             segs.add(new ImageSegment(null, image(pixelSizes[i]), 10 * i, 10 * i + 10));
         }
         // The viewer shows a calibrated image that is not part of the run.
-        return ClusteringWorkflow.spatialFrame(segs, image(0.123), "open.tif");
+        return ClusteringWorkflow.spatialFrame(segs, image(0.123), "open.tif", "open-id");
     }
 
     private static List<String> names(int n) {
@@ -141,16 +141,17 @@ class SpatialPixelSizeRuleTest {
         // extract() gives a single-image run one segment with no image attached;
         // it used to read as uncalibrated, so the run reported pixels.
         List<ImageSegment> single = List.of(new ImageSegment(null, null, 0, 10));
-        SpatialFrame frame = ClusteringWorkflow.spatialFrame(single, image(0.5), "open.tif");
+        SpatialFrame frame = ClusteringWorkflow.spatialFrame(single, image(0.5), "open.tif", "open-id");
         assertThat(frame.unit()).isEqualTo("um");
         assertThat(frame.pixelSizesUm()).containsExactly(0.5);
         assertThat(frame.byImageName()).containsEntry("open.tif", 0.5);
+        assertThat(frame.byImageId()).containsEntry("open-id", 0.5);
     }
 
     @Test
     void aSingleUncalibratedImageRunsInPixels() {
         List<ImageSegment> single = List.of(new ImageSegment(null, null, 0, 10));
-        SpatialFrame frame = ClusteringWorkflow.spatialFrame(single, image(Double.NaN), "open.tif");
+        SpatialFrame frame = ClusteringWorkflow.spatialFrame(single, image(Double.NaN), "open.tif", "open-id");
         assertThat(frame.unit()).isEqualTo("px");
         assertThat(frame.mixed()).isFalse();
         assertThat(ClusteringWorkflow.micronOutputRefusal(spatialRun(), frame, List.of("open.tif")))

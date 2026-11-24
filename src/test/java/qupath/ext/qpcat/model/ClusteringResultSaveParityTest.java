@@ -74,9 +74,9 @@ class ClusteringResultSaveParityTest {
         if (type == double[][].class) return new double[][] {{1, 2}, {3, 4 + index}};
         if (type == CellRef[].class) {
             return new CellRef[] {
-                new CellRef("img-1", "one.tif", "id-a", 10.5, 20.5, 6),
-                new CellRef("img-1", "one.tif", "id-b", 30.5, 40.5, 7),
-                new CellRef("img-2", "two.tif", "id-c", 50.5, 60.5, 8)};
+                new CellRef("img-1", "one.tif", "id-a", 10.5, 20.5, 6, 0, 0),
+                new CellRef("img-1", "one.tif", "id-b", 30.5, 40.5, 7, 0, 0),
+                new CellRef("img-2", "two.tif", "id-c", 50.5, 60.5, 8, 0, 0)};
         }
         if (type == MembershipConfidence.class) {
             return new MembershipConfidence(MembershipConfidence.Kind.POSTERIOR,

@@ -3564,6 +3564,7 @@ public class ClusteringDialog {
         // entries to pass.
         config.setClusterEntireProject(!scopeSection.isCurrentImage());
         config.setScopeImageNames(scopeSection.selectedImageNames());
+        config.setScopeImageIds(scopeSection.selectedImageIds());
         applyClassSubsetToConfig(config);
 
         // Analysis options
@@ -4153,8 +4154,8 @@ public class ClusteringDialog {
         // choice the user made last time wins over the default -- but only
         // their choice, not an empty stored value.
         if (scopeSection != null) {
-            scopeSection.restoreScope(
-                    config.isClusterEntireProject(), config.getScopeImageNames());
+            scopeSection.restoreScope(config.isClusterEntireProject(),
+                    config.getScopeImageIds(), config.getScopeImageNames());
         }
 
         restoreClassSubset(config);
@@ -7183,14 +7184,13 @@ public class ClusteringDialog {
         String coordUnit = "px";
         if (wantSpatial && result.getCellRefs() != null) {
             var refs = result.getCellRefs();
-            var sizes = result.getPixelSizeUmByImage();
-            boolean microns = sizes != null && !sizes.isEmpty();
+            boolean microns = true;
             for (int i = 0; microns && i < refs.length; i++) {
-                microns = refs[i] == null || sizes.get(refs[i].getImageName()) != null;
+                microns = refs[i] == null || result.pixelSizeUmOf(refs[i]) != null;
             }
             coords = new double[refs.length][2];
             for (int i = 0; i < refs.length; i++) {
-                double f = microns && refs[i] != null ? sizes.get(refs[i].getImageName()) : 1.0;
+                double f = microns && refs[i] != null ? result.pixelSizeUmOf(refs[i]) : 1.0;
                 coords[i][0] = refs[i] != null ? refs[i].getX() * f : 0;
                 coords[i][1] = refs[i] != null ? refs[i].getY() * f : 0;
             }

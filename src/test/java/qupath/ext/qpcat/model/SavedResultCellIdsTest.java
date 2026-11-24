@@ -21,7 +21,7 @@ class SavedResultCellIdsTest {
     }
 
     private static CellRef ref(String objectId, double x, double y) {
-        return new CellRef("img-1", "img.tif", objectId, x, y, 2.0);
+        return new CellRef("img-1", "img.tif", objectId, x, y, 2.0, 0, 0);
     }
 
     @Test

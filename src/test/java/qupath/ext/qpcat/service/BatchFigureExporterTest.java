@@ -60,4 +60,22 @@ class BatchFigureExporterTest {
         assertThat(roundtrip.getWidth()).isEqualTo(64);
         assertThat(roundtrip.getHeight()).isEqualTo(64);
     }
+
+    @Test
+    void aFigureExportUsesOnlyAResultAboutThatImage() {
+        // H14: a result is used for an image only when its scope or cells are that entry;
+        // a same-named entry, or any other image, records a failure instead.
+        qupath.ext.qpcat.model.ClusteringResult r = new qupath.ext.qpcat.model.ClusteringResult(
+                new int[]{0}, 1, new double[1][2], new double[1][1], new String[]{"m"});
+        r.setCellRefs(new qupath.ext.qpcat.model.CellRef[]{
+                new qupath.ext.qpcat.model.CellRef("7", "slide.tif", "o", 1, 1, 1, 0, 0)});
+        var saved = qupath.ext.qpcat.model.SavedClusteringResult.fromResult(
+                r, "t", "kmeans", "zscore", "umap");
+        org.assertj.core.api.Assertions.assertThat(
+                BatchFigureExporter.covers(saved, "7", "slide.tif")).isTrue();
+        org.assertj.core.api.Assertions.assertThat(
+                BatchFigureExporter.covers(saved, "9", "slide.tif")).isFalse();
+        org.assertj.core.api.Assertions.assertThat(
+                BatchFigureExporter.covers(null, "7", "slide.tif")).isFalse();
+    }
 }

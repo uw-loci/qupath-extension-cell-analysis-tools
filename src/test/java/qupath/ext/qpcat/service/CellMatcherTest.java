@@ -30,13 +30,13 @@ class CellMatcherTest {
     private static CellRef refOf(PathObject det) {
         var roi = det.getROI();
         return new CellRef(IMG, "img.tif", CellRef.idOf(det),
-                roi.getCentroidX(), roi.getCentroidY(), 2.0);
+                roi.getCentroidX(), roi.getCentroidY(), 2.0, 0, 0);
     }
 
     private static CellRef refWithoutId(PathObject det) {
         var roi = det.getROI();
         return new CellRef(IMG, "img.tif", null,
-                roi.getCentroidX(), roi.getCentroidY(), 2.0);
+                roi.getCentroidX(), roi.getCentroidY(), 2.0, 0, 0);
     }
 
     private static ClusteringResult resultOf(CellRef[] refs, int[] labels) {
@@ -106,7 +106,7 @@ class CellMatcherTest {
         // Re-segmentation moves a centroid. The id still names the same cell,
         // where a positional key would have missed it -- or hit its neighbour.
         PathObject a = cell(10, 20);
-        CellRef ref = new CellRef(IMG, "img.tif", CellRef.idOf(a), 10.0, 20.0, 2.0);
+        CellRef ref = new CellRef(IMG, "img.tif", CellRef.idOf(a), 10.0, 20.0, 2.0, 0, 0);
         BiFunction<String, PathObject, PathClass> lookup =
                 ResultApplier.labelLookup(resultOf(new CellRef[]{ref}, new int[]{2}));
 

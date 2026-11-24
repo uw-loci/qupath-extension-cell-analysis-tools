@@ -103,8 +103,11 @@ public final class TrainingLabels {
         double[] cx = new double[n];
         double[] cy = new double[n];
         for (int i = 0; i < n; i++) {
-            cx[i] = detections.get(i).getROI().getCentroidX();
-            cy[i] = detections.get(i).getROI().getCentroidY();
+            // No outline, no position: NaN never wins the nearest-point search.
+            var roi = detections.get(i).getROI();
+            boolean placed = roi != null && !roi.isEmpty();
+            cx[i] = placed ? roi.getCentroidX() : Double.NaN;
+            cy[i] = placed ? roi.getCentroidY() : Double.NaN;
         }
         double maxSq = maxDistance * maxDistance;
         for (PathObject annotation : annotations) {

@@ -220,14 +220,28 @@ public class ClusteringResult {
      * @return image name -&gt; cells; empty when the result has no references
      */
     public java.util.Map<String, Integer> cellsPerImage() {
-        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        // Counted by entry id, so two images that share a name stay two rows.
+        java.util.Map<String, Integer> byId = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> nameOfId = new java.util.LinkedHashMap<>();
         if (cellRefs != null) {
             for (CellRef ref : cellRefs) {
+                if (ref == null) continue;
                 String name = ref.getImageName() != null ? ref.getImageName()
                         : (ref.getImageId() != null ? "id " + ref.getImageId() : "(current image)");
-                counts.merge(name, 1, Integer::sum);
+                String key = ref.getImageId() != null ? ref.getImageId() : "name:" + name;
+                byId.merge(key, 1, Integer::sum);
+                nameOfId.putIfAbsent(key, name);
             }
         }
+        java.util.Map<String, Integer> nameUses = new java.util.HashMap<>();
+        nameOfId.values().forEach(n -> nameUses.merge(n, 1, Integer::sum));
+        java.util.Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        byId.forEach((key, n) -> {
+            String name = nameOfId.get(key);
+            String label = nameUses.get(name) > 1 && !key.startsWith("name:")
+                    ? name + " [entry " + key + "]" : name;
+            counts.put(label, n);
+        });
         return counts;
     }
 
@@ -615,6 +629,8 @@ public class ClusteringResult {
     private String spatialUnit = "px";     // distance unit for spatial stats: "px" or "um"
     /** Microns per pixel for each image in the run, by image name; null when unknown. */
     private java.util.Map<String, Double> pixelSizeUmByImage;
+    /** The same by project entry id, which two same-named images cannot share; null on older results. */
+    private java.util.Map<String, Double> pixelSizeUmByImageId;
 
     /**
      * Per-area Ripley curves, keyed by area label, when the run was partitioned.
@@ -697,6 +713,23 @@ public class ClusteringResult {
     public void setSpatialUnit(String v) { this.spatialUnit = v; }
     public java.util.Map<String, Double> getPixelSizeUmByImage() { return pixelSizeUmByImage; }
     public void setPixelSizeUmByImage(java.util.Map<String, Double> v) { this.pixelSizeUmByImage = v; }
+    public java.util.Map<String, Double> getPixelSizeUmByImageId() { return pixelSizeUmByImageId; }
+    public void setPixelSizeUmByImageId(java.util.Map<String, Double> v) { this.pixelSizeUmByImageId = v; }
+
+    /**
+     * Microns per pixel of a cell's image: by its entry id when the result recorded
+     * sizes by id, else by its name (results saved before 0.26.0).
+     *
+     * @param ref the cell
+     * @return the pixel size, or null when unknown
+     */
+    public Double pixelSizeUmOf(CellRef ref) {
+        if (ref == null) return null;
+        if (pixelSizeUmByImageId != null && ref.getImageId() != null) {
+            return pixelSizeUmByImageId.get(ref.getImageId());
+        }
+        return pixelSizeUmByImage == null ? null : pixelSizeUmByImage.get(ref.getImageName());
+    }
 
     /**
      * True if at least one v1 spatial statistic is populated. Used by the

@@ -114,6 +114,10 @@ public final class BatchFigureExporter {
         // Composition figures are result-level; this records which have already
         // been written so the per-image loop does not repeat them.
         Set<String> emittedComposition = new LinkedHashSet<>();
+        // Results read once for the whole export, newest first.
+        Map<String, SavedClusteringResult> loaded = new LinkedHashMap<>();
+        Map<String, Integer> dupNames = InputChecks.duplicateNames(
+                entries.stream().map(e -> e.getImageName()).toList());
 
         for (ProjectImageEntry<?> entry : entries) {
             if (isCancelled(progressCallback, processed, totalWork, "Scanning " + entry.getImageName())) {
@@ -123,7 +127,10 @@ public final class BatchFigureExporter {
 
             // Load the saved result for this image (best effort -- if
             // none exists, record a failure and skip).
-            SavedClusteringResult saved = loadSavedResultForImage(project, entry, options, result);
+            SavedClusteringResult saved = loadSavedResultForImage(project, entry, options, result,
+                    loaded);
+            // Two images sharing a name would write one file; the second gets its entry id.
+            String fileLabel = InputChecks.imageLabel(entry.getImageName(), entry.getID(), dupNames);
 
             for (PlotKind plot : options.getPlotKinds()) {
                 for (OutputFormat fmt : options.getOutputFormats()) {
@@ -134,7 +141,7 @@ public final class BatchFigureExporter {
                         result.setCancelled(true);
                         return result;
                     }
-                    exportSingle(project, entry, saved, plot, fmt, options, result,
+                    exportSingle(project, entry, fileLabel, saved, plot, fmt, options, result,
                             emittedComposition);
                 }
             }
@@ -173,13 +180,12 @@ public final class BatchFigureExporter {
             case CURRENT -> {
                 QuPathGUI qupath = QuPathGUI.getInstance();
                 if (qupath != null && qupath.getImageData() != null) {
-                    String currentName = qupath.getImageData().getServer().getMetadata().getName();
-                    for (ProjectImageEntry<?> entry : project.getImageList()) {
-                        if (entry.getImageName().equals(currentName)) {
-                            out.add(entry);
-                            break;
-                        }
-                    }
+                    // The open image's own entry: its server name can differ from the
+                    // entry name, and two entries can share a name.
+                    @SuppressWarnings("unchecked")
+                    ProjectImageEntry<?> open = ((Project<java.awt.image.BufferedImage>) project)
+                            .getEntry(qupath.getImageData());
+                    if (open != null) out.add(open);
                 }
                 if (out.isEmpty()) {
                     result.addFailure(
@@ -205,42 +211,76 @@ public final class BatchFigureExporter {
     }
 
     /**
-     * Locate the saved clustering result for this image. The convention
-     * is one saved-result directory per image (named after the image).
-     * If options.resultName is set, prefer that; otherwise look for any
-     * result whose JSON references this image. If none found, fall back
-     * to "most-recent saved result" since the existing
-     * {@link ClusteringResultManager} keeps results listed most-recent
-     * first.
+     * Locate the saved clustering result for this image: the one named in the
+     * options, else the newest result that covers this image, preferring one named
+     * after it. A result covers an image when its scope or its cells are that
+     * project entry ({@link #covers}). An image no result covers is a failure
+     * for that image; another image's result is never used in its place.
+     *
+     * @param loaded results already read in this export, by name; filled here
      */
     private static SavedClusteringResult loadSavedResultForImage(
             Project<?> project, ProjectImageEntry<?> entry,
-            ExportOptions options, ExportResult result) {
+            ExportOptions options, ExportResult result,
+            Map<String, SavedClusteringResult> loaded) {
+        String explicit = options.getResultName();
         try {
-            String explicit = options.getResultName();
             if (explicit != null && !explicit.isEmpty()) {
-                try {
-                    return ClusteringResultManager.loadSavedResult(project, explicit);
-                } catch (IOException e) {
-                    // fall through to most-recent
-                    logger.debug("Explicit result '{}' not found: {}", explicit, e.getMessage());
-                }
+                SavedClusteringResult saved = load(project, explicit, loaded);
+                if (covers(saved, entry.getID(), entry.getImageName())) return saved;
+                result.addFailure(entry.getImageName() + ": saved result '" + explicit
+                        + "' has no cells on this image");
+                return null;
             }
             List<String> names = ClusteringResultManager.listResults(project);
-            // Prefer a result whose name matches the image
-            for (String n : names) {
-                if (namedAfterImage(n, entry.getImageName())) {
-                    return ClusteringResultManager.loadSavedResult(project, n);
-                }
+            List<String> order = new ArrayList<>();
+            for (String n : names) if (namedAfterImage(n, entry.getImageName())) order.add(n);
+            for (String n : names) if (!order.contains(n)) order.add(n);
+            for (String n : order) {
+                SavedClusteringResult saved = load(project, n, loaded);
+                if (covers(saved, entry.getID(), entry.getImageName())) return saved;
             }
-            if (!names.isEmpty()) {
-                return ClusteringResultManager.loadSavedResult(project, names.get(0));
-            }
+            result.addFailure(entry.getImageName() + ": no saved clustering result has cells "
+                    + "on this image");
         } catch (IOException e) {
             result.addFailure(entry.getImageName()
                     + ": failed to load saved clustering result (" + e.getMessage() + ")");
         }
         return null;
+    }
+
+    private static SavedClusteringResult load(Project<?> project, String name,
+                                              Map<String, SavedClusteringResult> loaded)
+            throws IOException {
+        SavedClusteringResult saved = loaded.get(name);
+        if (saved == null) {
+            saved = ClusteringResultManager.loadSavedResult(project, name);
+            loaded.put(name, saved);
+        }
+        return saved;
+    }
+
+    /**
+     * Whether a saved result is about an image: its scope key is the entry id, or a
+     * cell of it lies on that entry. A result recorded without image ids (before
+     * 0.20) is matched by its scope key or cell image names.
+     *
+     * @param saved     the result; may be null
+     * @param entryId   the image's entry id, or null
+     * @param imageName the image's name
+     * @return whether the result covers the image
+     */
+    static boolean covers(SavedClusteringResult saved, String entryId, String imageName) {
+        if (saved == null) return false;
+        String[] ids = saved.getCellImageIds();
+        if (entryId != null && (entryId.equals(saved.getScopeKey())
+                || (ids != null && java.util.Arrays.asList(ids).contains(entryId)))) {
+            return true;
+        }
+        if (ids != null || imageName == null) return false;
+        String[] names = saved.getCellImageNames();
+        return imageName.equals(saved.getScopeKey())
+                || (names != null && java.util.Arrays.asList(names).contains(imageName));
     }
 
     /**
@@ -249,7 +289,7 @@ public final class BatchFigureExporter {
      * row on {@code result.failures}.
      */
     private static void exportSingle(Project<?> project, ProjectImageEntry<?> entry,
-                                      SavedClusteringResult saved,
+                                      String fileLabel, SavedClusteringResult saved,
                                       PlotKind plot, OutputFormat fmt,
                                       ExportOptions options, ExportResult result,
                                       Set<String> emittedComposition) {
@@ -270,9 +310,12 @@ public final class BatchFigureExporter {
             return;
         }
 
+        if (saved == null) {
+            return; // loadSavedResultForImage recorded this image's failure
+        }
         String filename = FilenameSanitizer.expand(
                 options.getFilenamePattern(),
-                imageName,
+                fileLabel,
                 plot.getSlug(),
                 saved != null ? saved.getName() : options.getResultName(),
                 fmt.getExtension());
@@ -633,6 +676,7 @@ public final class BatchFigureExporter {
             logger.warn("Plot-availability scan: could not list saved results: {}", e.getMessage());
             return out;
         }
+        Map<String, SavedClusteringResult> loaded = new LinkedHashMap<>();
         for (String imageName : imageNames) {
             Map<String, Boolean> per = new LinkedHashMap<>();
             // Pre-fill every kind as false
@@ -640,10 +684,9 @@ public final class BatchFigureExporter {
                 per.put(kind.getSlug(), false);
             }
             try {
-                String pick = pickSavedResultForImage(savedNames, imageName, resultName);
-                if (pick != null) {
-                    SavedClusteringResult saved =
-                            ClusteringResultManager.loadSavedResult(project, pick);
+                SavedClusteringResult saved = pickSavedResultForImage(project, savedNames,
+                        imageName, resultName, loaded);
+                if (saved != null) {
                     Map<String, String> paths = saved.getPlotPaths();
                     if (paths != null) {
                         for (PlotKind kind : PlotKind.values()) {
@@ -662,16 +705,31 @@ public final class BatchFigureExporter {
         return out;
     }
 
-    private static String pickSavedResultForImage(List<String> savedNames,
-                                                   String imageName, String preferred) {
+    /** The result the export would use for an image of this name, or null; see {@link #covers}. */
+    private static SavedClusteringResult pickSavedResultForImage(
+            Project<?> project, List<String> savedNames, String imageName, String preferred,
+            Map<String, SavedClusteringResult> loaded) throws IOException {
         if (savedNames == null || savedNames.isEmpty()) return null;
-        if (preferred != null && savedNames.contains(preferred)) return preferred;
-        for (String n : savedNames) {
-            if (namedAfterImage(n, imageName)) {
-                return n;
-            }
+        List<String> order = new ArrayList<>();
+        if (preferred != null && savedNames.contains(preferred)) {
+            order.add(preferred);
+        } else {
+            for (String n : savedNames) if (namedAfterImage(n, imageName)) order.add(n);
+            for (String n : savedNames) if (!order.contains(n)) order.add(n);
         }
-        return savedNames.get(0);  // fall back to most-recent
+        for (String n : order) {
+            SavedClusteringResult saved = load(project, n, loaded);
+            if (coversByName(saved, imageName)) return saved;
+        }
+        return null;
+    }
+
+    /** {@link #covers} for a caller that knows only the image's name. */
+    private static boolean coversByName(SavedClusteringResult saved, String imageName) {
+        if (saved == null || imageName == null) return false;
+        String[] names = saved.getCellImageNames();
+        return imageName.equals(saved.getScopeKey())
+                || (names != null && java.util.Arrays.asList(names).contains(imageName));
     }
 
     /** True when a saved result's file name is the image's name, under either file-name rule. */

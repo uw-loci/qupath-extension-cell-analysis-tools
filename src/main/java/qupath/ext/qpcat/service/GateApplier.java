@@ -14,7 +14,7 @@ import qupath.lib.projects.ProjectImageEntry;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,10 +26,12 @@ import java.util.Map;
  * {@link PathClass} to every gated cell across all of their source images and
  * saving each.
  *
- * <p>Each gated {@code CellRef} carries the source image id/name and the
- * detection centroid (from {@code MeasurementExtractor.extractCentroids}), so a
- * cell is resolved back to its {@code PathObject} by matching the centroid
- * (exact integer-rounded key, falling back to nearest within the image). The
+ * <p>Each gated {@code CellRef} carries the source image id/name, the detection's
+ * object id and its centroid and plane. A ref with an object id is resolved by
+ * that id alone, as {@link CellMatcher} does; only a ref without one (results
+ * saved before 0.21.0) falls back to the centroid on its own plane (exact
+ * integer-rounded key, a +-1 px probe, then the nearest within 2 px). An image
+ * whose detections repeat an object id is left unchanged and reported. The
  * cross-image write-back mirrors the per-image {@code saveImageData} loop in
  * {@code ClusteringWorkflow.runProjectClustering}.</p>
  */
@@ -39,16 +41,19 @@ public final class GateApplier {
 
     private GateApplier() {}
 
-    /** Outcome of an {@link #assignClass} run. */
+    /** Outcome of a select or an {@link #assignClass} run. */
     public static final class Result {
         public final int cellsClassified;
         public final int imagesTouched;
         public final int unmatched;
+        /** One message per image left unchanged because its detections repeat an id. */
+        public final List<String> refused;
 
-        Result(int cellsClassified, int imagesTouched, int unmatched) {
+        Result(int cellsClassified, int imagesTouched, int unmatched, List<String> refused) {
             this.cellsClassified = cellsClassified;
             this.imagesTouched = imagesTouched;
             this.unmatched = unmatched;
+            this.refused = List.copyOf(refused);
         }
     }
 
@@ -57,30 +62,35 @@ public final class GateApplier {
      * viewer's hierarchy. No image switch, no write to disk. Returns the number
      * selected. Safe to call from any thread (selection is marshalled to FX).
      */
-    public static int selectInOpenImage(QuPathGUI qupath, CellRef[] refs, int[] gatedIndices) {
-        if (qupath == null || refs == null || gatedIndices == null) return 0;
+    public static Result selectInOpenImage(QuPathGUI qupath, CellRef[] refs, int[] gatedIndices) {
+        Result none = new Result(0, 0, 0, List.of());
+        if (qupath == null || refs == null || gatedIndices == null) return none;
         QuPathViewer viewer = qupath.getViewer();
         ImageData<BufferedImage> imageData = viewer != null ? viewer.getImageData() : null;
-        if (imageData == null) return 0;
+        if (imageData == null) return none;
 
         String currentName = imageData.getServer().getMetadata().getName();
         String currentId = entryId(qupath.getProject(), imageData);
 
-        Map<String, PathObject> byId = buildIdIndex(imageData);
-        Map<Long, PathObject> index = buildCentroidIndex(imageData);
-        List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
-        List<PathObject> hits = new ArrayList<>();
+        Index index = new Index(imageData.getHierarchy().getDetectionObjects());
+        List<CellRef> here = new ArrayList<>();
         for (int idx : gatedIndices) {
             if (idx < 0 || idx >= refs.length) continue;
             CellRef ref = refs[idx];
-            if (ref == null || !sameImage(ref, currentId, currentName)) continue;
-            PathObject po = resolve(ref, byId, index, dets);
+            if (ref != null && sameImage(ref, currentId, currentName)) here.add(ref);
+        }
+        if (here.isEmpty()) return none;
+        String refusal = index.refusal(here, currentName);
+        if (refusal != null) return new Result(0, 0, here.size(), List.of(refusal));
+        List<PathObject> hits = new ArrayList<>();
+        for (CellRef ref : here) {
+            PathObject po = index.resolve(ref);
             if (po != null) hits.add(po);
         }
-        if (hits.isEmpty()) return 0;
+        if (hits.isEmpty()) return new Result(0, 0, here.size(), List.of());
         Platform.runLater(() ->
                 imageData.getHierarchy().getSelectionModel().setSelectedObjects(hits, null));
-        return hits.size();
+        return new Result(hits.size(), 1, here.size() - hits.size(), List.of());
     }
 
     /**
@@ -93,7 +103,7 @@ public final class GateApplier {
     public static Result assignClass(QuPathGUI qupath, CellRef[] refs, int[] gatedIndices,
                                      String className) {
         if (qupath == null || refs == null || gatedIndices == null || className == null) {
-            return new Result(0, 0, 0);
+            return new Result(0, 0, 0, List.of());
         }
         PathClass pathClass = CellClasses.forTypedName(className, "Class name");
         Project<BufferedImage> project = qupath.getProject();
@@ -115,6 +125,7 @@ public final class GateApplier {
         int classified = 0;
         int images = 0;
         int unmatched = 0;
+        List<String> refused = new ArrayList<>();
 
         for (Map.Entry<String, List<CellRef>> grp : byImage.entrySet()) {
             List<CellRef> groupRefs = grp.getValue();
@@ -144,12 +155,18 @@ public final class GateApplier {
                 }
             }
 
-            Map<String, PathObject> byId = buildIdIndex(imageData);
-            Map<Long, PathObject> index = buildCentroidIndex(imageData);
-            List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
+            Index index = new Index(imageData.getHierarchy().getDetectionObjects());
+            String refusal = index.refusal(groupRefs, entry != null
+                    ? entry.getImageName() : sample.getImageName());
+            if (refusal != null) {
+                refused.add(refusal);
+                unmatched += groupRefs.size();
+                if (!isOpen) ImageDataResources.closeQuietly(imageData);
+                continue;
+            }
             int hitsThisImage = 0;
             for (CellRef ref : groupRefs) {
-                PathObject po = resolve(ref, byId, index, dets);
+                PathObject po = index.resolve(ref);
                 if (po != null) {
                     ResultApplier.setClassification(po, pathClass);
                     hitsThisImage++;
@@ -182,14 +199,15 @@ public final class GateApplier {
                 ImageDataResources.closeQuietly(imageData);
             }
         }
-        return new Result(classified, images, unmatched);
+        return new Result(classified, images, unmatched, refused);
     }
 
     // ==================== helpers ====================
 
+    /** By entry id; the name decides only for a ref that has no id (two entries can share a name). */
     private static boolean sameImage(CellRef ref, String openId, String openName) {
-        return (ref.getImageId() != null && ref.getImageId().equals(openId))
-                || (ref.getImageName() != null && ref.getImageName().equals(openName));
+        if (ref.getImageId() != null) return ref.getImageId().equals(openId);
+        return ref.getImageName() != null && ref.getImageName().equals(openName);
     }
 
     private static String entryId(Project<BufferedImage> project, ImageData<BufferedImage> data) {
@@ -210,73 +228,81 @@ public final class GateApplier {
         return null;
     }
 
-    /** Integer-rounded centroid -> detection, for O(1) resolution of CellRefs. */
-    private static Map<Long, PathObject> buildCentroidIndex(ImageData<BufferedImage> imageData) {
-        Map<Long, PathObject> index = new HashMap<>();
-        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            var roi = det.getROI();
-            if (roi == null) continue;
-            index.put(centroidKey(roi.getCentroidX(), roi.getCentroidY()), det);
-        }
-        return index;
-    }
-
-    /** Object id -> detection, so a ref that carries one needs no position search. */
-    private static Map<String, PathObject> buildIdIndex(ImageData<BufferedImage> imageData) {
-        Map<String, PathObject> index = new HashMap<>();
-        for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
-            String id = CellRef.idOf(det);
-            if (id != null) index.putIfAbsent(id, det);
-        }
-        return index;
-    }
-
-    private static long centroidKey(double x, double y) {
-        long xi = Math.round(x);
-        long yi = Math.round(y);
-        return (xi << 32) ^ (yi & 0xffffffffL);
-    }
-
-    /** Resolve a CellRef to its detection: its object id when it has one, then
-     *  an exact integer-key hit, a small neighbor probe, and a linear nearest
-     *  fallback within the image.
+    /**
+     * One image's detections by object id and by whole-pixel centroid on its plane.
      *
-     *  <p>The id is tried first because the position search is tolerant by
-     *  design -- it probes +-1px and then takes the nearest within 2px -- and a
-     *  tolerant search can return a NEIGHBORING cell, which classifies the
-     *  wrong one with nothing reported. A ref that knows its own id never needs
-     *  that risk. */
-    private static PathObject resolve(CellRef ref, Map<String, PathObject> byId,
-                                      Map<Long, PathObject> index,
-                                      List<PathObject> dets) {
-        if (ref.getObjectId() != null) {
-            PathObject exact = byId.get(ref.getObjectId());
-            if (exact != null) return exact;
-        }
-        PathObject po = index.get(centroidKey(ref.getX(), ref.getY()));
-        if (po != null) return po;
-        // +-1px probe absorbs JSON double round-trip / sub-pixel drift.
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                if (dx == 0 && dy == 0) continue;
-                po = index.get(centroidKey(ref.getX() + dx, ref.getY() + dy));
-                if (po != null) return po;
+     * <p>A ref that knows its id is resolved by the id alone: the position search
+     * is tolerant by design (+-1 px, then the nearest within 2 px), and a tolerant
+     * search can return a NEIGHBORING cell after re-segmentation, which
+     * classifies the wrong one with nothing reported. Only refs without an id,
+     * from results saved before 0.21.0, take the position search.
+     */
+    static final class Index {
+        private final CellMatcher.KeyIndex<PathObject> byId = new CellMatcher.KeyIndex<>();
+        private final CellMatcher.KeyIndex<PathObject> byPosition = new CellMatcher.KeyIndex<>();
+        private final List<PathObject> dets = new ArrayList<>();
+
+        Index(Collection<PathObject> detections) {
+            for (PathObject det : detections) {
+                byId.add(CellRef.idOf(det), det);
+                var roi = det.getROI();
+                if (roi == null || roi.isEmpty()) continue;
+                dets.add(det);
+                byPosition.add(positionKey(roi.getCentroidX(), roi.getCentroidY(),
+                        roi.getZ(), roi.getT()), det);
             }
         }
-        // Rare fallback: nearest centroid within a small radius.
-        PathObject nearest = null;
-        double best = 4.0;  // 2px squared tolerance
-        for (PathObject det : dets) {
-            var roi = det.getROI();
-            if (roi == null) continue;
-            double ddx = roi.getCentroidX() - ref.getX();
-            double ddy = roi.getCentroidY() - ref.getY();
-            double d = ddx * ddx + ddy * ddy;
-            if (d < best) {
-                best = d;
-                nearest = det;
+
+        /** The refusal when these refs are matched on a key the image repeats, else null. */
+        String refusal(List<CellRef> refs, String imageName) {
+            boolean anyId = refs.stream().anyMatch(r -> r.getObjectId() != null);
+            boolean anyPosition = refs.stream().anyMatch(r -> r.getObjectId() == null);
+            if (anyId && byId.hasRepeats()) {
+                return CellMatcher.repeatedKeyRefusal(imageName, byId, true);
             }
+            if (anyPosition && byPosition.hasRepeats()) {
+                return CellMatcher.repeatedKeyRefusal(imageName, byPosition, false);
+            }
+            return null;
         }
-        return nearest;
+
+        PathObject resolve(CellRef ref) {
+            if (ref.getObjectId() != null) {
+                return byId.unique(ref.getObjectId());
+            }
+            PathObject po = byPosition.unique(
+                    positionKey(ref.getX(), ref.getY(), ref.getZ(), ref.getT()));
+            if (po != null) return po;
+            // +-1px probe absorbs JSON double round-trip / sub-pixel drift.
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    if (dx == 0 && dy == 0) continue;
+                    po = byPosition.unique(positionKey(ref.getX() + dx, ref.getY() + dy,
+                            ref.getZ(), ref.getT()));
+                    if (po != null) return po;
+                }
+            }
+            // Rare fallback: nearest centroid on the same plane within a small radius.
+            PathObject nearest = null;
+            double best = 4.0;  // 2px squared tolerance
+            for (PathObject det : dets) {
+                var roi = det.getROI();
+                if (roi.getZ() != ref.getZ() || roi.getT() != ref.getT()) continue;
+                double ddx = roi.getCentroidX() - ref.getX();
+                double ddy = roi.getCentroidY() - ref.getY();
+                double d = ddx * ddx + ddy * ddy;
+                if (d < best) {
+                    best = d;
+                    nearest = det;
+                }
+            }
+            return nearest;
+        }
+    }
+
+    /** Whole-pixel centroid on a plane; null for a non-finite centroid. */
+    private static String positionKey(double x, double y, int z, int t) {
+        if (!Double.isFinite(x) || !Double.isFinite(y)) return null;
+        return Math.round(x) + "," + Math.round(y) + "@" + z + ":" + t;
     }
 }

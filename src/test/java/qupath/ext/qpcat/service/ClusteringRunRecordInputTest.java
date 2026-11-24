@@ -19,9 +19,9 @@ class ClusteringRunRecordInputTest {
     private static ClusteringResult twoImages() {
         ClusteringResult r = new ClusteringResult(new int[3], 1, null, null, new String[0]);
         r.setCellRefs(new CellRef[] {
-                new CellRef("1", "a.tif", "o1", 0, 0, 1),
-                new CellRef("2", "b.tif", "o2", 0, 0, 1),
-                new CellRef("2", "b.tif", "o3", 0, 0, 1)});
+                new CellRef("1", "a.tif", "o1", 0, 0, 1, 0, 0),
+                new CellRef("2", "b.tif", "o2", 0, 0, 1, 0, 0),
+                new CellRef("2", "b.tif", "o3", 0, 0, 1, 0, 0)});
         return r;
     }
 

@@ -626,11 +626,7 @@ public class ClusteringWorkflow {
                 imageName = entry.getImageName();
             }
             for (int i = seg.getStartIndex(); i < seg.getEndIndex(); i++) {
-                PathObject det = detections.get(i);
-                var roi = det.getROI();
-                double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
-                refs[i] = new CellRef(imageId, imageName, CellRef.idOf(det),
-                        roi.getCentroidX(), roi.getCentroidY(), half);
+                refs[i] = CellRef.of(imageId, imageName, detections.get(i));
             }
         }
         return refs;
@@ -2208,6 +2204,7 @@ public class ClusteringWorkflow {
                     clusterStats, extraction.getMeasurementNames());
             result.setSpatialUnit(frame.unit());
             result.setPixelSizeUmByImage(frame.byImageName());
+            result.setPixelSizeUmByImageId(frame.byImageId());
             // The heatmap needs to know whether zero means anything in these
             // numbers; only Z-scored values have a center to diverge about.
             if (config.getNormalization() != null) {
@@ -5188,7 +5185,8 @@ public class ClusteringWorkflow {
      * @param pixelSizesUm per segment, NaN where uncalibrated
      * @param starts       first detection index of each segment
      */
-    record SpatialFrame(double[] pixelSizesUm, int[] starts, boolean inMicrons, String[] names) {
+    record SpatialFrame(double[] pixelSizesUm, int[] starts, boolean inMicrons, String[] names,
+                        String[] ids) {
         String unit() { return inMicrons ? "um" : "px"; }
 
         /** Some images have a pixel size and some do not. */
@@ -5218,21 +5216,35 @@ public class ClusteringWorkflow {
         }
 
         static SpatialFrame of(double[] pixelSizesUm, int[] starts) {
-            return of(pixelSizesUm, starts, new String[pixelSizesUm.length]);
+            return of(pixelSizesUm, starts, new String[pixelSizesUm.length],
+                    new String[pixelSizesUm.length]);
         }
 
-        static SpatialFrame of(double[] pixelSizesUm, int[] starts, String[] names) {
+        static SpatialFrame of(double[] pixelSizesUm, int[] starts, String[] names, String[] ids) {
             boolean all = pixelSizesUm.length > 0;
             for (double p : pixelSizesUm) all &= PixelSizes.isCalibrated(p);
-            return new SpatialFrame(pixelSizesUm, starts, all, names);
+            return new SpatialFrame(pixelSizesUm, starts, all, names, ids);
         }
 
-        /** Microns per pixel by image name, for the calibrated, named images. */
+        /**
+         * Microns per pixel by image name, for the calibrated, named images. Kept for
+         * readers of older results; two images sharing a name share one entry here,
+         * which is why {@link #byImageId} exists.
+         */
         Map<String, Double> byImageName() {
+            return byKey(names);
+        }
+
+        /** Microns per pixel by project entry id, for the calibrated images that have one. */
+        Map<String, Double> byImageId() {
+            return byKey(ids);
+        }
+
+        private Map<String, Double> byKey(String[] keys) {
             Map<String, Double> out = new java.util.LinkedHashMap<>();
-            for (int i = 0; i < names.length; i++) {
-                if (names[i] != null && PixelSizes.isCalibrated(pixelSizesUm[i])) {
-                    out.put(names[i], pixelSizesUm[i]);
+            for (int i = 0; i < keys.length; i++) {
+                if (keys[i] != null && PixelSizes.isCalibrated(pixelSizesUm[i])) {
+                    out.put(keys[i], pixelSizesUm[i]);
                 }
             }
             return out;
@@ -5242,12 +5254,16 @@ public class ClusteringWorkflow {
     private SpatialFrame resolveSpatialFrame(MeasurementExtractor.ExtractionResult extraction) {
         ImageData<BufferedImage> open = qupath == null ? null : qupath.getImageData();
         String openName = null;
+        String openId = null;
         if (open != null && qupath.getProject() != null) {
             var entry = qupath.getProject().getEntry(open);
-            if (entry != null) openName = entry.getImageName();
+            if (entry != null) {
+                openName = entry.getImageName();
+                openId = entry.getID();
+            }
         }
         SpatialFrame f = spatialFrame(
-                extraction == null ? null : extraction.getImageSegments(), open, openName);
+                extraction == null ? null : extraction.getImageSegments(), open, openName, openId);
         if (!f.inMicrons()) {
             logger.warn("Spatial results stay in pixels: {}", f.mixed()
                     ? "at least one image in the run has no pixel size."
@@ -5263,9 +5279,11 @@ public class ClusteringWorkflow {
      * @param segs      the run's segments, or null
      * @param openImage the image open in the viewer, or null
      * @param openName  its project name, or null
+     * @param openId    its project entry id, or null
      */
     static SpatialFrame spatialFrame(List<MeasurementExtractor.ImageSegment> segs,
-                                     ImageData<BufferedImage> openImage, String openName) {
+                                     ImageData<BufferedImage> openImage, String openName,
+                                     String openId) {
         if (segs == null || segs.isEmpty()) {
             segs = List.of(new MeasurementExtractor.ImageSegment(null, null, 0, 0));
         }
@@ -5273,6 +5291,7 @@ public class ClusteringWorkflow {
         double[] sizes = new double[segs.size()];
         int[] starts = new int[segs.size()];
         String[] names = new String[segs.size()];
+        String[] ids = new String[segs.size()];
         for (int i = 0; i < segs.size(); i++) {
             MeasurementExtractor.ImageSegment seg = segs.get(i);
             Object data = seg.getImageData() == null && single ? openImage : seg.getImageData();
@@ -5280,11 +5299,13 @@ public class ClusteringWorkflow {
             starts[i] = seg.getStartIndex();
             if (seg.getImageEntry() instanceof ProjectImageEntry<?> e) {
                 names[i] = e.getImageName();
+                ids[i] = e.getID();
             } else if (single && seg.getImageData() == null) {
                 names[i] = openName;
+                ids[i] = openId;
             }
         }
-        return SpatialFrame.of(sizes, starts, names);
+        return SpatialFrame.of(sizes, starts, names, ids);
     }
 
     /** Whether the run hands cell positions to Python, which then builds the spatial graph. */

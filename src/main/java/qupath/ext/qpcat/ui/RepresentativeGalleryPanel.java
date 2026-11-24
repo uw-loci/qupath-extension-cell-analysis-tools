@@ -670,8 +670,7 @@ public class RepresentativeGalleryPanel extends VBox {
             return box;
         }
 
-        box.setOnMouseClicked(e -> ViewerNavigator.navigateToCell(
-                qupath, ref.getImageId(), ref.getImageName(), ref.getX(), ref.getY()));
+        box.setOnMouseClicked(e -> ViewerNavigator.navigateToCell(qupath, ref));
         Region cursorTarget = box;
         cursorTarget.setStyle(cursorTarget.getStyle() + " -fx-cursor: hand;");
 

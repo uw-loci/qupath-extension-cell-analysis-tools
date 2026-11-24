@@ -25,6 +25,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Window;
 import javafx.util.StringConverter;
+import qupath.ext.qpcat.service.InputChecks;
 import qupath.lib.projects.Project;
 import qupath.lib.projects.ProjectImageEntry;
 
@@ -88,6 +89,9 @@ public class ProjectImageSelector extends VBox {
 
         Set<String> metadataKeys = new TreeSet<>();
         if (project != null) {
+            // Two entries can share a name; the picker shows them apart by entry id.
+            Map<String, Integer> dupNames = InputChecks.duplicateNames(project.getImageList()
+                    .stream().map(ProjectImageEntry::getImageName).toList());
             for (ProjectImageEntry<BufferedImage> entry : project.getImageList()) {
                 Map<String, String> meta = new LinkedHashMap<>();
                 try {
@@ -104,7 +108,8 @@ public class ProjectImageSelector extends VBox {
                     // metadata is best-effort; an unreadable entry just has none
                 }
                 boolean checked = preset == null || preset.contains(entry);
-                Item item = new Item(entry, entry.getImageName(), meta, checked);
+                Item item = new Item(entry, InputChecks.imageLabel(entry.getImageName(),
+                        entry.getID(), dupNames), meta, checked);
                 item.selected.addListener((obs, was, now) -> recountSelected());
                 masterItems.add(item);
             }

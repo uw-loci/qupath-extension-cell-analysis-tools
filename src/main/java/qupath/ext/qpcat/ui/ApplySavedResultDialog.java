@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.InputChecks;
 import qupath.ext.qpcat.service.SavedResultApplier;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
@@ -198,13 +199,19 @@ public final class ApplySavedResultDialog {
                         + "'All images' if the labels belong to other images.\n");
             } else {
                 int[] pm = SavedResultApplier.predictOpenImageMatch(qupath, saved);
-                sb.append("  predicted match (by centroid): ").append(pm[0])
+                sb.append("  predicted match: ").append(pm[0])
                         .append(" of ").append(pm[1]);
                 if (pm[1] > 0 && pm[0] < pm[1]) {
                     sb.append("  <-- ").append(pm[1] - pm[0])
                             .append(" saved cells will NOT match (detections differ)");
                 }
                 sb.append("\n");
+                if (pm[2] > 0) {
+                    sb.append("  WARNING: ").append(pm[2]).append(" detection(s) here repeat "
+                            + "another detection's object id (usually the same objects imported "
+                            + "twice). This image will be left unchanged. ")
+                            .append(InputChecks.REPEATED_ID_FIX).append("\n");
+                }
             }
         }
         sb.append("\nApplied classes will be named \"").append(
@@ -235,6 +242,10 @@ public final class ApplySavedResultDialog {
         if (report.cellsUnmatched > 0) {
             sb.append("   Unmatched: ").append(report.cellsUnmatched);
         }
+        if (report.imagesRefused > 0) {
+            sb.append("\nImages left unchanged (repeated object ids): ")
+                    .append(report.imagesRefused);
+        }
         sb.append("\n\n");
         for (String line : report.perImage) sb.append("  ").append(line).append("\n");
 
@@ -245,7 +256,9 @@ public final class ApplySavedResultDialog {
 
         Dialog<ButtonType> d = new Dialog<>();
         d.setTitle("QP-CAT - Apply Saved Result - Report");
-        d.setHeaderText(report.cellsMatched > 0
+        d.setHeaderText(report.imagesRefused > 0
+                ? report.imagesRefused + " image(s) were left unchanged -- see details."
+                : report.cellsMatched > 0
                 ? "Saved result applied."
                 : "No cells were labeled -- see details.");
         d.getDialogPane().getButtonTypes().add(ButtonType.OK);

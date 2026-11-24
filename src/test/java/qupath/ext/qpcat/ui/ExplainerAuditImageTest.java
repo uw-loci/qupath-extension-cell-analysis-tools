@@ -17,7 +17,7 @@ class ExplainerAuditImageTest {
                 new int[images.length], 1, null, null, new String[]{"m"});
         CellRef[] refs = new CellRef[images.length];
         for (int i = 0; i < images.length; i++) {
-            refs[i] = new CellRef("id-" + images[i], images[i], "o" + i, 0, 0, 1);
+            refs[i] = new CellRef("id-" + images[i], images[i], "o" + i, 0, 0, 1, 0, 0);
         }
         r.setCellRefs(refs);
         return r;

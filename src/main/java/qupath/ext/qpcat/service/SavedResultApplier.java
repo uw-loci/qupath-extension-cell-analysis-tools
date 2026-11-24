@@ -16,7 +16,6 @@ import qupath.lib.roi.interfaces.ROI;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +43,10 @@ public final class SavedResultApplier {
         public int imagesProcessed;
         public int cellsMatched;
         public int cellsUnmatched;
+        /** Saved rows that named a detection another row had already matched. */
+        public int repeatedRows;
+        /** Images left unchanged because their detections repeat a matching key. */
+        public int imagesRefused;
         public final List<String> perImage = new ArrayList<>();
         public String error;
 
@@ -248,12 +251,19 @@ public final class SavedResultApplier {
                 PathObjectHierarchy hierarchy = data.getHierarchy();
 
                 boolean byId = CellMatcher.hasObjectIds(saved);
-                Map<String, PathObject> byKey = new HashMap<>();
-                for (PathObject d : hierarchy.getDetectionObjects()) {
-                    String k = CellMatcher.liveKey(d, byId);
-                    if (k != null) byKey.putIfAbsent(k, d);
+                CellMatcher.KeyIndex<PathObject> byKey =
+                        CellMatcher.liveIndex(hierarchy.getDetectionObjects(), byId);
+                String refusal = CellMatcher.repeatedKeyRefusal(
+                        shortName(project, eid), byKey, byId);
+                if (refusal != null) {
+                    report.imagesRefused++;
+                    report.perImage.add(refusal);
+                    continue;
                 }
 
+                Set<PathObject> taken = java.util.Collections.newSetFromMap(
+                        new java.util.IdentityHashMap<>());
+                int repeated = 0;
                 List<PathObject> matchedDet = new ArrayList<>();
                 List<Integer> matchedLab = new ArrayList<>();
                 List<double[]> matchedEmb = embedding != null ? new ArrayList<>() : null;
@@ -263,8 +273,10 @@ public final class SavedResultApplier {
                     if (!eid.equals(cellImageIds[i])) continue;
                     savedForImage++;
                     String k = CellMatcher.savedKey(saved, i, byId);
-                    PathObject d = k != null ? byKey.get(k) : null;
+                    PathObject d = byKey.unique(k);
                     if (d == null) { unmatched++; continue; }
+                    // A result that itself repeats a cell must not count, or label, it twice.
+                    if (!taken.add(d)) { repeated++; continue; }
                     matchedDet.add(d);
                     matchedLab.add(labels[i]);
                     if (matchedEmb != null && i < embedding.length) {
@@ -300,9 +312,12 @@ public final class SavedResultApplier {
                 report.imagesProcessed++;
                 report.cellsMatched += matchedDet.size();
                 report.cellsUnmatched += unmatched;
+                report.repeatedRows += repeated;
                 report.perImage.add(shortName(project, eid) + ": applied "
                         + matchedDet.size() + " of " + savedForImage
-                        + (unmatched > 0 ? " (" + unmatched + " unmatched)" : ""));
+                        + (unmatched > 0 ? " (" + unmatched + " unmatched)" : "")
+                        + (repeated > 0 ? " (" + repeated + " saved rows repeat a cell already "
+                                + "applied; the saved result lists those cells more than once)" : ""));
             } catch (Exception ex) {
                 logger.error("Failed to {} on image {}", actionLabel, eid, ex);
                 report.perImage.add(shortName(project, eid) + ": ERROR " + ex.getMessage());
@@ -322,10 +337,11 @@ public final class SavedResultApplier {
     }
 
     /**
-     * Dry run of the centroid match for the currently open image: returns
-     * {@code {matched, savedForImage}} so the pre-flight can show the ACTUAL
-     * predicted match rate (the count comparison alone is misleading because
-     * matching is by centroid, not by count).
+     * Dry run of the match for the currently open image: returns
+     * {@code {matched, savedForImage, repeatedDetections}} so the pre-flight can show
+     * the ACTUAL predicted match rate (the count comparison alone is misleading
+     * because matching is by key, not by count) and warn that an image whose
+     * detections repeat a key will be refused.
      */
     @SuppressWarnings("unchecked")
     public static int[] predictOpenImageMatch(QuPathGUI qupath, SavedClusteringResult saved) {
@@ -335,23 +351,22 @@ public final class SavedResultApplier {
         double[] cx = saved.getCellX();
         double[] cy = saved.getCellY();
         if (eid == null || data == null || ids == null || cx == null || cy == null) {
-            return new int[]{0, 0};
+            return new int[]{0, 0, 0};
         }
         boolean byId = CellMatcher.hasObjectIds(saved);
-        Map<String, PathObject> byKey = new HashMap<>();
-        for (PathObject d : data.getHierarchy().getDetectionObjects()) {
-            String k = CellMatcher.liveKey(d, byId);
-            if (k != null) byKey.putIfAbsent(k, d);
-        }
+        CellMatcher.KeyIndex<PathObject> byKey =
+                CellMatcher.liveIndex(data.getHierarchy().getDetectionObjects(), byId);
+        Set<PathObject> taken = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
         int total = 0;
         int matched = 0;
         for (int i = 0; i < ids.length; i++) {
             if (!eid.equals(ids[i])) continue;
             total++;
-            String k = CellMatcher.savedKey(saved, i, byId);
-            if (k != null && byKey.containsKey(k)) matched++;
+            PathObject d = byKey.unique(CellMatcher.savedKey(saved, i, byId));
+            if (d != null && taken.add(d)) matched++;
         }
-        return new int[]{matched, total};
+        return new int[]{matched, total, byKey.repeats()};
     }
 
     /** The entry id of the currently open image, or null. */

@@ -281,14 +281,18 @@ public final class AnnDataImporter {
      * @return detection per entry of {@code rows}; null where none matches
      */
     static PathObject[] match(Iterable<PathObject> detections, String[] names, List<Integer> rows) {
-        Map<String, PathObject> byId = new HashMap<>();
-        for (PathObject d : detections) {
-            String id = CellRef.idOf(d);
-            if (id != null) byId.put(id, d);
-        }
+        return match(CellMatcher.liveIndex(detections, true), names, rows);
+    }
+
+    /**
+     * The detection each row names, from an index already built; a row naming an
+     * id two detections share matches neither.
+     */
+    static PathObject[] match(CellMatcher.KeyIndex<PathObject> byId, String[] names,
+                              List<Integer> rows) {
         PathObject[] out = new PathObject[rows.size()];
         for (int r = 0; r < out.length; r++) {
-            out[r] = byId.get(names[rows.get(r)]);
+            out[r] = byId.unique(names[rows.get(r)]);
         }
         return out;
     }
@@ -336,8 +340,17 @@ public final class AnnDataImporter {
                     report.cellsInOtherImages += rows.size();
                     continue;
                 }
-                PathObject[] cells = match(data.getHierarchy().getDetectionObjects(),
-                        contents.names(), rows);
+                var detections = data.getHierarchy().getDetectionObjects();
+                InputAudit audit = InputAudit.of(InputAudit.Workflow.ANNDATA_IMPORT);
+                audit.addImage(id, m.imageName, detections, null);
+                InputAudit.InputReport input = audit.report();
+                if (input.isRefused()) {
+                    // Which copy a row's values belong to cannot be known; nothing is written.
+                    m.error = String.join(" ", input.refusals());
+                    report.images.add(m);
+                    continue;
+                }
+                PathObject[] cells = match(detections, contents.names(), rows);
                 List<PathObject> classed = new ArrayList<>();
                 List<Integer> codes = new ArrayList<>();
                 for (int r = 0; r < cells.length; r++) {

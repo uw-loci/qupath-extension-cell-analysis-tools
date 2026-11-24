@@ -48,6 +48,10 @@ public final class UncertaintyQueue {
                 continue;
             }
             PathObject det = dets.get(i);
+            var roi = det.getROI();
+            if (roi == null || roi.isEmpty()) {
+                continue; // no position to show the cell at
+            }
             Number value = det.getMeasurements().get(CONFIDENCE);
             double conf = value == null ? Double.NaN : value.doubleValue();
             if (!Double.isFinite(conf)) {
@@ -56,7 +60,6 @@ public final class UncertaintyQueue {
             PathClass pc = det.getPathClass();
             String predicted = CellClasses.isUnclassified(pc)
                     ? TrainingLabels.UNCLASSIFIED : pc.toString();
-            var roi = det.getROI();
             out.add(new Candidate(imageId, imageName, roi.getCentroidX(), roi.getCentroidY(),
                     roi.getZ(), roi.getT(), predicted, conf));
         }

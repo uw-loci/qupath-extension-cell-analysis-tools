@@ -664,7 +664,8 @@ public class ResultApplier {
      *
      * <p>Nothing is written to the hierarchy. A detection the result does not
      * cover maps to null, which a view should render as ungrouped rather than
-     * guess at.
+     * guess at; so does one whose key the result lists more than once, because
+     * the rows cannot say which label it had.
      *
      * @param result the clustering result being displayed
      * @return imageId + detection -&gt; the cluster's PathClass, or null outside
@@ -680,7 +681,7 @@ public class ResultApplier {
         boolean byId = CellMatcher.hasObjectIds(refs);
         var nameFn = result.clusterNameFn();
         Map<Integer, PathClass> classByLabel = new HashMap<>();
-        Map<String, Map<String, PathClass>> byImage = new HashMap<>();
+        Map<String, CellMatcher.KeyIndex<PathClass>> byImage = new HashMap<>();
 
         int n = Math.min(refs.length, labels.length);
         for (int i = 0; i < n; i++) {
@@ -699,20 +700,24 @@ public class ResultApplier {
                     return null;
                 }
             });
-            if (pc == null) continue;
-            byImage.computeIfAbsent(ref.getImageId(), k -> new HashMap<>())
-                    .putIfAbsent(key, pc);
+            byImage.computeIfAbsent(ref.getImageId(), k -> new CellMatcher.KeyIndex<>())
+                    .add(key, pc);
         }
+        byImage.forEach((image, index) -> {
+            if (index.hasRepeats()) {
+                logger.warn("Image {}: {} cells listed more than once in the result are shown "
+                        + "as ungrouped", image, index.sharedKeys());
+            }
+        });
         // Deliberately NOT "return null when nothing was keyed". Null means
         // "read each cell's own classification", and a result that grouped
         // nothing -- all noise, say -- would then show whatever later run the
         // cells are classified as, which is the confusion this exists to end.
         // An empty lookup reports every cell as ungrouped, which is true.
         return (imageId, det) -> {
-            Map<String, PathClass> forImage = byImage.get(imageId);
+            CellMatcher.KeyIndex<PathClass> forImage = byImage.get(imageId);
             if (forImage == null) return null;
-            String key = CellMatcher.liveKey(det, byId);
-            return key == null ? null : forImage.get(key);
+            return forImage.unique(CellMatcher.liveKey(det, byId));
         };
     }
 }

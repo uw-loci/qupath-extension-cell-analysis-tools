@@ -302,10 +302,29 @@ public final class ScopeSection extends VBox {
     }
 
     /**
+     * The project entry ids chosen under "Specific images...", index-aligned with
+     * {@link #selectedImageNames()}.
+     *
+     * @return the chosen ids, or an empty list under any other scope
+     */
+    public List<String> selectedImageIds() {
+        List<String> ids = new ArrayList<>();
+        if (!scopeSpecificImages.isSelected()) {
+            return ids;
+        }
+        for (ProjectImageEntry<BufferedImage> e : selectedSubset) {
+            ids.add(e.getID());
+        }
+        return ids;
+    }
+
+    /**
      * Put back a scope the user chose on a previous run.
      *
-     * <p>Names are matched against the project as it is NOW, so images that have
-     * been removed or renamed are dropped rather than carried as ghosts. If none
+     * <p>Entry ids are matched against the project as it is NOW, so images that
+     * have been removed are dropped rather than carried as ghosts; a scope stored
+     * before ids were recorded is matched by name, every entry of a stored name
+     * (two entries can share one). If none
      * of them still exist the stored scope is treated as gone and the current
      * selection is left alone -- better than silently running over an unrelated
      * set, or over the whole project, because a name changed.
@@ -315,21 +334,21 @@ public final class ScopeSection extends VBox {
      * would open a modal picker every time the dialog appeared.
      *
      * @param entireProject the stored coarse scope: false means the current image
+     * @param imageIds      the stored subset's entry ids; null or empty for settings
+     *                      saved before ids were recorded
      * @param imageNames    the stored subset; empty for the current-image or
      *                      all-images scopes
      * @return true when a scope was actually restored
      */
-    public boolean restoreScope(boolean entireProject, List<String> imageNames) {
+    public boolean restoreScope(boolean entireProject, List<String> imageIds,
+                                List<String> imageNames) {
         Project<BufferedImage> project = qupath.getProject();
-        if (imageNames != null && !imageNames.isEmpty() && project != null
+        boolean byId = imageIds != null && !imageIds.isEmpty();
+        List<String> stored = byId ? imageIds : imageNames;
+        if (stored != null && !stored.isEmpty() && project != null
                 && !specificImagesUnavailable) {
-            Set<String> wanted = new LinkedHashSet<>(imageNames);
-            List<ProjectImageEntry<BufferedImage>> found = new ArrayList<>();
-            for (ProjectImageEntry<BufferedImage> e : project.getImageList()) {
-                if (wanted.contains(e.getImageName())) {
-                    found.add(e);
-                }
-            }
+            List<ProjectImageEntry<BufferedImage>> found =
+                    storedSubset(project.getImageList(), byId, stored);
             if (!found.isEmpty()) {
                 selectedSubset.clear();
                 selectedSubset.addAll(found);
@@ -415,5 +434,25 @@ public final class ScopeSection extends VBox {
             return new ArrayList<>(project.getImageList());
         }
         return null;  // current image
+    }
+
+    /**
+     * The entries a stored subset names, in project order.
+     *
+     * @param entries the project's entries now
+     * @param byId    true when {@code stored} holds entry ids, false for names
+     * @param stored  the stored ids or names
+     * @return the entries still there
+     */
+    static <T extends ProjectImageEntry<?>> List<T> storedSubset(List<T> entries, boolean byId,
+                                                               List<String> stored) {
+        Set<String> wanted = new LinkedHashSet<>(stored);
+        List<T> found = new ArrayList<>();
+        for (T e : entries) {
+            if (wanted.contains(byId ? e.getID() : e.getImageName())) {
+                found.add(e);
+            }
+        }
+        return found;
     }
 }

@@ -108,6 +108,20 @@ public final class InputChecks {
         }
     }
 
+    /**
+     * An image's name for a message or a table: the name, followed by its entry id
+     * when another image in the same run has that name.
+     *
+     * @param name     the display name
+     * @param id       the project entry id, or null
+     * @param dupNames from {@link #duplicateNames}
+     * @return the label
+     */
+    public static String imageLabel(String name, String id, Map<String, Integer> dupNames) {
+        return dupNames.containsKey(String.valueOf(name)) && id != null
+                ? name + " [entry " + id + "]" : name;
+    }
+
     /** The plane label used in messages. */
     static String planeLabel(int z, int t) {
         return "z=" + z + ", t=" + t;

@@ -138,8 +138,11 @@ public final class GateActionBar {
         selectBtn.setOnAction(e -> {
             int[] gated = scatter.getGatedIndices();
             if (gated.length == 0) return;
-            int n = GateApplier.selectInOpenImage(qupath, refs, gated);
-            if (n == 0) {
+            GateApplier.Result sel = GateApplier.selectInOpenImage(qupath, refs, gated);
+            int n = sel.cellsClassified;
+            if (!sel.refused.isEmpty()) {
+                Dialogs.showWarningNotification("QPCAT", sel.refused.get(0));
+            } else if (n == 0) {
                 Dialogs.showInfoNotification("QPCAT",
                         "None of the gated cells are in the image open in the viewer. "
                         + "Open one of their images, or use 'Assign class...'.");
@@ -185,7 +188,12 @@ public final class GateActionBar {
                             + " Draw the next gate, or Clear all to remove the outlines.";
                     if (r.unmatched > 0) msg += " (" + r.unmatched + " could not be matched.)";
                     if (record != null) msg += " Gate recorded in " + record + ".";
-                    Dialogs.showInfoNotification("QPCAT", msg);
+                    if (r.refused.isEmpty()) {
+                        Dialogs.showInfoNotification("QPCAT", msg);
+                    } else {
+                        Dialogs.showWarningNotification("QPCAT", msg + " "
+                                + String.join(" ", r.refused));
+                    }
                 });
             }, "qpcat-gate-assign");
             t.setDaemon(true);

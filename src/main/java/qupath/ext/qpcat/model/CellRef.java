@@ -30,15 +30,34 @@ public class CellRef {
     private final double x;           // ROI centroid X, full-resolution pixels
     private final double y;           // ROI centroid Y, full-resolution pixels
     private final double bboxHalf;    // 0.5 * max(bbox width, bbox height), pixels; <=0 if unknown
+    private final int z;              // z-slice of the ROI; 0 for a 2D image
+    private final int t;              // time point of the ROI; 0 for a single time point
 
     public CellRef(String imageId, String imageName, String objectId,
-                   double x, double y, double bboxHalf) {
+                   double x, double y, double bboxHalf, int z, int t) {
         this.imageId = imageId;
         this.imageName = imageName;
         this.objectId = objectId;
         this.x = x;
         this.y = y;
         this.bboxHalf = bboxHalf;
+        this.z = z;
+        this.t = t;
+    }
+
+    /**
+     * The reference for a detection with an outline.
+     *
+     * @param imageId   project entry id, or null
+     * @param imageName display name, or null
+     * @param det       the detection; its ROI must be non-null
+     * @return the reference, with the ROI's centroid, half extent and plane
+     */
+    public static CellRef of(String imageId, String imageName, PathObject det) {
+        var roi = det.getROI();
+        double half = 0.5 * Math.max(roi.getBoundsWidth(), roi.getBoundsHeight());
+        return new CellRef(imageId, imageName, idOf(det), roi.getCentroidX(), roi.getCentroidY(),
+                half, roi.getZ(), roi.getT());
     }
 
     public String getImageId() { return imageId; }
@@ -61,6 +80,12 @@ public class CellRef {
 
     public double getX() { return x; }
     public double getY() { return y; }
+
+    /** The ROI's z-slice; 0 for a 2D image and for results saved without planes. */
+    public int getZ() { return z; }
+
+    /** The ROI's time point; 0 for one time point and for results saved without planes. */
+    public int getT() { return t; }
 
     /** Half of the larger bounding-box side, in pixels. Returns 0 if unknown. */
     public double getBboxHalf() { return bboxHalf; }
