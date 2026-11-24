@@ -319,4 +319,36 @@ class McpExplainerToolsTest {
         assertThat(McpExplainerTools.replyClusterIds("Here you go: [{\"cluster_id\": 3}] hope it helps"))
                 .containsExactly(3);
     }
+
+    /** Same cases as python_tests/test_llm_reply_parser.py, so both paths agree (H44). */
+    @Test
+    void theReplyArrayIsFoundPastProseBracketsAndFences() {
+        String rows = "[{\"cluster_id\":0,\"rationale\":\"CD3 high [see ref 12]\"},"
+                + "{\"cluster_id\":1,\"rationale\":\"PanCK; cf. 12]\"}]";
+        assertThat(McpExplainerTools.replyClusterIds("Here is my answer [1]:\n" + rows + "\nHope that helps."))
+                .containsExactly(0, 1);
+        assertThat(McpExplainerTools.replyClusterIds("Sure.\n```json\n" + rows + "\n```\nDone [ok]."))
+                .containsExactly(0, 1);
+        assertThat(McpExplainerTools.replyClusterIds("Clusters [0, 1] are below: " + rows))
+                .containsExactly(0, 1);
+        assertThat(McpExplainerTools.findReplyArray("Cluster [0] is T cells.")).isNull();
+        assertThat(McpExplainerTools.findReplyArray("[1, 2, 3]")).isNull();
+        assertThat(McpExplainerTools.findReplyArray("")).isNull();
+        assertThat(McpExplainerTools.findReplyArray(null)).isNull();
+    }
+
+    @Test
+    void onlyWholeNumberClusterIdsCount() {
+        for (String bad : List.of("3.7", "\"3.7\"", "true", "\"three\"", "null", "{}", "[3]")) {
+            assertThat(McpExplainerTools.clusterId(JsonParser.parseString(bad))).as(bad).isNull();
+        }
+        assertThat(McpExplainerTools.clusterId(null)).isNull();
+        assertThat(McpExplainerTools.clusterId(JsonParser.parseString("3"))).isEqualTo(3);
+        assertThat(McpExplainerTools.clusterId(JsonParser.parseString("3.0"))).isEqualTo(3);
+        assertThat(McpExplainerTools.clusterId(JsonParser.parseString("\"3\""))).isEqualTo(3);
+        assertThat(McpExplainerTools.clusterId(JsonParser.parseString("\" 4 \""))).isEqualTo(4);
+        assertThat(McpExplainerTools.clusterId(JsonParser.parseString("1e400"))).isNull();
+        assertThat(McpExplainerTools.replyClusterIds("[{\"cluster_id\":3.7},{\"cluster_id\":2}]"))
+                .containsExactly(2);
+    }
 }

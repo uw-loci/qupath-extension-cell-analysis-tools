@@ -529,6 +529,7 @@ public class ClusterExplainerPanel {
         cancelBtn.setAccessibleText("Cancel in-flight LLM call");
 
         statusLabel = new Label("Ready.");
+        statusLabel.setWrapText(true);
         progressBar = new ProgressBar(0);
         progressBar.setPrefWidth(Double.MAX_VALUE);
         progressBar.setVisible(false);
@@ -960,7 +961,8 @@ public class ClusterExplainerPanel {
                 mergeResults(req, finalRes);
                 statusLabel.setText("Done. " + finalRes.answeredCount() + " of " + finalRes.explanations.size()
                         + " clusters explained ("
-                        + (durationMs / 1000L) + "s).");
+                        + (durationMs / 1000L) + "s)."
+                        + (finalRes.replyNotes.isEmpty() ? "" : " " + String.join(" ", finalRes.replyNotes)));
                 LlmExplainerService.writeAuditLog(req, finalRes, durationMs);
                 persistToSavedResult(req, finalRes);
             });

@@ -190,6 +190,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The Cluster Explainer finds the JSON array however the reply wraps it (H44).** A reply with
+  a bracket before the array ("Here is my answer [1]:") or an unmatched bracket inside a
+  rationale ("cf. 12]") was read as having no JSON array, a false "unexpected response shape".
+  The parser now drops code-fence lines and takes the first JSON array of objects it can read,
+  the same rule in the worker and in the MCP tool. A cluster the reply answers twice no longer
+  keeps the last row silently: it gets no suggestion, and the status line, the MCP reply and
+  the audit log's new `Reply notes:` row name it. A `cluster_id` that is not a whole number
+  (`3.7` used to become cluster 3, `true` cluster 1) is not used and is counted the same way.
+  Marker names with a line break are sent on one prompt line.
+- **The LLM audit log no longer records a password in an Ollama URL (H53).** The `Endpoint:`,
+  `Model:`/`Agent:` and `Client:` rows, and the label saved with the suggestions, go through
+  the same scrubber as the prompt and reply, which now also replaces the `user:password@` part
+  of any URL with `[REDACTED]@` (in the worker's error text too).
 - **The PAGA graph is drawn when the clusters do not touch.** When no nearest-neighbor edge
   joined two clusters (a clean separation), python-igraph 1.0 failed inside scanpy's PAGA
   ("mismatching number of index arrays for shape; got 0, expected 2") and the PAGA tab was

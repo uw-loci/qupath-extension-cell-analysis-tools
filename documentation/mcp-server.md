@@ -699,7 +699,10 @@ Where you see the result:
   (`1 image`, `8 images`, or `unknown scope`); `QPCAT version:` and `QuPath version:`; `Prompt hash:`,
   `Top markers:` (the `top_n` used) and `Cluster ids:` as actually answered; and the prompt
   and the reply verbatim; a `Dropped rows:` row when the reply named cluster ids the result
-  does not have. An overwrite adds an `Overwrite: replaced <provider>/<label>
+  does not have; a `Reply notes:` row when it answered a cluster twice (that cluster gets no
+  suggestion) or gave a `cluster_id` that is not a whole number (that row is not used). The
+  `Agent:`, `Client:` and Ollama `Endpoint:` values are scrubbed like the prompt (key-shaped
+  text and the `user:password@` of a URL become `[REDACTED]`). An overwrite adds an `Overwrite: replaced <provider>/<label>
   written <timestamp> (N suggestions)` row; a refused write is its own `=== LLM EXPLAIN [REFUSED] ===` block
   with a `Refused:` row giving the reason and the summary `REFUSED, nothing written`. `User:`
   is the account QuPath runs as, not necessarily the person at the

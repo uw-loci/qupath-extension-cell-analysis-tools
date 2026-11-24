@@ -29,6 +29,10 @@ public final class LlmAuditScrubber {
     private static final Pattern ANTHROPIC_KEY = Pattern.compile(
             "sk-ant-[A-Za-z0-9_\\-]+");
 
+    /** The user:password@ part of a URL (an Ollama endpoint behind basic auth). */
+    private static final Pattern URL_USERINFO = Pattern.compile(
+            "([A-Za-z][A-Za-z0-9+.\\-]*://)[^\\s/@]+@");
+
     private LlmAuditScrubber() {}
 
     /**
@@ -42,6 +46,7 @@ public final class LlmAuditScrubber {
         s = X_API_KEY.matcher(s).replaceAll("$1[REDACTED]");
         s = GENERIC_BEARER.matcher(s).replaceAll("$1[REDACTED]");
         s = ANTHROPIC_KEY.matcher(s).replaceAll("[REDACTED]");
+        s = URL_USERINFO.matcher(s).replaceAll("$1[REDACTED]@");
         return s;
     }
 }

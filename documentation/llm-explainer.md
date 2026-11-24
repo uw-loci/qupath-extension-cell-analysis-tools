@@ -121,8 +121,11 @@ labels to publish.
    shape.` -- the usual cause is the chatbot answering in prose, so ask it again for only the
    JSON array.
 
-   A reply that parses looks like this; code fences and a sentence around it are fine, prose
-   with no `[` is not:
+   A reply that parses looks like this; code fences and sentences around it are fine (QP-CAT
+   uses the first JSON array of objects it finds), prose with no array of objects is not. A
+   cluster the reply answers twice gets no suggestion, and a row whose `cluster_id` is not a
+   whole number (`3.7`, `"three"`) is not used; the status line and the audit log's
+   `Reply notes:` row say which:
 
    ```json
    [{"cluster_id": 0, "phenotype": "Cytotoxic T cell", "confidence": "high",

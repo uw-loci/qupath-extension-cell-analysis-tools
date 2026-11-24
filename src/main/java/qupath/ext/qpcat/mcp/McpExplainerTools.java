@@ -6,6 +6,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.mcp.McpJsonRpc.CallContext;
@@ -26,6 +29,8 @@ import qupath.ext.qpcat.service.LlmExplainerService.Provider;
 import qupath.lib.projects.Project;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -348,7 +353,8 @@ public final class McpExplainerTools {
                         + "for (one object per cluster with cluster_id, phenotype, confidence, rationale, "
                         + "supporting_markers), or none of its rows named a cluster of this result. "
                         + "Nothing has changed. Send the JSON array itself."
-                        + (dropped.isEmpty() ? "" : "\n" + droppedNote));
+                        + (dropped.isEmpty() ? "" : "\n" + droppedNote)
+                        + (res.replyNotes.isEmpty() ? "" : "\n" + String.join("\n", res.replyNotes)));
             }
 
             if (existing != null) {
@@ -385,6 +391,9 @@ public final class McpExplainerTools {
             }
             if (!dropped.isEmpty()) {
                 sb.append('\n').append(droppedNote);
+            }
+            for (String note : res.replyNotes) {
+                sb.append('\n').append(note);
             }
             sb.append("\n\n");
             if (notified > 0) {
@@ -623,44 +632,64 @@ public final class McpExplainerTools {
         return new ArrayList<>(dropped);
     }
 
-    /** cluster_id values of the objects in the reply's JSON array; markdown fences tolerated. */
+    /** Usable cluster_id values of the objects in the reply's JSON array, repeats included. */
     static List<Integer> replyClusterIds(String response) {
         List<Integer> ids = new ArrayList<>();
-        if (response == null) return ids;
-        String text = response.trim();
-        if (text.startsWith("```")) {
-            int nl = text.indexOf('\n');
-            text = nl >= 0 ? text.substring(nl + 1) : "";
-            int end = text.lastIndexOf("```");
-            if (end >= 0) text = text.substring(0, end);
-        }
-        JsonElement parsed = null;
-        try {
-            parsed = JsonParser.parseString(text);
-        } catch (RuntimeException notJson) {
-            int open = text.indexOf('[');
-            int close = text.lastIndexOf(']');
-            if (open >= 0 && close > open) {
-                try {
-                    parsed = JsonParser.parseString(text.substring(open, close + 1));
-                } catch (RuntimeException stillNot) {
-                    return ids;
-                }
-            }
-        }
-        if (parsed == null || !parsed.isJsonArray()) return ids;
-        for (JsonElement item : parsed.getAsJsonArray()) {
-            if (!item.isJsonObject() || !item.getAsJsonObject().has("cluster_id")) continue;
-            JsonElement cid = item.getAsJsonObject().get("cluster_id");
-            if (cid.isJsonPrimitive()) {
-                try {
-                    ids.add((int) Double.parseDouble(cid.getAsString().trim()));
-                } catch (NumberFormatException ignored) {
-                    // the Python parser drops it too
-                }
-            }
+        JsonArray rows = findReplyArray(response);
+        if (rows == null) return ids;
+        for (JsonElement item : rows) {
+            if (!item.isJsonObject()) continue;
+            Integer cid = clusterId(item.getAsJsonObject().get("cluster_id"));
+            if (cid != null) ids.add(cid);
         }
         return ids;
+    }
+
+    private static final Pattern FENCE_LINE = Pattern.compile("(?m)^[ \\t]*```[^\\n]*$");
+    private static final Pattern INTEGER_TEXT = Pattern.compile("[+-]?[0-9]+");
+    private static final TypeAdapter<JsonElement> JSON_VALUE = new Gson().getAdapter(JsonElement.class);
+
+    /**
+     * The first JSON array holding an object in a reply, after dropping markdown fence lines:
+     * the text is read as one JSON value at each {@code [} in turn. Null when none. Same rule as
+     * {@code _try_parse_json_array} in {@code run_llm_explainer.py}.
+     */
+    static JsonArray findReplyArray(String response) {
+        if (response == null || response.isEmpty()) return null;
+        String text = FENCE_LINE.matcher(response).replaceAll("");
+        for (int at = text.indexOf('['); at >= 0; at = text.indexOf('[', at + 1)) {
+            JsonElement value;
+            try (JsonReader reader = new JsonReader(new StringReader(text.substring(at)))) {
+                value = JSON_VALUE.read(reader);
+            } catch (IOException | RuntimeException notJsonHere) {
+                continue;
+            }
+            if (value == null || !value.isJsonArray()) continue;
+            for (JsonElement item : value.getAsJsonArray()) {
+                if (item.isJsonObject()) return value.getAsJsonArray();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A row's cluster_id as an int, or null when it is not a whole number: an integer, an
+     * integral number (3.0) or a string holding an integer counts; a boolean, 3.7, text or a
+     * missing id does not. Same rule as {@code _cluster_id} in {@code run_llm_explainer.py}.
+     */
+    static Integer clusterId(JsonElement value) {
+        if (value == null || !value.isJsonPrimitive()) return null;
+        JsonPrimitive p = value.getAsJsonPrimitive();
+        try {
+            if (p.isNumber()) return new BigDecimal(p.getAsString()).intValueExact();
+            if (p.isString()) {
+                String s = p.getAsString().trim();
+                return INTEGER_TEXT.matcher(s).matches() ? Integer.parseInt(s) : null;
+            }
+        } catch (ArithmeticException | NumberFormatException notAnInt) {
+            return null;
+        }
+        return null;
     }
 
     private static boolean isKnownResult(Project<?> project, String name, String tool) throws IOException {

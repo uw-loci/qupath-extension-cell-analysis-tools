@@ -91,13 +91,16 @@ public class LlmExplainerService {
         public final int outputTokens;      // -1 when provider didn't report
         public final String errorType;       // null on success
         public final String errorDetail;     // null on success
+        /** Sentences on reply rows the parser left out (repeated or non-integer cluster_id). */
+        public final List<String> replyNotes;
 
         ExplainResult(List<ClusterExplanation> explanations,
                       String promptTemplate, String promptHash,
                       String prompt, String responseRaw,
                       int tokenCount, int inputTokens, int outputTokens,
-                      String errorType, String errorDetail) {
+                      String errorType, String errorDetail, List<String> replyNotes) {
             this.explanations = explanations;
+            this.replyNotes = replyNotes != null ? List.copyOf(replyNotes) : List.of();
             this.promptTemplate = promptTemplate;
             this.promptHash = promptHash;
             this.prompt = prompt;
@@ -243,13 +246,29 @@ public class LlmExplainerService {
 
         return new ExplainResult(explanations, promptTemplate, promptHash,
                 prompt, responseRaw, tokenCount, inputTokens, outputTokens,
-                errorType, errorDetail);
+                errorType, errorDetail, parseReplyNotes(stringOr(out.get("reply_notes"), "")));
+    }
+
+    /** The worker's {@code reply_notes} JSON list; empty when absent or unreadable. */
+    static List<String> parseReplyNotes(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            List<String> notes = new Gson().fromJson(json, new TypeToken<List<String>>(){}.getType());
+            List<String> out = new ArrayList<>();
+            if (notes != null) {
+                for (String n : notes) if (n != null && !n.isBlank()) out.add(n);
+            }
+            return out;
+        } catch (RuntimeException e) {
+            logger.warn("Unreadable reply_notes from the explainer: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private static ExplainResult cancelledResult() {
         return new ExplainResult(new ArrayList<>(), "cluster_phenotype_v2",
                 "", "", "", -1, -1, -1, "REQUEST_CANCELLED",
-                "Canceled by user; result discarded.");
+                "Canceled by user; result discarded.", List.of());
     }
 
     /**
@@ -312,7 +331,7 @@ public class LlmExplainerService {
                                                    String model) {
         LlmExplanationsBundle bundle = new LlmExplanationsBundle();
         bundle.setProvider(provider != null ? provider.name() : "NONE");
-        bundle.setModel(model);
+        bundle.setModel(model != null ? LlmAuditScrubber.scrub(model) : null);
         bundle.setPromptTemplate(result.promptTemplate);
         bundle.setPromptHash(result.promptHash);
         bundle.setTimestamp(OffsetDateTime.now().toString());
@@ -362,6 +381,9 @@ public class LlmExplainerService {
                 result.tokenCount >= 0 ? String.valueOf(result.tokenCount) : "unknown");
         if (req.droppedRows != null) {
             params.put("Dropped rows", req.droppedRows);
+        }
+        if (!result.replyNotes.isEmpty()) {
+            params.put("Reply notes", String.join(" ", result.replyNotes));
         }
 
         Map<String, String> blocks = new LinkedHashMap<>();
@@ -475,20 +497,21 @@ public class LlmExplainerService {
     }
 
     /** The provenance rows every LLM EXPLAIN block starts with. */
-    private static Map<String, String> baseParams(ExplainRequest req) {
+    static Map<String, String> baseParams(ExplainRequest req) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("Project", emptyToUnknown(req.projectName));
         params.put("Clustering result", emptyToUnknown(req.resultName));
         params.put("Image", emptyToUnknown(req.imageName));
         params.put("User", emptyToUnknown(req.operatorUser));
         params.put("Provider", req.provider != null ? req.provider.name() : "NONE");
+        // Typed or sent by someone else: scrubbed like the prompt and the reply.
         params.put(req.provider == Provider.MCP ? "Agent" : "Model",
-                req.model != null && !req.model.isBlank() ? req.model : "(not stated)");
+                req.model != null && !req.model.isBlank() ? LlmAuditScrubber.scrub(req.model) : "(not stated)");
         if (req.provider == Provider.MCP) {
-            params.put("Client", emptyToUnknown(req.client));
+            params.put("Client", LlmAuditScrubber.scrub(emptyToUnknown(req.client)));
         }
         if (req.provider == Provider.OLLAMA) {
-            params.put("Endpoint", req.endpoint != null ? req.endpoint : "");
+            params.put("Endpoint", LlmAuditScrubber.scrub(req.endpoint));
         }
         if (req.replaced != null) {
             params.put("Overwrite", "replaced " + req.replaced);
