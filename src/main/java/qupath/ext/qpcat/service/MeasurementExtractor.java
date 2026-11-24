@@ -329,24 +329,50 @@ public class MeasurementExtractor {
      */
     public static MissingReport missingValues(Collection<? extends PathObject> detections,
                                               List<String> measurements) {
-        Map<String, Integer> per = new LinkedHashMap<>();
-        int withMissing = 0;
-        int total = 0;
-        for (PathObject det : detections) {
-            if (!(det instanceof PathDetectionObject)) continue;
+        MissingCounter counter = new MissingCounter(measurements);
+        for (PathObject det : detections) counter.add(det);
+        return counter.report();
+    }
+
+    /**
+     * Counts missing values one object at a time, so a caller already walking the
+     * objects needs no second pass; {@link #missingValues} is this over a collection.
+     */
+    public static final class MissingCounter {
+        private final List<String> measurements;
+        private final Map<String, Integer> per = new LinkedHashMap<>();
+        private int withMissing;
+        private int total;
+
+        /** @param measurements the measurements to check, in report order */
+        public MissingCounter(List<String> measurements) {
+            this.measurements = List.copyOf(measurements);
+            for (String m : this.measurements) per.put(m, 0);
+        }
+
+        /** Count one object; objects that are not detections are ignored. */
+        public void add(PathObject det) {
+            if (!(det instanceof PathDetectionObject)) return;
             total++;
             var ml = det.getMeasurements();
             boolean any = false;
             for (String m : measurements) {
-                Number v = ml.get(m);
-                if (lacks(v)) {
+                if (lacks(ml.get(m))) {
                     per.merge(m, 1, Integer::sum);
                     any = true;
                 }
             }
             if (any) withMissing++;
         }
-        return new MissingReport(total, withMissing, per);
+
+        /** The counts so far; only measurements with a missing value appear in the map. */
+        public MissingReport report() {
+            Map<String, Integer> out = new LinkedHashMap<>();
+            per.forEach((m, n) -> {
+                if (n > 0) out.put(m, n);
+            });
+            return new MissingReport(total, withMissing, out);
+        }
     }
 
     /** What {@link #applyMissingPolicy} decided. */
