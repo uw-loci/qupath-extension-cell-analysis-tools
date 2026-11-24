@@ -353,3 +353,77 @@ def test_run_ripley_takes_no_graph_argument():
 
     module = _run_ripley()
     assert "graph_type" not in inspect.signature(module.run_ripley).parameters
+
+
+@requires("squidpy")
+@requires("anndata")
+def test_ripley_skips_a_cluster_too_small_for_a_curve():
+    """H29: a 2-cell cluster gave L = 0 and envelope 0, which centers to the flat
+    "random" line in the chart and the PNG. It now has no curve and a note."""
+    import pandas as pd
+
+    module = _run_ripley()
+    module.reset_notes()
+    adata = _ripley_adata()
+    labels = [str(int(v)) for v in np.random.RandomState(3).randint(0, 2, adata.n_obs)]
+    labels[0] = labels[1] = "rare"
+    adata.obs["cluster"] = pd.Categorical(labels)
+    task = _Task()
+    module.run_ripley(
+        adata, task, cluster_key="cluster", n_permutations=5, persist_plots=False
+    )
+    payload = json.loads(task.outputs["ripley"])
+    assert "rare" not in payload["cluster_names"]
+    assert len(payload["l_values"]) == len(payload["cluster_names"]) == 2
+    assert len(payload["envelope_median"]) == 2
+    assert payload["skipped_clusters"] == [
+        {"name": "rare", "reason": "2 cell(s); at least 5 are needed"}
+    ]
+    assert len(module.SPATIAL_NOTES) == 1 and "rare" in module.SPATIAL_NOTES[0]
+
+
+@requires("squidpy")
+@requires("anndata")
+def test_ripley_with_no_cluster_large_enough_writes_an_error_not_a_curve():
+    import pandas as pd
+
+    module = _run_ripley()
+    module.reset_notes()
+    adata = _ripley_adata(n=8)
+    adata.obs["cluster"] = pd.Categorical(["a"] * 4 + ["b"] * 4)
+    task = _Task()
+    module.run_ripley(
+        adata, task, cluster_key="cluster", n_permutations=5, persist_plots=False
+    )
+    assert "ripley" not in task.outputs
+    assert "at least 5" in task.outputs["ripley_error"]
+
+
+@requires("squidpy")
+@requires("anndata")
+def test_per_area_notes_name_their_area_and_skipped_areas_are_reported():
+    """A per-area Ripley note says which area; an area with no result is a note,
+    not only a log line."""
+    import pandas as pd
+
+    module = _run_ripley()
+    module.reset_notes()
+    adata = _ripley_adata(n=61)
+    labels = [str(int(v)) for v in np.random.RandomState(5).randint(0, 2, 61)]
+    labels[0] = labels[1] = "rare"  # both in area 0
+    adata.obs["cluster"] = pd.Categorical(labels)
+    area_ids = [0] * 30 + [1] * 30 + [2]  # area 2 has a single cell
+    results, skipped = module.run_per_area(
+        module.run_ripley,
+        adata,
+        area_ids,
+        ["core A", "core B", "core C"],
+        "ripley",
+        cluster_key="cluster",
+        n_permutations=5,
+    )
+    assert set(results) == {"core A", "core B"}
+    assert skipped == [("core C", "only 1 cell(s)")]
+    notes = list(module.SPATIAL_NOTES)
+    assert any(n.startswith("Area 'core A': Ripley's L has no curve") for n in notes)
+    assert any("1 of 3 area(s) produced no result" in n for n in notes)

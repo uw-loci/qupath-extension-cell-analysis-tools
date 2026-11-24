@@ -158,6 +158,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Ripley's L no longer draws a "random" curve for a cluster too small to measure.** A
+  cluster with one or two cells (a rare imported label, a small area) gave an L curve and a
+  simulated-random band of zero, which the chart and the PNG center to the flat line that
+  reads as "spatially random". Clusters with fewer than 5 cells, or whose cells lie on one line
+  or at one point, now get no curve, and the results window names them. When Ripley's L
+  produces nothing at all, or produces nothing for some areas of a per-area run, the results
+  window now says so and why instead of only the log; per-area notes name their area. Earlier
+  Ripley charts showed such clusters as random.
 - **Two measurements with the same name are refused, and a figure that cannot be drawn says
   why.** A batch file or an imported AnnData can list the same measurement name twice (or two
   names that differ only in case or surrounding spaces). Results are listed by name, so the

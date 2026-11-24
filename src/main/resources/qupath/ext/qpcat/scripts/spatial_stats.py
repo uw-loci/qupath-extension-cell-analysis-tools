@@ -730,6 +730,7 @@ def run_per_area(
     """
     results = {}
     skipped = []
+    area_notes = []
     slices = area_slices(area_ids, adata.shape[0])
 
     # Every helper writes its PNG to one fixed filename (the names are a public
@@ -754,34 +755,108 @@ def run_per_area(
             # sliced to match or it would measure this area's clusters against
             # the whole cohort's geometry.
             per_area_kwargs["spatial_data"] = np.asarray(pooled_spatial)[idx]
+        notes_before = len(SPATIAL_NOTES)
         try:
             fn(sub, capture, cluster_key=cluster_key, **per_area_kwargs)
         except Exception as e:
             logger.warning("Area '%s': %s failed (%s)", label, output_key, e)
             skipped.append((label, str(e)))
             continue
+        finally:
+            # A helper's note is about this area only; say which.
+            area_notes.extend(
+                "Area '%s': %s" % (label, n) for n in SPATIAL_NOTES[notes_before:]
+            )
+            del SPATIAL_NOTES[notes_before:]
         if output_key in capture.outputs:
             results[label] = capture.outputs[output_key]
         else:
             skipped.append((label, "produced no result"))
+    # A 55-core TMA must not bury the results window: the first few per-area
+    # notes are shown, the rest counted (all of them are in the log).
+    for n in area_notes[:PER_AREA_NOTES_SHOWN]:
+        SPATIAL_NOTES.append(n)
+    if len(area_notes) > PER_AREA_NOTES_SHOWN:
+        for n in area_notes[PER_AREA_NOTES_SHOWN:]:
+            logger.warning("Spatial: %s", n)
+        SPATIAL_NOTES.append(
+            "%s: %d more per-area note(s) like these; the QuPath log lists them."
+            % (
+                PER_AREA_STAT_NAMES.get(output_key, output_key),
+                len(area_notes) - PER_AREA_NOTES_SHOWN,
+            )
+        )
     if skipped:
-        # Name the count, not every area: a 55-core TMA would otherwise bury
-        # the log. Silence here would read as "all areas measured".
-        logger.warning(
-            "%s: %d of %d area(s) produced no result (first: %s -- %s)",
-            output_key,
-            len(skipped),
-            len(slices),
-            skipped[0][0],
-            skipped[0][1],
+        # Name the count and the first, not every area. Silence here would read
+        # as "all areas measured".
+        note_for_user(
+            "%s: %d of %d area(s) produced no result (first: %s -- %s)."
+            % (
+                PER_AREA_STAT_NAMES.get(output_key, output_key),
+                len(skipped),
+                len(slices),
+                skipped[0][0],
+                skipped[0][1],
+            )
         )
     return results, skipped
+
+
+# How many per-area notes a statistic adds to the results window before the
+# rest are only counted.
+PER_AREA_NOTES_SHOWN = 5
+
+# run_per_area output keys as the results window names them.
+PER_AREA_STAT_NAMES = {
+    "ripley": "Ripley's L",
+    "co_occurrence_pairwise": "Co-occurrence (pairwise)",
+    "co_occurrence_one_vs_rest": "Co-occurrence (one vs rest)",
+}
 
 
 # CSR realisations per cluster for the Ripley envelope. 99 gives a 2.5/97.5 band
 # with a resolution of about one percentile, and costs well under a second for a
 # few thousand points.
 RIPLEY_ENVELOPE_SIMS = 99
+
+# Fewer cells than this in a cluster and its L curve is not drawn. With 1-2
+# cells the estimator returns zeros and so does the envelope, which centers to
+# the flat "random" line: a curve that looks like a finding and is not one.
+RIPLEY_MIN_CELLS = 5
+
+
+def _ripley_failed(task, msg):
+    """Record why Ripley's L produced nothing: the error output and a user note."""
+    logger.error(msg)
+    task.outputs["ripley_error"] = msg
+    SPATIAL_NOTES.append(msg)
+
+
+def ripley_skip_reason(coords):
+    """Why a cluster gets no Ripley L curve, or None when it gets one."""
+    from scipy.spatial import ConvexHull
+
+    coords = np.asarray(coords, dtype=float)
+    n = coords.shape[0]
+    if n < RIPLEY_MIN_CELLS:
+        return "%d cell(s); at least %d are needed" % (n, RIPLEY_MIN_CELLS)
+    try:
+        if float(ConvexHull(coords).volume) > 0:
+            return None
+    except Exception:
+        pass
+    return "its %d cells lie on one line or at one point" % n
+
+
+def ripley_skipped_note(skipped):
+    """The results-window note for the clusters left out of Ripley's L."""
+    shown = "; ".join("%s (%s)" % (name, why) for name, why in skipped[:8])
+    if len(skipped) > 8:
+        shown += "; and %d more" % (len(skipped) - 8)
+    return (
+        "Ripley's L has no curve for %d cluster(s), because the estimate needs cells "
+        "spread over an area: %s." % (len(skipped), shown)
+    )
 
 
 def ripley_l_observed(coords, radii):
@@ -1065,8 +1140,7 @@ def run_ripley(
                     observed_keys,
                 )
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         try:
@@ -1181,8 +1255,7 @@ def run_ripley(
                 "complete spatial randomness."
                 % (getattr(sq, "__version__", "?"), type(l_data).__name__, observed)
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         # Pad the OTHER curve set only. K is genuinely optional on builds that
@@ -1206,9 +1279,16 @@ def run_ripley(
             radii_arr = _np.asarray(radii, dtype=float)
             labels_all = [str(c) for c in adata.obs[cluster_key].values]
             recomputed = []
-            for cname in cluster_names:
+            kept = []
+            skipped = []
+            for idx, cname in enumerate(cluster_names):
                 mask = _np.array([lab == cname for lab in labels_all], dtype=bool)
                 pts_c = coords_all[mask]
+                why = ripley_skip_reason(pts_c)
+                if why is not None:
+                    skipped.append((cname, why))
+                    continue
+                kept.append(idx)
                 recomputed.append(
                     [float(v) for v in ripley_l_observed(pts_c, radii_arr)]
                 )
@@ -1223,6 +1303,21 @@ def run_ripley(
                 envelope_median.append([float(v) for v in med])
                 envelope_high.append([float(v) for v in hi])
             l_curves = recomputed
+            if skipped:
+                note_for_user(ripley_skipped_note(skipped))
+                k_curves = [k_curves[i] for i in kept if i < len(k_curves)]
+                kept_names = [cluster_names[i] for i in kept]
+                p_value_curves = {
+                    k: v for k, v in p_value_curves.items() if k in kept_names
+                }
+                cluster_names = kept_names
+            if not cluster_names:
+                msg = (
+                    "Ripley's L has no cluster with enough cells spread over an area "
+                    "(at least %d), so there is no Ripley tab." % RIPLEY_MIN_CELLS
+                )
+                _ripley_failed(task, msg)
+                return
             logger.info(
                 "Ripley L recomputed per cluster with its own intensity, plus a "
                 "%d-run CSR envelope per cluster",
@@ -1236,8 +1331,7 @@ def run_ripley(
                 "squidpy's own L is normalized by the total cell count rather "
                 "than each cluster's, so it cannot be read against any null." % e
             )
-            logger.error(msg)
-            task.outputs["ripley_error"] = msg
+            _ripley_failed(task, msg)
             return
 
         # Kept for the payload's shape; the envelope is what the chart compares
@@ -1277,6 +1371,9 @@ def run_ripley(
             # reads exactly like a real "no clustering at any radius" result --
             # so the consumer must be told rather than left to plot it.
             "k_unavailable": not k_available,
+            # Clusters with no curve and why ({"name", "reason"}); see
+            # RIPLEY_MIN_CELLS. Their names are absent from cluster_names.
+            "skipped_clusters": [{"name": n, "reason": w} for n, w in skipped],
         }
         task.outputs["ripley"] = json.dumps(payload)
         logger.info(
