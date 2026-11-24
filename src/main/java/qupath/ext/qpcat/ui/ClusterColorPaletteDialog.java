@@ -21,8 +21,6 @@ import qupath.lib.objects.classes.PathClass;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Recolors the "Cluster N" classes in bulk from a chosen named palette. Because
@@ -33,7 +31,6 @@ import java.util.regex.Pattern;
 public final class ClusterColorPaletteDialog {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusterColorPaletteDialog.class);
-    private static final Pattern CLUSTER = Pattern.compile("^Cluster (\\d+)$");
     private static final String CURRENT = "Current \"Cluster N\" classes";
     private static final int PREVIEW_CAP = 60;
 
@@ -154,8 +151,8 @@ public final class ClusterColorPaletteDialog {
         int max = -1;
         for (PathClass pc : qupath.getAvailablePathClasses()) {
             if (pc == null || pc.getName() == null) continue;
-            Matcher m = CLUSTER.matcher(pc.toString());
-            if (m.matches()) max = Math.max(max, Integer.parseInt(m.group(1)));
+            var label = ClusterNaming.labelOf(pc.toString());
+            if (label.isPresent()) max = Math.max(max, label.getAsInt());
         }
         return ClusterNaming.digitsForHighestLabel(max);
     }
@@ -174,8 +171,8 @@ public final class ClusterColorPaletteDialog {
         int max = -1;
         for (PathClass pc : qupath.getAvailablePathClasses()) {
             if (pc == null || pc.getName() == null) continue;
-            Matcher m = CLUSTER.matcher(pc.toString());
-            if (m.matches()) max = Math.max(max, Integer.parseInt(m.group(1)));
+            var label = ClusterNaming.labelOf(pc.toString());
+            if (label.isPresent()) max = Math.max(max, label.getAsInt());
         }
         return max + 1;
     }

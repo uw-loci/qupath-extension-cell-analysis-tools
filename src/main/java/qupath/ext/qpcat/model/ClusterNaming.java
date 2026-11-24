@@ -1,5 +1,10 @@
 package qupath.ext.qpcat.model;
 
+import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * The default display name of a cluster, and how wide its number is.
  *
@@ -26,7 +31,57 @@ public final class ClusterNaming {
     /** Prefix of a default cluster name, including the trailing space. */
     public static final String CLUSTER_PREFIX = "Cluster ";
 
+    /**
+     * QP-CAT's own cluster class names, and only those: "Cluster 7", "Cluster 07",
+     * and the sub-cluster names "Cluster 3.1" and "Cluster 3.-1" (the sub-cluster
+     * run's noise). Nine digits at most, so the number always fits an int.
+     */
+    private static final Pattern OWN_NAME =
+            Pattern.compile("Cluster (\\d{1,9})(?:\\.(-?\\d{1,9}))?");
+
+    /**
+     * A QP-CAT cluster name taken apart.
+     *
+     * @param label    the cluster label
+     * @param subLabel the sub-cluster label, or null for a whole cluster
+     */
+    public record Parsed(int label, Integer subLabel) {}
+
     private ClusterNaming() {}
+
+    /**
+     * Read one of QP-CAT's own cluster names. A real class that merely starts with
+     * "Cluster" ("Cluster of stroma", "Clustered tumor", "Cluster 99999999999") is
+     * not one and gives empty.
+     *
+     * @param name a class name; may be null
+     * @return the label (and sub-label), or empty when the name is not QP-CAT's
+     */
+    public static Optional<Parsed> parse(String name) {
+        if (name == null) {
+            return Optional.empty();
+        }
+        Matcher m = OWN_NAME.matcher(name);
+        if (!m.matches()) {
+            return Optional.empty();
+        }
+        Integer sub = m.group(2) == null ? null : Integer.valueOf(m.group(2));
+        return Optional.of(new Parsed(Integer.parseInt(m.group(1)), sub));
+    }
+
+    /**
+     * The label of a whole-cluster name ("Cluster 7"); empty for sub-cluster names
+     * and for anything {@link #parse} does not read.
+     *
+     * @param name a class name; may be null
+     * @return the cluster label, or empty
+     */
+    public static OptionalInt labelOf(String name) {
+        return parse(name)
+                .filter(p -> p.subLabel() == null)
+                .map(p -> OptionalInt.of(p.label()))
+                .orElse(OptionalInt.empty());
+    }
 
     /**
      * Digits to write a cluster number in, given the highest label in the run.

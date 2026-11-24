@@ -6,6 +6,7 @@ import org.apposed.appose.Service.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.CellRef;
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.PathObject;
@@ -28,8 +29,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Exports the currently-clustered cells as a bundle for the VEST 3D viewer
@@ -46,7 +45,6 @@ import java.util.regex.Pattern;
 public final class VestExporter {
 
     private static final Logger logger = LoggerFactory.getLogger(VestExporter.class);
-    private static final Pattern CLUSTER = Pattern.compile("^Cluster (\\d+)$");
 
     /** Measurement-name substrings that are NOT markers (coords / embeddings / labels). */
     private static final String[] NON_MARKER_TOKENS = {
@@ -126,10 +124,10 @@ public final class VestExporter {
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
             PathClass pc = det.getPathClass();
             if (pc == null) continue;
-            Matcher m = CLUSTER.matcher(pc.toString());
-            if (!m.matches()) continue;
+            var label = ClusterNaming.labelOf(pc.toString());
+            if (label.isEmpty()) continue;
             if (det.getROI() == null) continue;
-            int cid = Integer.parseInt(m.group(1));
+            int cid = label.getAsInt();
             byCluster.computeIfAbsent(cid, k -> new ArrayList<>()).add(det);
         }
         if (byCluster.isEmpty()) {
@@ -263,9 +261,9 @@ public final class VestExporter {
         for (PathObject det : imageData.getHierarchy().getDetectionObjects()) {
             PathClass pc = det.getPathClass();
             if (pc == null) continue;
-            Matcher m = CLUSTER.matcher(pc.toString());
-            if (!m.matches() || det.getROI() == null) continue;
-            counts.merge(Integer.parseInt(m.group(1)), 1, Integer::sum);
+            var label = ClusterNaming.labelOf(pc.toString());
+            if (label.isEmpty() || det.getROI() == null) continue;
+            counts.merge(label.getAsInt(), 1, Integer::sum);
         }
         int[] out = new int[counts.size()];
         int i = 0;

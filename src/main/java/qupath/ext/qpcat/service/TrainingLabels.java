@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import qupath.ext.qpcat.model.ClusterNaming;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
@@ -62,7 +63,7 @@ public final class TrainingLabels {
                     continue;
                 }
                 Label label = annotationLabel(annotation);
-                if (label == null || label.name().startsWith("Cluster ")) {
+                if (label == null || ClusterNaming.parse(label.name()).isPresent()) {
                     continue; // a "Cluster N" region is clustering output drawn over cells, not a label
                 }
                 for (PathObject det : hierarchy.getAllDetectionsForROI(annotation.getROI())) {
