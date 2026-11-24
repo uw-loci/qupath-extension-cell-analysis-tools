@@ -190,6 +190,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **A cell type absent from a neighborhood is drawn as absent, not as -19.** The
+  cellular-neighborhood enrichment heatmap computed log2 with a 1e-6 guard, so a cell type
+  with no cell in a neighborhood scored about -19 and that one value set the color range,
+  washing the real enrichments out to white. Absent pairs are now gray, outside the color
+  scale, with a caption under the plot, and `null` in `enrichment_json`. The adjacency
+  heatmap's gray cells (the hidden diagonal) are captioned too.
 - **A name with `$` in it no longer makes a figure go missing (H52).** A class, cluster,
   marker or image name holding two `$` with `^` or `{` between them was read as a matplotlib
   formula, `savefig` raised, and the figure was reported as "plot failed". The worker now

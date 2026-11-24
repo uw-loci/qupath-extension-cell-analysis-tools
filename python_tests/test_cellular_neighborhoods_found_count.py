@@ -70,7 +70,9 @@ def test_fewer_distinct_windows_than_requested_reports_the_found_count():
     assert len(enrichment) == found
     # An empty neighborhood had every class at about -19 (log2 of eps over the
     # class frequency); a real one has at least one class it is enriched in.
-    assert all(max(row) > -10 for row in enrichment)
+    # An absent class is null, never a large negative number.
+    assert all(max(v for v in row if v is not None) > -10 for row in enrichment)
+    assert all(v is None or v > -10 for row in enrichment for v in row)
     notes = json.loads(out["notes"])
     assert len(notes) == 1
     assert (
