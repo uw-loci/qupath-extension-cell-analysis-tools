@@ -1321,7 +1321,8 @@ public class ClusteringWorkflow {
             }
             if (result.getInputSelection() != null) {
                 // Counts and classes only; the saved result's RUN_INFO lists each one.
-                lines.add("// Input: " + result.getInputSelection().summary() + ", "
+                InputSelection sel = result.getInputSelection();
+                lines.add("// Input: " + sel.summary(CellClasses.noClassLabel(sel)) + ", "
                         + result.getNCells() + " cells clustered");
             }
             lines.add("// Algorithm: " + algo + "  params: " + paramsStr);

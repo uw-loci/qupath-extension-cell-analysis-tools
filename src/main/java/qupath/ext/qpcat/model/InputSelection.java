@@ -2,8 +2,10 @@ package qupath.ext.qpcat.model;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a single-image run was narrowed to: the selected annotations, or the
@@ -34,23 +36,35 @@ public record InputSelection(List<Annotation> annotations, int selectedDetection
         return new InputSelection(List.of(), count);
     }
 
+    /** The real class names of the selected annotations (no null). */
+    public Set<String> classNames() {
+        Set<String> names = new LinkedHashSet<>();
+        for (Annotation a : annotations) {
+            if (a.classification() != null) names.add(a.classification());
+        }
+        return names;
+    }
+
     /**
      * One line naming the selection: {@code 3 annotations (Tumor x2, Stroma x1)}
      * or {@code 100 selected detections}.
      *
+     * @param noClassLabel what to call annotations without a class, distinct from
+     *                     every name in {@link #classNames()}
      * @return the summary
      */
-    public String summary() {
+    public String summary(String noClassLabel) {
         if (annotations.isEmpty()) {
             return selectedDetections + " selected detection" + (selectedDetections == 1 ? "" : "s");
         }
+        // Keyed on the class itself, null for none, so a real class spelled like the
+        // no-class word keeps its own count.
         Map<String, Integer> byClass = new LinkedHashMap<>();
         for (Annotation a : annotations) {
-            byClass.merge(a.classification() == null ? "Unclassified" : a.classification(), 1,
-                    Integer::sum);
+            byClass.merge(a.classification(), 1, Integer::sum);
         }
         List<String> parts = new ArrayList<>();
-        byClass.forEach((cls, n) -> parts.add(cls + " x" + n));
+        byClass.forEach((cls, n) -> parts.add((cls == null ? noClassLabel : cls) + " x" + n));
         return annotations.size() + " annotation" + (annotations.size() == 1 ? "" : "s")
                 + " (" + String.join(", ", parts) + ")";
     }
@@ -58,12 +72,13 @@ public record InputSelection(List<Annotation> annotations, int selectedDetection
     /**
      * One line per annotation: class, name, ID and the detections inside it.
      *
+     * @param noClassLabel what to call an annotation without a class
      * @return the lines, empty for a detection selection
      */
-    public List<String> detailLines() {
+    public List<String> detailLines(String noClassLabel) {
         List<String> lines = new ArrayList<>();
         for (Annotation a : annotations) {
-            lines.add((a.classification() == null ? "Unclassified" : a.classification())
+            lines.add((a.classification() == null ? noClassLabel : a.classification())
                     + "  '" + (a.name() == null ? "(unnamed)" : a.name()) + "'"
                     + "  id=" + a.id()
                     + "  " + a.detections() + " detection" + (a.detections() == 1 ? "" : "s")

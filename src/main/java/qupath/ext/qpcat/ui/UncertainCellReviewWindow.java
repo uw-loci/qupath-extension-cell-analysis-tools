@@ -76,6 +76,8 @@ public final class UncertainCellReviewWindow {
     private final CheckBox spreadCheck = new CheckBox("Take turns between predicted classes");
     private final Deque<Answer> history = new ArrayDeque<>();
     private int answered;
+    /** What the Predicted column calls a cell predicted to have no class. */
+    private String noClassLabel = CellClasses.UNCLASSIFIED_DISPLAY;
 
     /** One table row: a candidate cell and the label given to it (empty until answered). */
     public static final class Row {
@@ -136,7 +138,8 @@ public final class UncertainCellReviewWindow {
         imageCol.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().cell.imageName()));
         imageCol.setPrefWidth(150);
         TableColumn<Row, String> predCol = new TableColumn<>("Predicted");
-        predCol.setCellValueFactory(r -> new SimpleStringProperty(r.getValue().cell.predicted()));
+        predCol.setCellValueFactory(r -> new SimpleStringProperty(
+                r.getValue().cell.predicted() != null ? r.getValue().cell.predicted() : noClassLabel));
         predCol.setPrefWidth(130);
         TableColumn<Row, String> confCol = new TableColumn<>("Confidence");
         confCol.setCellValueFactory(r -> new SimpleStringProperty(
@@ -245,15 +248,19 @@ public final class UncertainCellReviewWindow {
             }
             List<Candidate> ranked = UncertaintyQueue.rank(all, limit, spread);
             Platform.runLater(() -> {
-                rows.setAll(ranked.stream().map(Row::new).toList());
                 Set<String> classes = new LinkedHashSet<>();
                 String[] trained = trainedClasses.get();
                 if (trained != null) {
                     classes.addAll(List.of(trained));
                 }
-                all.forEach(c -> classes.add(c.predicted()));
-                // "No class" is not an answer a point can carry.
+                // "No class" is not an answer a point can carry: null predictions, and
+                // the trained model's word for them, get no button.
                 classes.remove(TrainingLabels.UNCLASSIFIED);
+                all.forEach(c -> {
+                    if (c.predicted() != null) classes.add(c.predicted());
+                });
+                noClassLabel = CellClasses.noClassLabel(classes, CellClasses.UNCLASSIFIED_DISPLAY);
+                rows.setAll(ranked.stream().map(Row::new).toList());
                 List<String> sorted = new ArrayList<>(classes);
                 sorted.sort(UncertainCellReviewWindow::compareNatural);
                 rebuildClassButtons(sorted);
@@ -304,7 +311,7 @@ public final class UncertainCellReviewWindow {
             status.setText("Select a cell first.");
             return;
         }
-        if (TrainingLabels.UNCLASSIFIED.equals(className)) {
+        if (className == null) {
             status.setText("This cell was predicted to have no class, and a point needs a class. "
                     + "Choose the class it should have.");
             return;

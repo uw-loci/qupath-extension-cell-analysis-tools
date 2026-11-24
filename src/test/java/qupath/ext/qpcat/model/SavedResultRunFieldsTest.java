@@ -71,8 +71,8 @@ class SavedResultRunFieldsTest {
         assertThat(back.getMissingNote()).startsWith("2 object(s) excluded");
         assertThat(back.getExcludedObjects()).isEqualTo(2);
         assertThat(back.getDuplicateRows()).isEqualTo(2903);
-        assertThat(back.getInputSelection().summary()).isEqualTo("1 annotation (Tumor x1)");
-        assertThat(back.getInputSelection().detailLines())
+        assertThat(back.getInputSelection().summary("Unclassified")).isEqualTo("1 annotation (Tumor x1)");
+        assertThat(back.getInputSelection().detailLines("Unclassified"))
                 .containsExactly("Tumor  'Region 1'  id=a1  409 detections inside");
         assertThat(back.getAreaResolutionSummary()).isEqualTo("8 areas, 0 cells outside");
         assertThat(back.getAreasSummaryCsv()).isEqualTo("area,n\ncore 1,10\n");

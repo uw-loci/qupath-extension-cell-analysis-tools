@@ -28,6 +28,27 @@ class UncertaintyQueueTest {
         assertThat(ranked).extracting(Candidate::confidence).containsExactly(0.4, 0.6);
     }
 
+    /** No class is null, not the word "Unclassified", so a real class of that name stays apart. */
+    @Test
+    void noClassIsNullAndARealUnclassifiedClassKeepsItsName() {
+        ImagePlane plane = ImagePlane.getDefaultPlane();
+        PathObjectHierarchy h = new PathObjectHierarchy();
+        PathObject none = PathObjects.createDetectionObject(ROIs.createRectangleROI(0, 0, 4, 4, plane));
+        none.getMeasurements().put(UncertaintyQueue.CONFIDENCE, 0.3);
+        PathObject named = PathObjects.createDetectionObject(ROIs.createRectangleROI(50, 0, 4, 4, plane));
+        named.setPathClass(PathClass.fromString("Unclassified"));
+        named.getMeasurements().put(UncertaintyQueue.CONFIDENCE, 0.4);
+        h.addObjects(List.of(none, named));
+
+        var out = UncertaintyQueue.collect(h, "id", "img", false, 5);
+
+        assertThat(out).extracting(Candidate::predicted).containsExactly(null, "Unclassified");
+        var ranked = UncertaintyQueue.rank(out, 2, true);
+        assertThat(ranked).extracting(Candidate::predicted).containsExactly(null, "Unclassified");
+        assertThat(CellClasses.noClassLabel(List.of("Unclassified"), CellClasses.UNCLASSIFIED_DISPLAY))
+                .isEqualTo("Unclassified (no class)");
+    }
+
     @Test
     void spreadTakesTurnsBetweenPredictedClasses() {
         var all = List.of(c("A", 0.30, 1), c("A", 0.31, 2), c("A", 0.32, 3), c("B", 0.50, 4), c("C", 0.70, 5));

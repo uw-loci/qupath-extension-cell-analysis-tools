@@ -16,12 +16,12 @@ class InputSelectionTest {
 
     @Test
     void summaryCountsAnnotationsByClass() {
-        assertThat(THREE.summary()).isEqualTo("3 annotations (Tumor x2, Unclassified x1)");
+        assertThat(THREE.summary("Unclassified")).isEqualTo("3 annotations (Tumor x2, Unclassified x1)");
     }
 
     @Test
     void detailLinesNameEveryAnnotation() {
-        assertThat(THREE.detailLines()).containsExactly(
+        assertThat(THREE.detailLines("Unclassified")).containsExactly(
                 "Tumor  'Region 1'  id=a1  409 detections inside",
                 "Tumor  '(unnamed)'  id=a2  120 detections inside",
                 "Unclassified  'Edge'  id=a3  1 detection inside");
@@ -30,7 +30,20 @@ class InputSelectionTest {
     @Test
     void aDetectionSelectionIsCounted() {
         InputSelection sel = InputSelection.ofDetections(100);
-        assertThat(sel.summary()).isEqualTo("100 selected detections");
-        assertThat(sel.detailLines()).isEmpty();
+        assertThat(sel.summary("Unclassified")).isEqualTo("100 selected detections");
+        assertThat(sel.detailLines("Unclassified")).isEmpty();
+    }
+
+    /** A real class spelled like the no-class word keeps its own count. */
+    @Test
+    void aRealUnclassifiedClassIsNotMergedWithNoClass() {
+        InputSelection sel = InputSelection.ofAnnotations(List.of(
+                new InputSelection.Annotation("A", "Unclassified", "a1", 5),
+                new InputSelection.Annotation("B", null, "a2", 6)));
+        assertThat(sel.classNames()).containsExactly("Unclassified");
+        String noClass = qupath.ext.qpcat.service.CellClasses.noClassLabel(sel);
+        assertThat(sel.summary(noClass))
+                .isEqualTo("2 annotations (Unclassified x1, Unclassified (no class) x1)");
+        assertThat(sel.detailLines(noClass).get(1)).startsWith("Unclassified (no class)  'B'");
     }
 }

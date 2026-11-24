@@ -190,6 +190,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **A real class called "Unclassified" is kept apart in two more places.** The input line of
+  a clustering run (results window, run record, Workflow-tab record, audit log) counted
+  selected annotations without a class and annotations of a real class named `Unclassified`
+  as one group, and the uncertain-cell review listed a cell predicted to have no class under
+  the same word as a cell predicted to be that real class. Both now key on "no class" itself
+  and show it as `Unclassified (no class)` when a real class has the name, as the other
+  outputs have since the class-name check.
 - **A cell type absent from a neighborhood is drawn as absent, not as -19.** The
   cellular-neighborhood enrichment heatmap computed log2 with a 1e-6 guard, so a cell type
   with no cell in a neighborhood scored about -19 and that one value set the color range,
