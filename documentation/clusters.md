@@ -132,6 +132,32 @@ You can open this dialog two ways: from the menu (**Extensions > QP-CAT > Result
 The original saved result and its plots are left untouched, so you can always go back to the
 run's original labels.
 
+### Names you can give a class
+
+The same rules apply wherever you type a name that becomes a QuPath class: a rename or merge
+here, a gate's class, a phenotype cell type, and an answer in the uncertain-cell review.
+
+- **No `:`.** QuPath reads a colon as the separator of a *derived* class (a class inside a
+  class): `CD8:T` would become the two-part class `CD8: T`. QP-CAT refuses the name, says what
+  QuPath would have made of it, and offers a spelling without the colon (`CD8-T`) in the box
+  for you to accept or change.
+- **Not empty, and on one line.** Line breaks and tabs are refused; spaces at either end are
+  removed.
+- **Not `Unclassified`, `Unknown` or `(Unclassified)`, in any capitalization.** QP-CAT shows
+  these words for cells with no class and for cells no phenotype rule matched, so a class
+  spelled the same way could not be told apart from them.
+- **On the manual path only**, typing `(Unclassified)` as the merge name clears the class of
+  the merged cells.
+
+Names that come from data are kept as they are, in QuPath's spelling: a category `CD8:T` in an
+imported AnnData file becomes the derived class `CD8: T`, and that is the name QP-CAT saves,
+so the result and the cells always agree. A real `Unclassified` or `Unknown` class from
+another tool keeps its own name; cells with no class are then shown as
+`Unclassified (no class)` (cellular neighborhoods) or `Unknown (no class)` (AnnData export)
+instead of being counted with it. The Autoencoder classifier refuses to train when a real class
+is called `Unclassified`, because it uses that word for cells with no class; rename the class
+first.
+
 ### Splitting a merge apart
 
 A merge is a **naming** operation: the clusters keep their own labels underneath, and the

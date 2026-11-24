@@ -41,6 +41,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Changed
 
+- **Every class name QP-CAT writes passes one check.** A name you type (a rename or merge in
+  Modify cell populations, a gate's class, a phenotype cell type, an answer in the
+  uncertain-cell review) is refused when it is empty, holds a line break or tab, holds `:`, or
+  is `Unclassified`, `Unknown` or `(Unclassified)` in any capitalization; the message says why
+  and, for a colon, what QuPath would have made of it, and the box is prefilled with a spelling
+  that works (`CD8:T` becomes `CD8-T`). A name that comes from data (an AnnData category, a
+  saved result, the classifier, the LLM explainer's suggestions) keeps QuPath's meaning of `:`
+  and is stored in QuPath's spelling (`CD8:T` is saved as `CD8: T`); an unusable one (`A::B`,
+  a line break) is refused with a message before any cell changes. Phenotype cell types are
+  checked the same way in the dialog, in batch files (the dry run reports **E026**) and in
+  saved rule sets, and two that
+  differ only in capitalization (`CD8`, `cd8`) are refused. Rules in *Names you can give a
+  class* in `clusters.md`.
+- **The Autoencoder classifier refuses a real class called `Unclassified`** in its training
+  labels (on a detection, a locked annotation or a point), because it uses that word for cells
+  with no class, and a cell it predicts as `Unclassified` is now left with no class rather than
+  given a class of that name. The uncertain-cell review no longer offers `Unclassified` as an
+  answer.
+
 - **Clustering runs: one pixel size rule for spatial outputs, and a current-image run is now in
   microns.** Checked what a run did with pixel sizes in three cases, then fixed what was wrong.
   **Images with different pixel sizes in one run were handled correctly** (since 0.22.0 for the
@@ -157,6 +176,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   under *Cells with identical measurements* in `clustering.md`.
 
 ### Fixed
+
+- **A name with `:` became a different class than the one shown, and a second rename did
+  nothing.** Before this release a typed or imported name such as `CD8:T` was handed to QuPath
+  as it was. QuPath read it as the derived class `CD8: T`, while the saved result kept `CD8:T`,
+  so post-hoc statistics, cellular neighborhoods and the saved-labels reader saw a different
+  name than the result showed, and renaming those cells again in Modify cell populations
+  matched nothing. `A::B` or a name with a line break threw part-way through applying a result,
+  leaving an image partly relabelled. Names are now checked (see Changed) and every class is
+  resolved before the first cell is written.
+- **A real class called `Unclassified`, `Unknown` or `(Unclassified)` was merged with cells
+  that had no class.** Imported classifiers and cell-type columns often use these words.
+  Before this release cellular neighborhoods counted a real `Unclassified` class together with
+  unclassified cells (and did not count it toward the two-class minimum), Modify cell
+  populations listed a real `(Unclassified)` class in the no-class row and cleared its cells'
+  classes on a merge, and the AnnData export wrote unclassified cells as `Unknown` next to a
+  real `Unknown` class (and cells carrying QuPath's null class as `Unclassified`). No-class
+  cells are now kept apart by a value no class name can equal; where a word has to be shown,
+  they read `Unclassified` or `Unknown` as before unless a real class has that name, in which
+  case they read `Unclassified (no class)` or `Unknown (no class)`. A phenotype label with no
+  name now leaves the cell with no class instead of the class `Unknown`, and the Autoencoder
+  evaluation no longer counts two cells with no prediction as a correct match.
+- **Classes that only started with "Cluster" were read as QP-CAT's own.** A locked annotation
+  of class `Clustered tumor` was skipped as a training label, a class `Cluster of stroma` was
+  treated as a cluster without a number by the AnnData export (so it could be left out of the
+  phenotype column), and a class `Cluster 99999999999` threw in the cluster
+  palette dialog (which then never opened) and in the VEST export. QP-CAT now reads only its
+  own names (`Cluster 7`, `Cluster 07`, the sub-cluster `Cluster 3.1` and its noise
+  `Cluster 3.-1`, at most nine digits).
+- **Two custom embedding names could share columns.** Characters other than letters, digits,
+  spaces, `_` and `-` are replaced by `_` in a custom embedding name, so `CD8/CD4` wrote to
+  the columns of an earlier run named `CD8_CD4` and overwrote its coordinates, with only a log
+  line in a batch run. A name that lands on existing columns only because characters were
+  replaced is now refused, in the dialogs before the run and in batch and scripted runs before
+  anything is written; re-running under the same name still asks before overwriting.
 
 - **Typed decimals could be misread on decimal-comma systems.** Before this release, on a
   system set to a decimal comma (German, French and most of Europe), a number typed with a

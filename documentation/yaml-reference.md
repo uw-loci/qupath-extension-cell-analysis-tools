@@ -241,7 +241,7 @@ is counted as failed (exit code 1, or 3 with `on_error: stop`, which also stops 
 | `enabled` | boolean | `true` | Master switch. |
 | `missing_values` | string | `exclude_objects` | As for `clustering.missing_values`: an object lacking a value for a rule's marker is left out (`exclude_objects`, no phenotype), the gapped measurements are left out (`exclude_measurements`) or the gap takes the median (`impute`). |
 | `rules` | list[object] | `[]` | Rule list; each rule has the fields below. |
-| `rules[].name` | string | required | Phenotype label (e.g. `T_cell`). |
+| `rules[].name` | string | required | Phenotype label (e.g. `T_cell`), written as the cells' class: no `:` (QuPath would read it as a derived class), not `Unknown` or `Unclassified`, and not a capitalization-only variant of another rule's name. Two rules may share a name; their cells are one phenotype. |
 | `rules[].require_markers` | list[string] | `[]` (required >=1) | Measurements required positive (for example `"Cell: CD3 mean"`; see [Measurement and marker names](#measurement-and-marker-names)). |
 | `rules[].exclude_markers` | list[string] | `[]` | Measurements required negative. |
 | `rules[].any_markers` | list[string] | `[]` | Markers of which **at least one** must be positive -- one OR group, ANDed with `require_markers` / `exclude_markers`. A rule may supply `any_markers` INSTEAD of `require_markers`; at least one of the two is required. A marker listed in both keeps the stricter `require`. |
@@ -573,6 +573,7 @@ figure_export:
 - E023 A name listed more than once in one list
 - E024 Two images in the resolved scope of one project share a name
 - E025 `clustering.result_name` set for per-image clustering of several images
+- E026 A phenotyping rule name that cannot be a class name (contains `:`, a line break or tab, is `Unknown` / `Unclassified`, or differs from another rule's name only in case)
 
 Warnings (non-fatal):
 

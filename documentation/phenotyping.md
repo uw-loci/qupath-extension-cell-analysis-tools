@@ -20,6 +20,11 @@ A recommended approach:
 - **Use the histogram** to verify that positive/negative populations are separable for each marker
 - **Rule order matters** -- more specific rules should come first (first match wins)
 - **Not all cells need a rule** -- unmatched cells are classified as "Unknown"
+- **Cell type names** become QuPath classes, so they cannot contain `:` (QuPath would read
+  `CD8:T` as the derived class `CD8: T`), cannot be `Unknown` or `Unclassified`, and cannot
+  differ from another rule's name only in capitalization (`CD8` and `cd8`). The same check
+  runs for batch files and saved rule sets. See *Names you can give a class* in
+  [clusters.md](clusters.md#names-you-can-give-a-class).
 
 ### Gate selection
 
