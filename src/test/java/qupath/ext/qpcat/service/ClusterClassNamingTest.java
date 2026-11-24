@@ -118,4 +118,23 @@ class ClusterClassNamingTest {
                 new String[]{"CD8 T", "Unknown"}, null);
         assertThat(b.getPathClass().toString()).isEqualTo("Unknown");
     }
+
+    @Test
+    void twoEmbeddingNamesThatOnlyMeetAfterReplacementAreRefused() {
+        PathObject a = cell(null);
+        // An earlier run named "CD8_CD4" wrote these columns.
+        String prefix = ResultApplier.getEmbeddingPrefix("umap", "CD8_CD4");
+        a.getMeasurementList().put(prefix + "1", 1.0);
+        a.getMeasurementList().put(prefix + "2", 2.0);
+
+        assertThat(ResultApplier.getEmbeddingPrefix("umap", "CD8/CD4")).isEqualTo(prefix);
+        assertThat(ResultApplier.embeddingNameCollision("CD8/CD4", "umap", List.of(a)))
+                .contains("'CD8/CD4'").contains(prefix + "1").contains("overwrite");
+        // Re-running under the same name is the dialogs' own overwrite question.
+        assertThat(ResultApplier.embeddingNameCollision("CD8_CD4", "umap", List.of(a))).isNull();
+        // A replaced name on cells without those columns writes new ones; fine.
+        assertThat(ResultApplier.embeddingNameCollision("CD8/CD4", "umap", List.of(cell(null))))
+                .isNull();
+        assertThat(ResultApplier.embeddingNameCollision(null, "umap", List.of(a))).isNull();
+    }
 }

@@ -269,6 +269,13 @@ public class EmbeddingDialog {
         // Resolve the measurement prefix and warn before overwriting existing columns.
         final String prefix = ResultApplier.getEmbeddingPrefix(
                 embeddingCombo.getValue().getId(), (String) embeddingParams.get("name"));
+        String collision = ResultApplier.embeddingNameCollision(
+                (String) embeddingParams.get("name"), embeddingCombo.getValue().getId(),
+                this::embeddingColumnsExist);
+        if (collision != null) {
+            Dialogs.showWarningNotification("QPCAT", collision);
+            return;
+        }
         if (embeddingColumnsExist(prefix)) {
             boolean ok = Dialogs.showConfirmDialog("QPCAT - overwrite coordinates?",
                     prefix + "1 / " + prefix + "2 already exist on these cells and will be "

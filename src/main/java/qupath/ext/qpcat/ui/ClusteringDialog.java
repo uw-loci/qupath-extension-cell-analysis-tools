@@ -4468,6 +4468,12 @@ public class ClusteringDialog {
                     : (String) config.getEmbeddingParams().get("name");
             String prefix = ResultApplier.getEmbeddingPrefix(
                     config.getEmbeddingMethod().getId(), embName);
+            String collision = ResultApplier.embeddingNameCollision(embName,
+                    config.getEmbeddingMethod().getId(), this::embeddingColumnsExistInScope);
+            if (collision != null) {
+                Dialogs.showWarningNotification("QPCAT", collision);
+                return;
+            }
             if (embeddingColumnsExistInScope(prefix)) {
                 boolean ok = Dialogs.showConfirmDialog("QPCAT - overwrite coordinates?",
                         prefix + "1 / " + prefix + "2 already exist on these cells and will be "

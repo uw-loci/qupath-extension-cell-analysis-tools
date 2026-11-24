@@ -601,6 +601,53 @@ public class ResultApplier {
         return getEmbeddingPrefix(embeddingMethod);
     }
 
+    /**
+     * Why a custom embedding name cannot be used on these cells, or null when it can.
+     * <p>
+     * {@link #sanitizePrefix} turns every character outside letters, digits, space,
+     * {@code _} and {@code -} into {@code _}, so "CD8/CD4" and "CD8_CD4" name the same
+     * columns. Re-running under the SAME name overwrites its own columns, which the
+     * dialogs already confirm; a DIFFERENT name that only lands on existing columns
+     * after that replacement would overwrite another run's coordinates without
+     * anyone having asked for it, so that case is refused.
+     *
+     * @param customName      the name as typed; null or blank uses the method default
+     * @param embeddingMethod the embedding method id ("umap", "pca", ...)
+     * @param detections      the cells the columns would be written to
+     * @return the message to show, or null
+     */
+    public static String embeddingNameCollision(String customName, String embeddingMethod,
+                                                java.util.Collection<PathObject> detections) {
+        return embeddingNameCollision(customName, embeddingMethod, prefix -> detections != null
+                && detections.stream().anyMatch(d -> d.getMeasurements().containsKey(prefix + "1")));
+    }
+
+    /**
+     * As {@link #embeddingNameCollision(String, String, java.util.Collection)}, for a
+     * caller that checks the columns itself (a dialog looking across its scope).
+     *
+     * @param hasColumns given the measurement prefix, whether its columns already exist
+     */
+    public static String embeddingNameCollision(String customName, String embeddingMethod,
+                                                java.util.function.Predicate<String> hasColumns) {
+        if (customName == null || customName.isBlank()) {
+            return null;
+        }
+        String typed = customName.trim().replaceAll("\\s+", " ");
+        if (sanitizePrefix(customName).equals(typed)) {
+            return null;
+        }
+        String prefix = getEmbeddingPrefix(embeddingMethod, customName);
+        if (!hasColumns.test(prefix)) {
+            return null;
+        }
+        return "Embedding name '" + typed + "' is written as the columns '" + prefix
+                + "1', '" + prefix + "2', ... because characters other than letters, "
+                + "digits, spaces, '_' and '-' become '_'. Those columns already exist "
+                + "on these cells, so this run would overwrite another run's "
+                + "coordinates. Choose a name that uses only those characters.";
+    }
+
     /** Keep only measurement-safe characters in a user-supplied embedding name. */
     public static String sanitizePrefix(String name) {
         // Spaces are allowed: QuPath measurement names carry them routinely

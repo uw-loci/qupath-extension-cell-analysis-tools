@@ -516,6 +516,7 @@ public class ClusteringWorkflow {
 
         // Apply results back to QuPath
         reportPhase(progressCallback, "apply", "Applying results to QuPath...");
+        requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
 
         ResultApplier applier = new ResultApplier();
 
@@ -1004,6 +1005,7 @@ public class ClusteringWorkflow {
         result.setCellParentClasses(buildParentClassNames(extraction));
 
         // Apply results back per-image and save
+        requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
         reportPhase(progressCallback, "apply", "Applying results to project images...");
         ResultApplier applier = new ResultApplier();
 
@@ -3041,6 +3043,7 @@ public class ClusteringWorkflow {
         result.setCellParentClasses(buildParentClassNames(extraction));
         result.setClusterNames(buildSubclusterNames(result.getClusterLabels(), parentClusterName));
 
+        requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
         // Apply hierarchical sub-cluster labels
         report(progressCallback, "Applying sub-cluster labels...");
         ResultApplier applier = new ResultApplier();
@@ -3440,6 +3443,7 @@ public class ClusteringWorkflow {
                     buildSubclusterNames(result.getClusterLabels(), parentClusterName));
 
             reportPhase(progressCallback, "apply", "Applying results to project images...");
+            requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
             ResultApplier applier = new ResultApplier();
 
             for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
@@ -6030,6 +6034,24 @@ public class ClusteringWorkflow {
             rule.put("cellType", name);
         }
         return new Gson().toJson(rules);
+    }
+
+    /**
+     * Refuses, before anything is written, a custom embedding name that lands on
+     * another run's existing columns only because characters were replaced
+     * ({@link ResultApplier#embeddingNameCollision}).
+     */
+    private static void requireOwnEmbeddingColumns(ClusteringConfig config,
+                                                   List<PathObject> detections,
+                                                   ClusteringResult result) throws IOException {
+        if (!result.hasEmbedding()) {
+            return;
+        }
+        String problem = ResultApplier.embeddingNameCollision(embeddingName(config),
+                config.getEmbeddingMethod().getId(), detections);
+        if (problem != null) {
+            throw new IOException(problem);
+        }
     }
 
     /** Optional user-supplied embedding measurement name from the config params. */
