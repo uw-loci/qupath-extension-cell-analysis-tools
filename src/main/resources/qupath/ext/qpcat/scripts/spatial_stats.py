@@ -1862,7 +1862,9 @@ def describe_nhood_null(n_permutations, n_areas):
     return "%d permutations; cluster labels shuffled across all cells" % n_permutations
 
 
-def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
+def run_nhood_enrichment(
+    adata, task, n_permutations, area_ids=None, cluster_key="cluster"
+):
     """Neighborhood enrichment z-scores and edge counts into task.outputs.
 
     Writes nhood_enrichment (z), nhood_counts (edges from a row-cluster cell
@@ -1872,6 +1874,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
 
     :param n_permutations: label shuffles forming the null
     :param area_ids: per-cell independent-area id, or None
+    :param cluster_key: the obs column holding the labels
     :return: True when the outputs were written
     """
     import squidpy as sq
@@ -1883,7 +1886,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
         # dropped it must fail here, not silently shuffle across areas.
         sq.gr.nhood_enrichment(
             adata,
-            cluster_key="cluster",
+            cluster_key=cluster_key,
             library_key=library_key,
             n_perms=n_permutations,
             **_safe_kwargs(
@@ -1894,7 +1897,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
                 seed=0,
             ),
         )
-        data = adata.uns["cluster_nhood_enrichment"]
+        data = adata.uns[cluster_key + "_nhood_enrichment"]
         for key, values in (
             ("nhood_enrichment", data["zscore"]),
             ("nhood_counts", data["count"]),
@@ -1903,7 +1906,7 @@ def run_nhood_enrichment(adata, task, n_permutations, area_ids=None):
             np.copyto(nd.ndarray(), np.asarray(values, dtype=np.float64))
             task.outputs[key] = nd
         task.outputs["nhood_cluster_names"] = json.dumps(
-            list(adata.obs["cluster"].cat.categories)
+            list(adata.obs[cluster_key].cat.categories)
         )
         n_areas = 1 if library_key is None else len(set(area_ids))
         task.outputs["nhood_null"] = describe_nhood_null(n_permutations, n_areas)

@@ -158,6 +158,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **A measurement named `cluster` no longer breaks a clustering run.** Clustering stored its
+  labels in a column called `cluster` next to the measurements, so a measurement of that name
+  (from a CSV import, for example) was overwritten and the run failed with a shape error after
+  the embedding and the clustering had already run, and the plots would have refused the name
+  as ambiguous. The labels are now kept apart from the measurements and the run, its plots and
+  its statistics treat `cluster` like any other measurement name.
 - **No made-up fold changes for measurements with negative values.** The marker rankings'
   log2 fold change is a ratio of mean raw values, and negative values were silently set to 0
   first, so a signed measurement (an imported z-score, a PCA axis, a background-subtracted

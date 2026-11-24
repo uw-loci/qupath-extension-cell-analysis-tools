@@ -53,7 +53,7 @@ def fixed_matrix():
     return data
 
 
-def run_full_clustering(scripts_dir, data, normalization):
+def run_full_clustering(scripts_dir, data, normalization, names=None, **extra):
     """Exec model_utils.py then run_clustering.py the way the worker does; return outputs."""
     scripts_dir = Path(scripts_dir)
     namespace = {}
@@ -67,12 +67,14 @@ def run_full_clustering(scripts_dir, data, normalization):
         {
             "task": task,
             "measurements": _Nd(data.copy()),
-            "marker_names": ["Cell: M%d mean" % i for i in range(data.shape[1])],
+            "marker_names": names
+            or ["Cell: M%d mean" % i for i in range(data.shape[1])],
             "algorithm": "kmeans",
             "algorithm_params": {"n_clusters": 3, "random_state": 7},
             "normalization": normalization,
             "embedding_method": "none",
             "embedding_params": {},
+            **extra,
         }
     )
     saved_path = list(sys.path)

@@ -1490,8 +1490,8 @@ def validate_supplied_labels(labels, n_cells):
     produced by one of the algorithms in this file, and three of their assumptions
     are load-bearing:
 
-    * **Length.** ``df_norm["cluster"] = labels_shifted`` and the exported
-      ``cluster_labels`` NDArray both assume one label per row.
+    * **Length.** The per-cluster means (a groupby of df_norm by the labels) and
+      the exported ``cluster_labels`` NDArray both assume one label per row.
     * **Non-negative.** A negative label means "HDBSCAN noise" everywhere here:
       all negatives are collapsed into a single bucket, the noise index is assumed
       to be the maximum, and the quality warnings attach HDBSCAN-specific advice.
@@ -3158,6 +3158,17 @@ def cluster_quality_warnings(labels, algorithm, marker_names=None):
     return out
 
 
+def internal_cluster_key(marker_names, preferred="cluster"):
+    """An AnnData obs key for the labels that no measurement name equals."""
+    taken = {str(m) for m in marker_names}
+    key = preferred
+    n = 1
+    while key in taken:
+        key = "%s (QP-CAT %d)" % (preferred, n)
+        n += 1
+    return key
+
+
 def fold_change_input(raw):
     """(raw values for log2 fold changes, per-column True where a value is negative).
 
@@ -3195,8 +3206,11 @@ if labels.min() < 0:
 else:
     labels_shifted = labels
 
-df_norm["cluster"] = labels_shifted
-cluster_means = df_norm.groupby("cluster").mean(numeric_only=True).values
+# The labels stay out of df_norm: a measurement may itself be named "cluster"
+# (a CSV import), and a label column would overwrite it.
+cluster_means = (
+    df_norm.groupby(np.asarray(labels_shifted)).mean(numeric_only=True).values
+)
 
 # Noise is NOT a cluster. n_clusters_found stays the ROW COUNT of
 # cluster_stats (the Java side sizes its arrays from it), but the noise row is
@@ -3340,7 +3354,7 @@ except (NameError, TypeError, ValueError):
     rep_k = 5
 rep_k = max(1, rep_k)
 
-_feat_matrix = df_norm.drop(columns=["cluster"]).values
+_feat_matrix = df_norm.values
 representatives = {}
 for _c in range(n_clusters_found):
     _members = np.where(labels_shifted == _c)[0]
@@ -3377,7 +3391,10 @@ import anndata as ad
 import json
 
 # Build full AnnData for scanpy analysis
-adata = ad.AnnData(X=df_norm.drop(columns=["cluster"]).values)
+adata = ad.AnnData(X=df_norm.values)
+# The obs column holding the labels. scanpy refuses a key that is both an obs
+# column and a var name, so it moves aside when a measurement is named "cluster".
+CLUSTER_KEY = internal_cluster_key(marker_names)
 adata.var_names = pd.Index(list(marker_names))
 cluster_labels_str = [str(x) for x in labels_shifted]
 # Pin the Categorical's order to NUMERIC, not lexicographic. Without this,
@@ -3386,14 +3403,14 @@ cluster_labels_str = [str(x) for x in labels_shifted]
 # panel on the Java side (ClusterPalette, numeric). Pinning explicit numeric
 # category order keeps both views colored consistently.
 _cluster_category_order = [str(x) for x in sorted({int(s) for s in cluster_labels_str})]
-adata.obs["cluster"] = pd.Categorical(
+adata.obs[CLUSTER_KEY] = pd.Categorical(
     cluster_labels_str, categories=_cluster_category_order, ordered=False
 )
 # Give scanpy the shared palette by cluster ID, so the embedding scatter and the
 # PAGA graph use the colors the viewer and the Java plots use. Left to itself
 # scanpy picks its own default_20 (not tab20: its cluster 7 is olive, ours is
 # gray) and, past 28 clusters, a 102-color list unrelated to either.
-adata.uns["cluster_colors"] = [
+adata.uns[CLUSTER_KEY + "_colors"] = [
     cluster_palette_hex(int(_c)) for _c in _cluster_category_order
 ]
 
@@ -3474,7 +3491,7 @@ if can_analyze:
     if pref_compute_paga:
         _progress(0.64, "Building cluster connectivity graph for PAGA...")
         sc.pp.neighbors(adata, n_neighbors=n_neigh, use_rep=_analysis_rep)
-    sc.tl.dendrogram(adata, groupby="cluster")
+    sc.tl.dendrogram(adata, groupby=CLUSTER_KEY)
 
     # 6a. Marker ranking (Wilcoxon rank-sum test)
     try:
@@ -3491,7 +3508,7 @@ if can_analyze:
         # fold-changes ourselves from the RAW intensities below.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon")
+            sc.tl.rank_genes_groups(adata, groupby=CLUSTER_KEY, method="wilcoxon")
 
         # Per-cluster log2 fold-change of MEAN RAW intensity (cluster vs rest).
         # df holds the raw (NaN-imputed) intensities, row-aligned with
@@ -3506,7 +3523,7 @@ if can_analyze:
         _eps = 1e-9
         _labels_arr = np.asarray(labels_shifted)
         _logfc_by_cluster = {}
-        for _cid in adata.obs["cluster"].cat.categories:
+        for _cid in adata.obs[CLUSTER_KEY].cat.categories:
             _in = _labels_arr == int(_cid)
             if _in.sum() == 0 or (~_in).sum() == 0:
                 _logfc_by_cluster[str(_cid)] = {}
@@ -3521,7 +3538,7 @@ if can_analyze:
 
         marker_result = {}
         result_data = adata.uns["rank_genes_groups"]
-        for cid in adata.obs["cluster"].cat.categories:
+        for cid in adata.obs[CLUSTER_KEY].cat.categories:
             markers_list = []
             names = result_data["names"][cid][:top_n]
             scores = result_data["scores"][cid][:top_n]
@@ -3555,14 +3572,14 @@ if can_analyze:
                 "PAGA was not requested (the 'Cluster connectivity graph' box is "
                 "unticked), so its neighbor graph was not built"
             )
-        sc.tl.paga(adata, groups="cluster")
+        sc.tl.paga(adata, groups=CLUSTER_KEY)
         paga_conn = adata.uns["paga"]["connectivities"].toarray()
 
         paga_nd = PyNDArray(dtype="float64", shape=list(paga_conn.shape))
         np.copyto(paga_nd.ndarray(), paga_conn.astype(np.float64))
         task.outputs["paga_connectivity"] = paga_nd
         task.outputs["paga_cluster_names"] = json.dumps(
-            list(adata.obs["cluster"].cat.categories)
+            list(adata.obs[CLUSTER_KEY].cat.categories)
         )
         logger.info(
             "PAGA connectivity computed (%d x %d)",
@@ -3714,7 +3731,7 @@ if has_spatial and n_clusters_found > 1:
         # spatial_stats_standalone.py; the null shuffles labels within each area.
         _progress(0.78, "Computing neighborhood enrichment (permutation test)...")
         _qpcat_spatial.run_nhood_enrichment(
-            adata, task, n_perms, area_ids=area_ids_list
+            adata, task, n_perms, area_ids=area_ids_list, cluster_key=CLUSTER_KEY
         )
 
         # Spatial autocorrelation (Moran's I per marker). The call lives in
@@ -3777,7 +3794,7 @@ if has_spatial and n_clusters_found > 1:
                 area_ids_list,
                 area_names_list,
                 "ripley",
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 n_permutations=n_perms,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
@@ -3789,7 +3806,7 @@ if has_spatial and n_clusters_found > 1:
             _qpcat_spatial.run_ripley(
                 adata,
                 task,
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 n_permutations=n_perms,
                 plot_dir=_spatial_plot_dir,
                 plot_dpi=pref_plot_dpi,
@@ -3845,7 +3862,7 @@ if has_spatial and n_clusters_found > 1:
                 area_ids_list,
                 area_names_list,
                 "co_occurrence_pairwise",
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 mode="pairwise",
                 matrix_radius=pref_cooc_matrix_radius,
                 n_permutations=n_perms,
@@ -3864,7 +3881,7 @@ if has_spatial and n_clusters_found > 1:
             _qpcat_spatial.run_co_occurrence(
                 adata,
                 task,
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 mode="pairwise",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
@@ -3898,7 +3915,7 @@ if has_spatial and n_clusters_found > 1:
                 area_ids_list,
                 area_names_list,
                 "co_occurrence_one_vs_rest",
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 mode="oneVsRest",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
@@ -3916,7 +3933,7 @@ if has_spatial and n_clusters_found > 1:
             _qpcat_spatial.run_co_occurrence(
                 adata,
                 task,
-                cluster_key="cluster",
+                cluster_key=CLUSTER_KEY,
                 mode="oneVsRest",
                 n_permutations=n_perms,
                 spatial_data=spatial_data,
@@ -3993,7 +4010,7 @@ if do_plots and plot_dir and can_analyze:
     _ranked_by_cluster = {}
     try:
         _rk = adata.uns["rank_genes_groups"]["names"]
-        for _cid in list(adata.obs["cluster"].cat.categories):
+        for _cid in list(adata.obs[CLUSTER_KEY].cat.categories):
             _ranked_by_cluster[str(_cid)] = list(_rk[_cid])
     except (KeyError, AttributeError, ValueError) as e:
         # No marker ranking (single cluster, or embedding-only run): fall back to
@@ -4025,7 +4042,7 @@ if do_plots and plot_dir and can_analyze:
     try:
         _dot_cutoff = 0.0
         _dot_fractions = dot_size_fractions(
-            adata.X, adata.obs["cluster"].to_numpy(), cutoff=_dot_cutoff
+            adata.X, adata.obs[CLUSTER_KEY].to_numpy(), cutoff=_dot_cutoff
         )
         if not dot_size_is_readable(_dot_fractions):
             _lo = min(_dot_fractions) if _dot_fractions else float("nan")
@@ -4047,7 +4064,7 @@ if do_plots and plot_dir and can_analyze:
         dp = sc.pl.dotplot(
             adata,
             var_names=plot_var_names,
-            groupby="cluster",
+            groupby=CLUSTER_KEY,
             dendrogram=True,
             standard_scale="var",
             cmap=pref_cmap_sequential,
@@ -4080,7 +4097,7 @@ if do_plots and plot_dir and can_analyze:
         mp = sc.pl.matrixplot(
             adata,
             var_names=plot_var_names,
-            groupby="cluster",
+            groupby=CLUSTER_KEY,
             dendrogram=True,
             standard_scale="var",
             cmap=pref_cmap_sequential,
@@ -4129,7 +4146,7 @@ if do_plots and plot_dir and can_analyze:
             sv = sc.pl.stacked_violin(
                 adata,
                 var_names=plot_var_names,
-                groupby="cluster",
+                groupby=CLUSTER_KEY,
                 dendrogram=True,
                 colorbar_title=legend_title("Median", normalization),
                 show=False,
@@ -4167,7 +4184,7 @@ if do_plots and plot_dir and can_analyze:
     if embedding_result is not None:
         try:
             fig, ax = plt.subplots(figsize=(8, 6))
-            sc.pl.embedding(adata, basis="embed", color="cluster", show=False, ax=ax)
+            sc.pl.embedding(adata, basis="embed", color=CLUSTER_KEY, show=False, ax=ax)
             # Rasterize the point cloud so savefig stops scaling with cell count
             # (the spatial scatter below already does this). Axes, labels and
             # legend stay vector; only the millions of markers are flattened.
@@ -4190,14 +4207,14 @@ if do_plots and plot_dir and can_analyze:
         # something nobody had computed, and logged
         # "Unable to get the data from adata.uns['cluster_nhood_enrichment']"
         # as though a plot had failed rather than never having been requested.
-        if "cluster_nhood_enrichment" not in adata.uns:
+        if CLUSTER_KEY + "_nhood_enrichment" not in adata.uns:
             logger.info(
                 "Neighborhood enrichment was not computed, so no heatmap is drawn "
                 "(tick 'Neighborhood enrichment + Moran's I' to get one)"
             )
         else:
             try:
-                sq.pl.nhood_enrichment(adata, cluster_key="cluster", show=False)
+                sq.pl.nhood_enrichment(adata, cluster_key=CLUSTER_KEY, show=False)
                 nhood_path = os.path.join(plot_dir, "nhood_enrichment.png")
                 plt.savefig(nhood_path, dpi=pref_plot_dpi, bbox_inches="tight")
                 plt.close("all")
@@ -4211,11 +4228,11 @@ if do_plots and plot_dir and can_analyze:
         # them is meaningless. Keys "spatial_scatter::<image name>" let the results dialog
         # offer an image dropdown; "spatial_scatter" (first image) stays for back-compat.
         try:
-            clusters_cat = adata.obs["cluster"].cat.categories
+            clusters_cat = adata.obs[CLUSTER_KEY].cat.categories
             # Colors by cluster ID from the shared palette, like the embedding
             # above. A tab20 colormap resampled to the cluster count handed
             # neighboring ids the same color once there were more than 20.
-            clusters_series = adata.obs["cluster"].values
+            clusters_series = adata.obs[CLUSTER_KEY].values
 
             def _spatial_fig(coords, cluster_vals, title):
                 fig, ax = plt.subplots(figsize=(10, 8))
