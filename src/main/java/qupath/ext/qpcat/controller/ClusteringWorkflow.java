@@ -539,6 +539,10 @@ public class ClusteringWorkflow {
         requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
 
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                        config.getEmbeddingMethod().getId(), embeddingName(config)) : null, true);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
 
         // Skip label application for embedding-only mode
         if (config.getAlgorithm() != ClusteringConfig.Algorithm.NONE) {
@@ -584,6 +588,9 @@ public class ClusteringWorkflow {
                 : "Clustering complete: " + result.clusterCountText()
                     + " found for " + result.getNCells() + " cells.";
         for (String note : result.runNotes()) {
+            completeMsg += " " + note;
+        }
+        for (String note : overwrites) {
             completeMsg += " " + note;
         }
         report(progressCallback, completeMsg);
@@ -1083,6 +1090,9 @@ public class ClusteringWorkflow {
         if (embeddingPrefix != null) {
             result.setEmbeddingPrefix(embeddingPrefix);
         }
+        List<String> overwrites = clusteringOverwriteNotes(
+                extraction.getDetections(), config, result, embeddingPrefix, true);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
         // Saved BEFORE the per-image loop: each image's Workflow record names
         // the saved result, and a name assigned afterwards read
         // "(not saved - no project open)" on every image of a project run.
@@ -1168,6 +1178,9 @@ public class ClusteringWorkflow {
                 + " found for " + result.getNCells() + " cells across "
                 + extraction.getImageSegments().size() + " images.";
         for (String note : result.runNotes()) {
+            completeMsg += " " + note;
+        }
+        for (String note : overwrites) {
             completeMsg += " " + note;
         }
         if (!unreadable.isEmpty()) {
@@ -1454,6 +1467,8 @@ public class ClusteringWorkflow {
         String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
 
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = ResultApplier.overwriteNotes(extraction.getDetections(), true, List.of());
+        resultMap.put("input_notes", plus(notesOf(resultMap), overwrites));
         applier.applyPhenotypeLabels(extraction.getDetections(), labels, phenotypeNames, null);
 
         // Fire hierarchy update on FX thread
@@ -1550,12 +1565,11 @@ public class ClusteringWorkflow {
         } catch (Exception e) {
             throw new IOException("Phenotyping failed: " + e.getMessage(), e);
         }
-        @SuppressWarnings("unchecked")
-        List<String> phenotypingNotes = resultMap.get("input_notes") instanceof List<?> l
-                ? (List<String>) l : List.of();
-        resultMap.put("input_notes", unreadable.appendTo(phenotypingNotes));
+        resultMap.put("input_notes", unreadable.appendTo(notesOf(resultMap)));
 
         report(progressCallback, "Applying phenotype labels to project images...");
+        resultMap.put("input_notes", plus(notesOf(resultMap),
+                ResultApplier.overwriteNotes(extraction.getDetections(), true, List.of())));
         int[] labels = (int[]) resultMap.get("labels");
         String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
         ResultApplier applier = new ResultApplier();
@@ -3100,6 +3114,10 @@ public class ClusteringWorkflow {
         // Apply hierarchical sub-cluster labels
         report(progressCallback, "Applying sub-cluster labels...");
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                        config.getEmbeddingMethod().getId(), embeddingName(config)) : null, false);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
         applier.applySubclusterLabels(extraction.getDetections(),
                 result.getClusterLabels(), parentClusterName);
 
@@ -3120,7 +3138,8 @@ public class ClusteringWorkflow {
         });
 
         String completeMsg = "Sub-clustering complete: " + result.getNClusters()
-                + " sub-clusters in " + parentClusterName;
+                + " sub-clusters in " + parentClusterName
+                + (overwrites.isEmpty() ? "" : ". " + String.join(" ", overwrites));
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -3499,6 +3518,10 @@ public class ClusteringWorkflow {
             reportPhase(progressCallback, "apply", "Applying results to project images...");
             requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
             ResultApplier applier = new ResultApplier();
+            List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                    result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                            config.getEmbeddingMethod().getId(), embeddingName(config)) : null, false);
+            result.setInputNotes(plus(result.getInputNotes(), overwrites));
 
             for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
                 int start = segment.getStartIndex();
@@ -4863,6 +4886,35 @@ public class ClusteringWorkflow {
                 msg, elapsed);
 
         return currentImageApplied;
+    }
+
+    /**
+     * What writing a clustering result replaces on these cells: their classes (when
+     * {@code writesClasses} and the run assigns clusters) and any embedding column already
+     * present. See {@link ResultApplier#overwriteNotes}.
+     */
+    private static List<String> clusteringOverwriteNotes(List<PathObject> detections,
+            ClusteringConfig config, ClusteringResult result, String embeddingPrefix,
+            boolean writesClasses) {
+        // Embedding columns only: generic names (UMAP1) another tool may have written.
+        // The "QPCAT confidence:" columns are QP-CAT's own from an earlier run.
+        List<String> columns = ResultApplier.embeddingColumns(embeddingPrefix, result.getEmbedding());
+        return ResultApplier.overwriteNotes(detections,
+                writesClasses && config.getAlgorithm() != ClusteringConfig.Algorithm.NONE, columns);
+    }
+
+    /** {@code a} then {@code b}, as a new list. */
+    private static List<String> plus(List<String> a, List<String> b) {
+        if (b == null || b.isEmpty()) return a == null ? List.of() : a;
+        List<String> all = new ArrayList<>(a == null ? List.of() : a);
+        all.addAll(b);
+        return all;
+    }
+
+    /** The {@code input_notes} list of a phenotyping result map; empty when absent. */
+    @SuppressWarnings("unchecked")
+    private static List<String> notesOf(Map<String, Object> resultMap) {
+        return resultMap.get("input_notes") instanceof List<?> l ? (List<String>) l : List.of();
     }
 
     /**

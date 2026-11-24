@@ -190,6 +190,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Classes and measurements a run replaces are counted where you read the result (H36).**
+  Clustering and phenotyping write each cell's class, and an embedding writes `UMAP1`-style
+  columns; when cells already carried a class (an imported label, a classifier's output) or
+  such a column (from another tool or an earlier run), only the log said so. The completion
+  message and the result's notes (results window, run record, phenotyping warnings, batch
+  `W014` rows) now give the count and the names, for example "1,204 of 3,000 cell(s) already
+  had a class (Tumor, Stroma), which this run replaced." Sub-clustering reports the columns
+  only, since its cells carry the parent cluster's class by design.
 - **Images a project run could not read are named, not just logged (H37).** Clustering over
   project images (and sub-clustering, analyzing existing classifications), project
   phenotyping, Compute Thresholds over the project, cellular neighborhoods over the project,
