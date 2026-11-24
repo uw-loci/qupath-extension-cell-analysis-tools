@@ -1313,14 +1313,15 @@ public class PhenotypingDialog {
                 Platform.runLater(() -> {
                     progressBar.setVisible(false);
                     setBusy(false, null, null);
+                    String unreadable = result.unreadableNote() == null ? "" : " " + result.unreadableNote();
                     if (result.allConsistent()) {
                         statusLabel.setText("All " + result.imagesChecked()
-                                + " images have consistent measurements ("
-                                + result.commonMeasurements().size() + " measurements).");
+                                + " images checked have consistent measurements ("
+                                + result.commonMeasurements().size() + " measurements)." + unreadable);
                         Dialogs.showInfoNotification("QPCAT",
                                 "Channel validation passed. All " + result.imagesChecked()
-                                + " images share " + result.commonMeasurements().size()
-                                + " common measurements.");
+                                + " images checked share " + result.commonMeasurements().size()
+                                + " common measurements." + unreadable);
                     } else {
                         statusLabel.setText("Channel mismatch detected across images.");
                         showValidationWarning(result);
@@ -1347,6 +1348,9 @@ public class PhenotypingDialog {
         sb.append("Common measurements: ").append(result.commonMeasurements().size()).append("\n");
         sb.append("Images checked: ").append(result.imagesChecked())
                 .append(" / ").append(result.totalImages()).append("\n\n");
+        if (result.unreadableNote() != null) {
+            sb.append(result.unreadableNote()).append("\n\n");
+        }
 
         if (!result.uniqueToImage().isEmpty()) {
             sb.append("Unique measurements per image:\n");
@@ -1459,6 +1463,7 @@ public class PhenotypingDialog {
                 Map<String, Map<String, Object>> histData = gson.fromJson(histogramsJson,
                         new TypeToken<Map<String, Map<String, Object>>>(){}.getType());
 
+                List<String> skippedNotes = threshEntries != null ? workflow.getLastRunNotes() : List.of();
                 Platform.runLater(() -> {
                     cachedHistogramData = histData;
                     cachedHistogramNorm = normId;
@@ -1471,6 +1476,7 @@ public class PhenotypingDialog {
                     });
                     thresholdPreview.setScalings(scalings);
                     List<String> notes = thresholdNotes(histData);
+                    notes.addAll(0, skippedNotes);
                     showThresholdNotes(notes);
                     progressBar.setProgress(1.0);
                     progressBar.setVisible(false);

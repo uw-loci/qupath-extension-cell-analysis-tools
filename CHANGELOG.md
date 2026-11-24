@@ -190,6 +190,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Images a project run could not read are named, not just logged (H37).** Clustering over
+  project images (and sub-clustering, analyzing existing classifications), project
+  phenotyping, Compute Thresholds over the project, cellular neighborhoods over the project,
+  spatial statistics, the phenotyping channel check, and autoencoder training, evaluation and
+  apply left out an image that failed to open with only a WARN in the log. The completion
+  message and the saved notes (results window, run record, cohort run info, phenotyping
+  warnings, the threshold notes, the autoencoder status line and evaluation summary) now say
+  which images were left out and why, as Apply saved result already did.
+- **The autoencoder and the VEST export say how many cells a missing value left out, and the
+  autoencoder keeps its labels on the right cells.** These extractions leave out cells with a
+  missing or infinite value in a selected (for VEST, in any marker) measurement, and nothing
+  said how many. Training, evaluation, apply and the VEST export now give the count (status
+  line, evaluation summary, VEST completion text and README). Two defects behind it are
+  fixed: training built its class labels from every cell while the measurement rows held only
+  the kept ones, so a run with a missing value failed or trained on shifted labels; and
+  evaluation and apply checked only for absent values, not NaN or infinite ones, so such a
+  value made apply skip the whole image and evaluation compare the wrong rows. Training also
+  saved each image's results to the next image's entry when an earlier image could not be
+  read; it now saves to the entry each image was read from.
 - **Cells inside overlapping annotations of one area level are counted, and go to the inner
   one (H40).** With independent areas by annotation, a cell inside two annotations of an
   allowed class (two overlapping `Tissue` regions, or one drawn inside another) was put in

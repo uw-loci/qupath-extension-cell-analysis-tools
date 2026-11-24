@@ -83,7 +83,7 @@ public final class VestExporter {
         public final int cells;
         public final int clusters;
         public final Path outputDir;
-        /** What the input audit noted about the exported cells; never null. */
+        /** What the input audit noted about the exported cells, then what the export left out; never null. */
         public final List<String> inputNotes;
         public Result(int cells, int clusters, Path outputDir, List<String> inputNotes) {
             this.cells = cells;
@@ -151,6 +151,7 @@ public final class VestExporter {
         List<PathObject> selected;
         List<Integer> selectedClusters;
         double[][] coords3d;
+        String excludedNote;
 
         if ("geosketch".equalsIgnoreCase(opts.samplingMode)) {
             // Density-aware geometric sketch over ALL clustered cells (preserves rare
@@ -165,6 +166,7 @@ public final class VestExporter {
                 throw new IOException("No marker measurements found on these cells to embed.");
             }
             Aligned a = extractAligned(extractor, allDets, allCids, markerNames);
+            excludedNote = a.excludedNote;
             report(progress, "Representative sketch of " + a.dets.size() + " clustered cells...");
             int[] labels = a.clusters.stream().mapToInt(Integer::intValue).toArray();
             int[] sel = geosketchSelect(a.data, markerNames, labels, opts, progress);
@@ -205,6 +207,7 @@ public final class VestExporter {
                 throw new IOException("No marker measurements found on these cells to embed.");
             }
             Aligned a = extractAligned(extractor, pick, pickCids, markerNames);
+            excludedNote = a.excludedNote;
             selected = a.dets;
             selectedClusters = a.clusters;
             report(progress, "Selected " + selected.size() + " cells across "
@@ -246,14 +249,20 @@ public final class VestExporter {
         }
 
         writeCsv(opts.outputDir.resolve("embedding.csv"), csvRows);
-        writeReadme(opts.outputDir, n, byCluster.size(), input.notices());
+        List<String> notes = new ArrayList<>(input.notices());
+        if (excludedNote != null) notes.add(excludedNote);
+        if (written < n) {
+            notes.add((n - written) + " of " + n + " cell crop(s) could not be read; their rows are in "
+                    + "embedding.csv without an image file.");
+        }
+        writeReadme(opts.outputDir, n, byCluster.size(), notes);
 
         logger.info("VEST export: {} cells ({} crops) across {} clusters -> {}",
                 n, written, byCluster.size(), opts.outputDir);
         OperationLogger.getInstance().logEvent("VEST EXPORT",
                 "Exported " + n + " cells (" + written + " crops) across " + byCluster.size()
                 + " clusters to " + opts.outputDir);
-        return new Result(n, byCluster.size(), opts.outputDir, input.notices());
+        return new Result(n, byCluster.size(), opts.outputDir, notes);
     }
 
     /**
@@ -352,10 +361,13 @@ public final class VestExporter {
         final List<PathObject> dets;
         final List<Integer> clusters;
         final double[][] data;
-        Aligned(List<PathObject> dets, List<Integer> clusters, double[][] data) {
+        /** How many cells a missing or infinite marker value left out, as a sentence; null when none. */
+        final String excludedNote;
+        Aligned(List<PathObject> dets, List<Integer> clusters, double[][] data, String excludedNote) {
             this.dets = dets;
             this.clusters = clusters;
             this.data = data;
+            this.excludedNote = excludedNote;
         }
     }
 
@@ -368,13 +380,17 @@ public final class VestExporter {
         MeasurementExtractor.ExtractionResult ex = extractor.extract(dets, markerNames);
         List<PathObject> kept = ex.getDetections();
         if (kept.size() == dets.size()) {
-            return new Aligned(kept, cids, ex.getData());
+            return new Aligned(kept, cids, ex.getData(), null);
         }
+        String note = (dets.size() - kept.size()) + " of " + dets.size() + " sampled cell(s) were left out "
+                + "for a missing or infinite value in a marker measurement"
+                + (ex.getMissingPerMeasurement().isEmpty() ? ""
+                        : " (" + String.join(", ", ex.getMissingPerMeasurement().keySet()) + ")") + ".";
         Map<PathObject, Integer> cidOf = new HashMap<>();
         for (int i = 0; i < dets.size(); i++) cidOf.put(dets.get(i), cids.get(i));
         List<Integer> keptCids = new ArrayList<>(kept.size());
         for (PathObject d : kept) keptCids.add(cidOf.getOrDefault(d, -1));
-        return new Aligned(kept, keptCids, ex.getData());
+        return new Aligned(kept, keptCids, ex.getData(), note);
     }
 
     /**

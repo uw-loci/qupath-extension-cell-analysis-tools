@@ -23,14 +23,16 @@ public class ChannelValidator {
     /**
      * Result of validating measurement consistency across project images.
      * {@code uniqueToImage} is keyed by image name, followed by the entry id when
-     * two images share the name.
+     * two images share the name. {@code unreadableNote} names the images that could not
+     * be read (and so were not compared), or is null.
      */
     public record ValidationResult(
             List<String> commonMeasurements,
             Map<String, List<String>> uniqueToImage,
             boolean allConsistent,
             int totalImages,
-            int imagesChecked) {}
+            int imagesChecked,
+            String unreadableNote) {}
 
     /**
      * Result of checking which markers from a rule set are present/missing.
@@ -47,6 +49,7 @@ public class ChannelValidator {
         var imageEntries = project.getImageList();
         int totalImages = imageEntries.size();
         int imagesChecked = 0;
+        SkippedImages unreadable = new SkippedImages();
 
         Set<String> commonSet = null;
         // Keyed by a label that is unique per entry: two entries may share a name.
@@ -85,8 +88,7 @@ public class ChannelValidator {
 
                 imagesChecked++;
             } catch (Exception e) {
-                logger.warn("Failed to read image data for {}: {}",
-                        entry.getImageName(), e.getMessage());
+                unreadable.unreadable(logger, entry.getImageName(), e);
             } finally {
                 // Always a detached read; close its reader so the validation sweep does
                 // not leak one native handle per image.
@@ -126,7 +128,8 @@ public class ChannelValidator {
                 uniqueToImage,
                 allConsistent,
                 totalImages,
-                imagesChecked);
+                imagesChecked,
+                unreadable.note());
     }
 
     /**

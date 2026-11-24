@@ -147,6 +147,11 @@ The message for repeated ids includes a one-line script that removes the repeats
 the first copy of each), or gives the copies new ids if they are different cells. The batch
 dry run (`--dry-run`) makes the same check, so `E027` and `W014` appear before any work.
 
+An image in the run that cannot be opened (a moved file, a broken server) is left out, and
+the completion message and the run's saved notes name it with the reason. Cells inside two
+overlapping annotations of one independent-area level go to the smaller annotation, and the
+run's notes give the count.
+
 ### Names in figures
 
 Class, cluster, marker and image names are drawn in figures as written, a `$` included (a

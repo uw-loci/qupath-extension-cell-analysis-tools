@@ -19,6 +19,7 @@ import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CsvText;
 import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.AreaResolver;
+import qupath.ext.qpcat.service.SkippedImages;
 import qupath.ext.qpcat.service.CellMatcher;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.InputAudit;
@@ -90,6 +91,8 @@ public class PostHocSpatialWorkflow {
     private List<String> lastInputNotes = List.of();
     /** Overlapping-area notes from the images of the current run, one per image that has any. */
     private final List<String> areaNotes = new ArrayList<>();
+    /** Images of the current run that could not be read. */
+    private SkippedImages unreadable = new SkippedImages();
     /** True when savedLabelMap is keyed by object id rather than by centroid. */
     private boolean savedLabelsById;
     // Absolute path of the persisted results folder from the last run, or null.
@@ -224,7 +227,7 @@ public class PostHocSpatialWorkflow {
             }
             List<String> notes = new ArrayList<>(auditWindows(targets, windows).notices());
             notes.addAll(areaNotes);
-            lastInputNotes = List.copyOf(notes);
+            lastInputNotes = List.copyOf(unreadable.appendTo(notes));
 
             List<WindowResult> results = new ArrayList<>();
             int idx = 0;
@@ -461,6 +464,7 @@ public class PostHocSpatialWorkflow {
     @SuppressWarnings("unchecked")
     private List<Target> resolveTargets(Options opts) throws IOException {
         List<Target> targets = new ArrayList<>();
+        unreadable = new SkippedImages();
         Project<BufferedImage> project = currentProject();
         ImageData<BufferedImage> openData = currentImageData();
         String openId = null;
@@ -482,7 +486,7 @@ public class PostHocSpatialWorkflow {
                     targets.add(new Target(entry.getImageName(), entry.getID(), entry.readImageData(), true));
                 }
             } catch (Exception e) {
-                logger.warn("Could not read image {}: {}", entry.getImageName(), e.getMessage());
+                unreadable.unreadable(logger, entry.getImageName(), e);
             }
         }
         return targets;

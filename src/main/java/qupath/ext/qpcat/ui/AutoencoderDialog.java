@@ -1489,12 +1489,13 @@ public class AutoencoderDialog {
 
                 double accuracy = ((Number) result.get("accuracy")).doubleValue();
                 int nClasses = ((Number) result.get("n_classes")).intValue();
+                String runNotes = notesText(result.get("run_notes"));
 
                 Platform.runLater(() -> {
                     String msg = "Training complete. ";
                     if (accuracy >= 0)
                         msg += String.format("Accuracy: %.1f%%. ", accuracy * 100);
-                    msg += nClasses + " classes, latent dim " + latentDim + ".";
+                    msg += nClasses + " classes, latent dim " + latentDim + "." + runNotes;
                     statusLabel.setText(msg);
                     progressBar.setProgress(1);
                     trainButton.setDisable(false);
@@ -1564,8 +1565,9 @@ public class AutoencoderDialog {
                         trainedClassNames, trainedInputMode, trainedTileSize, trainedDownsample,
                         trainedIncludeMask, trainedCellsOnly, progress);
 
+                String runNotes = notesText(workflow.getLastRunNotes());
                 Platform.runLater(() -> {
-                    statusLabel.setText("Applied to " + entries.size() + " image(s).");
+                    statusLabel.setText("Applied to " + entries.size() + " image(s)." + runNotes);
                     progressBar.setProgress(1);
                     trainButton.setDisable(false);
                     applyProjectButton.setDisable(false);
@@ -1594,7 +1596,7 @@ public class AutoencoderDialog {
                         }
                     } else {
                         Dialogs.showInfoNotification("QP-CAT",
-                                "Classifier applied to " + entries.size() + " image(s).");
+                                "Classifier applied to " + entries.size() + " image(s)." + runNotes);
                     }
                 });
             } catch (Exception e) {
@@ -1687,6 +1689,16 @@ public class AutoencoderDialog {
         thread.start();
     }
 
+    /** The run's notes as text to append after a sentence: " note1 note2", or "". */
+    static String notesText(Object notes) {
+        if (!(notes instanceof List<?> list) || list.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Object n : list) {
+            if (n != null) sb.append(' ').append(n);
+        }
+        return sb.toString();
+    }
+
     @SuppressWarnings("unchecked")
     private void showEvaluationResults(Map<String, Object> evalResult) {
         Map<String, Map<String, Integer>> confusionMatrix =
@@ -1705,6 +1717,10 @@ public class AutoencoderDialog {
         sb.append(String.format("Overall accuracy: %.1f%% (%d / %d labeled cells)\n",
                 accuracy, totalCorrect, totalLabeled));
         sb.append(String.format("Total cells evaluated: %d\n\n", totalCells));
+        String runNotes = notesText(evalResult.get("run_notes"));
+        if (!runNotes.isEmpty()) {
+            sb.append("Left out:").append(runNotes.replace(". ", ".\n ")).append("\n\n");
+        }
 
         sb.append("Per-class results:\n");
         sb.append(String.format("%-20s %8s %8s %8s\n", "Class", "Correct", "Total", "Accuracy"));
