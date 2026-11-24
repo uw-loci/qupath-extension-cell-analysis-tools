@@ -48,8 +48,9 @@ public final class BatchYamlValidator {
             "agglomerative", "minibatch_kmeans", "minibatchkmeans",
             "gmm", "banksy", "none", "existing"));
 
-    private static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
-            "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"));
+    /** Every spelling here must resolve in {@code YamlBatchOrchestrator.parseNormalization}. */
+    static final Set<String> NORMALIZATIONS = new HashSet<>(Arrays.asList(
+            "none", "percentile_99", "percentile", "zscore", "minmax"));
     private static final Set<String> MISSING_VALUES = Set.of(
             "exclude_objects", "exclude_measurements", "impute");
     private static final Set<String> GRAPH_BACKENDS = Set.of("cpu", "gpu");
@@ -234,6 +235,12 @@ public final class BatchYamlValidator {
             }
         }
         if (c.getNormalization() != null
+                && "log1p".equals(c.getNormalization().toLowerCase(Locale.ROOT))) {
+            // Used to be accepted and run as z-score, for clustering and phenotyping alike.
+            r.add(ValidationIssue.error("E005", "clustering.normalization",
+                    "'log1p' is not implemented (QP-CAT has no log transform); use one of "
+                    + NORMALIZATIONS));
+        } else if (c.getNormalization() != null
                 && !NORMALIZATIONS.contains(c.getNormalization().toLowerCase(Locale.ROOT))) {
             r.add(ValidationIssue.error("E005", "clustering.normalization",
                     "'" + asciiSafe(c.getNormalization()) + "' is not one of " + NORMALIZATIONS));

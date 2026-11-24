@@ -483,11 +483,7 @@ public final class YamlBatchOrchestrator {
         emitter.emit(ProgressEmitter.Level.INFO, "Phenotyping across " + nImages
                 + " image(s): " + pb.getRules().size() + " rule(s)");
         try {
-            // Normalization follows the clustering block when present, so gates
-            // mean the same thing as the clustering that produced the panel.
-            String normalization = (schema.getClustering() != null
-                    && schema.getClustering().getNormalization() != null)
-                    ? schema.getClustering().getNormalization() : "zscore";
+            String normalization = phenotypingNormalization(schema);
             List<String> measurements = (schema.getClustering() != null)
                     ? schema.getClustering().getMeasurements() : null;
 
@@ -508,6 +504,23 @@ public final class YamlBatchOrchestrator {
             emitter.emit(ProgressEmitter.Level.ERROR, "Phenotyping failed: "
                     + BatchYamlParser.asciiSafe(e.getMessage()));
         }
+    }
+
+    /**
+     * The normalization id phenotyping runs with: the clustering block's, resolved
+     * exactly as the clustering path resolves it, so the gates mean the same thing;
+     * {@code zscore} when the file sets none. Passing the YAML spelling through
+     * unresolved ran {@code ZSCORE}, {@code Percentile} or {@code percentile_99}
+     * with no normalization at all.
+     *
+     * @param schema the validated batch file
+     * @return a {@link ClusteringConfig.Normalization} id
+     */
+    static String phenotypingNormalization(BatchYamlSchema schema) {
+        String yaml = schema.getClustering() == null ? null
+                : schema.getClustering().getNormalization();
+        return yaml == null ? ClusteringConfig.Normalization.ZSCORE.getId()
+                : parseNormalization(yaml).getId();
     }
 
     /** True when the schema asks for an actual clustering run (not reuse_saved / skip). */
@@ -775,31 +788,22 @@ public final class YamlBatchOrchestrator {
     }
 
     /**
-     * Resolve a YAML {@code clustering.normalization}.
+     * Resolve a YAML {@code clustering.normalization}, case-insensitively. Used
+     * for clustering and phenotyping alike.
      *
      * @param id the YAML value
      * @return the matching normalization
      * @throws IllegalArgumentException if it is not recognized
      */
-    private static ClusteringConfig.Normalization parseNormalization(String id) {
+    static ClusteringConfig.Normalization parseNormalization(String id) {
         for (ClusteringConfig.Normalization n : ClusteringConfig.Normalization.values()) {
             if (n.getId().equalsIgnoreCase(id)) return n;
         }
         // Alias for the same thing: PERCENTILE is p1-p99.
         if ("percentile_99".equalsIgnoreCase(id)) return ClusteringConfig.Normalization.PERCENTILE;
-        if ("log1p".equalsIgnoreCase(id)) {
-            // A real substitution, not an alias: no log transform exists. Say so
-            // -- a run silently z-scored when the user asked for log1p produces
-            // different clusters and different marker means, and nothing else
-            // would tell them.
-            logger.warn("clustering.normalization 'log1p' is NOT implemented; this run uses "
-                    + "z-score instead. Results are z-scored, not log-transformed. "
-                    + "Set normalization: zscore to make that explicit.");
-            return ClusteringConfig.Normalization.ZSCORE;
-        }
         throw new IllegalArgumentException(
                 "Unknown clustering.normalization '" + id
-                + "'. Accepted: zscore, minmax, percentile, percentile_99, none, log1p.");
+                + "'. Accepted: zscore, minmax, percentile, percentile_99, none.");
     }
 
     /**

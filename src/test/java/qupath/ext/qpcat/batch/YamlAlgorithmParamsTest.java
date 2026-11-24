@@ -80,12 +80,48 @@ class YamlAlgorithmParamsTest {
     }
 
     @Test
-    void everyNormalizationTheValidatorAcceptsAlsoParses() throws Exception {
-        for (String id : new String[] {
-                "none", "percentile_99", "percentile", "zscore", "minmax", "log1p"}) {
-            assertThat(parsePrivate("parseNormalization", id))
-                    .as("validator accepts '%s'", id).isNotNull();
+    void everyNormalizationTheValidatorAcceptsAlsoParses() {
+        for (String id : BatchYamlValidator.NORMALIZATIONS) {
+            for (String spelling : new String[] {id, id.toUpperCase(java.util.Locale.ROOT)}) {
+                assertThat(YamlBatchOrchestrator.parseNormalization(spelling))
+                        .as("validator accepts '%s'", spelling).isNotNull();
+            }
         }
+    }
+
+    @Test
+    void log1pIsRefusedNotRunAsZscore() {
+        assertThatThrownBy(() -> YamlBatchOrchestrator.parseNormalization("log1p"))
+                .isInstanceOf(IllegalArgumentException.class);
+        for (String block : new String[] {
+                "clustering: { type: leiden, normalization: log1p }\n",
+                "clustering: { mode: reuse_saved, saved_result_name: r, normalization: LOG1P }\n"
+                        + "phenotyping:\n  rules:\n    - name: T\n      require_markers: [A]\n"}) {
+            BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(
+                    "version: '1.0'\nscope: { projects: [/tmp/p] }\n" + block);
+            assertThat(BatchYamlValidator.validate(po.getSchema()).getIssues())
+                    .anyMatch(i -> i.getCode().equals("E005")
+                            && i.getFieldPath().equals("clustering.normalization")
+                            && i.getMessage().contains("not implemented"));
+        }
+    }
+
+    @Test
+    void phenotypingGetsTheCanonicalNormalizationId() {
+        String[][] cases = {
+                {"ZSCORE", "zscore"}, {"Percentile", "percentile"},
+                {"percentile_99", "percentile"}, {"MinMax", "minmax"}, {"None", "none"}};
+        for (String[] c : cases) {
+            BatchYamlParser.ParseOutcome po = BatchYamlParser.parseString(
+                    "version: '1.0'\nscope: { projects: [/tmp/p] }\n"
+                    + "clustering: { type: leiden, normalization: " + c[0] + " }\n");
+            assertThat(YamlBatchOrchestrator.phenotypingNormalization(po.getSchema()))
+                    .as(c[0]).isEqualTo(c[1]);
+        }
+        BatchYamlParser.ParseOutcome none = BatchYamlParser.parseString(
+                "version: '1.0'\nscope: { projects: [/tmp/p] }\n");
+        assertThat(YamlBatchOrchestrator.phenotypingNormalization(none.getSchema()))
+                .isEqualTo("zscore");
     }
 
     @Test

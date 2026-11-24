@@ -196,6 +196,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   ignored. Batch runs from earlier versions whose files used a decimal comma, a leading zero, a
   `:` in a number, a fraction for a whole-number key or a repeated key ran with values other
   than the ones written. The YAML reference now says to quote names containing `: `.
+- **Batch phenotyping now normalizes the way the batch file says.** Phenotyping took
+  `clustering.normalization` exactly as typed, and the phenotyping task recognizes only `zscore`,
+  `minmax` and `percentile`, so `ZSCORE`, `Percentile` or `percentile_99` (all accepted by the
+  validator) gated the raw intensities against the z-score default with no normalization at
+  all. Phenotyping now resolves the name the same way clustering does. `log1p`, which was
+  accepted and then run as z-score, is refused (E005) for clustering and phenotyping alike.
+  Batch phenotyping runs from earlier versions with any spelling other than lower-case
+  `zscore`, `minmax` or `percentile` labeled cells on unnormalized values; batch runs with
+  `log1p` were z-scored.
 
 ## [0.25.0] - 2026-11-19
 
