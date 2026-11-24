@@ -82,6 +82,7 @@ def worker_globals():
 
     normalization_params, normalize_frame = normalization_functions()
     return {
+        "finite_json": load_script_symbol("model_utils.py", "finite_json", {"np": np}),
         "refuse_duplicate_names": load_script_symbol(
             "model_utils.py", "refuse_duplicate_names"
         ),

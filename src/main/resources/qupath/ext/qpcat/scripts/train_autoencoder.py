@@ -1323,9 +1323,14 @@ np.copyto(conf_nd.ndarray(), pred_conf)
 task.outputs["prediction_confidence"] = conf_nd
 
 task.outputs["n_classes"] = n_classes
-task.outputs["final_recon_loss"] = float(avg_recon)
-task.outputs["final_class_accuracy"] = float(accuracy) if has_labels else -1.0
-task.outputs["best_val_accuracy"] = float(best_val_acc) if best_val_acc >= 0 else -1.0
+# A direct float output travels as a bare JSON number, and NaN is not one.
+task.outputs["final_recon_loss"] = finite_json(float(avg_recon))
+task.outputs["final_class_accuracy"] = (
+    float(accuracy) if has_labels and np.isfinite(accuracy) else -1.0
+)
+task.outputs["best_val_accuracy"] = (
+    float(best_val_acc) if np.isfinite(best_val_acc) and best_val_acc >= 0 else -1.0
+)
 task.outputs["best_epoch"] = int(best_epoch + 1)
 task.outputs["active_units"] = n_active
 task.outputs["model_state_base64"] = model_b64

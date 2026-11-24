@@ -161,6 +161,22 @@ def require_finite(matrix, step, column_names=None, max_named=6, reason=None):
     )
 
 
+def finite_json(obj):
+    """``obj`` with every NaN or infinite float replaced by None, for json.dumps.
+
+    json.dumps writes NaN and Infinity as bare tokens, which are not JSON and
+    which strict readers (Gson on the Java side) reject. Dicts, lists and
+    tuples are walked; numpy floats come back as Python floats.
+    """
+    if isinstance(obj, dict):
+        return {k: finite_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [finite_json(v) for v in obj]
+    if isinstance(obj, (float, np.floating)):
+        return float(obj) if np.isfinite(obj) else None
+    return obj
+
+
 def refuse_duplicate_names(names):
     """Raise when two measurement names are equal, or equal after trimming and case folding.
 

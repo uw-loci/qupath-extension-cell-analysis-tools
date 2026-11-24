@@ -428,6 +428,6 @@ with single_threaded():  # noqa: F821 - loaded from model_utils at worker init
 
 # 4. Package outputs
 task.update("Packaging threshold results...")
-task.outputs["histograms_json"] = json.dumps(result)
+task.outputs["histograms_json"] = json.dumps(finite_json(result))
 
 logger.info("Threshold computation complete for %d markers", len(result))

@@ -158,6 +158,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **No invented lengths when every cell sits at one position.** With a radius graph on its
+  automatic radius, cells that were all at the same position (or one cell per area) got a
+  radius of 50 in whatever unit the coordinates were in, and co-occurrence fell back to distance
+  bins cut from the bounding box. Both now stop with a message saying why and what to change
+  (set the radius by hand, or use the k-nearest-neighbor graph); in a clustering run the
+  results window says that no spatial statistic was computed and why, where before only the log
+  did. Threshold, validation and autoencoder outputs can no longer carry a bare NaN, which is
+  not valid JSON.
 - **Spatial statistics on existing classes: the results window now says what was left out and
   why.** Every note this workflow wrote (a statistic that did not run, measurements that could
   not be tested) went only to the QuPath log; they now appear under "Not produced in this run".

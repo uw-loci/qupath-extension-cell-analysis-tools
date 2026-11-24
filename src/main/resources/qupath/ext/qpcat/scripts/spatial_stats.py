@@ -382,7 +382,14 @@ def _auto_radius(coords, slices):
         if d is not None and d > 0:
             nn.append(d)
     if not nn:
-        return 50.0
+        # 50 in whatever unit the coordinates are in was the old answer here,
+        # an invented length that set every neighborhood the statistics used.
+        raise ValueError(
+            "the radius graph's automatic radius comes from the distance between "
+            "neighboring cells, and no area has two cells at different positions "
+            "(each area has one cell, or all its cells share one position). Set "
+            "the radius by hand, or choose the k-nearest-neighbor graph."
+        )
     return float(np.median(nn) * 5.0)
 
 
@@ -2504,9 +2511,13 @@ def run_co_occurrence(
                 r_min = med_nn
                 r_max = min(med_nn * 20.0, max(med_nn * 2.0, diag * 0.5))
             else:
-                # Fallback: the old bbox-diagonal heuristic.
-                r_min = max(1.0, diag * 0.001)
-                r_max = diag * 0.1
+                # No two cells at different positions: no length scale exists,
+                # and a fraction of the bounding box (or 1 in any unit) would
+                # invent one.
+                raise ValueError(
+                    "its distance bins come from the distance between neighboring "
+                    "cells, and these cells all share one position"
+                )
             kwargs["interval"] = np.linspace(r_min, r_max, int(n_intervals))
 
         # Force serial execution (avoids the numba/joblib deadlock on Windows).
@@ -2696,7 +2707,15 @@ def run_co_occurrence(
             except Exception as e:
                 logger.warning("Co-occurrence (%s) plot failed: %s", mode, e)
     except Exception as e:
-        logger.warning("Co-occurrence (%s) failed: %s", mode, e)
+        note_for_user(
+            (
+                "Co-occurrence (%s) did not run: %s." % (mode, e)
+                if isinstance(e, ValueError)
+                else "Co-occurrence (%s) did not run; the QuPath log has the error."
+                % mode
+            ),
+            detail="%s: %s" % (type(e).__name__, e),
+        )
 
 
 def node_distance_scale(coord_unit, pixel_size_um):

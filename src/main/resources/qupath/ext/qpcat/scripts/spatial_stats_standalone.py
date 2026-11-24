@@ -93,16 +93,6 @@ def dropped_columns_note(dropped, none_left, max_named=6):
     )
 
 
-def _sanitize(obj):
-    if isinstance(obj, dict):
-        return {k: _sanitize(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_sanitize(v) for v in obj]
-    if isinstance(obj, float):
-        return obj if np.isfinite(obj) else None
-    return obj
-
-
 # 1. Load inputs
 report_progress(task, "Loading cell positions and labels...")
 coords = spatial_coords.ndarray().astype(np.float64, copy=True)

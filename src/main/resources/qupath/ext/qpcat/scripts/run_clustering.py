@@ -100,6 +100,7 @@ import sys
 import os
 import re
 import logging
+import math
 
 logger = logging.getLogger("qpcat.clustering")
 
@@ -3254,27 +3255,6 @@ if _quality:
     for _w in _quality:
         logger.warning("Clustering quality: %s", _w)
 
-import math
-
-
-def _finite_or_none(v):
-    """Coerce NaN/Inf floats to None so json.dumps emits RFC-valid output.
-    Python's default json.dumps writes NaN/Infinity as bare tokens, which
-    strict JSON parsers (including Gson on the Java side) reject."""
-    if isinstance(v, float) and not math.isfinite(v):
-        return None
-    return v
-
-
-def _sanitize_json_tree(obj):
-    """Recursively replace non-finite floats with None throughout obj."""
-    if isinstance(obj, dict):
-        return {k: _sanitize_json_tree(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_sanitize_json_tree(v) for v in obj]
-    return _finite_or_none(obj)
-
-
 # 5a. Validation: stability across seeds and agreement with known classes.
 # Both are diagnostics of a run that already succeeded, so a failure in either
 # is reported and never fails the run.
@@ -3348,7 +3328,7 @@ if resolution_comparison is not None:
 if validation:
     import json as _json_val
 
-    task.outputs["validation"] = _json_val.dumps(_sanitize_json_tree(validation))
+    task.outputs["validation"] = _json_val.dumps(finite_json(validation))
 
 # 5b. Representative cells per cluster (medoids).
 # For each cluster, rank member cells by distance to the cluster center under
@@ -3570,7 +3550,7 @@ if can_analyze:
                 )
             marker_result[str(cid)] = markers_list
 
-        task.outputs["marker_rankings"] = json.dumps(_sanitize_json_tree(marker_result))
+        task.outputs["marker_rankings"] = json.dumps(finite_json(marker_result))
         logger.info("Marker ranking complete: top %d markers per cluster", top_n)
     except Exception as e:
         logger.warning("Marker ranking failed: %s", e)
@@ -3704,9 +3684,23 @@ if has_spatial and n_clusters_found > 1:
                 pref_write_component_measurements,
             )
         except Exception as e:
-            logger.warning("Spatial node measurements failed: %s", e)
+            _qpcat_spatial.note_for_user(
+                "The spatial graph measurements (neighbor count, distances, "
+                "components) were not written to the cells; the QuPath log has the "
+                "error.",
+                detail="%s: %s" % (type(e).__name__, e),
+            )
     except Exception as e:
-        logger.warning("Spatial neighbor graph failed: %s", e)
+        _qpcat_spatial.note_for_user(
+            (
+                "No spatial statistic was computed, because the spatial neighbor graph "
+                "could not be built: %s." % e
+                if isinstance(e, ValueError)
+                else "No spatial statistic was computed, because the spatial neighbor "
+                "graph could not be built; the QuPath log has the error."
+            ),
+            detail="%s: %s" % (type(e).__name__, e),
+        )
         has_spatial = False
 
 if has_spatial and n_clusters_found > 1:
