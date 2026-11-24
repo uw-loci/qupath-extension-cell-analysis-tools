@@ -25,6 +25,8 @@ import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.ViewerNavigator;
 import qupath.ext.qpcat.service.QpcatPaths;
+import qupath.ext.qpcat.service.AutoencoderModelFiles;
+import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -1850,41 +1852,21 @@ public class AutoencoderDialog {
                     defaultName);
             if (name == null || name.isBlank()) return;
 
-            // Sanitize filename
-            name = name.replaceAll("[^a-zA-Z0-9_\\-]", "_");
+            name = AutoencoderModelFiles.stemFor(name.trim());
+            if (AutoencoderModelFiles.exists(modelsDir, name)) {
+                String free = AutoencoderModelFiles.freeStem(modelsDir, name);
+                var choice = SaveConflictPrompt.ask(owner, "Replace Saved Model",
+                        "A saved autoencoder model", name, free);
+                if (choice.isEmpty()) return;
+                if (choice.get() == FilenameSanitizer.IfExists.NEW_NAME) name = free;
+            }
 
             // Save checkpoint (base64) and metadata
-            Path ckptFile = modelsDir.resolve(name + ".b64");
-            Path metaFile = modelsDir.resolve(name + ".json");
+            Path ckptFile = modelsDir.resolve(name + AutoencoderModelFiles.CHECKPOINT_EXT);
+            Path metaFile = modelsDir.resolve(name + AutoencoderModelFiles.METADATA_EXT);
 
+            AutoencoderModelFiles.writeMetadata(metaFile, metadata);
             Files.writeString(ckptFile, trainedModelState, StandardCharsets.UTF_8);
-
-            // Simple JSON serialization
-            StringBuilder json = new StringBuilder("{\n");
-            for (var entry : metadata.entrySet()) {
-                json.append("  \"").append(entry.getKey()).append("\": ");
-                Object val = entry.getValue();
-                if (val == null) {
-                    json.append("null");
-                } else if (val instanceof String) {
-                    json.append("\"").append(val).append("\"");
-                } else if (val instanceof Boolean || val instanceof Number) {
-                    json.append(val);
-                } else if (val instanceof List) {
-                    json.append("[");
-                    List<?> list = (List<?>) val;
-                    for (int i = 0; i < list.size(); i++) {
-                        if (i > 0) json.append(", ");
-                        json.append("\"").append(list.get(i)).append("\"");
-                    }
-                    json.append("]");
-                }
-                json.append(",\n");
-            }
-            if (json.length() > 2)
-                json.setLength(json.length() - 2); // trim trailing comma
-            json.append("\n}");
-            Files.writeString(metaFile, json.toString(), StandardCharsets.UTF_8);
 
             long sizeMB = Files.size(ckptFile) / (1024 * 1024);
             statusLabel.setText("Model saved: " + name + " (" + sizeMB + " MB)");
@@ -1944,19 +1926,18 @@ public class AutoencoderDialog {
             Path ckptFile = modelsDir.resolve(selected + ".b64");
             Path metaFile = modelsDir.resolve(selected + ".json");
 
+            // Metadata first: a damaged file must not leave a half-loaded model behind.
+            AutoencoderModelFiles.Metadata meta = Files.exists(metaFile)
+                    ? AutoencoderModelFiles.readMetadata(metaFile) : null;
             trainedModelState = Files.readString(ckptFile, StandardCharsets.UTF_8).trim();
-
-            // Parse metadata
-            if (Files.exists(metaFile)) {
-                String metaJson = Files.readString(metaFile, StandardCharsets.UTF_8);
-                // Simple JSON parsing for known fields
-                trainedInputMode = parseJsonString(metaJson, "input_mode", "measurements");
-                trainedTileSize = parseJsonInt(metaJson, "tile_size", 64);
-                trainedDownsample = parseJsonDouble(metaJson, "downsample", 1.0);
-                trainedIncludeMask = parseJsonBool(metaJson, "include_mask", true);
-                trainedCellsOnly = parseJsonBool(metaJson, "cells_only", false);
-                trainedClassNames = parseJsonStringArray(metaJson, "class_names");
-                trainedMeasurements = List.of(parseJsonStringArray(metaJson, "measurements"));
+            if (meta != null) {
+                trainedInputMode = meta.inputMode();
+                trainedTileSize = meta.tileSize();
+                trainedDownsample = meta.downsample();
+                trainedIncludeMask = meta.includeMask();
+                trainedCellsOnly = meta.cellsOnly();
+                trainedClassNames = meta.classNames();
+                trainedMeasurements = List.copyOf(meta.measurements());
             }
 
             applyProjectButton.setDisable(false);
@@ -1977,43 +1958,5 @@ public class AutoencoderDialog {
             UserErrors.notify(logger, "QP-CAT",
                     "Failed to load model: " + e.getMessage());
         }
-    }
-
-    // Simple JSON helpers (avoid adding a JSON library dependency)
-
-    private static String parseJsonString(String json, String key, String defaultVal) {
-        String pattern = "\"" + key + "\"\\s*:\\s*\"([^\"]*)\"";
-        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
-        return m.find() ? m.group(1) : defaultVal;
-    }
-
-    private static double parseJsonDouble(String json, String key, double defaultVal) {
-        String pattern = "\"" + key + "\"\\s*:\\s*([\\d.]+)";
-        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
-        return m.find() ? Double.parseDouble(m.group(1)) : defaultVal;
-    }
-
-    private static int parseJsonInt(String json, String key, int defaultVal) {
-        String pattern = "\"" + key + "\"\\s*:\\s*(\\d+)";
-        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
-        return m.find() ? Integer.parseInt(m.group(1)) : defaultVal;
-    }
-
-    private static boolean parseJsonBool(String json, String key, boolean defaultVal) {
-        String pattern = "\"" + key + "\"\\s*:\\s*(true|false)";
-        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
-        return m.find() ? Boolean.parseBoolean(m.group(1)) : defaultVal;
-    }
-
-    private static String[] parseJsonStringArray(String json, String key) {
-        String pattern = "\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]";
-        var m = java.util.regex.Pattern.compile(pattern).matcher(json);
-        if (!m.find()) return new String[0];
-        String inner = m.group(1).trim();
-        if (inner.isEmpty()) return new String[0];
-        return java.util.regex.Pattern.compile("\"([^\"]*)\"")
-                .matcher(inner).results()
-                .map(r -> r.group(1))
-                .toArray(String[]::new);
     }
 }
