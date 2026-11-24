@@ -361,8 +361,8 @@ public class PostHocSpatialWorkflow {
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
             for (var e : obj.entrySet()) {
                 JsonObject m = e.getValue().getAsJsonObject();
-                double i = m.has("I") ? m.get("I").getAsDouble() : Double.NaN;
-                double p = m.has("pval") ? m.get("pval").getAsDouble() : Double.NaN;
+                double i = number(m, "I");
+                double p = number(m, "pval");
                 sb.append(base).append("moran_i,").append(csv(e.getKey())).append(",")
                         .append(fmt(i)).append(",").append(fmt(p)).append("\n");
                 any = true;
@@ -372,6 +372,11 @@ public class PostHocSpatialWorkflow {
                     .debug("Moran JSON parse for CSV failed: {}", ex.getMessage());
         }
         return any;
+    }
+
+    /** A JSON number field, or NaN when absent or null (an undefined statistic has no p). */
+    private static double number(JsonObject m, String key) {
+        return m.has(key) && !m.get(key).isJsonNull() ? m.get(key).getAsDouble() : Double.NaN;
     }
 
     private static String fmt(double v) {

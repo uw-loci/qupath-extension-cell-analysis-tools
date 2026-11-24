@@ -40,6 +40,23 @@ class PostHocNhoodCsvTest {
         assertThat(csv.lines().filter(l -> l.contains(",nhood_z,")).count()).isEqualTo(4);
     }
 
+    /** H09: an undefined Moran's I ships I and p as null; the other rows must still be written. */
+    @Test
+    void anUndefinedMoranRowKeepsTheOthers() {
+        ClusteringResult r = new ClusteringResult(new int[] {0, 1}, 2, null, null, new String[] {"A", "B"});
+        r.setSpatialAutocorrJson("{\"A\": {\"I\": null, \"pval\": null, \"pval_uncorrected\": null},"
+                + " \"B\": {\"I\": 0.25, \"pval\": 0.01, \"pval_uncorrected\": 0.005}}");
+        PostHocSpatialWorkflow.WindowResult wr = new PostHocSpatialWorkflow.WindowResult();
+        wr.imageName = "img";
+        wr.regionLabel = "whole image";
+        wr.result = r;
+
+        String csv = PostHocSpatialWorkflow.buildCsv(List.of(wr));
+
+        assertThat(csv).contains("moran_i,A,,\n");
+        assertThat(csv).contains("moran_i,B,0.250000,0.0100000\n");
+    }
+
     @Test
     void numbersUseADecimalPointUnderTurkishAndGermanLocales() {
         // "%.6g" was formatted with the default locale, so de-DE and tr-TR wrote

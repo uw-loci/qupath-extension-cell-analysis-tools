@@ -42,6 +42,7 @@ import math
 import os
 
 import numpy as np
+import pandas as pd
 
 logger = logging.getLogger("qpcat.spatial_stats")
 
@@ -1557,23 +1558,66 @@ def _json_number(v):
     return f if math.isfinite(f) else None
 
 
-def pick_p_column(row, preference):
-    """First finite p-value in `preference` that `row` actually has.
+def choose_p_column(df, defined, preference):
+    """The one p-value column a table reports for every row.
 
-    :param row: one row of the sq.gr.spatial_autocorr DataFrame
+    The first column in `preference` that is finite on every row whose
+    statistic is defined; failing that, the first finite on any of them. One
+    column for the whole table, so the caption naming it describes every row.
+
+    :param df: the sq.gr.spatial_autocorr DataFrame
+    :param defined: boolean per row, True where the statistic is finite
     :param preference: column names, best first
-    :return: (value, column_name), or (nan, None) when none is usable
+    :return: the column name, or None when no column has a usable value
     """
+    defined = np.asarray(defined, dtype=bool)
+    if not defined.any():
+        return None
+    fallback = None
     for col in preference:
-        if col not in row:
+        if col not in df.columns:
             continue
-        try:
-            val = float(row[col])
-        except (TypeError, ValueError):
-            continue
-        if not math.isnan(val):
-            return val, col
-    return float("nan"), None
+        vals = np.asarray(pd.to_numeric(df[col], errors="coerce"), dtype=np.float64)[
+            defined
+        ]
+        finite = np.isfinite(vals)
+        if finite.all():
+            return col
+        if fallback is None and finite.any():
+            fallback = col
+    return fallback
+
+
+def benjamini_hochberg(p):
+    """Benjamini-Hochberg adjusted p-values (statsmodels' fdr_bh); NaN stays NaN."""
+    p = np.asarray(p, dtype=np.float64)
+    out = np.full(p.shape, np.nan)
+    ok = np.isfinite(p)
+    m = int(ok.sum())
+    if m == 0:
+        return out
+    vals = p[ok]
+    order = np.argsort(vals)
+    ranked = vals[order] * m / np.arange(1, m + 1)
+    ranked = np.minimum.accumulate(ranked[::-1])[::-1]
+    adj = np.empty(m)
+    adj[order] = np.minimum(ranked, 1.0)
+    out[ok] = adj
+    return out
+
+
+def undefined_note(statistic, markers, max_named=6):
+    """The note for measurements whose statistic is undefined, or None when there are none."""
+    if not markers:
+        return None
+    shown = ", ".join(markers[:max_named])
+    if len(markers) > max_named:
+        shown += " and %d more" % (len(markers) - max_named)
+    return (
+        "%s is undefined for %d measurement(s) whose values do not vary across the "
+        "cells tested (constant, or missing): %s. Their rows show no value and no "
+        "p-value." % (statistic, len(markers), shown)
+    )
 
 
 def autocorr_passes(value, mode, threshold=AUTOCORR_DEFAULT_THRESHOLD):
@@ -1686,8 +1730,10 @@ def compute_autocorr(
     :param area_ids: per-cell independent-area id, for the consistency count
     :param threshold: effect-size cut, see autocorr_passes
     :return: dict with "stats" (marker -> {value, p, p_raw, areas_above,
-             n_areas}), "p_method", "per_area" (marker -> {area: value}),
-             "n_areas" (areas evaluated), "skipped_areas", "threshold"
+             n_areas}; p and p_raw NaN where the value is), "p_method" (the
+             one column every p comes from), "per_area" (marker -> {area:
+             value}), "n_areas" (areas evaluated), "skipped_areas",
+             "threshold", "undefined" (markers with no finite value)
     :raises ValueError: when `measurements` is empty
     """
     genes = [str(m) for m in (measurements or [])]
@@ -1702,15 +1748,40 @@ def compute_autocorr(
         adata, mode, genes, area_ids, area_names, value_key=value_key
     )
 
+    key = value_key if value_key in df.columns else "I"
+    values = np.asarray(pd.to_numeric(df[key], errors="coerce"), dtype=np.float64)
+    defined = np.isfinite(values)
+    # A constant or NaN-bearing column has no statistic; squidpy still fills
+    # pval_sim with 1 / (perms + 1), the strongest p in the table, and its NaN
+    # turns every other row's pval_z_sim_fdr_bh and pval_norm_fdr_bh into NaN.
+    # Such a row gets no p at all, and the correction is redone over the
+    # measurements that have a statistic.
+    p_raw_col = choose_p_column(df, defined, AUTOCORR_P_RAW_PREFERENCE)
+    raw = (
+        np.asarray(pd.to_numeric(df[p_raw_col], errors="coerce"), dtype=np.float64)
+        if p_raw_col
+        else np.full(len(df), np.nan)
+    )
+    if defined.all():
+        p_method = choose_p_column(df, defined, AUTOCORR_P_PREFERENCE)
+        corrected = (
+            np.asarray(pd.to_numeric(df[p_method], errors="coerce"), dtype=np.float64)
+            if p_method
+            else np.full(len(df), np.nan)
+        )
+    else:
+        p_method = p_raw_col + "_fdr_bh" if p_raw_col else None
+        corrected = np.full(len(df), np.nan)
+        corrected[defined] = benjamini_hochberg(raw[defined])
     stats = {}
-    p_method = None
-    for marker in df.index:
-        row = df.loc[marker]
-        value = float(row.get(value_key, row.get("I", float("nan"))))
-        p_val, p_col = pick_p_column(row, AUTOCORR_P_PREFERENCE)
-        p_raw, _ = pick_p_column(row, AUTOCORR_P_RAW_PREFERENCE)
-        if p_col is not None and p_method is None:
-            p_method = p_col
+    undefined = []
+    for i, marker in enumerate(df.index):
+        value = float(values[i])
+        if defined[i]:
+            p_val, p_raw = float(corrected[i]), float(raw[i])
+        else:
+            p_val = p_raw = float("nan")
+            undefined.append(str(marker))
         areas_above = sum(
             1
             for v in per_area.get(str(marker), {}).values()
@@ -1730,6 +1801,7 @@ def compute_autocorr(
         "n_areas": int(n_areas),
         "skipped_areas": skipped,
         "threshold": float(threshold),
+        "undefined": undefined,
     }
 
 
@@ -1896,13 +1968,16 @@ def run_moran_i(
         # row per key. Everything else travels as its own output.
         task.outputs[output_key] = json.dumps(payload)
         task.outputs[output_key + "_p_method"] = describe_p_method(
-            res["p_method"], len(stats), n_permutations
+            res["p_method"], len(stats) - len(res["undefined"]), n_permutations
         )
         task.outputs[output_key + "_per_area"] = json.dumps(res["per_area"])
         task.outputs[output_key + "_threshold"] = float(res["threshold"])
         task.outputs[output_key + "_areas"] = describe_areas(
             res["n_areas"], res["skipped_areas"]
         )
+        note = undefined_note("Moran's I", res["undefined"])
+        if note:
+            note_for_user(note)
         logger.info(
             "Moran's I computed for %d markers (p from %s; %d area(s) compared)",
             len(stats),
@@ -1993,10 +2068,13 @@ def run_geary_c(
             "n_permutations": int(n_permutations),
             "graph_type": graph_type,
             "p_value_method": describe_p_method(
-                p_method, len(marker_stats), n_permutations
+                p_method, len(marker_stats) - len(res["undefined"]), n_permutations
             ),
         }
         task.outputs["geary_c"] = json.dumps(payload)
+        note = undefined_note("Geary's C", res["undefined"])
+        if note:
+            note_for_user(note)
         logger.info(
             "Geary's C computed for %d markers (%d perms, p from %s; %d area(s) compared)",
             len(marker_stats),
@@ -2066,9 +2144,16 @@ def run_geary_c(
                 plt.close(fig)
                 logger.info("Saved Geary's C PNG: %s", out_path)
             except Exception as e:
-                logger.warning("Geary's C plot failed: %s", e)
+                note_for_user(
+                    "The Geary's C chart could not be drawn; the table has the values.",
+                    detail="%s: %s" % (type(e).__name__, e),
+                )
     except Exception as e:
-        logger.warning("Geary's C failed: %s", e)
+        note_for_user(
+            "Geary's C did not run, so there is no Geary's C tab. Everything else in "
+            "this result stands. The QuPath log has the error.",
+            detail="%s: %s" % (type(e).__name__, e) if str(e) else type(e).__name__,
+        )
 
 
 # Panels in the curves figure. Past this the grid is taller than it is useful

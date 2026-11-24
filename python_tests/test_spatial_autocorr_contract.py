@@ -154,7 +154,7 @@ def _const(name):
 def _base_globals():
     """Everything these helpers reference, since the AST loader injects nothing.
 
-    The chain is run_moran_i -> compute_autocorr -> pick_p_column, plus
+    The chain is run_moran_i -> compute_autocorr -> choose_p_column, plus
     describe_p_method, _json_number and _safe_kwargs. Loading them in dependency
     order and sharing one dict means each sees the others.
     """
@@ -165,6 +165,7 @@ def _base_globals():
         "json": json,
         "math": _math,
         "np": np,
+        "pd": pd,
         "logger": logging.getLogger("test.spatial_stats"),
         "AUTOCORR_P_PREFERENCE": _const("AUTOCORR_P_PREFERENCE"),
         "AUTOCORR_P_RAW_PREFERENCE": _const("AUTOCORR_P_RAW_PREFERENCE"),
@@ -176,7 +177,9 @@ def _base_globals():
     for name in (
         "_safe_kwargs",
         "_json_number",
-        "pick_p_column",
+        "choose_p_column",
+        "benjamini_hochberg",
+        "undefined_note",
         "area_slices",
         "area_label",
         "autocorr_passes",
@@ -191,8 +194,8 @@ def _base_globals():
     return g
 
 
-def _pick_p():
-    return _base_globals()["pick_p_column"]
+def _choose_p():
+    return _base_globals()["choose_p_column"]
 
 
 def _run_moran():
@@ -402,11 +405,71 @@ def test_small_areas_do_not_vote():
     )
 
 
-def test_pick_p_column_skips_missing_and_nan():
-    pick = _pick_p()
-    row = {"pval_sim_fdr_bh": float("nan"), "pval_norm": 0.25}
-    val, col = pick(row, _const("AUTOCORR_P_PREFERENCE"))
-    assert col == "pval_norm"
-    assert val == pytest.approx(0.25)
-    val, col = pick({}, _const("AUTOCORR_P_PREFERENCE"))
-    assert col is None
+def test_choose_p_column_uses_one_column_for_every_defined_row():
+    choose = _choose_p()
+    df = pd.DataFrame(
+        {
+            "pval_z_sim_fdr_bh": [np.nan, 0.02, 0.3],
+            "pval_sim_fdr_bh": [0.0015, 0.01, 0.2],
+            "pval_norm": [np.nan, 0.03, 0.25],
+        }
+    )
+    # The first row's statistic is undefined: its NaN must not push the table
+    # onto pval_sim_fdr_bh, the column with the permutation floor.
+    assert choose(df, [False, True, True], _const("AUTOCORR_P_PREFERENCE")) == (
+        "pval_z_sim_fdr_bh"
+    )
+    # Nothing defined: no column at all.
+    assert choose(df, [False, False, False], _const("AUTOCORR_P_PREFERENCE")) is None
+    # No column finite on every defined row: the first finite on any.
+    df2 = pd.DataFrame({"pval_norm": [0.1, np.nan], "pval_sim": [np.nan, np.nan]})
+    assert choose(df2, [True, True], _const("AUTOCORR_P_PREFERENCE")) == "pval_norm"
+
+
+def test_benjamini_hochberg_matches_statsmodels():
+    from statsmodels.stats.multitest import multipletests
+
+    bh = _base_globals()["benjamini_hochberg"]
+    p = np.array([0.01, 0.04, 0.03, 0.2, 0.5, 0.001])
+    np.testing.assert_allclose(bh(p), multipletests(p, method="fdr_bh")[1])
+    out = bh(np.array([0.01, np.nan, 0.04]))
+    assert np.isnan(out[1])
+    np.testing.assert_allclose(
+        out[[0, 2]], multipletests([0.01, 0.04], method="fdr_bh")[1]
+    )
+
+
+def _adata_with_constant_marker():
+    adata = _adata()
+    X = np.asarray(adata.X).copy()
+    X[:, 0] = 3.0
+    adata.X = X
+    return adata
+
+
+def test_an_undefined_statistic_gets_no_p_and_a_note():
+    """H09: a constant marker used to ship I = null with pval 0.0015 (the
+    permutation floor), the strongest p in the table, and its NaN columns
+    captioned the whole table pval_sim_fdr_bh (H30)."""
+    _NOTES.clear()
+    task = _Task()
+    _run_moran()(
+        _adata_with_constant_marker(), task, measurements=MARKERS, n_permutations=99
+    )
+    payload = json.loads(task.outputs["spatial_autocorr"])
+    const = payload[MARKERS[0]]
+    assert const["I"] is None
+    assert const["pval"] is None and const["pval_uncorrected"] is None
+    # squidpy's own corrected z-sim column is all NaN here; the correction is
+    # redone over the two defined markers, from the same raw column.
+    method = task.outputs["spatial_autocorr_p_method"]
+    assert method.startswith("pval_z_sim_fdr_bh"), method
+    assert "across 2 measurements" in method
+    raws = [payload[m]["pval_uncorrected"] for m in MARKERS[1:]]
+    for marker in MARKERS[1:]:
+        assert payload[marker]["I"] is not None
+        assert payload[marker]["pval"] is not None
+        assert payload[marker]["pval"] >= payload[marker]["pval_uncorrected"]
+    assert max(payload[m]["pval"] for m in MARKERS[1:]) == pytest.approx(max(raws))
+    assert len(_NOTES) == 1
+    assert "undefined" in _NOTES[0] and MARKERS[0] in _NOTES[0]

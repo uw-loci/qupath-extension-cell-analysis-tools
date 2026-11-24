@@ -158,6 +158,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **Moran's I and Geary's C: a measurement with no statistic no longer gets the strongest
+  p-value in the table.** A measurement that is constant over the cells tested (common in a
+  small area, or a marker no cell expresses) has no Moran's I or Geary's C, yet its row showed
+  an empty statistic beside a p-value of about 0.0015 at 1,000 permutations, the permutation
+  floor. Its NaN also made the library's corrected z-score p-values NaN for every other
+  measurement, so the whole table fell back to the floor-bound permutation p-values, and the
+  caption could name a p-value column some rows did not use. Such a row now has no value and
+  no p-value, a note in the results window names the measurements, and the Benjamini-Hochberg
+  correction is redone over the measurements that do have a statistic, from one column whose
+  name the caption gives for every row. A Geary's C run or chart that fails now says so in the
+  results window instead of only in the log, and the post-hoc spatial CSV no longer loses every
+  Moran's I row when one of them is empty. Spatial autocorrelation tables from earlier versions
+  that included a constant measurement reported a false p-value for it, and floor-bound
+  p-values for the rest.
 - **Values too large for the arithmetic are refused, naming the measurement.** A measurement
   holding a value around 1e154 or larger (often a "missing" placeholder such as 1e300 written by
   another program) made its z-score spread infinite, so every cell normalized to 0 and the
