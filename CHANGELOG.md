@@ -190,6 +190,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **AnnData import reports what it could not place, and refuses a blank class (H54).** Rows
+  with no image id while no image was open, and rows whose image id was missing in the file
+  (read as the text `nan`), were reported as "cells in image(s) not in this project". The
+  first are now reported as "N cells name no image, and no image is open", and a missing id
+  is read as no id. A blank class category (`""` or spaces), which QuPath reads as no class
+  and so would have stripped those cells of theirs while counting them as reclassified, is
+  refused with the number of cells it holds. Spaces around a category are trimmed, as QuPath
+  does, so those cells no longer count as changing class.
 - **Classes and measurements a run replaces are counted where you read the result (H36).**
   Clustering and phenotyping write each cell's class, and an embedding writes `UMAP1`-style
   columns; when cells already carried a class (an imported label, a classifier's output) or

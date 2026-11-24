@@ -128,9 +128,12 @@ public final class AnnDataImporter {
         /** Cells naming an image that is not in this project. */
         public int cellsInOtherImages;
         public int otherImages;
+        /** Cells naming no image (or a file without image ids) while no image is open. */
+        public int cellsWithNoImage;
 
         public int fileCells() {
-            return images.stream().mapToInt(m -> m.fileCells).sum() + cellsInOtherImages;
+            return images.stream().mapToInt(m -> m.fileCells).sum() + cellsInOtherImages
+                    + cellsWithNoImage;
         }
         public int matched() { return images.stream().mapToInt(m -> m.matched).sum(); }
         public int reclassified() { return images.stream().mapToInt(m -> m.reclassified).sum(); }
@@ -153,6 +156,10 @@ public final class AnnDataImporter {
             if (otherImages > 0) {
                 sb.append(String.format("%,d cells in %d image(s) not in this project%n",
                         cellsInOtherImages, otherImages));
+            }
+            if (cellsWithNoImage > 0) {
+                sb.append(String.format("%,d cells name no image, and no image is open: open the "
+                        + "image they came from and import again%n", cellsWithNoImage));
             }
             sb.append(String.format("Total: %,d of %,d cells found", matched(), fileCells()));
             return sb.toString();
@@ -210,7 +217,7 @@ public final class AnnDataImporter {
             }
             return new Contents(names.toArray(String[]::new),
                     imageIds == null ? null : imageIds.toArray(String[]::new), codes,
-                    canonicalClassNames((List<String>) task.outputs.get("class_names")),
+                    canonicalClassNames((List<String>) task.outputs.get("class_names"), codes),
                     (List<String>) task.outputs.get("class_colors"), values, valueNames);
         } finally {
             ApposeArrays.closeQuietly(codesNd, valuesNd);
@@ -223,17 +230,31 @@ public final class AnnDataImporter {
      * category "CD8:T" keeps QuPath's derived-class meaning and is "CD8: T".
      *
      * @param names categories as read; may be null
+     * @param codes the category index of each cell, for counting the cells of a blank
+     *              category; may be null
      * @return the canonical names, index-aligned
-     * @throws IOException when a category is not a usable class name, or two
+     * @throws IOException when a category is blank or not a usable class name, or two
      *                     categories would become one class
      */
-    static List<String> canonicalClassNames(List<String> names) throws IOException {
+    static List<String> canonicalClassNames(List<String> names, int[] codes) throws IOException {
         if (names == null) {
             return null;
         }
         List<String> out = new ArrayList<>(names.size());
         Map<String, String> firstRaw = new LinkedHashMap<>();
-        for (String raw : names) {
+        for (int k = 0; k < names.size(); k++) {
+            String raw = names.get(k);
+            if (raw == null || raw.isBlank()) {
+                // QuPath would read it as no class, so the cells would lose theirs.
+                int cells = 0;
+                if (codes != null) {
+                    for (int c : codes) if (c == k) cells++;
+                }
+                throw new IOException((codes == null ? "Some cells" : String.format("%,d cell(s)", cells))
+                        + " have a blank class category in the file. Importing it would remove "
+                        + "their QuPath class. Give them a class in the file, or choose another "
+                        + "class column.");
+            }
             String name;
             try {
                 name = CellClasses.canonicalName(raw, "Class category");
@@ -336,8 +357,12 @@ public final class AnnDataImporter {
                     m.imageName = SavedResultApplier.shortName(project, id);
                 }
                 if (data == null) {
-                    report.otherImages++;
-                    report.cellsInOtherImages += rows.size();
+                    if (id == null) {
+                        report.cellsWithNoImage += rows.size();
+                    } else {
+                        report.otherImages++;
+                        report.cellsInOtherImages += rows.size();
+                    }
                     continue;
                 }
                 var detections = data.getHierarchy().getDetectionObjects();
