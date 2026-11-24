@@ -190,6 +190,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
 
 ### Fixed
 
+- **The PAGA graph is drawn when the clusters do not touch.** When no nearest-neighbor edge
+  joined two clusters (a clean separation), python-igraph 1.0 failed inside scanpy's PAGA
+  ("mismatching number of index arrays for shape; got 0, expected 2") and the PAGA tab was
+  missing with that message. Such a graph is now recorded as having no edges, drawn with the
+  clusters on a circle, and the results summary says that every cluster stands alone. A graph
+  whose edges are all weaker than the PAGA edge threshold is drawn the same way instead of
+  failing in the layout.
 - **The same objects imported twice no longer get labels by whichever copy came first (H11).**
   QuPath's GeoJSON import keeps object ids, so a repeated import repeats them. Applying a saved
   result, a rename or a gate labeled the first copy, never the second, and still reported every

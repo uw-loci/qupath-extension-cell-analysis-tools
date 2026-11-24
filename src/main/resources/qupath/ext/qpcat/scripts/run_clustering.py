@@ -2749,6 +2749,65 @@ else:
     raise ValueError("Unknown clustering algorithm: %s" % algorithm)
 
 
+def compute_paga(adata, cluster_key):
+    """Run scanpy's PAGA, or record an edgeless graph when no cluster touches another.
+
+    When no nearest-neighbor edge joins two clusters, python-igraph 1.0's
+    ``get_adjacency_sparse`` builds a sparse matrix from an empty edge list and
+    scipy raises "mismatching number of index arrays for shape", so PAGA failed on
+    exactly the cleanest separations. That graph is a real result (every cluster
+    stands alone), so it is written as all-zero connectivities in the same
+    ``adata.uns["paga"]`` layout ``sc.tl.paga`` uses.
+
+    :param adata: AnnData with ``obsp["distances"]`` from ``sc.pp.neighbors``
+    :param cluster_key: categorical obs column holding the clusters
+    :return: a note for the user when the graph has no edges, else None
+    """
+    import scanpy as sc
+    from scipy import sparse
+
+    codes = np.asarray(adata.obs[cluster_key].cat.codes)
+    graph = adata.obsp["distances"].tocoo()
+    crosses = codes[graph.row] != codes[graph.col]
+    if crosses.any():
+        sc.tl.paga(adata, groups=cluster_key)
+        return None
+    n = len(adata.obs[cluster_key].cat.categories)
+    empty = sparse.csr_matrix((n, n), dtype=np.float64)
+    adata.uns["paga"] = {
+        "connectivities": empty,
+        "connectivities_tree": empty.copy(),
+        "groups": cluster_key,
+    }
+    return (
+        "PAGA graph: no nearest-neighbor edge joins two clusters, so every "
+        "cluster stands alone and the graph has no edges."
+    )
+
+
+def edgeless_paga_pos(adata, threshold):
+    """Node positions for a PAGA graph with no edge left to draw, else None.
+
+    scanpy lays the graph out from the edges at or above ``threshold`` through
+    igraph, which fails when none are left (no cluster touches another, or every
+    edge is weaker than the threshold). Such a graph is drawn with its clusters on
+    a circle; with no edges the positions carry no meaning either way.
+
+    :param adata: AnnData holding ``uns["paga"]``
+    :param threshold: the weakest edge ``sc.pl.paga`` will draw
+    :return: (n_clusters, 2) array, or None to let scanpy lay the graph out
+    """
+    conn = adata.uns["paga"]["connectivities"]
+    data = conn.data[conn.data != 0]
+    if threshold > 0:
+        data = data[data >= threshold]
+    if data.size > 0:
+        return None
+    n = conn.shape[0]
+    angles = 2 * np.pi * np.arange(n) / max(n, 1)
+    return np.column_stack([np.cos(angles), np.sin(angles)])
+
+
 def select_plot_features(all_features, ranked_by_cluster, max_features):
     """Pick the features the per-feature plots draw, most discriminative first.
 
@@ -3576,7 +3635,9 @@ if can_analyze:
                 "PAGA was not requested (the 'Cluster connectivity graph' box is "
                 "unticked), so its neighbor graph was not built"
             )
-        sc.tl.paga(adata, groups=CLUSTER_KEY)
+        _paga_note = compute_paga(adata, CLUSTER_KEY)
+        if _paga_note is not None:
+            _analysis_notes.append(_paga_note)
         paga_conn = adata.uns["paga"]["connectivities"].toarray()
 
         paga_nd = PyNDArray(dtype="float64", shape=list(paga_conn.shape))
@@ -4157,7 +4218,12 @@ if do_plots and plot_dir and can_analyze:
             # run with many clusters draws k(k-1)/2 lines and arrives as a solid
             # black mass. scanpy's documented lever for exactly this is `threshold`;
             # 0 restores every edge.
-            sc.pl.paga(adata, threshold=pref_paga_edge_threshold, show=False)
+            sc.pl.paga(
+                adata,
+                threshold=pref_paga_edge_threshold,
+                pos=edgeless_paga_pos(adata, pref_paga_edge_threshold),
+                show=False,
+            )
             paga_path = os.path.join(plot_dir, "paga_graph.png")
             plt.savefig(paga_path, dpi=pref_plot_dpi, bbox_inches="tight")
             plt.close("all")
