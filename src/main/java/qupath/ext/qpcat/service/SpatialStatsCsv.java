@@ -81,11 +81,49 @@ public final class SpatialStatsCsv {
      * @param nameResolver maps a stored cluster key to its display name, or null for the key
      */
     public static String coOccurrenceCsv(CoOccurrenceResult coo, UnaryOperator<String> nameResolver) {
-        boolean oneVsRest = coo != null && "oneVsRest".equals(coo.getMode());
-        StringBuilder sb = new StringBuilder(
-                oneVsRest ? "cluster,radius,ratio\n" : "center_cluster,neighbor_cluster,radius,ratio\n");
-        if (coo == null || coo.getData() == null || coo.getIntervals() == null || coo.getClusterNames() == null) {
+        return coOccurrenceTable(coo, nameResolver).text();
+    }
+
+    /**
+     * A header and its rows, each row one CSV line without its terminator. Kept
+     * apart so a per-area table can prefix rows without re-splitting the text,
+     * which would cut a quoted name that holds a line break in two.
+     */
+    private record Table(String header, List<String> rows) {
+        String text() {
+            StringBuilder sb = new StringBuilder(header).append('\n');
+            for (String r : rows) sb.append(r).append('\n');
             return sb.toString();
+        }
+    }
+
+    /** Collects the rows a {@code StringBuilder}-style writer appends, one per {@link #end()}. */
+    private static final class Rows {
+        final List<String> rows = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        Rows append(Object o) {
+            current.append(o);
+            return this;
+        }
+
+        Rows append(char c) {
+            current.append(c);
+            return this;
+        }
+
+        void end() {
+            rows.add(current.toString());
+            current = new StringBuilder();
+        }
+    }
+
+    private static Table coOccurrenceTable(CoOccurrenceResult coo, UnaryOperator<String> nameResolver) {
+        boolean oneVsRest = coo != null && "oneVsRest".equals(coo.getMode());
+        String header = oneVsRest ? "cluster,radius,ratio" : "center_cluster,neighbor_cluster,radius,ratio";
+        Rows sb = new Rows();
+        if (coo == null || coo.getData() == null || coo.getIntervals() == null || coo.getClusterNames() == null) {
+            return new Table(header, sb.rows);
         }
         double[][][] data = coo.getData();
         double[] intervals = coo.getIntervals();
@@ -96,7 +134,7 @@ public final class SpatialStatsCsv {
                 for (int r = 0; r < intervals.length; r++) {
                     double v = (data[a].length > 0 && data[a][0].length > r) ? data[a][0][r] : Double.NaN;
                     sb.append(escape(centre)).append(',').append(num(intervals[r])).append(',').append(num(v))
-                            .append('\n');
+                            .end();
                 }
             } else {
                 for (int b = 0; b < names.size() && b < data[a].length; b++) {
@@ -110,12 +148,12 @@ public final class SpatialStatsCsv {
                                 .append(num(intervals[r]))
                                 .append(',')
                                 .append(num(v))
-                                .append('\n');
+                                .end();
                     }
                 }
             }
         }
-        return sb.toString();
+        return new Table(header, sb.rows);
     }
 
     /**
@@ -128,9 +166,14 @@ public final class SpatialStatsCsv {
      * @param nameResolver maps a stored cluster key to its display name, or null for the key
      */
     public static String ripleyCsv(RipleyResult ripley, UnaryOperator<String> nameResolver) {
-        StringBuilder sb = new StringBuilder("cluster,radius,k,l\n");
+        return ripleyTable(ripley, nameResolver).text();
+    }
+
+    private static Table ripleyTable(RipleyResult ripley, UnaryOperator<String> nameResolver) {
+        String header = "cluster,radius,k,l";
+        Rows sb = new Rows();
         if (ripley == null || ripley.getRadii() == null) {
-            return sb.toString();
+            return new Table(header, sb.rows);
         }
         double[] radii = ripley.getRadii();
         List<String> names = ripley.getClusterNames();
@@ -149,7 +192,7 @@ public final class SpatialStatsCsv {
                             .append(num(at(k, i, r)))
                             .append(',')
                             .append(num(at(l, i, r)))
-                            .append('\n');
+                            .end();
                 }
             }
         }
@@ -164,10 +207,10 @@ public final class SpatialStatsCsv {
                         .append(num(pk != null && pk.length > r ? pk[r] : Double.NaN))
                         .append(',')
                         .append(num(pl != null && pl.length > r ? pl[r] : Double.NaN))
-                        .append('\n');
+                        .end();
             }
         }
-        return sb.toString();
+        return new Table(header, sb.rows);
     }
 
     /**
@@ -180,7 +223,7 @@ public final class SpatialStatsCsv {
      */
     public static String coOccurrencePerAreaCsv(Map<String, CoOccurrenceResult> byArea,
                                                 UnaryOperator<String> nameResolver) {
-        return perAreaCsv(byArea, r -> coOccurrenceCsv(r, nameResolver));
+        return perAreaCsv(byArea, r -> coOccurrenceTable(r, nameResolver));
     }
 
     /**
@@ -189,23 +232,20 @@ public final class SpatialStatsCsv {
      * column, which is how two exports of the same numbers drift apart.
      */
     private static <T> String perAreaCsv(Map<String, T> byArea,
-                                         java.util.function.Function<T, String> writer) {
+                                         java.util.function.Function<T, Table> writer) {
         StringBuilder sb = new StringBuilder();
         if (byArea == null || byArea.isEmpty()) {
             return "area\n";
         }
         boolean headerWritten = false;
         for (Map.Entry<String, T> e : byArea.entrySet()) {
-            String[] lines = writer.apply(e.getValue()).split("\n", -1);
+            Table t = writer.apply(e.getValue());
             if (!headerWritten) {
-                sb.append("area,").append(lines[0]).append('\n');
+                sb.append("area,").append(t.header()).append('\n');
                 headerWritten = true;
             }
-            for (int i = 1; i < lines.length; i++) {
-                if (lines[i].isEmpty()) {
-                    continue;
-                }
-                sb.append(escape(e.getKey())).append(',').append(lines[i]).append('\n');
+            for (String row : t.rows()) {
+                sb.append(escape(e.getKey())).append(',').append(row).append('\n');
             }
         }
         return sb.toString();
@@ -224,7 +264,7 @@ public final class SpatialStatsCsv {
         if (byArea == null || byArea.isEmpty()) {
             return "area,cluster,radius,k,l\n";
         }
-        return perAreaCsv(byArea, r -> ripleyCsv(r, nameResolver));
+        return perAreaCsv(byArea, r -> ripleyTable(r, nameResolver));
     }
 
     /**
@@ -309,14 +349,8 @@ public final class SpatialStatsCsv {
         return v == null ? "" : num(v.doubleValue());
     }
 
-    /** RFC 4180 quoting: cluster and marker names are user-supplied and may contain commas. */
+    /** Cluster, marker and area names are user-supplied: quoted and formula-guarded. */
     private static String escape(String s) {
-        if (s == null) {
-            return "";
-        }
-        if (s.indexOf(',') < 0 && s.indexOf('"') < 0 && s.indexOf('\n') < 0 && s.indexOf('\r') < 0) {
-            return s;
-        }
-        return '"' + s.replace("\"", "\"\"") + '"';
+        return CsvText.cell(s);
     }
 }

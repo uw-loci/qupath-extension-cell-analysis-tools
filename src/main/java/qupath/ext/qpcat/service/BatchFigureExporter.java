@@ -373,7 +373,7 @@ public final class BatchFigureExporter {
         if (figure == null) return;   // reason already recorded
 
         if (table) {
-            Files.writeString(target, figure.toCsv(), java.nio.charset.StandardCharsets.UTF_8);
+            CsvText.writeCsvFile(target, figure.toCsv());
         } else {
             BufferedImage img = figure.render(
                     CompositionFigure.scaleForDpi(options.getDpi()), null);

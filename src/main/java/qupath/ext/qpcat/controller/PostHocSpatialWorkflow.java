@@ -16,6 +16,7 @@ import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.model.MissingPolicy;
 import qupath.ext.qpcat.preferences.QpcatPreferences;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.CsvText;
 import qupath.ext.qpcat.service.FilenameSanitizer;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellMatcher;
@@ -276,7 +277,7 @@ public class PostHocSpatialWorkflow {
                     FilenameSanitizer.IfExists.NEW_NAME, "A spatial statistics export",
                     ".csv", ".json");
 
-            Files.writeString(dir.resolve(base + ".csv"), buildCsv(results));
+            CsvText.writeCsvFile(dir.resolve(base + ".csv"), buildCsv(results));
 
             Map<String, Object> meta = new java.util.LinkedHashMap<>();
             meta.put("timestamp", LocalDateTime.now().toString());
@@ -387,10 +388,9 @@ public class PostHocSpatialWorkflow {
         return Double.isFinite(v) ? String.format(Locale.ROOT, "%.6g", v) : "";
     }
 
+    /** Image, area and class names are user text: quoted (CR and LF included) and formula-guarded. */
     private static String csv(String s) {
-        if (s == null) return "";
-        if (s.contains(",") || s.contains("\"")) return "\"" + s.replace("\"", "\"\"") + "\"";
-        return s;
+        return CsvText.cell(s);
     }
 
     /** Cancel the running Appose task and stop the window loop. */

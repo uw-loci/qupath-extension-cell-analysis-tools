@@ -4,6 +4,7 @@ import javafx.application.Platform;
 import org.apposed.appose.NDArray;
 import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.ApposeArrays;
+import qupath.ext.qpcat.service.CsvText;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
 import org.slf4j.Logger;
@@ -1264,7 +1265,7 @@ public class ClusteringWorkflow {
         }
         Path target = dir.resolve(fileName);
         try {
-            Files.writeString(target, content, StandardCharsets.UTF_8);
+            CsvText.writeCsvFile(target, content);
             logger.info("Wrote per-area table {}", target);
         } catch (IOException e) {
             logger.warn("Could not write per-area table {}: {}", target, e.getMessage());

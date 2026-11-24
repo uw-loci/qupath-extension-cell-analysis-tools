@@ -24,11 +24,11 @@ import javafx.scene.shape.Rectangle;
 
 import qupath.ext.qpcat.service.CompositionFigure;
 import qupath.ext.qpcat.service.FilenameSanitizer;
+import qupath.ext.qpcat.service.CsvText;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -392,8 +392,7 @@ public class ClusterCompositionPanel extends BorderPane {
             }
             ImageIO.write(figure.render(2.0, colors), "PNG",
                     root.resolve(base + ".png").toFile());
-            Files.writeString(root.resolve(base + ".csv"), figure.toCsv(),
-                    StandardCharsets.UTF_8);
+            CsvText.writeCsvFile(root.resolve(base + ".csv"), figure.toCsv());
 
             // Individual pies plus ONE shared legend, so the panel can be
             // rebuilt in a figure editor without cropping the combined image
@@ -404,10 +403,10 @@ public class ClusterCompositionPanel extends BorderPane {
             Files.createDirectories(parts);
             ImageIO.write(figure.renderLegend(2.0, colors), "PNG",
                     parts.resolve("legend.png").toFile());
+            int n = 0;
             // Unique per export, so two groups whose names differ only in characters
             // a file name cannot hold (or in case, on Windows) keep separate pies.
             java.util.Set<String> used = new java.util.HashSet<>(java.util.Set.of("legend.png"));
-            int n = 0;
             for (String group : groups()) {
                 String file = FilenameSanitizer.uniqueIn(used,
                         FilenameSanitizer.sanitize(group, "group_" + n) + ".png");

@@ -538,8 +538,25 @@ def area_type(area_types, area_id):
 
 
 def _csv_cell(value):
-    """Minimal CSV quoting. Area labels contain ' | ' and can contain commas."""
+    """One CSV cell, by the rules of the Java side's CsvText.
+
+    Area labels contain ' | ' and can contain commas, so a cell holding a
+    comma, quote, CR or LF is quoted. A TEXT cell starting with = + - @, tab
+    or CR gets a leading apostrophe, so a spreadsheet shows an annotation named
+    '=HYPERLINK(...)' as text instead of running it; numbers, and text that is
+    a plain number, keep their sign.
+    """
     text = "" if value is None else str(value)
+    if isinstance(value, str) and text[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        numeric = False
+        if text[:1] in ("+", "-"):
+            try:
+                float(text)
+                numeric = True
+            except ValueError:
+                numeric = False
+        if not numeric:
+            text = "'" + text
     if any(ch in text for ch in [",", '"', "\n", "\r"]):
         return '"' + text.replace('"', '""') + '"'
     return text
@@ -590,6 +607,12 @@ def build_area_summary_csv(
         return listed[c] if 0 <= c < len(listed) else "Cluster %d" % c
 
     names = {c: _name_of(c) for c in present}
+    # Two clusters with one display name (or a cluster named "Noise") would give
+    # two columns with one header; add the label so every header is unique.
+    taken = [names[c] for c in present]
+    for c in present:
+        if taken.count(names[c]) > 1:
+            names[c] = "%s (%s)" % (names[c], "noise" if c < 0 else "label %d" % c)
 
     header = ["area", "type", "n_cells", "n_clusters_present"]
     header += ["%s_frac" % names[c] for c in present]

@@ -1,6 +1,7 @@
 package qupath.ext.qpcat.ui;
 
 import qupath.ext.qpcat.service.QpcatPaths;
+import qupath.ext.qpcat.service.CsvText;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
@@ -129,7 +130,7 @@ public final class SpatialStatsSummaryDialog {
         File file = fc.showSaveDialog(qupath.getStage());
         if (file == null) return;
         try {
-            Files.writeString(file.toPath(), PostHocSpatialWorkflow.buildCsv(results));
+            CsvText.writeCsvFile(file.toPath(), PostHocSpatialWorkflow.buildCsv(results));
             ExportLocation.announce(file.getParentFile(), file.getName());
         } catch (IOException ex) {
             logger.error("Failed to write spatial stats CSV", ex);

@@ -75,6 +75,7 @@ import javafx.stage.FileChooser;
 import javafx.embed.swing.SwingFXUtils;
 import javax.imageio.ImageIO;
 import qupath.ext.qpcat.service.FilenameSanitizer;
+import qupath.ext.qpcat.service.CsvText;
 import javafx.scene.paint.Color;
 
 import java.awt.image.BufferedImage;
@@ -4912,7 +4913,7 @@ public class ClusteringDialog {
             return;
         }
         try {
-            java.nio.file.Files.writeString(file.toPath(), csv);
+            CsvText.writeCsvFile(file.toPath(), csv);
             ExportLocation.announce(file.getParentFile(), file.getName());
         } catch (java.io.IOException ex) {
             logger.error("Failed to write CSV", ex);

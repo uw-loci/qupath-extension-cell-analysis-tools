@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.AreaLevelSpec;
 import qupath.ext.qpcat.model.CnWindow;
 import qupath.ext.qpcat.service.ApposeClusteringService;
+import qupath.ext.qpcat.service.CsvText;
 import qupath.ext.qpcat.service.AreaResolver;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
@@ -1062,18 +1063,18 @@ public class CellularNeighborhoodWorkflow {
             String perSampleCsv = proportionsJsonToCsv(
                     perSampleJson, sampleKind(perSampleJson), "image_names");
             if (perSampleCsv != null) {
-                Files.writeString(resultsDir.resolve("cn_per_sample_proportions.csv"),
-                        perSampleCsv, StandardCharsets.UTF_8);
+                CsvText.writeCsvFile(resultsDir.resolve("cn_per_sample_proportions.csv"),
+                        perSampleCsv);
             }
             String groupCsv = proportionsJsonToCsv(groupJson, "group", "group_names");
             if (groupCsv != null) {
-                Files.writeString(resultsDir.resolve("cn_per_group_proportions.csv"),
-                        groupCsv, StandardCharsets.UTF_8);
+                CsvText.writeCsvFile(resultsDir.resolve("cn_per_group_proportions.csv"),
+                        groupCsv);
             }
             String adjCsv = adjacencyJsonToCsv(adjacencyJson);
             if (adjCsv != null) {
-                Files.writeString(resultsDir.resolve("cn_neighborhood_adjacency.csv"),
-                        adjCsv, StandardCharsets.UTF_8);
+                CsvText.writeCsvFile(resultsDir.resolve("cn_neighborhood_adjacency.csv"),
+                        adjCsv);
             }
             StringBuilder info = new StringBuilder();
             info.append("QP-CAT joint cellular-neighborhood run\n");
@@ -1147,7 +1148,7 @@ public class CellularNeighborhoodWorkflow {
             sb.append('\n');
             for (int r = 0; r < props.size(); r++) {
                 String label = r < labels.size() ? labels.get(r).getAsString() : (rowHeader + "_" + r);
-                sb.append('"').append(label.replace("\"", "\"\"")).append('"');
+                sb.append(CsvText.cell(label));
                 JsonArray row = props.get(r).getAsJsonArray();
                 for (int cn = 0; cn < row.size(); cn++) {
                     sb.append(',').append(String.format(java.util.Locale.US, "%.6f",

@@ -427,3 +427,32 @@ def test_per_area_notes_name_their_area_and_skipped_areas_are_reported():
     notes = list(module.SPATIAL_NOTES)
     assert any(n.startswith("Area 'core A': Ripley's L has no curve") for n in notes)
     assert any("1 of 3 area(s) produced no result" in n for n in notes)
+
+
+# --- Spreadsheet safety (H49) --------------------------------------------
+
+
+def test_text_cells_that_look_like_formulas_get_an_apostrophe():
+    cell = load_script_symbol(SCRIPT, "_csv_cell", {"np": np})
+    assert cell("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+    assert cell("@cmd") == "'@cmd"
+    assert cell("-CD8") == "'-CD8"
+    assert cell("+x,y") == '"\'+x,y"'
+    # Numbers, and text that is a plain number, keep their sign.
+    assert cell(-3) == "-3"
+    assert cell("-0.5") == "-0.5"
+    assert cell("CD8+") == "CD8+"
+    assert cell("a\nb") == '"a\nb"'
+
+
+def test_summary_headers_stay_unique_when_display_names_repeat():
+    csv = _summary_builder()(
+        area_ids=[0, 0, 0],
+        area_names=["A"],
+        cluster_labels=[-1, 0, 1],
+        cluster_names=["Noise", "Noise"],
+    )
+    header = _rows(csv)[0].split(",")
+    assert len(header) == len(set(header)), header
+    assert "Noise (noise)_frac" in header
+    assert "Noise (label 0)_frac" in header
