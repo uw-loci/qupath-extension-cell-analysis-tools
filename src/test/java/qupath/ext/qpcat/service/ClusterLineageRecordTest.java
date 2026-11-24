@@ -62,7 +62,7 @@ class ClusterLineageRecordTest {
         // The script must call the sub-cluster entry point with the parent class
         // AND the parent result, in that order -- the signature it is generated for.
         assertThat(info).contains("workflow.runSubclustering(");
-        assertThat(info).contains("\"Cluster 1\", \"parent_run\", config,");
+        assertThat(info).contains("'Cluster 1', 'parent_run', config,");
         // It loads the config sidecar rather than restating parameters that could
         // drift from what actually ran.
         assertThat(info).contains("loadConfigFromFile(");
@@ -91,7 +91,7 @@ class ClusterLineageRecordTest {
         assertThat(info).contains("Parent result : (not recorded");
         assertThat(info).contains("nothing to step back to");
         // A null parent must reach the script as a literal null, not as "null".
-        assertThat(info).contains("\"Tumor\", null, config,");
+        assertThat(info).contains("'Tumor', null, config,");
     }
 
     @Test

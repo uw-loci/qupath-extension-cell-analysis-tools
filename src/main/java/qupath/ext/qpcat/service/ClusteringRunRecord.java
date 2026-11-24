@@ -469,8 +469,10 @@ public final class ClusteringRunRecord {
      */
     private static String subclusterScript(String savedName, String parentClass,
                                            String parentResult, ClusteringConfig config) {
+        // Names are user text: single-quoted literals, so a quote, backslash, '$' or
+        // line break in a class or result name cannot break or alter the script.
         String parentArg = (parentResult != null && !parentResult.isBlank())
-                ? "\"" + parentResult + "\"" : "null";
+                ? GroovyText.literal(parentResult) : "null";
         boolean projectWide = config != null && config.isClusterEntireProject();
         StringBuilder g = new StringBuilder();
         g.append("   import qupath.ext.qpcat.controller.ClusteringWorkflow\n");
@@ -480,13 +482,15 @@ public final class ClusteringRunRecord {
         g.append("   def qupath = QuPathGUI.getInstance()\n");
         g.append("   def dir = ClusteringResultManager.getResultsDirectory(qupath.getProject())\n");
         g.append("   def config = ClusteringConfigManager.loadConfigFromFile(\n");
-        g.append("           dir.resolve(\"").append(savedName).append("_config.json\"))\n");
+        g.append("           dir.resolve(").append(GroovyText.literal(savedName + "_config.json"))
+                .append("))\n");
         g.append("   def workflow = new ClusteringWorkflow(qupath)\n\n");
         String single = "   def result = workflow.runSubclustering(\n"
-                + "           \"" + parentClass + "\", " + parentArg + ", config, { println it })\n";
+                + "           " + GroovyText.literal(parentClass) + ", " + parentArg
+                + ", config, { println it })\n";
         String project = "   def entries = qupath.getProject().getImageList()\n"
                 + "   def result = workflow.runProjectSubclustering(\n"
-                + "           \"" + parentClass + "\", entries, " + parentArg
+                + "           " + GroovyText.literal(parentClass) + ", entries, " + parentArg
                 + ", config, { println it })\n";
         if (projectWide) {
             g.append("   // This run covered project images:\n").append(project);

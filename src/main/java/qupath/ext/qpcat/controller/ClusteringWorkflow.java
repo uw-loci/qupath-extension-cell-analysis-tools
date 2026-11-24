@@ -5,6 +5,7 @@ import org.apposed.appose.NDArray;
 import qupath.ext.qpcat.service.TrainingLabels;
 import qupath.ext.qpcat.service.ApposeArrays;
 import qupath.ext.qpcat.service.CsvText;
+import qupath.ext.qpcat.service.GroovyText;
 import qupath.ext.qpcat.service.AnnDataEmbedding;
 import org.apposed.appose.Service.Task;
 import org.apposed.appose.Service.ResponseType;
@@ -1359,7 +1360,8 @@ public class ClusteringWorkflow {
                     + result.clusterCountText()
                     + (crossImage ? ", " + nImages + " images" : "") + ")";
             imageData.getHistoryWorkflow().addStep(
-                    new DefaultScriptableWorkflowStep(stepName, String.join("\n", lines)));
+                    new DefaultScriptableWorkflowStep(stepName, String.join("\n",
+                            lines.stream().map(GroovyText::commentSafe).toList())));
         } catch (Exception e) {
             logger.warn("Failed to record clustering workflow step: {}", e.getMessage());
         }

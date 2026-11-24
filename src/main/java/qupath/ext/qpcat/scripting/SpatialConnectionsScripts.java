@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import qupath.ext.qpcat.model.SavedClusteringResult;
 import qupath.ext.qpcat.model.SpatialStatsBundle;
 import qupath.ext.qpcat.service.ClusteringResultManager;
+import qupath.ext.qpcat.service.GroovyText;
 import qupath.ext.qpcat.service.OperationLogger;
 import qupath.lib.images.ImageData;
 import qupath.lib.objects.DefaultPathObjectConnectionGroup;
@@ -582,12 +583,13 @@ public final class SpatialConnectionsScripts {
         return null;
     }
 
-    private static String buildPushWorkflowScript(String resultName) {
+    static String buildPushWorkflowScript(String resultName) {
         StringBuilder sb = new StringBuilder();
         sb.append("import qupath.ext.qpcat.scripting.SpatialConnectionsScripts\n");
         sb.append("SpatialConnectionsScripts.pushConnectionsToViewer(\n");
         sb.append("    getCurrentImageData(),\n");
-        sb.append("    \"").append(escape(resultName)).append("\"\n");
+        sb.append("    ").append(GroovyText.literal(resultName == null ? "" : resultName))
+                .append("\n");
         sb.append(")\n");
         return sb.toString();
     }
@@ -597,10 +599,6 @@ public final class SpatialConnectionsScripts {
                 + "SpatialConnectionsScripts.clearConnections(getCurrentImageData())\n";
     }
 
-    private static String escape(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
 
     /**
      * Count undirected edges in a connection group. Each unordered pair
