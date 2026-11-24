@@ -205,6 +205,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   Batch phenotyping runs from earlier versions with any spelling other than lower-case
   `zscore`, `minmax` or `percentile` labeled cells on unnormalized values; batch runs with
   `log1p` were z-scored.
+- **Batch files: `scope.images: <one name>` runs that image only.** Any single string other
+  than `all` selected every image in the project, so `images: slide_01.tif` (or a typo, or
+  `none`) ran the whole project. A single string is now one image name, and a name the project
+  does not have is refused (E008). Two images sharing a name in the scope are refused too
+  (E024): only the last one could be selected by name, and their saved results and figures
+  would overwrite each other. Batch runs from earlier versions with a single string under
+  `scope.images` processed (and wrote results to) every image in the project.
 
 ## [0.25.0] - 2026-11-19
 

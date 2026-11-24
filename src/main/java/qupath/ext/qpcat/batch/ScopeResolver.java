@@ -26,10 +26,10 @@ import java.util.regex.PatternSyntaxException;
  * / bare-name resolution (E013/E014) is deferred -- relative paths are
  * resolved against the JVM's working directory.</p>
  *
- * <p>Image resolution: {@code "all"}, list of names, {@code {glob: ...}},
- * or {@code {regex: ...}}. Mixed shapes are caught earlier by
- * {@link BatchYamlValidator}; here we surface E008 (image not found)
- * and W003 (zero-match scope filter).</p>
+ * <p>Image resolution: {@code "all"}, one name, a list of names,
+ * {@code {glob: ...}} or {@code {regex: ...}}. Mixed shapes are caught earlier
+ * by {@link BatchYamlValidator}; here we surface E008 (image not found), W003
+ * (zero-match scope filter) and E024 (two entries in scope share a name).</p>
  */
 public final class ScopeResolver {
 
@@ -125,7 +125,8 @@ public final class ScopeResolver {
         }
 
         List<ProjectImageEntry<BufferedImage>> matched =
-                filterImages(project, scope, index, issues);
+                filterImages(project.getImageList(), scope, issues);
+        refuseDuplicateNames(matched, projectFile.toString(), issues);
         if (matched.isEmpty() && !scope.isSkipMissing()) {
             // W003 -- but only if filter is more specific than "all"
             if (!isAllFilter(scope.getImages())) {
@@ -143,41 +144,53 @@ public final class ScopeResolver {
         return false;
     }
 
+    /**
+     * The entries of one project that {@code scope.images} selects.
+     * A bare string other than {@code all} is one image name.
+     *
+     * @param all    the project's entries
+     * @param scope  the scope block
+     * @param issues receives E008 / W003 / E003
+     * @return the selected entries, in project order for a pattern, in listed order for names
+     */
     @SuppressWarnings("unchecked")
-    private static List<ProjectImageEntry<BufferedImage>> filterImages(
-            Project<BufferedImage> project, BatchYamlSchema.ScopeBlock scope,
-            int projectIndex, ValidationResult issues) {
-        List<ProjectImageEntry<BufferedImage>> all = project.getImageList();
+    static List<ProjectImageEntry<BufferedImage>> filterImages(
+            List<ProjectImageEntry<BufferedImage>> all, BatchYamlSchema.ScopeBlock scope,
+            ValidationResult issues) {
         Object filter = scope.getImages();
-        if (filter == null || (filter instanceof String s && s.equalsIgnoreCase("all"))) {
+        if (isAllFilter(filter)) {
             return new ArrayList<>(all);
         }
-        // List of names
-        if (filter instanceof List<?> rawList) {
+        // One name, or a list of names. A bare string used to select every image.
+        if (filter instanceof String || filter instanceof List<?>) {
             List<String> wanted = new ArrayList<>();
-            for (Object o : rawList) if (o != null) wanted.add(o.toString());
-            Map<String, ProjectImageEntry<BufferedImage>> byName = new LinkedHashMap<>();
+            if (filter instanceof String one) {
+                wanted.add(one);
+            } else {
+                for (Object o : (List<?>) filter) if (o != null) wanted.add(o.toString());
+            }
+            Map<String, List<ProjectImageEntry<BufferedImage>>> byName = new LinkedHashMap<>();
             for (ProjectImageEntry<BufferedImage> e : all) {
-                byName.put(e.getImageName(), e);
+                byName.computeIfAbsent(e.getImageName(), k -> new ArrayList<>()).add(e);
             }
             List<ProjectImageEntry<BufferedImage>> matched = new ArrayList<>();
             for (int i = 0; i < wanted.size(); i++) {
                 String name = wanted.get(i);
-                ProjectImageEntry<BufferedImage> e = byName.get(name);
-                if (e == null) {
+                List<ProjectImageEntry<BufferedImage>> named = byName.get(name);
+                String path = filter instanceof String ? "scope.images" : "scope.images[" + i + "]";
+                if (named == null) {
                     if (!scope.isSkipMissing()) {
-                        issues.add(ValidationIssue.error("E008",
-                                "scope.images[" + i + "]",
+                        issues.add(ValidationIssue.error("E008", path,
                                 "image '" + BatchYamlParser.asciiSafe(name)
                                         + "' not found in project (set skip_missing: true to ignore)"));
                     } else {
-                        issues.add(ValidationIssue.warning("W003",
-                                "scope.images[" + i + "]",
+                        issues.add(ValidationIssue.warning("W003", path,
                                 "image '" + BatchYamlParser.asciiSafe(name)
                                         + "' not in project; skipped"));
                     }
                 } else {
-                    matched.add(e);
+                    // Every entry with the name; refuseDuplicateNames reports a repeat.
+                    matched.addAll(named);
                 }
             }
             return matched;
@@ -213,6 +226,34 @@ public final class ScopeResolver {
             }
         }
         return new ArrayList<>(all);
+    }
+
+    /**
+     * E024 for every image name used by more than one entry in {@code entries}.
+     * Batch result names, figure file names and the figure-export lookup are
+     * keyed by image name, so two entries sharing one would overwrite or pick up
+     * each other's results.
+     *
+     * @param entries      the entries a project contributes to the run
+     * @param projectLabel the project, for the message
+     * @param issues       receives the errors
+     */
+    static void refuseDuplicateNames(List<ProjectImageEntry<BufferedImage>> entries,
+                                     String projectLabel, ValidationResult issues) {
+        Map<String, List<String>> idsByName = new LinkedHashMap<>();
+        for (ProjectImageEntry<BufferedImage> e : entries) {
+            idsByName.computeIfAbsent(e.getImageName(), k -> new ArrayList<>()).add(e.getID());
+        }
+        for (Map.Entry<String, List<String>> e : idsByName.entrySet()) {
+            if (e.getValue().size() < 2) continue;
+            issues.add(ValidationIssue.error("E024", "scope.images",
+                    e.getValue().size() + " images in project '"
+                    + BatchYamlParser.asciiSafe(projectLabel) + "' are named '"
+                    + BatchYamlParser.asciiSafe(e.getKey()) + "' (entry ids " + e.getValue()
+                    + "). Batch results and figures are named after the image, so they would "
+                    + "overwrite each other. Rename one in QuPath's Project tab, or leave it "
+                    + "out of scope.images."));
+        }
     }
 
     /**

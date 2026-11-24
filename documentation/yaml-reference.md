@@ -105,12 +105,17 @@ The `images` field is a union:
 
 | YAML value | Behavior |
 |---|---|
-| `all` | Every `ProjectImageEntry` in every project. |
+| `all` | Every `ProjectImageEntry` in every project (any case). |
+| `name` | Any other single string is one image name, matched like a list entry: `images: slide_01.tif` is `images: [slide_01.tif]`. A name not in the project hard-fails (E008). |
 | `[name1, name2, ...]` | Each entry matched against `entry.getImageName()`, exactly and case-sensitively. Missing names hard-fail (E008) unless `skip_missing: true`. |
 | `{glob: "<pattern>"}` | Shell-style glob (`*`, `?`, `[abc]`). Zero matches warns (W003). |
 | `{regex: "<pattern>"}` | Java regex (anchored implicitly by `Matcher.matches()`). |
 
 `glob` and `regex` are mutually exclusive (E006). Mixing list and map shape errors (E015).
+
+Two images in the resolved scope of one project may not share a name (E024): batch results
+(`yaml_<image>`) and figure files are named after the image, so they would overwrite each
+other. Rename one in QuPath's Project tab, or leave it out of `scope.images`.
 
 > **Note:** `scope.images` names are project-relative. If two projects each have an image named `Patient03_ROI1`, both are processed. For per-project image lists, write two YAMLs.
 
@@ -541,6 +546,7 @@ figure_export:
 - E021 Marker gated at more than one threshold across phenotyping rules
 - E022 A key repeated in the same block
 - E023 A name listed more than once in one list
+- E024 Two images in the resolved scope of one project share a name
 
 Warnings (non-fatal):
 
