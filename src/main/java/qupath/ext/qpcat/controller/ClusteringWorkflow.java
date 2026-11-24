@@ -31,6 +31,7 @@ import qupath.ext.qpcat.service.ClusteringResultManager;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.ExistingLabelReader;
 import qupath.ext.qpcat.service.InputAudit;
+import qupath.ext.qpcat.service.InputChecks;
 import qupath.ext.qpcat.service.ClusteringRunRecord;
 import qupath.ext.qpcat.service.MeasurementExtractor;
 import qupath.ext.qpcat.service.QpcatPaths;
@@ -718,10 +719,9 @@ public class ClusteringWorkflow {
         if (!config.hasSubImageAreaLevels() && nImages < 2) {
             return null;
         }
-        List<String> imageNames = new ArrayList<>();
+        List<String> imageNames = segmentImageLabels(extraction.getImageSegments());
         List<PathObjectHierarchy> hierarchies = new ArrayList<>();
         for (MeasurementExtractor.ImageSegment seg : extraction.getImageSegments()) {
-            imageNames.add(segmentImageName(seg));
             hierarchies.add(segmentHierarchy(seg));
         }
         return AreaResolver.resolve(
@@ -2849,10 +2849,11 @@ public class ClusteringWorkflow {
         // is independent of batch correction.
         if (extraction.isMultiImage()) {
             List<Integer> imageLabels = new ArrayList<>();
-            List<String> imageNames = new ArrayList<>();
+            // Distinct per image: the per-image plots are keyed by this name, and two
+            // same-named images would share one plot (H16).
+            List<String> imageNames = segmentImageLabels(extraction.getImageSegments());
             for (int segIdx = 0; segIdx < extraction.getImageSegments().size(); segIdx++) {
                 MeasurementExtractor.ImageSegment seg = extraction.getImageSegments().get(segIdx);
-                imageNames.add(segmentImageName(seg));
                 for (int i = 0; i < seg.getCount(); i++) imageLabels.add(segIdx);
             }
             inputs.put("image_labels", imageLabels);
@@ -5774,6 +5775,23 @@ public class ClusteringWorkflow {
     }
 
     /** Best available image name for a segment, for the per-image spatial-graph summary. */
+    /**
+     * Each segment's image name, followed by its entry id where two segments share
+     * the name, so a name keyed output (plots, area labels) keeps them apart.
+     */
+    static List<String> segmentImageLabels(List<MeasurementExtractor.ImageSegment> segs) {
+        List<String> names = new ArrayList<>();
+        for (MeasurementExtractor.ImageSegment seg : segs) names.add(segmentImageName(seg));
+        Map<String, Integer> dups = InputChecks.duplicateNames(names);
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < segs.size(); i++) {
+            String id = segs.get(i).getImageEntry() instanceof ProjectImageEntry<?> e
+                    ? e.getID() : null;
+            out.add(InputChecks.imageLabel(names.get(i), id, dups));
+        }
+        return out;
+    }
+
     private static String segmentImageName(MeasurementExtractor.ImageSegment seg) {
         Object e = seg.getImageEntry();
         if (e instanceof ProjectImageEntry<?> pe && pe.getImageName() != null) {
