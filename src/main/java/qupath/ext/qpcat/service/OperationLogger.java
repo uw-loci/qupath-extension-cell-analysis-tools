@@ -295,8 +295,9 @@ public class OperationLogger {
         InputSelection sel = result.getInputSelection();
         if (sel != null) {
             List<String> parts = new ArrayList<>();
-            parts.add(sel.summary());
-            parts.addAll(sel.detailLines());
+            String noClass = CellClasses.noClassLabel(sel);
+            parts.add(sel.summary(noClass));
+            parts.addAll(sel.detailLines(noClass));
             params.put("Input", String.join("; ", parts));
         }
     }

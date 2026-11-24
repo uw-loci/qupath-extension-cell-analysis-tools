@@ -59,7 +59,8 @@ Outputs (via task.outputs):
   notes: str (JSON list) -- sentences the dialog shows about this run
   neighborhood_counts: str (JSON) -- {cn_id: n_cells}
   composition_json: str (JSON) -- {class_names, mean_composition[CN][class]}
-  enrichment_json: str (JSON) -- {class_names, log2_enrichment[CN][class]}
+  enrichment_json: str (JSON) -- {class_names, log2_enrichment[CN][class]}, null
+                    where the class has no cell in that neighborhood
   heatmap_path: str -- path to the CN x cell-type enrichment heatmap PNG, or ""
   per_sample_proportions_json: str (JSON) -- {image_names, n_neighborhoods,
                     proportions[image][cn], counts[image][cn]} or "" if single-image
@@ -104,6 +105,30 @@ def fewer_neighborhoods_note(found, requested, distinct_windows):
         "list the %d found. Use more cell types, a larger window, or fewer neighborhoods."
         % (found, requested, distinct_windows, found)
     )
+
+
+def cn_enrichment(mean_comp, global_freq):
+    """log2 of each neighborhood's class fraction over the overall class frequency.
+
+    A class with no cell in a neighborhood is absent, not depleted: its entry is
+    NaN (drawn gray, left out of the color scale) instead of the log2 of a small
+    guard value, which read as about -19 and could set the heatmap's range.
+
+    :param mean_comp: (n_cn, n_classes) mean window composition per neighborhood
+    :param global_freq: (n_classes,) fraction of all cells in each class
+    :return: (n_cn, n_classes) float64, NaN where undefined
+    """
+    mean_comp = np.asarray(mean_comp, dtype=np.float64)
+    freq = np.broadcast_to(np.asarray(global_freq, dtype=np.float64), mean_comp.shape)
+    out = np.full(mean_comp.shape, np.nan, dtype=np.float64)
+    ok = (mean_comp > 0) & (freq > 0)
+    out[ok] = np.log2(mean_comp[ok] / freq[ok])
+    return out
+
+
+def nan_to_none(matrix):
+    """Rows of a matrix as lists with None for every non-finite value (valid JSON)."""
+    return [[float(v) if np.isfinite(v) else None for v in row] for row in matrix]
 
 
 # What the user has to know about this run, shown by the Cellular Neighborhoods
@@ -451,14 +476,26 @@ for cn in range(n_cn):
 
 global_freq = np.bincount(labels_arr, minlength=n_classes).astype(np.float64)
 global_freq = global_freq / max(1.0, global_freq.sum())
-eps = 1e-6
-enrichment = np.log2((mean_comp + eps) / (global_freq[None, :] + eps))
+enrichment = cn_enrichment(mean_comp, global_freq)
 
 
 def _save_heatmap(
-    matrix, row_labels, col_labels, title, cbar_label, cmap, vmin, vmax, fname
+    matrix,
+    row_labels,
+    col_labels,
+    title,
+    cbar_label,
+    cmap,
+    vmin,
+    vmax,
+    fname,
+    missing_caption=None,
 ):
-    """Write a labeled heatmap PNG; returns the path or "" on failure."""
+    """Write a labeled heatmap PNG; returns the path or "" on failure.
+
+    NaN cells are drawn gray; ``missing_caption`` says what gray means and is
+    printed under the plot when the matrix has any.
+    """
     try:
         os.makedirs(out_dir, exist_ok=True)
         import matplotlib
@@ -471,7 +508,8 @@ def _save_heatmap(
         fig_w = max(6.0, 0.6 * n_cols + 2.0)
         fig_h = max(4.0, 0.5 * n_rows + 1.5)
         fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-        im = ax.imshow(matrix, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+        colors = matplotlib.colormaps[cmap].with_extremes(bad="#BDBDBD")
+        im = ax.imshow(matrix, aspect="auto", cmap=colors, vmin=vmin, vmax=vmax)
         ax.set_xticks(range(n_cols))
         ax.set_xticklabels(col_labels, rotation=45, ha="right", fontsize=8)
         ax.set_yticks(range(n_rows))
@@ -479,6 +517,8 @@ def _save_heatmap(
         ax.set_title(title)
         cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
         cbar.set_label(cbar_label)
+        if missing_caption and not np.all(np.isfinite(matrix)):
+            ax.set_xlabel(missing_caption, fontsize=8)
         fig.tight_layout()
         path = os.path.join(out_dir, fname)
         fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -498,7 +538,8 @@ def _save_heatmap(
 heatmap_path = ""
 if want_heatmap and out_dir:
     report_progress(task, "Rendering enrichment heatmap...")
-    vmax = float(np.nanmax(np.abs(enrichment))) if enrichment.size else 1.0
+    _finite = enrichment[np.isfinite(enrichment)]
+    vmax = float(np.max(np.abs(_finite))) if _finite.size else 1.0
     if not np.isfinite(vmax) or vmax <= 0:
         vmax = 1.0
     cn_row_labels = ["CN %d (n=%d)" % (cn, counts[str(cn)]) for cn in range(n_cn)]
@@ -512,6 +553,7 @@ if want_heatmap and out_dir:
         -vmax,
         vmax,
         "cn_enrichment.png",
+        missing_caption="Gray: no cell of that type in the neighborhood (absent, not scaled)",
     )
 
 # 7. Multi-image (cohort) summaries: per-sample CN proportions + per-group means.
@@ -723,10 +765,7 @@ try:
         {
             "n_cn": n_cn,
             "metric": "log2_observed_over_expected",
-            "matrix": [
-                [None if not np.isfinite(v) else float(v) for v in row]
-                for row in enrich
-            ],
+            "matrix": nan_to_none(enrich),
         }
     )
     if want_heatmap and out_dir:
@@ -748,6 +787,7 @@ try:
             -amax,
             amax,
             "cn_neighborhood_adjacency.png",
+            missing_caption="Gray: the diagonal, or no contact to compare",
         )
 except Exception as e:
     logger.warning("Neighborhood adjacency failed: %s", e)
@@ -767,7 +807,7 @@ task.outputs["composition_json"] = json.dumps(
     {"class_names": names, "mean_composition": mean_comp.tolist()}
 )
 task.outputs["enrichment_json"] = json.dumps(
-    {"class_names": names, "log2_enrichment": enrichment.tolist()}
+    {"class_names": names, "log2_enrichment": nan_to_none(enrichment)}
 )
 task.outputs["heatmap_path"] = heatmap_path
 task.outputs["per_sample_proportions_json"] = per_sample_json

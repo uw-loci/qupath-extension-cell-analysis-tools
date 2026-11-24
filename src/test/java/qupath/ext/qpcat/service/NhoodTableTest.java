@@ -39,6 +39,22 @@ class NhoodTableTest {
         assertThat(text).contains("shuffled within each of 8 areas");
     }
 
+    /** H57: a hand-edited, ragged matrix is refused with one message, not an index error. */
+    @Test
+    void aRaggedMatrixIsRefusedClearly() {
+        ClusteringResult r = result(true);
+        r.setNhoodEnrichment(new double[][] {{12.5, -3.0}, {-1.25}});
+        String text = NhoodTable.text(r, k -> "Cluster " + k);
+        assertThat(text).contains("not square").contains("row 2 has 1 values for 2 clusters");
+        assertThat(SpatialStatsCsv.nhoodRows(r, null)).isEmpty();
+        assertThat(SpatialStatsCsv.nhoodCsv(r, null)).doesNotContain("12.5");
+
+        r.setNhoodEnrichment(new double[][] {{12.5, -3.0}, null});
+        assertThat(NhoodTable.text(r, null)).contains("row 2 has 0 values");
+        r.setNhoodEnrichment(new double[][] {{1.0, 2.0, 3.0}, {1.0, 2.0, 3.0}});
+        assertThat(NhoodTable.text(r, null)).contains("not square");
+    }
+
     @Test
     void aResultSavedWithoutCountsSaysSo() {
         String text = NhoodTable.text(result(false), null);

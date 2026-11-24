@@ -215,8 +215,9 @@ public final class ClusteringRunRecord {
             }
             InputSelection sel = result.getInputSelection();
             if (sel != null) {
-                sb.append("Input       : ").append(sel.summary()).append('\n');
-                for (String line : sel.detailLines()) {
+                String noClass = CellClasses.noClassLabel(sel);
+                sb.append("Input       : ").append(sel.summary(noClass)).append('\n');
+                for (String line : sel.detailLines(noClass)) {
                     sb.append("  - ").append(line).append('\n');
                 }
             }

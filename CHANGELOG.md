@@ -204,6 +204,101 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); QP-
   Shared Appose plumbing, so the DL Pixel Classifier, cellAPpose, PPM and Fiber Analysis
   extensions carry the same change.
 
+- **An independent-areas class that only other images carry can be chosen (H48).** The class
+  picker offered the open image's annotation classes and the project's class list, so a class
+  present only on images that were not open (imported GeoJSON) could not be picked, and a
+  saved configuration naming such a class lost it on load without a word. **Add class...**
+  beside the picker takes a typed class name (checked like every other class name), and a
+  loaded configuration keeps its classes.
+- **AnnData import reports what it could not place, and refuses a blank class (H54).** Rows
+  with no image id while no image was open, and rows whose image id was missing in the file
+  (read as the text `nan`), were reported as "cells in image(s) not in this project". The
+  first are now reported as "N cells name no image, and no image is open", and a missing id
+  is read as no id. A blank class category (`""` or spaces), which QuPath reads as no class
+  and so would have stripped those cells of theirs while counting them as reclassified, is
+  refused with the number of cells it holds. Spaces around a category are trimmed, as QuPath
+  does, so those cells no longer count as changing class.
+- **Classes and measurements a run replaces are counted where you read the result (H36).**
+  Clustering and phenotyping write each cell's class, and an embedding writes `UMAP1`-style
+  columns; when cells already carried a class (an imported label, a classifier's output) or
+  such a column (from another tool or an earlier run), only the log said so. The completion
+  message and the result's notes (results window, run record, phenotyping warnings, batch
+  `W014` rows) now give the count and the names, for example "1,204 of 3,000 cell(s) already
+  had a class (Tumor, Stroma), which this run replaced." Sub-clustering reports the columns
+  only, since its cells carry the parent cluster's class by design.
+- **Images a project run could not read are named, not just logged (H37).** Clustering over
+  project images (and sub-clustering, analyzing existing classifications), project
+  phenotyping, Compute Thresholds over the project, cellular neighborhoods over the project,
+  spatial statistics, the phenotyping channel check, and autoencoder training, evaluation and
+  apply left out an image that failed to open with only a WARN in the log. The completion
+  message and the saved notes (results window, run record, cohort run info, phenotyping
+  warnings, the threshold notes, the autoencoder status line and evaluation summary) now say
+  which images were left out and why, as Apply saved result already did.
+- **The autoencoder and the VEST export say how many cells a missing value left out, and the
+  autoencoder keeps its labels on the right cells.** These extractions leave out cells with a
+  missing or infinite value in a selected (for VEST, in any marker) measurement, and nothing
+  said how many. Training, evaluation, apply and the VEST export now give the count (status
+  line, evaluation summary, VEST completion text and README). Two defects behind it are
+  fixed: training built its class labels from every cell while the measurement rows held only
+  the kept ones, so a run with a missing value failed or trained on shifted labels; and
+  evaluation and apply checked only for absent values, not NaN or infinite ones, so such a
+  value made apply skip the whole image and evaluation compare the wrong rows. Training also
+  saved each image's results to the next image's entry when an earlier image could not be
+  read; it now saves to the entry each image was read from.
+- **Cells inside overlapping annotations of one area level are counted, and go to the inner
+  one (H40).** With independent areas by annotation, a cell inside two annotations of an
+  allowed class (two overlapping `Tissue` regions, or one drawn inside another) was put in
+  whichever annotation's id sorted first, and nothing said so. It now goes to the smaller
+  region, and the count appears in the area preview, in the notes of the clustering result,
+  the cellular-neighborhood summary and the spatial-statistics summary, and in the log.
+- **A real class called "Unclassified" is kept apart in two more places.** The input line of
+  a clustering run (results window, run record, Workflow-tab record, audit log) counted
+  selected annotations without a class and annotations of a real class named `Unclassified`
+  as one group, and the uncertain-cell review listed a cell predicted to have no class under
+  the same word as a cell predicted to be that real class. Both now key on "no class" itself
+  and show it as `Unclassified (no class)` when a real class has the name, as the other
+  outputs have since the class-name check.
+- **A cell type absent from a neighborhood is drawn as absent, not as -19.** The
+  cellular-neighborhood enrichment heatmap computed log2 with a 1e-6 guard, so a cell type
+  with no cell in a neighborhood scored about -19 and that one value set the color range,
+  washing the real enrichments out to white. Absent pairs are now gray, outside the color
+  scale, with a caption under the plot, and `null` in `enrichment_json`. The adjacency
+  heatmap's gray cells (the hidden diagonal) are captioned too.
+- **A name with `$` in it no longer makes a figure go missing (H52).** A class, cluster,
+  marker or image name holding two `$` with `^` or `{` between them was read as a matplotlib
+  formula, `savefig` raised, and the figure was reported as "plot failed". The worker now
+  draws text literally; the bold marker labels still draw bold and show a `$` as written.
+  Troubleshooting, *Names in figures*, also notes that names in Chinese, Japanese or Korean
+  script draw as empty boxes in figures.
+- **Batch progress rows stay one line (H57).** A field value holding a quote, a backslash, a
+  line break or another control character (an image named `slide "A"`, or one with a newline)
+  broke the one-line `[qpcat-batch] ... image="..."` row that log parsers read. Values with
+  whitespace, `"`, `\` or control characters are now quoted with `\"`, `\\`, `\n`, `\r`, `\t`
+  and `\uXXXX` escapes. The message after the fields is unchanged (a refusal still lists its
+  reasons on indented lines).
+- **A hand-edited neighborhood-enrichment matrix that is not square is refused (H57).** The
+  Neighborhood Enrichment tab threw an index error on a ragged matrix; it now says which row is
+  short and shows nothing else, and the CSV exports leave the matrix out.
+- **The Cluster Explainer finds the JSON array however the reply wraps it (H44).** A reply with
+  a bracket before the array ("Here is my answer [1]:") or an unmatched bracket inside a
+  rationale ("cf. 12]") was read as having no JSON array, a false "unexpected response shape".
+  The parser now drops code-fence lines and takes the first JSON array of objects it can read,
+  the same rule in the worker and in the MCP tool. A cluster the reply answers twice no longer
+  keeps the last row silently: it gets no suggestion, and the status line, the MCP reply and
+  the audit log's new `Reply notes:` row name it. A `cluster_id` that is not a whole number
+  (`3.7` used to become cluster 3, `true` cluster 1) is not used and is counted the same way.
+  Marker names with a line break are sent on one prompt line.
+- **The LLM audit log no longer records a password in an Ollama URL (H53).** The `Endpoint:`,
+  `Model:`/`Agent:` and `Client:` rows, and the label saved with the suggestions, go through
+  the same scrubber as the prompt and reply, which now also replaces the `user:password@` part
+  of any URL with `[REDACTED]@` (in the worker's error text too).
+- **The PAGA graph is drawn when the clusters do not touch.** When no nearest-neighbor edge
+  joined two clusters (a clean separation), python-igraph 1.0 failed inside scanpy's PAGA
+  ("mismatching number of index arrays for shape; got 0, expected 2") and the PAGA tab was
+  missing with that message. Such a graph is now recorded as having no edges, drawn with the
+  clusters on a circle, and the results summary says that every cluster stands alone. A graph
+  whose edges are all weaker than the PAGA edge threshold is drawn the same way instead of
+  failing in the layout.
 - **The same objects imported twice no longer get labels by whichever copy came first (H11).**
   QuPath's GeoJSON import keeps object ids, so a repeated import repeats them. Applying a saved
   result, a rename or a gate labeled the first copy, never the second, and still reported every

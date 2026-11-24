@@ -65,6 +65,11 @@ try:
     import matplotlib
 
     matplotlib.use("Agg")
+    # Class, cluster, image and marker names reach titles, ticks and legends.
+    # With mathtext on, a name holding two "$" is parsed as math and savefig
+    # raises (the figure goes missing). Text is literal; the bold marker labels
+    # opt back in per label (model_utils.bold_marker_ticks).
+    matplotlib.rcParams["text.parse_math"] = False
 
     import numpy
     import pandas

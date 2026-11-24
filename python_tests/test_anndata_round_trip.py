@@ -228,3 +228,13 @@ def test_too_many_values_are_not_offered_as_a_classification():
     obs = pd.DataFrame({"id_like": [str(i) for i in range(600)]})
     summary = summarize(obs, {}, 600)
     assert summary["columns"] == []
+
+
+def test_a_missing_image_id_is_blank_not_the_word_nan():
+    """H54: str() of a missing categorical id is "nan", reported as a foreign image."""
+    import pandas as pd
+
+    ids = load_script_symbol("read_anndata.py", "image_id_strings", {"pd": pd})
+    series = pd.Series(pd.Categorical(["7", None, "8"]))
+    assert ids(series) == ["7", "", "8"]
+    assert ids(pd.Series([1, float("nan")], dtype=object)) == ["1", ""]

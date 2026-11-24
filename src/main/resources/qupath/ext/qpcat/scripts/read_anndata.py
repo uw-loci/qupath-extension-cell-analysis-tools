@@ -96,7 +96,7 @@ def summarize(obs, obsm_shapes, n_cells):
     ]
     images = []
     if IMAGE_ID_COLUMN in obs.columns:
-        ids = obs[IMAGE_ID_COLUMN].astype(str)
+        ids = pd.Series(image_id_strings(obs[IMAGE_ID_COLUMN]), index=obs.index)
         names = (
             obs[IMAGE_NAME_COLUMN].astype(str)
             if IMAGE_NAME_COLUMN in obs.columns
@@ -119,6 +119,15 @@ def summarize(obs, obsm_shapes, n_cells):
         "images": images,
         "has_image_ids": IMAGE_ID_COLUMN in obs.columns,
     }
+
+
+def image_id_strings(series):
+    """Image id per cell as text, with "" where the file has none (NaN, None).
+
+    ``str()`` of a missing categorical value is "nan", which the import then reported
+    as an image not in the project.
+    """
+    return ["" if pd.isna(x) else str(x) for x in series]
 
 
 def class_codes(series, colors=None):
@@ -198,7 +207,7 @@ if _path is not None:
                 )
             task.outputs["obs_names"] = _names  # noqa: F821
             task.outputs["image_ids"] = (  # noqa: F821
-                [str(x) for x in _obs[IMAGE_ID_COLUMN]]
+                image_id_strings(_obs[IMAGE_ID_COLUMN])
                 if IMAGE_ID_COLUMN in _obs.columns
                 else None
             )

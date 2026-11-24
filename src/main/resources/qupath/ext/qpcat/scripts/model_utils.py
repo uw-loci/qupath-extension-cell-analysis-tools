@@ -504,13 +504,14 @@ def bold_marker_label(name):
 
     Characters mathtext would space out or reinterpret (a hyphen becomes a minus
     sign, an apostrophe a prime) are swapped for ones that draw as written. A name
-    holding any other special character is returned unchanged, never mangled.
+    holding any other special character is returned unchanged, never mangled, with
+    each ``$`` escaped: the label is drawn with ``parse_math=True``.
     """
     import re
 
     before, marker, after = split_measurement_name(name)
     if not marker or "$" in name or not re.match(r"^[A-Za-z0-9 .()/,'+_%-]+$", marker):
-        return name
+        return name.replace("$", r"\$")
     safe = {
         " ": r"\ ",
         "-": "\u2010",
@@ -536,6 +537,8 @@ def bold_marker_ticks(ax, axis="x"):
         "ha": first.get_ha(),
         "va": first.get_va(),
         "fontsize": first.get_fontsize(),
+        # mathtext is off in the worker (init_services.py); these labels need it.
+        "parse_math": True,
     }
     text = [bold_marker_label(t.get_text()) for t in labels]
     if axis == "x":

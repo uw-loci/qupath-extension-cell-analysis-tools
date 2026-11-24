@@ -215,6 +215,73 @@ public class ResultApplier {
         return names;
     }
 
+    private static final int NAMES_SHOWN = 8;
+
+    /**
+     * What a write is about to replace, as sentences for the run's notes and completion
+     * message: how many cells already carry a class (and which), and which of
+     * {@code columns} already hold values (and on how many cells). Read-only; call it
+     * before the write. Empty when nothing would be replaced.
+     *
+     * @param detections    the cells about to be written
+     * @param writesClasses whether the write sets each cell's class
+     * @param columns       measurement names the write sets
+     * @return zero, one or two sentences
+     */
+    public static List<String> overwriteNotes(List<PathObject> detections, boolean writesClasses,
+                                              java.util.Collection<String> columns) {
+        List<String> notes = new ArrayList<>();
+        if (detections == null || detections.isEmpty()) return notes;
+        if (writesClasses) {
+            int classified = 0;
+            Set<String> names = new LinkedHashSet<>();
+            for (PathObject det : detections) {
+                String name = CellClasses.nameOf(det);
+                if (name != null) {
+                    classified++;
+                    names.add(name);
+                }
+            }
+            if (classified > 0) {
+                notes.add(String.format(Locale.ROOT, "%,d of %,d cell(s) already had a class (%s), "
+                        + "which this run replaced.", classified, detections.size(), shown(names)));
+            }
+        }
+        if (columns != null && !columns.isEmpty()) {
+            List<String> clash = preexistingMeasurements(detections, columns.toArray(new String[0]));
+            if (!clash.isEmpty()) {
+                int cells = 0;
+                for (PathObject det : detections) {
+                    var ml = det.getMeasurements();
+                    for (String c : clash) {
+                        if (ml.containsKey(c)) {
+                            cells++;
+                            break;
+                        }
+                    }
+                }
+                notes.add(String.format(Locale.ROOT, "%d existing measurement column(s) (%s) on %,d "
+                        + "cell(s) were overwritten. Give the run a custom embedding name to keep "
+                        + "earlier columns.", clash.size(), shown(clash), cells));
+            }
+        }
+        return notes;
+    }
+
+    /** The embedding columns {@link #applyEmbedding} writes for {@code prefix}. */
+    public static List<String> embeddingColumns(String prefix, double[][] embedding) {
+        List<String> names = new ArrayList<>();
+        if (prefix == null || embedding == null || embedding.length == 0) return names;
+        for (int c = 0; c < embedding[0].length; c++) names.add(prefix + (c + 1));
+        return names;
+    }
+
+    private static String shown(java.util.Collection<String> names) {
+        List<String> list = new ArrayList<>(names);
+        String head = String.join(", ", list.subList(0, Math.min(NAMES_SHOWN, list.size())));
+        return list.size() > NAMES_SHOWN ? head + ", and " + (list.size() - NAMES_SHOWN) + " more" : head;
+    }
+
     /** Logs a warning naming any measurement keys about to be replaced. */
     private static void warnOnMeasurementOverwrite(List<PathObject> detections, String[] names) {
         List<String> clash = preexistingMeasurements(detections, names);
@@ -338,6 +405,27 @@ public class ResultApplier {
     public static final String CONFIDENCE_PREFIX = "QPCAT confidence: ";
 
     /**
+     * The columns {@link #applyMembershipConfidence} writes for {@code confidence}, the
+     * value column first; empty when it writes none.
+     */
+    public static List<String> confidenceColumns(MembershipConfidence confidence) {
+        List<String> names = new ArrayList<>();
+        if (confidence == null || !confidence.isUsable()) return names;
+        names.add(CONFIDENCE_PREFIX + confidence.getKind().getColumnName());
+        if (confidence.getRunnerUp() != null) {
+            names.add(CONFIDENCE_PREFIX + "Runner-up cluster");
+        }
+        if (confidence.getRunnerUpValues() != null) {
+            names.add(CONFIDENCE_PREFIX + "Runner-up "
+                    + confidence.getKind().getColumnName().toLowerCase(Locale.ROOT));
+        }
+        if (confidence.getEntropy() != null) {
+            names.add(CONFIDENCE_PREFIX + "Entropy");
+        }
+        return names;
+    }
+
+    /**
      * Writes per-cell membership confidence as measurements.
      *
      * <p>Column names carry the KIND, not a generic "confidence": a GMM posterior,
@@ -359,21 +447,11 @@ public class ResultApplier {
         if (confidence == null || !confidence.isUsable() || detections == null) {
             return written;
         }
-        String valueName = CONFIDENCE_PREFIX + confidence.getKind().getColumnName();
-        written.add(valueName);
+        written.addAll(confidenceColumns(confidence));
+        String valueName = written.get(0);
         boolean hasRunnerUp = confidence.getRunnerUp() != null;
         boolean hasRunnerUpValue = confidence.getRunnerUpValues() != null;
         boolean hasEntropy = confidence.getEntropy() != null;
-        if (hasRunnerUp) {
-            written.add(CONFIDENCE_PREFIX + "Runner-up cluster");
-        }
-        if (hasRunnerUpValue) {
-            written.add(CONFIDENCE_PREFIX + "Runner-up "
-                    + confidence.getKind().getColumnName().toLowerCase(Locale.ROOT));
-        }
-        if (hasEntropy) {
-            written.add(CONFIDENCE_PREFIX + "Entropy");
-        }
         warnOnMeasurementOverwrite(detections, written.toArray(new String[0]));
 
         double[] values = confidence.getValues();

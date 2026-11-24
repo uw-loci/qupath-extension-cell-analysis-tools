@@ -10,6 +10,7 @@ import qupath.ext.qpcat.model.CnWindow;
 import qupath.ext.qpcat.service.ApposeClusteringService;
 import qupath.ext.qpcat.service.CsvText;
 import qupath.ext.qpcat.service.AreaResolver;
+import qupath.ext.qpcat.service.SkippedImages;
 import qupath.ext.qpcat.service.CellClasses;
 import qupath.ext.qpcat.service.DetectionSelector;
 import qupath.ext.qpcat.service.InputAudit;
@@ -429,6 +430,7 @@ public class CellularNeighborhoodWorkflow {
         // 1. Load detections per image; skip images that fail or have none.
         report(progress, "Loading detections from " + imageEntries.size() + " images...");
         List<LoadedImage> loaded = new ArrayList<>();
+        SkippedImages unreadable = new SkippedImages();
         // Reuse the LIVE ImageData for the currently-open image so applied CN
         // labels and region annotations appear in the viewer immediately. A
         // detached readImageData() copy is written to disk only, which forces the
@@ -442,8 +444,7 @@ public class CellularNeighborhoodWorkflow {
             try {
                 imageData = isOpenImage ? openData : entry.readImageData();
             } catch (Exception e) {
-                logger.warn("Failed to read image data for {}: {}",
-                        entry.getImageName(), e.getMessage());
+                unreadable.unreadable(logger, entry.getImageName(), e);
                 continue;
             }
             List<PathObject> dets = new ArrayList<>(imageData.getHierarchy().getDetectionObjects());
@@ -655,12 +656,12 @@ public class CellularNeighborhoodWorkflow {
         // 8. Write the cohort tables + a run-info file next to the heatmaps.
         writeCohortTables(resultsDir, perSampleJson, groupJson, adjacencyJson, runId, paramsHash,
                 window, nNeighborhoods, actualCn, totalCells, loaded.size(),
-                classNames, groupMetadataKey, divergenceWarning, input.notices());
+                classNames, groupMetadataKey, divergenceWarning, unreadable.appendTo(input.notices()));
 
         long elapsed = System.currentTimeMillis() - startTime;
         String completeMsg = "Joint cellular neighborhoods complete: " + actualCn
                 + " neighborhoods over " + totalCells + " cells across " + loaded.size()
-                + " images.";
+                + " images." + (unreadable.isEmpty() ? "" : " " + unreadable.note());
         report(progress, completeMsg);
         OperationLogger.getInstance().logOperation("CELLULAR NEIGHBORHOODS (project)",
                 Map.of("window", window.detail(),
@@ -677,7 +678,8 @@ public class CellularNeighborhoodWorkflow {
                 safePath(resultsDir), enrichmentHeatmap, perSampleHeatmap, groupHeatmap,
                 adjacencyHeatmap, perSampleJson, groupJson, adjacencyJson,
                 divergenceWarning, runId, paramsHash)
-                .withNotes(withInputNotes(input, notesOf(resultMap)));
+                .withNotes(unreadable.appendTo(AreaResolver.AreaAssignment.withOverlapNote(
+                        withInputNotes(input, notesOf(resultMap)), cohortAreas, null)));
         } finally {
             // Close every ImageData we read ourselves; leave the live open image alone.
             closeLoaded(loaded);

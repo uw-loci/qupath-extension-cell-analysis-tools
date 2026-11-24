@@ -220,6 +220,8 @@ clustering:
 
 > **How a cell is matched to an area.** Geometrically: the cell's centroid falls inside the region. Parent links are NOT used, so this works on a project where cell detection ran before dearraying, or whose hierarchy has since been edited. QP-CAT never reparents objects or resolves your hierarchy -- it only reads.
 
+> **Cells inside two regions of one level** -- two overlapping `Tissue` annotations, or a small one drawn inside a large one -- are placed in the smaller region (the inner one when they nest). The preview line, the run's notes (results window, run record, cellular-neighborhood and spatial-statistics summaries) and the log give the count, so an overlap you did not intend is visible.
+
 > **Cells inside no region at the chosen level** -- a cell inside a core but outside any `Tissue` annotation -- get their own area, scoped to the deepest level they DID match (`A-1 | (unassigned)`). They are never merged across cores, and the count is warned so a partition cannot quietly swallow cells.
 >
 > `(unassigned)` is parenthesized because it is QP-CAT's word, not yours: it has to sit in the same column as your annotation class names, and a pixel classifier that emits a class called `Unclassified` would otherwise be told apart from it only by a capital letter. The Composition by class tab shows the same cells as `(none)`.

@@ -49,6 +49,8 @@ Outputs (task.outputs):
   token_count          int   -- total tokens (input + output) if reported, else -1
   input_tokens         int   -- input/prompt tokens if reported, else -1
   output_tokens        int   -- output/completion tokens if reported, else -1
+  reply_notes          str   -- JSON list of sentences on rows the parser left
+                                out (repeated or non-integer cluster_id)
   error_type           str   -- enum-shaped failure reason (only on failure)
   error_detail         str   -- short human-readable error (only on failure)
 """
@@ -171,14 +173,18 @@ def run_explainer(
 
     explanations = parse_response(raw, cluster_ids)
     out["explanations_json"] = json.dumps(explanations)
+    notes = reply_notes(raw)
+    out["reply_notes"] = json.dumps(notes)
     # MCP refuses such a reply itself, with text written for the agent.
     provider_norm = (provider or "").strip().upper()
     if provider_norm != "MCP" and not set(_rows_by_id(raw)) & set(cluster_ids):
         out["error_type"] = "MALFORMED_RESPONSE"
         out["error_detail"] = (
-            "The reply held no JSON array with a row for any requested cluster; "
-            "the full reply is in the audit log's Response block."
+            "The reply held no JSON array with a usable row for any requested "
+            "cluster; the full reply is in the audit log's Response block."
         )
+        if notes:
+            out["error_detail"] += " " + " ".join(notes)
     return out
 
 
@@ -231,7 +237,9 @@ def build_prompt(marker_table, cluster_ids, top_n):
             continue
         lines = ["Cluster {0}:".format(cid)]
         for m in markers:
-            name = m.get("name", "?")
+            # One line per marker: a name holding a line break would start a
+            # prompt line of its own.
+            name = " ".join(str(m.get("name", "?")).split()) or "?"
             score = m.get("score", 0.0)
             log2fc = m.get("logfoldchange", 0.0)
             # pval_adj is deliberately NOT sent. It is the p-value of a test whose
@@ -515,19 +523,28 @@ def parse_response(raw, cluster_ids):
     """
     Parse the LLM's JSON-array response. Returns a list with one entry per
     requested cluster id; missing or malformed rows fall back to the
-    "insufficient signal" representation so the UI always has a row.
+    "insufficient signal" representation so the UI always has a row. A cluster
+    the reply answered more than once gets no suggestion (``reply_notes`` says
+    which).
     """
-    by_id = _rows_by_id(raw)
+    by_id, repeated, _notes = _parse_rows(raw)
     out = []
     for cid in cluster_ids:
         entry = by_id.get(cid)
         if entry is None:
+            if cid in repeated:
+                rationale = (
+                    "The reply held %d rows for this cluster, so none was used."
+                    % repeated[cid]
+                )
+            else:
+                rationale = "LLM did not return a row for this cluster."
             out.append(
                 {
                     "cluster_id": cid,
                     "phenotype": None,
                     "confidence": None,
-                    "rationale": "LLM did not return a row for this cluster.",
+                    "rationale": rationale,
                     "supporting_markers": [],
                 }
             )
@@ -559,49 +576,120 @@ def parse_response(raw, cluster_ids):
     return out
 
 
+def reply_notes(raw):
+    """What the parser left out of the reply and why, one sentence per kind."""
+    return _parse_rows(raw)[2]
+
+
 def _rows_by_id(raw):
-    """The reply's JSON-array rows keyed by integer cluster_id; {} when none parse."""
+    """The reply's usable rows keyed by integer cluster_id; {} when none parse."""
+    return _parse_rows(raw)[0]
+
+
+_INT32_MAX = 2**31 - 1
+
+
+def _cluster_id(value):
+    """A row's cluster_id as an int, or None when it is not a whole number.
+
+    Mirrored by ``McpExplainerTools.clusterId`` on the Java side: an integer, an
+    integral number (3.0) or a string holding an integer counts; a boolean, 3.7,
+    text or a missing id does not.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        cid = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None
+        cid = int(value)
+    elif isinstance(value, str) and re.fullmatch(r"[+-]?[0-9]+", value.strip()):
+        cid = int(value.strip())
+    else:
+        return None
+    return cid if -_INT32_MAX - 1 <= cid <= _INT32_MAX else None
+
+
+def _parse_rows(raw):
+    """Rows by cluster id, ids answered more than once, and notes on what was left out.
+
+    :return: (by_id, repeated {id: row count}, notes [str])
+    """
     parsed = _try_parse_json_array(raw)
     by_id = {}
+    counts = {}
+    bad = []
     if isinstance(parsed, list):
         for entry in parsed:
             if not isinstance(entry, dict):
                 continue
-            cid = entry.get("cluster_id")
-            try:
-                cid = int(cid)
-            except (TypeError, ValueError):
+            cid = _cluster_id(entry.get("cluster_id"))
+            if cid is None:
+                bad.append(entry.get("cluster_id"))
                 continue
+            counts[cid] = counts.get(cid, 0) + 1
             by_id[cid] = entry
-    return by_id
+    repeated = {cid: n for cid, n in counts.items() if n > 1}
+    for cid in repeated:
+        del by_id[cid]
+    notes = []
+    if repeated:
+        notes.append(
+            "The reply held more than one row for cluster %s, so %s no "
+            "suggestion."
+            % (
+                ", ".join(str(c) for c in sorted(repeated)),
+                "that cluster got" if len(repeated) == 1 else "those clusters got",
+            )
+        )
+    if bad:
+        shown = ", ".join(
+            "missing" if b is None else json.dumps(b, ensure_ascii=True)[:40]
+            for b in bad[:5]
+        )
+        notes.append(
+            "%d row(s) were not used because their cluster_id is not a whole "
+            "number (%s%s)." % (len(bad), shown, ", ..." if len(bad) > 5 else "")
+        )
+    return by_id, repeated, notes
+
+
+# A markdown fence line (```json, ```), anywhere in the reply.
+_FENCE_LINE_RE = re.compile(r"^[ \t]*```[^\n]*$", re.MULTILINE)
+
+
+def _strip_code_fences(raw):
+    """The reply with every markdown code-fence line removed."""
+    return _FENCE_LINE_RE.sub("", raw)
+
+
+def _is_object_list(value):
+    return isinstance(value, list) and any(isinstance(v, dict) for v in value)
 
 
 def _try_parse_json_array(raw):
+    """The first JSON array of objects in the reply, or None.
+
+    Fence lines are dropped first (a JSON string cannot hold a line break, so no
+    fence line is inside the array). Then the text is decoded as one JSON value at
+    each ``[`` in turn; the first that is a list holding an object wins, so prose
+    like "my answer [1]:" before the array and brackets inside the array's
+    strings do not matter. Mirrored by ``McpExplainerTools.findReplyArray``.
+    """
     if not raw:
         return None
-    # First, try the whole string
-    try:
-        return json.loads(raw)
-    except Exception:
-        pass
-    # Fall back: extract the first balanced JSON array from a possibly
-    # markdown-wrapped response.
-    start = raw.find("[")
-    if start < 0:
-        return None
-    depth = 0
-    for i in range(start, len(raw)):
-        ch = raw[i]
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                snippet = raw[start : i + 1]
-                try:
-                    return json.loads(snippet)
-                except Exception:
-                    return None
+    text = _strip_code_fences(raw)
+    decoder = json.JSONDecoder()
+    start = text.find("[")
+    while start >= 0:
+        try:
+            value, _end = decoder.raw_decode(text, start)
+        except ValueError:
+            value = None
+        if _is_object_list(value):
+            return value
+        start = text.find("[", start + 1)
     return None
 
 
@@ -618,6 +706,8 @@ _AUTH_HEADER_RE = re.compile(
 _ANTHROPIC_KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_\-]+")
 _GENERIC_BEARER_RE = re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9_\-./=+]{8,}")
 _X_API_KEY_RE = re.compile(r"(?i)(x-api-key\s*:?\s*)([A-Za-z0-9_\-./=+]+)")
+# The user:password@ part of a URL (an Ollama endpoint behind basic auth).
+_URL_USERINFO_RE = re.compile(r"([A-Za-z][A-Za-z0-9+.\-]*://)[^\s/@]+@")
 
 
 def scrub_secrets(text):
@@ -636,6 +726,7 @@ def scrub_secrets(text):
     s = _X_API_KEY_RE.sub(r"\1[REDACTED]", s)
     s = _GENERIC_BEARER_RE.sub(r"\1[REDACTED]", s)
     s = _ANTHROPIC_KEY_RE.sub("[REDACTED]", s)
+    s = _URL_USERINFO_RE.sub(r"\1[REDACTED]@", s)
     return s
 
 

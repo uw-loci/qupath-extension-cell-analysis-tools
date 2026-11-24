@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Set;
 
 import qupath.lib.objects.PathObject;
-import qupath.lib.objects.classes.PathClass;
 import qupath.lib.objects.hierarchy.PathObjectHierarchy;
 
 /**
@@ -26,7 +25,10 @@ public final class UncertaintyQueue {
 
     private UncertaintyQueue() {}
 
-    /** One cell to review: where it is, what was predicted, and how sure the classifier was. */
+    /**
+     * One cell to review: where it is, what was predicted, and how sure the classifier was.
+     * {@code predicted} is null for a cell predicted to have no class.
+     */
     public record Candidate(String imageId, String imageName, double x, double y, int z, int t,
                             String predicted, double confidence) {}
 
@@ -57,9 +59,7 @@ public final class UncertaintyQueue {
             if (!Double.isFinite(conf)) {
                 continue;
             }
-            PathClass pc = det.getPathClass();
-            String predicted = CellClasses.isUnclassified(pc)
-                    ? TrainingLabels.UNCLASSIFIED : pc.toString();
+            String predicted = CellClasses.nameOf(det);
             out.add(new Candidate(imageId, imageName, roi.getCentroidX(), roi.getCentroidY(),
                     roi.getZ(), roi.getT(), predicted, conf));
         }

@@ -39,6 +39,7 @@ import qupath.ext.qpcat.service.OperationLogger;
 import qupath.ext.qpcat.service.PixelSizes;
 import qupath.ext.qpcat.service.ResultApplier;
 import qupath.ext.qpcat.service.SavedResultApplier;
+import qupath.ext.qpcat.service.SkippedImages;
 import qupath.fx.dialogs.Dialogs;
 import qupath.lib.gui.QuPathGUI;
 import qupath.lib.images.ImageData;
@@ -89,6 +90,9 @@ import qupath.lib.projects.ProjectImageEntry;
 public class ClusteringWorkflow {
 
     private static final Logger logger = LoggerFactory.getLogger(ClusteringWorkflow.class);
+
+    /** See {@link #getLastRunNotes()}. */
+    private volatile List<String> lastRunNotes = List.of();
 
     /**
      * Measurement-name prefixes that must be excluded from the
@@ -535,6 +539,10 @@ public class ClusteringWorkflow {
         requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
 
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                        config.getEmbeddingMethod().getId(), embeddingName(config)) : null, true);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
 
         // Skip label application for embedding-only mode
         if (config.getAlgorithm() != ClusteringConfig.Algorithm.NONE) {
@@ -580,6 +588,9 @@ public class ClusteringWorkflow {
                 : "Clustering complete: " + result.clusterCountText()
                     + " found for " + result.getNCells() + " cells.";
         for (String note : result.runNotes()) {
+            completeMsg += " " + note;
+        }
+        for (String note : overwrites) {
             completeMsg += " " + note;
         }
         report(progressCallback, completeMsg);
@@ -928,6 +939,7 @@ public class ClusteringWorkflow {
 
         // Build detection groups from each image
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        SkippedImages unreadable = new SkippedImages();
         int cellsBeforeSubset = 0;
         for (int idx = 0; idx < imageEntries.size(); idx++) {
             ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
@@ -938,7 +950,7 @@ public class ClusteringWorkflow {
             try {
                 imageData = liveOrRead(entry);
             } catch (Exception e) {
-                logger.warn("Failed to read image data for {}: {}", entry.getImageName(), e.getMessage());
+                unreadable.unreadable(logger, entry.getImageName(), e);
                 continue;
             }
 
@@ -1006,6 +1018,7 @@ public class ClusteringWorkflow {
         } catch (Exception e) {
             throw new IOException("Clustering failed: " + e.getMessage(), e);
         }
+        result.setInputNotes(unreadable.appendTo(result.getInputNotes()));
 
         // Per-cell back-references: multi-image segments each carry their own
         // ProjectImageEntry, so no fallback id/name is needed.
@@ -1077,6 +1090,9 @@ public class ClusteringWorkflow {
         if (embeddingPrefix != null) {
             result.setEmbeddingPrefix(embeddingPrefix);
         }
+        List<String> overwrites = clusteringOverwriteNotes(
+                extraction.getDetections(), config, result, embeddingPrefix, true);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
         // Saved BEFORE the per-image loop: each image's Workflow record names
         // the saved result, and a name assigned afterwards read
         // "(not saved - no project open)" on every image of a project run.
@@ -1163,6 +1179,12 @@ public class ClusteringWorkflow {
                 + extraction.getImageSegments().size() + " images.";
         for (String note : result.runNotes()) {
             completeMsg += " " + note;
+        }
+        for (String note : overwrites) {
+            completeMsg += " " + note;
+        }
+        if (!unreadable.isEmpty()) {
+            completeMsg += " " + unreadable.note();
         }
         report(progressCallback, completeMsg);
 
@@ -1321,7 +1343,8 @@ public class ClusteringWorkflow {
             }
             if (result.getInputSelection() != null) {
                 // Counts and classes only; the saved result's RUN_INFO lists each one.
-                lines.add("// Input: " + result.getInputSelection().summary() + ", "
+                InputSelection sel = result.getInputSelection();
+                lines.add("// Input: " + sel.summary(CellClasses.noClassLabel(sel)) + ", "
                         + result.getNCells() + " cells clustered");
             }
             lines.add("// Algorithm: " + algo + "  params: " + paramsStr);
@@ -1444,6 +1467,8 @@ public class ClusteringWorkflow {
         String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
 
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = ResultApplier.overwriteNotes(extraction.getDetections(), true, List.of());
+        resultMap.put("input_notes", plus(notesOf(resultMap), overwrites));
         applier.applyPhenotypeLabels(extraction.getDetections(), labels, phenotypeNames, null);
 
         // Fire hierarchy update on FX thread
@@ -1512,8 +1537,9 @@ public class ClusteringWorkflow {
             throw new IOException("No project images selected for phenotyping.");
         }
 
+        SkippedImages unreadable = new SkippedImages();
         List<MeasurementExtractor.ImageDetectionGroup> groups =
-                loadProjectDetectionGroups(imageEntries, progressCallback);
+                loadProjectDetectionGroups(imageEntries, progressCallback, unreadable);
         try {
 
         report(progressCallback, "Extracting measurements...");
@@ -1539,8 +1565,11 @@ public class ClusteringWorkflow {
         } catch (Exception e) {
             throw new IOException("Phenotyping failed: " + e.getMessage(), e);
         }
+        resultMap.put("input_notes", unreadable.appendTo(notesOf(resultMap)));
 
         report(progressCallback, "Applying phenotype labels to project images...");
+        resultMap.put("input_notes", plus(notesOf(resultMap),
+                ResultApplier.overwriteNotes(extraction.getDetections(), true, List.of())));
         int[] labels = (int[]) resultMap.get("labels");
         String[] phenotypeNames = (String[]) resultMap.get("phenotype_names");
         ResultApplier applier = new ResultApplier();
@@ -1575,7 +1604,8 @@ public class ClusteringWorkflow {
 
         String completeMsg = "Project phenotyping complete: " + resultMap.get("n_phenotypes")
                 + " phenotypes assigned to " + extraction.getNCells() + " cells across "
-                + extraction.getImageSegments().size() + " images.";
+                + extraction.getImageSegments().size() + " images."
+                + (unreadable.isEmpty() ? "" : " " + unreadable.note());
         report(progressCallback, completeMsg);
 
         int ruleCount = 0;
@@ -1606,7 +1636,7 @@ public class ClusteringWorkflow {
      */
     private List<MeasurementExtractor.ImageDetectionGroup> loadProjectDetectionGroups(
             List<ProjectImageEntry<BufferedImage>> imageEntries,
-            Consumer<String> progressCallback) throws IOException {
+            Consumer<String> progressCallback, SkippedImages unreadable) throws IOException {
         report(progressCallback, "Loading detections from " + imageEntries.size() + " images...");
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
         for (int idx = 0; idx < imageEntries.size(); idx++) {
@@ -1617,8 +1647,7 @@ public class ClusteringWorkflow {
             try {
                 imageData = liveOrRead(entry);
             } catch (Exception e) {
-                logger.warn("Failed to read image data for {}: {}",
-                        entry.getImageName(), e.getMessage());
+                unreadable.unreadable(logger, entry.getImageName(), e);
                 continue;
             }
             Collection<PathObject> detections = imageData.getHierarchy().getDetectionObjects();
@@ -1641,6 +1670,13 @@ public class ClusteringWorkflow {
     }
 
     /**
+     * What the last threshold or autoencoder run over project images left out (images it
+     * could not read or failed on, objects with a missing or infinite measurement), one
+     * sentence each; empty when it used everything. Those calls return data, not a message.
+     */
+    public List<String> getLastRunNotes() { return lastRunNotes; }
+
+    /**
      * Compute per-marker histograms and auto-thresholds across MULTIPLE project
      * images, pooling and normalizing their cells together exactly as
      * {@link #runPhenotypingProject} does -- so the gates you set match the
@@ -1656,8 +1692,12 @@ public class ClusteringWorkflow {
             return computeThresholds(selectedMeasurements, normalization, progressCallback);
         }
         long startTime = System.currentTimeMillis();
+        SkippedImages unreadable = new SkippedImages();
         List<MeasurementExtractor.ImageDetectionGroup> groups =
-                loadProjectDetectionGroups(imageEntries, progressCallback);
+                loadProjectDetectionGroups(imageEntries, progressCallback, unreadable);
+        // The thresholds come back as JSON for the histogram panel, so the note on
+        // images left out is read back with getLastRunNotes().
+        lastRunNotes = unreadable.appendTo(List.of());
         try {
             MeasurementExtractor extractor = new MeasurementExtractor();
             MeasurementExtractor.ExtractionResult extraction =
@@ -2236,7 +2276,8 @@ public class ClusteringWorkflow {
                 result.setMissingNote(extraction.missingSummary());
                 result.setExcludedObjects(extraction.getExcludedObjects());
             }
-            result.setInputNotes(input.notices());
+            result.setInputNotes(
+                    AreaResolver.AreaAssignment.withOverlapNote(input.notices(), areas, null));
             result.setInputNotesShown(noticesShown);
 
             // Noise is a row of clusterStats but not a cluster -- carry the index
@@ -3073,6 +3114,10 @@ public class ClusteringWorkflow {
         // Apply hierarchical sub-cluster labels
         report(progressCallback, "Applying sub-cluster labels...");
         ResultApplier applier = new ResultApplier();
+        List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                        config.getEmbeddingMethod().getId(), embeddingName(config)) : null, false);
+        result.setInputNotes(plus(result.getInputNotes(), overwrites));
         applier.applySubclusterLabels(extraction.getDetections(),
                 result.getClusterLabels(), parentClusterName);
 
@@ -3093,7 +3138,8 @@ public class ClusteringWorkflow {
         });
 
         String completeMsg = "Sub-clustering complete: " + result.getNClusters()
-                + " sub-clusters in " + parentClusterName;
+                + " sub-clusters in " + parentClusterName
+                + (overwrites.isEmpty() ? "" : ". " + String.join(" ", overwrites));
         report(progressCallback, completeMsg);
 
         // Audit trail
@@ -3221,6 +3267,7 @@ public class ClusteringWorkflow {
         config.setAlgorithm(ClusteringConfig.Algorithm.EXISTING);
 
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        SkippedImages unreadable = new SkippedImages();
         String fallbackName = null;
         String fallbackId = null;
         boolean multiImage = entries != null && !entries.isEmpty();
@@ -3234,8 +3281,7 @@ public class ClusteringWorkflow {
                     try {
                         imageData = liveOrRead(entry);
                     } catch (Exception e) {
-                        logger.warn("Failed to read image data for {}: {}",
-                                entry.getImageName(), e.getMessage());
+                        unreadable.unreadable(logger, entry.getImageName(), e);
                         continue;
                     }
                     Collection<PathObject> dets = imageData.getHierarchy().getDetectionObjects();
@@ -3364,6 +3410,7 @@ public class ClusteringWorkflow {
                     ? (extraction.getImageSegments().size() + " project image(s), existing classifications")
                     : (fallbackName + " (existing classifications)");
             result.setDerivedOp("analyzed current classifications");
+            result.setInputNotes(unreadable.appendTo(result.getInputNotes()));
             autoSaveResult(result, config, scopeKey, scopeLabel);
 
             return result;
@@ -3392,6 +3439,7 @@ public class ClusteringWorkflow {
                 + "' detections from " + imageEntries.size() + " images...");
 
         List<MeasurementExtractor.ImageDetectionGroup> groups = new ArrayList<>();
+        SkippedImages unreadable = new SkippedImages();
         try {
             for (int idx = 0; idx < imageEntries.size(); idx++) {
                 ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
@@ -3402,8 +3450,7 @@ public class ClusteringWorkflow {
                 try {
                     imageData = liveOrRead(entry);
                 } catch (Exception e) {
-                    logger.warn("Failed to read image data for {}: {}",
-                            entry.getImageName(), e.getMessage());
+                    unreadable.unreadable(logger, entry.getImageName(), e);
                     continue;
                 }
 
@@ -3471,6 +3518,10 @@ public class ClusteringWorkflow {
             reportPhase(progressCallback, "apply", "Applying results to project images...");
             requireOwnEmbeddingColumns(config, extraction.getDetections(), result);
             ResultApplier applier = new ResultApplier();
+            List<String> overwrites = clusteringOverwriteNotes(extraction.getDetections(), config, result,
+                    result.hasEmbedding() ? ResultApplier.getEmbeddingPrefix(
+                            config.getEmbeddingMethod().getId(), embeddingName(config)) : null, false);
+            result.setInputNotes(plus(result.getInputNotes(), overwrites));
 
             for (MeasurementExtractor.ImageSegment segment : extraction.getImageSegments()) {
                 int start = segment.getStartIndex();
@@ -3527,6 +3578,7 @@ public class ClusteringWorkflow {
                     "PROJECT SUB-CLUSTERING", params, completeMsg, elapsed);
 
             setSubclusterLineage(result, parentResultName, parentClusterName);
+            result.setInputNotes(unreadable.appendTo(result.getInputNotes()));
 
             autoSaveResult(result, config, SavedClusteringResult.PROJECT_SCOPE_KEY,
                     nImages + " project image" + (nImages == 1 ? "" : "s")
@@ -4007,8 +4059,13 @@ public class ClusteringWorkflow {
         List<String> classNames = new ArrayList<>();
         List<Integer> allLabels = new ArrayList<>();
 
-        // Build image list: use selected entries, or fall back to current image
+        // Build image list: use selected entries, or fall back to current image.
+        // readEntries stays index-aligned with imageDatas: an unreadable image is in
+        // neither, so results are saved to the entry they were read from.
         List<ImageData<BufferedImage>> imageDatas = new ArrayList<>();
+        List<ProjectImageEntry<BufferedImage>> readEntries = new ArrayList<>();
+        SkippedImages unreadable = new SkippedImages();
+        lastRunNotes = List.of();
         if (selectedImages != null && !selectedImages.isEmpty()) {
             for (int idx = 0; idx < selectedImages.size(); idx++) {
                 ProjectImageEntry<BufferedImage> entry = selectedImages.get(idx);
@@ -4024,8 +4081,9 @@ public class ClusteringWorkflow {
                     } else {
                         imageDatas.add(entry.readImageData());
                     }
+                    readEntries.add(entry);
                 } catch (Exception e) {
-                    logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                    unreadable.unreadable(logger, entry.getImageName(), e);
                 }
             }
         } else {
@@ -4080,12 +4138,6 @@ public class ClusteringWorkflow {
             throw new IOException("No " + (cellsOnly ? "cell objects" : "detections")
                     + " found in selected images.");
 
-        int[] classLabels = allLabels.stream().mapToInt(Integer::intValue).toArray();
-        int nLabeled = 0;
-        for (int l : classLabels) if (l >= 0) nLabeled++;
-        logger.info("Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
-                inputMode, allDetections.size(), imageDatas.size(), nLabeled, classNames.size());
-
         // Extract measurements (for measurement mode, or hybrid tile+measurements mode)
         MeasurementExtractor.ExtractionResult extraction = null;
         boolean hybridMode = useTiles && selectedMeasurements != null && !selectedMeasurements.isEmpty();
@@ -4098,7 +4150,25 @@ public class ClusteringWorkflow {
                 logger.info("Hybrid tile+measurement mode: {} measurements alongside tiles",
                         extraction.getNMeasurements());
             }
+            if (extraction.getExcludedObjects() > 0) {
+                // The matrix rows are the extraction's detections; the labels, the
+                // tiles and the cells written back must be the same ones.
+                keepOnly(extraction.getDetections(), allDetections, allLabels, perImageDets);
+            }
         }
+        List<String> runNotes = new ArrayList<>();
+        if (extraction != null && !extraction.missingSummary().isEmpty()) {
+            runNotes.add(capitalize(extraction.missingSummary())
+                    + "; those cells keep their class and get no AE_ values.");
+        }
+        runNotes = unreadable.appendTo(runNotes);
+        lastRunNotes = List.copyOf(runNotes);
+
+        int[] classLabels = allLabels.stream().mapToInt(Integer::intValue).toArray();
+        int nLabeled = 0;
+        for (int l : classLabels) if (l >= 0) nLabeled++;
+        logger.info("Autoencoder ({}): {} cells from {} images, {} labeled, {} classes",
+                inputMode, allDetections.size(), imageDatas.size(), nLabeled, classNames.size());
 
         // For tile mode, write tiles to a temp file that Python memory-maps.
         // This scales to any dataset size without holding all tiles in Java memory.
@@ -4292,6 +4362,7 @@ public class ClusteringWorkflow {
                     resultMap.put("best_epoch", task.outputs.get("best_epoch"));
                     resultMap.put("n_classes", task.outputs.get("n_classes"));
                     resultMap.put("active_units", task.outputs.get("active_units"));
+                    resultMap.put("run_notes", lastRunNotes);
 
                     return null;
                 } finally {
@@ -4307,21 +4378,21 @@ public class ClusteringWorkflow {
         // Save results for non-current images; fire hierarchy update for current
         if (selectedImages != null) {
             report(progressCallback, "Saving results to " + imageDatas.size() + " images...");
-            for (int i = 0; i < selectedImages.size() && i < imageDatas.size(); i++) {
+            for (int i = 0; i < readEntries.size(); i++) {
                 var currentData = qupath.getImageData();
                 var currentEntry = (currentProject() != null && currentData != null)
                         ? currentProject().getEntry(currentData) : null;
-                if (currentEntry != null && currentEntry.equals(selectedImages.get(i))) {
+                if (currentEntry != null && currentEntry.equals(readEntries.get(i))) {
                     // Current image: already modified in-memory, just fire update
                     continue;
                 }
                 try {
-                    selectedImages.get(i).saveImageData(imageDatas.get(i));
+                    readEntries.get(i).saveImageData(imageDatas.get(i));
                     logger.info("Saved training results for {}",
-                            selectedImages.get(i).getImageName());
+                            readEntries.get(i).getImageName());
                 } catch (Exception e) {
                     logger.error("Failed to save {}: {}",
-                            selectedImages.get(i).getImageName(), e.getMessage());
+                            readEntries.get(i).getImageName(), e.getMessage());
                 }
             }
         }
@@ -4370,6 +4441,9 @@ public class ClusteringWorkflow {
 
         boolean useTiles = "tiles".equals(inputMode);
         int totalCells = 0;
+        SkippedImages leftOut = new SkippedImages();
+        int excludedObjects = 0;
+        lastRunNotes = List.of();
         int totalCorrect = 0;
         int totalLabeled = 0;
         List<Map<String, Object>> misclassifications = new ArrayList<>();
@@ -4399,7 +4473,7 @@ public class ClusteringWorkflow {
                     imageData = entry.readImageData();
                 }
             } catch (Exception e) {
-                logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                leftOut.unreadable(logger, entry.getImageName(), e);
                 continue;
             }
             // Close this image's reader at the end of the iteration unless it is the
@@ -4417,33 +4491,27 @@ public class ClusteringWorkflow {
             int[] groundTruth = extractClassLabels(imageData.getHierarchy(), detections,
                     imgClassNames, labelFromLocked, labelFromPoints, labelFromDetections);
 
-            // Run inference (same as apply, but don't write results back)
-            // For measurement mode, filter to objects with all measurements
+            // Run inference (same as apply, but don't write results back). In
+            // measurement mode the rows are the extraction's detections: objects with
+            // a missing or infinite value are left out, and the ground truth follows.
             List<PathObject> validDetections = detections;
-            if (!useTiles && measurements != null && !measurements.isEmpty()) {
-                List<PathObject> filtered = new ArrayList<>();
-                List<Integer> filteredGT = new ArrayList<>();
-                for (int i = 0; i < detections.size(); i++) {
-                    boolean hasMissing = false;
-                    for (String m : measurements) {
-                        if (detections.get(i).getMeasurements().get(m) == null) {
-                            hasMissing = true;
-                            break;
-                        }
-                    }
-                    if (!hasMissing) {
-                        filtered.add(detections.get(i));
-                        filteredGT.add(groundTruth[i]);
-                    }
+            MeasurementExtractor.ExtractionResult extraction = null;
+            if (!useTiles) {
+                extraction = new MeasurementExtractor().extract(detections, measurements);
+                validDetections = extraction.getDetections();
+                excludedObjects += extraction.getExcludedObjects();
+                if (validDetections.size() < detections.size()) {
+                    Map<PathObject, Integer> gtOf = new java.util.IdentityHashMap<>();
+                    for (int i = 0; i < detections.size(); i++) gtOf.put(detections.get(i), groundTruth[i]);
+                    int[] kept = new int[validDetections.size()];
+                    for (int i = 0; i < kept.length; i++) kept[i] = gtOf.get(validDetections.get(i));
+                    groundTruth = kept;
                 }
-                validDetections = filtered;
-                groundTruth = filteredGT.stream().mapToInt(Integer::intValue).toArray();
             }
 
             if (validDetections.isEmpty()) continue;
 
             // Run inference via Appose
-            MeasurementExtractor.ExtractionResult extraction = null;
             Path inferTileFile = null;
             int nChannels = 0;
 
@@ -4464,9 +4532,6 @@ public class ClusteringWorkflow {
                         raf.write(bb.array());
                     }
                 }
-            } else {
-                MeasurementExtractor extractor = new MeasurementExtractor();
-                extraction = extractor.extract(validDetections, measurements);
             }
 
             final MeasurementExtractor.ExtractionResult fExtraction = extraction;
@@ -4518,7 +4583,7 @@ public class ClusteringWorkflow {
                     }
                 });
             } catch (Exception e) {
-                logger.error("Inference failed for {}: {}", entry.getImageName(), e.getMessage());
+                leftOut.add(logger, entry.getImageName(), "inference failed", e);
                 deleteTempFile(inferTileFile);
                 continue;
             }
@@ -4566,7 +4631,14 @@ public class ClusteringWorkflow {
             }
         }
 
+        List<String> runNotes = new ArrayList<>();
+        if (excludedObjects > 0) {
+            runNotes.add(excludedObjects + " object(s) with a missing or infinite value in a selected "
+                    + "measurement were left out of the evaluation.");
+        }
+        lastRunNotes = List.copyOf(leftOut.appendTo(runNotes));
         Map<String, Object> result = new HashMap<>();
+        result.put("run_notes", lastRunNotes);
         result.put("confusion_matrix", confusionMatrix);
         result.put("correct", totalCorrect);
         result.put("total_labeled", totalLabeled);
@@ -4607,6 +4679,9 @@ public class ClusteringWorkflow {
         long startTime = System.currentTimeMillis();
         boolean currentImageApplied = false;
         int totalApplied = 0;
+        SkippedImages leftOut = new SkippedImages();
+        int unchangedObjects = 0;
+        lastRunNotes = List.of();
 
         for (int idx = 0; idx < imageEntries.size(); idx++) {
             ProjectImageEntry<BufferedImage> entry = imageEntries.get(idx);
@@ -4625,7 +4700,7 @@ public class ClusteringWorkflow {
                 isCurrentImage = (currentEntry != null && currentEntry.equals(entry));
                 imageData = entry.readImageData();
             } catch (Exception e) {
-                logger.warn("Failed to read {}: {}", entry.getImageName(), e.getMessage());
+                leftOut.unreadable(logger, entry.getImageName(), e);
                 continue;
             }
             // This is always a detached read (even for the current image); close its
@@ -4646,42 +4721,26 @@ public class ClusteringWorkflow {
 
             boolean useTiles = "tiles".equals(inputMode);
 
-            // Filter out objects with missing measurements (measurement mode only)
-            List<PathObject> detections;
-            int skippedMissing = 0;
-            if (!useTiles && measurements != null && !measurements.isEmpty()) {
-                detections = new ArrayList<>();
-                for (PathObject det : allDetections) {
-                    boolean hasMissing = false;
-                    for (String m : measurements) {
-                        Number val = det.getMeasurements().get(m);
-                        if (val == null) {
-                            hasMissing = true;
-                            break;
-                        }
-                    }
-                    if (hasMissing) {
-                        skippedMissing++;
-                    } else {
-                        detections.add(det);
-                    }
+            // Measurement mode: the extraction leaves out objects with a missing or
+            // infinite value, and its detections are the rows the model sees.
+            MeasurementExtractor.ExtractionResult extraction = null;
+            if (!useTiles) {
+                extraction = new MeasurementExtractor().extract(allDetections, measurements);
+                if (extraction.getExcludedObjects() > 0) {
+                    unchangedObjects += extraction.getExcludedObjects();
+                    logger.warn("{}: {} of {} objects lack a finite value in a selected measurement; "
+                            + "their classification is not changed", entry.getImageName(),
+                            extraction.getExcludedObjects(), allDetections.size());
                 }
-                if (skippedMissing > 0) {
-                    logger.error("{}: {} out of {} objects did not have all needed measurements "
-                            + "-- classification was not changed for these objects",
-                            entry.getImageName(), skippedMissing, allDetections.size());
-                }
-                if (detections.isEmpty()) {
-                    logger.error("{}: ALL objects missing measurements -- skipping image",
-                            entry.getImageName());
+                if (extraction.getNCells() == 0) {
+                    leftOut.add(logger, entry.getImageName(),
+                            "no object has every selected measurement", null);
                     continue;
                 }
-            } else {
-                detections = allDetections;
             }
+            final List<PathObject> detections = useTiles ? allDetections : extraction.getDetections();
 
             // Prepare input data based on mode
-            MeasurementExtractor.ExtractionResult extraction = null;
             Path inferTileFile = null;
             int nChannels = 0;
             if (useTiles) {
@@ -4703,14 +4762,6 @@ public class ClusteringWorkflow {
                         bb.asFloatBuffer().put(batch);
                         raf.write(bb.array());
                     }
-                }
-            } else {
-                MeasurementExtractor extractor = new MeasurementExtractor();
-                try {
-                    extraction = extractor.extract(detections, measurements);
-                } catch (Exception e) {
-                    logger.warn("Failed to extract from {}: {}", entry.getImageName(), e.getMessage());
-                    continue;
                 }
             }
 
@@ -4775,9 +4826,7 @@ public class ClusteringWorkflow {
                             confNd.buffer().asFloatBuffer().get(confidence);
 
                             // Apply to detections
-                            List<PathObject> targetDets = useTiles
-                                    ? detections
-                                    : finalExtraction.getDetections();
+                            List<PathObject> targetDets = detections;
                             for (int i = 0; i < nCells; i++) {
                                 var ml = targetDets.get(i).getMeasurements();
                                 for (int d = 0; d < latentDim; d++) {
@@ -4799,8 +4848,7 @@ public class ClusteringWorkflow {
                     }
                 });
             } catch (Exception e) {
-                logger.error("Failed to apply autoencoder to {}: {}",
-                        entry.getImageName(), e.getMessage());
+                leftOut.add(logger, entry.getImageName(), "the model could not be applied", e);
                 continue;
             }
 
@@ -4812,7 +4860,7 @@ public class ClusteringWorkflow {
                 logger.info("Saved autoencoder results for {} ({} detections)",
                         entry.getImageName(), detections.size());
             } catch (Exception e) {
-                logger.error("Failed to save {}: {}", entry.getImageName(), e.getMessage());
+                leftOut.add(logger, entry.getImageName(), "results could not be saved", e);
             }
 
             // Clean up per-image tile temp file
@@ -4823,15 +4871,78 @@ public class ClusteringWorkflow {
         }
 
         long elapsed = System.currentTimeMillis() - startTime;
+        List<String> runNotes = new ArrayList<>();
+        if (unchangedObjects > 0) {
+            runNotes.add(unchangedObjects + " object(s) with a missing or infinite value in a selected "
+                    + "measurement kept their class and got no AE_ values.");
+        }
+        lastRunNotes = List.copyOf(leftOut.appendTo(runNotes));
         String msg = "Autoencoder applied to " + totalApplied + "/"
                 + imageEntries.size() + " images";
-        report(progressCallback, msg);
+        report(progressCallback, msg + (lastRunNotes.isEmpty() ? "" : ". " + String.join(" ", lastRunNotes)));
         OperationLogger.getInstance().logOperation("AUTOENCODER_PROJECT_APPLY",
                 Map.of("Images", String.valueOf(imageEntries.size()),
                        "Applied", String.valueOf(totalApplied)),
                 msg, elapsed);
 
         return currentImageApplied;
+    }
+
+    /**
+     * What writing a clustering result replaces on these cells: their classes (when
+     * {@code writesClasses} and the run assigns clusters) and any embedding column already
+     * present. See {@link ResultApplier#overwriteNotes}.
+     */
+    private static List<String> clusteringOverwriteNotes(List<PathObject> detections,
+            ClusteringConfig config, ClusteringResult result, String embeddingPrefix,
+            boolean writesClasses) {
+        // Embedding columns only: generic names (UMAP1) another tool may have written.
+        // The "QPCAT confidence:" columns are QP-CAT's own from an earlier run.
+        List<String> columns = ResultApplier.embeddingColumns(embeddingPrefix, result.getEmbedding());
+        return ResultApplier.overwriteNotes(detections,
+                writesClasses && config.getAlgorithm() != ClusteringConfig.Algorithm.NONE, columns);
+    }
+
+    /** {@code a} then {@code b}, as a new list. */
+    private static List<String> plus(List<String> a, List<String> b) {
+        if (b == null || b.isEmpty()) return a == null ? List.of() : a;
+        List<String> all = new ArrayList<>(a == null ? List.of() : a);
+        all.addAll(b);
+        return all;
+    }
+
+    /** The {@code input_notes} list of a phenotyping result map; empty when absent. */
+    @SuppressWarnings("unchecked")
+    private static List<String> notesOf(Map<String, Object> resultMap) {
+        return resultMap.get("input_notes") instanceof List<?> l ? (List<String>) l : List.of();
+    }
+
+    /**
+     * Drops from {@code detections} (and the index-aligned {@code labels}, and each image's
+     * list in {@code perImage}) every object not in {@code kept}, preserving order.
+     */
+    static void keepOnly(List<PathObject> kept, List<PathObject> detections,
+                                 List<Integer> labels,
+                                 Map<ImageData<BufferedImage>, List<PathObject>> perImage) {
+        Set<PathObject> keep = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        keep.addAll(kept);
+        List<PathObject> dets = new ArrayList<>();
+        List<Integer> labs = new ArrayList<>();
+        for (int i = 0; i < detections.size(); i++) {
+            if (keep.contains(detections.get(i))) {
+                dets.add(detections.get(i));
+                labs.add(labels.get(i));
+            }
+        }
+        detections.clear();
+        detections.addAll(dets);
+        labels.clear();
+        labels.addAll(labs);
+        perImage.replaceAll((data, list) -> list.stream().filter(keep::contains).toList());
+    }
+
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
     }
 
     /** Converts int[] to List<Integer> for Appose JSON serialization. */

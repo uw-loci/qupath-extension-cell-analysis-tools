@@ -77,6 +77,18 @@ final class AnnotationClasses {
         return new ArrayList<>(names);
     }
 
+    /**
+     * {@code inScope} followed by each of {@code extra} it lacks: classes typed in, or
+     * from a saved configuration, that only images other than the open one hold.
+     */
+    static List<String> withExtra(List<String> inScope, java.util.Collection<String> extra) {
+        List<String> all = new ArrayList<>(inScope);
+        for (String name : extra) {
+            if (!all.contains(name)) all.add(name);
+        }
+        return all;
+    }
+
     /** The open image's annotation classes first, then the rest of the project's. */
     static List<String> inScope(QuPathGUI qupath) {
         List<String> all = new ArrayList<>(onOpenImageAnnotations(qupath));

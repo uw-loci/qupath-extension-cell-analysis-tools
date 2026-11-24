@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
+import qupath.ext.qpcat.model.InputSelection;
 import qupath.ext.qpcat.model.PhenotypeNames;
 import qupath.lib.objects.PathObject;
 import qupath.lib.objects.classes.PathClass;
@@ -224,6 +225,11 @@ public final class CellClasses {
             n++;
         }
         return label;
+    }
+
+    /** {@link #noClassLabel} for the unclassified annotations of an input selection. */
+    public static String noClassLabel(InputSelection selection) {
+        return noClassLabel(selection.classNames(), UNCLASSIFIED_DISPLAY);
     }
 
     /**

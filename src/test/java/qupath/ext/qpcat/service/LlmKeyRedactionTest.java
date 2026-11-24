@@ -2,6 +2,8 @@ package qupath.ext.qpcat.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -82,6 +84,37 @@ class LlmKeyRedactionTest {
     @Test
     void nullInputReturnsEmptyString() {
         assertThat(LlmAuditScrubber.scrub(null)).isEqualTo("");
+    }
+
+    @Test
+    void urlUserinfoIsRedactedAndTheRestKept() {
+        String payload = "Could not reach http://alice:s3cret@ollama.lab:11434/api/chat (refused)";
+        String scrubbed = LlmAuditScrubber.scrub(payload);
+        assertThat(scrubbed)
+                .isEqualTo("Could not reach http://[REDACTED]@ollama.lab:11434/api/chat (refused)")
+                .doesNotContain("s3cret").doesNotContain("alice");
+        assertThat(LlmAuditScrubber.scrub(scrubbed)).isEqualTo(scrubbed);
+        assertThat(LlmAuditScrubber.scrub("http://localhost:11434/api/chat"))
+                .isEqualTo("http://localhost:11434/api/chat");
+    }
+
+    @Test
+    void auditFieldsOthersTypedAreScrubbed() {
+        LlmExplainerService.ExplainRequest ollama = new LlmExplainerService.ExplainRequest();
+        ollama.provider = LlmExplainerService.Provider.OLLAMA;
+        ollama.endpoint = "https://bob:pw@gpu-box:11434";
+        ollama.model = "llama3 sk-ant-api03-abcdefghijklmnop";
+        Map<String, String> p = LlmExplainerService.baseParams(ollama);
+        assertThat(p.get("Endpoint")).isEqualTo("https://[REDACTED]@gpu-box:11434");
+        assertThat(p.get("Model")).doesNotContain("sk-ant-api03");
+
+        LlmExplainerService.ExplainRequest mcp = new LlmExplainerService.ExplainRequest();
+        mcp.provider = LlmExplainerService.Provider.MCP;
+        mcp.model = "agent Authorization: Bearer abcdefghijkl";
+        mcp.client = "curl/8 x-api-key: zzzzzzzz";
+        Map<String, String> m = LlmExplainerService.baseParams(mcp);
+        assertThat(m.get("Agent")).doesNotContain("abcdefghijkl");
+        assertThat(m.get("Client")).doesNotContain("zzzzzzzz");
     }
 
     @Test

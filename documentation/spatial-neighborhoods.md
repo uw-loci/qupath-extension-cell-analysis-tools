@@ -87,7 +87,10 @@ a TMA with many cores scanned in a single image, or a multi-section slide.
 **How to configure:**
 1. Expand the **Independent areas** section in the dialog.
 2. Click **Add level** to define one or more partitioning levels (e.g., `Tissue`
-   annotations to separate cores or sections).
+   annotations to separate cores or sections). The class list shows the open image's
+   annotation classes and the project's class list; for a class that only images that
+   are not open carry (imported GeoJSON, say), click **Add class...** and type it. A
+   loaded configuration keeps its classes even when the open image has none of them.
 3. The preview shows how many areas were found and if any cells lack an
    assignment. Empty areas are skipped; sparse areas are handled (spatial graph
    parameters are capped per area so one small core does not reduce k for the rest).
@@ -162,7 +165,9 @@ same neighborhood labels.
 Rows are neighborhoods, columns are cell types. Each cell is the **log2 fold
 enrichment** of that cell type in the neighborhood versus its frequency across all cells
 in the run (one slide, or every image of a joint run; red = enriched, blue = depleted). Read each row across to name
-the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). For a
+the neighborhood ("CN 3 = tumor + macrophage, depleted of B cells"). A **gray** cell means
+the neighborhood holds no cell of that type at all: absence has no fold change, so it is
+left out of the color scale rather than drawn as the deepest blue. For a
 single-image run the heatmap is written to a temporary folder and a prompt,
 **QPCAT - open enrichment heatmap?**, offers to open it; for a joint run it lands in the results folder.
 

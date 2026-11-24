@@ -18,9 +18,13 @@ public final class NhoodTable {
     /**
      * @param result       the result holding the matrix
      * @param nameResolver maps a stored cluster key to its display name, or null for the key
-     * @return the table, or a one-line message when the result has no matrix
+     * @return the table, or a one-line message when the result has no matrix or a ragged one
      */
     public static String text(ClusteringResult result, UnaryOperator<String> nameResolver) {
+        String shape = result == null ? null : SpatialStatsCsv.nhoodShapeProblem(result.getNhoodEnrichment());
+        if (shape != null) {
+            return shape;
+        }
         List<SpatialStatsCsv.NhoodRow> rows = SpatialStatsCsv.nhoodRows(result, nameResolver);
         if (rows.isEmpty()) {
             return "No neighborhood enrichment data available.";
