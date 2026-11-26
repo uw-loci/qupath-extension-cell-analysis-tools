@@ -75,6 +75,9 @@ class ClusterPaletteTest {
     @Test
     void wrapsModuloPaletteSize() {
         int size = ClusterPalette.size();
+        // 20 tab20 colors plus 20 deeper tones; a change of size changes every
+        // cluster color past the end and must be deliberate.
+        assertThat(size).isEqualTo(40);
         // Wrap-around: id N and N+size map to the same color.
         assertThat(ClusterPalette.rgbFor(3)).isEqualTo(ClusterPalette.rgbFor(3 + size));
         assertThat(ClusterPalette.rgbFor(0)).isEqualTo(ClusterPalette.rgbFor(size));
